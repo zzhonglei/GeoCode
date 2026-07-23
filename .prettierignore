@@ -1,0 +1,3 @@
+# Vendored kernel keeps upstream formatting verbatim — reformatting it would
+# poison the three-way merge base on the kernel-upstream branch. Never touch.
+kernel/
