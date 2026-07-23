@@ -14,6 +14,27 @@ export XDG_CONFIG_HOME="$SANDBOX/config"
 export XDG_CACHE_HOME="$SANDBOX/cache"
 export XDG_STATE_HOME="$SANDBOX/state"
 
+# GeoCode's public env namespace is GEOCODE_*. At this boundary we
+# 1) strip inherited OPENCODE_* (this machine may also run real OpenCode —
+#    a stray OPENCODE_CONFIG(_DIR)/OPENCODE_DB would silently steer the kernel),
+# 2) map every GEOCODE_X to OPENCODE_X, the names the kernel natively reads.
+# Generic on purpose: future upstream flags get GEOCODE_ aliases for free.
+# Same two rules apply to the Electron shell when spawning the sidecar.
+for v in $(env | sed -n 's/^\(OPENCODE_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$v"; done
+for v in $(env | sed -n 's/^GEOCODE_\([A-Za-z0-9_]*\)=.*/\1/p'); do
+  [ "$v" = "KERNEL_HOME" ] && continue # script-own knob, not a kernel flag
+  eval "export OPENCODE_$v=\"\$GEOCODE_$v\""
+done
+
 echo "kernel sandbox: $SANDBOX (project: $SANDBOX/playground)" >&2
-cd "$SANDBOX/playground"
-exec bun run --conditions=browser "$ROOT/kernel/packages/opencode/src/index.ts" "$@"
+
+# Run from packages/opencode — its bunfig.toml preloads @opentui/solid's JSX
+# plugin, and bun only reads bunfig from the cwd. Anywhere else the TUI's
+# Solid .tsx files fall back to the react JSX transform and crash on a missing
+# react/jsx-dev-runtime. This mirrors upstream's own dev workflow (`bun dev`).
+# The sandbox playground is handed over as the [project] positional instead.
+cd "$ROOT/kernel/packages/opencode"
+if [ $# -eq 0 ]; then
+  exec bun run --conditions=browser src/index.ts "$SANDBOX/playground"
+fi
+exec bun run --conditions=browser src/index.ts "$@"
