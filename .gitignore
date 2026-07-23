@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+*.tsbuildinfo
+
+# Bundled artifacts built elsewhere (kernel bundle, staged MCP runtime) — never committed
+vendor/
+
+# Caches
+.turbo/
+.cache/
+.vite/
+
+# Test artifacts
+.artifacts/
+coverage/
+
+# Logs
+*.log
+logs/
+
+# Local environment
+.env
+.env.*
+!.env.example
+*.local
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
