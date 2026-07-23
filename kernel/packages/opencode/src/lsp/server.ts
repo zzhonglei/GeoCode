@@ -2,6 +2,7 @@ import type { ChildProcessWithoutNullStreams } from "child_process"
 import path from "path"
 import os from "os"
 import { Global } from "@opencode-ai/core/global"
+import { Brand } from "@opencode-ai/core/brand"
 import { text } from "node:stream/consumers"
 import fs from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
@@ -1243,7 +1244,8 @@ export const JDTLS: Info = {
         }
       })(),
     )
-    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-jdtls-data"))
+    // GeoCode: branded scratch dir — the only LSP path that escapes the XDG roots
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), Brand.tempPrefix("jdtls-data")))
     return {
       process: spawn(
         java,

@@ -13,8 +13,15 @@ import { CodexAuthPlugin } from "./openai/codex"
 import { Session } from "@/session/session"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
-import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
-import { PoeAuthPlugin } from "opencode-poe-auth"
+/* --- GeoCode: GitLab Duo and Poe login are not part of GeoCode. Their npm
+ * bundles embed a published copy of core whose import mkdirs opencode-branded
+ * XDG dirs on the user's disk — a brand leak our source patches can never
+ * reach (docs/PATHS.md §5). Dropping the imports is enough: the leak happens
+ * at import time, so the package.json deps stay untouched to keep the lockfile
+ * (and its merge surface) identical to upstream. Other login flows unaffected. ---
+ * import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
+ * import { PoeAuthPlugin } from "opencode-poe-auth"
+ * --- /GeoCode --- */
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
 import { AzureAuthPlugin } from "./azure"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
@@ -70,8 +77,10 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
         experimentalWebSockets: experimentalWebSocketsEnabled({ enabled: flags.experimentalWebSockets }),
       }),
     CopilotAuthPlugin,
-    GitlabAuthPlugin,
-    PoeAuthPlugin,
+    // --- GeoCode: GitLab Duo / Poe auth removed (see import note above) ---
+    // GitlabAuthPlugin,
+    // PoeAuthPlugin,
+    // --- /GeoCode ---
     CloudflareWorkersAuthPlugin,
     CloudflareAIGatewayAuthPlugin,
     AzureAuthPlugin,

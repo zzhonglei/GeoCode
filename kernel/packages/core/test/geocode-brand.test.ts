@@ -1,0 +1,95 @@
+/* --- GeoCode: tripwire tests for the Brand path patches (docs/PATHS.md).
+ * Two layers: runtime assertions verify the live read paths actually resolve
+ * to branded names, and literal scans verify no patched file regressed to an
+ * upstream literal after a merge (typecheck alone cannot catch either). --- */
+import { describe, expect, test } from "bun:test"
+import path from "path"
+import { readFileSync } from "fs"
+import { Brand } from "../src/brand"
+import { Global } from "../src/global"
+
+const sep = path.sep
+
+describe("brand runtime", () => {
+  test("identity strings all derive from one base name", () => {
+    // Guards the single-source-of-truth property: nothing may be a hand-kept
+    // literal that could drift from Brand.name after an edit.
+    expect(Brand.configJson).toBe(`${Brand.name}.json`)
+    expect(Brand.configJsonc).toBe(`${Brand.name}.jsonc`)
+    expect(Brand.dbFile).toBe(`${Brand.name}.db`)
+    expect(Brand.logFile).toBe(`${Brand.name}.log`)
+    expect(Brand.mdnsHost).toBe(`${Brand.name}.local`)
+    expect(Brand.projectMarker).toBe(Brand.name)
+    expect(Brand.stagingMarker).toBe(`.${Brand.name}-version`)
+    expect(Brand.managedDomain).toBe(`ai.${Brand.name}.managed`)
+    expect(Brand.dirName.toLowerCase()).toBe(Brand.name)
+  })
+
+  test("XDG roots are namespaced under GeoCode", () => {
+    for (const root of [Global.Path.data, Global.Path.config, Global.Path.cache, Global.Path.state, Global.Path.tmp]) {
+      expect(root.endsWith(`${sep}${Brand.dirName}`)).toBe(true)
+    }
+  })
+
+  test("database file name is branded (channel-suffixed on local builds)", () => {
+    // The test preload pins OPENCODE_DB=":memory:", which short-circuits the
+    // branded fallback inside this process — so resolve Database.path() in a
+    // subprocess with that override removed. InstallationChannel is "local"
+    // for source runs -> geocode-local.db.
+    const env = { ...process.env }
+    delete env.OPENCODE_DB
+    const script = `import("${path.join(import.meta.dir, "..", "src", "database", "database.ts")}").then((m) => console.log(m.Database.path()))`
+    const result = Bun.spawnSync({ cmd: ["bun", "-e", script], env, cwd: path.join(import.meta.dir, "..") })
+    const resolved = result.stdout.toString().trim().split("\n").pop() ?? ""
+    expect(path.basename(resolved)).toBe(Brand.channelDbFile("local"))
+  })
+})
+
+describe("brand literal scan", () => {
+  // For each patched file, the exact upstream literals we replaced must not
+  // come back. An upstream merge that reverts a patch turns this red instead
+  // of silently shipping opencode-branded paths.
+  const repo = path.join(import.meta.dir, "..", "..", "..")
+  const forbidden: Record<string, string[]> = {
+    "packages/core/src/global.ts": ['const app = "opencode"'],
+    "packages/core/src/database/database.ts": ['"opencode.db"', "opencode-${"],
+    "packages/core/src/observability/logging.ts": ['"opencode.log"'],
+    "packages/core/src/project.ts": ['"opencode")'],
+    "packages/core/src/skill/discovery.ts": ['".opencode-version"'],
+    "packages/opencode/src/skill/discovery.ts": ['".opencode-version"'],
+    "packages/opencode/src/server/mdns.ts": ['"opencode.local"', "opencode-${"],
+    "packages/opencode/src/config/managed.ts": [
+      '"ai.opencode.managed"',
+      "Application Support/opencode",
+      '"/etc/opencode"',
+    ],
+    "packages/opencode/src/config/config.ts": [
+      'Global.Path.config, "opencode.',
+      '["opencode.jsonc", "opencode.json", "config.json"]',
+    ],
+    "packages/opencode/src/config/tui-migrate.ts": ['Global.Path.config, "opencode")'],
+    "packages/opencode/src/lsp/server.ts": ['"opencode-jdtls-data"'],
+  }
+
+  for (const [file, literals] of Object.entries(forbidden)) {
+    test(file, () => {
+      const content = readFileSync(path.join(repo, file), "utf8")
+      for (const literal of literals) {
+        expect(content.includes(literal)).toBe(false)
+      }
+      // The patch itself must still be present, not merely the literal gone.
+      expect(content.includes("Brand.")).toBe(true)
+    })
+  }
+
+  test("gitlab/poe auth plugins stay removed", () => {
+    // Their npm bundles embed a published core copy that mkdirs opencode-
+    // branded XDG dirs on import — an unreachable brand leak. An upstream
+    // merge re-activating either line turns this red.
+    const content = readFileSync(path.join(repo, "packages/opencode/src/plugin/index.ts"), "utf8")
+    expect(/^\s*GitlabAuthPlugin,/m.test(content)).toBe(false)
+    expect(/^\s*PoeAuthPlugin,/m.test(content)).toBe(false)
+    expect(/^\s*import .* from "opencode-gitlab-auth"/m.test(content)).toBe(false)
+    expect(/^\s*import .* from "opencode-poe-auth"/m.test(content)).toBe(false)
+  })
+})

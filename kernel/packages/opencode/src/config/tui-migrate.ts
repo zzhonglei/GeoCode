@@ -5,6 +5,7 @@ import { Option, Schema } from "effect"
 import { TuiConfig } from "@opencode-ai/tui/config"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
+import { Brand } from "@opencode-ai/core/brand"
 import { Filesystem } from "@/util/filesystem"
 import * as ConfigPaths from "@/config/paths"
 
@@ -114,7 +115,12 @@ async function backupAndStripLegacy(file: string, source: string) {
 
 async function opencodeFiles(input: { directories: string[]; cwd: string }) {
   const files = [
-    ...ConfigPaths.fileInDirectory(Global.Path.config, "opencode"),
+    // --- GeoCode: only the global-config-dir name is branded here. The two
+    // project-level lookups below stay upstream on purpose — project `.opencode/`
+    // and `opencode.json` are a deliberate open item (docs/PATHS.md §7), not an
+    // oversight. Scanning both names is harmless for this migration pass. ---
+    ...ConfigPaths.fileInDirectory(Global.Path.config, Brand.name),
+    // --- /GeoCode ---
     ...(await Filesystem.findUp(["opencode.json", "opencode.jsonc"], input.cwd, undefined, { rootFirst: true })),
   ]
   for (const dir of unique(input.directories)) {

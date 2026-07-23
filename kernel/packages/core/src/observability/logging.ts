@@ -1,6 +1,7 @@
 import { Formatter, Logger, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global"
+import { Brand } from "../brand"
 import { runID } from "./shared"
 
 function formatter(id: string = runID) {
@@ -46,7 +47,8 @@ function format(input: unknown) {
   return /^[^\s="\\]+$/.test(value) ? value : JSON.stringify(value)
 }
 
-export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id: string = runID) {
+// GeoCode: branded log file name
+export function fileLogger(file = path.join(Global.Path.log, Brand.logFile), id: string = runID) {
   // Do not set batchWindow to 0; it causes high idle CPU usage.
   return Logger.toFile(formatter(id), file, { flag: "a" })
 }

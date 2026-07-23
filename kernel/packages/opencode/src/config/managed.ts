@@ -4,8 +4,10 @@ import { existsSync } from "fs"
 import os from "os"
 import path from "path"
 import { Process } from "@/util/process"
+import { Brand } from "@opencode-ai/core/brand"
 
-const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
+// GeoCode: managed-policy identity — plist domain + system config dirs
+const MANAGED_PLIST_DOMAIN = Brand.managedDomain
 
 // Keys injected by macOS/MDM into the managed plist that are not OpenCode config
 const PLIST_META = new Set([
@@ -20,11 +22,11 @@ const PLIST_META = new Set([
 function systemManagedConfigDir(): string {
   switch (process.platform) {
     case "darwin":
-      return "/Library/Application Support/opencode"
+      return `/Library/Application Support/${Brand.dirName}` // GeoCode: branded managed dir
     case "win32":
-      return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
+      return path.join(process.env.ProgramData || "C:\\ProgramData", Brand.dirName) // GeoCode: branded managed dir
     default:
-      return "/etc/opencode"
+      return `/etc/${Brand.name}` // GeoCode: branded managed dir
   }
 }
 
