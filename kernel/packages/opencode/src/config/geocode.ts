@@ -25,13 +25,25 @@ export function base(): ConfigV1.Info {
           question: "allow",
           plan_enter: "allow",
         },
-        // No `prompt` yet — GeoAgent inherits the model-specific system prompt
-        // for now. Its own persona is a separate, deliberate step.
+        // Deliberately no `prompt`: GeoAgent picks up prompt/geocode.txt through
+        // the base-prompt selector in session/system.ts, which GeoCode returns
+        // for every model. Setting one here would only duplicate that.
       },
-      // Disable upstream's `build` primary agent by config instead of deleting
-      // its source: the kernel turns `disable` into a real removal, and the
-      // upstream definition stays byte-identical for clean merges.
+      // Disable upstream's coding-oriented agents by config instead of deleting
+      // their source: the kernel turns `disable` into a real removal, and the
+      // upstream definitions stay byte-identical for clean merges.
+      //
+      // `build` is replaced by GeoAgent above. `explore` and `general` are
+      // code-search and code-task subagents with no role in geographic work;
+      // the task tool advertises its subagent list dynamically, so removing
+      // them simply shrinks that list rather than leaving a dangling name.
       build: {
+        disable: true,
+      },
+      explore: {
+        disable: true,
+      },
+      general: {
         disable: true,
       },
     },

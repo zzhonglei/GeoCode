@@ -82,6 +82,15 @@ describe("brand literal scan", () => {
     })
   }
 
+  test("coding-oriented upstream agents are disabled by config", () => {
+    // build/explore/general are removed through the assembly layer, never by
+    // editing agent.ts — that file is upstream's hottest churn area.
+    const content = readFileSync(path.join(repo, "packages/opencode/src/config/geocode.ts"), "utf8")
+    for (const agent of ["build", "explore", "general"]) {
+      expect(new RegExp(`${agent}:\\s*\\{\\s*disable:\\s*true`).test(content)).toBe(true)
+    }
+  })
+
   test("system prompt selector returns the GeoCode base for every model", () => {
     // Upstream picks one of nine coding-agent prompts by model id; GeoCode must
     // return its own single base instead, or agents start calling themselves
