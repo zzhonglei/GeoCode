@@ -82,6 +82,35 @@ describe("brand literal scan", () => {
     })
   }
 
+  test("system prompt selector returns the GeoCode base for every model", () => {
+    // Upstream picks one of nine coding-agent prompts by model id; GeoCode must
+    // return its own single base instead, or agents start calling themselves
+    // OpenCode again.
+    const content = readFileSync(path.join(repo, "packages/opencode/src/session/system.ts"), "utf8")
+    expect(content.includes("PROMPT_GEOCODE")).toBe(true)
+    for (const upstream of ["PROMPT_ANTHROPIC", "PROMPT_BEAST", "PROMPT_GPT", "PROMPT_DEFAULT"]) {
+      expect(content.includes(upstream)).toBe(false)
+    }
+  })
+
+  test("geocode base prompt is present and speaks as GeoAgent", () => {
+    const prompt = readFileSync(path.join(repo, "packages/opencode/src/session/prompt/geocode.txt"), "utf8")
+    expect(prompt.startsWith("You are GeoAgent")).toBe(true)
+    expect(/opencode/i.test(prompt)).toBe(false)
+  })
+
+  test("plan mode reminders stay agent-neutral", () => {
+    // Prompt files are fed verbatim to the model, so they cannot carry inline
+    // GeoCode markers — these assertions are their only guard against an
+    // upstream merge restoring the "build" wording or the explore-subagent
+    // reference (GeoCode has neither).
+    const dir = path.join(repo, "packages/opencode/src/session/prompt")
+    const buildSwitch = readFileSync(path.join(dir, "build-switch.txt"), "utf8")
+    expect(/\bbuild\b/i.test(buildSwitch)).toBe(false)
+    const plan = readFileSync(path.join(dir, "plan.txt"), "utf8")
+    expect(plan.includes("delegate explore agents")).toBe(false)
+  })
+
   test("plan reminder switch-back is generalized off hardcoded build", () => {
     // GeoCode disables build; the reminder must fire for any non-plan agent,
     // not the upstream literal "build" (which would never match).

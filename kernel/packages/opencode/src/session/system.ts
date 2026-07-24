@@ -3,16 +3,7 @@ import { Context, Effect, Layer } from "effect"
 
 import { InstanceState } from "@/effect/instance-state"
 
-import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
-import PROMPT_DEFAULT from "./prompt/default.txt"
-import PROMPT_BEAST from "./prompt/beast.txt"
-import PROMPT_GEMINI from "./prompt/gemini.txt"
-import PROMPT_GPT from "./prompt/gpt.txt"
-import PROMPT_KIMI from "./prompt/kimi.txt"
-import PROMPT_META from "./prompt/meta.txt"
-
-import PROMPT_CODEX from "./prompt/codex.txt"
-import PROMPT_TRINITY from "./prompt/trinity.txt"
+import PROMPT_GEOCODE from "./prompt/geocode.txt"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -24,21 +15,18 @@ import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 
-export function provider(model: Provider.Model) {
-  if (model.api.id.includes("muse-spark")) return [PROMPT_META]
-  if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
-    return [PROMPT_BEAST]
-  if (model.api.id.includes("gpt")) {
-    if (model.api.id.includes("codex")) {
-      return [PROMPT_CODEX]
-    }
-    return [PROMPT_GPT]
-  }
-  if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
-  if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
-  if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
-  if (model.api.id.toLowerCase().includes("kimi")) return [PROMPT_KIMI]
-  return [PROMPT_DEFAULT]
+/* --- GeoCode: one base system prompt for every model. Upstream picks a
+ * per-model-family prompt here (anthropic/beast/gpt/gemini/kimi/codex/trinity/
+ * meta/default) — all of them written for a coding agent, all of them opening
+ * with "You are OpenCode". GeoCode ships a single geo-focused base instead, so
+ * every agent without its own prompt (GeoAgent, plan, and any user subagent
+ * whose markdown has no body) speaks as GeoAgent rather than OpenCode.
+ *
+ * The nine upstream prompt files stay in the tree untouched — kept, not
+ * deleted, simply no longer referenced. Restoring per-model selection is a
+ * matter of reverting this one function. --- */
+export function provider(_model: Provider.Model) {
+  return [PROMPT_GEOCODE]
 }
 
 export interface Interface {
