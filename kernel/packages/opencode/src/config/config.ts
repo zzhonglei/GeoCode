@@ -9,6 +9,7 @@ import { Global } from "@opencode-ai/core/global"
 import fsNode from "fs/promises"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Brand } from "@opencode-ai/core/brand"
+import { GeoCodeConfig } from "./geocode"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
@@ -355,6 +356,11 @@ const layer = Layer.effect(
           result = mergeConfigConcatArrays(result, next)
           return mergePluginOrigins(source, next.plugin, kind)
         }
+
+        // --- GeoCode: factory base layer, merged before everything else so user
+        // and project config can still override it (config/geocode.ts). ---
+        result = mergeConfigConcatArrays(result, GeoCodeConfig.base())
+        // --- /GeoCode ---
 
         for (const [key, value] of Object.entries(auth)) {
           if (value.type === "wellknown") {

@@ -82,6 +82,14 @@ describe("brand literal scan", () => {
     })
   }
 
+  test("plan reminder switch-back is generalized off hardcoded build", () => {
+    // GeoCode disables build; the reminder must fire for any non-plan agent,
+    // not the upstream literal "build" (which would never match).
+    const content = readFileSync(path.join(repo, "packages/opencode/src/session/reminders.ts"), "utf8")
+    expect(content.includes('input.agent.name === "build"')).toBe(false)
+    expect(content.includes('input.agent.name !== "plan"')).toBe(true)
+  })
+
   test("gitlab/poe auth plugins stay removed", () => {
     // Their npm bundles embed a published core copy that mkdirs opencode-
     // branded XDG dirs on import — an unreachable brand leak. An upstream

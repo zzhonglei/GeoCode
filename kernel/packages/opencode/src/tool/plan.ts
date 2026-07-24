@@ -55,6 +55,11 @@ export const PlanExitTool = Tool.define(
             sessionID: ctx.sessionID,
             role: "user",
             time: { created: Date.now() },
+            // GeoCode: plan_exit only registers under OPENCODE_EXPERIMENTAL_PLAN_MODE,
+            // which GeoCode keeps off — so this path never runs today and cannot be
+            // exercised for real. When that mode is turned on, this hardcoded "build"
+            // (disabled in GeoCode) must become the default agent; left byte-identical
+            // until it can be changed and verified together with the TUI handler.
             agent: "build",
             model,
           }

@@ -35,7 +35,11 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
       })
     }
     const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
-    if (wasPlan && input.agent.name === "build") {
+    // GeoCode: switching back from plan to ANY primary agent (not just the
+    // upstream-hardcoded "build") gets the build-switch reminder. GeoCode
+    // disables build, so the old `=== "build"` check would never fire and the
+    // reminder would silently vanish; this also fixes it for custom agents.
+    if (wasPlan && input.agent.name !== "plan") {
       userMessage.parts.push({
         id: PartID.ascending(),
         messageID: userMessage.info.id,
