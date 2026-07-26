@@ -48,7 +48,19 @@ function precheck(hint: string): "ok" | "path-missing" {
   return (resolved.prefix && resolved.verified) || resolved.notQgis ? "ok" : "path-missing"
 }
 
-export function resolve(hint: string, runtime: GeoRuntime.Interface): Effect.Effect<Resolution> {
+export interface Hooks {
+  /**
+   * Fired once, immediately before the first probe subprocess starts.
+   *
+   * Exists so the lifecycle can surface `probing` as its own state: the two
+   * intermediate states are split because their costs live in different places
+   * — resolving in launcher export and directory search, probing in the probe
+   * run — and merging them would lose exactly that attribution (§4.7).
+   */
+  readonly onProbing?: Effect.Effect<void>
+}
+
+export function resolve(hint: string, runtime: GeoRuntime.Interface, hooks: Hooks = {}): Effect.Effect<Resolution> {
   return Effect.gen(function* () {
     if (precheck(hint) === "path-missing") {
       return {
@@ -57,13 +69,27 @@ export function resolve(hint: string, runtime: GeoRuntime.Interface): Effect.Eff
         diagnostics: QgisDiagnostics.bare(hint, `path does not exist or is not absolute: ${hint}`),
       }
     }
-    return process.platform === "win32" ? yield* resolveWindows(hint, runtime) : yield* resolveMacOS(hint, runtime)
+    // Once, whichever platform and track gets there first; retries stay in
+    // `probing` rather than announcing it again.
+    let fired = false
+    const onProbing = Effect.suspend(() => {
+      if (fired || !hooks.onProbing) return Effect.void
+      fired = true
+      return hooks.onProbing
+    })
+    return process.platform === "win32"
+      ? yield* resolveWindows(hint, runtime, onProbing)
+      : yield* resolveMacOS(hint, runtime, onProbing)
   })
 }
 
 // --- macOS ------------------------------------------------------------------
 
-function resolveMacOS(hint: string, runtime: GeoRuntime.Interface): Effect.Effect<Resolution> {
+function resolveMacOS(
+  hint: string,
+  runtime: GeoRuntime.Interface,
+  onProbing: Effect.Effect<void>,
+): Effect.Effect<Resolution> {
   return Effect.gen(function* () {
     const located = QgisMacOS.resolvePrefix(hint)
     if (!located.prefix) {
@@ -90,6 +116,7 @@ function resolveMacOS(hint: string, runtime: GeoRuntime.Interface): Effect.Effec
     const assembly = QgisMacOS.assemble(prefix, interpreter)
     const choices: Record<string, Choice> = { ...assembly.choices, interpreter: interpreterChoice }
 
+    yield* onProbing
     const first = yield* QgisProbe.run(runtime, interpreter, assembly.env, [])
     if (first.ok) return succeed(interpreter, prefix, assembly.env, [], undefined, first.report)
 
@@ -147,7 +174,11 @@ function deepFindStandardLibrary(contents: string): string | undefined {
 
 // --- Windows ----------------------------------------------------------------
 
-function resolveWindows(hint: string, runtime: GeoRuntime.Interface): Effect.Effect<Resolution> {
+function resolveWindows(
+  hint: string,
+  runtime: GeoRuntime.Interface,
+  onProbing: Effect.Effect<void>,
+): Effect.Effect<Resolution> {
   return Effect.gen(function* () {
     // Two root strategies (§4.5), most specific intent first. Their coverage
     // is disjoint — see correctMidLayer for the layout only it reaches.
@@ -181,6 +212,7 @@ function resolveWindows(hint: string, runtime: GeoRuntime.Interface): Effect.Eff
               candidates: QgisWindows.LAUNCHER_NAMES.map((n) => path.win32.join(resolvedRoot!, "bin", n)),
             },
           }
+          yield* onProbing
           const outcome = yield* QgisProbe.run(runtime, adopted.interpreter, adopted.env, [])
           if (outcome.ok) {
             return succeed(adopted.interpreter, adopted.prefix, adopted.env, [], "bridge", outcome.report)
@@ -188,15 +220,14 @@ function resolveWindows(hint: string, runtime: GeoRuntime.Interface): Effect.Eff
           // Bridge probe failed → manual retry, once (§4.6 回退). The two
           // tracks fail for entirely different reasons, so the second attempt
           // is a genuinely different experiment, not a repeat.
-          const manual = yield* manualAttempt(hint, resolvedRoot, rootCandidates, runtime, attempted, choices)
-          return manual
+          return yield* manualAttempt(hint, resolvedRoot, rootCandidates, runtime, attempted, choices, onProbing)
         }
       }
       // Dump failed or was rejected: fall to manual without counting a bridge
       // probe attempt — there was nothing to probe.
     }
 
-    return yield* manualAttempt(hint, resolvedRoot, rootCandidates, runtime, attempted, {})
+    return yield* manualAttempt(hint, resolvedRoot, rootCandidates, runtime, attempted, {}, onProbing)
   })
 }
 
@@ -207,6 +238,7 @@ function manualAttempt(
   runtime: GeoRuntime.Interface,
   attempted: Track[],
   inherited: Record<string, Choice>,
+  onProbing: Effect.Effect<void>,
 ): Effect.Effect<Resolution> {
   return Effect.gen(function* () {
     attempted.push("manual")
@@ -228,6 +260,7 @@ function manualAttempt(
     const assembly = QgisWindows.assembleManual(interpreter, root)
     const choices = { ...inherited, ...assembly.choices }
 
+    yield* onProbing
     const outcome = yield* QgisProbe.run(runtime, interpreter, assembly.env, assembly.dllDirectories)
     if (outcome.ok) {
       return succeed(interpreter, assembly.prefix, assembly.env, assembly.dllDirectories, "manual", outcome.report)

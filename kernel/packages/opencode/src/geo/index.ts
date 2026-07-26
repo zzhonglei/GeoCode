@@ -3,11 +3,13 @@ export * as GeoKernel from "./index"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { MachineConfig } from "./config"
 import { GeoNet } from "./net"
+import { GeoQgis } from "./qgis"
 import { GeoRuntime } from "./runtime"
 import { GeoStatus } from "./status"
 
 export { MachineConfig } from "./config"
 export { GeoNet } from "./net"
+export { GeoQgis } from "./qgis"
 export { GeoRuntime } from "./runtime"
 export { GeoStatus } from "./status"
 
@@ -28,5 +30,8 @@ export { GeoStatus } from "./status"
  *   status   slot storage, generation-guarded commit, publication       §3.4
  *   net      network reachability: resolve, probe, rank, monitor  §3.3
  *
- * Capability layer — QGIS, GEE, OSM, GDAL — arrives on top of these. --- */
-export const node = LayerNode.group([MachineConfig.node, GeoRuntime.node, GeoNet.node, GeoStatus.node])
+ * Capability layer, on top of those:
+ *   qgis     lifecycle, environment resolution, unified gate      §4
+ *            (catalog exporter and executor still to come — 2c/2d)
+ *   gee, osm, dataplane — not yet built. --- */
+export const node = LayerNode.group([MachineConfig.node, GeoRuntime.node, GeoNet.node, GeoStatus.node, GeoQgis.node])

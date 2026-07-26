@@ -51,7 +51,9 @@ export const QgisDiagnostics = Schema.Struct({
 })
 export interface QgisDiagnostics extends Schema.Schema.Type<typeof QgisDiagnostics> {}
 
-const qgisFailure = (status: string) =>
+// Generic so each literal survives as itself: widening these to `string`
+// silently breaks discrimination for every consumer of the union.
+const qgisFailure = <const S extends string>(status: S) =>
   Schema.Struct({
     status: Schema.Literal(status),
     diagnostics: QgisDiagnostics,
@@ -59,6 +61,13 @@ const qgisFailure = (status: string) =>
 
 export const QgisStatus = Schema.Union([
   Schema.Struct({ status: Schema.Literal("unconfigured") }),
+  /**
+   * machine.json cannot be parsed. Mandated by the config contract: a syntax
+   * error fails EVERY block, and each module shows that honestly instead of
+   * pretending to be merely unconfigured (§3.1). Carries the location so the
+   * user can fix the line, not hunt for it.
+   */
+  Schema.Struct({ status: Schema.Literal("config-error"), file: Schema.String, message: Schema.String }),
   Schema.Struct({ status: Schema.Literal("path-missing"), hint: optional(Schema.String) }),
   Schema.Struct({ status: Schema.Literal("not-qgis"), hint: optional(Schema.String) }),
   Schema.Struct({ status: Schema.Literal("resolving") }),
