@@ -45,7 +45,7 @@ Windows 上还发生过真实事故:NSIS 单击安装器的安装目录取自 pa
 | data | `log/opencode.log` | `log/geocode.log` | |
 | data | `log/direct/*.jsonl` | 同名 | |
 | config | `opencode.json` / `opencode.jsonc` / `config.json` | `geocode.json` / `geocode.jsonc` | **只保留一套**,不再新旧并存 |
-| config | —— | `env.json` / `env.jsonc` | **GeoCode 自有**:用户机器的地理环境描述(见下) |
+| config | —— | `machine.json` / `machine.jsonc` | **GeoCode 自有**:本机的地理环境描述(见下) |
 | config | `themes/` `tui/` `agents/` | 同名 | |
 | config | `node_modules/` `package.json` `package-lock.json` | 同名 | 插件安装用,npm 机制要求,不可改名 |
 | cache | `bin/` `skills/` `models.json` | 同名 | LSP 与 ripgrep 二进制、模型快照 |
@@ -60,11 +60,16 @@ GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统�
 | 文件 | 内容 | 生效方式 |
 |---|---|---|
 | `geocode.json` | 内核与 Agent 配置(模型、代理人、权限等),沿用上游语义 | 实例加载时读取 |
-| `env.json` | **本机地理环境的描述**:各外部软件的位置与所需标识 | **保存即生效**,由地理内核监控并按域重探 |
+| `machine.json` | **本机地理环境的描述**:各外部软件的位置与所需标识 | **保存即生效**,由地理内核监控并按域重探 |
 
-分成两个文件而非合并为一个,是因为二者的生效语义相反:一个文件内出现两种生效方式,用户无从分辨哪些改动需要重启。分开还带来两项收益——`env.json` 写坏不波及 Agent 配置;设置界面写入 `env.json` 时不可能损坏用户手写的内核配置。文件设计见 GEOKERNEL.md §3.1。
+分成两个文件而非合并为一个,是因为二者的生效语义相反:一个文件内出现两种生效方式,用户无从分辨哪些改动需要重启。分开还带来两项收益——`machine.json` 写坏不波及 Agent 配置;设置界面写入 `machine.json` 时不可能损坏用户手写的内核配置。文件设计见 GEOKERNEL.md §3.1。
 
-**不叫 `geo.json`**:在 GIS 应用中,名为 `geo.json` 的文件会被当作 GeoJSON 数据文件。
+**命名排除过两个候选**,理由都不是美学:
+
+- **不叫 `geo.json`**:在 GIS 应用中,名为 `geo.json` 的文件会被当作 GeoJSON 数据文件。
+- **不叫 `env.json`**:本产品自身大量操作真正的环境变量(GEOKERNEL.md §4.5、§7.3 要注入 `PROJ_LIB`、`QT_PLUGIN_PATH`、`GDAL_DATA` 等成串变量),而该名字在通行惯例中正指向环境变量文件。两个含义在同一个代码库里贴得太近,会诱发一类被容错机制吞掉的错误:GEOKERNEL.md §5.11 允许 Agent 独立写入本文件,而 §3.1 的未知键**静默忽略**规则(为键名笔误设计)会让写错的变量名解析成功、块值不变、不触发重探,**全链路无一处报错**。
+
+`machine.json` 另有一项两个候选都不具备的收益:它自带"不可搬运"的语义。`geocode.json` 里是模型与代理人配置,换机照抄即可用;本文件全是绝对路径,抄过去必然全错。名字说清这一点,省掉一次用户事故。
 
 ### 3.3 系统身份
 

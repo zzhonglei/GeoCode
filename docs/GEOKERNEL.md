@@ -900,7 +900,7 @@ Qt 根的优先级不是偏好而是必需:较新 QGIS 仅链接新版 Qt,若只
 
 ### 4.8 状态迁移
 
-**触发源两个**:应用启动、`env.json` 的 `qgis` 块变更。
+**触发源两个**:应用启动、`machine.json` 的 `qgis` 块变更。
 
 ```
 触发 ──▶ resolving ──┬──▶ unconfigured / path-missing / not-qgis        (同步判定)
