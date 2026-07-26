@@ -2,9 +2,11 @@ export * as GeoKernel from "./index"
 
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { MachineConfig } from "./config"
+import { GeoRuntime } from "./runtime"
 import { GeoStatus } from "./status"
 
 export { MachineConfig } from "./config"
+export { GeoRuntime } from "./runtime"
 export { GeoStatus } from "./status"
 
 /* --- GeoCode: GeoKernel, the geographic execution kernel (docs/GEOKERNEL.md).
@@ -17,11 +19,12 @@ export { GeoStatus } from "./status"
  * Mounted as ONE node so the service-graph injection stays a single line, which
  * is what keeps it cheap to carry across upstream merges (§2.4 principle 6).
  *
- * Infrastructure layer, in dependency order:
+ * Infrastructure layer. The four are mutually independent — each depends only
+ * on the host kernel — which is what lets them be built in any order:
  *   config   `machine.json`: load, watch, dispatch per block            §3.1
+ *   runtime  subprocess execution: spawn, deliver, clock, terminate     §3.2
  *   status   slot storage, generation-guarded commit, publication       §3.4
- *   runtime  subprocess primitives                          (not yet built)
  *   net      network reachability                           (not yet built)
  *
  * Capability layer — QGIS, GEE, OSM, GDAL — arrives on top of these. --- */
-export const node = LayerNode.group([MachineConfig.node, GeoStatus.node])
+export const node = LayerNode.group([MachineConfig.node, GeoRuntime.node, GeoStatus.node])
