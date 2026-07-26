@@ -31,7 +31,7 @@ export { GeoStatus } from "./status"
  *   net      network reachability: resolve, probe, rank, monitor  §3.3
  *
  * Capability layer, on top of those:
- *   qgis     lifecycle, environment resolution, unified gate      §4
- *            (catalog exporter and executor still to come — 2c/2d)
+ *   qgis     lifecycle, resolution, catalog, unified gate          §4
+ *            (executor and scripts still to come — 2d)
  *   gee, osm, dataplane — not yet built. --- */
 export const node = LayerNode.group([MachineConfig.node, GeoRuntime.node, GeoNet.node, GeoStatus.node, GeoQgis.node])

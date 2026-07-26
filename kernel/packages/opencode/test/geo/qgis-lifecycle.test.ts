@@ -73,6 +73,13 @@ function scriptedCatalog(outcomes: (QgisCatalog.BuildOutcome | "hang")[]) {
           return outcome
         }),
       invalidate: () => Effect.void,
+      // The lifecycle only drives build/invalidate; queries are 2c's concern
+      // and answer empty here.
+      groups: () => Effect.succeed([]),
+      inGroup: () => Effect.succeed([]),
+      get: () => Effect.succeed(undefined),
+      search: () => Effect.succeed([]),
+      suggest: () => Effect.succeed([]),
     }),
   )
   return { layer, calls }
