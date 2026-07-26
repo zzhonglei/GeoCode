@@ -110,3 +110,22 @@ export function boundedBuffer(cap: number): BoundedBuffer {
     dropped: () => discarded,
   }
 }
+
+/**
+ * Pull a script's own structured error out of its error stream.
+ *
+ * Scripts that fail deliberately emit one JSON object with an `error` field;
+ * showing that sentence beats showing the surrounding traceback noise. Absent
+ * or unparsable, the caller falls back to the raw stream — this only ever
+ * upgrades the message, never hides it (§3.2 输出通用件).
+ */
+export function structuredError(stderr: string): string | undefined {
+  const match = /\{.*"error"\s*:.*\}/s.exec(stderr)
+  if (!match) return undefined
+  try {
+    const parsed = JSON.parse(match[0]) as { error?: unknown }
+    return typeof parsed.error === "string" ? parsed.error : undefined
+  } catch {
+    return undefined
+  }
+}
