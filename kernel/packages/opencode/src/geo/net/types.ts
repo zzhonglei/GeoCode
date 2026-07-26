@@ -42,7 +42,7 @@ export function routeId(route: Route): RouteId {
   if (route.kind === "direct") return "direct"
   try {
     const url = new URL(route.url)
-    return `proxy:${url.hostname}:${url.port || "80"}`
+    return `proxy:${url.hostname}:${url.port || (url.protocol === "https:" ? "443" : "80")}`
   } catch {
     return "proxy:unparseable"
   }

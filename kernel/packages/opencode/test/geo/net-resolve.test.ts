@@ -7,6 +7,7 @@ import path from "node:path"
 import tls from "node:tls"
 import { NetDiscovery } from "@/geo/net/discovery"
 import { NetRedact } from "@/geo/net/redact"
+import { NetRanking } from "@/geo/net/ranking"
 import { NetResolver } from "@/geo/net/resolver"
 import { NetRoute } from "@/geo/net/route"
 import type { Target } from "@/geo/net/types"
@@ -149,6 +150,54 @@ describe("net path resolution", () => {
     // works today (§12).
     expect(NetDiscovery.declared({ ALL_PROXY: "socks5://127.0.0.1:1080" })).toBeUndefined()
     expect(NetDiscovery.declared({ HTTPS_PROXY: "127.0.0.1:7890" })).toBe("http://127.0.0.1:7890")
+  })
+})
+
+describe("net endpoint ranking", () => {
+  test.skipIf(!certificate)("the route is a dimension of the candidate set, not a setting", async () => {
+    const target = await tlsTarget()
+    const proxyPort = await proxyTo(target.port)
+    const endpoint = `https://localhost:${target.port}/api`
+
+    // One endpoint, two routes. Both must be measured: which is quicker is
+    // settled by measurement, and a proxy is sometimes faster than a direct
+    // path that merely works (§3.3).
+    const ranked = await NetRanking.rank(
+      [endpoint],
+      [
+        { kind: "direct" },
+        { kind: "proxy", url: `http://127.0.0.1:${proxyPort}` },
+      ],
+      { timeoutMs: 5000, tls: { ca: [certificate!] } },
+    )
+
+    expect(ranked).toHaveLength(2)
+    expect(new Set(ranked.map((entry) => entry.routeId))).toEqual(
+      new Set(["direct", `proxy:127.0.0.1:${proxyPort}`]),
+    )
+    // Fastest first, so a consumer can simply take them in order.
+    expect(ranked[0]!.latencyMs).toBeLessThanOrEqual(ranked[1]!.latencyMs)
+  })
+
+  test.skipIf(!certificate)("pairs that cannot be reached are dropped, not parked at the back", async () => {
+    const target = await tlsTarget()
+    const dead = await closedPort()
+
+    const ranked = await NetRanking.rank(
+      [`https://localhost:${target.port}/api`, `https://localhost:${dead}/api`],
+      [{ kind: "direct" }],
+      { timeoutMs: 3000, tls: { ca: [certificate!] } },
+    )
+
+    // A consumer that runs out of ranked pairs already has its own failover and
+    // backoff; carrying known-dead pairs would only make it pay their timeouts
+    // a second time.
+    expect(ranked).toHaveLength(1)
+    expect(ranked[0]!.endpoint).toContain(String(target.port))
+  })
+
+  test("a malformed endpoint is skipped rather than throwing", async () => {
+    expect(await NetRanking.rank(["not-a-url"], [{ kind: "direct" }])).toEqual([])
   })
 })
 

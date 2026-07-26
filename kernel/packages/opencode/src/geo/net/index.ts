@@ -1,9 +1,11 @@
 export * as GeoNet from "./index"
 
+import { isDeepStrictEqual } from "node:util"
 import { Context, Effect, Fiber, Layer, PubSub, Stream } from "effect"
 import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { NetClassifier } from "./classifier"
+import { NetDiscovery } from "./discovery"
 import { NetMonitor } from "./monitor"
 import { NetProbe } from "./probe"
 import { NetRanking } from "./ranking"
@@ -151,7 +153,7 @@ const layer = Layer.effect(
         if (!verdict.ok) entry.route = entry.machine.state.state === "reachable" ? entry.route : undefined
         if (outcome.invalidateRanking) yield* invalidate(entry.target.id)
         // Publishing only on real change keeps a steady network silent (§3.4).
-        if (JSON.stringify(before) !== JSON.stringify(entry.machine.state)) yield* publish(entry)
+        if (!isDeepStrictEqual(before, entry.machine.state)) yield* publish(entry)
       })
 
     const runLoop = (entry: Entry): Effect.Effect<void> =>
@@ -163,6 +165,20 @@ const layer = Layer.effect(
           yield* Effect.sleep(NetMonitor.interval(entry.machine))
         }
       })
+
+    /**
+     * Routes worth measuring against: direct, plus any proxy the machine has.
+     *
+     * Path RESOLUTION is direct-first and only looks for proxies once direct
+     * has failed. Ranking is a different question — not "how do I get there"
+     * but "which way is quickest" — so it measures every path that exists.
+     */
+    const availableRoutes = async (anchor?: Target): Promise<Route[]> => {
+      const routes: Route[] = [{ kind: "direct" }]
+      if (!anchor) return routes
+      for (const url of await NetDiscovery.candidates(anchor)) routes.push({ kind: "proxy", url })
+      return routes
+    }
 
     const acquire = (id: string) =>
       Effect.gen(function* () {
@@ -197,8 +213,16 @@ const layer = Layer.effect(
     const registerGroup = (id: string, endpoints: readonly string[]) =>
       Effect.gen(function* () {
         if (groups.has(id) || endpoints.length === 0) return
+        // A malformed endpoint must not take the registration down with it: the
+        // list is a constant in the consuming module, and a typo there should
+        // cost that module its ranking, not the whole Net service.
+        let first: URL
+        try {
+          first = new URL(endpoints[0]!)
+        } catch {
+          return
+        }
         groups.set(id, { endpoints, holding: false })
-        const first = new URL(endpoints[0]!)
         yield* register({
           id,
           host: first.hostname,
@@ -235,8 +259,15 @@ const layer = Layer.effect(
 
         // Measured on first request, not at startup: a target nobody ends up
         // using should cost nothing (§3.3 按需激活).
+        //
+        // Every available route participates, not just the one currently in use.
+        // The candidate set is (endpoint × route), and which combination is
+        // quickest is settled by measurement rather than assumed — a proxy is
+        // sometimes faster than a direct path that merely works. On a machine
+        // with no proxy the set collapses to direct alone, which is exactly the
+        // no-overhead case the design describes.
         const entry = entries.get(id)
-        const routes: Route[] = entry?.route ? [entry.route] : [{ kind: "direct" }]
+        const routes = yield* Effect.promise(() => availableRoutes(entry?.target))
         const measured = yield* Effect.promise(() => NetRanking.rank(group.endpoints, routes))
         group.ranked = measured
         if (!group.holding) {

@@ -1,6 +1,7 @@
 export * as NetDiscovery from "./discovery"
 
 import { NetProbe } from "./probe"
+import { NetTunnel } from "./tunnel"
 import type { Target } from "./types"
 
 /* --- GeoCode: finding proxy candidates (docs/GEOKERNEL.md §3.3).
@@ -107,11 +108,11 @@ export async function candidates(authority: Target, options: Options = {}): Prom
  * decision to actually use it stays per-target (§3.3).
  */
 export async function speaksProxy(authority: Target, proxyUrl: string, options: Options = {}): Promise<boolean> {
-  const result = await NetProbe.viaProxy(authority, proxyUrl, {
-    timeoutMs: options.probeTimeoutMs,
-    tls: options.tls,
-  })
-  // Reaching the handshake means the tunnel was granted; whether the handshake
-  // itself succeeded is stage 3's question and belongs to the resolver.
-  return result.ok || result.stage === "handshake"
+  // Stages 1 and 2 only, and literally so — this opens the tunnel and stops.
+  // Running the full three-stage probe here would answer the question, but the
+  // resolver then runs it again on the survivors, so every working proxy would
+  // pay for two handshakes with the target instead of one.
+  const result = await NetTunnel.open(proxyUrl, `${authority.host}:${authority.port}`, options.probeTimeoutMs ?? 5_000)
+  if (result.ok) result.socket.destroy()
+  return result.ok
 }
