@@ -29,6 +29,8 @@ import { makeApi } from "@opencode-ai/protocol/api"
 import { LocationMiddleware } from "@opencode-ai/server/location"
 import { SessionLocationMiddleware } from "@opencode-ai/server/middleware/session-location"
 import { GlobalApi } from "./groups/global"
+// GeoCode: the data face of GeoKernel (docs/GEOKERNEL.md §10.1 #2).
+import { GeoApi } from "./groups/geo"
 import { Authorization } from "./middleware/authorization"
 import { SchemaErrorMiddleware } from "./middleware/schema-error"
 
@@ -55,6 +57,8 @@ export const RootHttpApi = HttpApi.make("opencode-root")
   .addHttpApi(ControlApi)
   .addHttpApi(ControlPlaneApi)
   .addHttpApi(GlobalApi)
+  // GeoKernel is process-wide, so it belongs on the root api beside global (§10.2).
+  .addHttpApi(GeoApi)
   .middleware(SchemaErrorMiddleware)
   .middleware(Authorization)
 
