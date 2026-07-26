@@ -112,7 +112,11 @@ export async function speaksProxy(authority: Target, proxyUrl: string, options: 
   // Running the full three-stage probe here would answer the question, but the
   // resolver then runs it again on the survivors, so every working proxy would
   // pay for two handshakes with the target instead of one.
-  const result = await NetTunnel.open(proxyUrl, `${authority.host}:${authority.port}`, options.probeTimeoutMs ?? 5_000)
+  const result = await NetTunnel.open(
+    proxyUrl,
+    `${authority.host}:${authority.port}`,
+    options.probeTimeoutMs ?? NetProbe.LOOPBACK_TIMEOUT_MS,
+  )
   if (result.ok) result.socket.destroy()
   return result.ok
 }

@@ -12,8 +12,23 @@ import type { Target } from "./types"
  * and it follows directly from the decision not to read the operating system's
  * proxy settings (§12), which was the only thing that would have needed one. --- */
 
-/** Local proxy ports answer or refuse in about a millisecond; this bounds the remote case. */
-const DEFAULT_TIMEOUT_MS = 5_000
+/**
+ * Budget for a handshake with a remote target.
+ *
+ * Deliberately shorter than the re-verify interval: a round that spends longer
+ * than the gap between rounds stretches the cadence rather than keeping it.
+ */
+const DEFAULT_TIMEOUT_MS = 3_000
+
+/**
+ * Budget for anything that stays on this machine.
+ *
+ * Discovery talks only to loopback, where a closed port refuses in about a
+ * millisecond. The one expensive case is a port that is open but answers
+ * nothing, and this is what bounds it — using the remote budget there would let
+ * a single unrelated local service dominate every round.
+ */
+export const LOOPBACK_TIMEOUT_MS = 1_000
 
 export interface Options {
   readonly timeoutMs?: number
@@ -34,6 +49,19 @@ export type Stage = "connect" | "tunnel" | "handshake"
 export type Result =
   | { readonly ok: true; readonly latencyMs: number }
   | { readonly ok: false; readonly stage: Stage; readonly reason: string }
+
+/**
+ * The name to present for SNI, or undefined when there is none to present.
+ *
+ * SNI carries a host NAME, and the runtime refuses an address outright rather
+ * than sending one — so a target written as a literal address must be probed
+ * without it. Passing one through regardless throws where the caller expects a
+ * verdict, and a thrown probe is not a failed probe: it takes the monitor's
+ * fiber with it.
+ */
+function serverName(host: string): string | undefined {
+  return net.isIP(host) === 0 ? host : undefined
+}
 
 function reasonOf(err: unknown): string {
   if (err instanceof Error) {
@@ -61,7 +89,7 @@ export function direct(target: Target, options: Options = {}): Promise<Result> {
     const socket = tls.connect({
       host: target.host,
       port: target.port,
-      servername: target.host,
+      servername: serverName(target.host),
       ...options.tls,
     })
     const finish = (result: Result) => {
@@ -105,7 +133,7 @@ export async function viaProxy(target: Target, proxyUrl: string, options: Option
   // report "reachable" on a machine with no working route at all.
   return new Promise<Result>((resolve) => {
     let settled = false
-    const secure = tls.connect({ socket: tunnel.socket, servername: target.host, ...options.tls })
+    const secure = tls.connect({ socket: tunnel.socket, servername: serverName(target.host), ...options.tls })
     const finish = (result: Result) => {
       if (settled) return
       settled = true

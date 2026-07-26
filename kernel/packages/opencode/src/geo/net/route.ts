@@ -2,6 +2,7 @@ export * as NetRoute from "./route"
 
 import http from "node:http"
 import https from "node:https"
+import net from "node:net"
 import type stream from "node:stream"
 import tls from "node:tls"
 import { NetTunnel } from "./tunnel"
@@ -87,7 +88,8 @@ class TunnelAgent extends https.Agent {
         }
         // Verification stays on here exactly as it does in the probe: a route
         // that only works with checks disabled is not a route we would adopt.
-        const secure = tls.connect({ socket: result.socket, servername: options.servername ?? host })
+        const name = options.servername ?? host
+        const secure = tls.connect({ socket: result.socket, servername: net.isIP(name) === 0 ? name : undefined })
         secure.once("secureConnect", () => callback(null, secure))
         secure.once("error", (err: unknown) =>
           callback(err instanceof Error ? err : new Error(String(err)), undefined as never),

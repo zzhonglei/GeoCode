@@ -95,12 +95,26 @@ describe("net monitor transitions", () => {
     expect(NetMonitor.shouldRediscover(NetMonitor.initial)).toBe(true)
   })
 
-  test("a degraded target is re-checked more often than a healthy one", () => {
-    // The degraded interval is the window a user waits in after starting their
-    // proxy software, and noticing is meant to need nothing from them.
-    expect(NetMonitor.interval({ state: { state: "unreachable" }, streak: 1 })).toBeLessThan(
+  test("the cadence is the same whichever way the user is waiting", () => {
+    // Both directions are somebody waiting: one is a user whose network just
+    // broke, the other a user who has just fixed it. There is no reason to serve
+    // one of them worse.
+    expect(NetMonitor.interval({ state: { state: "unreachable" }, streak: 1 })).toBe(
       NetMonitor.interval(reachable("direct")),
     )
+  })
+
+  test("the cadence stays short enough to be worth having", () => {
+    // Pinned deliberately. The probe carries no credentials and touches no API
+    // path, so remote quota and abuse systems never see it — which makes this
+    // interval a question of our own cost, and our own cost is one handshake.
+    // A future change that lengthens it is trading away the thing the module
+    // exists for, so it should have to edit this line and explain itself.
+    expect(NetMonitor.INTERVAL_MS).toBeLessThanOrEqual(5_000)
+
+    // Two consecutive failures to give up a route, so a broken network is known
+    // within roughly two rounds.
+    expect(NetMonitor.FAILURE_STREAK * NetMonitor.INTERVAL_MS).toBeLessThanOrEqual(15_000)
   })
 })
 
@@ -108,6 +122,20 @@ describe("net failure classification", () => {
   test("only interface-level codes take the fast path", () => {
     expect(NetClassifier.classify("ENETDOWN: network is down", true)).toBe("offline")
     expect(NetClassifier.classify("ENETUNREACH: network is unreachable", true)).toBe("offline")
+  })
+
+  test("only routable addresses count as having a network", () => {
+    // Measured on a real machine: eleven non-internal interfaces, nine of which
+    // held nothing but a link-local address. `awdl0` and `llw0` exist for
+    // AirDrop and are always present; idle tunnels keep an fe80:: of their own.
+    // Counting those made the check answer yes on a laptop with its radio off —
+    // exactly the case it exists to catch.
+    expect(NetClassifier.routable({ address: "192.168.3.8", internal: false })).toBe(true)
+    expect(NetClassifier.routable({ address: "198.18.0.1", internal: false })).toBe(true)
+
+    expect(NetClassifier.routable({ address: "fe80::bcf4:54ff:fe99:77c9", internal: false })).toBe(false)
+    expect(NetClassifier.routable({ address: "169.254.1.1", internal: false })).toBe(false)
+    expect(NetClassifier.routable({ address: "127.0.0.1", internal: true })).toBe(false)
   })
 
   test("having no interface at all is itself the unambiguous signal", () => {

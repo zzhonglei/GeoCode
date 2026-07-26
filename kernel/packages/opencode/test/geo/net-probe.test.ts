@@ -189,6 +189,26 @@ describe("net probe", () => {
     expect(result.ok).toBe(true)
   })
 
+  test("a target written as an address returns a verdict instead of throwing", async () => {
+    // SNI carries a host NAME; the runtime refuses an address outright. Passing
+    // one through threw where the caller expected a verdict — and a thrown probe
+    // is not a failed probe, it takes the monitor's fiber with it. Found by
+    // running the real module against real proxy software; every offline target
+    // in this file is a name, so nothing here would ever have caught it.
+    const result = await NetProbe.direct({ id: "t", host: "127.0.0.1", port: 1 }, { timeoutMs: 1500 })
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toContain("ECONNREFUSED")
+  })
+
+  test("an address target survives the proxy path too", async () => {
+    const port = await fakeProxy({ tunnel: false })
+    const result = await NetProbe.viaProxy({ id: "t", host: "203.0.113.1", port: 443 }, `http://127.0.0.1:${port}`, {
+      timeoutMs: 1500,
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.stage).toBe("handshake")
+  })
+
   test("listening() answers without claiming anything more", async () => {
     const service = await plainService()
     expect(await NetProbe.listening("127.0.0.1", service.port, 1000)).toBe(true)

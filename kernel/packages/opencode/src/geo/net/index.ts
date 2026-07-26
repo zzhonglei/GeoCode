@@ -125,6 +125,16 @@ const layer = Layer.effect(
      */
     const probeOnce = (entry: Entry) =>
       Effect.promise(async (): Promise<{ verdict: NetMonitor.Verdict; route?: Route }> => {
+        // The cheapest question first, and the only one that costs no network at
+        // all: does this machine have anywhere to send a packet? Asking the
+        // operating system takes microseconds and no traffic, so a laptop with
+        // its radio off — or one on a plane — spends nothing at all while it
+        // waits, instead of opening a socket every round to be told the same
+        // thing. It is also the unambiguous signal that skips hysteresis (§3.3).
+        if (!NetClassifier.hasNetworkInterface()) {
+          return { verdict: { ok: false, kind: "offline", detail: "no network interface is up" } }
+        }
+
         // Route-aware re-verification: a held direct route is re-tested
         // directly, a held proxy route is re-tested as "can this proxy still
         // reach the target". A user losing their connection and a user closing
@@ -159,7 +169,22 @@ const layer = Layer.effect(
     const runLoop = (entry: Entry): Effect.Effect<void> =>
       Effect.gen(function* () {
         while (true) {
-          const round = yield* probeOnce(entry)
+          // A probe that throws is not a probe that failed — without this the
+          // defect propagates and takes the loop's fiber with it, so one bad
+          // target would silently end monitoring for good. Treated as an
+          // ambiguous failure, which is what it is: we learned nothing.
+          const round = yield* probeOnce(entry).pipe(
+            Effect.catchDefect(
+              (defect): Effect.Effect<{ verdict: NetMonitor.Verdict; route?: Route }> =>
+                Effect.succeed({
+                  verdict: {
+                    ok: false,
+                    kind: "other",
+                    detail: defect instanceof Error ? defect.message : String(defect),
+                  },
+                }),
+            ),
+          )
           if (round.verdict.ok) entry.route = round.route
           yield* applyVerdict(entry, round.verdict)
           yield* Effect.sleep(NetMonitor.interval(entry.machine))

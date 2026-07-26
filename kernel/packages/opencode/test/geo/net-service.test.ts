@@ -120,6 +120,33 @@ describe("net service", () => {
     { timeout: 40000 },
   )
 
+  it.live(
+    "a machine with no network spends nothing finding that out",
+    () =>
+      Effect.gen(function* () {
+        const network = yield* GeoNet.Service
+        const port = yield* Effect.promise(closedPort)
+        yield* network.register({ id: "gated", host: "localhost", port })
+
+        // The interface check is the first thing each round asks, and it costs
+        // microseconds with no traffic. On a machine that does have an
+        // interface it simply passes and the real probing follows — which is
+        // what this asserts, since the alternative would be a module that never
+        // probes at all.
+        const seen: string[] = []
+        yield* Effect.forkScoped(
+          Stream.runForEach(network.watch("gated"), (state) => Effect.sync(() => void seen.push(state.state))),
+        )
+        yield* pollWithTimeout(
+          Effect.sync(() => (seen.includes("unreachable") ? true : undefined)),
+          `the gate never let a round through; saw ${seen.join(" -> ")}`,
+          "20 seconds",
+        )
+        expect(seen).toContain("checking")
+      }),
+    { timeout: 30000 },
+  )
+
   it.live("an unknown target reports idle rather than inventing an answer", () =>
     Effect.gen(function* () {
       const network = yield* GeoNet.Service

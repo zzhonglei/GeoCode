@@ -12,17 +12,23 @@ import type { FailureKind, Reachability, RouteId } from "./types"
  * subtly wrong — hysteresis and the fast path around it — can be examined
  * without a network. --- */
 
-/** Re-verify interval while a target is reachable. */
-export const HEALTHY_INTERVAL_MS = 30_000
-
 /**
- * Re-verify interval while it is not.
+ * Re-verify interval, the same whether a target is up or down.
  *
- * Shorter than the healthy one on purpose: this is the window in which a user
- * who has just started their proxy software is waiting for the application to
- * notice, and noticing is supposed to need no interaction from them at all.
+ * Short because it can afford to be. The probe is a TLS handshake and nothing
+ * else: no subprocess, no credentials, no API path. Remote quota and abuse
+ * systems key on a project and its credentials, so an unauthenticated handshake
+ * never enters their view at all — which is what makes a five-second cadence a
+ * question of our own cost rather than of the remote service's tolerance.
+ *
+ * **This justification is load-bearing.** Anyone who lengthens this interval
+ * without a new reason is trading the thing the module exists for — knowing
+ * quickly — against a cost that was already established to be negligible.
+ *
+ * Uniform across states because both directions are someone waiting: one is a
+ * user whose network just broke, the other a user who has just fixed it.
  */
-export const DEGRADED_INTERVAL_MS = 10_000
+export const INTERVAL_MS = 5_000
 
 /**
  * Consecutive ambiguous failures required to give up a working route.
@@ -97,8 +103,8 @@ export function step(current: Machine, verdict: Verdict): Step {
 }
 
 /** How long to wait before the next round. */
-export function interval(machine: Machine): number {
-  return machine.state.state === "reachable" ? HEALTHY_INTERVAL_MS : DEGRADED_INTERVAL_MS
+export function interval(_machine: Machine): number {
+  return INTERVAL_MS
 }
 
 /**
