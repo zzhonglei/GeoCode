@@ -125,7 +125,18 @@ export const GeeSetup = Schema.Union([
   Schema.Struct({ status: Schema.Literal("project-missing") }),
   Schema.Struct({ status: Schema.Literal("probe-timeout") }),
   Schema.Struct({ status: Schema.Literal("probe-failed"), error: Schema.String }),
-  Schema.Struct({ status: Schema.Literal("ready") }),
+  /**
+   * Ready carries what the happy path has to show: which interpreter, which
+   * project, which client version. The guidance in §5.11 names the project,
+   * and the tool layer's environment header names all three — none of which
+   * exists anywhere else once the chain has passed.
+   */
+  Schema.Struct({
+    status: Schema.Literal("ready"),
+    python: Schema.String,
+    project: Schema.String,
+    version: optional(Schema.String),
+  }),
 ]).annotate({ identifier: "GeoEvent.GeeSetup" })
 export type GeeSetup = typeof GeeSetup.Type
 

@@ -188,9 +188,18 @@ export function probe(
 
     // 4. The project identifier — a config read, and last in the chain
     // because only an authorized run needs it (§5.2).
-    if (!block?.project?.trim()) return { status: "project-missing" as const }
+    const project = block?.project?.trim()
+    if (!project) return { status: "project-missing" as const }
 
-    return { status: "ready" as const }
+    // Ready carries the facts, because after this point nothing else holds
+    // them: the guidance names the project, the environment header names all
+    // three, and neither can look them up.
+    return {
+      status: "ready" as const,
+      python,
+      project,
+      version: typeof report.version === "string" && report.version ? report.version : undefined,
+    }
   })
 }
 

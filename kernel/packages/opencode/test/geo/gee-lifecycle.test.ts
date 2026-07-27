@@ -108,7 +108,7 @@ const waitFor = (predicate: (status: GeoEvent.GeeStatus) => boolean, message: st
   )
 
 describe("gee composition", () => {
-  const ready: GeoEvent.GeeSetup = { status: "ready" }
+  const ready: GeoEvent.GeeSetup = { status: "ready", python: "/p", project: "demo" }
   const reachable: GeoEvent.GeeNetwork = { status: "reachable", route: "direct" }
 
   test("local comes before network comes before remote", () => {

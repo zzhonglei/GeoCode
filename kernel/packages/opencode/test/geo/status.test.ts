@@ -114,7 +114,7 @@ describe("geo status slots", () => {
 
       const next: GeoEvent.GeeStatus = {
         facing: "network",
-        setup: { status: "ready" },
+        setup: { status: "ready", python: "/p", project: "demo" },
         network: { status: "unreachable" },
         runtime: { status: "unknown" },
       }

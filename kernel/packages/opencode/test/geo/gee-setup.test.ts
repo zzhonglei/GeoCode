@@ -168,7 +168,12 @@ describe("gee setup chain", () => {
       Effect.gen(function* () {
         expect(yield* GeeSetup.probe(runtime, { python })).toEqual({ status: "project-missing" })
         expect(yield* GeeSetup.probe(runtime, { python, project: "  " })).toEqual({ status: "project-missing" })
-        expect(yield* GeeSetup.probe(runtime, { python, project: "my-project" })).toEqual({ status: "ready" })
+        expect(yield* GeeSetup.probe(runtime, { python, project: "my-project" })).toEqual({
+          status: "ready",
+          python,
+          project: "my-project",
+          version: undefined,
+        })
       }),
     )
     it.effect("the project is the last link, and completes the chain", body)
