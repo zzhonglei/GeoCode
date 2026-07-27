@@ -163,7 +163,13 @@ describe("gee execution", () => {
       // Default, floored, honoured. A total clock could not work here: a
       // single remote call legitimately runs for hours, and the heartbeat in
       // the runtime library is what makes an idle clock safe (§5.9 心跳契约).
-      expect(idles).toEqual([60_000, 30_000, 900_000])
+      //
+      // The floor is twice the library's heartbeat interval, and that is what
+      // it is FOR: a caller asking for 5 seconds — or for 30, which is the
+      // interval itself — would kill scripts that are heartbeating exactly as
+      // documented, which is the one thing the contract promises works.
+      expect(GeeExecutor.IDLE_FLOOR_SECONDS).toBeGreaterThan(GeeExecutor.HEARTBEAT_INTERVAL_SECONDS)
+      expect(idles).toEqual([60_000, 60_000, 900_000])
       expect(captured.at(-1)!.clocks.total).toBeUndefined()
     }),
   )

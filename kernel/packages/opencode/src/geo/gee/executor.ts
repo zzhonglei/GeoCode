@@ -28,8 +28,19 @@ import type { Environment } from "./types"
  * is not a bug to work around but the premise the library is built on, and it
  * has to reach the agent through the tool description (§5.9 心跳契约).
  */
-export const IDLE_FLOOR_SECONDS = 30
+export const IDLE_FLOOR_SECONDS = 60
 export const IDLE_DEFAULT_SECONDS = 60
+
+/**
+ * The library's default heartbeat interval, in seconds.
+ *
+ * The floor above is twice this, and the relationship is the point: a script
+ * heartbeating exactly as documented emits every HEARTBEAT_INTERVAL_SECONDS,
+ * so an idle limit at or near that number kills scripts that are doing
+ * precisely what the contract asks. These two numbers move together — raising
+ * the library's interval without raising the floor reintroduces the race.
+ */
+export const HEARTBEAT_INTERVAL_SECONDS = 30
 
 export interface Options {
   /** Inline source, for a one-off query. Exactly one of this and `scriptPath`. */

@@ -193,6 +193,17 @@ const layer = Layer.effect(
     let cached: { readonly route: string | undefined; readonly conclusion: GeoEvent.GeeRuntime } | undefined
     /** When a failed conclusion stops being reused (§5.5 退避). */
     let backoffUntil = 0
+    /**
+     * Counts refusals reported from real runs.
+     *
+     * §5.5 ranks the evidence: a refusal the user actually experienced is more
+     * direct than anything we probed, because it IS the operation, against the
+     * same remote, with the same credentials. The check takes seconds, so a
+     * refusal can arrive while one is in flight — and without this counter the
+     * probe's older "valid" would land on top of it and the ranking would be
+     * exactly inverted.
+     */
+    let refusals = 0
 
     /** The network watch, alive exactly while setup is ready (§5.4 idle 的含义). */
     let watching: Fiber.Fiber<void, never> | undefined
@@ -380,6 +391,7 @@ const layer = Layer.effect(
           // leaving the status describing a configuration that no longer
           // exists.
           const token = currentToken
+          const witnessed = refusals
           const route = current.network.route
           if (cached && cached.route === route) {
             // A failed conclusion is reused until its backoff expires, so a
@@ -398,6 +410,10 @@ const layer = Layer.effect(
           // describes a configuration the system has moved on from, so it goes
           // neither into the cache nor onto the wire.
           if (token !== currentToken) return conclusion
+          // Overtaken by a real refusal. Same reasoning, different evidence:
+          // what the user's own run met is more direct than what we asked, so
+          // this answer is returned but not recorded (§5.5 真实使用兜底).
+          if (refusals !== witnessed) return conclusion
 
           cached = { route, conclusion }
           if (conclusion.status === "failed") {
@@ -426,6 +442,7 @@ const layer = Layer.effect(
         // Evidence from the user's own call outranks anything we probed: it is
         // the same operation, against the same remote, with the same
         // credentials (§5.5 真实使用兜底).
+        refusals += 1
         cached = { route, conclusion }
         backoffUntil = (yield* Clock.currentTimeMillis) + FAILURE_BACKOFF_MS
         yield* Ref.update(facts, (state) => ({ ...state, runtime: conclusion }))

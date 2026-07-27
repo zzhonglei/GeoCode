@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { Effect, Layer, PubSub, Ref, Stream } from "effect"
+import { Effect, Fiber, Layer, PubSub, Ref, Stream } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Global } from "@opencode-ai/core/global"
@@ -309,6 +309,58 @@ describe("gee remote authorization", () => {
           expect(yield* gee.reject("NameError: name 'ee' is not defined")).toBe(false)
           // No remote call was made by either report.
           expect(yield* validations(rt.labels)).toBe(1)
+        }),
+      { timeout: 30000 },
+    )
+  }
+
+  {
+    // A validate that takes its time, so a real rejection can land while it
+    // is still in flight — the ordering §5.5 is explicit about.
+    const slowLabels = Ref.makeUnsafe<string[]>([])
+    const slow = Layer.mock(GeoRuntime.Service)({
+      run: (options) =>
+        Effect.gen(function* () {
+          yield* Ref.update(slowLabels, (all) => [...all, options.label ?? "?"])
+          if (options.label === "gee:validate") yield* Effect.sleep("400 millis")
+          return {
+            code: 0,
+            reason: "exit",
+            stdout: options.label === "gee:setup" ? SETUP_OK : VALID,
+            stderr: "",
+            durationMs: 1,
+            truncated: false,
+            drainIncomplete: false,
+          } satisfies GeoRuntime.Result
+        }),
+      killAllSync: () => {},
+    })
+    const net = scriptedNet()
+    const it = graph(slow, net.layer)
+
+    it.live(
+      "a refusal that lands mid-check outranks the check it overtook",
+      () =>
+        Effect.gen(function* () {
+          const gee = yield* GeeService.Service
+          yield* arrive(net.hub, "direct")
+
+          // The probe says valid, but while it is asking, a real run comes
+          // back refused. Real use is the more direct evidence — it is the
+          // same operation against the same remote (§5.5) — so the probe's
+          // older answer must not land on top of it.
+          const asking = yield* Effect.forkScoped(gee.validate())
+          yield* Effect.sleep("100 millis")
+          expect(yield* gee.reject("invalid_grant: Token has been expired or revoked.")).toBe(true)
+          yield* Fiber.join(asking)
+
+          const after = yield* currentStatus
+          expect(after?.runtime.status).toBe("failed")
+          if (after?.runtime.status === "failed") expect(after.runtime.reason).toBe("credentials-expired")
+
+          // And the rejection stays: a later ask reuses it rather than
+          // re-running the check the refusal already answered.
+          expect((yield* gee.validate()).status).toBe("failed")
         }),
       { timeout: 30000 },
     )

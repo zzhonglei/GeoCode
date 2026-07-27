@@ -47,6 +47,10 @@ export const DEPS: readonly Dep[] = [
   {
     pkg: "geopandas",
     module: "geopandas",
+    // Covers shapely too, which the library also imports (to explain why a
+    // geometry is invalid). geopandas requires it outright, so a probe entry
+    // of its own could never fail on its own — it would only add a line to
+    // every install instruction.
     role: "reading the local vector file that defines a study region",
   },
 ] as const
