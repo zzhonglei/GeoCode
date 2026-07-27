@@ -2,12 +2,14 @@ export * as GeoKernel from "./index"
 
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { MachineConfig } from "./config"
+import { GeeService } from "./gee"
 import { GeoNet } from "./net"
 import { GeoQgis } from "./qgis"
 import { GeoRuntime } from "./runtime"
 import { GeoStatus } from "./status"
 
 export { MachineConfig } from "./config"
+export { GeeService } from "./gee"
 export { GeoNet } from "./net"
 export { GeoQgis } from "./qgis"
 export { GeoRuntime } from "./runtime"
@@ -31,7 +33,15 @@ export { GeoStatus } from "./status"
  *   net      network reachability: resolve, probe, rank, monitor  §3.3
  *
  * Capability layer, on top of those:
- *   qgis     lifecycle, resolution, catalog, unified gate          §4
- *            (executor and scripts still to come — 2d)
- *   gee, osm, dataplane — not yet built. --- */
-export const node = LayerNode.group([MachineConfig.node, GeoRuntime.node, GeoNet.node, GeoStatus.node, GeoQgis.node])
+ *   qgis     lifecycle, resolution, catalog, executor, data reading      §4
+ *   gee      lifecycle, local chain, Net consumption                     §5
+ *            (remote authorization and execution still to come — 3c, 3d)
+ *   osm, dataplane — not yet built. --- */
+export const node = LayerNode.group([
+  MachineConfig.node,
+  GeoRuntime.node,
+  GeoNet.node,
+  GeoStatus.node,
+  GeoQgis.node,
+  GeeService.node,
+])
