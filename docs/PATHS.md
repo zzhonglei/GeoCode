@@ -53,7 +53,7 @@ Windows 上还发生过真实事故:NSIS 单击安装器的安装目录取自 pa
 | cache | `skills/` 暂存区内 `.opencode-version` | `.geocode-version` | 技能暂存版本标记 |
 | 用户项目 `.git/` | `opencode`(项目 id 标记文件) | `geocode` | 内核写进项目 git 目录的唯一文件;改名后两个程序各记各的项目 id,互不干扰 |
 
-GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统一收进 `cache/geo/` 一层之下,不再与内核产物平铺。这条规则对将来新增的地理能力同样生效——地理内核的任何缓存都在 `geo/` 里,永远一眼可辨。
+GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统一收进 `cache/geo/` 一层之下,不再与内核产物平铺。这条规则对将来新增的地理能力同样生效——地理内核的任何缓存都在 `geo/` 里,永远一眼可辨。已就位的成员:`geo/qgis-pyhome/`(符号链接农场,GEOKERNEL.md §4.4)与 `geo/scripts/`(数据读取脚本的物化产物,内容哈希命名、变更即换名,GEOKERNEL.md §4.13)。
 
 **两个配置文件的分工**必须清晰,否则用户不知道该改哪一个:
 
