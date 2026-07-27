@@ -31,6 +31,7 @@ export interface GeoStatusSnapshot extends Schema.Schema.Type<typeof GeoStatusSn
 
 export const GeoPaths = {
   status: "/geo/status",
+  reload: "/geo/reload",
 } as const
 
 export const GeoApi = HttpApi.make("geo").add(
@@ -46,6 +47,19 @@ export const GeoApi = HttpApi.make("geo").add(
             "Current status of every geographic environment slot. Subscribe to the event stream BEFORE " +
             "reading this snapshot, and re-read it on every reconnect: a change landing between the read " +
             "and the subscription is lost by both paths (GEOKERNEL.md §9.2).",
+        }),
+      ),
+      HttpApiEndpoint.post("reload", GeoPaths.reload, {
+        success: described(Schema.Struct({ reloaded: Schema.Literal(true) }), "Configuration re-read"),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "geo.reload",
+          summary: "Re-read machine.json now",
+          description:
+            "Force a synchronous re-read of machine.json. The config module watches the file, but a watch can " +
+            "die with the platform's blessing (§3.1 documents the watcher; this is the pull escape hatch) — and " +
+            "a settings surface that just WROTE the file gets a deterministic apply instead of racing the " +
+            "watcher's debounce.",
         }),
       ),
     )

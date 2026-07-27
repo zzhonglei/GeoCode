@@ -179,14 +179,32 @@ export function run(
           startupCrash: false,
         } satisfies Outcome
       }
+      // Marker present but unreadable is ITS OWN case (§4.6 failure grading):
+      // the interpreter demonstrably started and reached its emit, so calling
+      // it a startup crash both drops the parse error and — worse — trips the
+      // macOS unknown-layout retry, a spurious thirty-second stdlib search
+      // keyed precisely on startupCrash.
+      if (extracted.kind === "invalid") {
+        return {
+          ok: false,
+          failure: "probe-failed",
+          detail: `probe result would not parse (${extracted.error}); raw output:\n${tail(result.stdout, result.stderr)}`,
+          startupCrash: false,
+        } satisfies Outcome
+      }
       // No marker: the script never reached its emit — interpreter startup
       // failure, segfault, kill. The RAW output is the diagnosis and must
       // reach the reader intact (§4.6 失败分级); with the fault handler on,
-      // stderr carries the native stack for the segfault case.
+      // stderr carries the native stack for the segfault case. The process's
+      // own ending is part of that diagnosis (§4.6 row 1), so it leads.
+      const ending =
+        result.reason !== "exit" || result.code !== 0
+          ? `[process ${result.reason}${result.code !== null ? `, exit code ${result.code}` : ""}]\n`
+          : ""
       return {
         ok: false,
         failure: "probe-failed",
-        detail: tail(result.stdout, result.stderr) || "(no output at all)",
+        detail: ending + (tail(result.stdout, result.stderr) || "(no output at all)"),
         startupCrash: true,
       } satisfies Outcome
     }

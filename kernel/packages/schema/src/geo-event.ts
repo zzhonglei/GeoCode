@@ -43,6 +43,13 @@ export const QgisDiagnostics = Schema.Struct({
   selected: optional(Schema.Record(Schema.String, Schema.String)),
   /** Per-path existence checks, so a missing file is visible without a log dive. */
   checks: optional(Schema.Record(Schema.String, Schema.Boolean)),
+  /**
+   * Registered dynamic-library directories, when the track registers any.
+   * §4.10 lists them as part of the bundle: on the manual Windows track the
+   * WIDTH of this set is load-bearing (§4.5), and a reader cannot judge it
+   * without seeing it.
+   */
+  dllDirectories: optional(Schema.Array(Schema.String)),
   /** Environment variables in effect, filtered at this exit (§4.3 principle 8). */
   environment: optional(Schema.Record(Schema.String, Schema.String)),
   /** Raw probe output. Present when the probe never reached its output marker. */
@@ -83,6 +90,21 @@ export const QgisStatus = Schema.Union([
     processing: Schema.Boolean,
     catalog: QgisCatalog,
     catalogError: optional(Schema.String),
+    /**
+     * The facts a status surface shows on the happy path: which interpreter,
+     * which versions, which track produced them. Without these the ready state
+     * has nothing to render and no source to fetch it from — the verified
+     * environment object itself never leaves the kernel (§9.1).
+     */
+    interpreter: optional(Schema.String),
+    track: optional(Schema.String),
+    versions: optional(
+      Schema.Struct({
+        python: Schema.String,
+        gdal: Schema.String,
+        qgis: Schema.String,
+      }),
+    ),
   }),
 ]).annotate({ identifier: "GeoEvent.QgisStatus" })
 export type QgisStatus = typeof QgisStatus.Type

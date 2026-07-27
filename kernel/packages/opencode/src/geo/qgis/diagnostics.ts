@@ -98,9 +98,21 @@ export function pathChecks(input: CheckInput): Record<string, boolean> {
       }
     }
   } else {
-    // macOS equivalent: the install's own library directory.
-    const core = path.join(input.prefix, "lib", "libqgis_core.dylib")
-    checks[core] = existsSync(core)
+    // macOS equivalent — with BOTH generations' locations. The older bundle
+    // keeps the core library under the prefix's lib directory; the current one
+    // keeps it in Frameworks beside Contents (verified against a real 3.44.9
+    // install, where the lib directory does not exist at all). Checking only
+    // the old spot painted a false red mark on every healthy modern install.
+    const candidates = [
+      path.join(input.prefix, "lib", "libqgis_core.dylib"),
+      path.join(path.resolve(input.prefix, ".."), "Frameworks", "libqgis_core.dylib"),
+    ]
+    const found = candidates.find((candidate) => existsSync(candidate))
+    if (found) {
+      checks[found] = true
+    } else {
+      for (const candidate of candidates) checks[candidate] = false
+    }
   }
 
   // Projection database — the payload, never the directory (§4.3 principle 4).

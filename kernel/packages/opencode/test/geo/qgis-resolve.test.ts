@@ -261,6 +261,21 @@ describe("qgis probe grading", () => {
     }
   })
 
+  test("a marker that will not parse is not called a startup crash", async () => {
+    // The interpreter demonstrably started and reached its emit. Grading this
+    // as a startup crash both drops the parse error and trips the macOS
+    // unknown-layout retry — a spurious thirty-second search keyed on exactly
+    // that flag (§4.6 keeps 无标记 and 标记内容非法 as separate grades).
+    const runtime = stubRuntime([{ stdout: `${QgisProbe.MARKER}{definitely not json` }])
+    const outcome = await Effect.runPromise(QgisProbe.run(runtime, "python", {}, []))
+    expect(outcome.ok).toBe(false)
+    if (!outcome.ok) {
+      expect(outcome.failure).toBe("probe-failed")
+      expect(outcome.startupCrash).toBe(false)
+      expect(outcome.detail).toContain("would not parse")
+    }
+  })
+
   test("a timeout is its own failure, not a generic one", async () => {
     const outcome = await Effect.runPromise(
       QgisProbe.run(stubRuntime([{ reason: "timeout", code: null }]), "python", {}, []),
@@ -342,6 +357,27 @@ describe("qgis resolve orchestration", () => {
       if (resolution.ok) expect(resolution.environment.env.PYTHONHOME).toBe(seen[1]!.PYTHONHOME!)
     },
   )
+
+  test.skipIf(process.platform === "win32")("a real interpreter outranks a missing marker", async () => {
+    // A QGIS-derived bundle with no recognizable marker, but the hint names an
+    // interpreter that exists. The marker's absence must not veto the probe:
+    // for pruned and renamed builds the probe is the only honest judge (§4.3
+    // principle 10). Everything short of this still gets the clean not-qgis.
+    const bundle = path.join(root, "Derived.app")
+    const macos = path.join(bundle, "Contents", "MacOS")
+    fs.mkdirSync(macos, { recursive: true })
+    fs.writeFileSync(path.join(macos, "python3.12"), "") // no qgis_process, no QGIS
+
+    const { runtime, seen } = recordingRuntime([{ stdout: success }])
+    const viaInterpreter = await Effect.runPromise(QgisResolve.resolve(path.join(macos, "python3.12"), runtime))
+    expect(viaInterpreter.ok).toBe(true)
+    expect(seen).toHaveLength(1)
+
+    // The bundle ROOT is not an interpreter: no escape hatch, clean verdict.
+    const viaRoot = await Effect.runPromise(QgisResolve.resolve(bundle, runtime))
+    expect(viaRoot.ok).toBe(false)
+    if (!viaRoot.ok) expect(viaRoot.failure).toBe("not-qgis")
+  })
 
   test.skipIf(process.platform === "win32")("a startup crash with no rescue keeps the raw output", async () => {
     const bundle = path.join(root, "QGIS-Bare.app")

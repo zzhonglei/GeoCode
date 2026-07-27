@@ -9,6 +9,7 @@ import { Auth } from "@/auth"
 import { Config } from "@/config/config"
 import { Installation } from "@/installation"
 import { ServerAuth } from "@/server/auth"
+import { MachineConfig } from "@/geo/config"
 import { GeoStatus } from "@/geo/status"
 import { RootHttpApi } from "@/server/routes/instance/httpapi/api"
 import { GeoPaths } from "@/server/routes/instance/httpapi/groups/geo"
@@ -26,7 +27,7 @@ import { testEffect } from "../lib/effect"
  * route is mounted on the root api and reads the live slots, not that a stub
  * can return an object. */
 
-const geoLayer = LayerNode.compile(LayerNode.group([GeoStatus.node]))
+const geoLayer = LayerNode.compile(LayerNode.group([GeoStatus.node, MachineConfig.node]))
 
 const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(RootHttpApi).pipe(
@@ -57,6 +58,17 @@ describe("geo status endpoint", () => {
       // Honesty over optimism: a module that has not started has no status, and
       // the snapshot says so rather than inventing "unconfigured" on its behalf.
       expect(yield* response.json).toEqual({})
+    }),
+  )
+
+  it.live("reload re-reads the file on demand", () =>
+    Effect.gen(function* () {
+      // The pull escape hatch behind the watcher: a settings surface that just
+      // wrote machine.json calls this for a deterministic apply, and a machine
+      // whose watch quietly died has a remedy short of restarting.
+      const response = yield* HttpClient.post(GeoPaths.reload)
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toEqual({ reloaded: true })
     }),
   )
 

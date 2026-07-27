@@ -63,6 +63,7 @@ function toWire(diagnostics: Diagnostics): GeoEvent.QgisDiagnostics {
     candidates,
     selected,
     checks: diagnostics.checks,
+    dllDirectories: diagnostics.dllDirectories.length > 0 ? [...diagnostics.dllDirectories] : undefined,
     environment: diagnostics.env,
     output: diagnostics.output,
     error: diagnostics.error,
@@ -167,19 +168,29 @@ const layer = Layer.effect(
         // before any ready status is visible, or the gate could see ready and
         // find nothing to hand out.)
 
+        // Every ready frame carries the facts a status surface shows on the
+        // happy path — interpreter, versions, track. The verified environment
+        // object itself never leaves the kernel (§9.1), so if these are not on
+        // the wire they are nowhere.
+        const facts = {
+          interpreter: environment.python,
+          track: environment.track,
+          versions: environment.versions,
+        }
+
         // Stage one lands NOW; the catalog stage reports its own progress
         // under the same token (§4.10 提交时机, §3.4 令牌覆盖整轮).
         if (!environment.processing) {
-          yield* commit({ status: "ready", processing: false, catalog: "skipped" })
+          yield* commit({ status: "ready", processing: false, catalog: "skipped", ...facts })
           return
         }
-        yield* commit({ status: "ready", processing: true, catalog: "building" })
+        yield* commit({ status: "ready", processing: true, catalog: "building", ...facts })
 
         const built = yield* catalog.build(environment)
         if (built.ok) {
-          yield* commit({ status: "ready", processing: true, catalog: "ready" })
+          yield* commit({ status: "ready", processing: true, catalog: "ready", ...facts })
         } else {
-          yield* commit({ status: "ready", processing: true, catalog: "failed", catalogError: built.error })
+          yield* commit({ status: "ready", processing: true, catalog: "failed", catalogError: built.error, ...facts })
         }
       })
 

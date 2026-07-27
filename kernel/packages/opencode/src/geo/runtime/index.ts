@@ -373,6 +373,27 @@ const layer = Layer.effect(
         // repeat calls are harmless.
         const stopper = new AbortController()
 
+        // Liveness is asked of the OPERATING SYSTEM directly, never of the
+        // spawner's handle. The handle's notion of "running" settles on the
+        // stream-close event — and the scenario this check exists for is
+        // precisely the one where that event is being withheld: the process is
+        // dead while a crash reporter (or an inheriting grandchild) keeps its
+        // stdio open. Wired to the handle, the detector can never fire in the
+        // only situation it is for, and the run waits out its whole idle
+        // budget to end under the wrong reason.
+        const pid = child.pid === undefined ? undefined : Number(child.pid)
+        const osLiveness =
+          LIVENESS_CHECK && pid !== undefined
+            ? Effect.sync(() => {
+                try {
+                  process.kill(pid, 0)
+                  return true
+                } catch {
+                  return false
+                }
+              })
+            : undefined
+
         const watchdog = GeoClocks.watch({
           lastActivity,
           accumulated,
@@ -380,7 +401,7 @@ const layer = Layer.effect(
           totalMs,
           idleMs,
           outputLimit: limit,
-          isRunning: LIVENESS_CHECK ? child.isRunning.pipe(Effect.orElseSucceed(() => true)) : undefined,
+          isRunning: osLiveness,
           now: () => Date.now(),
         })
 

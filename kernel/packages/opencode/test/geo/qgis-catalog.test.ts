@@ -282,7 +282,7 @@ describe("qgis catalog wired into the lifecycle", () => {
         )
         yield* config.reload()
 
-        yield* pollWithTimeout(
+        const ready = yield* pollWithTimeout(
           Effect.gen(function* () {
             const current = yield* status.current("qgis")
             return current?.status === "ready" && current.catalog === "ready" ? current : undefined
@@ -290,6 +290,14 @@ describe("qgis catalog wired into the lifecycle", () => {
           "the catalog stage never completed",
           "15 seconds",
         )
+
+        // The ready frame carries what a status surface shows on the happy
+        // path. The verified environment never leaves the kernel, so these
+        // facts exist on the wire or nowhere.
+        if (ready.status === "ready") {
+          expect(ready.versions?.qgis).toBe("3.44.9")
+          expect(ready.interpreter?.endsWith("python3.12")).toBe(true)
+        }
 
         // This is 2c's whole point: the stub that honestly failed is gone, and
         // the same seam now opens the gate (§4.9).

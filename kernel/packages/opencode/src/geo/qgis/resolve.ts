@@ -92,14 +92,24 @@ function resolveMacOS(
 ): Effect.Effect<Resolution> {
   return Effect.gen(function* () {
     const located = QgisMacOS.resolvePrefix(hint)
-    if (!located.prefix) {
+    let prefix: string
+    if (located.prefix) {
+      prefix = located.prefix
+    } else if (located.fallbackPrefix && /^python(3(\.\d+)?)?$/i.test(path.basename(hint)) && existsSync(hint)) {
+      // The escape hatch (§4.3 principle 10): the bundle carries no marker,
+      // but the hint IS a real interpreter the user pointed at. A missing
+      // marker must not outrank a spawnable file — QGIS-derived and pruned
+      // builds exist, and for them the probe is the only honest judge. The
+      // verdict stays with the probe; everything else still gets the clean
+      // not-qgis below.
+      prefix = located.fallbackPrefix
+    } else {
       return {
         ok: false as const,
         failure: "not-qgis" as const,
         diagnostics: QgisDiagnostics.bare(hint, "the path names an application bundle that is not QGIS"),
       }
     }
-    const prefix = located.prefix
 
     // Pre-resolution discipline (§4.4): the hint is the interpreter only when
     // its NAME fits and the FILE exists — both, not either. The incident
@@ -200,34 +210,57 @@ function resolveWindows(
     // Track one: the bridge. The launcher is maintained by the QGIS project
     // and evolves with it; adopting its answer beats rebuilding it (§4.3
     // principle 2).
+    const launcherChoice: Record<string, Choice> = launcher && resolvedRoot
+      ? {
+          launcher: {
+            selected: launcher,
+            candidates: QgisWindows.LAUNCHER_NAMES.map((n) => path.win32.join(resolvedRoot!, "bin", n)),
+          },
+        }
+      : {}
     if (launcher && resolvedRoot) {
-      const dumped = yield* dumpLauncherEnv(runtime, launcher)
-      if (dumped) {
+      const dump = yield* dumpLauncherEnv(runtime, launcher)
+      if (!dump.ok) {
+        // A launcher existed and its dump failed — that fact must survive to
+        // the fallback's diagnostics AND the log, or "why am I on the manual
+        // track with a perfectly good launcher" becomes unanswerable (§4.10).
+        // Byte counts only: a dump carries every secret this process holds.
+        yield* Effect.logWarning("qgis launcher env dump failed; falling back to manual assembly", {
+          launcher,
+          reason: dump.reason,
+          stdoutBytes: dump.stdoutBytes,
+          stderrBytes: dump.stderrBytes,
+        })
+        attempted.push("bridge")
+        return yield* manualAttempt(hint, resolvedRoot, rootCandidates, runtime, attempted, launcherChoice, onProbing)
+      }
+      const dumped = dump.env
+      {
         const adopted = QgisWindows.adoptBridgeDump(dumped, resolvedRoot)
-        if (adopted) {
+        if (!adopted) {
+          yield* Effect.logWarning("qgis launcher dump rejected: missing required keys", { launcher })
           attempted.push("bridge")
-          const choices: Record<string, Choice> = {
-            launcher: {
-              selected: launcher,
-              candidates: QgisWindows.LAUNCHER_NAMES.map((n) => path.win32.join(resolvedRoot!, "bin", n)),
-            },
-          }
+          return yield* manualAttempt(hint, resolvedRoot, rootCandidates, runtime, attempted, launcherChoice, onProbing)
+        }
+        {
+          attempted.push("bridge")
+          const choices: Record<string, Choice> = launcherChoice
           yield* onProbing
           const outcome = yield* QgisProbe.run(runtime, adopted.interpreter, adopted.env, [])
           if (outcome.ok) {
             return succeed(adopted.interpreter, adopted.prefix, adopted.env, [], "bridge", outcome.report)
           }
+          // The bridge probe failed; its own failure would be the one shown if
+          // the manual retry also fails, so the effective track must travel.
           // Bridge probe failed → manual retry, once (§4.6 回退). The two
           // tracks fail for entirely different reasons, so the second attempt
           // is a genuinely different experiment, not a repeat.
           return yield* manualAttempt(hint, resolvedRoot, rootCandidates, runtime, attempted, choices, onProbing)
         }
       }
-      // Dump failed or was rejected: fall to manual without counting a bridge
-      // probe attempt — there was nothing to probe.
     }
 
-    return yield* manualAttempt(hint, resolvedRoot, rootCandidates, runtime, attempted, {}, onProbing)
+    return yield* manualAttempt(hint, resolvedRoot, rootCandidates, runtime, attempted, launcherChoice, onProbing)
   })
 }
 
@@ -272,6 +305,9 @@ function manualAttempt(
       dllDirectories: assembly.dllDirectories,
       choices,
       attempted,
+      // The track whose failure this is (§4.10 来源标记): the manual attempt
+      // always runs last, so its assembly is what the diagnostics describe.
+      track: "manual",
     })
   })
 }
@@ -287,7 +323,9 @@ function manualAttempt(
 function dumpLauncherEnv(
   runtime: GeoRuntime.Interface,
   launcher: string,
-): Effect.Effect<Record<string, string> | undefined> {
+): Effect.Effect<
+  { ok: true; env: Record<string, string> } | { ok: false; reason: string; stdoutBytes: number; stderrBytes: number }
+> {
   return Effect.gen(function* () {
     const result = yield* runtime
       .run({
@@ -297,11 +335,28 @@ function dumpLauncherEnv(
         clocks: { total: "15 seconds" },
         label: "qgis:env-dump",
       })
-      .pipe(Effect.catch(() => Effect.succeed(undefined)))
-    if (!result || result.reason !== "exit" || result.code !== 0) return undefined
+      .pipe(Effect.catch((error) => Effect.succeed(error)))
+    if (result instanceof Error) {
+      return { ok: false as const, reason: `spawn failed: ${result.message.split("\n")[0]}`, stdoutBytes: 0, stderrBytes: 0 }
+    }
+    if (result.reason !== "exit" || result.code !== 0) {
+      return {
+        ok: false as const,
+        reason: `${result.reason}, exit code ${result.code}`,
+        stdoutBytes: result.stdout.length,
+        stderrBytes: result.stderr.length,
+      }
+    }
     const extracted = GeoOutput.extractMarked(result.stdout, QgisWindows.ENV_DUMP_MARKER)
-    if (!extracted.ok) return undefined
-    return extracted.value as Record<string, string>
+    if (!extracted.ok) {
+      return {
+        ok: false as const,
+        reason: extracted.kind === "missing" ? "no marker in dump output" : "dump payload would not parse",
+        stdoutBytes: result.stdout.length,
+        stderrBytes: result.stderr.length,
+      }
+    }
+    return { ok: true as const, env: extracted.value as Record<string, string> }
   })
 }
 
@@ -340,6 +395,7 @@ function fail(
     dllDirectories: readonly string[]
     choices: Record<string, Choice>
     attempted?: readonly Track[]
+    track?: Track
   },
 ): Resolution {
   return {
@@ -351,6 +407,7 @@ function fail(
       env: context.env,
       dllDirectories: context.dllDirectories,
       choices: context.choices,
+      track: context.track,
       // Raw output only when the script never spoke — that is when it IS the
       // diagnosis (§4.6); otherwise the step's own error suffices.
       output: outcome.startupCrash ? outcome.detail : undefined,

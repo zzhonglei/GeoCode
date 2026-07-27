@@ -29,6 +29,14 @@ export interface PrefixResolution {
   /** True when a bundle was found but carries no QGIS marker — a definite answer. */
   readonly notQgis: boolean
   /**
+   * Where the executable directory WOULD be, kept alongside a not-qgis
+   * verdict. The escape hatch needs it: when the hint itself is a real
+   * interpreter, the marker's absence must not veto the probe (§4.3
+   * principle 10 — lenient where recovery exists), and this is the prefix
+   * that best-effort attempt runs under.
+   */
+  readonly fallbackPrefix?: string
+  /**
    * True when the prefix passed a marker check (levels 1 and 2). The
    * non-bundle fallback never verifies anything, and the reachability precheck
    * must not treat its guess as evidence — that is the difference between
@@ -49,10 +57,16 @@ export interface PrefixResolution {
 export function resolvePrefix(hint: string): PrefixResolution {
   // 1. The hint runs through a bundle's executable directory. Covers the
   //    canonical case where the hint IS the interpreter.
+  // A marker hit here is a verified answer; a miss is NOT a verdict — the
+  // design places marker verification in level 2's scan (§4.4), and level 1's
+  // job is only to find the directory. The miss is remembered, falls through.
+  let executableDir: string | undefined
   let walking = path.dirname(hint)
   while (walking && walking !== path.dirname(walking)) {
     if (path.basename(walking) === "MacOS") {
-      return isQgisBundle(walking) ? { prefix: walking, notQgis: false, verified: true } : { notQgis: true, verified: false }
+      if (isQgisBundle(walking)) return { prefix: walking, notQgis: false, verified: true }
+      executableDir = walking
+      break
     }
     walking = path.dirname(walking)
   }
@@ -68,7 +82,9 @@ export function resolvePrefix(hint: string): PrefixResolution {
     return existsSync(executableDir) && isQgisBundle(executableDir) ? executableDir : undefined
   })
   if (fromBundle) return { prefix: fromBundle, notQgis: false, verified: true }
-  if (sawBundle) return { notQgis: true, verified: false }
+  if (sawBundle || executableDir) {
+    return { notQgis: true, verified: false, fallbackPrefix: executableDir ?? path.resolve(hint, "../..") }
+  }
 
   // 3. Not a bundle. Best effort for package-manager and source installs —
   // and explicitly unverified: there is no marker to check outside a bundle,

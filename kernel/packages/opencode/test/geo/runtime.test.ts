@@ -427,6 +427,52 @@ describe("geo runtime", () => {
     { timeout: 40000 },
   )
 
+  it.live(
+    "a dead process with held-open streams is called a crash, quickly",
+    () =>
+      Effect.gen(function* () {
+        // The scenario the liveness check exists for: the child dies, but a
+        // grandchild inherited its stdio and keeps the streams open, so the
+        // close event — and everything wired to it — never fires. Liveness
+        // must come from asking the operating system about the pid, not from
+        // the handle; wired to the handle, this run would sit out the whole
+        // idle budget and end under the wrong reason.
+        if (process.platform !== "darwin") return
+        const runtime = yield* GeoRuntime.Service
+        const pids = yield* Ref.make<number | undefined>(undefined)
+
+        const result = yield* runtime.run({
+          ...script(
+            `const { spawn } = require("child_process")
+             const g = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" })
+             console.log("GRANDCHILD:" + g.pid)
+             setTimeout(() => process.exit(0), 300)`,
+          ),
+          delivery: {
+            mode: "incremental",
+            onChunk: (chunk) =>
+              Ref.update(pids, (current) => {
+                const match = /GRANDCHILD:(\d+)/.exec(chunk)
+                return match ? Number(match[1]) : current
+              }),
+          },
+          clocks: { idle: "30 seconds" },
+        })
+
+        expect(result.reason).toBe("crash")
+        // Well under the idle budget: the point is not waiting it out.
+        expect(result.durationMs).toBeLessThan(15_000)
+        // No drain flag asserted: the crash verdict leads to a process-GROUP
+        // kill, which takes the stream-holding grandchild with it — so the
+        // streams close and the drain completes. That is the cleanup working,
+        // not the settlement bound firing.
+
+        const grandchild = yield* Ref.get(pids)
+        if (grandchild) yield* waitUntilGone(grandchild, "the stream-holding grandchild was left behind")
+      }),
+    { timeout: 40000 },
+  )
+
   it.live("a signal that already fired stops the execution immediately", () =>
     Effect.gen(function* () {
       const runtime = yield* GeoRuntime.Service
