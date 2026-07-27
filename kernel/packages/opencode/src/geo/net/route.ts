@@ -33,7 +33,7 @@ const NO_PROXY_LOCAL = "localhost,127.0.0.1,::1"
  * lowercase form, others the uppercase, and a single-case injection quietly
  * routes only part of a program's traffic.
  */
-const PROXY_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"] as const
+export const PROXY_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"] as const
 
 /**
  * Environment for a subprocess that will use this route.
