@@ -12,9 +12,12 @@ import { GeoRuntime } from "../runtime"
 import { GeoStatus } from "../status"
 import { GeeCompose } from "./compose"
 import { GeeSetup } from "./setup"
+import type { GeeTypes } from "./types"
 import { GeeValidate } from "./validate"
 
 export { GeeDeps } from "./deps"
+export { GeeExecutor } from "./executor"
+export type { Environment } from "./types"
 
 /* --- GeoCode: the GEE lifecycle (docs/GEOKERNEL.md §5.1, §5.7).
  *
@@ -109,7 +112,22 @@ export interface Interface {
    * authorization rejection at all; anything else leaves the conclusion alone.
    */
   readonly reject: (message: string) => Effect.Effect<boolean>
+  /**
+   * The single readiness question, answered with a verified environment
+   * (§9.1, §5.6).
+   *
+   * Where the lazy check actually fires on the execution path: passing the
+   * gate is precisely the moment an authorization answer is needed. A refusal
+   * carries the composed status, so the caller shows the one layer that is in
+   * the way rather than three separate stories about it.
+   */
+  readonly gate: () => Effect.Effect<Gate>
 }
+
+/** What the gate answers. */
+export type Gate =
+  | { readonly ok: true; readonly environment: GeeTypes.Environment }
+  | { readonly ok: false; readonly status: GeoEvent.GeeStatus }
 
 export class Service extends Context.Service<Service, Interface>()("@geocode/GeeService") {}
 
@@ -415,7 +433,45 @@ const layer = Layer.effect(
         return true
       })
 
-    return Service.of({ recheck, validate, reject })
+    const gate = (): Effect.Effect<Gate> =>
+      Effect.gen(function* () {
+        const refuse = Effect.gen(function* () {
+          const state = yield* Ref.get(facts)
+          return {
+            ok: false as const,
+            status: GeeCompose.compose(state.setup, state.network, state.runtime),
+          }
+        })
+
+        const before = yield* Ref.get(facts)
+        if (before.setup.status !== "ready" || before.network.status !== "reachable") return yield* refuse
+
+        // The lazy check's other trigger (§5.5): needing to run IS needing an
+        // answer. A cached conclusion over the route in use costs nothing.
+        const conclusion = yield* validate()
+        if (conclusion.status !== "valid") return yield* refuse
+
+        // Re-read: the check took seconds, and a configuration edit inside
+        // that window would have started a new round. Handing out an
+        // environment assembled from what we read BEFORE the wait is exactly
+        // the window §4.9 exists to close.
+        const after = yield* Ref.get(facts)
+        if (after.setup.status !== "ready" || after.network.status !== "reachable") return yield* refuse
+        if (after.runtime.status !== "valid") return yield* refuse
+
+        return {
+          ok: true as const,
+          environment: {
+            python: after.setup.python,
+            project: after.setup.project,
+            version: after.setup.version,
+            route: after.network.route,
+            env: yield* remoteEnv(after),
+          },
+        }
+      })
+
+    return Service.of({ recheck, validate, reject, gate })
   }),
 )
 

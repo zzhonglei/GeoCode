@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -31,6 +31,9 @@ import { pollWithTimeout, testEffect } from "../lib/effect"
 const FILE = path.join(Global.Path.config, "machine.json")
 const write = (value: object) => Effect.promise(() => fs.promises.writeFile(FILE, JSON.stringify(value), "utf-8"))
 const clear = Effect.promise(() => fs.promises.rm(FILE, { force: true }))
+// The config directory is shared across test files; leaving a configuration
+// behind would decide another file's starting state.
+afterAll(() => fs.rmSync(FILE, { force: true }))
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "geo-gee-rt-"))
 const python = path.join(home, "python3")

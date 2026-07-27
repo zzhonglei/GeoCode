@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -28,6 +28,9 @@ import { pollWithTimeout, testEffect } from "../lib/effect"
 const FILE = path.join(Global.Path.config, "machine.json")
 const write = (value: object) => Effect.promise(() => fs.promises.writeFile(FILE, JSON.stringify(value), "utf-8"))
 const clear = Effect.promise(() => fs.promises.rm(FILE, { force: true }))
+// The config directory is shared across test files; leaving a configuration
+// behind would decide another file's starting state.
+afterAll(() => fs.rmSync(FILE, { force: true }))
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "geo-gee-lc-"))
 const python = path.join(home, "python3")
@@ -156,11 +159,15 @@ describe("gee lifecycle", () => {
           yield* clear
           yield* config.reload()
 
+          // Wait for the round rather than reading straight after reload: a
+          // reload dispatches the block change and the round that answers it
+          // runs on its own fiber, so an immediate read returns whatever the
+          // previous state was — including a configuration another test file
+          // left in this shared config directory.
+          const initial = yield* waitFor((s) => s.setup.status === "unconfigured", "never reached unconfigured")
           // Nothing configured: no subscription exists to spend probes on.
-          const initial = yield* currentStatus
-          expect(initial?.setup.status).toBe("unconfigured")
-          expect(initial?.network.status).toBe("idle")
-          expect(initial?.facing).toBe("setup")
+          expect(initial.network.status).toBe("idle")
+          expect(initial.facing).toBe("setup")
           expect(yield* Ref.get(net.subscribes)).toBe(0)
 
           yield* write({ gee: { python, project: "demo-project" } })
