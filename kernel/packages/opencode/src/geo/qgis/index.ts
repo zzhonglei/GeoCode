@@ -224,7 +224,13 @@ const layer = Layer.effect(
         // is one fact, and three different stories about it would read as
         // three different problems (§4.9). Guidance wording is the tool
         // layer's job (§8.6); the status carries the facts.
-        return { ok: false, status: current ?? { status: "unconfigured" } }
+        //
+        // Re-read when the environment is what is missing: a new round can
+        // land between the two reads above, and reporting the ready status it
+        // just replaced would hand the reader "not ready: ready".
+        const status_ =
+          environment === undefined && current?.status === "ready" ? yield* status.current("qgis") : current
+        return { ok: false, status: status_ ?? { status: "unconfigured" } }
       })
 
     return Service.of({ gate })

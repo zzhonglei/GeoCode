@@ -210,14 +210,15 @@ function resolveWindows(
     // Track one: the bridge. The launcher is maintained by the QGIS project
     // and evolves with it; adopting its answer beats rebuilding it (§4.3
     // principle 2).
-    const launcherChoice: Record<string, Choice> = launcher && resolvedRoot
-      ? {
-          launcher: {
-            selected: launcher,
-            candidates: QgisWindows.LAUNCHER_NAMES.map((n) => path.win32.join(resolvedRoot!, "bin", n)),
-          },
-        }
-      : {}
+    const launcherChoice: Record<string, Choice> =
+      launcher && resolvedRoot
+        ? {
+            launcher: {
+              selected: launcher,
+              candidates: QgisWindows.LAUNCHER_NAMES.map((n) => path.win32.join(resolvedRoot!, "bin", n)),
+            },
+          }
+        : {}
     if (launcher && resolvedRoot) {
       const dump = yield* dumpLauncherEnv(runtime, launcher)
       if (!dump.ok) {
@@ -283,6 +284,7 @@ function manualAttempt(
       resolvedRoot ??
       rootCandidates.find(Boolean) ??
       QgisWindows.rootFromInterpreter(hint) ??
+      QgisWindows.findRootByContent(hint) ??
       path.win32.dirname(hint)
 
     // The interpreter, discovered under the root rather than trusted from the
@@ -290,7 +292,7 @@ function manualAttempt(
     // probe's diagnostics show the exact path the user gave.
     const interpreter = QgisWindows.findInterpreterUnderRoot(root) ?? hint
 
-    const assembly = QgisWindows.assembleManual(interpreter, root)
+    const assembly = QgisWindows.assembleManual(interpreter, root, hint)
     const choices = { ...inherited, ...assembly.choices }
 
     yield* onProbing
@@ -337,7 +339,12 @@ function dumpLauncherEnv(
       })
       .pipe(Effect.catch((error) => Effect.succeed(error)))
     if (result instanceof Error) {
-      return { ok: false as const, reason: `spawn failed: ${result.message.split("\n")[0]}`, stdoutBytes: 0, stderrBytes: 0 }
+      return {
+        ok: false as const,
+        reason: `spawn failed: ${result.message.split("\n")[0]}`,
+        stdoutBytes: 0,
+        stderrBytes: 0,
+      }
     }
     if (result.reason !== "exit" || result.code !== 0) {
       return {

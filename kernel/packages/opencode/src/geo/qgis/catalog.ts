@@ -66,6 +66,16 @@ export interface GroupInfo {
 export const MARKER = "__GEOCODE_REGISTRY_JSON__"
 
 /**
+ * Stand-in group for algorithms that declare none.
+ *
+ * One constant, used by the export script and by both readers: the name a
+ * group is LISTED under has to be the name it can be looked up by, and three
+ * hand-written spellings of the same idea only agree until one of them is
+ * edited.
+ */
+export const UNGROUPED = "Ungrouped"
+
+/**
  * The export script.
  *
  * **Its output is English as a property of HOW IT RUNS, not a setting** — and
@@ -127,7 +137,7 @@ for prov in registry.providers():
         a = {
             "id": algo.id(),
             "name": algo.displayName(),
-            "group": algo.group() or "Ungrouped",
+            "group": algo.group() or "${UNGROUPED}",
             "description": algo.shortHelpString(),
             "helpText": help_text,
             "parameters": [],
@@ -271,7 +281,7 @@ const layer = Layer.effect(
         const counts = new Map<string, number>()
         for (const provider of registry.providers) {
           for (const algorithm of provider.algorithms) {
-            const group = algorithm.group || "(ungrouped)"
+            const group = algorithm.group || UNGROUPED
             counts.set(group, (counts.get(group) ?? 0) + 1)
           }
         }
@@ -320,7 +330,7 @@ const layer = Layer.effect(
         if (!registry) return []
         const candidates =
           kind === "group"
-            ? [...new Set(registry.providers.flatMap((p) => p.algorithms.map((a) => a.group || "(ungrouped)")))]
+            ? [...new Set(registry.providers.flatMap((p) => p.algorithms.map((a) => a.group || UNGROUPED)))]
             : registry.providers.flatMap((p) => p.algorithms.map((a) => a.id))
         return fuzzysort.go(input, candidates, { limit, threshold: -10000 }).map((result) => result.target)
       })

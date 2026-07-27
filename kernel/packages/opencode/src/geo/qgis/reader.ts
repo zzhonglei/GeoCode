@@ -96,11 +96,18 @@ export function materialize(
   if (!existsSync(target)) {
     mkdirSync(directory, { recursive: true })
     // Write-then-rename: an existing file must never be a partial one, or a
-    // concurrent instance could spawn Python on half a script. Same-content
-    // overwrite from a lost race is harmless by construction.
+    // concurrent instance could spawn Python on half a script.
     const staging = path.join(directory, `${name}-${hash}.${process.pid}.tmp`)
     writeFileSync(staging, content, "utf8")
-    renameSync(staging, target)
+    try {
+      renameSync(staging, target)
+    } catch (error) {
+      // On Windows a rename onto a path another process just created (or that
+      // an antivirus scanner is holding open) fails with EPERM. The target is
+      // content-addressed, so if it exists now, someone else wrote exactly
+      // this — that is success, not a race to report.
+      if (!existsSync(target)) throw error
+    }
   }
   return target
 }
@@ -180,7 +187,15 @@ function runRead(
   environment: Environment,
   spec: ReadSpec,
 ): Effect.Effect<GeoRuntime.Result, Error> {
-  return Effect.sync(() => materialize(spec.name, spec.content)).pipe(
+  // Effect.try, not Effect.sync: a read-only cache directory or a full disk
+  // must surface as the declared Error, not kill the fiber as a defect.
+  return Effect.try({
+    try: () => materialize(spec.name, spec.content),
+    catch: (error) =>
+      new Error(
+        `could not write the ${spec.name} script to the cache: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+  }).pipe(
     Effect.flatMap((scriptPath) =>
       runtime.run({
         command: environment.python,
@@ -256,6 +271,22 @@ function parsePreview(result: GeoRuntime.Result): PreviewOutcome {
   if (!base64) {
     // The classic undersized-cap signature: metadata arrived, image did not.
     return failed(result, "preview produced metadata but no image payload followed the marker line")
+  }
+
+  // The image gets the completeness check the metadata got for free from
+  // JSON.parse. The metadata line flushes ahead of the image, so a clock
+  // expiring — or the output cap tripping — mid-transfer leaves a valid
+  // marker line above a half-written payload. The script reports the byte
+  // count it encoded; base64 length follows from it exactly. Without this,
+  // a truncated image is delivered as a successful one.
+  if (typeof record.bytes === "number") {
+    const expected = 4 * Math.ceil(record.bytes / 3)
+    if (base64.length !== expected) {
+      return failed(
+        result,
+        `the preview image is incomplete (${base64.length} of ${expected} encoded characters for ${record.bytes} bytes)`,
+      )
+    }
   }
   return { ok: true, meta: record as PreviewMeta, base64 }
 }

@@ -180,7 +180,11 @@ describe("qgis windows pure logic", () => {
     // PATH is the one that must not be waved through: the bridge registers no
     // library directories and rides entirely on the adopted search path, so an
     // empty one would pass the probe and fail on first real use (§4.5).
-    const base = { QGIS_PREFIX_PATH: "C:/OSGeo4W/apps/qgis-ltr", PYTHONHOME: "C:\\OSGeo4W\\apps\\Python312", PATH: "C:\\OSGeo4W\\bin" }
+    const base = {
+      QGIS_PREFIX_PATH: "C:/OSGeo4W/apps/qgis-ltr",
+      PYTHONHOME: "C:\\OSGeo4W\\apps\\Python312",
+      PATH: "C:\\OSGeo4W\\bin",
+    }
     expect(QgisWindows.adoptBridgeDump({ ...base, PATH: "" }, "C:\\OSGeo4W")).toBeUndefined()
     expect(QgisWindows.adoptBridgeDump({ ...base, PYTHONHOME: "" }, "C:\\OSGeo4W")).toBeUndefined()
 
@@ -193,7 +197,9 @@ describe("qgis windows pure logic", () => {
     expect(adopted.env.PYTHONUTF8).toBe("1")
     expect(adopted.env.PYTHONIOENCODING).toBe("UTF-8")
     // Adoption is complete, not filtered: unlisted variables survive (§4.3 p8).
-    expect(QgisWindows.adoptBridgeDump({ ...base, SOME_QGIS_INTERNAL: "kept" }, "C:\\OSGeo4W")!.env.SOME_QGIS_INTERNAL).toBe("kept")
+    expect(
+      QgisWindows.adoptBridgeDump({ ...base, SOME_QGIS_INTERNAL: "kept" }, "C:\\OSGeo4W")!.env.SOME_QGIS_INTERNAL,
+    ).toBe("kept")
   })
 })
 
@@ -226,7 +232,15 @@ describe("qgis probe grading", () => {
 
   test("a full report grades as success despite surrounding noise", async () => {
     const runtime = stubRuntime([
-      { stdout: marked({ pythonVersion: "3.12.11", gdalVersion: "3.12.0", projTransformReady: true, qgisVersion: "3.44.9", processingReady: true }) },
+      {
+        stdout: marked({
+          pythonVersion: "3.12.11",
+          gdalVersion: "3.12.0",
+          projTransformReady: true,
+          qgisVersion: "3.44.9",
+          processingReady: true,
+        }),
+      },
     ])
     const outcome = await Effect.runPromise(QgisProbe.run(runtime, "python", {}, []))
     expect(outcome.ok).toBe(true)
@@ -235,11 +249,25 @@ describe("qgis probe grading", () => {
   test("each failing step names its own failure", async () => {
     const cases: [object, string][] = [
       [{ pythonVersion: "3", gdalVersion: "", gdalTraceback: "ImportError: osgeo" }, "gdal-missing"],
-      [{ pythonVersion: "3", gdalVersion: "3.12", projTransformReady: false, projTransformError: "no proj.db" }, "proj-broken"],
-      [{ pythonVersion: "3", gdalVersion: "3.12", projTransformReady: true, qgisVersion: "", qgisTraceback: "DLL load failed" }, "core-missing"],
+      [
+        { pythonVersion: "3", gdalVersion: "3.12", projTransformReady: false, projTransformError: "no proj.db" },
+        "proj-broken",
+      ],
+      [
+        {
+          pythonVersion: "3",
+          gdalVersion: "3.12",
+          projTransformReady: true,
+          qgisVersion: "",
+          qgisTraceback: "DLL load failed",
+        },
+        "core-missing",
+      ],
     ]
     for (const [payload, failure] of cases) {
-      const outcome = await Effect.runPromise(QgisProbe.run(stubRuntime([{ stdout: marked(payload) }]), "python", {}, []))
+      const outcome = await Effect.runPromise(
+        QgisProbe.run(stubRuntime([{ stdout: marked(payload) }]), "python", {}, []),
+      )
       expect(outcome.ok).toBe(false)
       if (!outcome.ok) expect(outcome.failure).toBe(failure as never)
     }
@@ -434,5 +462,49 @@ describe("qgis diagnostics", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true })
     }
+  })
+
+  test("the python package is one finding, not a cross per module-path entry", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "geo-pythonpath-"))
+    try {
+      const good = path.join(dir, "python")
+      const plugins = path.join(good, "plugins")
+      fs.mkdirSync(path.join(good, "qgis"), { recursive: true })
+      fs.writeFileSync(path.join(good, "qgis", "__init__.py"), "")
+      fs.mkdirSync(path.join(plugins, "processing"), { recursive: true })
+      fs.writeFileSync(path.join(plugins, "processing", "__init__.py"), "")
+      const inherited = path.join(dir, "my-own-libs")
+
+      const checks = QgisDiagnostics.pathChecks({
+        prefix: "/nowhere",
+        // The real shape: module directory, plugins directory, and whatever
+        // the user's own PYTHONPATH contributed.
+        env: { PYTHONPATH: [good, plugins, inherited].join(":") },
+        dllDirectories: [],
+        platform: "darwin",
+      })
+
+      // Found once, reported once. The plugins and inherited entries are not
+      // supposed to carry the package, and marking them red would put two
+      // guaranteed crosses on a healthy install.
+      expect(checks[path.join(good, "qgis", "__init__.py")]).toBe(true)
+      expect(checks[path.join(plugins, "qgis", "__init__.py")]).toBeUndefined()
+      expect(checks[path.join(inherited, "qgis", "__init__.py")]).toBeUndefined()
+      // The plugins entry gets the check that belongs to it instead.
+      expect(checks[path.join(plugins, "processing", "__init__.py")]).toBe(true)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("a python package found nowhere makes the candidates the diagnosis", () => {
+    const checks = QgisDiagnostics.pathChecks({
+      prefix: "/nowhere",
+      env: { PYTHONPATH: "/gone/python:/gone/other" },
+      dllDirectories: [],
+      platform: "darwin",
+    })
+    expect(checks[path.join("/gone/python", "qgis", "__init__.py")]).toBe(false)
+    expect(checks[path.join("/gone/other", "qgis", "__init__.py")]).toBe(false)
   })
 })

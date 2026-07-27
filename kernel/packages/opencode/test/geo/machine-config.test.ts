@@ -1,7 +1,7 @@
 import { expect, describe } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Stream } from "effect"
+import { Effect, Fiber, Stream } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { MachineConfig } from "@/geo/config"
@@ -194,5 +194,40 @@ describe("machine.json config", () => {
         if (seen.ok) expect(seen.value).toBe("/Applications/QGIS.app")
       }),
     { timeout: 20000 },
+  )
+
+  it.live("concurrent reloads settle on the file, not on who finished last", () =>
+    Effect.gen(function* () {
+      const config = yield* MachineConfig.Service
+      yield* clear
+      yield* write(JSON.stringify({ qgis: "/old.app" }))
+      yield* config.reload()
+
+      // Two reloads in flight over a file that changes between them — the
+      // shape produced by a settings surface pulling (§3.1 escape hatch) while
+      // the watcher fires, or by two saves past the debounce.
+      //
+      // Honest about what this proves: it guards the INVARIANT (whatever the
+      // interleaving, the record ends up agreeing with the file), not the
+      // interleaving itself. The losing order needs the first read to finish
+      // after the second, which nothing here can force — verified by removing
+      // the serialization and watching this test still pass. It is a
+      // regression guard, not a counterproof.
+      const first = yield* Effect.forkScoped(config.reload())
+      yield* write(JSON.stringify({ qgis: "/new.app" }))
+      const second = yield* Effect.forkScoped(config.reload())
+      yield* Fiber.join(first)
+      yield* Fiber.join(second)
+
+      const settled = yield* config.snapshot()
+      expect(settled.blocks.qgis.ok).toBe(true)
+      if (settled.blocks.qgis.ok) expect(settled.blocks.qgis.value).toBe("/new.app")
+
+      // And the record agrees with the file, so the next edit is diffed
+      // against the truth rather than against a value that was overwritten.
+      yield* config.reload()
+      const again = yield* config.snapshot()
+      expect(again.blocks.qgis.fingerprint).toBe(settled.blocks.qgis.fingerprint)
+    }),
   )
 })

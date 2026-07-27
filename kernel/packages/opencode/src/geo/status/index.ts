@@ -95,6 +95,12 @@ const layer = Layer.effect(
     const generations = new Map<SlotName, number>()
     const registered = new Set<SlotName>()
 
+    // Uninterruptible as a unit. A round is interrupted the moment a new
+    // configuration arrives, and an interruption landing between the two
+    // publishes leaves the stored value updated while the wire never heard —
+    // after which the next round's identical first state is discarded as a
+    // duplicate and subscribers sit on a stale frame until something else
+    // changes. The three steps are one state transition; they end together.
     const publish = (slot: SlotName, value: SlotValues[SlotName]) =>
       Effect.gen(function* () {
         values.set(slot, value)
@@ -102,7 +108,7 @@ const layer = Layer.effect(
         // The wire payload is the whole state object: consumers replace the
         // slot rather than merging into it (§3.4).
         yield* events.publish(DEFINITIONS[slot], { status: value } as never)
-      })
+      }).pipe(Effect.uninterruptible)
 
     const register = <Name extends SlotName>(slot: Name, initial: SlotValues[Name]) =>
       Effect.gen(function* () {

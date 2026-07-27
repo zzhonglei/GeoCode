@@ -57,9 +57,29 @@ export function pathChecks(input: CheckInput): Record<string, boolean> {
   const checks: Record<string, boolean> = {}
   const separator = platform === "win32" ? ";" : ":"
 
-  // The Python package entry point, on every module-path entry.
-  for (const entry of (input.env.PYTHONPATH ?? "").split(separator).filter(Boolean)) {
-    const marker = path.join(entry, "qgis", "__init__.py")
+  // The Python package entry point. Reported as ONE finding, the same way the
+  // core library below is: the module path legitimately holds entries that are
+  // not supposed to carry the qgis package — the plugins directory, and
+  // whatever the user's own PYTHONPATH contributed — so marking each entry
+  // individually guarantees red crosses on a healthy install and sends the
+  // reader chasing them. What matters is whether the package is on the path at
+  // all; only when it is nowhere do the candidates themselves become the
+  // diagnosis.
+  const entries = (input.env.PYTHONPATH ?? "").split(separator).filter(Boolean)
+  const moduleEntries = entries.filter((entry) => path.basename(entry).toLowerCase() !== "plugins")
+  const packageMarkers = moduleEntries.map((entry) => path.join(entry, "qgis", "__init__.py"))
+  const foundPackage = packageMarkers.find((marker) => existsSync(marker))
+  if (foundPackage) {
+    checks[foundPackage] = true
+  } else {
+    for (const marker of packageMarkers) checks[marker] = false
+  }
+
+  // The plugins entry carries processing instead — the very subsystem the
+  // ready state reports on, so its absence is worth its own mark.
+  for (const entry of entries) {
+    if (path.basename(entry).toLowerCase() !== "plugins") continue
+    const marker = path.join(entry, "processing", "__init__.py")
     checks[marker] = existsSync(marker)
   }
 

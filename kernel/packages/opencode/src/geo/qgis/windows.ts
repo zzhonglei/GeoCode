@@ -106,6 +106,32 @@ export function rootFromInterpreter(hint: string): string | undefined {
   return undefined
 }
 
+/**
+ * Walk up from the hint looking for what an install root actually contains.
+ *
+ * The last line of defence, for the shape every name-based strategy misses: an
+ * install whose directory was renamed to something without "qgis" or "osgeo"
+ * in it, pointed at through the root-level `bin\python3.exe` shim rather than
+ * `apps\Python3xx\python.exe`. Substring matching finds nothing, the
+ * interpreter's shape says nothing, and without this the fallback would settle
+ * on `<root>\bin` and assemble an environment out of an empty tree.
+ *
+ * Identified by CONTENT, not by name (§4.3 principle 4): a directory holding
+ * an `apps` subdirectory, or a launcher next to the shim, is an install root
+ * whatever it is called.
+ */
+export function findRootByContent(hint: string): string | undefined {
+  let walking = win.resolve(hint)
+  for (let depth = 0; depth < 8; depth++) {
+    const parent = win.dirname(walking)
+    if (parent === walking) return undefined
+    walking = parent
+    if (existsSync(win.join(walking, "apps"))) return walking
+    if (LAUNCHER_NAMES.some((name) => existsSync(win.join(walking, "bin", name)))) return walking
+  }
+  return undefined
+}
+
 /** Find the bundled interpreter under a root, whatever Python version it ships. */
 export function findInterpreterUnderRoot(root: string): string | undefined {
   const appsDir = win.join(root, "apps")
@@ -143,7 +169,7 @@ export function subPrefixRank(prefix: string): number {
  * Taking "first found" instead of ranking would let the choice drift with
  * directory enumeration order between runs on the same machine.
  */
-export function resolveSubPrefix(root: string, interpreter: string): Choice {
+export function resolveSubPrefix(root: string, interpreter: string, hint?: string): Choice {
   const candidates: (string | undefined)[] = []
   const interpreterApps = win.resolve(interpreter, "../..")
   if (win.basename(interpreterApps).toLowerCase() === "apps") {
@@ -152,8 +178,22 @@ export function resolveSubPrefix(root: string, interpreter: string): Choice {
   candidates.push(...qgisNamedSubdirectories(win.join(root, "apps")))
   candidates.push(win.join(root, "apps", "qgis-ltr"), win.join(root, "apps", "qgis"))
 
+  // A hint that IS a complete sub-prefix outranks the fixed order. The order
+  // exists to break ties the user did not express an opinion about; when they
+  // pointed at `apps\qgis-dev` themselves, handing back the LTR install beside
+  // it answers a question they did not ask (§4.2 允许中间层目录形态).
+  //
+  // Admitted only when it carries both required directories — an interpreter
+  // path is a hint too, and listing it among the sub-prefix candidates would
+  // put a file where the diagnostics promise directories.
+  const resolvedHint = hint ? win.resolve(hint) : undefined
+  const preferred =
+    resolvedHint && existsSync(win.join(resolvedHint, "python")) && existsSync(win.join(resolvedHint, "bin"))
+      ? resolvedHint
+      : undefined
+  if (preferred) candidates.push(preferred)
   const ordered = QgisPaths.unique(candidates).sort((a, b) => {
-    const rank = subPrefixRank(a) - subPrefixRank(b)
+    const rank = (a === preferred ? -1 : subPrefixRank(a)) - (b === preferred ? -1 : subPrefixRank(b))
     return rank !== 0 ? rank : a.localeCompare(b)
   })
   const complete = ordered.filter(
@@ -298,10 +338,10 @@ export interface ManualAssembly {
  * The manual track: replicate everything the official launcher sets up,
  * because we spawn the interpreter directly without it (§4.5 track two).
  */
-export function assembleManual(interpreter: string, root: string): ManualAssembly {
+export function assembleManual(interpreter: string, root: string, hint?: string): ManualAssembly {
   const choices: Record<string, Choice> = {}
 
-  const subPrefixChoice = resolveSubPrefix(root, interpreter)
+  const subPrefixChoice = resolveSubPrefix(root, interpreter, hint)
   const subPrefix = subPrefixChoice.selected ?? root
   choices.subPrefix = subPrefixChoice
 
@@ -354,9 +394,7 @@ export function assembleManual(interpreter: string, root: string): ManualAssembl
   const moduleRoot = win.join(subPrefix, "python")
   const modulePaths = QgisPaths.allExisting([moduleRoot, win.join(moduleRoot, "plugins")])
   if (modulePaths.length > 0) {
-    env.PYTHONPATH = process.env.PYTHONPATH
-      ? [...modulePaths, process.env.PYTHONPATH].join(";")
-      : modulePaths.join(";")
+    env.PYTHONPATH = process.env.PYTHONPATH ? [...modulePaths, process.env.PYTHONPATH].join(";") : modulePaths.join(";")
   }
 
   const qtPlugins = QgisPaths.allExisting([

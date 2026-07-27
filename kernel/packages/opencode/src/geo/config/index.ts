@@ -1,6 +1,6 @@
 export * as MachineConfig from "./index"
 
-import { Context, Effect, Layer, PubSub, Stream } from "effect"
+import { Context, Effect, Layer, PubSub, Semaphore, Stream } from "effect"
 import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { MachineSchema } from "./schema"
@@ -74,7 +74,12 @@ const layer = Layer.effect(
     const states = new Map<MachineSchema.BlockName, BlockState>()
 
     for (const name of MachineSchema.BlockNames) {
-      states.set(name, { block: name, ok: true, value: undefined, fingerprint: MachineLoader.fingerprint(name, undefined) })
+      states.set(name, {
+        block: name,
+        ok: true,
+        value: undefined,
+        fingerprint: MachineLoader.fingerprint(name, undefined),
+      })
       seen.set(name, MachineLoader.canonical(undefined))
     }
 
@@ -123,16 +128,30 @@ const layer = Layer.effect(
       }
     })
 
+    /**
+     * Reads are serialized. Two of them can be in flight at once — the watcher
+     * fires while a pull (§3.1 escape hatch) is running, or the user saves
+     * twice past the debounce — and the file read is several async hops whose
+     * completion order is not the order they started in. Unserialized, the
+     * older content can land last and be written back as `seen`, leaving the
+     * file saying one thing and every capability doing another until the user
+     * happens to edit again.
+     */
+    const serialized = Semaphore.makeUnsafe(1)
+
     const reload = Effect.fn("MachineConfig.reload")(function* () {
-      const loaded = yield* Effect.promise(() => MachineLoader.load())
-      yield* apply(loaded)
+      yield* serialized.withPermits(1)(
+        Effect.gen(function* () {
+          const loaded = yield* Effect.promise(() => MachineLoader.load())
+          yield* apply(loaded)
+        }),
+      )
     })
 
     yield* Effect.promise(() => MachineLoader.ensureTemplate()).pipe(
       Effect.tapCause((cause) => Effect.logWarning("failed to seed machine.json", { cause })),
       Effect.ignore,
     )
-    yield* reload()
 
     // The watcher callback arrives from outside Effect, so it hops back in with
     // this layer's context. Failures are logged and swallowed: a bad edit must
@@ -152,6 +171,14 @@ const layer = Layer.effect(
         runFork(Effect.logWarning("machine.json watch failed", { cause }))
       },
     )
+
+    // Watch first, THEN read — the same subscribe-before-read discipline this
+    // module preaches for `watch()`. Reading first leaves a window where a save
+    // is in neither the initial read nor the watch, and the system sits on
+    // pre-save configuration until the user edits again. A save landing inside
+    // the reversed window costs only a duplicate read, which the fingerprint
+    // comparison discards.
+    yield* reload()
 
     const block = <Name extends MachineSchema.BlockName>(name: Name) =>
       Effect.sync(() => states.get(name) as BlockState<Name>)

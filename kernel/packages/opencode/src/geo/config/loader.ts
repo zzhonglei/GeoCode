@@ -68,14 +68,32 @@ export async function load(): Promise<Loaded> {
   return { ok: true as const, value: merged }
 }
 
-async function readOne(file: string): Promise<Loaded> {
-  let text: string
-  try {
-    text = await fs.readFile(file, "utf-8")
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return { ok: true, value: MachineSchema.EMPTY }
-    throw err
+/**
+ * Read the file, tolerating one transient failure.
+ *
+ * On Windows a save is regularly followed by an antivirus or indexer holding
+ * the file open for a few milliseconds, and the read lands in that window with
+ * EPERM/EBUSY. Without a retry the whole edit is dropped — logged and
+ * swallowed upstream, with the system still running the previous
+ * configuration and nothing on screen saying so. One short retry covers the
+ * lock window; a failure that survives it is a real one and propagates.
+ */
+async function readFileTolerantly(file: string): Promise<string | undefined> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fs.readFile(file, "utf-8")
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code === "ENOENT") return undefined
+      if (attempt >= 1) throw err
+      await new Promise((resolve) => setTimeout(resolve, 60))
+    }
   }
+}
+
+async function readOne(file: string): Promise<Loaded> {
+  const text = await readFileTolerantly(file)
+  if (text === undefined) return { ok: true, value: MachineSchema.EMPTY }
   // Windows Notepad writes UTF-8 with a BOM by default and the JSONC parser
   // chokes on the leading U+FEFF. Our users hand-edit this file on Windows.
   const stripped = text.replace(/^\uFEFF/, "")

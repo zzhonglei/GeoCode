@@ -158,7 +158,11 @@ export function findStandardLibrary(resources: string): string | undefined {
  * search behaviour and does not hit this mismatch.
  */
 export function ensurePythonHome(interpreter: string, standardLibrary: string): string | undefined {
-  const name = path.basename(interpreter)
+  // Lowercased before matching, and the link takes the lowercased name:
+  // the volume this runs on is case-insensitive by default, so a hint written
+  // `.../Python3.12` names the same real binary — and CPython looks for
+  // `lib/python3.X` in lower case regardless of how the file was spelled.
+  const name = path.basename(interpreter).toLowerCase()
   if (!/^python3\.\d+$/.test(name)) return undefined
 
   const home = path.join(Global.Path.cache, "geo", "qgis-pyhome")

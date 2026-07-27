@@ -218,11 +218,17 @@ export function precheck(
     // The one value judgment the metadata CAN make: an enum given a value
     // outside its options. Everything subtler belongs to QGIS at run time.
     const value = parameters[parameter.name]
+    // An option index counts whether it arrives as a number or as the string
+    // of one: parameters are generated JSON, where quoting a number is
+    // routine, and QGIS accepts both. Flagging "2" would be advice against
+    // something that works.
+    const index =
+      typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : undefined
     if (
       parameter.options.length > 0 &&
       (typeof value === "string" || typeof value === "number") &&
       !parameter.options.includes(String(value)) &&
-      !(typeof value === "number" && value >= 0 && value < parameter.options.length)
+      !(index !== undefined && index >= 0 && index < parameter.options.length)
     ) {
       hints.push({
         kind: "invalid-choice",

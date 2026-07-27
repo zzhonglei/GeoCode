@@ -259,15 +259,17 @@ describe("qgis reader pipeline", () => {
   }
 
   {
+    // 9 bytes encode to exactly 12 base64 characters — the fixture has to be
+    // self-consistent now that the payload is checked against the count.
     const meta = `${QgisReader.MARKER}{"width":64,"height":64,"original_width":128,"original_height":128,"bands":[1,2,3],"bytes":9}`
-    const { it, body } = run([{ stdout: `gdal chatter\n${meta}\naVeryBase64String==\n` }], (runtime, calls) =>
+    const { it, body } = run([{ stdout: `gdal chatter\n${meta}\nMTIzNDU2Nzg5\n` }], (runtime, calls) =>
       Effect.gen(function* () {
         const outcome = yield* QgisReader.renderPreview(runtime, environment, { file: "/dem.tif" })
         expect(outcome.ok).toBe(true)
         if (outcome.ok) {
           expect(outcome.meta.width).toBe(64)
           expect(outcome.meta.bands).toEqual([1, 2, 3])
-          expect(outcome.base64).toBe("aVeryBase64String==")
+          expect(outcome.base64).toBe("MTIzNDU2Nzg5")
         }
         // The preview cap is the explicit upper-bound number, not a default.
         expect(calls[0]!.options.delivery).toEqual({ mode: "collect", limit: 128 * 1024 * 1024 })
@@ -306,6 +308,25 @@ describe("qgis reader pipeline", () => {
       }),
     )
     it.effect("metadata without an image payload is called out by name", body)
+  }
+
+  {
+    // The metadata line flushes ahead of the image, so a clock expiring
+    // mid-transfer leaves a perfectly valid marker line above half a payload.
+    // JSON.parse gives the metadata a completeness check for free; the image
+    // needs this one, or a corrupt PNG ships as a success.
+    const meta = `${QgisReader.MARKER}{"width":64,"height":64,"bytes":9}`
+    const { it, body } = run([{ stdout: `${meta}\nMTIz`, reason: "timeout", code: null }], (runtime) =>
+      Effect.gen(function* () {
+        const outcome = yield* QgisReader.renderPreview(runtime, environment, { file: "/big.tif" })
+        expect(outcome.ok).toBe(false)
+        if (!outcome.ok) {
+          expect(outcome.detail).toContain("incomplete")
+          expect(outcome.detail).toContain("4 of 12")
+        }
+      }),
+    )
+    it.effect("a truncated image is a failure, not a successful corrupt one", body)
   }
 
   {
