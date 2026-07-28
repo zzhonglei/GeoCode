@@ -203,6 +203,31 @@ describe("osm representative points", () => {
     expect(point[1]).toBeCloseTo(1)
   })
 
+  test("a small ring far from the origin still resolves inside itself", () => {
+    // A real 40 m car park in Wuhan, and the case that broke the previous
+    // arithmetic: computed on raw coordinates, the cross products are
+    // differences of products around 3500 that differ by about 0.01, five
+    // significant digits cancel per term, and the answer landed 2 m OUTSIDE
+    // the ring's own bounding box — which a centroid cannot do. The failure is
+    // worst exactly where this is used most: small features, far from the
+    // origin, which is what a city is made of.
+    const ring: [number, number][] = [
+      [114.3604117, 30.5337849],
+      [114.3603763, 30.5336521],
+      [114.3607236, 30.5335836],
+      [114.3607338, 30.5336211],
+      [114.3607588, 30.5337166],
+      [114.3604117, 30.5337849],
+    ]
+    const [x, y] = OsmCentroid.ringCentroid(ring)
+    const xs = ring.map((p) => p[0])
+    const ys = ring.map((p) => p[1])
+    expect(x).toBeGreaterThanOrEqual(Math.min(...xs))
+    expect(x).toBeLessThanOrEqual(Math.max(...xs))
+    expect(y).toBeGreaterThanOrEqual(Math.min(...ys))
+    expect(y).toBeLessThanOrEqual(Math.max(...ys))
+  })
+
   test("a line collapses to its midpoint by distance, not by vertex", () => {
     // Vertices bunch up around detail; halfway through the list is not
     // halfway along the line.
@@ -351,5 +376,25 @@ describe("osm output files", () => {
     const { outputs } = OsmOutput.write(base, [])
     expect(outputs[0]!.family).toBe("empty")
     expect(JSON.parse(fs.readFileSync(base, "utf-8")).features).toEqual([])
+  })
+
+  test("a base that is not named .geojson still gets three distinct files", () => {
+    // The sibling name is built by inserting the family before the extension.
+    // Deriving it by rewriting a ".geojson" suffix meant any other extension
+    // produced a sibling equal to the base itself: three families overwriting
+    // one file, then the stale-sibling sweep deleting the survivor — a download
+    // that reported three outputs and left nothing on disk.
+    const base = path.join(root, "ext", "out.json")
+    const { outputs } = OsmOutput.write(base, [feature(1, "Point"), feature(2, "LineString")])
+    expect(new Set(outputs.map((o) => o.path)).size).toBe(2)
+    for (const output of outputs) expect(fs.existsSync(output.path)).toBe(true)
+    expect(outputs.every((o) => o.path !== base)).toBe(true)
+  })
+
+  test("a base with no extension is written as GeoJSON, because that is what it is", () => {
+    const base = path.join(root, "bare", "out")
+    const { outputs } = OsmOutput.write(base, [feature(1, "Point")])
+    expect(outputs[0]!.path).toBe(`${base}.geojson`)
+    expect(fs.existsSync(`${base}.geojson`)).toBe(true)
   })
 })

@@ -14,32 +14,50 @@ import type { OsmConvert } from "./convert"
 
 type Position = [number, number]
 
-/** Area-weighted centroid of a ring, falling back to the vertex mean when degenerate. */
+/**
+ * Area-weighted centroid of a ring, falling back to the vertex mean when degenerate.
+ *
+ * **Computed relative to the ring's first vertex, and the shift is not
+ * optional.** The cross products are differences of products of the raw
+ * coordinates, and in longitude/latitude those products are around 3500 while
+ * a building-sized ring makes them differ by about 0.01 — five significant
+ * digits cancel on every term, and the accumulated error reaches the size of
+ * the answer. Measured on a real 40 m car park in Wuhan: the unshifted result
+ * landed 2 m outside the ring's own bounding box, which a centroid cannot do.
+ *
+ * The failure is worst exactly where this is used most — small features, far
+ * from the origin, which is what a city is made of.
+ */
 export function ringCentroid(ring: readonly Position[]): Position {
+  const [ox, oy] = ring[0] ?? [0, 0]
   let area = 0
   let cx = 0
   let cy = 0
   for (let i = 0; i < ring.length - 1; i++) {
-    const [x1, y1] = ring[i]!
-    const [x2, y2] = ring[i + 1]!
+    const x1 = ring[i]![0] - ox
+    const y1 = ring[i]![1] - oy
+    const x2 = ring[i + 1]![0] - ox
+    const y2 = ring[i + 1]![1] - oy
     const cross = x1 * y2 - x2 * y1
     area += cross
     cx += (x1 + x2) * cross
     cy += (y1 + y2) * cross
   }
-  if (Math.abs(area) < 1e-12) {
+  if (Math.abs(area) < 1e-15) {
     const points = ring.slice(0, -1).length > 0 ? ring.slice(0, -1) : ring
     const sx = points.reduce((sum, point) => sum + point[0], 0)
     const sy = points.reduce((sum, point) => sum + point[1], 0)
     return [sx / points.length, sy / points.length]
   }
-  return [cx / (3 * area), cy / (3 * area)]
+  return [cx / (3 * area) + ox, cy / (3 * area) + oy]
 }
 
+/** Ring area, shifted for the same reason `ringCentroid` is. */
 export function ringArea(ring: readonly Position[]): number {
+  const [ox, oy] = ring[0] ?? [0, 0]
   let area = 0
   for (let i = 0; i < ring.length - 1; i++) {
-    area += ring[i]![0] * ring[i + 1]![1] - ring[i + 1]![0] * ring[i]![1]
+    area += (ring[i]![0] - ox) * (ring[i + 1]![1] - oy) - (ring[i + 1]![0] - ox) * (ring[i]![1] - oy)
   }
   return Math.abs(area / 2)
 }

@@ -23,10 +23,11 @@ function targetOf(endpoint: string): Target | undefined {
 /**
  * Measure every endpoint over every available route and order them fastest first.
  *
- * **The route is one dimension of the candidate set**, not a setting applied
- * afterwards. The set is (endpoint × route), so the result is a sequence of
- * PAIRS: different endpoints may be quickest by different paths, and a consumer
- * failing over from one to the next changes route along with it.
+ * **The route is one dimension of the MEASUREMENT**, not a setting applied
+ * afterwards: different endpoints may be quickest by different paths, so each
+ * one is timed over every path available and keeps the best. A consumer failing
+ * over from one endpoint to the next therefore changes route along with it,
+ * without ever having to think about routes.
  *
  * On a machine with no proxy the route list is just `direct`, so the candidate
  * set is identical to having no route dimension at all and costs nothing extra.
@@ -53,14 +54,53 @@ export async function rank(
         route.kind === "direct"
           ? await NetProbe.direct(target, options)
           : await NetProbe.viaProxy(target, route.url, options)
-      if (!result.ok) return undefined
-      return { endpoint, route, routeId: routeId(route), latencyMs: result.latencyMs } satisfies RankedEndpoint
+      return {
+        endpoint,
+        route,
+        routeId: routeId(route),
+        latencyMs: result.ok ? result.latencyMs : Number.POSITIVE_INFINITY,
+      } satisfies RankedEndpoint
     }),
   )
 
-  // Unreachable pairs are dropped rather than parked at the back. A consumer
-  // that runs out of ranked pairs already has its own failover and backoff to
-  // fall back on; carrying known-dead pairs would only make it pay their
-  // timeouts a second time.
-  return measured.filter((entry): entry is RankedEndpoint => entry !== undefined).sort((a, b) => a.latencyMs - b.latencyMs)
+  return order(measured)
+}
+
+/**
+ * One entry per endpoint — its best route — reachable first.
+ *
+ * **The result is a list of ENDPOINTS, not of pairs.** The route is how the
+ * measuring is done, not what the answer is made of: a consumer failing over
+ * wants the next SERVICE to ask, and giving it the same host a second time by
+ * another road is not a second chance. The road changes; the destination does
+ * not. When a host is unhealthy at the service level — which no path
+ * measurement can see, and which is the ordinary condition of a free public
+ * pool — every route to it stalls identically, so a list of pairs spends the
+ * consumer's whole budget twice over to learn one thing. Measured live against
+ * the public Overpass pool: two such hosts, four entries, four minutes.
+ *
+ * Losing the runner-up route costs nothing that is not already covered: a route
+ * that stops working is a change of route identity, and that invalidates the
+ * ranking and re-measures (§3.3 失效由监视器驱动).
+ *
+ * Unreachable endpoints are PARKED AT THE BACK, not dropped. The probe is a
+ * handshake with a short timeout, and one that is slow to greet, briefly
+ * refusing, or behind a link that hiccuped during the measurement is not a dead
+ * one. A measurement is evidence about the path, not a permit to use it, so
+ * what it produces is an ORDER and never a shorter pool.
+ *
+ * What it is NOT is a prediction of which endpoint will serve the request.
+ * Latency ordering separates "reachable" from "not", and past that it is close
+ * to noise: measured live, the two fastest handshakes in the pool (732ms,
+ * 735ms) were the two servers that then refused to answer at all, while the one
+ * that served in 1.6s had ranked fifth. Only a real request settles that, which
+ * is the consumer's business (§6.3).
+ */
+export function order(entries: readonly RankedEndpoint[]): RankedEndpoint[] {
+  const best = new Map<string, RankedEndpoint>()
+  for (const entry of entries) {
+    const held = best.get(entry.endpoint)
+    if (!held || entry.latencyMs < held.latencyMs) best.set(entry.endpoint, entry)
+  }
+  return [...best.values()].sort((a, b) => a.latencyMs - b.latencyMs)
 }

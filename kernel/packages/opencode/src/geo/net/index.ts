@@ -59,12 +59,38 @@ export interface Interface {
   /** The route in use for a target, if it currently has one. */
   readonly route: (id: string) => Effect.Effect<Route | undefined>
   /**
+   * A usable proxy on this machine, if there is one.
+   *
+   * The whole of Net's involvement for a consumer that picks its own servers.
+   * Net answers "does this machine have a proxy" — a fact about the machine,
+   * settled by asking a short fixed list of loopback addresses one protocol
+   * question each, and verified rather than assumed: a declared variable can
+   * name a proxy that stopped running months ago, and something answering on a
+   * conventional port may just be a development server.
+   *
+   * It says nothing about WHICH server to ask or in what order. A consumer with
+   * its own opinion about its endpoints — a reference deployment it prefers,
+   * mirrors it falls back to — keeps that opinion, and only needs to know how to
+   * get out of the building.
+   */
+  readonly proxy: (target: Target) => Effect.Effect<string | undefined>
+  /**
    * Ranked (endpoint, route) pairs for a group, measured on first request.
    *
    * Holding a ranking keeps the group's anchor monitored, which is how a route
    * change can invalidate it. Losing the ranking releases that.
    */
   readonly ranking: (id: string) => Effect.Effect<readonly RankedEndpoint[]>
+  /**
+   * Discard a group's ranking so the next request measures again.
+   *
+   * Net drops a ranking when the ROUTE changes, which is the only thing it can
+   * see. This is the other direction: a consumer that has just had every ranked
+   * pair fail a real request holds evidence Net does not have — the ranking is
+   * worthless whatever the path measurements said — and says so rather than
+   * starting the next call from the same order (§6.3 整轮耗尽后重置排名).
+   */
+  readonly invalidateRanking: (id: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@geocode/GeoNet") {}
@@ -143,7 +169,9 @@ const layer = Layer.effect(
         const held = entry.route
         if (!NetMonitor.shouldRediscover(entry.machine) && held) {
           const result =
-            held.kind === "direct" ? await NetProbe.direct(entry.target) : await NetProbe.viaProxy(entry.target, held.url)
+            held.kind === "direct"
+              ? await NetProbe.direct(entry.target)
+              : await NetProbe.viaProxy(entry.target, held.url)
           if (result.ok) return { verdict: { ok: true, routeId: routeId(held) }, route: held }
           return { verdict: { ok: false, kind: NetClassifier.classify(result.reason), detail: result.reason } }
         }
@@ -260,6 +288,15 @@ const layer = Layer.effect(
 
     const route = (id: string) => Effect.sync(() => entries.get(id)?.route)
 
+    const proxy = (target: Target) =>
+      Effect.promise(async () => (await NetDiscovery.candidates(target))[0]).pipe(
+        // Discovery opens sockets, and a socket layer that raises where it is
+        // documented to resolve would otherwise become a defect — outside the
+        // error type, taking the caller down over a question whose honest
+        // answer is simply "then we know of no proxy".
+        Effect.catchDefect(() => Effect.succeed(undefined)),
+      )
+
     const watch = (id: string): Stream.Stream<Reachability> =>
       Stream.unwrap(
         Effect.gen(function* () {
@@ -302,7 +339,16 @@ const layer = Layer.effect(
         return measured
       })
 
-    return Service.of({ register, registerGroup, status, watch, route, ranking })
+    return Service.of({
+      register,
+      registerGroup,
+      status,
+      watch,
+      route,
+      proxy,
+      ranking,
+      invalidateRanking: invalidate,
+    })
   }),
 )
 

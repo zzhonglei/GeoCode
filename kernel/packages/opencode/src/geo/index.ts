@@ -4,6 +4,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { MachineConfig } from "./config"
 import { GeeService } from "./gee"
 import { GeoNet } from "./net"
+import { GeoOsm } from "./osm"
 import { GeoQgis } from "./qgis"
 import { GeoRuntime } from "./runtime"
 import { GeoStatus } from "./status"
@@ -11,6 +12,7 @@ import { GeoStatus } from "./status"
 export { MachineConfig } from "./config"
 export { GeeService } from "./gee"
 export { GeoNet } from "./net"
+export { GeoOsm } from "./osm"
 export { GeoQgis } from "./qgis"
 export { GeoRuntime } from "./runtime"
 export { GeoStatus } from "./status"
@@ -34,9 +36,9 @@ export { GeoStatus } from "./status"
  *
  * Capability layer, on top of those:
  *   qgis     lifecycle, resolution, catalog, executor, data reading      §4
- *   gee      lifecycle, local chain, Net consumption                     §5
- *            (remote authorization and execution still to come — 3c, 3d)
- *   osm, dataplane — not yet built. --- */
+ *   gee      lifecycle, chain, authorization, execution, runtime library  §5
+ *   osm      client reliability, queries, extents, conversion, output    §6
+ *   dataplane — not yet built. --- */
 export const node = LayerNode.group([
   MachineConfig.node,
   GeoRuntime.node,
@@ -44,4 +46,5 @@ export const node = LayerNode.group([
   GeoStatus.node,
   GeoQgis.node,
   GeeService.node,
+  GeoOsm.node,
 ])

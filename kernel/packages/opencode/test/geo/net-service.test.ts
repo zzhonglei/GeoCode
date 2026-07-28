@@ -108,11 +108,15 @@ describe("net service", () => {
         yield* network.registerGroup("pool", [`https://localhost:${port}/a`, `https://localhost:${port}/b`])
 
         const first = yield* network.ranking("pool")
-        // Nothing answers, so no pair survives measurement. Dead pairs are
-        // dropped rather than parked at the back: a consumer that runs out has
-        // its own failover, and carrying them would only make it pay their
-        // timeouts twice (§3.3).
-        expect(first).toEqual([])
+        // Nothing answers, and the pool still comes back whole, at the back of
+        // its own order. The ranking is the consumer's entire answer — it walks
+        // what it is given and re-shapes none of it (§8.3) — so handing back an
+        // empty list would leave it nothing to fail over across, on the exact
+        // evidence (a short handshake) that is least able to settle the matter.
+        // Counted by endpoint, not by pair: how many pairs there are depends on
+        // how many proxies the machine running this happens to have.
+        expect(new Set(first.map((entry) => entry.endpoint)).size).toBe(2)
+        expect(first.every((entry) => entry.latencyMs === Number.POSITIVE_INFINITY)).toBe(true)
 
         const second = yield* network.ranking("pool")
         expect(second).toBe(first)

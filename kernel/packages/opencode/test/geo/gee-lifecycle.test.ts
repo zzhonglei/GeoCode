@@ -90,6 +90,8 @@ function scriptedNet() {
         ),
       route: () => Effect.succeed(undefined),
       ranking: () => Effect.succeed([]),
+      invalidateRanking: () => Effect.void,
+      proxy: () => Effect.succeed(undefined),
     }),
   )
   return { layer, hub, subscribes, releases, registered }

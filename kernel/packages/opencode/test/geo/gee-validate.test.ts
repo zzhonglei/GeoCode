@@ -82,6 +82,8 @@ function scriptedNet(route: NetTypes.Route = { kind: "direct" }) {
       watch: () => Stream.unwrap(Effect.map(PubSub.subscribe(hub), Stream.fromSubscription)),
       route: () => Effect.succeed(route),
       ranking: () => Effect.succeed([]),
+      invalidateRanking: () => Effect.void,
+      proxy: () => Effect.succeed(undefined),
     }),
   )
   return { layer, hub }

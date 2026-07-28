@@ -219,6 +219,8 @@ describe("gee gate", () => {
         watch: () => Stream.unwrap(Effect.map(PubSub.subscribe(hub), Stream.fromSubscription)),
         route: () => Effect.succeed({ kind: "proxy", url: "http://127.0.0.1:7890" } as NetTypes.Route),
         ranking: () => Effect.succeed([]),
+        invalidateRanking: () => Effect.void,
+        proxy: () => Effect.succeed(undefined),
       }),
     )
     const it = testEffect(

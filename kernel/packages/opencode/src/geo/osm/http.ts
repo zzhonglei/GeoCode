@@ -12,10 +12,10 @@ import type { NetTypes } from "../net/types"
  *
  * `node:https` rather than `fetch`, and the reason is structural: Net hands out
  * its in-process route as a Node agent (§3.3), because a dispatcher would mean
- * a dependency the target runtime cannot resolve. The route is applied PER
- * REQUEST — the ranking is a sequence of (endpoint, route) pairs, so two
- * endpoints may travel differently and a global setting would make the ranking
- * meaningless.
+ * a dependency the target runtime cannot resolve. The route is carried PER
+ * REQUEST rather than installed globally — a process-wide setting would reach
+ * every other thing the kernel does, and the caller here is one module deciding
+ * how its own traffic travels, not how the process does.
  *
  * Nothing here decides WHICH endpoint to use or what to do when one fails;
  * that is the client's business. This module only knows how to make one

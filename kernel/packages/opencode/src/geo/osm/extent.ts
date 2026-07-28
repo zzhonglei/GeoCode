@@ -129,7 +129,10 @@ function fromFile(value: string, readFile: (file: string) => string): Resolved {
   }
   let document: unknown
   try {
-    document = JSON.parse(raw.replace(/^﻿/, ""))
+    // Written as an escape on purpose: a literal byte-order mark in source is
+    // invisible, and any editor or tool that normalizes it away would silently
+    // turn this into a no-op.
+    document = JSON.parse(raw.replace(/^\uFEFF/, ""))
   } catch {
     throw new Error(`the boundary file is not valid JSON: ${value}`)
   }

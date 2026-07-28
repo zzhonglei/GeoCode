@@ -21,11 +21,30 @@ export interface Written {
   readonly family: string
 }
 
-function siblingPath(base: string, family: OsmConvert.Family): string {
-  return base.replace(/\.geojson$/i, `-${family}.geojson`)
+/**
+ * The path a caller asked for, made safe to derive sibling names from.
+ *
+ * What we write is GeoJSON, so a path that does not say so gets told to. This
+ * is not cosmetic: the sibling names below are built by inserting the family
+ * before the extension, and a base with no recognizable extension would produce
+ * a sibling identical to the base itself — every family overwriting the last,
+ * then the "stale" cleanup deleting the survivor. A silent empty result.
+ */
+function normalizeBase(base: string): string {
+  const extension = path.extname(base).toLowerCase()
+  return extension === ".geojson" || extension === ".json" ? base : `${base}.geojson`
 }
 
-export function write(base: string, features: readonly OsmConvert.Feature[]): { outputs: Written[]; bytes: number } {
+function siblingPath(base: string, family: OsmConvert.Family): string {
+  const extension = path.extname(base)
+  return path.join(path.dirname(base), `${path.basename(base, extension)}-${family}${extension}`)
+}
+
+export function write(
+  requested: string,
+  features: readonly OsmConvert.Feature[],
+): { outputs: Written[]; bytes: number } {
+  const base = normalizeBase(requested)
   mkdirSync(path.dirname(base), { recursive: true })
   const groups = OsmConvert.splitByFamily(features)
   const outputs: Written[] = []
