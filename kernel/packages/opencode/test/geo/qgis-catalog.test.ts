@@ -120,7 +120,9 @@ function runtimeReturning(results: Partial<GeoRuntime.Result>[]) {
 
 describe("qgis catalog queries", () => {
   const it = testEffect(
-    LayerNode.compile(LayerNode.group([QgisCatalog.node]), [[GeoRuntime.node, runtimeReturning([{ stdout: REGISTRY_OK }])]]),
+    LayerNode.compile(LayerNode.group([QgisCatalog.node]), [
+      [GeoRuntime.node, runtimeReturning([{ stdout: REGISTRY_OK }])],
+    ]),
   )
 
   it.effect("build extracts the registry from noisy output and holds it", () =>
@@ -263,9 +265,10 @@ describe("qgis catalog wired into the lifecycle", () => {
   })
 
   const it = testEffect(
-    LayerNode.compile(LayerNode.group([GeoQgis.node, QgisCatalog.node, EventV2.node, MachineConfig.node, GeoStatus.node]), [
-      [GeoRuntime.node, runtimeByLabel],
-    ]),
+    LayerNode.compile(
+      LayerNode.group([GeoQgis.node, QgisCatalog.node, EventV2.node, MachineConfig.node, GeoStatus.node]),
+      [[GeoRuntime.node, runtimeByLabel]],
+    ),
   )
 
   it.live(

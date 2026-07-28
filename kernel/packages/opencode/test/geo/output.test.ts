@@ -82,4 +82,3 @@ describe("geo output utilities", () => {
     expect(GeoOutput.truncate(buffer.text(), 4).text).toBe("6789")
   })
 })
-

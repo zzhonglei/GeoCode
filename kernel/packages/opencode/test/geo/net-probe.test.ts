@@ -26,11 +26,21 @@ const material = (() => {
   const result = spawnSync(
     "openssl",
     [
-      "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-      "-keyout", path.join(dir, "key.pem"),
-      "-out", path.join(dir, "cert.pem"),
-      "-days", "2", "-subj", "/CN=localhost",
-      "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1",
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-keyout",
+      path.join(dir, "key.pem"),
+      "-out",
+      path.join(dir, "cert.pem"),
+      "-days",
+      "2",
+      "-subj",
+      "/CN=localhost",
+      "-addext",
+      "subjectAltName=DNS:localhost,IP:127.0.0.1",
     ],
     { stdio: "ignore" },
   )
@@ -52,7 +62,9 @@ afterAll(() => servers.forEach((server) => server.close()))
 
 function listen(server: net.Server | tls.Server): Promise<number> {
   servers.push(server)
-  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve((server.address() as net.AddressInfo).port)))
+  return new Promise((resolve) =>
+    server.listen(0, "127.0.0.1", () => resolve((server.address() as net.AddressInfo).port)),
+  )
 }
 
 /** A TLS endpoint standing in for a remote service. */
@@ -114,9 +126,13 @@ describe("net probe", () => {
 
   test("stage 2 unmasks a non-proxy service without disturbing it", async () => {
     const service = await plainService()
-    const result = await NetProbe.viaProxy({ id: "t", host: "localhost", port: 443 }, `http://127.0.0.1:${service.port}`, {
-      timeoutMs: 3000,
-    })
+    const result = await NetProbe.viaProxy(
+      { id: "t", host: "localhost", port: 443 },
+      `http://127.0.0.1:${service.port}`,
+      {
+        timeoutMs: 3000,
+      },
+    )
 
     // Something was listening, so stage 1 passed; only the protocol question
     // separates a proxy from any other local service.

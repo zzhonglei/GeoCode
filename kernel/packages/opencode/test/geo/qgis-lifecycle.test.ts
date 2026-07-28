@@ -101,7 +101,9 @@ const waitForStatus = (predicate: (status: GeoEvent.QgisStatus) => boolean, mess
 describe("qgis lifecycle", () => {
   {
     const it = testEffect(
-      LayerNode.compile(LayerNode.group([GeoQgis.node, EventV2.node, MachineConfig.node, GeoStatus.node]), [[GeoRuntime.node, runtimeMock]]),
+      LayerNode.compile(LayerNode.group([GeoQgis.node, EventV2.node, MachineConfig.node, GeoStatus.node]), [
+        [GeoRuntime.node, runtimeMock],
+      ]),
     )
 
     it.live(
@@ -220,7 +222,9 @@ describe("qgis lifecycle", () => {
   {
     // Default stub catalog: honest failure until the real exporter lands.
     const it = testEffect(
-      LayerNode.compile(LayerNode.group([GeoQgis.node, EventV2.node, MachineConfig.node, GeoStatus.node]), [[GeoRuntime.node, runtimeMock]]),
+      LayerNode.compile(LayerNode.group([GeoQgis.node, EventV2.node, MachineConfig.node, GeoStatus.node]), [
+        [GeoRuntime.node, runtimeMock],
+      ]),
     )
 
     it.live(

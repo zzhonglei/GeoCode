@@ -334,7 +334,8 @@ const layer = Layer.effect(
         // the consumer stays within the buffer, idle measures true arrival; if
         // it falls far enough behind to fill it, backpressure takes over and
         // the two paces converge again.
-        const queue = options.delivery.mode === "incremental" ? yield* Queue.bounded<string, Cause.Done>(CHUNK_BUFFER) : undefined
+        const queue =
+          options.delivery.mode === "incremental" ? yield* Queue.bounded<string, Cause.Done>(CHUNK_BUFFER) : undefined
         const onChunk = options.delivery.mode === "incremental" ? options.delivery.onChunk : undefined
 
         const primaryFiber = yield* Effect.forkScoped(
@@ -479,10 +480,7 @@ const layer = Layer.effect(
         // watching second is what keeps the two in order however fast the
         // process exits.
         yield* Effect.forkScoped(
-          Fiber.join(settleFiber).pipe(
-            Effect.ignore,
-            Effect.ensuring(Effect.sync(() => void live.delete(id))),
-          ),
+          Fiber.join(settleFiber).pipe(Effect.ignore, Effect.ensuring(Effect.sync(() => void live.delete(id)))),
         )
 
         // Scope closure is the other end: it runs however the execution ends —

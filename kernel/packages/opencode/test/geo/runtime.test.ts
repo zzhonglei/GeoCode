@@ -36,7 +36,11 @@ const alive = (pid: number) => {
 }
 
 const waitUntilGone = (pid: number, message: string) =>
-  pollWithTimeout(Effect.sync(() => (alive(pid) ? undefined : true)), message, "15 seconds")
+  pollWithTimeout(
+    Effect.sync(() => (alive(pid) ? undefined : true)),
+    message,
+    "15 seconds",
+  )
 
 describe("geo runtime", () => {
   it.live("collect mode returns the whole output and the exit code", () =>

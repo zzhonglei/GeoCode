@@ -62,7 +62,9 @@ describe("qgis executor precheck", () => {
   })
 
   test("an enum accepts its options and their indices, and flags the rest", () => {
-    expect(QgisExecutor.precheck("native:buffer", BUFFER, { INPUT: "/a", DISTANCE: 1, END_CAP_STYLE: "Round" })).toEqual([])
+    expect(
+      QgisExecutor.precheck("native:buffer", BUFFER, { INPUT: "/a", DISTANCE: 1, END_CAP_STYLE: "Round" }),
+    ).toEqual([])
     expect(QgisExecutor.precheck("native:buffer", BUFFER, { INPUT: "/a", DISTANCE: 1, END_CAP_STYLE: 2 })).toEqual([])
     const hints = QgisExecutor.precheck("native:buffer", BUFFER, { INPUT: "/a", DISTANCE: 1, END_CAP_STYLE: "Rounded" })
     expect(hints).toHaveLength(1)
@@ -101,7 +103,9 @@ describe("qgis executor pipeline", () => {
       },
       killAllSync: () => {},
     })
-    const it = testEffect(LayerNode.compile(LayerNode.group([GeoRuntimeModule.node]), [[GeoRuntimeModule.node, capturingRuntime]]))
+    const it = testEffect(
+      LayerNode.compile(LayerNode.group([GeoRuntimeModule.node]), [[GeoRuntimeModule.node, capturingRuntime]]),
+    )
 
     const environment: Environment = {
       python: "/fake/python3.12",

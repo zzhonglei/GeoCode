@@ -98,7 +98,9 @@ export function direct(target: Target, options: Options = {}): Promise<Result> {
       socket.destroy()
       resolve(result)
     }
-    socket.setTimeout(timeoutMs, () => finish({ ok: false, stage: "handshake", reason: `timed out after ${timeoutMs}ms` }))
+    socket.setTimeout(timeoutMs, () =>
+      finish({ ok: false, stage: "handshake", reason: `timed out after ${timeoutMs}ms` }),
+    )
     socket.once("secureConnect", () => finish({ ok: true, latencyMs: Date.now() - startedAt }))
     socket.once("error", (err: unknown) => finish({ ok: false, stage: "handshake", reason: reasonOf(err) }))
   })
@@ -141,7 +143,9 @@ export async function viaProxy(target: Target, proxyUrl: string, options: Option
       tunnel.socket.destroy()
       resolve(result)
     }
-    secure.setTimeout(timeoutMs, () => finish({ ok: false, stage: "handshake", reason: `timed out after ${timeoutMs}ms` }))
+    secure.setTimeout(timeoutMs, () =>
+      finish({ ok: false, stage: "handshake", reason: `timed out after ${timeoutMs}ms` }),
+    )
     secure.once("secureConnect", () => finish({ ok: true, latencyMs: Date.now() - startedAt }))
     secure.once("error", (err: unknown) => finish({ ok: false, stage: "handshake", reason: reasonOf(err) }))
   })
