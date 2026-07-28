@@ -135,6 +135,7 @@
     "opencode-gitlab-auth": "2.1.0",
     "opencode-poe-auth": "0.0.1",
     "opentui-spinner": "catalog:",
+    "osm2geojson-lite": "2.0.1",
     "partial-json": "0.1.7",
     "remeda": "catalog:",
     "semver": "^7.6.3",
