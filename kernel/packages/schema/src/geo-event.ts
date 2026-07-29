@@ -118,6 +118,13 @@ export type QgisStatus = typeof QgisStatus.Type
  */
 export const GeeSetup = Schema.Union([
   Schema.Struct({ status: Schema.Literal("unconfigured") }),
+  /**
+   * machine.json cannot be parsed. The same mandated member every status set
+   * carries, and it belongs on THIS layer because the local chain is the one
+   * the file describes — the network and the remote authorization know nothing
+   * about it (§3.1, §8.1).
+   */
+  Schema.Struct({ status: Schema.Literal("config-error"), file: Schema.String, message: Schema.String }),
   Schema.Struct({ status: Schema.Literal("python-missing"), python: Schema.String }),
   Schema.Struct({ status: Schema.Literal("checking") }),
   Schema.Struct({ status: Schema.Literal("packages-missing"), missing: Schema.Array(Schema.String) }),
@@ -196,6 +203,13 @@ export interface GeeStatus extends Schema.Schema.Type<typeof GeeStatus> {}
  */
 export const GdalStatus = Schema.Union([
   Schema.Struct({ status: Schema.Literal("unconfigured") }),
+  /**
+   * machine.json cannot be parsed. Mandated by the config contract, and NOT
+   * interchangeable with `unconfigured`: the user did configure this, the file
+   * is simply unreadable, and telling them to configure it sends them to do a
+   * thing they have already done (§3.1, §8.1).
+   */
+  Schema.Struct({ status: Schema.Literal("config-error"), file: Schema.String, message: Schema.String }),
   Schema.Struct({ status: Schema.Literal("dir-missing"), directory: Schema.String }),
   Schema.Struct({ status: Schema.Literal("unusable"), missing: Schema.Array(Schema.String) }),
   Schema.Struct({ status: Schema.Literal("raster-only"), missing: Schema.Array(Schema.String) }),

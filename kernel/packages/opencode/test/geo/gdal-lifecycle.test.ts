@@ -21,6 +21,8 @@ import { pollWithTimeout, testEffect } from "../lib/effect"
 
 const FILE = path.join(Global.Path.config, "machine.json")
 const write = (value: object) => Effect.promise(() => fs.promises.writeFile(FILE, JSON.stringify(value), "utf-8"))
+/** Deliberately unparsable, the way a hand-edited file goes wrong. */
+const writeBroken = () => Effect.promise(() => fs.promises.writeFile(FILE, '{ "gdal": "/opt", }}', "utf-8"))
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-gdal-lc-"))
 afterAll(() => {
@@ -111,6 +113,28 @@ describe("gdal lifecycle", () => {
           expect(gate.ok).toBe(false)
           // Nothing to hand over, and no directory to have taken a snapshot of.
           if (!gate.ok) expect(gate.status).toEqual({ status: "unconfigured" })
+        }
+      }),
+    { timeout: 30000 },
+  )
+
+  it.live(
+    "a config file that will not parse says so, and does not claim to be unconfigured",
+    () =>
+      Effect.gen(function* () {
+        const gdal = yield* GdalService.Service
+        yield* writeBroken()
+        const status = yield* waitForStatus((s) => s.status === "config-error", "never reported the parse failure")
+
+        // Two different facts needing two different actions from the user: one
+        // has a file to fix, the other has a field to fill. Reporting the first
+        // as "unconfigured" sends them to redo work they already did (§8.1).
+        expect(status).toMatchObject({ status: "config-error", file: FILE })
+        if (status.status === "config-error") expect(status.message.length).toBeGreaterThan(0)
+
+        // And no track runs on a configuration nobody could read.
+        for (const track of ["raster", "vector"] as const) {
+          expect((yield* gdal.gate(track)).ok).toBe(false)
         }
       }),
     { timeout: 30000 },

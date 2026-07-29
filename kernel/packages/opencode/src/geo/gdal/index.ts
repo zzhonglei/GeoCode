@@ -108,11 +108,21 @@ const layer = Layer.effect(
     const apply = (state: MachineConfig.BlockState<"gdal">) =>
       Effect.gen(function* () {
         const token = yield* writer.claim()
-        // An unparsable block leaves us with no directory, which is the same
-        // position as never having been told one. The parse failure itself is
-        // reported by Config; repeating it here would be a second voice on a
-        // subject this module has no information about (§3.1).
-        const directory = state.ok ? state.value : undefined
+
+        // A syntax error fails EVERY block (§3.1), and this module says so
+        // rather than reporting the same thing as a machine that was never
+        // configured. They are different facts and they need different answers
+        // from the user: one has a file to fix, the other has a field to fill,
+        // and telling the first user to configure GDAL sends them to redo work
+        // they already did (§8.1).
+        if (!state.ok) {
+          current = { status: "config-error", file: state.failure.file, message: state.failure.message }
+          environment = undefined
+          yield* writer.commit(token, current)
+          return
+        }
+
+        const directory = state.value
         current = GdalEnv.classify(directory)
         environment =
           directory && current.status !== "unconfigured" && current.status !== "dir-missing"

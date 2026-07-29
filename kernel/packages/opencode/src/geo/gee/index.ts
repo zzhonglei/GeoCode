@@ -275,10 +275,13 @@ const layer = Layer.effect(
 
         // A syntax error is not "unconfigured": the file says something, we
         // just cannot read it, and showing an empty configuration would
-        // contradict what the user is looking at (§3.1, §8.1).
+        // contradict what the user is looking at (§3.1, §8.1). Its own state
+        // rather than a probe failure — the interface has to tell "go fix this
+        // line" apart from "your Python environment is broken", and a location
+        // buried in a message string is not something it can act on.
         const setup: GeoEvent.GeeSetup = state.ok
           ? yield* GeeSetup.probe(runtime, state.value)
-          : { status: "probe-failed", error: `machine.json could not be read: ${state.failure.message}` }
+          : { status: "config-error", file: state.failure.file, message: state.failure.message }
 
         yield* Ref.update(facts, (current) => ({ ...current, setup }))
         yield* publish(token)

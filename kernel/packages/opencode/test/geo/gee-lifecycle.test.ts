@@ -351,12 +351,14 @@ describe("gee lifecycle", () => {
           yield* Effect.promise(() => fs.promises.writeFile(FILE, `{ "gee": ,, }`, "utf-8"))
           yield* config.reload()
 
-          const broken = yield* waitFor((s) => s.setup.status === "probe-failed", "the syntax error never surfaced")
+          const broken = yield* waitFor((s) => s.setup.status === "config-error", "the syntax error never surfaced")
           // Showing "unconfigured" would contradict the file the user is
-          // looking at, which plainly says something (§3.1, §8.1).
-          if (broken.setup.status === "probe-failed") {
-            expect(broken.setup.error).toContain("could not be read")
-          }
+          // looking at, which plainly says something (§3.1, §8.1). Its own
+          // state rather than a probe failure: the interface has to tell "go
+          // fix this line" apart from "your Python environment is broken", and
+          // it needs the location as a field to do anything with it.
+          expect(broken.setup).toMatchObject({ status: "config-error", file: FILE })
+          if (broken.setup.status === "config-error") expect(broken.setup.message.length).toBeGreaterThan(0)
           expect(broken.facing).toBe("setup")
         }),
       { timeout: 30000 },
