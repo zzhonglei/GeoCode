@@ -7,6 +7,7 @@ import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { MachineConfig } from "../config"
 import { GeoRuntime } from "../runtime"
 import { GeoStatus } from "../status"
+import { GdalCache } from "./cache"
 import { GdalEnv } from "./env"
 import { GdalRaster } from "./raster"
 import { GdalVector } from "./vector"
@@ -136,6 +137,14 @@ const layer = Layer.effect(
         if (!usable || !environment) return { ok: false, status: current }
         return { ok: true, environment }
       })
+
+    // Every artifact from the last run goes, and it goes BEFORE the pipelines
+    // exist rather than in the background beside them: a wipe racing a fresh
+    // production would take the new artifact with the old ones. Blunt on
+    // purpose — a cache that survives restarts needs a size budget and an
+    // eviction policy, and it makes "what does a first view cost" unaskable
+    // after the first run (§7.6).
+    yield* GdalCache.clear
 
     // The pipelines are handed the runtime once, here, rather than yielding it
     // per call: their work outlives the request that triggered it, and a fiber
