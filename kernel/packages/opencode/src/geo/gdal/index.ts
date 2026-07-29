@@ -5,11 +5,17 @@ import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { MachineConfig } from "../config"
+import { GeoRuntime } from "../runtime"
 import { GeoStatus } from "../status"
 import { GdalEnv } from "./env"
+import { GdalRaster } from "./raster"
+import { GdalVector } from "./vector"
 import type { GdalTypes } from "./types"
 
+export { GdalAccess } from "./access"
 export { GdalEnv } from "./env"
+export { GdalRaster } from "./raster"
+export { GdalVector } from "./vector"
 export type { Environment, Track } from "./types"
 
 /* --- GeoCode: the GDAL lifecycle (docs/GEOKERNEL.md §7.3).
@@ -48,6 +54,28 @@ export interface Interface {
    * single gate at §4.9).
    */
   readonly gate: (track: GdalTypes.Track) => Effect.Effect<Gate>
+  /**
+   * The two pipelines, built once and owned here.
+   *
+   * They hold state that has to outlive a request — parsed layers, and the
+   * merge that keeps concurrent callers to one production — so they cannot be
+   * constructed per call. They are exposed already carrying their runtime, so
+   * the data face never learns that a preview is subprocesses.
+   */
+  readonly vector: {
+    readonly meta: (environment: GdalTypes.Environment, file: string) => Effect.Effect<GdalVector.Meta, Error>
+    readonly content: (environment: GdalTypes.Environment, file: string) => Effect.Effect<string, Error>
+    readonly page: (
+      environment: GdalTypes.Environment,
+      file: string,
+      offset: number,
+      limit: number,
+    ) => Effect.Effect<GdalVector.Page, Error>
+  }
+  readonly raster: {
+    readonly meta: (environment: GdalTypes.Environment, file: string) => Effect.Effect<GdalRaster.Meta, Error>
+    readonly preview: (environment: GdalTypes.Environment, file: string) => Effect.Effect<GdalRaster.Preview, Error>
+  }
 }
 
 export class Service extends Context.Service<Service, Interface>()("@geocode/GdalService") {}
@@ -109,8 +137,33 @@ const layer = Layer.effect(
         return { ok: true, environment }
       })
 
-    return Service.of({ status: () => Effect.sync(() => current), gate })
+    // The pipelines are handed the runtime once, here, rather than yielding it
+    // per call: their work outlives the request that triggered it, and a fiber
+    // that has already gone is not a context to inherit from (§7.6).
+    const runtime = yield* GeoRuntime.Service
+    const supplied = <A, E>(effect: Effect.Effect<A, E, GeoRuntime.Service>) =>
+      Effect.provideService(effect, GeoRuntime.Service, runtime)
+    const vector = yield* GdalVector.make()
+    const raster = yield* GdalRaster.make()
+
+    return Service.of({
+      status: () => Effect.sync(() => current),
+      gate,
+      vector: {
+        meta: (environment, file) => supplied(vector.meta(environment, file)),
+        content: (environment, file) => supplied(vector.content(environment, file)),
+        page: (environment, file, offset, limit) => supplied(vector.page(environment, file, offset, limit)),
+      },
+      raster: {
+        meta: (environment, file) => supplied(raster.meta(environment, file)),
+        preview: (environment, file) => supplied(raster.preview(environment, file)),
+      },
+    })
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [MachineConfig.node, GeoStatus.node] })
+export const node = makeGlobalNode({
+  service: Service,
+  layer,
+  deps: [MachineConfig.node, GeoRuntime.node, GeoStatus.node],
+})

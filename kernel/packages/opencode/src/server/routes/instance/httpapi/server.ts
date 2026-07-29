@@ -90,7 +90,7 @@ import { fileHandlers } from "./handlers/file"
 import { globalHandlers } from "./handlers/global"
 // GeoCode: handler for the data face (docs/GEOKERNEL.md §10.1 #3).
 import { GeoKernel } from "@/geo"
-import { GeoHandler } from "./handlers/geo"
+import { GeoHandler, GeoPreviewHandler } from "./handlers/geo"
 import { instanceHandlers } from "./handlers/instance"
 import { mcpHandlers } from "./handlers/mcp"
 import { permissionHandlers } from "./handlers/permission"
@@ -159,6 +159,8 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     configHandlers,
     experimentalHandlers,
     fileHandlers,
+    // GeoCode: the preview endpoints (docs/GEOKERNEL.md §10.1 #3).
+    GeoPreviewHandler,
     instanceHandlers,
     mcpHandlers,
     projectHandlers,

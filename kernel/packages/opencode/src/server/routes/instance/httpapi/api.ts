@@ -30,7 +30,7 @@ import { LocationMiddleware } from "@opencode-ai/server/location"
 import { SessionLocationMiddleware } from "@opencode-ai/server/middleware/session-location"
 import { GlobalApi } from "./groups/global"
 // GeoCode: the data face of GeoKernel (docs/GEOKERNEL.md §10.1 #2).
-import { GeoApi } from "./groups/geo"
+import { GeoApi, GeoPreviewApi } from "./groups/geo"
 import { Authorization } from "./middleware/authorization"
 import { SchemaErrorMiddleware } from "./middleware/schema-error"
 
@@ -66,6 +66,9 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(ConfigApi)
   .addHttpApi(ExperimentalApi)
   .addHttpApi(FileApi)
+  // GeoCode: the preview endpoints take a path from outside, so unlike the
+  // status face they need to know which project they answer for (§7.8).
+  .addHttpApi(GeoPreviewApi)
   .addHttpApi(InstanceApi)
   .addHttpApi(McpApi)
   .addHttpApi(ProjectApi)
