@@ -1,4 +1,6 @@
 import { Glob } from "../util/glob"
+// GeoCode: the shared GIS taxonomy (docs/GEOKERNEL.md §10.1 #5, #7).
+import { GeoExtensions } from "./geo-extensions"
 
 const FOLDERS = new Set([
   "node_modules",
@@ -38,14 +40,29 @@ const FILES = [
   "**/.DS_Store",
   "**/Thumbs.db",
   "**/logs/**",
-  "**/tmp/**",
-  "**/temp/**",
+  // --- GeoCode-MERGE: tmp/temp deliberately NOT ignored — GIS workflows write
+  // intermediate outputs there, and a user who has just produced one expects to
+  // see it. Boundary marker so a future upstream re-add of a tmp/temp ignore
+  // rule trips a merge conflict instead of silently restoring it. ---
   "**/*.log",
   "**/coverage/**",
   "**/.nyc_output/**",
 ]
 
-export const PATTERNS = [...FILES, ...FOLDERS]
+/* --- GeoCode: transient files GIS tools churn constantly (docs/GEOKERNEL.md §10.1 #7).
+ *
+ * SQLite WAL / SHM / journal companions (GeoPackage, SpatiaLite, Esri mobile
+ * geodatabase, plain `.db`), plus QGIS project and style backups, locks and
+ * autosaves. A single QGIS session rewrites these hundreds of times, and every
+ * rewrite would otherwise reach the watcher as a file change.
+ *
+ * The suffixes come from the shared taxonomy rather than a list of their own,
+ * which is what keeps them from drifting away from the snapshot exclude. Kept
+ * out of `FILES` on purpose: the scope is the watcher, not `match`, which
+ * answers a different question for search and the file tree. --- */
+export const GEOCODE_WATCHER_IGNORE_PATTERNS = GeoExtensions.TRANSIENT_SUFFIXES.map((suffix) => `**/*.${suffix}`)
+
+export const PATTERNS = [...FILES, ...FOLDERS, ...GEOCODE_WATCHER_IGNORE_PATTERNS]
 
 export function match(filepath: string, opts?: { extra?: string[]; whitelist?: string[] }) {
   for (const pattern of opts?.whitelist || []) {
