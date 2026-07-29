@@ -11,7 +11,13 @@ import { QgisCatalog } from "./catalog"
 import { QgisResolve } from "./resolve"
 import type { Diagnostics, Environment } from "./types"
 
+/* The module's face, and everything the tool layer is meant to reach through
+ * it (§9.1): the gate below, algorithm search, and the two execution entries.
+ * Anything importing `qgis/executor` or `qgis/reader` directly has gone around
+ * the front — which is how one module ends up with two calling conventions. */
 export { QgisCatalog } from "./catalog"
+export { QgisExecutor } from "./executor"
+export { QgisReader } from "./reader"
 export type { Environment } from "./types"
 
 /* --- GeoCode: the QGIS module's lifecycle (docs/GEOKERNEL.md §4.8–§4.10).
