@@ -7,9 +7,23 @@ import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Effect, Layer, Option } from "effect"
 import ignore from "ignore"
+import fsp from "fs/promises" // GeoCode: one stat for the size gate below.
 import path from "path"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
+// GeoCode: the shared GIS taxonomy (docs/GEOKERNEL.md §10.1 #5).
+import { GeoExtensions } from "@opencode-ai/core/filesystem/geo-extensions"
 import { InstanceHttpApi } from "../api"
+
+/* --- GeoCode: the two ceilings on the generic content endpoint (§10.1 #8).
+ *
+ * The raster threshold is where "show me the file" stops being the right
+ * answer and "draw it on the map" starts — above it the interface is pointed at
+ * the preview endpoint, which reprojects and downscales instead.
+ *
+ * 50 MiB deliberately clears legitimate session artifacts (a 12 MiB PNG map
+ * export viewed inline) while stopping the pathological cases. --- */
+const MAX_INLINE_IMAGE = 8 * 1024 * 1024
+const MAX_INLINE_FILE = 50 * 1024 * 1024
 
 export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handlers) =>
   Effect.gen(function* () {
@@ -98,6 +112,48 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       const file = path.resolve(directory, ctx.query.path)
       if (!FSUtil.contains(directory, file)) return yield* Effect.die(new Error("Path escapes the location"))
       if (!(yield* FSUtil.Service.use((fs) => fs.existsSafe(file)))) return { type: "text" as const, content: "" }
+
+      /* --- GeoCode: size-gate the generic content endpoint (docs/GEOKERNEL.md §10.1 #8).
+       *
+       * Upstream has no limit anywhere on this path, so a restored editor tab
+       * or a session review sweep can pull a multi-hundred-megabyte file into
+       * the renderer as one string. Observed 2026-07-11: a 359 MiB CSV fetched
+       * twice ≈ 1.8 GiB of V8 heap (UTF-16), then a renderer OOM.
+       *
+       * Two tiers off a single stat. A large raster is not an error — the geo
+       * workspace draws it properly through `/geo/raster/image` — so it is
+       * pointed there rather than refused. Anything else past the ceiling is
+       * refused outright.
+       *
+       * A stat failure falls through as size 0 on purpose: the read below will
+       * surface the real error, and a file that cannot be statted is
+       * overwhelmingly one that cannot be read either. Agents are unaffected —
+       * their file tools read windowed slices and never come through here. --- */
+      const size = yield* Effect.promise(() =>
+        fsp
+          .stat(file)
+          .then((stat) => Number(stat.size))
+          .catch(() => 0),
+      )
+      const megabytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1)
+      if (GeoExtensions.RASTER_MAIN.includes(path.extname(file).toLowerCase().slice(1)) && size > MAX_INLINE_IMAGE) {
+        return {
+          type: "text" as const,
+          content: `Raw view disabled for large raster (${megabytes(size)} MiB). Use Map mode.`,
+          notice: "oversized-raster" as const,
+          size,
+        }
+      }
+      if (size > MAX_INLINE_FILE) {
+        return {
+          type: "text" as const,
+          content: `File too large to display (${megabytes(size)} MiB). Open it with an external tool, or ask the agent to read the parts you need.`,
+          notice: "oversized" as const,
+          size,
+        }
+      }
+      // --- /GeoCode ---
+
       return yield* filesystem(
         FileSystem.Service.use((fs) => fs.read({ path: RelativePath.make(ctx.query.path) })),
       ).pipe(
