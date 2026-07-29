@@ -36,6 +36,7 @@ const DEM = JSON.stringify({
 const SHAPEFILE = JSON.stringify({
   layers: [
     {
+      name: "wuchang_utm49n",
       featureCount: 1,
       geometryFields: [{ type: "Polygon", coordinateSystem: { projjson: { id: { authority: "EPSG", code: 32649 } } } }],
       fields: [{ name: "name" }, { name: "adcode" }, { name: "gb" }, { name: "level" }],
@@ -116,6 +117,9 @@ describe("gdal raster metadata", () => {
 describe("gdal vector metadata", () => {
   test("a real shapefile layer", () => {
     const info = GdalInspector.parseVector(SHAPEFILE)
+    // Needed verbatim to query the layer later; the filename is right often
+    // enough to look correct and wrong often enough to matter.
+    expect(info.name).toBe("wuchang_utm49n")
     expect(info.featureCount).toBe(1)
     // The interface picks a renderer from this; a wrong answer picks the wrong
     // one (§7.4).

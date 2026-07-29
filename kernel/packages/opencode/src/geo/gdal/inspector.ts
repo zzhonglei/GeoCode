@@ -53,6 +53,14 @@ export interface RasterInfo {
 }
 
 export interface VectorInfo {
+  /**
+   * The layer name the engine knows it by.
+   *
+   * Needed verbatim to query the layer later. Deriving it from the filename
+   * is right often enough to look correct and wrong often enough to matter —
+   * and it is right here in the output, so guessing is a choice.
+   */
+  readonly name: string
   readonly featureCount: number
   /**
    * The geometry types present.
@@ -197,6 +205,7 @@ export function parseVector(stdout: string): VectorInfo {
   const properties = fields.map((field) => field.name).filter((name): name is string => typeof name === "string")
 
   return {
+    name: typeof layer.name === "string" ? layer.name : "",
     featureCount: num(layer.featureCount) ?? 0,
     geometryTypes,
     properties,
