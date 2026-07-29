@@ -80,7 +80,7 @@ GeoKernel 分为两层:**基础设施层**提供与地理领域无关的通用�
 |---|---|---|---|---|
 | 基础设施 | **Config** | 机器环境配置的加载、监控与变更分发 | schema、loader、watcher、differ | §3.1 |
 | 基础设施 | **Runtime** | 子进程执行原语:启动、交付、时钟、终止 | spawn、delivery、clocks、terminate、output | §3.2 |
-| 基础设施 | **Net** | 网络可达性的全部决策:路径解析、探测、监视与判定 | targets、discovery、resolver、probe、classifier、monitor、redact | §3.3 |
+| 基础设施 | **Net** | 网络可达性的全部决策:路径解析、探测、监视与判定 | discovery、resolver、probe、tunnel、classifier、monitor、route、redact | §3.3 |
 | 基础设施 | **Status** | 状态的存储、提交、发布与快照 | registry、commit、publisher、snapshot | §3.4 |
 | 能力 | **QGIS** | QGIS 环境管理与空间处理执行 | lifecycle、env、catalog、executor、scripts | §4 |
 | 能力 | **GEE** | GEE 环境管理与遥感脚本执行 | lifecycle、setup、runtime-check、executor、pylib | §5 |
@@ -456,10 +456,11 @@ Runtime 决定"如何正确收场"**。
 
 | 子模块 | 内容 |
 |---|---|
-| targets | 目标注册表:远程能力在此声明其目标端点 |
 | discovery | 代理候选发现,结果全局共享 |
 | resolver | 按目标解析可用路径:直连优先,候选回退 |
 | probe | 探针:直连握手、代理协议问答、隧道内目标验证 |
+| tunnel | CONNECT 握手的唯一实现,探测与实际请求共用 |
+| route | 路由的两种形态:子进程环境注入与进程内 agent |
 | classifier | 失败判定:识别失败性质,区分需要立即响应与需要防抖的信号 |
 | monitor | 监视循环:复验节奏、判定变更、快速降级、自动恢复 |
 | redact | 凭据脱敏:出口信息的统一过滤 |
