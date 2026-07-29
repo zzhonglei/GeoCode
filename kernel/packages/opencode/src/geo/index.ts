@@ -2,6 +2,7 @@ export * as GeoKernel from "./index"
 
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { MachineConfig } from "./config"
+import { GdalService } from "./gdal"
 import { GeeService } from "./gee"
 import { GeoNet } from "./net"
 import { GeoOsm } from "./osm"
@@ -10,6 +11,7 @@ import { GeoRuntime } from "./runtime"
 import { GeoStatus } from "./status"
 
 export { MachineConfig } from "./config"
+export { GdalService } from "./gdal"
 export { GeeService } from "./gee"
 export { GeoNet } from "./net"
 export { GeoOsm } from "./osm"
@@ -32,13 +34,14 @@ export { GeoStatus } from "./status"
  *   config   `machine.json`: load, watch, dispatch per block            §3.1
  *   runtime  subprocess execution: spawn, deliver, clock, terminate     §3.2
  *   status   slot storage, generation-guarded commit, publication       §3.4
- *   net      network reachability: resolve, probe, rank, monitor  §3.3
+ *   net      network reachability: resolve, probe, monitor              §3.3
  *
  * Capability layer, on top of those:
  *   qgis     lifecycle, resolution, catalog, executor, data reading      §4
  *   gee      lifecycle, chain, authorization, execution, runtime library  §5
  *   osm      client reliability, queries, extents, conversion, output    §6
- *   dataplane — not yet built. --- */
+ *   gdal     toolchain discovery and the two preview tracks               §7
+ *            (pipelines still to come) --- */
 export const node = LayerNode.group([
   MachineConfig.node,
   GeoRuntime.node,
@@ -47,4 +50,5 @@ export const node = LayerNode.group([
   GeoQgis.node,
   GeeService.node,
   GeoOsm.node,
+  GdalService.node,
 ])
