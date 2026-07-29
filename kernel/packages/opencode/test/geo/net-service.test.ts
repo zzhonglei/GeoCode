@@ -8,8 +8,8 @@ import { pollWithTimeout, testEffect } from "../lib/effect"
 /* The Net service facade (docs/GEOKERNEL.md §3.3).
  *
  * These cover the parts the sub-module tests cannot: that nothing probes on
- * behalf of a target nobody asked about, and that a ranking is measured once,
- * on demand. */
+ * behalf of a target nobody asked about, and that monitoring starts and stops
+ * with the watchers. */
 
 const it = testEffect(LayerNode.compile(LayerNode.group([GeoNet.node])))
 
@@ -100,31 +100,6 @@ describe("net service", () => {
   )
 
   it.live(
-    "a ranking is measured on request and then reused",
-    () =>
-      Effect.gen(function* () {
-        const network = yield* GeoNet.Service
-        const port = yield* Effect.promise(closedPort)
-        yield* network.registerGroup("pool", [`https://localhost:${port}/a`, `https://localhost:${port}/b`])
-
-        const first = yield* network.ranking("pool")
-        // Nothing answers, and the pool still comes back whole, at the back of
-        // its own order. The ranking is the consumer's entire answer — it walks
-        // what it is given and re-shapes none of it (§8.3) — so handing back an
-        // empty list would leave it nothing to fail over across, on the exact
-        // evidence (a short handshake) that is least able to settle the matter.
-        // Counted by endpoint, not by pair: how many pairs there are depends on
-        // how many proxies the machine running this happens to have.
-        expect(new Set(first.map((entry) => entry.endpoint)).size).toBe(2)
-        expect(first.every((entry) => entry.latencyMs === Number.POSITIVE_INFINITY)).toBe(true)
-
-        const second = yield* network.ranking("pool")
-        expect(second).toBe(first)
-      }),
-    { timeout: 40000 },
-  )
-
-  it.live(
     "a machine with no network spends nothing finding that out",
     () =>
       Effect.gen(function* () {
@@ -155,7 +130,6 @@ describe("net service", () => {
     Effect.gen(function* () {
       const network = yield* GeoNet.Service
       expect((yield* network.status("never-registered")).state).toBe("idle")
-      expect(yield* network.ranking("never-registered")).toEqual([])
     }),
   )
 })

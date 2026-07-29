@@ -8,10 +8,9 @@ import { NetClassifier } from "./classifier"
 import { NetDiscovery } from "./discovery"
 import { NetMonitor } from "./monitor"
 import { NetProbe } from "./probe"
-import { NetRanking } from "./ranking"
 import { NetResolver } from "./resolver"
 import { NetRoute } from "./route"
-import { routeId, type RankedEndpoint, type Reachability, type Route, type Target } from "./types"
+import { routeId, type Reachability, type Route, type Target } from "./types"
 
 export { NetRedact } from "./redact"
 export { NetRoute } from "./route"
@@ -39,13 +38,6 @@ export interface Change {
 export interface Interface {
   /** Declare a target whose connectivity matters. */
   readonly register: (target: Target) => Effect.Effect<void>
-  /**
-   * Declare a set of interchangeable endpoints to be ranked.
-   *
-   * The first endpoint anchors the group: it is the target whose route changes
-   * decide when the ranking stops being valid.
-   */
-  readonly registerGroup: (id: string, endpoints: readonly string[]) => Effect.Effect<void>
   /** Current connectivity of a target. */
   readonly status: (id: string) => Effect.Effect<Reachability>
   /**
@@ -74,23 +66,6 @@ export interface Interface {
    * get out of the building.
    */
   readonly proxy: (target: Target) => Effect.Effect<string | undefined>
-  /**
-   * Ranked (endpoint, route) pairs for a group, measured on first request.
-   *
-   * Holding a ranking keeps the group's anchor monitored, which is how a route
-   * change can invalidate it. Losing the ranking releases that.
-   */
-  readonly ranking: (id: string) => Effect.Effect<readonly RankedEndpoint[]>
-  /**
-   * Discard a group's ranking so the next request measures again.
-   *
-   * Net drops a ranking when the ROUTE changes, which is the only thing it can
-   * see. This is the other direction: a consumer that has just had every ranked
-   * pair fail a real request holds evidence Net does not have — the ranking is
-   * worthless whatever the path measurements said — and says so rather than
-   * starting the next call from the same order (§6.3 整轮耗尽后重置排名).
-   */
-  readonly invalidateRanking: (id: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@geocode/GeoNet") {}
@@ -105,13 +80,6 @@ interface Entry {
   loop?: Fiber.Fiber<void, never>
 }
 
-interface Group {
-  readonly endpoints: readonly string[]
-  ranked?: readonly RankedEndpoint[]
-  /** True while this group's cached ranking is holding the anchor's monitor open. */
-  holding: boolean
-}
-
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -119,27 +87,14 @@ const layer = Layer.effect(
     yield* Effect.addFinalizer(() => PubSub.shutdown(pubsub))
 
     // Monitor loops belong to the MODULE's lifetime, not to whoever happened to
-    // start one. A ranking held across many callers and a stream watched by one
-    // must not put the same loop on two different clocks; the watcher count
-    // decides when it runs, and this decides where it lives.
+    // start one. Two consumers watching the same target must not put the same
+    // loop on two different clocks; the watcher count decides when it runs, and
+    // this decides where it lives.
     const scope = yield* Effect.scope
 
     const entries = new Map<string, Entry>()
-    const groups = new Map<string, Group>()
 
     const publish = (entry: Entry) => PubSub.publish(pubsub, { target: entry.target.id, state: entry.machine.state })
-
-    /** Discard rankings anchored on this target. */
-    const invalidate = (id: string) =>
-      Effect.gen(function* () {
-        const group = groups.get(id)
-        if (!group?.ranked) return
-        group.ranked = undefined
-        if (group.holding) {
-          group.holding = false
-          yield* release(id)
-        }
-      })
 
     /**
      * One round of probing for a target.
@@ -186,10 +141,8 @@ const layer = Layer.effect(
     const applyVerdict = (entry: Entry, verdict: NetMonitor.Verdict) =>
       Effect.gen(function* () {
         const before = entry.machine.state
-        const outcome = NetMonitor.step(entry.machine, verdict)
-        entry.machine = outcome.next
+        entry.machine = NetMonitor.step(entry.machine, verdict)
         if (!verdict.ok) entry.route = entry.machine.state.state === "reachable" ? entry.route : undefined
-        if (outcome.invalidateRanking) yield* invalidate(entry.target.id)
         // Publishing only on real change keeps a steady network silent (§3.4).
         if (!isDeepStrictEqual(before, entry.machine.state)) yield* publish(entry)
       })
@@ -219,20 +172,6 @@ const layer = Layer.effect(
         }
       })
 
-    /**
-     * Routes worth measuring against: direct, plus any proxy the machine has.
-     *
-     * Path RESOLUTION is direct-first and only looks for proxies once direct
-     * has failed. Ranking is a different question — not "how do I get there"
-     * but "which way is quickest" — so it measures every path that exists.
-     */
-    const availableRoutes = async (anchor?: Target): Promise<Route[]> => {
-      const routes: Route[] = [{ kind: "direct" }]
-      if (!anchor) return routes
-      for (const url of await NetDiscovery.candidates(anchor)) routes.push({ kind: "proxy", url })
-      return routes
-    }
-
     const acquire = (id: string) =>
       Effect.gen(function* () {
         const entry = entries.get(id)
@@ -261,26 +200,6 @@ const layer = Layer.effect(
       Effect.sync(() => {
         if (entries.has(target.id)) return
         entries.set(target.id, { target, machine: NetMonitor.initial, watchers: 0 })
-      })
-
-    const registerGroup = (id: string, endpoints: readonly string[]) =>
-      Effect.gen(function* () {
-        if (groups.has(id) || endpoints.length === 0) return
-        // A malformed endpoint must not take the registration down with it: the
-        // list is a constant in the consuming module, and a typo there should
-        // cost that module its ranking, not the whole Net service.
-        let first: URL
-        try {
-          first = new URL(endpoints[0]!)
-        } catch {
-          return
-        }
-        groups.set(id, { endpoints, holding: false })
-        yield* register({
-          id,
-          host: first.hostname,
-          port: Number(first.port || (first.protocol === "http:" ? 80 : 443)),
-        })
       })
 
     const status = (id: string): Effect.Effect<Reachability> =>
@@ -313,42 +232,7 @@ const layer = Layer.effect(
         }),
       )
 
-    const ranking = (id: string): Effect.Effect<readonly RankedEndpoint[]> =>
-      Effect.gen(function* () {
-        const group = groups.get(id)
-        if (!group) return []
-        if (group.ranked) return group.ranked
-
-        // Measured on first request, not at startup: a target nobody ends up
-        // using should cost nothing (§3.3 按需激活).
-        //
-        // Every available route participates, not just the one currently in use.
-        // The candidate set is (endpoint × route), and which combination is
-        // quickest is settled by measurement rather than assumed — a proxy is
-        // sometimes faster than a direct path that merely works. On a machine
-        // with no proxy the set collapses to direct alone, which is exactly the
-        // no-overhead case the design describes.
-        const entry = entries.get(id)
-        const routes = yield* Effect.promise(() => availableRoutes(entry?.target))
-        const measured = yield* Effect.promise(() => NetRanking.rank(group.endpoints, routes))
-        group.ranked = measured
-        if (!group.holding) {
-          group.holding = true
-          yield* acquire(id)
-        }
-        return measured
-      })
-
-    return Service.of({
-      register,
-      registerGroup,
-      status,
-      watch,
-      route,
-      proxy,
-      ranking,
-      invalidateRanking: invalidate,
-    })
+    return Service.of({ register, status, watch, route, proxy })
   }),
 )
 

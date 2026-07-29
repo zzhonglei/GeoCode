@@ -49,57 +49,32 @@ export interface Machine {
   readonly streak: number
 }
 
-export interface Step {
-  readonly next: Machine
-  /**
-   * Whether endpoint rankings for this target must be discarded.
-   *
-   * The rule is one line and covers every case §3.3 lists: **the ranking dies
-   * whenever the route identity changes**, counting "no route" as an identity
-   * of its own. A proxy appearing, a proxy disappearing, a switch from one
-   * route to another, connectivity lost, connectivity regained — each is a
-   * change of identity, and each means the measurements were taken under
-   * conditions that no longer hold. A re-verify that concludes what it
-   * concluded last time changes nothing and invalidates nothing.
-   */
-  readonly invalidateRanking: boolean
-}
-
 export const initial: Machine = { state: { state: "idle" }, streak: 0 }
 
-function identity(state: Reachability): RouteId | undefined {
-  return state.state === "reachable" ? state.route : undefined
-}
-
 /** Apply one verdict. */
-export function step(current: Machine, verdict: Verdict): Step {
-  const before = identity(current.state)
-
+export function step(current: Machine, verdict: Verdict): Machine {
   if (verdict.ok) {
     // Recovery needs no streak. A completed handshake with the genuine endpoint
     // is not something that happens by accident, so the evidence is already
     // conclusive — unlike failure, which has many innocent causes. The
     // asymmetry is the point: slow to give up, quick to come back.
-    const next: Machine = { state: { state: "reachable", route: verdict.routeId }, streak: 0 }
-    return { next, invalidateRanking: before !== verdict.routeId }
+    return { state: { state: "reachable", route: verdict.routeId }, streak: 0 }
   }
 
   // An interface-level signal is unambiguous, so it skips the streak entirely.
   // Waiting out a debounce here would leave the application claiming to be
   // online while the machine plainly is not (§3.3 快速降级).
   if (verdict.kind === "offline") {
-    const next: Machine = { state: { state: "unreachable", detail: verdict.detail }, streak: 0 }
-    return { next, invalidateRanking: before !== undefined }
+    return { state: { state: "unreachable", detail: verdict.detail }, streak: 0 }
   }
 
   const streak = current.streak + 1
   if (streak < FAILURE_STREAK && current.state.state === "reachable") {
     // Hold the current conclusion. The failure is recorded but not yet acted on.
-    return { next: { state: current.state, streak }, invalidateRanking: false }
+    return { state: current.state, streak }
   }
 
-  const next: Machine = { state: { state: "unreachable", detail: verdict.detail }, streak }
-  return { next, invalidateRanking: before !== undefined }
+  return { state: { state: "unreachable", detail: verdict.detail }, streak }
 }
 
 /** How long to wait before the next round. */

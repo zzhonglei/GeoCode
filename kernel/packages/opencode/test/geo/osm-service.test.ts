@@ -47,20 +47,9 @@ const netLayer = Layer.succeed(
   GeoNet.Service,
   GeoNet.Service.of({
     register: () => Effect.void,
-    registerGroup: () => Effect.void,
     status: () => Effect.succeed({ state: "idle" } as NetTypes.Reachability),
     watch: () => Effect.succeed({ state: "idle" }) as never,
     route: () => Effect.succeed({ kind: "direct" } as NetTypes.Route),
-    ranking: () =>
-      Effect.succeed([
-        {
-          endpoint: "https://a.example/api/interpreter",
-          route: { kind: "direct" } as NetTypes.Route,
-          routeId: "direct",
-          latencyMs: 1,
-        },
-      ]),
-    invalidateRanking: () => Effect.void,
     proxy: () => Effect.succeed(undefined),
   }),
 )

@@ -7,7 +7,7 @@ export * as NetTypes from "./types"
  * capability modules read its conclusions and never compute their own (§8.3).
  *
  * These types are separate from the service so the sub-modules — probe,
- * discovery, resolver, ranking, monitor — can share them without importing one
+ * discovery, resolver, monitor — can share them without importing one
  * another. --- */
 
 /** A remote endpoint Net can be asked to reach. */
@@ -32,9 +32,9 @@ export type Route = { readonly kind: "direct" } | { readonly kind: "proxy"; read
  * Stable identifier for a route, safe to publish.
  *
  * Consumers compare it to decide whether a conclusion of their own — a remote
- * authorization check, an endpoint ranking — was reached over a path that still
- * applies (§8.3). Carries host and port so a failure stays diagnosable, and
- * never any credentials.
+ * authorization check, say — was reached over a path that still applies (§8.3).
+ * Carries host and port so a failure stays diagnosable, and never any
+ * credentials.
  */
 export type RouteId = string
 
@@ -69,12 +69,3 @@ export type FailureKind =
   | "offline"
   /** Timeouts, resets, refusals — anything that a flapping link also produces. */
   | "other"
-
-/** One endpoint of an interchangeable group, paired with the route measured for it. */
-export interface RankedEndpoint {
-  readonly endpoint: string
-  readonly route: Route
-  readonly routeId: RouteId
-  /** Round-trip of the measurement, in milliseconds. */
-  readonly latencyMs: number
-}

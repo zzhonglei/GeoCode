@@ -7,7 +7,6 @@ import path from "node:path"
 import tls from "node:tls"
 import { NetDiscovery } from "@/geo/net/discovery"
 import { NetRedact } from "@/geo/net/redact"
-import { NetRanking } from "@/geo/net/ranking"
 import { NetResolver } from "@/geo/net/resolver"
 import { NetRoute } from "@/geo/net/route"
 import type { Target } from "@/geo/net/types"
@@ -160,69 +159,6 @@ describe("net path resolution", () => {
     // works today (§12).
     expect(NetDiscovery.declared({ ALL_PROXY: "socks5://127.0.0.1:1080" })).toBeUndefined()
     expect(NetDiscovery.declared({ HTTPS_PROXY: "127.0.0.1:7890" })).toBe("http://127.0.0.1:7890")
-  })
-})
-
-/*
- * These give the harness more time than the probe budget they exercise.
- * Equal budgets are a flake: the whole suite runs its files concurrently, and
- * any scheduling delay makes the TEST expire before the probe it is measuring
- * does — which reads as a broken probe rather than a busy machine.
- */
-const RANKING_TIMEOUT = { timeout: 20_000 }
-
-describe("net endpoint ranking", () => {
-  test.skipIf(!certificate)(
-    "the route is a dimension of the measurement, not of the answer",
-    async () => {
-      const target = await tlsTarget()
-      const proxyPort = await proxyTo(target.port)
-      const endpoint = `https://localhost:${target.port}/api`
-
-      // One endpoint, two routes. Both are measured — which is quicker is settled
-      // by measurement, and a proxy is sometimes faster than a direct path that
-      // merely works (§3.3).
-      const ranked = await NetRanking.rank(
-        [endpoint],
-        [{ kind: "direct" }, { kind: "proxy", url: `http://127.0.0.1:${proxyPort}` }],
-        { timeoutMs: 5000, tls: { ca: [certificate!] } },
-      )
-
-      // But what comes back is ONE entry: the endpoint, carrying whichever route
-      // won. A consumer failing over wants the next service to ask, and the same
-      // host by another road is not a different service.
-      expect(ranked).toHaveLength(1)
-      expect(ranked[0]!.endpoint).toBe(endpoint)
-      expect(["direct", `proxy:127.0.0.1:${proxyPort}`]).toContain(ranked[0]!.routeId)
-    },
-    RANKING_TIMEOUT,
-  )
-
-  test.skipIf(!certificate)(
-    "a pair that cannot be reached is parked at the back, not dropped",
-    async () => {
-      const target = await tlsTarget()
-      const dead = await closedPort()
-
-      const ranked = await NetRanking.rank(
-        [`https://localhost:${target.port}/api`, `https://localhost:${dead}/api`],
-        [{ kind: "direct" }],
-        { timeoutMs: 3000, tls: { ca: [certificate!] } },
-      )
-
-      // The ranking is the consumer's whole answer — it walks what it is given
-      // and re-shapes none of it (§8.3) — so a measurement produces an ORDER, not
-      // a shorter pool. A short handshake is the weakest evidence Net has, and it
-      // is not enough to retire an endpoint from the pool entirely.
-      expect(ranked).toHaveLength(2)
-      expect(ranked[0]!.endpoint).toContain(String(target.port))
-      expect(ranked[1]!.latencyMs).toBe(Number.POSITIVE_INFINITY)
-    },
-    RANKING_TIMEOUT,
-  )
-
-  test("a malformed endpoint is skipped rather than throwing", async () => {
-    expect(await NetRanking.rank(["not-a-url"], [{ kind: "direct" }])).toEqual([])
   })
 })
 

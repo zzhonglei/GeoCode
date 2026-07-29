@@ -17,27 +17,25 @@ describe("net monitor transitions", () => {
 
     // Timeouts and resets are exactly what a flapping link produces. Flipping on
     // the first one makes the indicator blink rather than inform.
-    expect(first.next.state.state).toBe("reachable")
-    expect(first.next.streak).toBe(1)
-    expect(first.invalidateRanking).toBe(false)
+    expect(first.state.state).toBe("reachable")
+    expect(first.streak).toBe(1)
   })
 
   test("a second consecutive ambiguous failure does", () => {
     const first = NetMonitor.step(reachable("direct"), failure("other"))
-    const second = NetMonitor.step(first.next, failure("other"))
+    const second = NetMonitor.step(first, failure("other"))
 
-    expect(second.next.state.state).toBe("unreachable")
-    expect(second.invalidateRanking).toBe(true)
+    expect(second.state.state).toBe("unreachable")
   })
 
   test("a success in between clears the streak", () => {
     const first = NetMonitor.step(reachable("direct"), failure("other"))
-    const recovered = NetMonitor.step(first.next, { ok: true, routeId: "direct" })
-    const afterOne = NetMonitor.step(recovered.next, failure("other"))
+    const recovered = NetMonitor.step(first, { ok: true, routeId: "direct" })
+    const afterOne = NetMonitor.step(recovered, failure("other"))
 
     // Otherwise two failures an hour apart would count as consecutive.
-    expect(afterOne.next.state.state).toBe("reachable")
-    expect(afterOne.next.streak).toBe(1)
+    expect(afterOne.state.state).toBe("reachable")
+    expect(afterOne.streak).toBe(1)
   })
 
   test("an interface-level failure degrades on the very first verdict", () => {
@@ -46,8 +44,7 @@ describe("net monitor transitions", () => {
     // No debounce: the signal is unambiguous, and waiting one out would leave
     // the application claiming to be online while the machine plainly is not
     // (§3.3 快速降级).
-    expect(immediate.next.state.state).toBe("unreachable")
-    expect(immediate.invalidateRanking).toBe(true)
+    expect(immediate.state.state).toBe("unreachable")
   })
 
   test("recovery needs no streak of its own", () => {
@@ -58,32 +55,8 @@ describe("net monitor transitions", () => {
     // endpoint does not happen by accident, so the evidence is already
     // conclusive — while failure has many innocent causes. Slow to give up,
     // quick to come back.
-    expect(back.next.state.state).toBe("reachable")
-    expect(back.next.streak).toBe(0)
-  })
-
-  test("rankings die exactly when the route identity changes", () => {
-    // Same route, still working: nothing has changed, so nothing is discarded.
-    const steady = NetMonitor.step(reachable("direct"), { ok: true, routeId: "direct" })
-    expect(steady.invalidateRanking).toBe(false)
-
-    // A proxy appeared and traffic moved onto it: measurements taken over the
-    // old path no longer describe anything.
-    const moved = NetMonitor.step(reachable("direct"), { ok: true, routeId: "proxy:127.0.0.1:7890" })
-    expect(moved.invalidateRanking).toBe(true)
-
-    // Connectivity lost — "no route" is an identity of its own.
-    const lost = NetMonitor.step(reachable("direct"), failure("offline"))
-    expect(lost.invalidateRanking).toBe(true)
-
-    // Regained. Even landing on the same identifier, the conditions the old
-    // measurements were taken under have demonstrably come and gone.
-    const regained = NetMonitor.step(lost.next, { ok: true, routeId: "direct" })
-    expect(regained.invalidateRanking).toBe(true)
-
-    // And a failure while already down changes nothing to discard.
-    const stillDown = NetMonitor.step(lost.next, failure("other"))
-    expect(stillDown.invalidateRanking).toBe(false)
+    expect(back.state.state).toBe("reachable")
+    expect(back.streak).toBe(0)
   })
 
   test("re-verification is route-aware only while a route is held", () => {

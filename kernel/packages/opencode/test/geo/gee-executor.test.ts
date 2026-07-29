@@ -214,12 +214,9 @@ describe("gee gate", () => {
       GeoNet.Service,
       GeoNet.Service.of({
         register: () => Effect.void,
-        registerGroup: () => Effect.void,
         status: () => Effect.succeed({ state: "idle" } as NetTypes.Reachability),
         watch: () => Stream.unwrap(Effect.map(PubSub.subscribe(hub), Stream.fromSubscription)),
         route: () => Effect.succeed({ kind: "proxy", url: "http://127.0.0.1:7890" } as NetTypes.Route),
-        ranking: () => Effect.succeed([]),
-        invalidateRanking: () => Effect.void,
         proxy: () => Effect.succeed(undefined),
       }),
     )

@@ -77,7 +77,6 @@ function scriptedNet() {
     GeoNet.Service,
     GeoNet.Service.of({
       register: (target) => Ref.update(registered, (all) => [...all, target.id]),
-      registerGroup: () => Effect.void,
       status: () => Effect.succeed({ state: "idle" } as NetTypes.Reachability),
       watch: () =>
         Stream.unwrap(
@@ -89,8 +88,6 @@ function scriptedNet() {
           }),
         ),
       route: () => Effect.succeed(undefined),
-      ranking: () => Effect.succeed([]),
-      invalidateRanking: () => Effect.void,
       proxy: () => Effect.succeed(undefined),
     }),
   )

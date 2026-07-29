@@ -77,12 +77,9 @@ function scriptedNet(route: NetTypes.Route = { kind: "direct" }) {
     GeoNet.Service,
     GeoNet.Service.of({
       register: () => Effect.void,
-      registerGroup: () => Effect.void,
       status: () => Effect.succeed({ state: "idle" } as NetTypes.Reachability),
       watch: () => Stream.unwrap(Effect.map(PubSub.subscribe(hub), Stream.fromSubscription)),
       route: () => Effect.succeed(route),
-      ranking: () => Effect.succeed([]),
-      invalidateRanking: () => Effect.void,
       proxy: () => Effect.succeed(undefined),
     }),
   )

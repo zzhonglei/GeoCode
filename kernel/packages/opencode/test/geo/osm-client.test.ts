@@ -70,12 +70,9 @@ function scriptedNet(proxyUrl?: string) {
     GeoNet.Service,
     GeoNet.Service.of({
       register: () => Effect.void,
-      registerGroup: () => Effect.void,
       status: () => Effect.succeed({ state: "idle" } as NetTypes.Reachability),
       watch: () => Effect.succeed({ state: "idle" }) as never,
       route: () => Effect.succeed(undefined),
-      ranking: () => Effect.succeed([]),
-      invalidateRanking: () => Effect.void,
       proxy: () =>
         Effect.gen(function* () {
           yield* Ref.update(asks, (n) => n + 1)

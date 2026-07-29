@@ -18,10 +18,9 @@ import type { Route } from "./types"
  *
  * When it is applied differs just as fundamentally. A subprocess's environment
  * is fixed the moment it starts, so one route serves everything it will ever
- * do. In-process access picks a route PER REQUEST — endpoint ranking produces
- * (endpoint, route) pairs, so different endpoints may travel differently, and a
- * failover that switches endpoint switches route with it. Installing one global
- * route would throw the ranking away. --- */
+ * do. In-process access carries the route PER REQUEST rather than installing
+ * it: a process-wide setting would reach every other thing the kernel does,
+ * while the caller is one module deciding how its own traffic travels. --- */
 
 /** Keeps loopback traffic off the proxy: local callbacks and local services. */
 const NO_PROXY_LOCAL = "localhost,127.0.0.1,::1"

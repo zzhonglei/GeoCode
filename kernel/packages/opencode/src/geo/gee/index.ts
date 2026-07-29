@@ -200,8 +200,8 @@ const layer = Layer.effect(
      * direct than anything we probed, because it IS the operation, against the
      * same remote, with the same credentials. The check takes seconds, so a
      * refusal can arrive while one is in flight — and without this counter the
-     * probe's older "valid" would land on top of it and the ranking would be
-     * exactly inverted.
+     * probe's older "valid" would land on top of it, inverting exactly the
+     * ordering §5.5 sets out.
      */
     let refusals = 0
 
@@ -240,12 +240,11 @@ const layer = Layer.effect(
      * unbound. So this never triggers a check — it only decides whether the
      * conclusion we already have still applies.
      *
-     * The rule here reads "the identity is DIFFERENT", and that is deliberately
-     * not the rule the ranking uses (§3.3), where any change — including gone
-     * and came back — invalidates. Ranking measures latency, which loses its
-     * reference the moment the link drops. Authorization does not: leaving and
-     * returning to the same exit means the same conclusion still holds, and
-     * re-asking would spend a credentialed call to learn what we knew.
+     * The rule here reads "the identity is DIFFERENT" — not "anything changed".
+     * Leaving and returning to the same exit means the same conclusion still
+     * holds, and re-asking would spend a credentialed call to learn what we
+     * already knew. A conclusion about latency would not survive that round
+     * trip; a conclusion about whether these credentials work does.
      */
     function onNetwork(network: GeoEvent.GeeNetwork): GeoEvent.GeeRuntime {
       if (network.status !== "reachable") return { status: "unknown" }
