@@ -89,6 +89,7 @@ import { experimentalHandlers } from "./handlers/experimental"
 import { fileHandlers } from "./handlers/file"
 import { globalHandlers } from "./handlers/global"
 // GeoCode: handler for the data face (docs/GEOKERNEL.md §10.1 #3).
+import { GeoKernel } from "@/geo"
 import { GeoHandler } from "./handlers/geo"
 import { instanceHandlers } from "./handlers/instance"
 import { mcpHandlers } from "./handlers/mcp"
@@ -268,6 +269,10 @@ const app = LayerNode.group([
   ProjectV2.node,
   ProjectCopy.node,
   PtyTicket.node,
+  // GeoCode: the service graph behind the data face (docs/GEOKERNEL.md §10.1 #4).
+  // The application runtime mounts this node too, and both build through the
+  // shared memo map — so this is the same instance, not a second one.
+  GeoKernel.node,
 ])
 
 export function createRoutes(
