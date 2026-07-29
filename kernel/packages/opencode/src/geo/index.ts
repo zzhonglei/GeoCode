@@ -40,8 +40,7 @@ export { GeoStatus } from "./status"
  *   qgis     lifecycle, resolution, catalog, executor, data reading      §4
  *   gee      lifecycle, chain, authorization, execution, runtime library  §5
  *   osm      client reliability, queries, extents, conversion, output    §6
- *   gdal     toolchain discovery and the two preview tracks               §7
- *            (pipelines still to come) --- */
+ *   gdal     toolchain discovery, and the vector and raster pipelines     §7 --- */
 export const node = LayerNode.group([
   MachineConfig.node,
   GeoRuntime.node,

@@ -85,19 +85,27 @@ export class GdalInspectError extends Error {
 }
 
 /**
- * Flags every metadata call carries, and why neither is optional.
+ * Carried by **every** GDAL subprocess in this module, not only these.
  *
  * `GDAL_PAM_ENABLED NO` stops the library writing computed statistics as a
  * sidecar **next to the source data**. Without it a read-only preview request
  * silently modifies the user's directory — the same class of problem that cost
  * the overview step its existence (§7.6).
  *
- * `-approx_stats` samples instead of walking every pixel. Exact statistics
- * would make this step scale with file size, which is precisely what the
- * light/heavy split exists to avoid, and the stretch it feeds is not sensitive
- * to the difference.
+ * Exported because that rule is module-wide: the raster pipeline runs four more
+ * tools over the same source, and a copy of this array in each file is a copy
+ * that can be forgotten in one of them.
  */
-const METADATA_FLAGS = ["--config", "GDAL_PAM_ENABLED", "NO"] as const
+export const NO_SIDECARS = ["--config", "GDAL_PAM_ENABLED", "NO"] as const
+
+/**
+ * Sample rather than walk every pixel.
+ *
+ * Exact statistics would make this step scale with file size, which is
+ * precisely what the light/heavy split exists to avoid (§7.2), and the stretch
+ * they feed is not sensitive to the difference.
+ */
+const APPROXIMATE_STATS = "-approx_stats"
 
 /** Generous for a header read; a network-mounted file is the case that needs it. */
 const TIMEOUT = "30 seconds"
@@ -258,12 +266,26 @@ export const inspectRaster = (environment: GdalTypes.Environment, file: string) 
   run(
     environment,
     environment.tools.gdalinfo,
-    [...METADATA_FLAGS, "-json", "-approx_stats", file],
+    [...NO_SIDECARS, "-json", APPROXIMATE_STATS, file],
     "gdal:inspect-raster",
   ).pipe(Effect.flatMap(parsed(parseRaster)))
 
+/**
+ * The same shape, without paying for statistics.
+ *
+ * For reading back an intermediate the pipeline just produced, where the
+ * questions are "where did it land" and "how many bands came out" — neither of
+ * which needs a single pixel read. Asking for statistics here would not be a
+ * cheap extra: the intermediate is a virtual dataset, so sampling it forces the
+ * reprojection to run early, on top of running again at encode time.
+ */
+export const inspectLayout = (environment: GdalTypes.Environment, file: string) =>
+  run(environment, environment.tools.gdalinfo, [...NO_SIDECARS, "-json", file], "gdal:inspect-layout").pipe(
+    Effect.flatMap(parsed(parseRaster)),
+  )
+
 export const inspectVector = (environment: GdalTypes.Environment, file: string) =>
-  run(environment, environment.tools.ogrinfo, [...METADATA_FLAGS, "-json", "-so", file], "gdal:inspect-vector").pipe(
+  run(environment, environment.tools.ogrinfo, [...NO_SIDECARS, "-json", "-so", file], "gdal:inspect-vector").pipe(
     Effect.flatMap(parsed(parseVector)),
   )
 
