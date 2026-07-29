@@ -10,6 +10,8 @@ import { Hash } from "@opencode-ai/core/util/hash"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
 import { Info } from "@opencode-ai/schema/file-diff"
+// GeoCode: the shared GIS taxonomy (docs/GEOKERNEL.md §10.1 #5).
+import { GeoExtensions } from "@opencode-ai/core/filesystem/geo-extensions"
 
 export const Patch = Schema.Struct({
   hash: Schema.String,
@@ -19,6 +21,43 @@ export type Patch = typeof Patch.Type
 
 export const FileDiff = Info
 export type FileDiff = typeof FileDiff.Type
+
+/* --- GeoCode: geodata never enters the checkpoint repository (docs/GEOKERNEL.md §10.1 #6).
+ *
+ * One scene is hundreds of megabytes and a project holds many; without this a
+ * checkpoint costs more than the work it protects, and the object store grows
+ * until the disk is gone.
+ *
+ * The extensions come from the shared taxonomy so this cannot drift away from
+ * the watcher's ignore list. **What it may use is constrained**: this becomes an
+ * unconditional `*.ext` rule, so it blankets only unambiguous geo extensions —
+ * `SNAPSHOT_BLANKET_SIDECARS` has already dropped the generics (`.dat`, `.hdr`,
+ * `.qml`, …) that a parent-gated consumer can use safely and this one cannot,
+ * because here they would also swallow a user's ordinary files (§10.1 #5). --- */
+const geoSection = (header: string, extensions: string[]) => [
+  `# GeoCode: ${header}`,
+  ...extensions.map((extension) => `*.${extension}`),
+]
+const GEO_EXCLUDE = [
+  ...geoSection("Vector data files", GeoExtensions.VECTOR_MAIN),
+  ...geoSection("CAD formats", GeoExtensions.CAD_MAIN),
+  ...geoSection("Raster data files", GeoExtensions.RASTER_MAIN),
+  ...geoSection("Scientific data (climate / satellite)", GeoExtensions.SCIENTIFIC_MAIN),
+  ...geoSection("Point cloud (LiDAR)", GeoExtensions.POINTCLOUD_MAIN),
+  ...geoSection("Tile cache formats", GeoExtensions.TILECACHE_MAIN),
+  ...geoSection("Container-dataset folders", GeoExtensions.CONTAINER_DIRS),
+  ...geoSection("Dataset sidecars", GeoExtensions.SNAPSHOT_BLANKET_SIDECARS),
+  ...geoSection("Transient churn (SQLite WAL / QGIS locks)", GeoExtensions.TRANSIENT_SUFFIXES),
+  // Snapshot-only, and too aggressive for any other consumer: a checkpoint has
+  // no use for these, while a file tree that hid them would be hiding the
+  // metadata a GIS user reads.
+  "# GeoCode: GIS metadata",
+  "*.xml",
+  "# GeoCode: OpenStreetMap PBF",
+  "*.osm.pbf",
+  "# GeoCode: macOS",
+  ".DS_Store",
+].join("\n")
 
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
@@ -99,7 +138,13 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           ),
         )
 
-        const ignore = Effect.fnUntraced(function* (files: string[]) {
+        const ignore = Effect.fnUntraced(function* (
+          files: string[],
+          // GeoCode: by default this asks the SOURCE repo's rules. Pass the
+          // snapshot's own gitdir to ask ITS `info/exclude` instead, which is
+          // where GEO_EXCLUDE lives (§10.1 #6).
+          gitDir: string = path.join(state.worktree, ".git"),
+        ) {
           if (!files.length) return new Set<string>()
           // check-ignore treats a leading colon as pathspec magic but accepts and echoes a protective ./ prefix.
           const checkIgnorePaths = files.map((item) => (item.startsWith(":") ? `./${item}` : item))
@@ -107,7 +152,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
             [
               ...quote,
               "--git-dir",
-              path.join(state.worktree, ".git"),
+              gitDir,
               "--work-tree",
               state.worktree,
               "check-ignore",
@@ -127,6 +172,13 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               .filter(Boolean)
               .map((item) => (item.startsWith("./:") ? item.slice(2) : item)),
           )
+        })
+
+        /** Everything the SNAPSHOT index currently tracks, seeded entries included. */
+        const lsFiles = Effect.fnUntraced(function* () {
+          const result = yield* git([...quote, ...args(["ls-files", "-z"])], { cwd: state.worktree })
+          if (result.code !== 0) return [] as string[]
+          return result.text.split("\0").filter(Boolean)
         })
 
         const drop = Effect.fnUntraced(function* (files: string[]) {
@@ -185,6 +237,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           const text = [
             file ? (yield* read(file)).trimEnd() : "",
             ...list.map((item) => `/${item.replaceAll("\\", "/")}`),
+            GEO_EXCLUDE, // GeoCode: geodata never belongs in a checkpoint (§10.1 #6).
           ]
             .filter(Boolean)
             .join("\n")
@@ -258,6 +311,30 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           const tracked = diff.text.split("\0").filter(Boolean)
           const untracked = other.text.split("\0").filter(Boolean)
           const all = Array.from(new Set([...tracked, ...untracked]))
+
+          /* --- GeoCode: geodata ALREADY TRACKED in the snapshot index has to go too
+           * (docs/GEOKERNEL.md §10.1 #6).
+           *
+           * The source-repo check below never sees GEO_EXCLUDE — that lives in
+           * the snapshot repo's own `info/exclude` — and a gitignore rule has no
+           * effect on a file that is already tracked anyway. So a `.tif` or
+           * `.gpkg` committed in the user's repo, seeded into the snapshot index
+           * along with everything else, would be re-hashed into the object store
+           * on every single checkpoint: gigabytes of I/O, an object store that
+           * only grows, and eventually a full disk.
+           *
+           * **Before the early return, and this is the whole subtlety.** Seeded
+           * geodata is unchanged at the moment it is tracked, so it appears in
+           * no candidate list — it is reachable only through `ls-files`, and a
+           * first checkpoint on an untouched project has no candidates at all.
+           * Placed after the return it would ride into the first tree and then
+           * be removed by the next call, showing up as a phantom deletion. --- */
+          const geoIgnored = yield* ignore(Array.from(new Set([...all, ...(yield* lsFiles())])), state.gitdir)
+          if (geoIgnored.size > 0) {
+            yield* Effect.logInfo("removing geodata from snapshot", { count: geoIgnored.size })
+            yield* drop(Array.from(geoIgnored))
+          }
+
           if (!all.length) return
 
           // Resolve source-repo ignore rules against the exact candidate set.
@@ -271,7 +348,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
             yield* drop(ignoredFiles)
           }
 
-          const allow = all.filter((item) => !ignored.has(item))
+          const allow = all.filter((item) => !ignored.has(item) && !geoIgnored.has(item))
           if (!allow.length) return
 
           const large = new Set(
