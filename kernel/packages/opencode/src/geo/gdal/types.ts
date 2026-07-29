@@ -16,6 +16,14 @@ import type { GdalEnv } from "./env"
 export interface Environment {
   /** The directory the tools were found in — what the status was decided about. */
   readonly directory: string
+  /**
+   * The configuration this was derived from, as Config fingerprinted it.
+   *
+   * Travels into every cache key so that pointing the configuration at a
+   * different toolchain retires the old artifacts instead of serving them from
+   * a build that no longer exists (§7.6).
+   */
+  readonly fingerprint: string
   readonly tools: Record<GdalEnv.Tool, string>
   /** Injected into every subprocess. Empty on platforms that need nothing (§7.3). */
   readonly env: Record<string, string>

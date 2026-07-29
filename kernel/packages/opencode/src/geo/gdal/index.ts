@@ -87,7 +87,12 @@ const layer = Layer.effect(
         current = GdalEnv.classify(directory)
         environment =
           directory && current.status !== "unconfigured" && current.status !== "dir-missing"
-            ? { directory, tools: GdalEnv.toolPaths(directory), env: GdalEnv.subprocessEnv(directory) }
+            ? {
+                directory,
+                fingerprint: state.fingerprint,
+                tools: GdalEnv.toolPaths(directory),
+                env: GdalEnv.subprocessEnv(directory),
+              }
             : undefined
         yield* writer.commit(token, current)
       })
