@@ -1,0 +1,79 @@
+/* Group the vendored suite's failures by cause.
+ *
+ * Two deliberate GeoCode changes leave a large block of upstream tests
+ * asserting things we no longer ship, and a raw failure count cannot tell that
+ * block apart from a real regression. This can, so the question after a merge
+ * becomes "did the unexplained bucket grow".
+ *
+ * bun prints a failure's error text BEFORE its `(fail) <name>` line, so the
+ * evidence for a failure is the run of lines since the previous one. */
+import fs from "node:fs"
+
+const RULES = [
+  {
+    name: "agent line-up (expected)",
+    // GeoAgent is the only primary and the code-oriented subagents are off, so
+    // upstream tests naming build / explore / general have nothing to run.
+    // Disabled through the assembly layer, which config can override — so the
+    // fix, when we make it, belongs in a shared fixture rather than per test.
+    test: (text) =>
+      /Agent not found: .{0,3}(build|explore|general)|Available agents: GeoAgent|agent=(build|explore|general)\b|\b(build|explore|general) agent\b/.test(
+        text,
+      ),
+  },
+  {
+    name: "on-disk identity (expected)",
+    // Assertions naming the pre-rename identity, against code that now derives
+    // every branded path and file name from the Brand module.
+    test: (text) =>
+      /opencode\.jsonc?|T\/opencode|tmpdir\(\), "opencode"|["'/]opencode["'/]|\.opencode\b/.test(text) &&
+      /Expected|NotFound|toBe|toEqual|toContain/.test(text),
+  },
+  {
+    name: "external dependency",
+    test: (text) => /ECONNREFUSED|ENOTFOUND|certificate|EAI_AGAIN|fetch failed|socket hang up/i.test(text),
+  },
+  { name: "timeout under load", test: (text) => /timed out after/i.test(text) },
+]
+
+const UNEXPLAINED = "unexplained — look at these"
+
+for (const file of process.argv.slice(2)) {
+  if (!fs.existsSync(file)) continue
+  const lines = fs.readFileSync(file, "utf8").split("\n")
+  const failures = []
+  let evidence = []
+  for (const line of lines) {
+    const hit = /^\(fail\) (.+?) \[[\d.]+m?s\]$/.exec(line)
+    if (hit) {
+      failures.push({ name: hit[1], evidence: evidence.join("\n") })
+      evidence = []
+      continue
+    }
+    evidence.push(line)
+    // Long enough to reach the error printed above a failure, bounded so one
+    // huge dump cannot leak its cause onto the next test.
+    if (evidence.length > 120) evidence.shift()
+  }
+
+  const buckets = new Map()
+  for (const failure of failures) {
+    const rule = RULES.find((candidate) => candidate.test(`${failure.evidence}\n${failure.name}`))
+    const key = rule?.name ?? UNEXPLAINED
+    if (!buckets.has(key)) buckets.set(key, [])
+    buckets.get(key).push(failure.name)
+  }
+
+  console.log(`\n===== ${file} — ${failures.length} failures =====`)
+  for (const [key, names] of [...buckets].sort((a, b) => b[1].length - a[1].length)) {
+    console.log(`\n## ${key}  (${names.length})`)
+    // The expected buckets are counted, not listed; the unexplained one is the
+    // whole point of running this, so it is always shown in full.
+    if (key !== UNEXPLAINED && names.length > 5) {
+      for (const name of names.slice(0, 5)) console.log(`  - ${name}`)
+      console.log(`  … and ${names.length - 5} more`)
+      continue
+    }
+    for (const name of names) console.log(`  - ${name}`)
+  }
+}
