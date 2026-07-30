@@ -39,6 +39,33 @@ process.env["OPENCODE_MODELS_PATH"] = path.join(import.meta.dir, "tool", "fixtur
 process.env["OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"] = "true"
 process.env["OPENCODE_EXPERIMENTAL_WORKSPACES"] = "true"
 
+/* --- GeoCode: give the vendored suite back the agents it was written against.
+ *
+ * GeoCode ships GeoAgent as the only primary and turns the code-oriented
+ * subagents off, which upstream's tests know nothing about — around a hundred
+ * of them prompt `build` or spawn `general`, get "agent not found", and then
+ * fail somewhere far away: a session that never becomes busy, a shell that
+ * never starts, a task tool that times out. The failures look unrelated and are
+ * not, which is what made the suite unreadable.
+ *
+ * Here rather than in each test, and as CONFIG rather than a code change: the
+ * disables come from the assembly layer, which merges beneath user config, so a
+ * global config file simply outranks them. Nothing in `src/` moves, and this
+ * restores upstream's own baseline for upstream's own tests — GeoCode's line-up
+ * is asserted separately, by the tripwires in core.
+ *
+ * Imported dynamically: env has to be set before anything reads it, and this
+ * runs after the block above. --- */
+const { Brand } = await import("@opencode-ai/core/brand")
+await fs.mkdir(path.join(dir, "config", Brand.dirName), { recursive: true })
+await fs.writeFile(
+  path.join(dir, "config", Brand.dirName, Brand.configJson),
+  JSON.stringify({
+    agent: { build: { disable: false }, explore: { disable: false }, general: { disable: false } },
+  }),
+)
+// --- /GeoCode ---
+
 // Set test home directory to isolate tests from user's actual home directory
 // This prevents tests from picking up real user configs/skills from ~/.claude/skills
 const testHome = path.join(dir, "home")

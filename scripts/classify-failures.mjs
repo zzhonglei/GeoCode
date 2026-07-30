@@ -16,8 +16,11 @@ const RULES = [
     // upstream tests naming build / explore / general have nothing to run.
     // Disabled through the assembly layer, which config can override — so the
     // fix, when we make it, belongs in a shared fixture rather than per test.
+    // Three spellings, because the same missing agent surfaces differently
+    // depending on who looked for it — and a rule that catches only one leaves
+    // the rest sitting in the bucket that is supposed to mean "look at this".
     test: (text) =>
-      /Agent not found: .{0,3}(build|explore|general)|Available agents: GeoAgent|agent=(build|explore|general)\b|\b(build|explore|general) agent\b/.test(
+      /Agent not found: .{0,3}(build|explore|general)|Unknown agent type: (build|explore|general)|Available agents: GeoAgent|agent=(build|explore|general)\b|\b(build|explore|general) agent\b/.test(
         text,
       ),
   },
