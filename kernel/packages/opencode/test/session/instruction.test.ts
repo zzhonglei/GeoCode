@@ -229,6 +229,26 @@ describe("Instruction.system", () => {
     }),
   )
 
+  /* --- GeoCode: the same assertion as the case below, minus the flag
+   * override — GeoCode disables the Claude Code prompt path by default
+   * (src/effect/runtime-flags.ts, docs/PATHS.md §7). This is the behavioural
+   * tripwire: it reads the real path, not the flag value, so flipping the
+   * default back turns it red. --- */
+  it.live("GeoCode: skips project and global CLAUDE.md by default", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpWithFiles({ ".claude/CLAUDE.md": "# Global Claude" })
+      const projectTmp = yield* tmpWithFiles({ "CLAUDE.md": "# Project Claude" })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(globalTmp, ".claude", "CLAUDE.md"))).toBe(false)
+        expect(paths.has(path.join(projectTmp, "CLAUDE.md"))).toBe(false)
+        expect(yield* svc.system()).toEqual([])
+      }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
   it.live("skips project and global CLAUDE.md when Claude Code prompt is disabled", () =>
     Effect.gen(function* () {
       const globalTmp = yield* tmpWithFiles({ ".claude/CLAUDE.md": "# Global Claude" })

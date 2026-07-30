@@ -13,6 +13,24 @@ const enabledByExperimental = (name: string) =>
     Config.map((flags) => Option.getOrElse(flags.enabled, () => flags.experimental)),
   )
 
+/* --- GeoCode: Claude Code's instruction file and skill library belong to
+ * another product, and a coding assistant's conventions are not GeoAgent's, so
+ * both isolation flags default to ON here where upstream defaults them OFF.
+ * This covers CLAUDE.md (project and ~/.claude) and .claude/skills; the wider
+ * cross-product read surface is docs/PATHS.md §7 and still open.
+ *
+ * The default lives here rather than in an env var exported by whatever
+ * launches the kernel: an env that some launch path forgets to set fails
+ * silently, and fails open. Both env vars keep their upstream names and still
+ * work, so the scanning can be turned back on; the specific flag wins over the
+ * broad one, mirroring `enabledByExperimental` above, so either path can be
+ * re-enabled on its own. --- */
+const isolatedFromClaudeCode = (direct: string) =>
+  Config.all({
+    broad: Config.boolean("OPENCODE_DISABLE_CLAUDE_CODE").pipe(Config.option),
+    direct: Config.boolean(direct).pipe(Config.option),
+  }).pipe(Config.map((flags) => Option.getOrElse(flags.direct, () => Option.getOrElse(flags.broad, () => true))))
+
 export class Service extends ConfigService.Service<Service>()("@opencode/RuntimeFlags", {
   autoShare: bool("OPENCODE_AUTO_SHARE"),
   pure: bool("OPENCODE_PURE"),
@@ -20,14 +38,9 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   disableEmbeddedWebUi: bool("OPENCODE_DISABLE_EMBEDDED_WEB_UI"),
   disableExternalSkills: bool("OPENCODE_DISABLE_EXTERNAL_SKILLS"),
   disableLspDownload: bool("OPENCODE_DISABLE_LSP_DOWNLOAD"),
-  disableClaudeCodePrompt: Config.all({
-    broad: bool("OPENCODE_DISABLE_CLAUDE_CODE"),
-    direct: bool("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"),
-  }).pipe(Config.map((flags) => flags.broad || flags.direct)),
-  disableClaudeCodeSkills: Config.all({
-    broad: bool("OPENCODE_DISABLE_CLAUDE_CODE"),
-    direct: bool("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"),
-  }).pipe(Config.map((flags) => flags.broad || flags.direct)),
+  // GeoCode: default ON, see isolatedFromClaudeCode above.
+  disableClaudeCodePrompt: isolatedFromClaudeCode("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"),
+  disableClaudeCodeSkills: isolatedFromClaudeCode("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"),
   enableExa: Config.all({
     experimental,
     enabled: bool("OPENCODE_ENABLE_EXA"),

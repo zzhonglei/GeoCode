@@ -242,6 +242,6 @@ export const Brand = {
 以下与"独立于 OpenCode"相关、但刻意不在路径阶段处理的事项,记录在此防止遗忘:
 
 - **项目目录的 `.opencode/` 与 `opencode.json` 自动加载**。内核会扫描用户项目里的这些文件——一个同时被 OpenCode 使用的项目,其 agent、MCP 注册**乃至 `.opencode/plugin/` 下的可执行插件代码**都会被 GeoCode 原样加载执行。这不只是配置串味,是跨产品执行代码。归属 Agent 上下文阶段决策(改名、禁用或保留兼容)。
-- **`~/.claude` 与 `~/.agents` 的技能扫描**(硬编码路径,不受 XDG 管)。同阶段决策。
+- **`~/.agents` 与项目内 `.agents/skills` 的技能扫描**(硬编码路径,不受 XDG 管)。它与保留 `AGENTS.md` 属同一套开放约定,是否一并关闭尚未决定。Claude Code 一侧——`CLAUDE.md`(项目与 `~/.claude`)与 `.claude/skills`——已默认不读,理由与开关语义见 `effect/runtime-flags.ts`。
 - **内核自动更新检查**指向上游的 npm/brew/scoop 通道(`opencode-ai` 等),桌面形态必须关闭,归装配阶段(`OPENCODE_DISABLE_AUTOUPDATE` 或配置层)。
 - **CLI scriptName 与 OTLP serviceName** 等非磁盘品牌字符串,归界面/品牌阶段。

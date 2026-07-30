@@ -31,6 +31,17 @@ const itWithoutExternalSkills = testEffect(
     testInstanceStoreLayer,
   ),
 )
+/* --- GeoCode: GeoCode disables Claude Code skill discovery by default
+ * (src/effect/runtime-flags.ts, docs/PATHS.md §7). The scanning mechanism is
+ * unchanged — only the default is — so the upstream cases that exercise it
+ * opt back in explicitly here instead of losing their coverage. --- */
+const itWithClaudeCodeSkills = testEffect(
+  Layer.mergeAll(
+    LayerNode.compile(Skill.node, [[RuntimeFlags.node, RuntimeFlags.layer({ disableClaudeCodeSkills: false })]]),
+    node,
+    testInstanceStoreLayer,
+  ),
+)
 
 async function createGlobalSkill(homeDir: string) {
   const skillDir = path.join(homeDir, ".claude", "skills", "global-test-skill")
@@ -242,7 +253,7 @@ Instructions here.
     ),
   )
 
-  it.live("discovers skills from .claude/skills/ directory", () =>
+  itWithClaudeCodeSkills.live("discovers skills from .claude/skills/ directory", () =>
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
@@ -270,7 +281,37 @@ description: A skill in the .claude/skills directory.
     ),
   )
 
-  it.live("discovers global skills from ~/.claude/skills/ directory", () =>
+  /* --- GeoCode: the tripwire for the flipped default. The case above proves
+   * the scan still works when asked; this one proves GeoCode does not ask.
+   * It takes no flag override on purpose — flip the default back and this
+   * goes red. --- */
+  it.live("GeoCode: skips .claude/skills by default", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".claude", "skills", "claude-skill", "SKILL.md"),
+              `---
+name: claude-skill
+description: A skill in the .claude/skills directory.
+---
+
+# Claude Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(list.find((x) => x.name === "claude-skill")).toBeUndefined()
+          expect(list.length).toBe(0)
+        }),
+      { git: true },
+    ),
+  )
+
+  itWithClaudeCodeSkills.live("discovers global skills from ~/.claude/skills/ directory", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir({ git: true })),
@@ -404,7 +445,7 @@ This skill is loaded from the global home directory.
     }),
   )
 
-  it.live("discovers skills from both .claude/skills/ and .agents/skills/", () =>
+  itWithClaudeCodeSkills.live("discovers skills from both .claude/skills/ and .agents/skills/", () =>
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
@@ -527,7 +568,8 @@ description: A skill in the .opencode/skill directory.
     ),
   )
 
-  it.live("properly resolves directories that skills live in", () =>
+  // GeoCode: counts all four scanned locations, one of which is .claude/skills.
+  itWithClaudeCodeSkills.live("properly resolves directories that skills live in", () =>
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {

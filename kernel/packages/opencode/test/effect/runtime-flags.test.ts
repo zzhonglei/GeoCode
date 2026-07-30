@@ -45,7 +45,8 @@ describe("RuntimeFlags", () => {
       expect(flags.disableEmbeddedWebUi).toBe(true)
       expect(flags.disableExternalSkills).toBe(true)
       expect(flags.disableLspDownload).toBe(true)
-      expect(flags.disableClaudeCodePrompt).toBe(false)
+      // GeoCode: no Claude Code env set here, so this reads the default — ON.
+      expect(flags.disableClaudeCodePrompt).toBe(true)
       expect(flags.enableExa).toBe(true)
       expect(flags.enableParallel).toBe(true)
       expect(flags.enableExperimentalModels).toBe(true)
@@ -111,8 +112,10 @@ describe("RuntimeFlags", () => {
       expect(flags.disableEmbeddedWebUi).toBe(false)
       expect(flags.disableExternalSkills).toBe(false)
       expect(flags.disableLspDownload).toBe(false)
-      expect(flags.disableClaudeCodePrompt).toBe(false)
-      expect(flags.disableClaudeCodeSkills).toBe(false)
+      // GeoCode: omitted overrides fall through to the Config defaults, which
+      // for the two Claude Code flags are ON.
+      expect(flags.disableClaudeCodePrompt).toBe(true)
+      expect(flags.disableClaudeCodeSkills).toBe(true)
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalIconDiscovery).toBe(false)
       expect(flags.experimentalOxfmt).toBe(false)
@@ -163,11 +166,46 @@ describe("RuntimeFlags", () => {
     }),
   )
 
-  it.effect("disableClaudeCodePrompt defaults to false", () =>
+  /* --- GeoCode: upstream defaults these OFF; GeoCode defaults them ON so a
+   * launch path that forgets an env var still stays isolated from Claude Code
+   * (src/effect/runtime-flags.ts, docs/PATHS.md §7). The four cases below pin
+   * both the default and the two ways of turning the scanning back on. --- */
+  it.effect("disableClaudeCodePrompt defaults to true", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
 
+      expect(flags.disableClaudeCodePrompt).toBe(true)
+    }),
+  )
+
+  it.effect("OPENCODE_DISABLE_CLAUDE_CODE=false re-enables both Claude Code paths", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_CLAUDE_CODE: "false" })))
+
       expect(flags.disableClaudeCodePrompt).toBe(false)
+      expect(flags.disableClaudeCodeSkills).toBe(false)
+    }),
+  )
+
+  it.effect("a specific Claude Code flag re-enables only its own path", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: "false" })))
+
+      expect(flags.disableClaudeCodePrompt).toBe(false)
+      expect(flags.disableClaudeCodeSkills).toBe(true)
+    }),
+  )
+
+  it.effect("a specific Claude Code flag wins over the broad one", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(
+        Effect.provide(
+          fromConfig({ OPENCODE_DISABLE_CLAUDE_CODE: "false", OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: "true" }),
+        ),
+      )
+
+      expect(flags.disableClaudeCodePrompt).toBe(false)
+      expect(flags.disableClaudeCodeSkills).toBe(true)
     }),
   )
 
@@ -337,8 +375,10 @@ describe("RuntimeFlags", () => {
       expect(flags.disableEmbeddedWebUi).toBe(false)
       expect(flags.disableExternalSkills).toBe(false)
       expect(flags.disableLspDownload).toBe(false)
-      expect(flags.disableClaudeCodePrompt).toBe(false)
-      expect(flags.disableClaudeCodeSkills).toBe(false)
+      // GeoCode: the ignored provider carries no Claude Code keys anyway; these
+      // two read the Config defaults, which are ON.
+      expect(flags.disableClaudeCodePrompt).toBe(true)
+      expect(flags.disableClaudeCodeSkills).toBe(true)
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalIconDiscovery).toBe(false)
       expect(flags.experimentalOxfmt).toBe(false)
@@ -348,11 +388,12 @@ describe("RuntimeFlags", () => {
     }),
   )
 
-  it.effect("disableClaudeCodeSkills defaults to false", () =>
+  // GeoCode: default flipped to ON, see the block above.
+  it.effect("disableClaudeCodeSkills defaults to true", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
 
-      expect(flags.disableClaudeCodeSkills).toBe(false)
+      expect(flags.disableClaudeCodeSkills).toBe(true)
     }),
   )
 
