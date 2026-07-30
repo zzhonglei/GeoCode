@@ -40,7 +40,7 @@ Windows 上还发生过真实事故:NSIS 单击安装器的安装目录取自 pa
 |---|---|---|---|
 | data | `opencode.db` `-shm` `-wal` | `geocode.db` `-shm` `-wal` | 打包版主库 |
 | data | `opencode-<channel>.db` | `geocode-<channel>.db` | 按发行通道分库;开发态 channel 为 `local` |
-| data | `auth.json` / `account.json` / `mcp-auth.json` | 同名 | 凭据,无商标 |
+| data | `auth.json` / `mcp-auth.json` | 同名 | 凭据,无商标。账号本身存在主库的表里,**不是文件** |
 | data | `storage/` `snapshot/` `worktree/` `tool-output/` `plans/` `repos/` | 同名 | 无商标 |
 | data | `log/opencode.log` | `log/geocode.log` | |
 | data | `log/direct/*.jsonl` | 同名 | |
@@ -53,7 +53,7 @@ Windows 上还发生过真实事故:NSIS 单击安装器的安装目录取自 pa
 | cache | `skills/` 暂存区内 `.opencode-version` | `.geocode-version` | 技能暂存版本标记 |
 | 用户项目 `.git/` | `opencode`(项目 id 标记文件) | `geocode` | 内核写进项目 git 目录的唯一文件;改名后两个程序各记各的项目 id,互不干扰 |
 
-GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统一收进 `cache/geo/` 一层之下,不再与内核产物平铺。这条规则对将来新增的地理能力同样生效——地理内核的任何缓存都在 `geo/` 里,永远一眼可辨。已就位的成员:`geo/qgis-pyhome/`(符号链接农场,GEOKERNEL.md §4.4)与 `geo/scripts/`(数据读取脚本的物化产物,内容哈希命名、变更即换名,GEOKERNEL.md §4.13)。
+GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统一收进 `cache/geo/` 一层之下,不再与内核产物平铺。这条规则对将来新增的地理能力同样生效——地理内核的任何缓存都在 `geo/` 里,永远一眼可辨。已就位四个成员:`preview/`(预览产物,每次启动清空,§7.6)、`scripts/`(Python 脚本的物化产物,内容哈希命名、变更即换名,§4.13)、`qgis-pyhome/`(符号链接农场,§4.4)、`gee-runtime/`(随执行注入的运行时库,§5.10)——章节号均指 GEOKERNEL.md。
 
 **两个配置文件的分工**必须清晰,否则用户不知道该改哪一个:
 
@@ -70,12 +70,82 @@ GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统�
 - **不叫 `env.json`**:本产品自身大量操作真正的环境变量(GEOKERNEL.md §4.5、§7.3 要注入 `PROJ_LIB`、`QT_PLUGIN_PATH`、`GDAL_DATA` 等成串变量),而该名字在通行惯例中正指向环境变量文件。两个含义在同一个代码库里贴得太近,会诱发一类被容错机制吞掉的错误:GEOKERNEL.md §5.11 允许 Agent 独立写入本文件,而 §3.1 的未知键**静默忽略**规则(为键名笔误设计)会让写错的变量名解析成功、块值不变、不触发重探,**全链路无一处报错**。
 
 **不做旧配置迁移**:旧版把 QGIS/GEE/GDAL 配置放在 `geocode.json` 的对应块里;新版不读取
-那些块,也不自动搬运——旧版已就地退役、配置已归档(§3.4),迁移代码只会为一台机器的一次性
+那些块,也不自动搬运——旧版已就地退役、配置已归档(§3.5),迁移代码只会为一台机器的一次性
 动作长期存在。升级后这些能力显示"未配置"属预期,重新填写 `machine.json` 即可。
 
 `machine.json` 另有一项两个候选都不具备的收益:它自带"不可搬运"的语义。`geocode.json` 里是模型与代理人配置,换机照抄即可用;本文件全是绝对路径,抄过去必然全错。名字说清这一点,省掉一次用户事故。
 
-### 3.3 系统身份
+### 3.3 全景:一台机器上会出现什么
+
+上面两张表按根拆开对照,这里把它们合成一棵树——**用户在自己的磁盘上实际会看到什么**。
+标 ★ 的是 GeoCode 自有,其余承自内核。
+
+```
+~/.local/share/GeoCode/          数据根:删了会丢会话与登录
+├── geocode.db  -shm  -wal       主库:会话、消息、账号、项目登记
+├── geocode-local.db  ...        开发态按通道分库
+├── auth.json                    供应商凭据(OAuth 令牌与 API key)
+├── mcp-auth.json                MCP 服务器的凭据
+├── storage/                     会话消息与工具输出的正文
+├── snapshot/<项目>/<worktree哈希>/   每工作区一个 git 仓,做检查点用(★ 地理数据不入内)
+├── worktree/                    agent 创建的工作树
+├── tool-output/                 超长工具输出的落盘副本
+├── plans/                       计划模式的产物
+├── repos/                       克隆的仓库
+└── log/
+    ├── geocode.log              滚动日志
+    └── direct/<时间戳>-<pid>.jsonl   单次直跑的追踪
+
+~/.config/GeoCode/               配置根:用户手写,删了回到出厂状态
+├── geocode.json / .jsonc        内核与 Agent 配置(模型、代理人、权限)
+├── machine.json / .jsonc      ★ 本机地理环境:QGIS/GEE/GDAL 装在哪
+├── themes/  tui/  agents/       主题、终端形态、自定义 agent
+└── node_modules/  package.json  插件安装(npm 机制要求,不可改名)
+
+~/.cache/GeoCode/                缓存根:可整个删掉,下次自动重建
+├── bin/                         LSP 与 ripgrep 二进制
+├── skills/                      技能暂存区(内含 .geocode-version 标记)
+├── models.json                  模型目录快照
+└── geo/                       ★ 地理内核的全部缓存,一眼可辨
+    ├── preview/raster|vector/<键>/   预览产物,**每次启动整体清空**(GEOKERNEL.md §7.6)
+    ├── scripts/                 Python 脚本的物化产物,内容哈希命名
+    ├── qgis-pyhome/             符号链接农场,给 QGIS 子进程当 HOME
+    └── gee-runtime/             随执行注入的 GEE 运行时库
+
+~/.local/state/GeoCode/          状态根:小而重要,记"上次选了什么"
+├── model.json                   上次使用的模型
+├── plugin-meta.json             插件元信息
+└── locks/                       跨进程文件锁
+
+$TMPDIR/GeoCode/                 临时根:进程内的短命文件
+
+<appData>/ai.geocode.desktop/    Electron 壳自己的数据(与上面四根分离,是上游的设计)
+└── logs/                        壳侧日志
+
+<用户项目>/.git/geocode        ★ 项目 id 标记(一行文本,见下)
+```
+
+三条值得单独记住:
+
+- **地理数据从不进快照仓库**。用户项目里的 `.tif`、`.gpkg`、`.shp` 及其附属文件被检查点排除,否则一景遥感影像就能让 `snapshot/` 比项目本身还大(GEOKERNEL.md §10.1 #6);
+- **`cache/geo/` 可以随时整个删掉**。四个成员都是可重建的:预览产物本来就每次启动清空,脚本与运行时库按需物化,链接农场重建即可;
+- **写进用户项目的只有 `.git/geocode` 一个文件**——但请注意它不是唯一的接触面:项目里已有的 `.opencode/` 会被**读取并执行**,见 §7 挂起项。
+
+#### `.git/geocode`:项目身份
+
+内容是一行 id。会话、检查点仓库、工作树全部以它作键(`data/snapshot/<项目id>/…`),所以这个
+id **必须跨时间稳定**——一旦变了,用户之前的会话就还在磁盘上但没人找得到。
+
+id 按三档推导:**远端 URL 的哈希** → **本文件记的值** → **首个根提交的哈希**。既然一三档都能
+算出来,为什么还要存文件?**因为它们都会变**:本地 `git init` 起步的项目用根提交推导,等用户
+某天把它推上 GitHub,规则改用远端——若无本文件,那一刻之前的全部历史就此失联。文件记住上次
+用的是哪个,解析时一并返回,调用方据此迁移。改写过历史(rebase 到根)是同一类情形。
+
+**放在 `.git/` 内部而非项目根目录**,因为 git 不跟踪自己的元数据目录:它不出现在 `git status`
+里、不会被误提交、同事 clone 时也不会带走你的项目 id。写入位置取 git 的 common directory,
+因此一个仓库的多个工作树共享同一个 id,而不是各记各的。
+
+### 3.4 系统身份
 
 | 项 | OpenCode | GeoCode | 影响面 |
 |---|---|---|---|
@@ -90,11 +160,11 @@ GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统�
 | mDNS 默认域名 | `opencode.local` | `geocode.local` | 用户可在配置中覆盖 |
 | macOS MDM plist 域 | `ai.opencode.managed` | `ai.geocode.managed` | `/Library/Managed Preferences/` 下的策略文件名 |
 | 系统托管配置目录 | `/Library/Application Support/opencode`(macOS)/ `%ProgramData%\opencode`(Windows) | 同构,`GeoCode` | 目录内的配置文件同样按 `geocode.json(c)` 命名 |
-| 环境变量(对外) | `OPENCODE_*` | `GEOCODE_*` | 产品的公开环境变量一律 `GEOCODE_*`,在进程边界映射(见 §3.5) |
+| 环境变量(对外) | `OPENCODE_*` | `GEOCODE_*` | 产品的公开环境变量一律 `GEOCODE_*`,在进程边界映射(见 §3.6) |
 | 环境变量(内核内部) | `OPENCODE_*` | **原样保留** | 降格为壳与内核之间的内部 ABI,人类不再直接书写 |
 | npm 包名 / User-Agent / config schema URL | 上游值 | **原样保留** | 同上 |
 
-### 3.4 Windows 注册表
+### 3.5 Windows 注册表
 
 NSIS 单击、按用户安装(`oneClick: true`, `perMachine: false`)会写入以下位置,全部在 `HKCU` 下,不触碰 `HKLM`:
 
@@ -107,7 +177,7 @@ NSIS 单击、按用户安装(`oneClick: true`, `perMachine: false`)会写入以
 
 `InstallLocation` 的固化行为需要特别记住:安装器在决定目标目录时优先读这个键,而不是重新推导默认值。这意味着一次错误的安装目录会跨版本延续,唯一的纠正方式是完整卸载后重装。
 
-### 3.5 环境变量:对外 `GEOCODE_*`,边界翻译
+### 3.6 环境变量:对外 `GEOCODE_*`,边界翻译
 
 产品的公开环境变量命名空间是 `GEOCODE_*`。但内核源码里的 `OPENCODE_*` 读取点有 77 处、散布 30 个文件,其中包括 OAuth 冻结区——在源码层改名既违背薄内核铁律,还有一个更隐蔽的恶果:上游每个版本都在新增 `OPENCODE_*` 变量,合并后它们不会自动跟随改名,产品会退化成一半 flag 听新名、一半听旧名的混杂态。
 
@@ -133,18 +203,27 @@ NSIS 单击、按用户安装(`oneClick: true`, `perMachine: false`)会写入以
 身份字符串集中到 `core` 的单一模块,所有消费点引用它,不再散落字面量:
 
 ```ts
+const dirName = "GeoCode"   // XDG 各根与系统目录的命名空间(大小写形态)
+const name = "geocode"      // 文件名与网络标识的基串,也是配置文件的基名
+
 export const Brand = {
-  dirName: "GeoCode",
-  configFile: "geocode.json",
-  dbFile: "geocode.db",
-  logFile: "geocode.log",
-  mdnsPrefix: "geocode",
-  mdnsHost: "geocode.local",
-  managedDomain: "ai.geocode.managed",
-  projectMarker: "geocode",       // 用户项目 .git/ 内的项目 id 标记文件
-  stagingMarker: ".geocode-version",
+  dirName,
+  name,
+  dbFile: `${name}.db`,
+  channelDbFile: (channel: string) => `${name}-${channel}.db`,
+  logFile: `${name}.log`,
+  configJson: `${name}.json`,
+  configJsonc: `${name}.jsonc`,
+  mdnsHost: `${name}.local`,
+  mdnsService: (port: number) => `${name}-${port}`,
+  managedDomain: `ai.${name}.managed`,
+  projectMarker: name,                    // 用户项目 .git/ 内的项目 id 标记文件
+  stagingMarker: `.${name}-version`,
+  tempPrefix: (suffix: string) => `${name}-${suffix}`,
 }
 ```
+
+**全部由两个基串派生,不写平铺字面量。** 这不是简洁的问题:文件名与"扫描它的那个基名"必须一致,写成两个字面量就是两处需要人工保持同步的地方。派生之后它们是同一个表达式。
 
 这样做的收益不在少写几行,而在审计:上游将来新增一处硬编码 `opencode` 字面量时,typecheck 不会报错,但只要对照这个模块做一次 grep 就能发现遗漏。路径层的正确性无法靠类型系统保证,只能靠可审计性保证。
 
