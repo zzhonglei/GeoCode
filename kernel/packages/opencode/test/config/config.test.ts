@@ -1,4 +1,5 @@
 import { test, expect, describe, afterEach, beforeEach, spyOn } from "bun:test"
+import { Brand } from "@opencode-ai/core/brand"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
@@ -147,13 +148,14 @@ afterEach(async () => {
 })
 
 const writeManagedSettingsEffect = (settings: object, filename?: string) =>
-  FSUtil.use.writeWithDirs(path.join(managedConfigDir, filename ?? "opencode.json"), JSON.stringify(settings))
+  FSUtil.use.writeWithDirs(path.join(managedConfigDir, filename ?? Brand.configJson), JSON.stringify(settings))
 
-async function writeConfig(dir: string, config: object, name = "opencode.json") {
+// GeoCode: helpers default to the name the loader reads.
+async function writeConfig(dir: string, config: object, name = Brand.configJson) {
   await Filesystem.write(path.join(dir, name), JSON.stringify(config))
 }
 
-const writeConfigEffect = (dir: string, config: object, name = "opencode.json") =>
+const writeConfigEffect = (dir: string, config: object, name = Brand.configJson) =>
   FSUtil.use.writeWithDirs(path.join(dir, name), JSON.stringify(config))
 
 const withInstanceDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =>
@@ -1218,7 +1220,7 @@ it.instance(
 it.instance("managed jsonc settings override managed json settings", () =>
   Effect.gen(function* () {
     yield* writeManagedSettingsEffect({ model: "managed/json" })
-    yield* writeManagedSettingsEffect({ model: "managed/jsonc" }, "opencode.jsonc")
+    yield* writeManagedSettingsEffect({ model: "managed/jsonc" }, Brand.configJsonc)
 
     const config = yield* Config.use.get()
     expect(config.model).toBe("managed/jsonc")

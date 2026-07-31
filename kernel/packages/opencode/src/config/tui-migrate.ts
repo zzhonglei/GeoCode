@@ -115,16 +115,14 @@ async function backupAndStripLegacy(file: string, source: string) {
 
 async function opencodeFiles(input: { directories: string[]; cwd: string }) {
   const files = [
-    // --- GeoCode: only the global-config-dir name is branded here. The two
-    // project-level lookups below stay upstream on purpose — project `.opencode/`
-    // and `opencode.json` are a deliberate open item (docs/PATHS.md §7), not an
-    // oversight. Scanning both names is harmless for this migration pass. ---
+    // --- GeoCode: branded config file names, global and project alike
+    // (docs/PATHS.md §5). ---
     ...ConfigPaths.fileInDirectory(Global.Path.config, Brand.name),
+    ...(await Filesystem.findUp([Brand.configJson, Brand.configJsonc], input.cwd, undefined, { rootFirst: true })),
     // --- /GeoCode ---
-    ...(await Filesystem.findUp(["opencode.json", "opencode.jsonc"], input.cwd, undefined, { rootFirst: true })),
   ]
   for (const dir of unique(input.directories)) {
-    files.push(...ConfigPaths.fileInDirectory(dir, "opencode"))
+    files.push(...ConfigPaths.fileInDirectory(dir, Brand.name))
   }
   if (Flag.OPENCODE_CONFIG) files.push(Flag.OPENCODE_CONFIG)
 

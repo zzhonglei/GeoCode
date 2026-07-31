@@ -1,4 +1,5 @@
 import { $ } from "bun"
+import { Brand } from "@opencode-ai/core/brand"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import * as fs from "fs/promises"
 import os from "os"
@@ -94,7 +95,8 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   }
   if (options?.config) {
     await Bun.write(
-      path.join(dirpath, "opencode.json"),
+      // GeoCode: the shared fixture writes the name the loader reads.
+      path.join(dirpath, Brand.configJson),
       JSON.stringify({
         $schema: "https://opencode.ai/config.json",
         ...options.config,
@@ -153,7 +155,8 @@ export function tmpdirScoped<E = never, R = never>(options?: {
       const resolved = typeof options.config === "function" ? options.config() : options.config
       yield* Effect.promise(() =>
         fs.writeFile(
-          path.join(dir, "opencode.json"),
+          // GeoCode: the shared fixture writes the name the loader reads.
+          path.join(dir, Brand.configJson),
           JSON.stringify({ $schema: "https://opencode.ai/config.json", ...resolved }),
         ),
       )

@@ -2,6 +2,7 @@ export * as Config from "./config"
 
 import { makeLocationNode } from "./effect/app-node"
 import path from "path"
+import { Brand } from "./brand"
 import { type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
@@ -139,7 +140,10 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     const policy = yield* Policy.Service
-    const names = ["opencode.json", "opencode.jsonc"]
+    // GeoCode: branded config file names (docs/PATHS.md §5). This is the
+    // location-scoped discovery, independent of the one in opencode/src/config
+    // — both have to be renamed or a project config would still be read here.
+    const names = [Brand.configJson, Brand.configJsonc]
     const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
     const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
     const decodeV1Info = Schema.decodeUnknownOption(ConfigV1.Info, decodeOptions)
@@ -178,7 +182,7 @@ const layer = Layer.effect(
       ? []
       : yield* fs
           .up({
-            targets: [".opencode", ...names.toReversed()],
+            targets: [Brand.projectDir, ...names.toReversed()],
             start: location.directory,
             stop: location.project.directory,
           })
@@ -186,13 +190,13 @@ const layer = Layer.effect(
     const directories = [
       globalDirectory,
       ...discovered
-        .filter((item) => path.basename(item) === ".opencode")
+        .filter((item) => path.basename(item) === Brand.projectDir)
         .toReversed()
         .map((directory) => AbsolutePath.make(directory)),
     ]
     // A config closer to the opened directory should win over one higher up.
     // Search starts nearby, so reverse the results before applying them.
-    const directPaths = discovered.filter((item) => path.basename(item) !== ".opencode").toReversed()
+    const directPaths = discovered.filter((item) => path.basename(item) !== Brand.projectDir).toReversed()
     const direct = yield* Effect.forEach(directPaths, loadFile).pipe(
       Effect.orDie,
       Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),

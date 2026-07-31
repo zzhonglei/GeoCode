@@ -1,4 +1,5 @@
 import { cmd } from "./cmd"
+import { Brand } from "@opencode-ai/core/brand"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { effectCmd } from "../effect-cmd"
 import { Cause } from "effect"
@@ -391,12 +392,19 @@ export const McpLogoutCommand = effectCmd({
   }),
 })
 
+/* --- GeoCode: branded config file and directory names (docs/PATHS.md §5).
+ * These were the only WRITE path left on the old names while every reader had
+ * already moved to the branded ones, so a global `mcp add` wrote a file the
+ * loader never reads and the server silently never appeared. --- */
 async function resolveConfigPath(baseDir: string, global = false) {
-  // Check for existing config files (prefer .jsonc over .json, check .opencode/ subdirectory too)
-  const candidates = [path.join(baseDir, "opencode.json"), path.join(baseDir, "opencode.jsonc")]
+  // Check for existing config files (prefer .jsonc over .json, check the project config dir too)
+  const candidates = [path.join(baseDir, Brand.configJson), path.join(baseDir, Brand.configJsonc)]
 
   if (!global) {
-    candidates.push(path.join(baseDir, ".opencode", "opencode.json"), path.join(baseDir, ".opencode", "opencode.jsonc"))
+    candidates.push(
+      path.join(baseDir, Brand.projectDir, Brand.configJson),
+      path.join(baseDir, Brand.projectDir, Brand.configJsonc),
+    )
   }
 
   for (const candidate of candidates) {
@@ -405,7 +413,7 @@ async function resolveConfigPath(baseDir: string, global = false) {
     }
   }
 
-  // Default to opencode.json if none exist
+  // Default to the branded .json if none exist
   return candidates[0]
 }
 

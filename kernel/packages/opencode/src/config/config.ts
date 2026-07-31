@@ -413,7 +413,8 @@ const layer = Layer.effect(
         }
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-          for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+          // GeoCode: branded project config file names (docs/PATHS.md §5)
+          for (const file of yield* ConfigPaths.files(Brand.name, ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
             yield* merge(file, yield* loadFile(file, authEnv), "local")
           }
         }
@@ -431,8 +432,9 @@ const layer = Layer.effect(
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
-          if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-            for (const file of ["opencode.json", "opencode.jsonc"]) {
+          // GeoCode: branded project config dir and file names (docs/PATHS.md §5)
+          if (ConfigPaths.isProjectDir(dir) || dir === Flag.OPENCODE_CONFIG_DIR) {
+            for (const file of [Brand.configJson, Brand.configJsonc]) {
               const source = path.join(dir, file)
               yield* Effect.logDebug(`loading config from ${source}`)
               yield* merge(source, yield* loadFile(source, authEnv))

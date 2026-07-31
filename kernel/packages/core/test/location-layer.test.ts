@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
+import { Brand } from "@opencode-ai/core/brand"
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Equal, Hash, Schema } from "effect"
 import { Tool } from "@opencode-ai/core/tool/tool"
@@ -78,7 +79,7 @@ describe("LocationServiceMap", () => {
           })
           yield* Effect.promise(() =>
             fs.writeFile(
-              path.join(blocked.path, "opencode.json"),
+              path.join(blocked.path, Brand.configJson),
               JSON.stringify({
                 experimental: { policies: [{ effect: "deny", action: "provider.use", resource: "test" }] },
               }),
@@ -150,7 +151,7 @@ describe("LocationServiceMap", () => {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
           yield* Effect.promise(() =>
             fs.writeFile(
-              path.join(dir.path, "opencode.json"),
+              path.join(dir.path, Brand.configJson),
               JSON.stringify({
                 providers: {
                   unavailable: {

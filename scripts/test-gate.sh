@@ -26,7 +26,8 @@ echo "== geo kernel (opencode) =="
   test/server/geo-routes-mounted.test.ts \
   test/server/geo-shutdown-sweep.test.ts \
   test/snapshot/geo-exclude.test.ts \
-  test/event-manifest.test.ts)
+  test/event-manifest.test.ts \
+  test/geocode-project-config.test.ts)
 
 echo
 echo "== geo kernel (core) =="

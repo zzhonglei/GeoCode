@@ -10,6 +10,7 @@
  * it are the same expression, not two literals kept in sync by hand. --- */
 const dirName = "GeoCode"
 const name = "geocode"
+const projectDir = `.${name}`
 
 export const Brand = {
   /** Cased namespace for XDG roots and system dirs (~/.local/share/<dirName>) */
@@ -25,6 +26,21 @@ export const Brand = {
   /** Global-config-dir file names — must stay `${name}.json(c)`, see below */
   configJson: `${name}.json`,
   configJsonc: `${name}.jsonc`,
+  /**
+   * Per-project config directory. Derived from `name` so it can never drift
+   * from the config file names above: the loader checks that a directory is
+   * this one BEFORE looking for `configJson` inside it, and if the two ever
+   * disagreed the check would pass while the file was never found — silently.
+   */
+  projectDir,
+  /**
+   * Plan files, as path segments. An array rather than a string because two
+   * call sites must agree: the writer joins it under the worktree, and the
+   * plan agent's edit permission joins it into a glob. Spreading one array in
+   * both places makes a drift between "where we write" and "what we allow"
+   * impossible to express.
+   */
+  plansSegments: [projectDir, "plans"] as const,
   /** mDNS default host and service name */
   mdnsHost: `${name}.local`,
   mdnsService: (port: number) => `${name}-${port}`,

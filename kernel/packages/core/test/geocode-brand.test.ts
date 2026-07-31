@@ -23,6 +23,11 @@ describe("brand runtime", () => {
     expect(Brand.stagingMarker).toBe(`.${Brand.name}-version`)
     expect(Brand.managedDomain).toBe(`ai.${Brand.name}.managed`)
     expect(Brand.dirName.toLowerCase()).toBe(Brand.name)
+    // The project config dir shares the base name with the files inside it:
+    // the loader checks the directory before looking for the file, so a drift
+    // between them would pass the check and never find the file.
+    expect(Brand.projectDir).toBe(`.${Brand.name}`)
+    expect([...Brand.plansSegments]).toEqual([Brand.projectDir, "plans"])
   })
 
   test("XDG roots are namespaced under GeoCode", () => {
@@ -67,8 +72,26 @@ describe("brand literal scan", () => {
       'Global.Path.config, "opencode.',
       '["opencode.jsonc", "opencode.json", "config.json"]',
     ],
-    "packages/opencode/src/config/tui-migrate.ts": ['Global.Path.config, "opencode")'],
+    "packages/opencode/src/config/tui-migrate.ts": [
+      'Global.Path.config, "opencode")',
+      '["opencode.json", "opencode.jsonc"]',
+      'fileInDirectory(dir, "opencode")',
+    ],
     "packages/opencode/src/lsp/server.ts": ['"opencode-jdtls-data"'],
+    // Project-scope identity. Both config discoveries have to stay branded:
+    // paths.ts serves the instance loader, core/config.ts is a second,
+    // independent location-scoped discovery that no flag gates.
+    "packages/opencode/src/config/paths.ts": ['targets: [".opencode"]'],
+    "packages/core/src/config.ts": ['".opencode"', '"opencode.json"'],
+    "packages/opencode/src/config/tui.ts": ['endsWith(".opencode")'],
+    "packages/opencode/src/plugin/tui/runtime.ts": ['".opencode"', '".opencode", "themes"', '".opencode", "tui.json"'],
+    "packages/opencode/src/cli/cmd/agent.ts": ['ctx.worktree, ".opencode"'],
+    "packages/opencode/src/cli/cmd/mcp.ts": ['"opencode.json"', '"opencode.jsonc"', 'baseDir, ".opencode"'],
+    // Plan files: the writer and the plan agent's edit permission must both
+    // spread Brand.plansSegments, never a literal.
+    "packages/opencode/src/session/session.ts": ['".opencode", "plans"'],
+    "packages/opencode/src/agent/agent.ts": ['".opencode", "plans"'],
+    "packages/core/src/plugin/agent.ts": ['".opencode", "plans"'],
   }
 
   for (const [file, literals] of Object.entries(forbidden)) {
@@ -78,9 +101,18 @@ describe("brand literal scan", () => {
         expect(content.includes(literal)).toBe(false)
       }
       // The patch itself must still be present, not merely the literal gone.
-      expect(content.includes("Brand.")).toBe(true)
+      // `isProjectDir` counts: it is defined as `basename === Brand.projectDir`.
+      expect(content.includes("Brand.") || content.includes("isProjectDir")).toBe(true)
     })
   }
+
+  test("the home-directory scan for a second global root is gone", () => {
+    // Upstream also walks ~/.opencode. GeoCode has exactly one global root
+    // (Global.Path.config), so that scan was removed rather than renamed —
+    // an upstream merge restoring it would reintroduce a second root.
+    const content = readFileSync(path.join(repo, "packages/opencode/src/config/paths.ts"), "utf8")
+    expect(content.includes("Global.Path.home")).toBe(false)
+  })
 
   test("coding-oriented upstream agents are disabled by config", () => {
     // build/explore/general are removed through the assembly layer, never by

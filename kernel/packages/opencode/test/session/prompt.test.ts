@@ -1,3 +1,4 @@
+import { Brand } from "@opencode-ai/core/brand"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
@@ -310,7 +311,8 @@ const writeText = Effect.fn("test.writeText")(function* (file: string, text: str
 
 const writeConfig = Effect.fn("test.writeConfig")(function* (dir: string, config: Partial<ConfigV1.Info>) {
   yield* writeText(
-    path.join(dir, "opencode.json"),
+    // GeoCode: the helper writes the name the loader reads.
+    path.join(dir, Brand.configJson),
     JSON.stringify({ $schema: "https://opencode.ai/config.json", ...config }),
   )
 })

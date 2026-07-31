@@ -1,4 +1,5 @@
 import { cmd } from "./cmd"
+import { Brand } from "@opencode-ai/core/brand"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { Global } from "@opencode-ai/core/global"
@@ -108,7 +109,11 @@ const AgentCreateCommand = effectCmd({
           if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
           scope = scopeResult
         }
-        targetPath = path.join(scope === "global" ? Global.Path.config : path.join(ctx.worktree, ".opencode"), "agents")
+        // GeoCode: branded project config dir (docs/PATHS.md §5)
+        targetPath = path.join(
+          scope === "global" ? Global.Path.config : path.join(ctx.worktree, Brand.projectDir),
+          "agents",
+        )
       }
 
       // Get description

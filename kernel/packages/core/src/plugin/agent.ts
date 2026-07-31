@@ -1,6 +1,7 @@
 export * as AgentPlugin from "./agent"
 
 import path from "path"
+import { Brand } from "../brand"
 import { define } from "./internal"
 import { Effect } from "effect"
 import { AgentV2 } from "../agent"
@@ -143,7 +144,8 @@ export const Plugin = define({
             { action: "plan_exit", resource: "*", effect: "allow" },
             { action: "external_directory", resource: path.join(Global.Path.data, "plans", "*"), effect: "allow" },
             { action: "edit", resource: "*", effect: "deny" },
-            { action: "edit", resource: path.join(".opencode", "plans", "*.md"), effect: "allow" },
+            // GeoCode: same segments Session.plan writes to (docs/PATHS.md §5)
+            { action: "edit", resource: path.join(...Brand.plansSegments, "*.md"), effect: "allow" },
             {
               action: "edit",
               resource: path.relative(worktree, path.join(Global.Path.data, "plans", "*.md")),

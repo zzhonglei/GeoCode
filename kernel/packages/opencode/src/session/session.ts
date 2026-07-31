@@ -1,5 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { Brand } from "@opencode-ai/core/brand"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
@@ -330,7 +331,8 @@ export const Event = {
 
 export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {
   const base = instance.project.vcs
-    ? path.join(instance.worktree, ".opencode", "plans")
+    ? // GeoCode: same segments the plan agent is allowed to edit (docs/PATHS.md §5)
+      path.join(instance.worktree, ...Brand.plansSegments)
     : path.join(Global.Path.data, "plans")
   return path.join(base, [input.time.created, input.slug].join("-") + ".md")
 }

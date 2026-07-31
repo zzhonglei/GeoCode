@@ -1,3 +1,4 @@
+import { Brand } from "@opencode-ai/core/brand"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Config } from "@/config/config"
@@ -170,7 +171,8 @@ const layer = Layer.effect(
                 },
                 edit: {
                   "*": "deny",
-                  [path.join(".opencode", "plans", "*.md")]: "allow",
+                  // GeoCode: same segments Session.plan writes to (docs/PATHS.md §5)
+                  [path.join(...Brand.plansSegments, "*.md")]: "allow",
                   [path.relative(ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
                 },
               }),
