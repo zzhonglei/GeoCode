@@ -33,6 +33,21 @@ const RULES = [
       /Expected|NotFound|toBe|toEqual|toContain/.test(text),
   },
   {
+    name: "feature removed (expected)",
+    // GeoCode loads neither external plugins nor `{tool,tools}/*.ts`, so tests
+    // for those have nothing to exercise. Whole files that test only this are
+    // skipped in test-upstream.sh; this rule is for the ones mixed into a file
+    // that still covers something we ship — tool/registry.test.ts above all,
+    // where the registry itself is where the geo tools land.
+    test: (text) => /custom tool|config-scoped plugin|external plugin/i.test(text),
+  },
+  {
+    name: "environment (locale)",
+    // yargs localizes `--help`, so the snapshot only matches on an English
+    // machine. Nothing to do with our code.
+    test: (text) => /選項|选项|\[布林\]|\[布尔\]/.test(text),
+  },
+  {
     name: "external dependency",
     test: (text) => /ECONNREFUSED|ENOTFOUND|certificate|EAI_AGAIN|fetch failed|socket hang up/i.test(text),
   },

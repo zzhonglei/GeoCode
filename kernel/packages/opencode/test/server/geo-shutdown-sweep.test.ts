@@ -80,9 +80,14 @@ describe("geo shutdown sweep", () => {
       stderr: "ignore",
     })
 
+    // Every wait here is bounded, including the request itself: `fetch` has no
+    // timeout of its own, so a server that accepts the connection and then
+    // stalls would hang this call forever — the loop below would never reach
+    // its own deadline check, and the test would die by timeout without saying
+    // which step never happened.
     const reachable = async () => {
       try {
-        await fetch(`http://127.0.0.1:${PORT}/geo/status`)
+        await fetch(`http://127.0.0.1:${PORT}/geo/status`, { signal: AbortSignal.timeout(2_000) })
         return true
       } catch {
         return false
@@ -96,9 +101,13 @@ describe("geo shutdown sweep", () => {
 
       // Ask for a preview; the fake toolchain hangs, so the child stays up
       // while we signal its parent.
-      const ask = fetch(`http://127.0.0.1:${PORT}/geo/raster/meta?path=scene.tif&directory=${project}`).catch(
-        () => undefined,
-      )
+      // Bounded for the same reason: this one is MEANT to hang — the fake
+      // toolchain never returns — and it is awaited at the end, so without a
+      // limit a server that fails to drop the socket on SIGTERM would keep the
+      // test alive past its timeout.
+      const ask = fetch(`http://127.0.0.1:${PORT}/geo/raster/meta?path=scene.tif&directory=${project}`, {
+        signal: AbortSignal.timeout(60_000),
+      }).catch(() => undefined)
       await waitFor(() => fs.existsSync(pidFile), 30_000)
       expect(fs.existsSync(pidFile)).toBe(true)
 
@@ -117,5 +126,10 @@ describe("geo shutdown sweep", () => {
       if (recorded && alive(recorded)) process.kill(recorded, "SIGKILL")
       fs.rmSync(home, { recursive: true, force: true })
     }
-  }, 90_000)
+    // The three waits above budget 60 + 30 + 15 = 105s. At the original 90s
+    // timeout that budget was overcommitted: under parallel load the boot wait
+    // alone could eat enough of it that bun killed the test before any wait
+    // could expire, so a real failure reported "timed out" instead of naming
+    // which step never happened. The limit has to exceed the budget.
+  }, 150_000)
 })
