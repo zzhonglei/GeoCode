@@ -135,6 +135,16 @@ describe("brand literal scan", () => {
     }
   })
 
+  test("session sharing stays off", () => {
+    // Both halves matter: the module constant stops the upload, and the config
+    // default makes an attempt report "disabled in configuration" rather than
+    // handing back an empty share URL.
+    const share = readFileSync(path.join(repo, "packages/opencode/src/share/share-next.ts"), "utf8")
+    expect(share.includes('process.env["OPENCODE_DISABLE_SHARE"] === "true"')).toBe(false)
+    const assembly = readFileSync(path.join(repo, "packages/opencode/src/config/geocode.ts"), "utf8")
+    expect(/share:\s*"disabled"/.test(assembly)).toBe(true)
+  })
+
   test("the home-directory scan for a second global root is gone", () => {
     // Upstream also walks ~/.opencode. GeoCode has exactly one global root
     // (Global.Path.config), so that scan was removed rather than renamed —

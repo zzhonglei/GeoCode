@@ -187,6 +187,36 @@ describe("GeoCode does not run code from a project directory", () => {
   )
 })
 
+describe("GeoCode session sharing", () => {
+  it.live("is disabled by the assembly layer, and stays overridable", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped({ git: true })
+      const globalDir = yield* tmpdirScoped()
+      const project = path.join(root, "project")
+      yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
+
+      yield* withInstance(
+        project,
+        globalDir,
+        Effect.gen(function* () {
+          expect((yield* Config.use.get()).share).toBe("disabled")
+        }),
+      )
+
+      // The assembly layer is a factory default, not a lock: a user who wants
+      // the upstream behaviour back can still ask for it.
+      yield* write(path.join(globalDir, Brand.configJson), JSON.stringify({ share: "manual" }))
+      yield* withInstance(
+        project,
+        globalDir,
+        Effect.gen(function* () {
+          expect((yield* Config.use.get()).share).toBe("manual")
+        }),
+      )
+    }),
+  )
+})
+
 describe("GeoCode plan file scope", () => {
   it.effect("the written plan path is one the plan agent is allowed to edit", () =>
     Effect.gen(function* () {

@@ -20,7 +20,15 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { EventV2 } from "@opencode-ai/core/event"
 
-const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
+/* --- GeoCode: sharing uploads a whole session — messages, tool calls, file
+ * paths — to a service GeoCode neither runs nor can vouch for, and a GeoCode
+ * session can carry unpublished research data. Off by default here, where
+ * upstream is on: every entry point in this module is already gated on this
+ * one constant, so nothing downstream needs to know (docs/PATHS.md §7).
+ *
+ * The env var keeps its upstream name and still works in reverse: set it to
+ * `false` or `0` to get upstream's behaviour back. --- */
+const disabled = !["false", "0"].includes(process.env["OPENCODE_DISABLE_SHARE"] ?? "")
 
 export type Api = {
   create: string

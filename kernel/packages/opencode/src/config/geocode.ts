@@ -15,6 +15,11 @@ export function base(): ConfigV1.Info {
   return {
     // GeoAgent is the sole primary agent GeoCode surfaces.
     default_agent: "GeoAgent",
+    // Session sharing uploads to a service GeoCode does not run. The module
+    // itself is off (share/share-next.ts); this makes the config surface say
+    // so too, so an attempt to share reports "disabled in configuration"
+    // instead of silently handing back an empty URL.
+    share: "disabled",
     agent: {
       GeoAgent: {
         mode: "primary",
