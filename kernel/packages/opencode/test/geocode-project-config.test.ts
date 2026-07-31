@@ -14,6 +14,8 @@ import { Brand } from "@opencode-ai/core/brand"
 import { Global } from "@opencode-ai/core/global"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Config } from "@/config/config"
+import { Plugin } from "@/plugin"
+import { ToolRegistry } from "@/tool/registry"
 import { Session } from "@/session/session"
 import { provideInstanceEffect, testInstanceStoreLayer, TestInstance, tmpdirScoped } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
@@ -26,7 +28,12 @@ const write = (file: string, body: string) =>
     await fs.writeFile(file, body)
   })
 
-const withInstance = <A, E, R>(project: string, globalDir: string, effect: Effect.Effect<A, E, R>) =>
+const withInstance = <A, E, R>(
+  project: string,
+  globalDir: string,
+  effect: Effect.Effect<A, E, R>,
+  node: Parameters<typeof LayerNode.compile>[0] = Config.node,
+) =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
       const previous = Global.Path.config
@@ -38,13 +45,23 @@ const withInstance = <A, E, R>(project: string, globalDir: string, effect: Effec
         Effect.provideService(TestInstance, { directory: project }),
         provideInstanceEffect(project),
         Effect.provide(testInstanceStoreLayer),
-        Effect.provide(LayerNode.compile(Config.node)),
+        Effect.provide(LayerNode.compile(node)),
       ),
     (previous) =>
       Effect.sync(() => {
         ;(Global.Path as { config: string }).config = previous
       }),
   )
+
+/** A module that leaves a file behind if anything imports it. */
+const witness = (marker: string) =>
+  [
+    `import fs from "fs"`,
+    `fs.writeFileSync(${JSON.stringify(marker)}, "imported")`,
+    `export const marker = { description: "witness", args: {}, execute: async () => "x" }`,
+    `export default async () => ({})`,
+    "",
+  ].join("\n")
 
 describe("GeoCode project config scope", () => {
   it.live("reads the branded project directory and ignores the upstream one", () =>
@@ -117,6 +134,55 @@ describe("GeoCode project config scope", () => {
           expect(Object.keys((yield* Config.use.get()).mcp ?? {})).toContain("probe")
         }),
       )
+    }),
+  )
+})
+
+/* --- GeoCode: opening a folder must not run its code. Upstream imports both
+ * `{plugin,plugins}/*.ts` and `{tool,tools}/*.ts` from every config directory,
+ * through two independent paths; these witness modules write a file if anything
+ * imports them, so the assertions below are evidence rather than inference
+ * (docs/PATHS.md §7). --- */
+describe("GeoCode does not run code from a project directory", () => {
+  it.live("ignores declared plugins, discovered plugins and file tools", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped({ git: true })
+      const globalDir = yield* tmpdirScoped()
+      const evidence = yield* tmpdirScoped()
+      const project = path.join(root, "project")
+      const dot = path.join(project, Brand.projectDir)
+
+      const declared = path.join(dot, "declared.ts")
+      yield* write(declared, witness(path.join(evidence, "declared")))
+      yield* write(path.join(dot, "plugin", "auto.ts"), witness(path.join(evidence, "discovered")))
+      yield* write(path.join(dot, "tool", "witness.ts"), witness(path.join(evidence, "tool")))
+      yield* write(
+        path.join(dot, Brand.configJson),
+        JSON.stringify({ plugin: [`file://${declared.split(path.sep).join("/")}`] }),
+      )
+
+      let ids: string[] = []
+      yield* withInstance(
+        project,
+        globalDir,
+        Effect.gen(function* () {
+          const plugin = yield* Plugin.Service
+          yield* plugin.init()
+          ids = yield* (yield* ToolRegistry.Service).ids()
+        }),
+        LayerNode.group([Config.node, ToolRegistry.node, Plugin.node]),
+      )
+
+      // Nothing imported any of the three, by either path. Asserted first:
+      // this is the claim, and tool registration is only one of its symptoms.
+      expect(yield* Effect.promise(() => fs.readdir(evidence))).toEqual([])
+      expect(ids).not.toContain("witness_marker")
+
+      // And nothing was installed into the user's project to support them.
+      const left = yield* Effect.promise(() => fs.readdir(dot))
+      for (const unwanted of ["node_modules", "package.json", "package-lock.json", ".gitignore"]) {
+        expect(left).not.toContain(unwanted)
+      }
     }),
   )
 })

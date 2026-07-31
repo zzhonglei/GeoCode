@@ -12,6 +12,18 @@ import { ConfigPlugin } from "@/config/plugin"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
+/* --- GeoCode: GeoCode does not load external plugins. Users extend it through
+ * MCP, which runs out of process and is authorized per server; a plugin runs
+ * inside the kernel with its credentials and file access. `loadExternal` is the
+ * single gate both callers pass through, and cutting there rather than in the
+ * config layer leaves `plugin` parsing exactly as upstream documents it — the
+ * setting is simply inert (docs/PATHS.md §7).
+ *
+ * Annotated `boolean` on purpose: as a `false` literal the typechecker would
+ * treat the rest of `loadExternal` as unreachable and stop narrowing inside it.
+ * --- */
+const EXTERNAL_PLUGINS_ENABLED: boolean = false
+
 export namespace PluginLoader {
   // A normalized plugin declaration derived from config before any filesystem or npm work happens.
   export type Plan = {
@@ -206,6 +218,7 @@ export namespace PluginLoader {
   // once after the caller finishes preparing dependencies. Once dynamic import runs, failures are
   // treated as permanent for this process because Bun caches failed module resolution.
   export async function loadExternal<R = Loaded>(input: Input<R>): Promise<R[]> {
+    if (!EXTERNAL_PLUGINS_ENABLED) return []
     const candidates = input.items.map((origin) => ({ origin, plan: plan(origin.spec) }))
     const list: Array<Promise<AttemptResult<R>>> = []
     for (const candidate of candidates) {

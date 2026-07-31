@@ -232,23 +232,10 @@ const layer = Layer.effect(
     const directory = yield* CurrentWorkingDirectory
     const npm = yield* Npm.Service
     const data = yield* loadState({ directory })
-    const deps = yield* Effect.forEach(
-      data.dirs,
-      (dir) =>
-        npm
-          .install(dir, {
-            add: [
-              {
-                name: "@opencode-ai/plugin",
-                version: InstallationLocal ? undefined : InstallationVersion,
-              },
-            ],
-          })
-          .pipe(Effect.forkScoped),
-      {
-        concurrency: "unbounded",
-      },
-    )
+    /* --- GeoCode: same as the instance loader — the plugin SDK is installed
+     * only so a user's own plugin file can import it, and GeoCode loads none
+     * (docs/PATHS.md §7). --- */
+    const deps: Fiber.Fiber<void>[] = []
 
     const get = Effect.fn("TuiConfig.get")(() => Effect.succeed(data.config))
     const pluginOrigins = Effect.fn("TuiConfig.pluginOrigins")(() => Effect.succeed(data.pluginOrigins))

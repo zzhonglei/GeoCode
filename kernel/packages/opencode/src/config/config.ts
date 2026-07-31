@@ -444,28 +444,13 @@ const layer = Layer.effect(
             }
           }
 
-          yield* ensureGitignore(dir).pipe(Effect.orDie)
-
-          const dep = yield* npmSvc
-            .install(dir, {
-              add: [
-                {
-                  name: "@opencode-ai/plugin",
-                  version: InstallationLocal ? undefined : InstallationVersion,
-                },
-              ],
-            })
-            .pipe(
-              Effect.exit,
-              Effect.tap((exit) =>
-                Exit.isFailure(exit)
-                  ? Effect.logWarning("background dependency install failed", { dir, error: String(exit.cause) })
-                  : Effect.void,
-              ),
-              Effect.asVoid,
-              Effect.forkDetach,
-            )
-          deps.push(dep)
+          /* --- GeoCode: upstream installs `@opencode-ai/plugin` into every
+           * config directory (project ones included) and writes a `.gitignore`
+           * for the resulting `node_modules`. Both exist only so a user's own
+           * plugin or tool file can import the SDK, and GeoCode loads neither
+           * — so nothing is installed and nothing is written into the user's
+           * project (docs/PATHS.md §7). `deps` stays empty; the join in
+           * `waitForDependencies` simply has nothing to wait for. --- */
 
           result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
           result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))

@@ -106,6 +106,35 @@ describe("brand literal scan", () => {
     })
   }
 
+  /* --- GeoCode: the four cuts that stop a project directory's code from
+   * running, plus what must survive them. The behavioural proof lives in
+   * opencode/test/geocode-project-config.test.ts; these guard the source
+   * against a merge putting a path back, and against a future cut taking the
+   * model providers with it — they are registered as internal plugins right
+   * beside the external loader that was removed (docs/PATHS.md §7). --- */
+  test("external plugins and file tools stay unloaded", () => {
+    const read = (file: string) => readFileSync(path.join(repo, file), "utf8")
+
+    const loader = read("packages/opencode/src/plugin/loader.ts")
+    expect(loader.includes("EXTERNAL_PLUGINS_ENABLED")).toBe(true)
+
+    const internal = read("packages/core/src/plugin/internal.ts")
+    expect(/^\s*yield\* add\(ConfigExternalPlugin\.Plugin\)/m.test(internal)).toBe(false)
+    // …but the provider plugins registered on the neighbouring lines must stay:
+    // they are how every model reaches its SDK.
+    expect(/^\s*for \(const item of ProviderPlugins\) yield\* add\(item\)/m.test(internal)).toBe(true)
+    expect(/^\s*yield\* add\(ConfigProviderPlugin\.Plugin\)/m.test(internal)).toBe(true)
+
+    const registry = read("packages/opencode/src/tool/registry.ts")
+    expect(registry.includes('Glob.scanSync("{tool,tools}')).toBe(false)
+
+    // The plugin SDK is installed only so a user's own plugin or tool file can
+    // import it; neither loads, so neither config loader may install it.
+    for (const file of ["packages/opencode/src/config/config.ts", "packages/opencode/src/config/tui.ts"]) {
+      expect(read(file).includes('name: "@opencode-ai/plugin"')).toBe(false)
+    }
+  })
+
   test("the home-directory scan for a second global root is gone", () => {
     // Upstream also walks ~/.opencode. GeoCode has exactly one global root
     // (Global.Path.config), so that scan was removed rather than renamed —

@@ -175,11 +175,13 @@ const layer = Layer.effect(
           }
         }
 
-        const dirs = yield* config.directories()
-        const matches = dirs.flatMap((dir) =>
-          Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
-        )
-        if (matches.length) yield* config.waitForDependencies()
+        /* --- GeoCode: upstream scans `{tool,tools}/*.{js,ts}` under every
+         * config directory and imports what it finds, so opening a folder can
+         * register and run its code. GeoCode's own tools are built in, and a
+         * user's custom tool belongs on MCP — out of process and separately
+         * authorized. Leaving the list empty keeps the loop below upstream's
+         * (docs/PATHS.md §7). --- */
+        const matches: string[] = []
         for (const match of matches) {
           const namespace = path.basename(match, path.extname(match))
           // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
