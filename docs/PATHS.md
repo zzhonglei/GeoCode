@@ -99,8 +99,7 @@ GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统�
 ~/.config/GeoCode/               配置根:用户手写,删了回到出厂状态
 ├── geocode.json / .jsonc        内核与 Agent 配置(模型、代理人、权限)
 ├── machine.json / .jsonc      ★ 本机地理环境:QGIS/GEE/GDAL 装在哪
-├── themes/  tui/  agents/       主题、终端形态、自定义 agent
-└── node_modules/  package.json  插件安装(npm 机制要求,不可改名)
+└── themes/  tui/  agents/       主题、终端形态、自定义 agent
 
 ~/.cache/GeoCode/                缓存根:可整个删掉,下次自动重建
 ├── bin/                         LSP 与 ripgrep 二进制
@@ -122,14 +121,19 @@ $TMPDIR/GeoCode/                 临时根:进程内的短命文件
 <appData>/ai.geocode.desktop/    Electron 壳自己的数据(与上面四根分离,是上游的设计)
 └── logs/                        壳侧日志
 
-<用户项目>/.git/geocode        ★ 项目 id 标记(一行文本,见下)
+<用户项目>/                       GeoCode 在用户项目里的全部接触面
+├── .git/geocode              ★ 项目 id 标记(一行文本,见下),始终写入
+└── .geocode/                    项目级配置,与全局同构;用户自建,GeoCode 不主动创建
+    ├── geocode.json / .jsonc    覆盖全局设置
+    ├── agent/  command/  skill/ 项目专属定义
+    └── plans/                   计划模式的产物(仅当实验性计划模式启用)
 ```
 
 三条值得单独记住:
 
 - **地理数据从不进快照仓库**。用户项目里的 `.tif`、`.gpkg`、`.shp` 及其附属文件被检查点排除,否则一景遥感影像就能让 `snapshot/` 比项目本身还大(GEOKERNEL.md §10.1 #6);
 - **`cache/geo/` 可以随时整个删掉**。四个成员都是可重建的:预览产物本来就每次启动清空,脚本与运行时库按需物化,链接农场重建即可;
-- **写进用户项目的只有 `.git/geocode` 一个文件**——但请注意它不是唯一的接触面:项目里已有的 `.opencode/` 会被**读取并执行**,见 §7 挂起项。
+- **写进用户项目的只有 `.git/geocode`**。`.geocode/` 是用户自己建的,GeoCode 不主动创建它;写进去的只有计划文件,而且要实验性计划模式启用才会发生。上游会往每个配置目录(**含项目里的那个**)装 `@opencode-ai/plugin` 并写一份 `.gitignore`,那是为了让用户自写的插件能 import SDK——GeoCode 不加载插件,这两件事一并去掉了(KERNEL.md 屏蔽清单)。项目目录里因此不会出现 `node_modules/`。
 
 #### `.git/geocode`:项目身份
 
@@ -214,6 +218,8 @@ export const Brand = {
   logFile: `${name}.log`,
   configJson: `${name}.json`,
   configJsonc: `${name}.jsonc`,
+  projectDir: `.${name}`,                 // 项目里的配置目录
+  plansSegments: [`.${name}`, "plans"],   // 计划文件目录,按路径片段给出
   mdnsHost: `${name}.local`,
   mdnsService: (port: number) => `${name}-${port}`,
   managedDomain: `ai.${name}.managed`,
@@ -224,6 +230,10 @@ export const Brand = {
 ```
 
 **全部由两个基串派生,不写平铺字面量。** 这不是简洁的问题:文件名与"扫描它的那个基名"必须一致,写成两个字面量就是两处需要人工保持同步的地方。派生之后它们是同一个表达式。
+
+后两项是这条原则的两个具体后果,值得单独说明。`projectDir` 与 `configJson` 同源,因为**加载器先判断"这个目录是不是项目配置目录",再进去找配置文件**——两者若分别写死,判断会通过而文件永远找不到,且不报错。`plansSegments` 给的是**路径片段数组而非字符串**,因为有两个调用点必须一致:一处把它接在 worktree 下面写文件,另一处把它接成 glob 作为计划 agent 的编辑授权。展开同一个数组,"写到哪"与"允许改哪"就不可能分家。
+
+这类"写入方与读取方必须成对"的要求不是理论:全局 `mcp add` 曾经写 `opencode.json`、而加载器早已改读 `geocode.json`,于是命令报告成功、服务器永不出现。现在每一处改名都配一个往返测试。
 
 这样做的收益不在少写几行,而在审计:上游将来新增一处硬编码 `opencode` 字面量时,typecheck 不会报错,但只要对照这个模块做一次 grep 就能发现遗漏。路径层的正确性无法靠类型系统保证,只能靠可审计性保证。
 
@@ -241,7 +251,10 @@ export const Brand = {
 
 以下与"独立于 OpenCode"相关、但刻意不在路径阶段处理的事项,记录在此防止遗忘:
 
-- **项目目录的 `.opencode/` 与 `opencode.json` 自动加载**。内核会扫描用户项目里的这些文件——一个同时被 OpenCode 使用的项目,其 agent、MCP 注册**乃至 `.opencode/plugin/` 下的可执行插件代码**都会被 GeoCode 原样加载执行。这不只是配置串味,是跨产品执行代码。归属 Agent 上下文阶段决策(改名、禁用或保留兼容)。
-- **`~/.agents` 与项目内 `.agents/skills` 的技能扫描**(硬编码路径,不受 XDG 管)。它与保留 `AGENTS.md` 属同一套开放约定,是否一并关闭尚未决定。Claude Code 一侧——`CLAUDE.md`(项目与 `~/.claude`)与 `.claude/skills`——已默认不读,理由与开关语义见 `effect/runtime-flags.ts`。
 - **内核自动更新检查**指向上游的 npm/brew/scoop 通道(`opencode-ai` 等),桌面形态必须关闭,归装配阶段(`OPENCODE_DISABLE_AUTOUPDATE` 或配置层)。
 - **CLI scriptName 与 OTLP serviceName** 等非磁盘品牌字符串,归界面/品牌阶段。
+
+原先挂在这里的两条已经处理,去向记在此处以免再被当作待办:
+
+- **项目目录的 `.opencode/` 与 `opencode.json`** 已改名为 `.geocode/` 与 `geocode.json`,家目录那条没有开关保护的 `~/.opencode` 扫描直接删除(我们只有一个全局根)。跨产品执行代码的那一半由屏蔽清单解决——插件与文件式工具都不再加载,见 KERNEL.md。
+- **`~/.agents` 与项目内 `.agents/skills`** 决定**保留**。它与 `AGENTS.md` 同属跨产品的开放约定,内容是用户自己刻意放的;关掉的是**其他产品专有**的位置(`.claude/`、`~/.opencode/`)。这条分界同时解释了为什么 `CLAUDE.md` 与 `.claude/skills` 默认不读。
