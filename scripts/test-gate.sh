@@ -27,7 +27,8 @@ echo "== geo kernel (opencode) =="
   test/server/geo-shutdown-sweep.test.ts \
   test/snapshot/geo-exclude.test.ts \
   test/event-manifest.test.ts \
-  test/geocode-project-config.test.ts)
+  test/geocode-project-config.test.ts \
+  test/geocode-truncation-hint.test.ts)
 
 echo
 echo "== geo kernel (core) =="

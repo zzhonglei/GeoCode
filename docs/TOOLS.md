@@ -97,11 +97,7 @@ findLast(...) ?? { action: "ask", permission, pattern: "*" }
 
 "agent": {
   "GeoAgent": {
-    "permission": {
-      "geo_qgis_*": "allow",
-      "geo_gee_*": "allow",
-      "task": { "*": "deny", "osmfetch": "allow" }
-    }
+    "permission": { "geo_qgis_*": "allow", "geo_gee_*": "allow" }
   },
   "osmfetch": {
     "permission": {
@@ -111,7 +107,7 @@ findLast(...) ?? { action: "ask", permission, pattern: "*" }
       "task": { "*": "deny" }, "question": "deny", "skill": "deny"
     }
   },
-  "plan": { "permission": { "task": { "*": "deny" } } }
+  "plan": { "permission": { "task": { "osmfetch": "deny" } } }
 }
 ```
 
@@ -121,23 +117,19 @@ findLast(...) ?? { action: "ask", permission, pattern: "*" }
 
 `patterns` 这一维留给操作对象(哪个文件、哪个算法),不用来区分工具。占用了它,就再也写不出"允许读 `./data/*.tif`,其他要问"。
 
-### 4.4 两条 task 规则不只是权限
+### 4.4 阵容与上游一一对应
 
-`task: { "*": "deny", "osmfetch": "allow" }` 除了做子代理白名单,还修好一处上游缺陷。
+task 规则不发明自己的机制,逐个对应上游的形状:
 
-`tool/truncate.ts:129` 在输出超限时按 `hasTaskTool(agent)` 二选一给建议,而它查的是 `evaluate("task", "*")`——**pattern 是字面量 `"*"`**。有 task 工具时给的建议是"用 Task 工具让 **explore agent** 处理这个文件",并附一句"**不要自己读完整文件**"。GeoCode 禁用了 explore,模型照做会拿到 `Unknown agent type`,同时被禁止用唯一可行的办法(Grep / Read 带 offset)。
-
-上面那条规则让三处判定各得其所:
-
-| 判定 | 过程 | 结果 |
+| GeoCode | 对应上游 | task 规则 |
 |---|---|---|
-| `evaluate("task","*")` | `match("*","osmfetch")` 不成立,只剩通配那条 | **deny** → 落到正确的建议分支 |
-| `evaluate("task","osmfetch")` | 两条都匹配,`findLast` 取后者 | **allow** → 仍可派生 |
-| `disabled(["task"])` | 最后匹配的规则 `pattern !== "*"` | **不隐藏** → task 工具照常在册 |
+| GeoAgent | build | **无**——继承 defaults 的放行,用户自定义的子代理即刻可派、即刻出现在 task 工具的描述里 |
+| plan | plan | `{ "osmfetch": "deny" }`,镜像上游的 `{ general: "deny" }`:点名那个往磁盘写东西的子代理。随 osmfetch 一起落地——在那之前它约束的对象不存在,无从验证 |
+| osmfetch | (自有) | 自身 `task` 全拒,不得递归派生——出口锁的一部分 |
 
-plan agent 那条 `task: { "*": "deny" }` 同理,并且比上游更准确:上游写的是 `task: { general: "deny" }`,语义是"计划阶段不许派**可写**代理";general 被禁用后该规则空转,而 osmfetch 恰恰要往磁盘写下载结果。
+一个被否决的方案要记下来,因为它看上去很聪明。曾试过给 GeoAgent 写 `task: { "*": "deny", "osmfetch": "allow" }`,一石二鸟:子代理白名单,同时让 `tool/truncate.ts` 的超限提示落到不点名 explore 的那支(它按 `evaluate("task","*")` 二选一,字面量 `"*"` 只有通配规则能匹配)。否决,两个代价当场兑现:白名单让**用户自定义的子代理静默消失**——`describeTask` 按权限过滤,定义了却不出现,无处报错;plan 的通配拒绝打翻两个上游测试(它们断言 plan 可派只读与自定义子代理)。拿权限语义换一段文案,影响面不成比例。
 
-**这两条是靠权限规则的副作用改一段文案,必须配绊线**:断言超限提示中不出现 `explore`。上游若改动 `hasTaskTool` 的判据,测试变红。
+文案的问题在文案处修:`tool/truncate.ts` 的补丁把两支建议合并——Grep/Read 路径永远给出,有子代理时**追加**委派选项,不点名任何 agent。这同时修好上游对一切自定义阵容的同一缺陷。绊线:`test/geocode-truncation-hint.test.ts`。
 
 ## 5. 输出超限由工具自管
 
@@ -188,22 +180,22 @@ plan agent 那条 `task: { "*": "deny" }` 同理,并且比上游更准确:上游
 
 ## 7. 注入点与绊线
 
-工具层对上游只有**一处**源码补丁,即 GEOKERNEL §10.1 的注入点 #9:
+工具层对上游有**两处**源码补丁:
 
-**`tool/registry.ts`**——八个工具进 `builtin` 数组,`node` 的 `deps` 加 `GeoKernel.node`。后者是 §2 第 5 条的必然结果:工具的服务依赖 `R` 会传导到注册表,层图因此把"工具依赖地理内核"显式化。
+1. **`tool/registry.ts`**(GEOKERNEL §10.1 注入点 #9,未落地)——八个工具进 `builtin` 数组,`node` 的 `deps` 加 `GeoKernel.node`。后者是 §2 第 5 条的必然结果:工具的服务依赖 `R` 会传导到注册表,层图因此把"工具依赖地理内核"显式化。
+2. **`tool/truncate.ts`**(已落地)——超限提示合并为一条。为什么不走配置,记录在 §4.4。
 
 其余全部落在装配层配置或新增文件。
 
 地理工具与上游原生工具**同级平铺在 `tool/` 下**,不另设子目录:它们是 GeoCode 内置核心工具集的一部分,不是外挂。`geo-` 文件名前缀保住可审计性,而新增文件在合并时永不冲突。
 
-绊线两条,都必须做反证(去掉改动看是否变红):
+绊线三条,都必须做反证(去掉改动看是否变红):
 
 1. 八个工具 id 确实出现在 `registry.ids()` 里;
-2. **换一个 agent 调用时工具确实不在模型清单中**——断言"拦住了",不是断言"写了规则"。
+2. **换一个 agent 调用时工具确实不在模型清单中**——断言"拦住了",不是断言"写了规则";
+3. 超限提示不点名已删除的 agent,且始终给出可行路径(`test/geocode-truncation-hint.test.ts`,已落地)。
 
 第二条是旧版事故的直接教训:规则写进去了不等于命中了。
-
-同时扩充 `core/test/geocode-brand.test.ts` 里已有的文案护栏,覆盖 §4.4 那条截断提示。
 
 ## 8. 描述文件
 

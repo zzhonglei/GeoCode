@@ -126,9 +126,27 @@ const layer = Layer.effect(
       const preview = out.join("\n")
       const file = yield* write(text)
 
-      const hint = hasTaskTool(agent)
-        ? `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`
-        : `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
+      /* --- GeoCode: one hint instead of upstream's two. The task-tool branch
+       * named the explore agent — which GeoCode disables — and forbade reading
+       * the file directly, steering the model into "Unknown agent type" while
+       * banning the one route that works. Config could flip the branch (deny
+       * task's "*" pattern), but only by turning subagents into a whitelist
+       * that silently hides user-defined ones from the task tool's description
+       * — a permission-semantics price for a wording problem. So the wording is
+       * fixed where the wording lives: the Grep/Read route is always offered,
+       * delegation is appended when subagents are reachable, and no agent is
+       * named — which also repairs the same defect for upstream's own custom
+       * line-ups. Tripwired by test/geocode-truncation-hint.test.ts.
+       * Upstream original:
+       *   const hint = hasTaskTool(agent)
+       *     ? `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`
+       *     : `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
+       * --- */
+      const hint = [
+        `The tool call succeeded but the output was truncated. Full output saved to: ${file}`,
+        `Use Grep to search the full content or Read with offset/limit to view specific sections.` +
+          (hasTaskTool(agent) ? ` To save context, you can instead use the Task tool to have a subagent do that.` : ``),
+      ].join("\n")
 
       return {
         content:
