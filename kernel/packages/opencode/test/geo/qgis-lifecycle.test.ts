@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -27,6 +27,13 @@ const writeRaw = (text: string) => Effect.promise(() => fs.promises.writeFile(FI
 
 /** A minimal bundle that passes location and assembly; the probe is scripted. */
 const bundles = fs.mkdtempSync(path.join(os.tmpdir(), "geo-qgis-lc-"))
+// The sandbox config root is shared by every file in this test process, and
+// the geo kernel is a process-global singleton: a machine.json left behind
+// here would poison any later test that assumes an unconfigured kernel.
+afterAll(() => {
+  fs.rmSync(bundles, { recursive: true, force: true })
+  fs.rmSync(FILE, { force: true })
+})
 function makeBundle(name: string): string {
   const bundle = path.join(bundles, name)
   const macos = path.join(bundle, "Contents", "MacOS")

@@ -23,12 +23,12 @@ echo "== geo kernel (opencode) =="
 (cd "$ROOT/kernel/packages/opencode" && bun test \
   test/geo/ \
   test/server/geo-content-limit.test.ts \
-  test/server/geo-routes-mounted.test.ts \
   test/server/geo-shutdown-sweep.test.ts \
   test/snapshot/geo-exclude.test.ts \
   test/event-manifest.test.ts \
   test/geocode-project-config.test.ts \
-  test/geocode-truncation-hint.test.ts)
+  test/geocode-truncation-hint.test.ts \
+  test/geocode-geo-read.test.ts)
 
 echo
 echo "== geo kernel (core) =="

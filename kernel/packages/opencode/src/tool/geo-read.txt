@@ -1,0 +1,17 @@
+Use this tool to read geographic data files.
+
+This tool reads ONLY geographic data files. For non-spatial files (plain CSV / JSON / TXT), use the standard `read` tool.
+
+Supported formats:
+- Vector: .shp, .geojson, .gpkg, .gml, .kml, .gpx, .fgb
+- Raster: .tif, .tiff, .img, .asc, .dem
+
+Usage:
+- The filePath parameter should be an absolute path.
+- mode "metadata" (default) returns the file's CRS, extent, schema, statistics and sampled features. mode "preview" returns a rendered PNG image of the raster (raster formats only).
+- Read with metadata mode first; use preview mode only when you need visual inspection.
+- Use offset and limit to page through vector features: offset is the 1-based position of the first feature (default 1), limit is how many features to return (default 3, max 50). e.g. offset=4 with limit=3 reads features 4-6.
+- For GeoPackage, read with defaults first to see all available layers, then set layerIndex to inspect a specific layer.
+- Parameters that do not apply to the current format or mode are silently ignored.
+- Call this tool in parallel when you know there are multiple files you want to read.
+- This tool needs the user's QGIS environment. When that environment is not ready, the output says exactly what is missing and who can fix it — relay that to the user instead of retrying.

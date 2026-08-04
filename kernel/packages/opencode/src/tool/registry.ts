@@ -26,6 +26,8 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
 import { WebSearchTool } from "./websearch"
+import { GeoReadTool } from "./geo-read" // GeoCode: the geographic toolset (docs/TOOLS.md §3)
+import { GeoKernel } from "@/geo" // GeoCode: its services flow into this registry's layer (docs/TOOLS.md §7)
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
@@ -112,6 +114,7 @@ const layer = Layer.effect(
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
+    const georead = yield* GeoReadTool // GeoCode: appended, off upstream's churn path
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -217,6 +220,7 @@ const layer = Layer.effect(
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
+          georead: Tool.init(georead), // GeoCode
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
@@ -240,6 +244,11 @@ const layer = Layer.effect(
             tool.search,
             tool.skill,
             tool.patch,
+            // GeoCode: the geographic toolset, built in beside the native tools
+            // (docs/TOOLS.md §3; GEOKERNEL §10.1 #9). Visible to every agent —
+            // the boundary is enforced at the execution layer, where each geo
+            // tool asks under its geo_* permission key (docs/TOOLS.md §4, §9).
+            tool.georead,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
@@ -446,6 +455,11 @@ export const node = LayerNode.make({
     MCP.node,
     Database.node,
     Ripgrep.node,
+    // GeoCode: geo tools yield geo-kernel services at init, so their node
+    // joins the registry's dependencies. The server graph mounts the same
+    // node; the shared memo map makes this the same instance, not a second
+    // kernel (docs/TOOLS.md §7).
+    GeoKernel.node,
   ],
 })
 

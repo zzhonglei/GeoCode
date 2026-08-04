@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -232,6 +232,12 @@ describe("qgis catalog build failures", () => {
 
 describe("qgis catalog wired into the lifecycle", () => {
   const bundles = fs.mkdtempSync(path.join(os.tmpdir(), "geo-catalog-"))
+  // Shared sandbox + process-global geo kernel: leave no machine.json behind
+  // for a later test that assumes an unconfigured kernel.
+  afterAll(() => {
+    fs.rmSync(bundles, { recursive: true, force: true })
+    fs.rmSync(path.join(Global.Path.config, "machine.json"), { force: true })
+  })
   const bundle = (() => {
     const dir = path.join(bundles, "QGIS.app")
     const macos = path.join(dir, "Contents", "MacOS")

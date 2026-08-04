@@ -20,6 +20,14 @@ export function base(): ConfigV1.Info {
     // so too, so an attempt to share reports "disabled in configuration"
     // instead of silently handing back an empty URL.
     share: "disabled",
+    // Geographic capability is closed by default and opened per agent group
+    // below. The wildcard deny cannot be omitted: evaluate() falls back to
+    // "ask" when NO rule matches, so without it an unauthorized agent calling
+    // a geo tool would pop a permission prompt at the user instead of being
+    // refused — a silent boundary failure (docs/TOOLS.md §4.2).
+    permission: {
+      "geo_*": "deny",
+    },
     agent: {
       GeoAgent: {
         mode: "primary",
@@ -29,6 +37,12 @@ export function base(): ConfigV1.Info {
         permission: {
           question: "allow",
           plan_enter: "allow",
+          // The QGIS group: ReadGeoData / QgisDoc / RunQgisAlgorithm ask under
+          // geo_qgis_* keys. Agent-level rules merge after the global deny
+          // above, so findLast picks this allow for GeoAgent and the deny for
+          // everyone else (docs/TOOLS.md §4.2 ③). GEE opens here too when its
+          // tool lands; OSM stays with the osmfetch subagent.
+          "geo_qgis_*": "allow",
         },
         // Deliberately no `prompt`: GeoAgent picks up prompt/geocode.txt through
         // the base-prompt selector in session/system.ts, which GeoCode returns
