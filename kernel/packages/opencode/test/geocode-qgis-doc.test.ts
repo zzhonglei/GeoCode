@@ -301,9 +301,18 @@ describe("QgisDoc, gate open", () => {
     }),
   )
 
+  /** The real tiering is the catalog's own tripwire; here it only has to be
+   * able to produce all three outcomes so the tool's branches are reachable. */
+  const resolveStub = (id: string): QgisCatalog.Resolution => {
+    if (id === "Slope") return { kind: "ambiguous", candidates: ["gdal:slope", "native:slope"] }
+    const found = ALGORITHMS.find((item) => item.id === id)
+    return found ? { kind: "found", algorithm: found } : { kind: "missing" }
+  }
+
   const stubCatalog = Layer.succeed(
     QgisCatalog.Service,
     QgisCatalog.Service.of({
+      resolve: (id) => Effect.succeed(resolveStub(id)),
       build: () => Effect.succeed({ ok: true as const }),
       invalidate: () => Effect.void,
       groups: () =>
@@ -320,7 +329,10 @@ describe("QgisDoc, gate open", () => {
               group.toLowerCase().replace(/[^a-z0-9]/g, ""),
           ),
         ),
-      get: (id) => Effect.succeed(ALGORITHMS.find((item) => item.id === id)),
+      get: (id) => {
+        const outcome = resolveStub(id)
+        return Effect.succeed(outcome.kind === "found" ? outcome.algorithm : undefined)
+      },
       search: (query, limit = 10) =>
         Effect.succeed(
           ALGORITHMS.filter((item) =>
@@ -387,6 +399,16 @@ describe("QgisDoc, gate open", () => {
       const missed = yield* run({ action: "read", algorithm: "native:nosuchthing" })
       expect(missed.output).toContain("Did you mean: native:buffer, gdal:warpreproject?")
       expect(missed.metadata.truncated).toBe(false)
+
+      // Ambiguity is NOT absence: the advice is "choose", not "search", and
+      // the candidates are the set the lookup declined to pick between rather
+      // than fuzzy neighbours re-guessed after the fact.
+      const many = yield* run({ action: "read", algorithm: "Slope" })
+      expect(many.output).toContain("names 2 algorithms")
+      expect(many.output).toContain("gdal:slope, native:slope")
+      expect(many.output).not.toContain("not found")
+      expect(many.metadata.ambiguous).toBe(true)
+      expect(many.metadata.candidates).toEqual(["gdal:slope", "native:slope"])
 
       const noGroup = yield* run({ action: "list_algorithms" })
       expect(noGroup.output).toContain('action="list_groups"')

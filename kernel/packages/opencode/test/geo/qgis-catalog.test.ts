@@ -269,6 +269,34 @@ describe("qgis catalog queries", () => {
     }),
   )
 
+  it.effect("resolve says WHICH way a lookup failed, and hands back the candidates", () =>
+    Effect.gen(function* () {
+      const catalog = yield* QgisCatalog.Service
+      yield* catalog.build(ENVIRONMENT)
+
+      // The whole reason this exists: `get` collapses two outcomes that need
+      // opposite advice, and throws away a set it had already computed.
+      const shortId = yield* catalog.resolve("slope")
+      expect(shortId.kind).toBe("ambiguous")
+      if (shortId.kind === "ambiguous") expect([...shortId.candidates].sort()).toEqual(["extra:slope", "other:slope"])
+
+      const byName = yield* catalog.resolve("Split lines")
+      expect(byName.kind).toBe("ambiguous")
+      if (byName.kind === "ambiguous") {
+        expect([...byName.candidates].sort()).toEqual(["extra:splitlinesbylength", "other:splitlinesbypoints"])
+      }
+
+      expect((yield* catalog.resolve("native:buffer")).kind).toBe("found")
+      expect((yield* catalog.resolve("Zonal statistics")).kind).toBe("found")
+      expect((yield* catalog.resolve("native:nosuchthing")).kind).toBe("missing")
+      expect((yield* catalog.resolve("///")).kind).toBe("missing")
+
+      // get stays the thin wrapper it claims to be: ambiguity reads as absence
+      // for callers that only act on a hit.
+      expect(yield* catalog.get("slope")).toBeUndefined()
+    }),
+  )
+
   it.effect("a group answers to every spelling it is listed under", () =>
     Effect.gen(function* () {
       const catalog = yield* QgisCatalog.Service

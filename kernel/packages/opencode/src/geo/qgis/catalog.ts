@@ -185,6 +185,21 @@ const TOTAL = "120 seconds"
 
 export type BuildOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string }
 
+/**
+ * What a lookup key turned out to name (§4.11 查找的宽容度).
+ *
+ * `ambiguous` is a distinct outcome rather than a flavour of `missing` because
+ * the two need opposite advice — one says "search for it", the other says
+ * "choose between these" — and because the candidates are already computed at
+ * the moment the tolerance declines to pick. Collapsing them throws that set
+ * away and leaves the caller to re-guess it with fuzzy matching, which returns
+ * neither the same set nor necessarily a complete one.
+ */
+export type Resolution =
+  | { readonly kind: "found"; readonly algorithm: Algorithm }
+  | { readonly kind: "ambiguous"; readonly candidates: readonly string[] }
+  | { readonly kind: "missing" }
+
 export interface Interface {
   /**
    * Export the catalog for a verified environment and keep it in memory.
@@ -207,6 +222,8 @@ export interface Interface {
    * provider prefix, then the folded display name — and each tolerance answers
    * only when it names exactly one algorithm (§4.11 查找的宽容度).
    */
+  readonly resolve: (id: string) => Effect.Effect<Resolution>
+  /** `resolve` for callers that only act on a hit; ambiguity reads as absence. */
   readonly get: (id: string) => Effect.Effect<Algorithm | undefined>
   /** Fuzzy search over ids and display names, by relevance. */
   readonly search: (query: string, limit?: number) => Effect.Effect<readonly Algorithm[]>
@@ -333,10 +350,10 @@ const layer = Layer.effect(
           .sort((a, b) => a.name.localeCompare(b.name))
       })
 
-    const get = (id: string) =>
+    const resolve = (id: string): Effect.Effect<Resolution> =>
       Effect.gen(function* () {
         const registry = yield* Ref.get(held)
-        if (!registry) return undefined
+        if (!registry) return { kind: "missing" as const }
         const all = registry.providers.flatMap((provider) => provider.algorithms)
         // The full id is the only unambiguous key, so it answers first and
         // alone. Everything below it is a TOLERANCE, and the rule for all of
@@ -351,23 +368,31 @@ const layer = Layer.effect(
         // came first would let a caller run an algorithm it never asked for and
         // never find out; one extra round trip is the cheaper outcome by far.
         const exact = all.find((algorithm) => algorithm.id === id)
-        if (exact) return exact
+        if (exact) return { kind: "found" as const, algorithm: exact }
 
         const wanted = new Set([fold(id), fold(stripPrefix(id))].filter((value) => value.length > 0))
-        if (wanted.size === 0) return undefined
+        if (wanted.size === 0) return { kind: "missing" as const }
+
+        const tier = (matched: readonly Algorithm[]): Resolution | undefined => {
+          if (matched.length === 1) return { kind: "found", algorithm: matched[0]! }
+          if (matched.length > 1) return { kind: "ambiguous", candidates: matched.map((item) => item.id) }
+          return undefined
+        }
 
         // Folded, with and against the provider prefix — one tier, because a
         // bare short-form match is just a folded match that needed no folding.
-        const byId = all.filter(
-          (algorithm) => wanted.has(fold(algorithm.id)) || wanted.has(fold(stripPrefix(algorithm.id))),
+        const byId = tier(
+          all.filter((algorithm) => wanted.has(fold(algorithm.id)) || wanted.has(fold(stripPrefix(algorithm.id)))),
         )
-        if (byId.length > 0) return byId.length === 1 ? byId[0] : undefined
+        if (byId) return byId
 
         // Display names last: they are labels, not identifiers, and only reach
         // here when nothing read the key as an id at all.
-        const byName = all.filter((algorithm) => wanted.has(fold(algorithm.name)))
-        return byName.length === 1 ? byName[0] : undefined
+        return tier(all.filter((algorithm) => wanted.has(fold(algorithm.name)))) ?? { kind: "missing" }
       })
+
+    const get = (id: string) =>
+      resolve(id).pipe(Effect.map((outcome) => (outcome.kind === "found" ? outcome.algorithm : undefined)))
 
     const search = (query: string, limit = 10) =>
       Effect.gen(function* () {
@@ -392,7 +417,7 @@ const layer = Layer.effect(
         return fuzzysort.go(input, candidates, { limit, threshold: -10000 }).map((result) => result.target)
       })
 
-    return Service.of({ build, invalidate, groups, inGroup, get, search, suggest })
+    return Service.of({ build, invalidate, groups, inGroup, resolve, get, search, suggest })
   }),
 )
 

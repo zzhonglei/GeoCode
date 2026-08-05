@@ -288,8 +288,29 @@ export const QgisDocTool = Tool.define<
               metadata: { truncated: false },
             }
           }
-          const algorithm = yield* catalog.get(params.algorithm)
-          if (!algorithm) {
+          const resolution = yield* catalog.resolve(params.algorithm)
+          // Ambiguity and absence need opposite advice, so they must not read
+          // the same. "Not found" for a name the catalog holds four of is
+          // simply false, and it sends the model off searching when all it has
+          // to do is choose. The candidates come from the resolution itself:
+          // they are the set the lookup declined to pick between, not fuzzy
+          // neighbours re-guessed afterwards (GEOKERNEL §4.11).
+          if (resolution.kind === "ambiguous") {
+            return {
+              title: `QGIS algorithm: ${params.algorithm}`,
+              output: framed(
+                `"${params.algorithm}" names ${resolution.candidates.length} algorithms, so it is not a usable identifier on its own.\n` +
+                  `Call again with one of these full IDs: ${resolution.candidates.join(", ")}`,
+              ),
+              metadata: {
+                truncated: false,
+                algorithm: params.algorithm,
+                ambiguous: true,
+                candidates: resolution.candidates,
+              },
+            }
+          }
+          if (resolution.kind === "missing") {
             const suggestions = yield* catalog.suggest(params.algorithm, "algorithm")
             const hint = suggestions.length > 0 ? `\nDid you mean: ${suggestions.join(", ")}?` : ""
             return {
@@ -301,6 +322,7 @@ export const QgisDocTool = Tool.define<
               metadata: { truncated: false, algorithm: params.algorithm },
             }
           }
+          const algorithm = resolution.algorithm
           return {
             title: algorithm.id,
             output: framed(formatAlgorithm(algorithm)),

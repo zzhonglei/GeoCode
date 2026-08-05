@@ -72,6 +72,7 @@ function scriptedCatalog(outcomes: (QgisCatalog.BuildOutcome | "hang")[]) {
   const layer = Layer.succeed(
     QgisCatalog.Service,
     QgisCatalog.Service.of({
+      resolve: () => Effect.succeed({ kind: "missing" as const }),
       build: () =>
         Effect.gen(function* () {
           const call = yield* Ref.updateAndGet(calls, (n) => n + 1)
