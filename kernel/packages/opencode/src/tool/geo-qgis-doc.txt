@@ -1,0 +1,24 @@
+Use this tool to search and browse QGIS Processing algorithm documentation.
+
+This tool supports four actions:
+- list_groups: List all algorithm groups with their algorithm counts. No other parameters needed.
+- list_algorithms: List all algorithms in a specific group. Requires the "group" parameter (a group name from list_groups output; capitalisation and spacing need not match).
+- read: Read the full documentation for a specific algorithm. Requires the "algorithm" parameter. Prefer the full algorithm ID (e.g. "native:buffer"): a bare name such as "buffer" or "Slope" is refused when several algorithms share it, and the reply then lists the candidates for you to choose between.
+- search: Fuzzy search for algorithms by keyword. Requires the "query" parameter. Returns the top 10 matching algorithms with their IDs, groups, and descriptions. Use this when you don't know the exact algorithm name.
+
+Examples:
+  action: "list_groups"
+  → Returns all available algorithm groups with counts, e.g. "1. Vector geometry (23)"
+
+  action: "list_algorithms", group: "Vector geometry"
+  → Returns all algorithms in the "Vector geometry" group.
+
+  action: "read", algorithm: "native:buffer"
+  → Returns the full documentation for the "buffer" algorithm, including parameters and outputs.
+
+  action: "search", query: "buffer"
+  → Returns algorithms matching "buffer", e.g. "native:buffer", "native:multiringconstantbuffer", etc.
+
+When the documentation returned by `read` for an algorithm is incomplete, use the URL printed at the end of that output with webfetch to load the algorithm's full official QGIS documentation page.
+
+This tool needs the user's QGIS environment. When that environment is not ready, the output says exactly what is missing and who can fix it — relay that to the user instead of retrying.

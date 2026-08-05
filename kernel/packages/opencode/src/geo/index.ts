@@ -47,6 +47,15 @@ export const node = LayerNode.group([
   GeoNet.node,
   GeoStatus.node,
   GeoQgis.node,
+  // The catalog is one of the two consumers §4.11 names — algorithm retrieval
+  // is the tool layer's, and qgis/index.ts already lists it on the module's
+  // face. It has to be a GROUP MEMBER to be reachable: compile() provides a
+  // node's deps (hidden) and provideMerges group members (exposed), so as a
+  // dep of GeoQgis.node alone the service exists but nothing outside can ask
+  // for it. Same node object, so the memo map hands out one instance — the
+  // lifecycle's catalog and the tool layer's are the same catalog, which is
+  // the whole point (a second one would answer from an empty registry).
+  GeoQgis.QgisCatalog.node,
   GeeService.node,
   GeoOsm.node,
   GdalService.node,
