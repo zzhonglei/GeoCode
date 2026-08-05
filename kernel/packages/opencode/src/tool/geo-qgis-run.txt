@@ -1,0 +1,26 @@
+Use this tool to execute QGIS Processing algorithms.
+
+IMPORTANT:
+- Before running any algorithm, you MUST use QgisDoc (action: "read") to learn about it.
+- This tool runs QGIS headlessly for data processing — no GUI, no map composition. Input/output parameters MUST be file paths; layer objects and "memory:" temp layers will not work.
+- In multi-step pipelines, reduce data first (clip/filter), then run expensive steps (joins/classify).
+- For large feature counts (e.g. POI, grids), use `.gpkg` for both inputs and outputs to speed up computation. Otherwise default to `.shp` or `.geojson`.
+- GeoJSON output MUST be in WGS-84 (EPSG:4326). Do not write GeoJSON in any other CRS.
+
+Coordinate System Rule:
+- QGIS algorithms do NOT automatically validate the input CRS, and QgisDoc may not explicitly state which CRS is required. Before running any algorithm, you MUST decide whether it should operate on PCS (meters/feet) or GCS (degrees) data.
+- Algorithms producing or consuming linear units (distance, area, buffer, density, slope) MUST run on PCS. GCS gives meaningless results — e.g. a 500m buffer becomes 500 degrees.
+- Reproject with `native:reprojectlayer` or `gdal:warpreproject` when needed.
+
+Usage:
+- algorithm: The full QGIS algorithm ID, e.g. "native:xxxxx", "gdal:xxxxxx", "qgis:xxxxxx". Use the full ID: a bare name is refused when several algorithms share it.
+- parameters: A JSON string of algorithm parameters. The keys and values depend on the specific algorithm. Use QgisDoc (action: "read") to learn what parameters are needed.
+- timeout: Optional timeout in seconds (default: 60). Increase for large datasets or complex operations.
+
+Example:
+  algorithm: "native:xxxxxx"
+  parameters: '{"Parameter 0": "/path/to/input.shp", "Parameter 1": 100, "Parameter 2": "/path/to/output.shp"}'
+
+The output ends with how the run terminated and how long it took. A run reported as cancelled was stopped by the user — do not restart it on your own; ask what they want instead.
+
+This tool needs the user's QGIS environment. When that environment is not ready, the output says exactly what is missing and who can fix it — relay that to the user instead of retrying.

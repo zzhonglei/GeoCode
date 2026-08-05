@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import * as fs from "fs"
 import * as path from "path"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { RASTER_MAIN, VECTOR_MAIN } from "@opencode-ai/core/filesystem/geo-extensions"
 import { Global } from "@opencode-ai/core/global"
 import { Agent } from "../src/agent/agent"
-import { GeoKernel, GeoQgis } from "../src/geo"
+import { GeoKernel, GeoQgis, GeoRuntime } from "../src/geo"
 import { InstanceState } from "../src/effect/instance-state"
 import { Permission } from "../src/permission"
 import { RuntimeFlags } from "../src/effect/runtime-flags"
@@ -189,6 +189,95 @@ describe("geo tool registration", () => {
       // first must never drift outside the second.
       for (const ext of VECTOR_SUPPORTED) expect(VECTOR_MAIN).toContain(ext)
       for (const ext of RASTER_SUPPORTED) expect(RASTER_MAIN).toContain(ext)
+    }),
+  )
+})
+
+/* A cancelled read, with the gate and the subprocess stood in for.
+ *
+ * Upstream does not interrupt a tool when the signal fires — it takes whatever
+ * the tool returns and completes the call with it (session/tools.ts) — so what
+ * comes back here is what the user and the model both see for the user's own
+ * Esc. Reporting it as a broken read hands the model something to retry, and
+ * hands the user a fault that never happened.
+ */
+describe("ReadGeoData, cancelled", () => {
+  const cancelledRuntime = Layer.mock(GeoRuntime.Service)({
+    run: () =>
+      Effect.succeed({
+        code: null,
+        reason: "abort",
+        stdout: "",
+        stderr: "",
+        durationMs: 3,
+        truncated: false,
+        drainIncomplete: false,
+      } satisfies GeoRuntime.Result),
+    killAllSync: () => {},
+  })
+
+  const openGate = Layer.succeed(
+    GeoQgis.Service,
+    GeoQgis.Service.of({
+      gate: () =>
+        Effect.succeed({
+          ok: true,
+          environment: {
+            python: "/fake/python3.12",
+            prefix: "/fake/prefix",
+            env: {},
+            dllDirectories: [],
+            versions: { python: "3.12.11", gdal: "3.12.0", qgis: "3.44.9" },
+            processing: true,
+          },
+        }),
+    }),
+  )
+
+  const it = testEffect(
+    LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
+      [RuntimeFlags.node, RuntimeFlags.layer()],
+      [GeoQgis.node, openGate],
+      [GeoRuntime.node, cancelledRuntime],
+    ]),
+  )
+
+  it.instance("says the user cancelled, in the same words the other QGIS tools use", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const permission = yield* Permission.Service
+      const agent = yield* Agent.Service.use((svc) => svc.get("GeoAgent"))
+      const ctx = yield* InstanceState.context
+      const target = path.join(ctx.directory, "cancelled.geojson")
+      fs.writeFileSync(target, '{"type":"FeatureCollection","features":[]}')
+
+      const controller = new AbortController()
+      controller.abort()
+      const georead = (yield* registry.all()).find((tool) => tool.id === "ReadGeoData")!
+      const result = yield* georead
+        .execute(
+          { filePath: target, mode: "metadata" },
+          {
+            sessionID: SessionID.make("ses_geo_read_cancel"),
+            messageID: MessageID.make("msg_geo_read_cancel"),
+            agent: "GeoAgent",
+            abort: controller.signal,
+            messages: [],
+            metadata: () => Effect.void,
+            ask: (req) =>
+              permission
+                .ask({ ...req, sessionID: SessionID.make("ses_geo_read_cancel"), ruleset: agent!.permission })
+                .pipe(Effect.orDie),
+          },
+        )
+        .pipe(Effect.timeout(10_000), Effect.exit)
+
+      expect(Exit.isSuccess(result)).toBe(true)
+      if (Exit.isSuccess(result)) {
+        expect(result.value.output).toContain("User cancelled execution")
+        expect(result.value.output).not.toContain("Read failed")
+        expect(result.value.metadata.aborted).toBe(true)
+      }
     }),
   )
 })

@@ -28,6 +28,7 @@ import { Provider } from "@/provider/provider"
 import { WebSearchTool } from "./websearch"
 import { GeoReadTool } from "./geo-read" // GeoCode: the geographic toolset (docs/TOOLS.md §3)
 import { QgisDocTool } from "./geo-qgis-doc" // GeoCode
+import { RunQgisAlgorithmTool } from "./geo-qgis-run" // GeoCode
 import { GeoKernel } from "@/geo" // GeoCode: its services flow into this registry's layer (docs/TOOLS.md §7)
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
@@ -117,6 +118,7 @@ const layer = Layer.effect(
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
     const georead = yield* GeoReadTool // GeoCode: appended, off upstream's churn path
     const qgisdoc = yield* QgisDocTool // GeoCode
+    const qgisrun = yield* RunQgisAlgorithmTool // GeoCode
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -224,6 +226,7 @@ const layer = Layer.effect(
           patch: Tool.init(patchtool),
           georead: Tool.init(georead), // GeoCode
           qgisdoc: Tool.init(qgisdoc), // GeoCode
+          qgisrun: Tool.init(qgisrun), // GeoCode
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
@@ -253,6 +256,7 @@ const layer = Layer.effect(
             // tool asks under its geo_* permission key (docs/TOOLS.md §4, §9).
             tool.georead,
             tool.qgisdoc,
+            tool.qgisrun,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),

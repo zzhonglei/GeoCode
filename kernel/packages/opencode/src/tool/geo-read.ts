@@ -210,12 +210,35 @@ export const GeoReadTool = Tool.define<
       }
       const header = yield* GeoTool.qgisHeader(status)
 
+      /**
+       * A cancelled read is not a failed read.
+       *
+       * Upstream does not interrupt a tool when the signal fires — it takes
+       * whatever the tool returns and completes the call with it
+       * (session/tools.ts) — so grading a cancellation as a failure files the
+       * user's own Esc under "the read broke", and the Agent reads that as
+       * something to retry. Same banner the QGIS group's other tools use, so
+       * one event does not arrive as two different stories.
+       */
+      const cancelled = () => ({
+        title,
+        output: [header, GeoTool.terminationBanner("abort")].filter(Boolean).join("\n"),
+        metadata: {
+          mode: params.mode,
+          truncated: false,
+          error_code: "Aborted",
+          aborted: true,
+          partial: true,
+        },
+      })
+
       if (params.mode === "preview") {
         const outcome = yield* GeoQgis.QgisReader.renderPreview(runtime, gate.environment, {
           file: filepath,
           abort: ctx.abort,
         }).pipe(Effect.catch((error) => Effect.succeed({ ok: false as const, detail: error.message })))
         if (!outcome.ok) {
+          if (ctx.abort.aborted) return cancelled()
           return {
             title,
             output: [header, `Preview failed: ${outcome.detail}`].filter(Boolean).join("\n"),
@@ -263,6 +286,7 @@ export const GeoReadTool = Tool.define<
       ).pipe(Effect.catch((error) => Effect.succeed({ ok: false as const, detail: error.message })))
 
       if (!outcome.ok) {
+        if (ctx.abort.aborted) return cancelled()
         return {
           title,
           output: [header, `Read failed: ${outcome.detail}`].filter(Boolean).join("\n"),
