@@ -82,6 +82,76 @@ const REGISTRY: QgisCatalog.Registry = {
           parameters: [],
           outputs: [],
         },
+        // No group at all: groups() lists these under UNGROUPED, so that name
+        // has to be a name inGroup() answers to (§4.11).
+        {
+          id: "gdal:orphan",
+          name: "Orphan",
+          group: "",
+          description: "Belongs nowhere.",
+          helpText: "orphan help",
+          parameters: [],
+          outputs: [],
+        },
+      ],
+    },
+    {
+      id: "extra",
+      name: "Extra",
+      algorithms: [
+        // A display name that folds differently from its id — the only shape
+        // that exercises name lookup rather than id lookup. Real: QGIS ships
+        // `native:zonalstatisticsfb` named "Zonal statistics".
+        {
+          id: "extra:zonalstatisticsfb",
+          name: "Zonal statistics",
+          group: "Raster analysis",
+          description: "Zonal stats.",
+          helpText: "zonal help",
+          parameters: [],
+          outputs: [],
+        },
+        // One short id, two providers. Real: gdal:slope and native:slope, and
+        // ten more pairs on a 3.44 install.
+        {
+          id: "extra:slope",
+          name: "Slope one",
+          group: "Raster terrain analysis",
+          description: "Slope, one way.",
+          helpText: "slope help",
+          parameters: [],
+          outputs: [],
+        },
+        {
+          id: "other:slope",
+          name: "Slope two",
+          group: "Raster terrain analysis",
+          description: "Slope, another way.",
+          helpText: "slope help",
+          parameters: [],
+          outputs: [],
+        },
+        // One display name, two algorithms, and it folds to nothing any id
+        // folds to — the only shape where the name lookup itself has to choose.
+        // Real: "Raster calculator" names four algorithms on a 3.44 install.
+        {
+          id: "extra:splitlinesbylength",
+          name: "Split lines",
+          group: "Vector overlay",
+          description: "Split by length.",
+          helpText: "split help",
+          parameters: [],
+          outputs: [],
+        },
+        {
+          id: "other:splitlinesbypoints",
+          name: "Split lines",
+          group: "Vector overlay",
+          description: "Split by points.",
+          helpText: "split help",
+          parameters: [],
+          outputs: [],
+        },
       ],
     },
   ],
@@ -162,16 +232,79 @@ describe("qgis catalog queries", () => {
     }),
   )
 
+  it.effect("lookup answers to the forms the catalog itself prints", () =>
+    Effect.gen(function* () {
+      const catalog = yield* QgisCatalog.Service
+      yield* catalog.build(ENVIRONMENT)
+
+      // The consumer is a language model: it does not mistype, it re-spells.
+      // Every form below is a re-spelling of something this catalog printed.
+      expect((yield* catalog.get("Native:Buffer"))?.id).toBe("native:buffer") // case
+      expect((yield* catalog.get("gdal:CLIPRASTERBYEXTENT"))?.id).toBe("gdal:cliprasterbyextent")
+      expect((yield* catalog.get("clip_raster_by_extent"))?.id).toBe("gdal:cliprasterbyextent") // snake
+      expect((yield* catalog.get("clip-raster-by-extent"))?.id).toBe("gdal:cliprasterbyextent") // kebab
+      expect((yield* catalog.get("Clip raster by extent"))?.id).toBe("gdal:cliprasterbyextent") // spaces
+      // A display name that shares no folded form with its id — the case that
+      // only the name lookup can answer.
+      expect((yield* catalog.get("Zonal statistics"))?.id).toBe("extra:zonalstatisticsfb")
+      expect((yield* catalog.get("zonal statistics"))?.id).toBe("extra:zonalstatisticsfb")
+
+      // Ambiguity is a miss, at every tolerance and by the same rule: two
+      // algorithms sharing a short id, and two sharing a display name, both
+      // answer nothing rather than whichever came first. Running an algorithm
+      // the caller never asked for is the one failure it cannot detect.
+      expect(yield* catalog.get("slope")).toBeUndefined()
+      expect(yield* catalog.get("SLOPE")).toBeUndefined()
+      expect(yield* catalog.get("Split lines")).toBeUndefined()
+      expect(yield* catalog.get("split_lines")).toBeUndefined()
+
+      // The full id always answers — it is the only key that cannot be
+      // ambiguous, which is why it is the one the catalog prints first.
+      expect((yield* catalog.get("extra:slope"))?.description).toBe("Slope, one way.")
+      expect((yield* catalog.get("other:slope"))?.description).toBe("Slope, another way.")
+      expect((yield* catalog.get("extra:splitlinesbylength"))?.description).toBe("Split by length.")
+
+      // A key that folds to nothing is no key, not a wildcard.
+      expect(yield* catalog.get("///")).toBeUndefined()
+    }),
+  )
+
+  it.effect("a group answers to every spelling it is listed under", () =>
+    Effect.gen(function* () {
+      const catalog = yield* QgisCatalog.Service
+      yield* catalog.build(ENVIRONMENT)
+
+      for (const spelling of ["Vector geometry", "vector geometry", "Vector Geometry", "vectorgeometry"]) {
+        expect((yield* catalog.inGroup(spelling)).map((algorithm) => algorithm.id).sort()).toEqual([
+          "gdal:warpreproject",
+          "native:buffer",
+        ])
+      }
+
+      // groups() counts the groupless under UNGROUPED, so inGroup owes an
+      // answer under that same name — the two used to disagree, which made a
+      // listed group unreachable.
+      const groups = yield* catalog.groups()
+      expect(groups.find((group) => group.name === QgisCatalog.UNGROUPED)?.count).toBe(1)
+      expect((yield* catalog.inGroup(QgisCatalog.UNGROUPED)).map((algorithm) => algorithm.id)).toEqual(["gdal:orphan"])
+
+      expect(yield* catalog.inGroup("no such group")).toEqual([])
+      expect(yield* catalog.inGroup("   ")).toEqual([])
+    }),
+  )
+
   it.effect("search and suggestion rank by closeness", () =>
     Effect.gen(function* () {
       const catalog = yield* QgisCatalog.Service
       yield* catalog.build(ENVIRONMENT)
       const found = yield* catalog.search("clip")
       expect(found.length).toBeGreaterThanOrEqual(2)
-      // Subsequence semantics, same as the old build: a DROPPED character
-      // still matches ("bufer" → "buffer"), a SUBSTITUTED one does not — the
-      // replacement character has to exist in the target. Real-machine run
-      // confirmed the dropped-character case is the one users actually hit.
+      // Subsequence semantics, same as the old build: dropped characters and
+      // truncations still match ("bufer" → "buffer"), EXTRA ones never do
+      // ("bufffer" → nothing), because the query has to be findable inside the
+      // target. That limit is acceptable precisely because the re-spellings a
+      // model actually produces — case, spaces, separators, display names —
+      // are now resolved by get/inGroup before anything reaches this path.
       const suggested = yield* catalog.suggest("native:bufer", "algorithm")
       expect(suggested[0]).toBe("native:buffer")
       const groups = yield* catalog.suggest("Vector geomtry", "group")

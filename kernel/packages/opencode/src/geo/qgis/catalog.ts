@@ -200,9 +200,13 @@ export interface Interface {
   readonly invalidate: () => Effect.Effect<void>
   /** Deduplicated groups across providers, with counts, in stable order. */
   readonly groups: () => Effect.Effect<readonly GroupInfo[]>
-  /** Every algorithm in a group, across providers, in stable order. */
+  /** Every algorithm in a group, across providers, in stable order. The group name is matched folded (§4.11). */
   readonly inGroup: (group: string) => Effect.Effect<readonly Algorithm[]>
-  /** Lookup by id, accepting both `native:buffer` and the short `buffer` (§4.11). */
+  /**
+   * Lookup by id: the exact id first, then the folded id with or without the
+   * provider prefix, then the folded display name — and each tolerance answers
+   * only when it names exactly one algorithm (§4.11 查找的宽容度).
+   */
   readonly get: (id: string) => Effect.Effect<Algorithm | undefined>
   /** Fuzzy search over ids and display names, by relevance. */
   readonly search: (query: string, limit?: number) => Effect.Effect<readonly Algorithm[]>
@@ -215,6 +219,26 @@ export class Service extends Context.Service<Service, Interface>()("@geocode/Qgi
 function stripPrefix(id: string): string {
   const index = id.indexOf(":")
   return index >= 0 ? id.slice(index + 1) : id
+}
+
+/**
+ * The comparison form of a lookup key: lowercased, with everything that is not
+ * a letter or a digit removed (§4.11 查找的宽容度).
+ *
+ * The consumer of these queries is a language model, and a model does not
+ * mistype — it RE-SPELLS. Handed `native:reprojectlayer — Reproject layer` it
+ * will later write `Reproject Layer`, `reproject layer` or `reproject_layer`,
+ * all of which are the same name to a reader and none of which are equal to
+ * each other. Folding both sides makes case, spaces, underscores and hyphens
+ * stop being differences, which is the entire distance between "the catalog
+ * printed it" and "the catalog accepts it back".
+ *
+ * Latin-only by construction, and that is safe here: the catalog is English as
+ * a property of how it is exported (§4.11), and ids are ASCII. A key that
+ * folds to nothing is treated as no key rather than as a wildcard.
+ */
+function fold(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "")
 }
 
 const layer = Layer.effect(
@@ -294,8 +318,18 @@ const layer = Layer.effect(
       Effect.gen(function* () {
         const registry = yield* Ref.get(held)
         if (!registry) return []
+        const wanted = fold(group)
+        if (!wanted) return []
+        // Folded on both sides, and through the SAME `|| UNGROUPED` fallback
+        // groups() lists by. Bare equality made this the one query that could
+        // not answer for its own output twice over: a group listed as "Vector
+        // geometry" went missing the moment a caller wrote "Vector Geometry",
+        // and the algorithms counted under UNGROUPED could never be reached at
+        // all (which is the exact failure that constant exists to prevent).
         return registry.providers
-          .flatMap((provider) => provider.algorithms.filter((algorithm) => algorithm.group === group))
+          .flatMap((provider) =>
+            provider.algorithms.filter((algorithm) => fold(algorithm.group || UNGROUPED) === wanted),
+          )
           .sort((a, b) => a.name.localeCompare(b.name))
       })
 
@@ -304,12 +338,35 @@ const layer = Layer.effect(
         const registry = yield* Ref.get(held)
         if (!registry) return undefined
         const all = registry.providers.flatMap((provider) => provider.algorithms)
-        // Exact id first; the short form only as a fallback, so an exact match
-        // can never be shadowed by a same-named algorithm in another provider.
+        // The full id is the only unambiguous key, so it answers first and
+        // alone. Everything below it is a TOLERANCE, and the rule for all of
+        // them is the same: a tolerance never guesses. When a looser key names
+        // more than one algorithm the choice belongs to the caller, so the
+        // lookup misses and the suggestion path shows the candidates.
+        //
+        // This is not hypothetical. On a real 3.44 install 11 short ids are
+        // shared across providers (gdal:slope / native:slope, and ten more) and
+        // 8 display names name several algorithms — "Raster calculator" names
+        // four. Their parameter sets differ entirely, so handing back whichever
+        // came first would let a caller run an algorithm it never asked for and
+        // never find out; one extra round trip is the cheaper outcome by far.
         const exact = all.find((algorithm) => algorithm.id === id)
         if (exact) return exact
-        const short = stripPrefix(id)
-        return all.find((algorithm) => stripPrefix(algorithm.id) === short)
+
+        const wanted = new Set([fold(id), fold(stripPrefix(id))].filter((value) => value.length > 0))
+        if (wanted.size === 0) return undefined
+
+        // Folded, with and against the provider prefix — one tier, because a
+        // bare short-form match is just a folded match that needed no folding.
+        const byId = all.filter(
+          (algorithm) => wanted.has(fold(algorithm.id)) || wanted.has(fold(stripPrefix(algorithm.id))),
+        )
+        if (byId.length > 0) return byId.length === 1 ? byId[0] : undefined
+
+        // Display names last: they are labels, not identifiers, and only reach
+        // here when nothing read the key as an id at all.
+        const byName = all.filter((algorithm) => wanted.has(fold(algorithm.name)))
+        return byName.length === 1 ? byName[0] : undefined
       })
 
     const search = (query: string, limit = 10) =>
