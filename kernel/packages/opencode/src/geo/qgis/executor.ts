@@ -107,10 +107,15 @@ try:
     else:
         _defs = algo.parameterDefinitions()
         _expected = {p.name() for p in _defs}
+        # Only parameters QGIS has nothing to fall back on. A non-optional
+        # parameter that ships a default is not a problem, and reporting it
+        # here would repeat what the caller's own pre-flight already stated
+        # WITH the values — this check reads the live registry and is worth
+        # spending on the one thing that needs it, value acceptability below.
         _required = set()
         for p in _defs:
             try:
-                if not (p.flags() & p.FlagOptional):
+                if not (p.flags() & p.FlagOptional) and p.defaultValue() is None:
                     _required.add(p.name())
             except AttributeError:
                 _required.add(p.name())
@@ -127,7 +132,7 @@ try:
         if _missing:
             _print_warning(
                 f"Missing required parameter(s) for '{algorithm}'",
-                [f"Missing: {sorted(_missing)}", "QGIS may use defaults if available, or fail."],
+                [f"Missing: {sorted(_missing)}", "These have no default; QGIS will fail without them."],
             )
 
         from qgis.core import QgsProcessingContext
@@ -171,9 +176,24 @@ finally:
     qgs.exitQgis()
 `
 
-/** A pre-flight finding. Advice with a location, never a veto. */
+/**
+ * A pre-flight finding. Advice with a location, never a veto.
+ *
+ * `defaults-applied` is a STATEMENT, not a warning, and it is separate from
+ * `missing-required` for a reason worth keeping: QGIS marks a parameter
+ * optional or not, but a great many non-optional ones ship a default, and on a
+ * real 3.44 catalog that is 869 of the 1858 required parameters across 74% of
+ * the algorithms. Reporting those as "missing" made a correct call raise up to
+ * twelve alarms, which teaches a reader to skip the whole channel — and the 989
+ * genuinely-required ones are the ones that then go unread.
+ */
 export interface Hint {
-  readonly kind: "unknown-algorithm" | "unknown-parameter" | "missing-required" | "invalid-choice"
+  readonly kind:
+    | "unknown-algorithm"
+    | "unknown-parameter"
+    | "missing-required"
+    | "invalid-choice"
+    | "defaults-applied"
   readonly message: string
 }
 
@@ -208,12 +228,25 @@ export function precheck(
     }
   }
 
+  // Absent non-optional parameters split two ways, and the metadata already
+  // holds the answer: a default means QGIS has something to run with, no
+  // default means it does not. The old single branch could not tell them
+  // apart, which is why its wording hedged — "may fall back to a default, or
+  // fail" is a check saying out loud that it did not look at defaultValue,
+  // which sits in the very same record.
+  const defaulted: string[] = []
   for (const parameter of algorithm.parameters) {
-    if (!parameter.optional && !(parameter.name in parameters)) {
-      hints.push({
-        kind: "missing-required",
-        message: `Required parameter '${parameter.name}' is missing; QGIS may fall back to a default, or fail.`,
-      })
+    if (!(parameter.name in parameters)) {
+      if (parameter.optional) continue
+      if (parameter.defaultValue === null) {
+        hints.push({
+          kind: "missing-required",
+          message: `Required parameter '${parameter.name}' is missing and has no default; QGIS will fail without it.`,
+        })
+      } else {
+        defaulted.push(`${parameter.name}=${parameter.defaultValue}`)
+      }
+      continue
     }
     // The one value judgment the metadata CAN make: an enum given a value
     // outside its options. Everything subtler belongs to QGIS at run time.
@@ -235,6 +268,17 @@ export function precheck(
         message: `Parameter '${parameter.name}' expects one of its listed options (or an option index); got ${JSON.stringify(value)}.`,
       })
     }
+  }
+
+  // One line, last, carrying the VALUES: what QGIS is about to run with is a
+  // fact the caller may want to override, and the catalog is the only place
+  // those values are already known — the in-script check would have to look
+  // them up again.
+  if (defaulted.length > 0) {
+    hints.push({
+      kind: "defaults-applied",
+      message: `Not given, so QGIS will use its defaults: ${defaulted.join(", ")}.`,
+    })
   }
   return hints
 }

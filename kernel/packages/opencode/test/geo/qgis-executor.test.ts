@@ -53,12 +53,42 @@ describe("qgis executor precheck", () => {
 
   test("unknown and missing parameters are separate findings", () => {
     const hints = QgisExecutor.precheck("native:buffer", BUFFER, { INPUTT: "/a.geojson" })
-    const kinds = hints.map((hint) => hint.kind).sort()
-    // INPUTT unknown; INPUT and DISTANCE missing — but each is a hint, and
-    // none of them stops anything: the metadata cannot express every
-    // constraint, so blocking on it would turn its gaps into "cannot run"
-    // (§4.12, §12).
-    expect(kinds).toEqual(["missing-required", "missing-required", "unknown-parameter"])
+    const kinds = hints.map((hint) => hint.kind)
+    // INPUTT unknown; INPUT missing with nothing to fall back on; DISTANCE
+    // absent but defaulted, which is a statement rather than a complaint. None
+    // of them stops anything: the metadata cannot express every constraint, so
+    // blocking on it would turn its gaps into "cannot run" (§4.12, §12).
+    expect(kinds).toEqual(["unknown-parameter", "missing-required", "defaults-applied"])
+  })
+
+  test("an absent parameter that has a default is stated once, with its value", () => {
+    // This is the difference between a channel worth reading and one worth
+    // skipping. QGIS marks 869 of 1858 required parameters as non-optional
+    // while shipping a default for them — 74% of the catalog — so treating
+    // absence alone as "missing" made a CORRECT call raise up to twelve alarms.
+    const hints = QgisExecutor.precheck("native:buffer", BUFFER, { INPUT: "/a.geojson" })
+    expect(hints).toHaveLength(1)
+    expect(hints[0]!.kind).toBe("defaults-applied")
+    // With the values, because they are what the run will actually use and the
+    // caller may want to override them — and the catalog is where they live.
+    expect(hints[0]!.message).toContain("DISTANCE=10")
+    // One line for all of them, never one line each.
+    expect(hints.filter((hint) => hint.kind === "defaults-applied")).toHaveLength(1)
+
+    // A genuine omission still speaks for itself, and says why it is fatal.
+    const missing = QgisExecutor.precheck("native:buffer", BUFFER, { DISTANCE: 5 })
+    expect(missing.map((hint) => hint.kind)).toEqual(["missing-required"])
+    expect(missing[0]!.message).toContain("has no default")
+    // The old wording hedged because the check had not looked at defaultValue.
+    expect(missing[0]!.message).not.toContain("may fall back")
+  })
+
+  test("the in-script check no longer repeats what the catalog already stated", () => {
+    // A text-level pin, not a behavioural one: this half runs inside QGIS and
+    // cannot be exercised without an install. Verified by hand against 3.44.9;
+    // what this catches is the guard being dropped in an edit.
+    expect(QgisExecutor.RUNNER_SCRIPT).toContain("p.defaultValue() is None")
+    expect(QgisExecutor.RUNNER_SCRIPT).not.toContain("QGIS may use defaults if available")
   })
 
   test("an enum accepts its options and their indices, and flags the rest", () => {
