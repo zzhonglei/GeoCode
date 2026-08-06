@@ -118,7 +118,9 @@ describe("gee setup chain", () => {
     const { it, body } = run([{ stdout: marked({ missing: ["geedim", "geemap"] }) }], (runtime, calls) =>
       Effect.gen(function* () {
         const state = yield* GeeSetup.probe(runtime, { python, project: "p" })
-        expect(state).toEqual({ status: "packages-missing", missing: ["geedim", "geemap"] })
+        // The interpreter travels with the gap, because the guidance for this
+        // step is an install command located FROM it (§5.11 安装纪律).
+        expect(state).toEqual({ status: "packages-missing", python, missing: ["geedim", "geemap"] })
 
         // The manifest goes over as an ARGUMENT the script parses, never
         // spliced into the source. A package name is a string from a list we
@@ -139,7 +141,7 @@ describe("gee setup chain", () => {
       Effect.gen(function* () {
         // Packages complete, credentials absent — the chain stops here even
         // though the project is also unset. One problem at a time (§5.11).
-        expect(yield* GeeSetup.probe(runtime, { python })).toEqual({ status: "credentials-missing" })
+        expect(yield* GeeSetup.probe(runtime, { python })).toEqual({ status: "credentials-missing", python })
       }),
     )
     it.effect("credentials come before the project, and stop the chain alone", body)

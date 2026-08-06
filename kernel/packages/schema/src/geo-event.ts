@@ -127,8 +127,26 @@ export const GeeSetup = Schema.Union([
   Schema.Struct({ status: Schema.Literal("config-error"), file: Schema.String, message: Schema.String }),
   Schema.Struct({ status: Schema.Literal("python-missing"), python: Schema.String }),
   Schema.Struct({ status: Schema.Literal("checking") }),
-  Schema.Struct({ status: Schema.Literal("packages-missing"), missing: Schema.Array(Schema.String) }),
-  Schema.Struct({ status: Schema.Literal("credentials-missing") }),
+  /**
+   * These two carry the interpreter for the same reason `ready` carries its
+   * three: once the chain stops here, nothing else holds it. Guidance for both
+   * steps is a command — install these packages, run this authentication — and
+   * both commands are located FROM the interpreter (§5.11 安装纪律, 认证命令的
+   * 定位). Without it the copy degrades to "use the interpreter you
+   * configured", which is precisely the sentence that leaves a user installing
+   * into the wrong environment.
+   *
+   * The probe states deliberately do not: their guidance names the
+   * configuration file and asks the reader to look, which costs one read and
+   * keeps the field off a state the lifecycle can reach without a config in
+   * hand.
+   */
+  Schema.Struct({
+    status: Schema.Literal("packages-missing"),
+    python: Schema.String,
+    missing: Schema.Array(Schema.String),
+  }),
+  Schema.Struct({ status: Schema.Literal("credentials-missing"), python: Schema.String }),
   Schema.Struct({ status: Schema.Literal("project-missing") }),
   Schema.Struct({ status: Schema.Literal("probe-timeout") }),
   Schema.Struct({ status: Schema.Literal("probe-failed"), error: Schema.String }),

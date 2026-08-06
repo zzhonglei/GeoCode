@@ -118,7 +118,9 @@ describe("gee composition", () => {
     // wrong attribution. Telling someone their credentials were rejected while
     // the network is down sends them to re-authenticate over a link that
     // cannot carry the request.
-    expect(GeeCompose.facing({ status: "packages-missing", missing: ["geemap"] }, reachable)).toBe("setup")
+    expect(GeeCompose.facing({ status: "packages-missing", python: "/p", missing: ["geemap"] }, reachable)).toBe(
+      "setup",
+    )
     expect(GeeCompose.facing({ status: "checking" }, reachable)).toBe("setup")
     expect(GeeCompose.facing(ready, { status: "unreachable" })).toBe("network")
     expect(GeeCompose.facing(ready, { status: "checking" })).toBe("network")

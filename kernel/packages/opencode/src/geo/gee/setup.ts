@@ -172,7 +172,7 @@ export function probe(
       return { status: "probe-failed" as const, error: `the setup report was not the expected shape\n${tail(result)}` }
     }
     if (report.missing.length > 0) {
-      return { status: "packages-missing" as const, missing: report.missing.map(String) }
+      return { status: "packages-missing" as const, python, missing: report.missing.map(String) }
     }
     // A broken check is not a missing credential. The client library imported
     // fine a moment ago, so failing to reach its credential path means the
@@ -184,7 +184,7 @@ export function probe(
         error: `the credential check could not run: ${report.credentials_error}`,
       }
     }
-    if (report.credentials !== true) return { status: "credentials-missing" as const }
+    if (report.credentials !== true) return { status: "credentials-missing" as const, python }
 
     // 4. The project identifier — a config read, and last in the chain
     // because only an authorized run needs it (§5.2).
