@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { GeoOutput } from "@/geo/runtime"
-import type { GeoQgis, GeoRuntime, GeoStatus } from "@/geo"
+import type { GeeService, GeoQgis, GeoRuntime, GeoStatus } from "@/geo"
 
 /* --- GeoCode: shared scaffolding for the geographic tools (docs/TOOLS.md §6).
  *
@@ -74,6 +74,82 @@ export const qgisHeader = Effect.fn("GeoTool.qgisHeader")(function* (status: Geo
  * voice — the tool layer renders it, it never writes environment copy. */
 
 /**
+ * The GEE gate's own transient shapes.
+ *
+ * Narrower than QGIS's, because the layers below answer differently. A remote
+ * check in flight needs no waiting here: `gate` calls `validate`, which is
+ * serialized, so the call already blocks until there is a conclusion. What is
+ * worth waiting on is a local probe running and a route not yet decided —
+ * both of which a cold start passes through, and neither of which is an answer.
+ */
+const settlingGee = (status: GeoEvent.GeeStatus) =>
+  status.setup.status === "checking" || (status.facing === "network" && status.network.status !== "unreachable")
+
+/**
+ * The GEE gate, waited out — and asked to look again first (§5.8 自愈重探).
+ *
+ * The re-probe is the half that cannot be left out. Three of the states a user
+ * lands in are fixed OUTSIDE the configuration file: they install a package,
+ * they run the authentication command. Nothing about either touches
+ * machine.json, so the watcher never fires and the conclusion on file stays
+ * "missing" no matter how long anyone waits. A tool retry is the only signal
+ * that the world may have changed, and this is where it is treated as one —
+ * without it, someone who has just done exactly what they were told is told
+ * the same thing again.
+ *
+ * `recheck` answers whether it actually started one (it debounces, and it
+ * declines states a re-probe cannot fix), and a started probe is worth one
+ * poll interval before reading: it is forked, so the status has not
+ * necessarily turned over by the time the call returns.
+ */
+export const settledGeeGate = Effect.fn("GeoTool.settledGeeGate")(function* (
+  gee: GeeService.Interface,
+  abort?: AbortSignal,
+) {
+  let gate = yield* gee.gate()
+  if (gate.ok) return gate
+
+  const deadline = Date.now() + SETTLE_LIMIT_MS
+  if (yield* gee.recheck()) {
+    yield* Effect.sleep(SETTLE_POLL_MS)
+    gate = yield* gee.gate()
+  }
+  while (!gate.ok && settlingGee(gate.status) && Date.now() < deadline && !abort?.aborted) {
+    yield* Effect.sleep(SETTLE_POLL_MS)
+    gate = yield* gee.gate()
+  }
+  return gate
+})
+
+/**
+ * The environment header for a usable Earth Engine.
+ *
+ * Two tiers where the old build had three, and the missing one is deliberate.
+ * Its middle tier printed the interpreter, project, reason and raw error for
+ * the post-setup blockers — because there the hint text and the environment
+ * block were separate pieces and only the block carried those fields. Here the
+ * guidance carries them itself, on exactly those states, so a second copy above
+ * it would be the duplication the old build's first tier existed to avoid.
+ *
+ * What remains is the tier that has no other home: a run that reached the
+ * interpreter and then failed on its own terms. Idle, abort, crash and a
+ * non-zero exit all keep the Agent anchored to the environment the script was
+ * actually running in, which nothing in the failure text would otherwise say.
+ */
+export const geeHeader = Effect.fn("GeoTool.geeHeader")(function* (status: GeoStatus.Interface) {
+  const current = yield* status.current("gee")
+  if (!current || current.setup.status !== "ready") return undefined
+  if (current.facing !== "runtime" || current.runtime.status !== "valid") return undefined
+  const parts = [
+    current.setup.version ? `GEE ${current.setup.version}` : "GEE ready",
+    `project ${current.setup.project}`,
+    current.network.status === "reachable" && current.network.route ? `route ${current.network.route}` : undefined,
+    current.setup.python,
+  ].filter((part): part is string => part !== undefined)
+  return `<geo_env>${parts.join(" · ")}</geo_env>`
+})
+
+/**
  * The one field a caller switches on to learn WHY the gate is shut.
  *
  * The raw status name is not enough on its own. The gate wants ready AND
@@ -90,6 +166,26 @@ export function gateStatus(status: GeoEvent.QgisStatus): string {
   if (status.catalog === "failed") return "ready:catalog-failed"
   if (status.catalog === "skipped") return "ready:catalog-skipped"
   return "ready"
+}
+
+/**
+ * The same one field for GEE, whose answer needs two parts rather than one.
+ *
+ * `facing` alone is not it. It says which of the three layers is in the way,
+ * which is the right thing to READ FIRST and useless to act on: "setup" covers
+ * both "no interpreter configured" and "not signed in", and a surface that
+ * cannot tell those apart cannot offer the user anything but the same button
+ * for both. The layer's own state is the other half, so both travel.
+ */
+export function geeGateStatus(status: GeoEvent.GeeStatus): string {
+  switch (status.facing) {
+    case "setup":
+      return `setup:${status.setup.status}`
+    case "network":
+      return `network:${status.network.status}`
+    case "runtime":
+      return `runtime:${status.runtime.status}`
+  }
 }
 
 /**

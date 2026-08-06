@@ -40,9 +40,14 @@ export function base(): ConfigV1.Info {
           // The QGIS group: ReadGeoData / QgisDoc / RunQgisAlgorithm ask under
           // geo_qgis_* keys. Agent-level rules merge after the global deny
           // above, so findLast picks this allow for GeoAgent and the deny for
-          // everyone else (docs/TOOLS.md §4.2 ③). GEE opens here too when its
-          // tool lands; OSM stays with the osmfetch subagent.
+          // everyone else (docs/TOOLS.md §4.2 ③). OSM stays with the osmfetch
+          // subagent.
           "geo_qgis_*": "allow",
+          // The GEE group, one tool for now. A group of its own rather than a
+          // second entry under the QGIS wildcard, because the two answer to
+          // different environments: turning one off is a statement about an
+          // install the user does or does not have (docs/TOOLS.md §3).
+          "geo_gee_*": "allow",
         },
         // Deliberately no `prompt`: GeoAgent picks up prompt/geocode.txt through
         // the base-prompt selector in session/system.ts, which GeoCode returns

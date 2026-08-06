@@ -17,6 +17,7 @@ import { GeeValidate } from "./validate"
 
 export { GeeDeps } from "./deps"
 export { GeeExecutor } from "./executor"
+export { GeeGuidance } from "./guidance"
 export type { Environment } from "./types"
 
 /* --- GeoCode: the GEE lifecycle (docs/GEOKERNEL.md §5.1, §5.7).

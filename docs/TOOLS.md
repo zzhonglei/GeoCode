@@ -212,7 +212,7 @@ task 规则不发明自己的机制,逐个对应上游的形状:
 |---|---|
 | `run-processing.txt` | 三处点名旧工具名 `QgisDoc`,改为新 id。**这是旧版事故的镜像**:描述里写一个名字、注册用另一个,模型照做就失败 |
 | `osm-search.txt` | **新写**耗时说明。§11.2 要求写明"这一步可能要等几分钟",旧版一个字都没有——不写则 Agent 会把正常等待判为卡死并重试,而重试只是再付一次同样的代价 |
-| `gee-run.txt` | 心跳契约已完备(含 `heartbeat()` 用法与"60s idle timeout will FORCE-KILL"的后果),直接迁 |
+| `gee-run.txt` | 心跳契约已完备(含 `heartbeat()` 用法与"60s idle timeout will FORCE-KILL"的后果)。两处小改:去掉对模型无意义的架构词 sidecar;补上 `download_image` 的 `dtype` 参数——代码里一直有,旧版描述漏了。那个 60s 由绊线钉在 `IDLE_FLOOR_SECONDS` 上,因为模型会按它来摆放 `heartbeat()` |
 
 描述文件**无法承载 `GeoCode:` 标记**——内容原样送进模型,注释会污染指令。可审计性只能由绊线提供,与提示词文件同一处理方式(KERNEL.md §5.3)。
 
