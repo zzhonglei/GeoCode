@@ -19,6 +19,13 @@ const DIAG: GeoEvent.QgisDiagnostics = {
   hint: "/somewhere/qgis",
   candidates: {},
   selected: {},
+  // The path the guidance asks the agent to judge. It travels on every broken
+  // state and is the only place it can surface — the environment header is
+  // silent whenever the status is not `ready`.
+  // Deliberately unlike any path the static copy names as an example: with
+  // /opt/homebrew/bin/python3 here the assertion below matched the prose's own
+  // "system pythons look like this" line and passed with the echo removed.
+  interpreter: "/Users/someone/miniconda3/envs/gis/bin/python3.11",
   error: "ImportError: no module named osgeo",
 } as GeoEvent.QgisDiagnostics
 
@@ -68,6 +75,47 @@ describe("QgisGuidance", () => {
     }
     // Five states, five distinct diagnoses — a shared body must not blur them.
     expect(openings.size).toBe(states.length)
+  })
+
+  test("a broken install forbids the agent from installing anything itself", () => {
+    // The guardrail belongs in THIS branch, not only in the configure one. This
+    // branch's advice ends in "reinstall QGIS", and an agent told to recommend a
+    // reinstall is one step from performing it; the configure branch, where the
+    // prohibition used to live alone, is a path a broken install never reaches.
+    //
+    // The user's standing constraint is that installing or reinstalling QGIS is
+    // never the agent's to do — it is the one repair that needs a human.
+    for (const status of ["gdal-missing", "proj-broken", "core-missing"] as const) {
+      const text = QgisGuidance.render({ status, diagnostics: DIAG })
+      expect(text).toContain("DO NOT run any install")
+      expect(text).toMatch(/ask the USER to reinstall/)
+      // And the fix must stay out of the agent's hands in the other direction
+      // too: hand-repairing bindings, and wrapper scripts.
+      expect(text).toContain("DO NOT write a wrapper")
+      expect(text).toContain("repair bindings or plugins by hand")
+    }
+  })
+
+  test("the macOS caveat that names the command an agent would reach for", () => {
+    if (process.platform === "win32") return
+    // gdal-missing is the state a macOS user arrives in most often, and the
+    // Homebrew cask build's broken GDAL bindings are its classic cause — so
+    // `brew install --cask qgis` is precisely the command that reproduces the
+    // fault the agent is standing in. Losing this sentence and losing the
+    // install prohibition compound each other, which is how they were lost.
+    const text = QgisGuidance.render({ status: "gdal-missing", diagnostics: DIAG })
+    expect(text).toContain("Homebrew cask")
+    expect(text).toContain("official .dmg")
+    expect(text).toContain("no brew")
+  })
+
+  test("a broken install shows the path it is asking the agent to judge", () => {
+    // Step 1 asks whether the hint points at a real QGIS install. A reader
+    // cannot judge a path it has not been shown, and in these states the
+    // environment header renders nothing — so this is the only place it can
+    // appear.
+    const text = QgisGuidance.render({ status: "gdal-missing", diagnostics: DIAG })
+    expect(text).toContain(DIAG.interpreter!)
   })
 
   test("a ready environment the gate still refuses gets an answer, not silence", () => {

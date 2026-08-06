@@ -89,17 +89,96 @@ function fixable(opening: string): string {
   return [...shared, ...platform, "", "Then call any QGIS tool again to see the new state."].join("\n")
 }
 
-function broken(symptom: string, error?: string): string {
-  return [
+/**
+ * The Agent cannot complete this one — but what it must NOT do matters more
+ * here than in `fixable()`, and that is the trap this copy is written around.
+ *
+ * This branch's advice ends in "reinstall QGIS", and an Agent told to
+ * recommend a reinstall is one step from performing it. The prohibitions
+ * therefore belong HERE, not only in the configure path: an earlier version of
+ * this file carried them only in `fixable()`, which a broken install never
+ * reaches, so the sentence a reader actually got was "recommend reinstalling"
+ * with nothing forbidding `brew install --cask qgis`.
+ *
+ * The Homebrew-cask caveat is the same trap seen from the other side. The
+ * state that brings a macOS user here most often is `gdal-missing`, and the
+ * cask build's broken GDAL bindings are its classic cause — so the one command
+ * an unguarded Agent would reach for is precisely the one that reproduces the
+ * fault. Losing that sentence and losing the prohibition compound each other.
+ *
+ * The resolved interpreter is echoed because step 1 asks the reader to judge
+ * whether the hint points at a real QGIS install, and it cannot judge a path it
+ * has not been shown. In these states the environment header renders nothing
+ * (the status is not `ready`), so this is the only place it can appear.
+ */
+function broken(symptom: string, opts?: { error?: string; interpreter?: string }): string {
+  const head = [
     `${symptom} — the configured location was found, but the QGIS installation itself is not fully usable.`,
-    ...(error ? ["", `Probe error: ${error}`] : []),
     "",
-    "What the agent can realistically do:",
-    `  1. Check that the "qgis" hint in ${machineJson()} points at a real QGIS`,
-    "     install (pointing at a system Python instead is the most common mistake).",
-    "  2. If the location is right, recommend reinstalling QGIS from",
-    "     https://qgis.org/download/ to the same place — do not try to repair",
-    "     bindings or plugins by hand; that is not reliably fixable from here.",
+    `Configuration file: ${machineJson()}`,
+    ...(opts?.interpreter ? [`Resolved interpreter: ${opts.interpreter}`] : []),
+    ...(opts?.error ? ["", `Probe error: ${opts.error}`] : []),
+    "",
+    "Two causes account for nearly all of these:",
+    "",
+  ]
+  const platform =
+    process.platform === "win32"
+      ? [
+          `1. WRONG PATH — the "qgis" hint does not point at a QGIS install.`,
+          `   System pythons such as C:\\Anaconda\\python.exe do not ship`,
+          "   qgis.core, osgeo or Processing.",
+          "",
+          "   Point it at ONE of:",
+          `     <install-root>                             e.g. C:\\Program Files\\QGIS 3.40.11`,
+          `     <install-root>\\apps\\Python<NN>\\python.exe`,
+          `     <install-root>\\bin\\python-qgis-ltr.bat    (LTR variant)`,
+          "",
+          "2. QGIS INSTALL BROKEN — the path is right but the install is missing",
+          "   components (GDAL bindings, plugins). Reinstall from:",
+          "     https://qgis.org/download/",
+          "",
+          "Note for the agent:",
+          "  1. Check whether the hint points at a QGIS-shipped python.exe or a",
+          "     launcher bat. If NOT, offer to find the QGIS install and fix the file.",
+          "  2. If the path looks correct, ask the USER to reinstall QGIS from the",
+          "     official site. DO NOT run any installer / package manager / winget /",
+          "     choco / .exe automation yourself.",
+          "  3. DO NOT write a wrapper .bat. Always point the hint at the QGIS",
+          "     install itself.",
+        ]
+      : [
+          `1. WRONG PYTHON — the "qgis" hint points at a SYSTEM python`,
+          "   (/usr/bin/python3, /opt/homebrew/bin/python3, a conda env). System",
+          "   pythons do not ship osgeo, qgis.core or Processing.",
+          "",
+          "   Point it at the app bundle, or at its bundled python:",
+          "     /Applications/QGIS.app",
+          "     /Applications/QGIS*.app/Contents/MacOS/bin/python3",
+          "",
+          "2. QGIS INSTALL BROKEN — the path is right but the install is missing",
+          "   components. Reinstall from:",
+          "     https://qgis.org/download/",
+          "   (Use the official .dmg — third-party Homebrew cask QGIS has known",
+          "    GDAL binding issues on macOS.)",
+          "",
+          "Note for the agent:",
+          "  1. Check whether the hint is .app-bundled (matches",
+          "     /Applications/QGIS*.app/Contents/MacOS/bin/python3). If NOT, offer",
+          "     to find the QGIS install and fix the file.",
+          "  2. If the path looks correct, ask the USER to reinstall from the",
+          "     official site. DO NOT run any install command yourself (no brew,",
+          "     no .dmg automation).",
+          "  3. DO NOT write a wrapper .sh — point the hint at the .app directly.",
+          "  4. DO NOT pre-test the python by running it yourself; GeoCode probes",
+          "     after save.",
+        ]
+  return [
+    ...head,
+    ...platform,
+    "",
+    "Do not try to repair bindings or plugins by hand; that is not reliably",
+    "fixable from here.",
     "",
     "GeoCode re-probes automatically when machine.json is saved and after the",
     "install changes underneath it. Then call any QGIS tool again.",
@@ -118,11 +197,18 @@ export function render(status: GeoEvent.QgisStatus): string {
       if (status.catalog === "building")
         return "QGIS is ready and its algorithm catalog is still being built — the first build after a configuration change can take a while. Try again shortly."
       if (!status.processing)
-        return broken("QGIS's Processing framework is not available in this installation")
+        return broken("QGIS's Processing framework is not available in this installation", {
+          interpreter: status.interpreter,
+        })
       if (status.catalog === "failed")
-        return broken(`The algorithm catalog could not be built${status.catalogError ? ` (${status.catalogError})` : ""}`)
+        return broken(`The algorithm catalog could not be built`, {
+          error: status.catalogError,
+          interpreter: status.interpreter,
+        })
       if (status.catalog === "skipped")
-        return broken("The algorithm catalog was skipped because Processing is unavailable")
+        return broken("The algorithm catalog was skipped because Processing is unavailable", {
+          interpreter: status.interpreter,
+        })
       return ""
     case "unconfigured":
       return fixable("QGIS is not configured yet.")
@@ -144,15 +230,30 @@ export function render(status: GeoEvent.QgisStatus): string {
     case "resolving":
       return "QGIS is still being validated — the first probe after a configuration change can take a while. Try again shortly."
     case "gdal-missing":
-      return broken("GDAL bindings cannot be imported", status.diagnostics.error)
+      return broken("GDAL bindings cannot be imported", {
+        error: status.diagnostics.error,
+        interpreter: status.diagnostics.interpreter,
+      })
     case "proj-broken":
-      return broken("PROJ data is broken or missing", status.diagnostics.error)
+      return broken("PROJ data is broken or missing", {
+        error: status.diagnostics.error,
+        interpreter: status.diagnostics.interpreter,
+      })
     case "core-missing":
-      return broken("qgis.core cannot be imported", status.diagnostics.error)
+      return broken("qgis.core cannot be imported", {
+        error: status.diagnostics.error,
+        interpreter: status.diagnostics.interpreter,
+      })
     case "probe-timeout":
-      return broken("The environment probe got no response within its time limit", status.diagnostics.error)
+      return broken("The environment probe got no response within its time limit", {
+        error: status.diagnostics.error,
+        interpreter: status.diagnostics.interpreter,
+      })
     case "probe-failed":
-      return broken("The environment probe failed before reporting", status.diagnostics.error)
+      return broken("The environment probe failed before reporting", {
+        error: status.diagnostics.error,
+        interpreter: status.diagnostics.interpreter,
+      })
   }
 }
 
