@@ -30,7 +30,8 @@ echo "== geo kernel (opencode) =="
   test/geocode-truncation-hint.test.ts \
   test/geocode-geo-read.test.ts \
   test/geocode-qgis-doc.test.ts \
-  test/geocode-qgis-run.test.ts)
+  test/geocode-qgis-run.test.ts \
+  test/geocode-read-handoff.test.ts)
 
 echo
 echo "== geo kernel (core) =="

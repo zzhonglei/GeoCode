@@ -2,6 +2,7 @@ import { Effect, Option, Schema, Scope, Stream } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import * as path from "path"
 import * as Tool from "./tool"
+import { geoHandoff } from "./geo-handoff" // GeoCode: docs/TOOLS.md §7
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./read.txt"
@@ -299,6 +300,21 @@ export const ReadTool = Tool.define<
 
       const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
       const sample = yield* readSample(filepath, Number(stat.size), SAMPLE_BYTES)
+
+      /* --- GeoCode: hand geographic data over to ReadGeoData before either of
+       * this tool's two endings can claim it (GEOKERNEL §10.1 #10, docs/TOOLS.md
+       * §7). The binary formats would stop at "Cannot read binary file", naming
+       * no alternative; the text ones — .geojson, .gml, .kml, .gpx, .asc — pass
+       * every check below and get capped mid-coordinate with an invitation to
+       * page onward, which is the worse of the two. --- */
+      const handoff = geoHandoff(filepath)
+      if (handoff) {
+        return {
+          title,
+          output: handoff,
+          metadata: { preview: handoff, truncated: false, loaded: loaded.map((item) => item.filepath) },
+        }
+      }
 
       const mime = sniffAttachmentMime(sample, FSUtil.mimeType(filepath))
       const isImage = SUPPORTED_IMAGE_MIMES.has(mime)

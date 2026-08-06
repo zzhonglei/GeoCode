@@ -11,6 +11,19 @@ import fs from "node:fs"
 
 const RULES = [
   {
+    name: "geographic handoff (expected)",
+    // `read` now redirects the formats ReadGeoData opens (GEOKERNEL §10.1 #10),
+    // so upstream tests that reach its text or binary path THROUGH one of those
+    // extensions stop where they used to continue. `.tiff` is the live case:
+    // upstream uses it to prove an unsupported image mime falls through to
+    // text, and to GeoCode a .tiff is raster data with a reader of its own.
+    //
+    // Ordered FIRST because the rules are first-match and the identity rule
+    // below is broad enough to claim anything whose evidence mentions a
+    // branded temp path — which most of these do.
+    test: (text) => /Use the ReadGeoData tool/.test(text),
+  },
+  {
     name: "agent line-up (expected)",
     // GeoAgent is the only primary and the code-oriented subagents are off, so
     // upstream tests naming build / explore / general have nothing to run.

@@ -7,6 +7,7 @@ import { GeoQgis, GeoRuntime, GeoStatus } from "@/geo"
 import { GeoTool } from "./geo-tool"
 import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { geoKind, RASTER_SUPPORTED, VECTOR_SUPPORTED } from "./geo-handoff"
 import DESCRIPTION from "./geo-read.txt"
 
 /* --- GeoCode: ReadGeoData, the geographic counterpart of `read`
@@ -24,14 +25,11 @@ import DESCRIPTION from "./geo-read.txt"
  * session: permission, the readiness gate, the environment header, and the
  * shaping of outcomes. --- */
 
-/**
- * The formats vector_read.py / raster_read.py were built and validated
- * against — a subset of the shared taxonomy's *_MAIN lists (tripwired as
- * such): advertising the whole taxonomy would claim formats the reader
- * scripts have never seen.
- */
-export const VECTOR_SUPPORTED = ["shp", "geojson", "gpkg", "gml", "kml", "gpx", "fgb"]
-export const RASTER_SUPPORTED = ["tif", "tiff", "img", "asc", "dem"]
+/* The advertised formats live next to the `read` handoff that redirects them
+ * here, so the two cannot disagree about what this tool accepts — the old
+ * build kept a second hand-copied list in read.ts and had nothing but memory
+ * holding them together. */
+export { RASTER_SUPPORTED, VECTOR_SUPPORTED } from "./geo-handoff"
 
 const FEATURE_DEFAULT = 3
 const FEATURE_CAP = 50
@@ -178,15 +176,18 @@ export const GeoReadTool = Tool.define<
       }
 
       const ext = path.extname(filepath).toLowerCase().slice(1)
-      const isVector = VECTOR_SUPPORTED.includes(ext)
-      const isRaster = RASTER_SUPPORTED.includes(ext)
-      if (!isVector && !isRaster) {
+      // The same judgement `read` redirects on (geo-handoff.ts). One function,
+      // both sides: what this tool accepts and what that tool hands over cannot
+      // disagree, because there is nothing to keep in agreement.
+      const kind = geoKind(filepath)
+      if (!kind) {
         return yield* Effect.fail(
           new Error(
             `Unsupported format ".${ext}". Vector: ${VECTOR_SUPPORTED.map((item) => `.${item}`).join(", ")}. Raster: ${RASTER_SUPPORTED.map((item) => `.${item}`).join(", ")}. For plain text formats use the read tool.`,
           ),
         )
       }
+      const isRaster = kind === "raster"
       if (params.mode === "preview" && !isRaster) {
         return yield* Effect.fail(new Error("Preview mode is only supported for raster formats."))
       }
