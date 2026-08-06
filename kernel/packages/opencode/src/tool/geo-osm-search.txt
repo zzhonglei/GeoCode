@@ -1,0 +1,19 @@
+Use this tool to find OSM objects by name. It returns candidate objects with their OSM ids — the ids you need for OsmGetObjects (boundaries) or as "area:R<id>" extents for OsmProbe / OsmGetFeatures.
+
+Two engines are queried in parallel and their results merged: a geocoder (fuzzy — handles word reordering, missing suffixes, address context) and a feature query service (literal substring match over official names — catches campus/parenthesis name variants, and expands site-relation members that carry different names). Either engine alone misses things, which is why both are asked.
+
+TIMING: this calls public services over the network. A few seconds is normal, and a slow or unreachable endpoint can stretch it to roughly half a minute while it fails over to another one. That wait is the tool working, not hanging — do not abandon the call and retry, because a retry pays the same cost from the start.
+
+Parameters:
+- query: The place or entity name, e.g. "武汉大学", "中国地质大学武汉", "Mount Tai".
+- context: Optional geographic context for disambiguation, e.g. "武汉" / "山东". Adding it strongly improves ranking when the name exists in many regions.
+- category: Optional OSM tag hint to narrow results, e.g. "amenity=university", "boundary=administrative", "natural".
+
+Reading the results:
+- Each candidate shows: id (R/W/N prefix), element type, category tags, which engines matched it, importance, center coordinates.
+- The bracket lists every source that matched it: [geocoder] fuzzy match; [features] literal name match; [site] a member of a matched site relation; [canonical] recovered by looking the geocoder's official name back up. TWO OR MORE sources means both engines agree — the strongest confidence signal available here.
+- (transit) marks bus stops / transit routes that share the entity's name — usually noise unless the user wants stops.
+- Candidates indented under a site relation are its members — include them when the user means the whole multi-part entity.
+- Lines starting with NOTE: say what degraded — one engine not answering, a category filter dropped, an expansion that failed. The results are still usable; the note tells you what may be missing from them.
+
+When nothing relevant comes back: expand abbreviations to full official names, add context, try alternate languages, or fall back to extent + tag queries via OsmProbe / OsmGetFeatures.

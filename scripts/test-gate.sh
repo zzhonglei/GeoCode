@@ -32,6 +32,7 @@ echo "== geo kernel (opencode) =="
   test/geocode-qgis-doc.test.ts \
   test/geocode-qgis-run.test.ts \
   test/geocode-gee-run.test.ts \
+  test/geocode-osm-search.test.ts \
   test/geocode-read-handoff.test.ts)
 
 echo

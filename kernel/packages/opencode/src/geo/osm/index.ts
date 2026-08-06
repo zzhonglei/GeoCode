@@ -16,6 +16,7 @@ export { OsmClient } from "./client"
 export { OsmConvert } from "./convert"
 export { OsmExtent } from "./extent"
 export { OsmQuery } from "./query"
+export { OsmSearch } from "./search"
 
 /* --- GeoCode: the four OSM capabilities (docs/GEOKERNEL.md §6.8).
  *

@@ -30,6 +30,7 @@ import { GeoReadTool } from "./geo-read" // GeoCode: the geographic toolset (doc
 import { QgisDocTool } from "./geo-qgis-doc" // GeoCode
 import { RunQgisAlgorithmTool } from "./geo-qgis-run" // GeoCode
 import { RunGeeScriptTool } from "./geo-gee-run" // GeoCode
+import { OsmSearchTool } from "./geo-osm-search" // GeoCode
 import { GeoKernel } from "@/geo" // GeoCode: its services flow into this registry's layer (docs/TOOLS.md §7)
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
@@ -121,6 +122,7 @@ const layer = Layer.effect(
     const qgisdoc = yield* QgisDocTool // GeoCode
     const qgisrun = yield* RunQgisAlgorithmTool // GeoCode
     const geerun = yield* RunGeeScriptTool // GeoCode
+    const osmsearch = yield* OsmSearchTool // GeoCode
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -230,6 +232,7 @@ const layer = Layer.effect(
           qgisdoc: Tool.init(qgisdoc), // GeoCode
           qgisrun: Tool.init(qgisrun), // GeoCode
           geerun: Tool.init(geerun), // GeoCode
+          osmsearch: Tool.init(osmsearch), // GeoCode
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
@@ -261,6 +264,7 @@ const layer = Layer.effect(
             tool.qgisdoc,
             tool.qgisrun,
             tool.geerun,
+            tool.osmsearch,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
