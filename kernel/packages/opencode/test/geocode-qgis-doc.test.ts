@@ -113,6 +113,10 @@ describe("QgisDoc", () => {
       const allowed = yield* executeAs("GeoAgent", { action: "list_groups" })
       expect(Exit.isSuccess(allowed)).toBe(true)
     }),
+    // forceUnconfigured() alone is allowed 10s, which already crosses bun's
+    // 5s default — a gate that fails at random teaches people to re-run it
+    // rather than read it.
+    { timeout: 30_000 },
   )
 
   it.instance("an unconfigured environment answers with the kernel's guidance", () =>
@@ -129,6 +133,7 @@ describe("QgisDoc", () => {
         expect(result.value.output).toContain(path.join(Global.Path.config, "machine.json"))
       }
     }),
+    { timeout: 30_000 },
   )
 
 

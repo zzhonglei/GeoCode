@@ -287,7 +287,7 @@ def load_region(file_path):
             "  On conda envs, prefer: conda install -c conda-forge geopandas\n"
             "  (geopandas pulls fiona/pyogrio which are GDAL-bound — conda-forge\n"
             "   avoids ABI mismatches with conda's bundled GDAL.)\n"
-            "  After installing, retry the script — the new package\n"
+            "  After installing, retry the RunGeeScript call — the new package\n"
             "  will be available immediately, no restart needed."
         ) from e
     import json
@@ -601,7 +601,7 @@ def download_image(image, filename, region, scale=10, crs="EPSG:4326", dtype=Non
         raise RuntimeError(
             "download_image() requires geemap, which is not installed.\n"
             f"  Install with: {sys.executable} -m pip install geemap\n"
-            "  After installing, retry the script — the new package\n"
+            "  After installing, retry the RunGeeScript call — the new package\n"
             "  will be available immediately, no restart needed."
         ) from e
     # Eager import for geedim: geemap.download_ee_image() uses it under the
@@ -618,7 +618,7 @@ def download_image(image, filename, region, scale=10, crs="EPSG:4326", dtype=Non
             "  GeoTIFF downloads, but geemap declares it as an optional extra —\n"
             "  pip install geemap does NOT pull it in.\n"
             f"  Install with: {sys.executable} -m pip install geedim\n"
-            "  After installing, retry the script — the new package\n"
+            "  After installing, retry the RunGeeScript call — the new package\n"
             "  will be available immediately, no restart needed."
         ) from e
 

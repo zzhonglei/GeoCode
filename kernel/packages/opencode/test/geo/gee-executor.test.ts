@@ -77,6 +77,25 @@ describe("gee runtime library", () => {
     expect(GEOCODE_PY).toContain("Task ID:")
     // And no reference to a config file that no longer exists.
     expect(GEOCODE_PY).not.toContain("geocode.json")
+
+    // The three missing-package hints name the tool to call again.
+    //
+    // They are read by the AGENT at the one moment they fire: a script just
+    // died on an absent import, the agent installs the package, and the hint's
+    // closing promise — usable immediately, no restart — is only actionable if
+    // it says WHAT to call. The port had generalised these to "retry the
+    // script", which names nothing: the agent may be holding an inline string
+    // or a path, and "the script" points at neither tool nor file.
+    //
+    // Worth pinning because the rule that produced the generalisation is real
+    // but belongs elsewhere: §11.2 took tool names OUT of the QGIS runner,
+    // which the kernel generates and the tool layer can annotate afterwards.
+    // This library is imported BY the user's script and raises inside Python,
+    // where no layer above can add anything — so here the name has to be in
+    // the string itself.
+    // Counted, not merely present: there are three such hints (geopandas,
+    // geemap, geedim) and the port had generalised all three at once.
+    expect(GEOCODE_PY.match(/retry the RunGeeScript call/g)).toHaveLength(3)
   })
 })
 
