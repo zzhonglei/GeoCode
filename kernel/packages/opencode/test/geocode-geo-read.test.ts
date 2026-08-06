@@ -7,6 +7,7 @@ import { RASTER_MAIN, VECTOR_MAIN } from "@opencode-ai/core/filesystem/geo-exten
 import { Global } from "@opencode-ai/core/global"
 import { Agent } from "../src/agent/agent"
 import { GeoKernel, GeoQgis, GeoRuntime } from "../src/geo"
+import { QgisReader } from "../src/geo/qgis/reader"
 import { InstanceState } from "../src/effect/instance-state"
 import { Permission } from "../src/permission"
 import { RuntimeFlags } from "../src/effect/runtime-flags"
@@ -14,6 +15,7 @@ import { ToolRegistry } from "../src/tool/registry"
 import { fitVectorPayload, RASTER_SUPPORTED, VECTOR_SUPPORTED } from "../src/tool/geo-read"
 import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
+import READ_DESCRIPTION from "../src/tool/geo-read.txt"
 import { testEffect } from "./lib/effect"
 
 /* Tripwires for the geo tool registration (GEOKERNEL §10.1 #9; docs/TOOLS.md §7).
@@ -139,6 +141,15 @@ describe("geo tool registration", () => {
     }),
   )
 
+  test("the description prepares the Agent for the two endings it can produce", () => {
+    // ReadGeoData returns the same cancellation banner RunQgisAlgorithm does
+    // (both spawn), so it owes the reader the same warning: upstream completes
+    // an aborted call with whatever the tool returns, and a model that reads a
+    // cancellation as a failure will restart what the user just stopped.
+    expect(READ_DESCRIPTION).toContain("cancelled was stopped by the user")
+    expect(READ_DESCRIPTION).toContain("do not restart it on your own")
+  })
+
   test("overflow drops features, never cuts the string", () => {
     const feature = (i: number) => ({ id: i, name: "x".repeat(2_000) })
     const build = (count: number) => ({
@@ -242,6 +253,49 @@ describe("ReadGeoData, cancelled", () => {
     ]),
   )
 
+  it.instance("a data failure is attributed as one, not as an environment event", () =>
+    Effect.gen(function* () {
+      // `error: true` is the shut gate's signal and travels with geoStatus.
+      // Reusing it for a script that could not parse a file would have a bad
+      // GeoJSON render as an environment card — and leave the caller no way to
+      // tell the two apart, which is exactly what the shared-shape tripwire in
+      // geocode-qgis-run.test.ts assumes it can do.
+      const registry = yield* ToolRegistry.Service
+      const permission = yield* Permission.Service
+      const agent = yield* Agent.Service.use((svc) => svc.get("GeoAgent"))
+      const ctx = yield* InstanceState.context
+      const target = path.join(ctx.directory, "broken.geojson")
+      fs.writeFileSync(target, "{ not json")
+
+      const georead = (yield* registry.all()).find((tool) => tool.id === "ReadGeoData")!
+      const result = yield* georead
+        .execute(
+          { filePath: target, mode: "metadata" },
+          {
+            sessionID: SessionID.make("ses_geo_read_fail"),
+            messageID: MessageID.make("msg_geo_read_fail"),
+            agent: "GeoAgent",
+            abort: AbortSignal.any([]),
+            messages: [],
+            metadata: () => Effect.void,
+            ask: (req) =>
+              permission
+                .ask({ ...req, sessionID: SessionID.make("ses_geo_read_fail"), ruleset: agent!.permission })
+                .pipe(Effect.orDie),
+          },
+        )
+        .pipe(Effect.timeout(10_000), Effect.exit)
+
+      expect(Exit.isSuccess(result)).toBe(true)
+      if (Exit.isSuccess(result)) {
+        expect(result.value.metadata.error_code).toBe("ReadFailed")
+        expect(result.value.metadata.failed).toBe(true)
+        expect("error" in result.value.metadata).toBe(false)
+        expect("geoStatus" in result.value.metadata).toBe(false)
+      }
+    }),
+  )
+
   it.instance("says the user cancelled, in the same words the other QGIS tools use", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
@@ -278,6 +332,114 @@ describe("ReadGeoData, cancelled", () => {
         expect(result.value.output).not.toContain("Read failed")
         expect(result.value.metadata.aborted).toBe(true)
       }
+    }),
+  )
+})
+
+/* A successful read, with the reader's subprocess stood in for.
+ *
+ * Two things the tool decides on top of the payload can only be checked with a
+ * payload in hand, and both were half-wired against the reader script: which
+ * formats may select a layer, and whether paging advice applies at all.
+ */
+describe("ReadGeoData, shaping a payload", () => {
+  const spawned: { args: readonly string[] } = { args: [] }
+
+  /** stdout the reader will accept: its marker followed by one JSON object. */
+  const readerReturning = (payload: Record<string, unknown>) =>
+    Layer.mock(GeoRuntime.Service)({
+      run: (options) =>
+        Effect.sync(() => {
+          spawned.args = options.args ?? []
+          return {
+            code: 0,
+            reason: "exit",
+            stdout: `${QgisReader.MARKER}${JSON.stringify(payload)}\n`,
+            stderr: "",
+            durationMs: 4,
+            truncated: false,
+            drainIncomplete: false,
+          } satisfies GeoRuntime.Result
+        }),
+      killAllSync: () => {},
+    })
+
+  /** Mixed geometry: sampled per type across the whole layer, offset ignored. */
+  const MIXED = {
+    driver: "GPX",
+    layer_index: 0,
+    layer: {
+      data_type: "vector",
+      feature_count: 900,
+      crs_name: "WGS 84",
+      geometry_types: { POINT: { count: 500 }, LINESTRING: { count: 400 } },
+      features: Array.from({ length: 3 }, (_, i) => ({ id: i, blob: "y".repeat(30_000) })),
+    },
+  }
+
+  const openGate = Layer.succeed(
+    GeoQgis.Service,
+    GeoQgis.Service.of({
+      gate: () =>
+        Effect.succeed({
+          ok: true,
+          environment: {
+            python: "/fake/python3.12",
+            prefix: "/fake/prefix",
+            env: {},
+            dllDirectories: [],
+            versions: { python: "3.12.11", gdal: "3.12.0", qgis: "3.44.9" },
+            processing: true,
+          },
+        }),
+    }),
+  )
+
+  const it = testEffect(
+    LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
+      [RuntimeFlags.node, RuntimeFlags.layer()],
+      [GeoQgis.node, openGate],
+      [GeoRuntime.node, readerReturning(MIXED)],
+    ]),
+  )
+
+  it.instance("selects a layer on any multi-layer source, and pages only where paging exists", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const permission = yield* Permission.Service
+      const agent = yield* Agent.Service.use((svc) => svc.get("GeoAgent"))
+      const ctx = yield* InstanceState.context
+      const target = path.join(ctx.directory, "track.gpx")
+      fs.writeFileSync(target, "<gpx></gpx>")
+
+      const georead = (yield* registry.all()).find((tool) => tool.id === "ReadGeoData")!
+      const result = yield* georead.execute(
+        { filePath: target, mode: "metadata", layerIndex: 2, limit: 3 },
+        {
+          sessionID: SessionID.make("ses_shape"),
+          messageID: MessageID.make("msg_shape"),
+          agent: "GeoAgent",
+          abort: AbortSignal.any([]),
+          messages: [],
+          metadata: () => Effect.void,
+          ask: (req) =>
+            permission
+              .ask({ ...req, sessionID: SessionID.make("ses_shape"), ruleset: agent!.permission })
+              .pipe(Effect.orDie),
+        },
+      )
+
+      // The reader emits an overview for ANY driver with more than one layer,
+      // so gating selection on .gpkg showed a .gpx's layers and gave no way to
+      // reach past the first.
+      expect(spawned.args).toContain("2")
+
+      // And the paging advice: this layer mixes geometry types, which the
+      // reader samples per type across the whole layer, ignoring offset. The
+      // old advice sent the caller back for the features it already had.
+      expect(result.metadata.truncated).toBe(true)
+      expect(result.output).toContain("mixes geometry types")
+      expect(result.output).not.toContain("Continue with offset=")
     }),
   )
 })

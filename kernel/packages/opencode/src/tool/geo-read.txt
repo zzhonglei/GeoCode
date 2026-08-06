@@ -14,4 +14,5 @@ Usage:
 - For GeoPackage, read with defaults first to see all available layers, then set layerIndex to inspect a specific layer.
 - Parameters that do not apply to the current format or mode are silently ignored.
 - Call this tool in parallel when you know there are multiple files you want to read.
+- A read reported as cancelled was stopped by the user — do not restart it on your own; ask what they want instead.
 - This tool needs the user's QGIS environment. When that environment is not ready, the output says exactly what is missing and who can fix it — relay that to the user instead of retrying.

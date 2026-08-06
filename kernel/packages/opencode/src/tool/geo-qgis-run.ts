@@ -194,7 +194,7 @@ export const RunQgisAlgorithmTool = Tool.define<
             truncated: false,
             algorithm: params.algorithm,
             error: true,
-            geoStatus: gate.status.status,
+            geoStatus: GeoTool.gateStatus(gate.status),
           },
         )
       }
@@ -212,14 +212,22 @@ export const RunQgisAlgorithmTool = Tool.define<
       // this". The in-script check reads the live registry and complements it.
       const nearest = known ? [] : yield* catalog.suggest(params.algorithm, "algorithm")
       const hints = GeoQgis.QgisExecutor.precheck(params.algorithm, known, parsed as Record<string, unknown>, nearest)
+      // A finding the caller can act on needs somewhere to go. The old build
+      // appended a pointer to EVERY parameter-level warning; the runner script
+      // no longer names tools itself (§11.2), so both pointers have to come
+      // from this layer — the search one when the algorithm is unknown, the
+      // schema one when the algorithm is known but its parameters are not.
+      const parameterTrouble = hints.some(
+        (hint) => hint.kind === "unknown-parameter" || hint.kind === "missing-required" || hint.kind === "invalid-choice",
+      )
+      const pointer = !known
+        ? `Pre-flight: use QgisDoc with action="search" to find the algorithm you mean.`
+        : parameterTrouble
+          ? `Pre-flight: see QgisDoc with action="read", algorithm="${known.id}" for the full parameter schema.`
+          : undefined
       const precheck =
         hints.length > 0
-          ? [
-              ...hints.map((hint) => `Pre-flight: ${hint.message}`),
-              // The runner script no longer names tools itself (§11.2), so the
-              // pointer back to the catalog has to come from this layer.
-              ...(known ? [] : [`Pre-flight: use QgisDoc with action="search" to find the algorithm you mean.`]),
-            ].join("\n")
+          ? [...hints.map((hint) => `Pre-flight: ${hint.message}`), ...(pointer ? [pointer] : [])].join("\n")
           : undefined
 
       // ---- Spawn. Every path below carries an elapsed footer ----
@@ -242,13 +250,19 @@ export const RunQgisAlgorithmTool = Tool.define<
           Effect.gen(function* () {
             streamed += chunk
             label = label ?? GeoQgis.QgisExecutor.displayName(streamed)
+            // The live view keeps the TAIL, which is where a running algorithm
+            // says anything new — but silently dropping the head would let a
+            // watcher read a partial log as the whole one, so it is marked, and
+            // this metadata reports the state of the payload it accompanies
+            // rather than that of the final result.
+            const live = GeoOutput.truncate(streamed, STREAM_BUDGET)
             yield* ctx.metadata({
               title: label ?? params.algorithm,
               metadata: {
-                truncated: false,
+                truncated: live.truncated,
                 algorithm: params.algorithm,
                 ...(label ? { display_name: label } : {}),
-                output: GeoOutput.truncate(streamed, STREAM_BUDGET).text,
+                output: live.truncated ? `…(earlier output trimmed)\n${live.text}` : live.text,
               },
             })
           }),
@@ -276,7 +290,17 @@ export const RunQgisAlgorithmTool = Tool.define<
       // field; showing that sentence beats showing the traceback around it.
       const structured = result.stderr.trim() ? GeoOutput.structuredError(result.stderr) : undefined
       const raw = structured ?? result.stderr.trim()
-      const detail = result.reason === "exit" ? raw || `Script failed (exit ${result.code})` : raw
+      // An idle stop is the one ending whose fix is a number, so the number has
+      // to be in the answer: "it went quiet for too long" without saying how
+      // long leaves the caller with nothing to raise.
+      const idleNote =
+        result.reason === "idle"
+          ? `The limit was ${params.timeout}s of silence; raise \`timeout\` for large datasets or slow algorithms.`
+          : undefined
+      const detail =
+        result.reason === "exit"
+          ? raw || `Script failed (exit ${result.code})`
+          : [idleNote, raw].filter(Boolean).join("\n")
       const banner = succeeded ? "" : GeoTool.terminationBanner(result.reason, detail)
 
       const metadata: Metadata = {
@@ -285,6 +309,7 @@ export const RunQgisAlgorithmTool = Tool.define<
         ...(label ? { display_name: label } : {}),
         ...(known ? { resolved_algorithm: known.id } : {}),
         elapsed_ms: elapsedMs,
+        idle_limit_seconds: params.timeout,
         // Present whenever pre-flight actually ran, even as an empty array: the
         // frontend has to tell "checked, nothing to report" from "never got
         // that far", and an absent field is the only honest way to say the

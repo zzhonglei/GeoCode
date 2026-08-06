@@ -201,6 +201,11 @@ export const QgisDocTool = Tool.define<
         metadata: { action: params.action, ...(target === undefined ? {} : { target }) },
       })
 
+      // Taken before the gate so a refusal still carries the environment line,
+      // and again after it (§11.2 环境头快照) — one event, one shape across the
+      // three tools.
+      const entryHeader = yield* GeoTool.qgisHeader(status)
+
       const gate = yield* GeoTool.settledQgisGate(qgis, ctx.abort)
       if (!gate.ok) {
         // The catalog is only populated behind a passing gate, so a shut gate
@@ -208,10 +213,14 @@ export const QgisDocTool = Tool.define<
         // all three QGIS tools say the same words (GEOKERNEL §8.6).
         return {
           title: "QGIS algorithm catalog unavailable",
-          output:
+          output: [
+            entryHeader,
             GeoQgis.QgisGuidance.render(gate.status) ||
-            "The QGIS environment settled while this call was checking it — call the tool again.",
-          metadata: { truncated: false, error: true, geoStatus: gate.status.status },
+              "The QGIS environment settled while this call was checking it — call the tool again.",
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+          metadata: { truncated: false, error: true, geoStatus: GeoTool.gateStatus(gate.status) },
         }
       }
       // Which install these docs describe is part of the answer: algorithm

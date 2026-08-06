@@ -89,7 +89,7 @@ export const Parameters = Schema.Struct({
     description: `Maximum number of vector features to return (vector metadata only, defaults to ${FEATURE_DEFAULT}, capped at ${FEATURE_CAP})`,
   }),
   layerIndex: Schema.optional(NonNegativeInt).annotate({
-    description: "Index of the layer to read (GeoPackage only, defaults to 0)",
+    description: "Index of the layer to read (multi-layer sources such as GeoPackage or GPX, defaults to 0)",
   }),
 })
 
@@ -191,6 +191,12 @@ export const GeoReadTool = Tool.define<
         return yield* Effect.fail(new Error("Preview mode is only supported for raster formats."))
       }
 
+      // Snapshotted before the gate so a refusal still carries the environment
+      // line, and taken again after it (§11.2 环境头快照). Without the entry
+      // snapshot this tool answered a shut gate bare while RunQgisAlgorithm
+      // answered the same event with a header — one event, two shapes.
+      const entryHeader = yield* GeoTool.qgisHeader(status)
+
       const gate = yield* GeoTool.settledQgisGate(qgis, ctx.abort)
       if (!gate.ok) {
         // Environment-not-ready is a diagnostic outcome for the model to relay,
@@ -202,10 +208,19 @@ export const GeoReadTool = Tool.define<
         // fully-ready status with ok:false, for which render has nothing.
         return {
           title,
-          output:
+          output: [
+            entryHeader,
             GeoQgis.QgisGuidance.render(gate.status) ||
-            "The QGIS environment settled while this call was checking it — call the tool again.",
-          metadata: { mode: params.mode, truncated: false, error: true, geoStatus: gate.status.status },
+              "The QGIS environment settled while this call was checking it — call the tool again.",
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+          metadata: {
+            mode: params.mode,
+            truncated: false,
+            error: true,
+            geoStatus: GeoTool.gateStatus(gate.status),
+          },
         }
       }
       const header = yield* GeoTool.qgisHeader(status)
@@ -242,7 +257,10 @@ export const GeoReadTool = Tool.define<
           return {
             title,
             output: [header, `Preview failed: ${outcome.detail}`].filter(Boolean).join("\n"),
-            metadata: { mode: params.mode, truncated: false, error: true },
+            // A data failure, not an environment one. `error: true` is reserved
+            // for the shut gate, where it travels with geoStatus; reusing it
+            // here would have a failed render render as an environment card.
+            metadata: { mode: params.mode, truncated: false, error_code: "PreviewFailed", failed: true },
           }
         }
         const meta = outcome.meta
@@ -280,7 +298,10 @@ export const GeoReadTool = Tool.define<
             file: filepath,
             offset,
             maxFeatures: requested,
-            ...(ext === "gpkg" && params.layerIndex !== undefined ? { layerIndex: params.layerIndex } : {}),
+            // Any multi-layer driver, not just GeoPackage: the reader emits an
+            // overview whenever layer_count > 1, so gating selection on .gpkg
+            // showed a .gpx's five layers and gave no way to reach past the first.
+            ...(params.layerIndex !== undefined ? { layerIndex: params.layerIndex } : {}),
             abort: ctx.abort,
           })
       ).pipe(Effect.catch((error) => Effect.succeed({ ok: false as const, detail: error.message })))
@@ -290,7 +311,7 @@ export const GeoReadTool = Tool.define<
         return {
           title,
           output: [header, `Read failed: ${outcome.detail}`].filter(Boolean).join("\n"),
-          metadata: { mode: params.mode, truncated: false, error: true },
+          metadata: { mode: params.mode, truncated: false, error_code: "ReadFailed", failed: true },
         }
       }
 
@@ -317,14 +338,23 @@ export const GeoReadTool = Tool.define<
       // The payload ships COMPACT: the budget measures the very string sent,
       // and pretty-printing coordinate arrays would spend 3× the context on
       // whitespace.
+      // A layer holding more than one geometry type is sampled BY TYPE, across
+      // the whole layer, and ignores offset entirely (vector_read.py's mixed
+      // branch) — `geometry_types` on the payload is how it says so. Telling
+      // the caller to continue with offset there would send it back for the
+      // same features it already has.
+      const paged = detail.geometry_types === undefined
       const fit = fitVectorPayload(payload, OUTPUT_BUDGET)
       let notice: string | undefined
       if (fit.dropped > 0) {
         const kept = Array.isArray(detail.features) ? detail.features.length : 0
         metadata.truncated = true
         metadata.dropped_features = fit.dropped
+        const continueWith = paged
+          ? `Continue with offset=${offset + kept}, or reduce limit.`
+          : `This layer mixes geometry types, so its sample is drawn per type rather than in order — reduce limit, or split the layer by geometry type first.`
         notice = kept > 0
-          ? `(Size cap: showing ${kept} of the ${requested} requested features. Continue with offset=${offset + kept}, or reduce limit.)`
+          ? `(Size cap: showing ${kept} of the ${requested} requested features. ${continueWith})`
           : `(Size cap: the sampled features are too large to inline even one. Retry with limit=1, or extract the attributes you need with a processing algorithm instead.)`
       } else if (!fit.fits) {
         notice = `(Size note: this layer's schema and statistics alone exceed the usual output budget; shipped whole.)`

@@ -74,6 +74,25 @@ export const qgisHeader = Effect.fn("GeoTool.qgisHeader")(function* (status: Geo
  * voice — the tool layer renders it, it never writes environment copy. */
 
 /**
+ * The one field a caller switches on to learn WHY the gate is shut.
+ *
+ * The raw status name is not enough on its own. The gate wants ready AND
+ * processing AND a built catalog (§4.9), so it refuses three shapes whose
+ * status name is nonetheless `ready` — and a caller reading metadata alone
+ * would get `error: true` next to `geoStatus: "ready"`, which reads as a
+ * contradiction and names no cause. The reason lives in sibling fields of the
+ * status, so it is folded in here rather than left for the prose to carry.
+ */
+export function gateStatus(status: GeoEvent.QgisStatus): string {
+  if (status.status !== "ready") return status.status
+  if (!status.processing) return "ready:no-processing"
+  if (status.catalog === "building") return "ready:catalog-building"
+  if (status.catalog === "failed") return "ready:catalog-failed"
+  if (status.catalog === "skipped") return "ready:catalog-skipped"
+  return "ready"
+}
+
+/**
  * How a subprocess ended, said in one sentence the Agent and the user both
  * read (GEOKERNEL §11.2 五种终止路径的横幅).
  *

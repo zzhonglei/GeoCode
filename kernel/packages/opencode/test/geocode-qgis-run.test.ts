@@ -256,13 +256,81 @@ describe("RunQgisAlgorithm, endings", () => {
       }),
   )
 
-  ending({ code: null, reason: "idle" }).instance("an idle timeout names itself", () =>
+  ending({ code: null, reason: "idle" }).instance("an idle timeout names the number it hit", () =>
     Effect.gen(function* () {
-      const result = yield* succeed({ algorithm: "native:buffer", parameters: '{"INPUT":"/a.shp"}' })
+      // The fix for this ending IS a number. "It went quiet for too long"
+      // without saying how long leaves the caller with nothing to raise.
+      const result = yield* succeed({
+        algorithm: "native:buffer",
+        parameters: '{"INPUT":"/a.shp"}',
+        timeout: 45,
+      })
       expect(result.output).toContain("--- timeout ---")
+      expect(result.output).toContain("45s")
+      expect(result.output).toContain("raise `timeout`")
+      expect(result.metadata.idle_limit_seconds).toBe(45)
       expect(result.metadata.timed_out).toBe(true)
       expect(result.metadata.error_code).toBe("IdleTimeout")
     }),
+  )
+
+  ending({ code: 0, reason: "exit" }).instance("a parameter finding says where to look it up", () =>
+    Effect.gen(function* () {
+      // The old build appended this to every parameter-level warning. Telling
+      // the model what is wrong with no next step is half an answer, and the
+      // runner script deliberately stopped naming tools (§11.2), so the
+      // pointer has to come from here.
+      const result = yield* succeed({ algorithm: "native:buffer", parameters: '{"NOPE":1}' })
+      expect(result.output).toContain("is not defined for")
+      expect(result.output).toContain('QgisDoc with action="read", algorithm="native:buffer"')
+
+      // A run with nothing wrong gets no pointer — it would be noise, and
+      // noise is what made pre-flight ignorable in the first place.
+      const clean = yield* succeed({
+        algorithm: "native:buffer",
+        parameters: '{"INPUT":"/a.shp","SEGMENTS":5,"DISSOLVE":false,"DISTANCE":1}',
+      })
+      expect(clean.output).not.toContain("QgisDoc")
+    }),
+  )
+
+  ending({ code: 0, reason: "exit" }, [`${"z".repeat(40_000)}\n`, "tail-line\n"]).instance(
+    "a trimmed live view says it was trimmed",
+    () =>
+      Effect.gen(function* () {
+        // The live push keeps the tail, which is where a running algorithm says
+        // anything new; dropping the head silently would let a watcher read a
+        // partial log as the whole one. Nothing here touches the final result.
+        const pushes: { truncated: unknown; output: unknown }[] = []
+        const registry = yield* ToolRegistry.Service
+        const permission = yield* Permission.Service
+        const agent = yield* Agent.Service.use((svc) => svc.get("GeoAgent"))
+        const tool = (yield* registry.all()).find((item) => item.id === "RunQgisAlgorithm")!
+        const result = yield* tool.execute(
+          { algorithm: "native:buffer", parameters: '{"INPUT":"/a.shp"}' },
+          {
+            sessionID: SessionID.make("ses_stream"),
+            messageID: MessageID.make("msg_stream"),
+            agent: "GeoAgent",
+            abort: AbortSignal.any([]),
+            messages: [],
+            metadata: (input) =>
+              Effect.sync(() => {
+                if (input.metadata) pushes.push(input.metadata as never)
+              }),
+            ask: (req) =>
+              permission
+                .ask({ ...req, sessionID: SessionID.make("ses_stream"), ruleset: agent!.permission })
+                .pipe(Effect.orDie),
+          },
+        )
+        const last = pushes[pushes.length - 1]!
+        expect(last.truncated).toBe(true)
+        expect(String(last.output)).toContain("earlier output trimmed")
+        expect(String(last.output)).toContain("tail-line")
+        // The final result is a different payload and answers for itself.
+        expect(result.metadata.truncated).toBe(false)
+      }),
   )
 
   ending({ code: null, reason: "crash", stderr: "Fatal Python error: Segmentation fault" }).instance(
@@ -482,4 +550,24 @@ describe("the QGIS group's shut-gate answer", () => {
     }),
     { timeout: 20_000 },
   )
+
+  test("a shut gate on a READY environment still names its cause", () => {
+    // The gate wants ready AND processing AND a built catalog (§4.9), so it
+    // refuses three shapes whose status name is `ready`. Reporting the bare
+    // name there puts `error: true` next to `geoStatus: "ready"` in front of a
+    // caller — a contradiction that names no cause, with the reason reachable
+    // only by reading the prose.
+    expect(GeoTool.gateStatus({ status: "unconfigured" })).toBe("unconfigured")
+    expect(GeoTool.gateStatus({ status: "ready", processing: true, catalog: "ready" } as never)).toBe("ready")
+    const refused = [
+      { status: "ready", processing: false, catalog: "skipped" },
+      { status: "ready", processing: true, catalog: "building" },
+      { status: "ready", processing: true, catalog: "failed" },
+    ] as const
+    const labels = refused.map((status) => GeoTool.gateStatus(status as never))
+    for (const label of labels) expect(label).not.toBe("ready")
+    // Three refusals, three distinguishable labels — one shared label would
+    // just move the ambiguity rather than remove it.
+    expect(new Set(labels).size).toBe(refused.length)
+  })
 })
