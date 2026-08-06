@@ -169,22 +169,24 @@ describe("RunQgisAlgorithm, pre-spawn refusals", () => {
     }),
   )
 
-  it.instance("a malformed tool call is blamed on the tool call, and never on QGIS", () =>
-    Effect.gen(function* () {
-      // The old build's lesson: a bare "Invalid parameters" reads as "QGIS
-      // rejected me" and sends the model hunting for a bug that is not there.
-      // Each refusal has to say QGIS was never invoked and whose fault it is.
-      for (const parameters of ["not json", "[1,2]", '"a string"', "null"]) {
-        const result = yield* succeed({ algorithm: "native:buffer", parameters })
-        expect(result.output).toContain("QGIS was NOT invoked")
-        expect(result.output).toContain("on your end (the agent)")
-        expect(result.metadata.param_error).toBe(true)
-        // No subprocess ran, so there is nothing to report a duration for.
-        // A synthetic 0ms would tell the Agent the algorithm ran and finished.
-        expect(result.output).not.toContain("Elapsed:")
-        expect(result.metadata.elapsed_ms).toBeUndefined()
-      }
-    }),
+  it.instance(
+    "a malformed tool call is blamed on the tool call, and never on QGIS",
+    () =>
+      Effect.gen(function* () {
+        // The old build's lesson: a bare "Invalid parameters" reads as "QGIS
+        // rejected me" and sends the model hunting for a bug that is not there.
+        // Each refusal has to say QGIS was never invoked and whose fault it is.
+        for (const parameters of ["not json", "[1,2]", '"a string"', "null"]) {
+          const result = yield* succeed({ algorithm: "native:buffer", parameters })
+          expect(result.output).toContain("QGIS was NOT invoked")
+          expect(result.output).toContain("on your end (the agent)")
+          expect(result.metadata.param_error).toBe(true)
+          // No subprocess ran, so there is nothing to report a duration for.
+          // A synthetic 0ms would tell the Agent the algorithm ran and finished.
+          expect(result.output).not.toContain("Elapsed:")
+          expect(result.metadata.elapsed_ms).toBeUndefined()
+        }
+      }),
     // Four executions behind a full kernel build, which lands close enough to
     // bun's five-second default to flake. A gate that fails at random teaches
     // people to re-run it rather than read it.
@@ -215,7 +217,8 @@ describe("RunQgisAlgorithm, pre-spawn refusals", () => {
 })
 
 describe("RunQgisAlgorithm, endings", () => {
-  const ending = (result: Partial<GeoRuntime.Result>, chunks?: readonly string[]) => harness(runtimeEnding(result, chunks))
+  const ending = (result: Partial<GeoRuntime.Result>, chunks?: readonly string[]) =>
+    harness(runtimeEnding(result, chunks))
 
   ending({ code: 0, reason: "exit" }, ["Algorithm name: Buffer\n", "Progress: 50%\n"]).instance(
     "a clean run reports its name, its output and its duration",
@@ -496,58 +499,60 @@ describe("the QGIS group's shut-gate answer", () => {
     ]),
   )
 
-  it.instance("carries the same fields from all three tools", () =>
-    Effect.gen(function* () {
-      // One voice is not only about wording. A shut gate is ONE event, and a
-      // caller forced to learn three field sets will end up handling whichever
-      // tool it happened to meet first.
-      const registry = yield* ToolRegistry.Service
-      const permission = yield* Permission.Service
-      const agent = yield* Agent.Service.use((svc) => svc.get("GeoAgent"))
-      const instance = yield* InstanceState.context
-      const tools = yield* registry.all()
+  it.instance(
+    "carries the same fields from all three tools",
+    () =>
+      Effect.gen(function* () {
+        // One voice is not only about wording. A shut gate is ONE event, and a
+        // caller forced to learn three field sets will end up handling whichever
+        // tool it happened to meet first.
+        const registry = yield* ToolRegistry.Service
+        const permission = yield* Permission.Service
+        const agent = yield* Agent.Service.use((svc) => svc.get("GeoAgent"))
+        const instance = yield* InstanceState.context
+        const tools = yield* registry.all()
 
-      const scene = path.join(instance.directory, "shut.geojson")
-      fs.writeFileSync(scene, '{"type":"FeatureCollection","features":[]}')
+        const scene = path.join(instance.directory, "shut.geojson")
+        fs.writeFileSync(scene, '{"type":"FeatureCollection","features":[]}')
 
-      const shut = Effect.fnUntraced(function* (id: string, params: Record<string, unknown>) {
-        const tool = tools.find((item) => item.id === id)!
-        return yield* tool
-          .execute(params, {
-            sessionID: SessionID.make("ses_shut"),
-            messageID: MessageID.make("msg_shut"),
-            agent: "GeoAgent",
-            abort: AbortSignal.any([]),
-            messages: [],
-            metadata: () => Effect.void,
-            ask: (req) =>
-              permission
-                .ask({ ...req, sessionID: SessionID.make("ses_shut"), ruleset: agent!.permission })
-                .pipe(Effect.orDie),
-          })
-          .pipe(Effect.timeout(10_000))
-      })
+        const shut = Effect.fnUntraced(function* (id: string, params: Record<string, unknown>) {
+          const tool = tools.find((item) => item.id === id)!
+          return yield* tool
+            .execute(params, {
+              sessionID: SessionID.make("ses_shut"),
+              messageID: MessageID.make("msg_shut"),
+              agent: "GeoAgent",
+              abort: AbortSignal.any([]),
+              messages: [],
+              metadata: () => Effect.void,
+              ask: (req) =>
+                permission
+                  .ask({ ...req, sessionID: SessionID.make("ses_shut"), ruleset: agent!.permission })
+                  .pipe(Effect.orDie),
+            })
+            .pipe(Effect.timeout(10_000))
+        })
 
-      const answers = [
-        yield* shut("ReadGeoData", { filePath: scene, mode: "metadata" }),
-        yield* shut("QgisDoc", { action: "list_groups" }),
-        yield* shut("RunQgisAlgorithm", { algorithm: "native:buffer", parameters: '{"INPUT":"/a.shp"}' }),
-      ]
+        const answers = [
+          yield* shut("ReadGeoData", { filePath: scene, mode: "metadata" }),
+          yield* shut("QgisDoc", { action: "list_groups" }),
+          yield* shut("RunQgisAlgorithm", { algorithm: "native:buffer", parameters: '{"INPUT":"/a.shp"}' }),
+        ]
 
-      for (const answer of answers) {
-        // The shared trio. Each tool may add its own subject on top — the file,
-        // the algorithm — but recognising the event must never depend on which
-        // tool produced it.
-        expect(answer.metadata.error).toBe(true)
-        expect(answer.metadata.geoStatus).toBe("unconfigured")
-        expect(answer.metadata.truncated).toBe(false)
-        // And the guidance itself is the kernel's, identical across all three.
-        expect(answer.output).toContain("machine.json")
-        // No synonym for `error`: a second flag meaning the same thing is how
-        // three tools start meaning three different things by one event.
-        expect("env_error" in answer.metadata).toBe(false)
-      }
-    }),
+        for (const answer of answers) {
+          // The shared trio. Each tool may add its own subject on top — the file,
+          // the algorithm — but recognising the event must never depend on which
+          // tool produced it.
+          expect(answer.metadata.error).toBe(true)
+          expect(answer.metadata.geoStatus).toBe("unconfigured")
+          expect(answer.metadata.truncated).toBe(false)
+          // And the guidance itself is the kernel's, identical across all three.
+          expect(answer.output).toContain("machine.json")
+          // No synonym for `error`: a second flag meaning the same thing is how
+          // three tools start meaning three different things by one event.
+          expect("env_error" in answer.metadata).toBe(false)
+        }
+      }),
     { timeout: 20_000 },
   )
 
