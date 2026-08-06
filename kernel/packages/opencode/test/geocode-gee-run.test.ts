@@ -297,6 +297,41 @@ describe("RunGeeScript, the endings", () => {
       }),
   )
 
+  harness(
+    Layer.mock(GeoRuntime.Service)({
+      run: () => Effect.fail(new Error("spawn /gone/bin/python3 ENOENT")),
+      killAllSync: () => {},
+    }),
+    open,
+  ).instance(
+    "a launch that never happened is not reported as a crash",
+    () =>
+      Effect.gen(function* () {
+        // Filing this as `crash` told the agent a native library segfaulted below
+        // the Python level and could not be caught — for an interpreter that was
+        // simply not there. Both real causes are fixable configuration.
+        const result = yield* succeed({ script: "print(1)" })
+        expect(result.output).toContain("never ran")
+        expect(result.output).toContain("ENOENT")
+        expect(result.output).toContain("gee.python")
+        expect(result.output).not.toContain("segfault")
+        expect(result.output).not.toContain("unexpectedly quit")
+        // Nothing ran, so nothing took any time. A footer here would say the
+        // script ran and finished instantly.
+        expect(result.output).not.toContain("Elapsed:")
+        expect(result.metadata.elapsed_ms).toBeUndefined()
+        expect(result.metadata.error_code).toBe("LaunchFailed")
+        // The same flag the shut gate sets, because it is the same kind of
+        // fact: the environment is in the way, not the script. One spelling.
+        expect(result.metadata.error).toBe(true)
+        expect(result.metadata.env_error).toBeUndefined()
+        // And it is not filed under the endings that mean "it ran and stopped".
+        expect(result.metadata.partial).toBeUndefined()
+        expect(result.metadata.failed).toBeUndefined()
+      }),
+    { timeout: 20_000 },
+  )
+
   ending({}, ["ndvi mean: 0.42\n"]).instance("a run that succeeded returns its output and its duration", () =>
     Effect.gen(function* () {
       const result = yield* succeed({ script: "print('ndvi mean: 0.42')" })

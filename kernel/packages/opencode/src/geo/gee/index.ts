@@ -433,7 +433,7 @@ const layer = Layer.effect(
         // Only what we can attribute. A script that failed on its own logic
         // must not invalidate a perfectly good authorization — the loop is
         // "every real use is an answer", not "every failure is a verdict".
-        if (!GeeValidate.isRejection(message)) return false
+        if (!GeeValidate.isRemoteRefusal(message)) return false
 
         const current = yield* Ref.get(facts)
         const route = current.network.status === "reachable" ? current.network.route : undefined

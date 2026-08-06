@@ -171,7 +171,10 @@ function unconfigured(): string {
     "",
     `  4. Verify: <env-python> -c "import ${GeeDeps.DEPS.map((dep) => dep.module).join(", ")}; print('ok')"`,
     "",
-    "  5. ONLY after the verify succeeds, write gee.python to the file above.",
+    "  5. ONLY after the verify succeeds, use the Edit tool to write gee.python",
+    "     into the file above. Edit it in place — machine.json also holds the",
+    "     QGIS and GDAL settings, and rewriting the whole file to add one field",
+    "     is how those get lost.",
     "",
     "  6. Then run a minimal script to reach the next step:",
     ...SMOKE_TEST,
@@ -210,7 +213,8 @@ function pythonMissing(python: string): string {
     `   Did the environment move? I can search for it (conda env list, ls).`,
     `   Shall I look?"`,
     "",
-    "Confirm the path with the user before writing it to the file above.",
+    "Confirm the path with the user, then use the Edit tool to correct it in the",
+    "file above — in place, so the QGIS and GDAL blocks beside it survive.",
     WATCHED,
   ].join("\n")
 }
@@ -382,7 +386,9 @@ function projectMissing(): string {
     `   https://code.earthengine.google.com. Give it to me and I'll add it`,
     `   to your configuration."`,
     "",
-    "Once the user provides it, write it to the file above, then verify:",
+    "Once the user provides it, use the Read and Edit tools to add it to the gee",
+    "block in the file above — in place, leaving the other blocks untouched.",
+    "Then verify:",
     ...SMOKE_TEST,
     "",
     WATCHED,
@@ -469,12 +475,19 @@ function setupGuidance(setup: GeoEvent.GeeSetup): string {
 /**
  * The network layer (§5.11 硬边界 3).
  *
- * The prohibitions are the substance of this branch, not a footnote. Everything
- * local is verified by the time anyone reads this — so every repair an Agent
+ * Says one thing: the network cannot reach Earth Engine right now. It
+ * deliberately says nothing about HOW a route is looked for, or about proxies
+ * at all — none of that is something an agent can act on. It cannot reconfigure
+ * the user's proxy software, and handing it the vocabulary only invites a
+ * diagnosis it is in no position to make. The connection is the user's to sort
+ * out; the agent's job is to say so and to stay out of the way.
+ *
+ * Which leaves the prohibitions as the substance of this branch. Everything
+ * local is verified by the time anyone reads this, so every repair an agent
  * might reach for is not merely useless but destructive: reinstalling packages
  * churns a working environment, re-authenticating cannot complete over a link
- * that carries nothing, and rewriting the configuration edits the one part
- * that is already correct.
+ * that carries nothing, and rewriting the configuration edits the one part that
+ * is already correct.
  */
 function networkGuidance(python: string, project: string, checking: boolean): string {
   if (checking) {
@@ -488,21 +501,14 @@ function networkGuidance(python: string, project: string, checking: boolean): st
     "",
     "The local setup is complete: the interpreter is configured, the packages",
     "are installed, credentials exist, and the project is set. All four steps",
-    "are done. What is missing is a route to Earth Engine.",
-    "",
-    "GeoCode already tries what it can reach on its own — inherited proxy",
-    "environment variables, the system proxy, a direct route, and common local",
-    "proxy ports. There is no proxy setting to configure here.",
+    "are done. This machine's network connection is what cannot currently",
+    "reach Earth Engine.",
     "",
     "Note for the agent: do NOT reinstall Python packages, do NOT edit",
     "machine.json, and do NOT ask the user to sign in again. None of those is",
     "the problem, and each one damages something that is already correct.",
-    "",
-    "What helps: check that the machine is online, and that a proxy or VPN is",
-    "running if this network needs one to reach Google at all. If there is one",
-    "and it is still failing, check its MODE — a proxy serving only SOCKS is a",
-    "common cause here, and switching it to HTTP or mixed mode is usually the",
-    "whole fix.",
+    "Tell the user their network cannot reach Earth Engine at the moment and",
+    "leave the connection itself to them.",
     "",
     "Then call the GEE tool again. Reachability is re-checked without",
     "restarting anything.",

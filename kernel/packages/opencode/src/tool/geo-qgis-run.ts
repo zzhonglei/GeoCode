@@ -218,7 +218,8 @@ export const RunQgisAlgorithmTool = Tool.define<
       // from this layer — the search one when the algorithm is unknown, the
       // schema one when the algorithm is known but its parameters are not.
       const parameterTrouble = hints.some(
-        (hint) => hint.kind === "unknown-parameter" || hint.kind === "missing-required" || hint.kind === "invalid-choice",
+        (hint) =>
+          hint.kind === "unknown-parameter" || hint.kind === "missing-required" || hint.kind === "invalid-choice",
       )
       const pointer = !known
         ? `Pre-flight: use QgisDoc with action="search" to find the algorithm you mean.`
@@ -267,20 +268,37 @@ export const RunQgisAlgorithmTool = Tool.define<
             })
           }),
       }).pipe(
-        // A spawn that never started is still an ending the caller has to be
-        // told about, in the same shape as every other ending.
-        Effect.catch((error) =>
-          Effect.succeed<GeoRuntime.Result>({
-            code: null,
-            reason: "crash",
-            stdout: "",
-            stderr: error.message,
-            durationMs: Date.now() - startedAt,
-            truncated: false,
-            drainIncomplete: false,
-          }),
-        ),
+        /* A launch that never happened is NOT one of the endings.
+         *
+         * Filing it as `crash` reads out as "a native library segfaulted,
+         * below the Python level, uncatchable", with an elapsed footer for a
+         * process that never existed. What actually lands here is an
+         * interpreter that went away between the gate and the spawn, or a
+         * script that could not be written to the cache — both fixable, and
+         * neither helped by being told the C stack blew up. */
+        Effect.catch((error) => Effect.succeed({ launchFailure: error.message })),
       )
+
+      if ("launchFailure" in result) {
+        return refuse(
+          "QGIS could not start",
+          [
+            "The QGIS interpreter could not be started, so the algorithm never ran.",
+            "",
+            result.launchFailure,
+            "",
+            "The environment passed its check moments ago, so this is something that",
+            "changed underneath it: the installation was moved or removed, or the",
+            "cache directory the runner script is written to is full or unwritable.",
+          ],
+          {
+            truncated: false,
+            algorithm: params.algorithm,
+            error_code: "LaunchFailed",
+            error: true,
+          },
+        )
+      }
 
       const elapsedMs = Date.now() - startedAt
       label = label ?? GeoQgis.QgisExecutor.displayName(streamed)

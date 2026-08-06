@@ -220,6 +220,28 @@ describe("RunQgisAlgorithm, endings", () => {
   const ending = (result: Partial<GeoRuntime.Result>, chunks?: readonly string[]) =>
     harness(runtimeEnding(result, chunks))
 
+  harness(
+    Layer.mock(GeoRuntime.Service)({
+      run: () => Effect.fail(new Error("spawn /gone/QGIS.app/Contents/MacOS/bin/python3 ENOENT")),
+      killAllSync: () => {},
+    }),
+  ).instance("a launch that never happened is not reported as a crash", () =>
+    Effect.gen(function* () {
+      // The gate passed moments ago, so this is something that changed
+      // underneath it — a moved installation, or an unwritable cache. Filing it
+      // as `crash` told the agent a native library segfaulted below the Python
+      // level and could not be caught, and gave a duration for a process that
+      // never existed.
+      const result = yield* succeed({ algorithm: "native:buffer", parameters: '{"INPUT":"/a.shp"}' })
+      expect(result.output).toContain("never ran")
+      expect(result.output).toContain("ENOENT")
+      expect(result.output).not.toContain("segfault")
+      expect(result.output).not.toContain("Elapsed:")
+      expect(result.metadata.elapsed_ms).toBeUndefined()
+      expect(result.metadata.error_code).toBe("LaunchFailed")
+    }),
+  )
+
   ending({ code: 0, reason: "exit" }, ["Algorithm name: Buffer\n", "Progress: 50%\n"]).instance(
     "a clean run reports its name, its output and its duration",
     () =>

@@ -89,15 +89,40 @@ export function classify(message: string): GeoEvent.GeeRejection {
 }
 
 /**
- * Whether a message is an authorization rejection at all.
+ * Markers that place a failure inside the Earth Engine client stack.
  *
- * The real-use feedback loop (§5.5) turns a rejected script into a status
- * update, and this is the guard on that: a script that failed on its own logic
- * must not invalidate a perfectly good authorization. Anything we cannot
- * attribute is left alone.
+ * Deliberately module and exception identities, never the word "earthengine"
+ * on its own: that appears in ordinary file paths, and a user whose output
+ * directory is `~/earthengine/` would have every local error read as a remote
+ * one. A Python traceback from a real refusal always names the exception's
+ * fully qualified type or the library frame it was raised in.
  */
-export function isRejection(message: string): boolean {
-  return classify(message) !== "unknown"
+const EARTH_ENGINE_ORIGIN =
+  /\bEEException\b|ee\.ee_exception|googleapiclient|google\.auth\b|google\.api_core|oauth2client|[/\\]ee[/\\][a-z_]+\.py/i
+
+/**
+ * Whether a FAILED RUN was refused by the remote — the guard on §5.5's loop.
+ *
+ * Takes the run's whole stderr, and the name says so on purpose. `classify`
+ * answers a different question: given text the remote produced, what did it
+ * object to. Feeding it a script's stderr instead asks it to judge text it was
+ * never written for, and the words it keys on are ordinary Python words —
+ * measured on real messages, five of seven common local failures came back as
+ * authorization problems. `PermissionError: [Errno 13] Permission denied` on
+ * an output file read as "the account lacks permission for this project";
+ * `SyntaxError: invalid token` read as expired credentials and sent the user
+ * to re-authenticate.
+ *
+ * The cost of a false positive is not a bad message: the conclusion is cached,
+ * the status slot turns red, and the gate refuses the next call for the whole
+ * backoff. A working setup is taken away over a typo. So the origin has to be
+ * established first, and anything that cannot be placed inside the client
+ * stack is left alone — which is the same principle `unknown` already encodes,
+ * applied one level earlier.
+ */
+export function isRemoteRefusal(stderr: string): boolean {
+  if (!EARTH_ENGINE_ORIGIN.test(stderr)) return false
+  return classify(stderr) !== "unknown"
 }
 
 /** Run the check in the given environment, which must already carry the route. */

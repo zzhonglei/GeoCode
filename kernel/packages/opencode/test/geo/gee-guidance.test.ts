@@ -283,16 +283,45 @@ describe("GeeGuidance", () => {
     expect(text).toContain("ee-demo")
   })
 
-  test("the network branch names the one thing that usually fixes it", () => {
-    // Forbidding every repair leaves the reader with nothing to do unless the
-    // branch also says what DOES help. The old build had this: a proxy serving
-    // only SOCKS is the common shape of "connected, and still unreachable",
-    // and switching it to HTTP or mixed mode is the whole fix. Without the
-    // sentence this branch degrades to "check your network" — true, and not
-    // something anyone can act on.
+  test("the network branch says the network is the problem, and nothing about proxies", () => {
+    /* A product decision, pinned here because it is the kind that drifts back.
+     *
+     * The old build's copy described the route search — which sources were
+     * tried, and that switching a proxy to HTTP or mixed mode is often the fix.
+     * This build says none of it, on purpose: an agent cannot reconfigure the
+     * user's proxy software, so the vocabulary buys nothing and invites a
+     * diagnosis it is in no position to make. The connection is the user's.
+     *
+     * (The sentence that started this was worse than useless — it claimed the
+     * system proxy had been searched, which this build does not do. Copy for
+     * the model is allowed to be thin. It is not allowed to be wrong.)
+     */
     const text = GeeGuidance.render(network({ status: "unreachable" }))
-    expect(text).toContain("SOCKS")
-    expect(text).toMatch(/HTTP or mixed mode/)
+    expect(text).not.toMatch(/proxy|VPN|SOCKS|tunnel/i)
+    // What it does say: the network is at fault, and the local setup is not.
+    expect(text).toMatch(/network connection is what cannot currently\s+reach Earth Engine/)
+    expect(text).toContain("All four steps")
+    expect(text).toMatch(/leave the connection itself to them/)
+  })
+
+  test("writing the configuration names the tool that edits in place", () => {
+    // machine.json holds the qgis, gee and gdal blocks together. "Write
+    // gee.python to the file" invites a heredoc or a redirect that replaces the
+    // whole file, taking the user's QGIS configuration with it. The old build
+    // named the Edit tool at all three of these points for that reason.
+    const writers: GeoEvent.GeeSetup[] = [
+      { status: "unconfigured" },
+      { status: "python-missing", python: PYTHON },
+      { status: "project-missing" },
+    ]
+    for (const state of writers) {
+      const text = GeeGuidance.render(setup(state))
+      expect(text).toMatch(/Edit tool/)
+      expect(text).toMatch(/in place/)
+    }
+    // And the reason travels with the instruction on the two that add a field
+    // to a file that already has other blocks in it.
+    expect(GeeGuidance.render(setup({ status: "unconfigured" }))).toMatch(/QGIS and GDAL/)
   })
 
   // The remote layer ------------------------------------------------------------

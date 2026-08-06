@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs"
 import path from "node:path"
 import { Effect, Schema } from "effect"
+import { Global } from "@opencode-ai/core/global"
 import * as Tool from "./tool"
 import { GeeService, GeoRuntime, GeoStatus } from "@/geo"
 import { GeoOutput } from "@/geo/runtime"
@@ -43,6 +44,9 @@ const STREAM_BUDGET = 30_000
  * truncation would drop (tool/tool.ts).
  */
 const OUTPUT_BUDGET = 60_000
+
+/** Named in the launch-failure text, which points at the field to check. */
+const machineJson = () => path.join(Global.Path.config, "machine.json")
 
 export const Parameters = Schema.Struct({
   script: Schema.optional(Schema.String).annotate({
@@ -230,24 +234,43 @@ export const RunGeeScriptTool = Tool.define<
             })
           }),
       }).pipe(
-        // A spawn that never started is still an ending the caller has to be
-        // told about, in the same shape as every other ending.
-        Effect.catch((error) =>
-          Effect.succeed<GeeService.GeeExecutor.Outcome>({
-            result: {
-              code: null,
-              reason: "crash",
-              stdout: "",
-              stderr: error.message,
-              durationMs: Date.now() - startedAt,
-              truncated: false,
-              drainIncomplete: false,
-            },
-            environment: gate.environment,
-            mode,
-          }),
-        ),
+        /* A launch that never happened is NOT one of the endings.
+         *
+         * It used to be filed as `crash`, which reads out as "a native library
+         * segfaulted, below the Python level, uncatchable" — and carried an
+         * elapsed footer for a process that never existed. Both halves were
+         * wrong in the same direction: the two things that actually land here
+         * are a configured interpreter that has gone away and a cache the
+         * library cannot be written to, and both are fixable. Telling someone
+         * their C stack blew up is telling them to give up. */
+        Effect.catch((error) => Effect.succeed({ launchFailure: error.message })),
       )
+
+      if ("launchFailure" in outcome) {
+        return refuse(
+          "Earth Engine could not start",
+          [
+            "Python could not be started, so the script never ran.",
+            "",
+            outcome.launchFailure,
+            "",
+            "This is the environment, not the script. Two things cause it:",
+            `  1. The configured interpreter is gone or is not executable — check "gee.python" in ${machineJson()}.`,
+            "  2. The runtime library could not be written to the cache directory (a full disk, or its permissions).",
+          ],
+          {
+            truncated: false,
+            mode,
+            ...(params.script_path ? { script: params.script_path } : {}),
+            // `error` is what both runners already use for "the environment is
+            // in the way", and the shut gate beside this one sets it too. The
+            // old build's separate `env_error` is not revived here: it would be
+            // a second spelling of the same fact, on one path out of two.
+            error: true,
+            error_code: "LaunchFailed",
+          },
+        )
+      }
 
       const result = outcome.result
       const elapsedMs = Date.now() - startedAt

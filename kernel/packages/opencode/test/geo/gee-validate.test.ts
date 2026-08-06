@@ -121,12 +121,48 @@ describe("gee rejection attribution", () => {
     expect(GeeValidate.classify("Image.load: parameter 'id' is required")).toBe("unknown")
   })
 
-  test("only an attributable message counts as a rejection", () => {
-    // The feedback loop turns a refused run into a status update. A script
-    // that failed on its own logic must not invalidate a good authorization.
-    expect(GeeValidate.isRejection("Project 'projects/nope' not found or deleted.")).toBe(true)
-    expect(GeeValidate.isRejection("NameError: name 'ee' is not defined")).toBe(false)
-    expect(GeeValidate.isRejection("")).toBe(false)
+  test("a refusal has to come from the Earth Engine stack, not merely sound like one", () => {
+    /* The words `classify` keys on are ordinary Python words, and `reject` feeds
+     * it a whole script's stderr. Measured against real messages before this
+     * guard existed, five of these seven came back as authorization problems —
+     * each one enough to cache a failure, turn the status red, and refuse the
+     * next call for the length of the backoff. A working setup taken away over
+     * a typo or a read-only output directory.
+     *
+     * These strings are real: `[Errno 13]` is what CPython prints for a denied
+     * file, and `invalid token` is its actual wording for a bad character in
+     * source — not a bad credential. */
+    const local = [
+      "PermissionError: [Errno 13] Permission denied: '/Users/me/data/out.tif'",
+      "OSError: [Errno 13] Permission denied",
+      "SyntaxError: invalid token (<string>, line 3)",
+      "ValueError: could not convert string to float: 'login'",
+      "KeyError: 'project id'",
+      "NameError: name 'ee' is not defined",
+      "",
+    ]
+    for (const stderr of local) expect(GeeValidate.isRemoteRefusal(stderr)).toBe(false)
+
+    // A path that happens to contain the word is still not an origin — which is
+    // why the markers are module and exception identities, never "earthengine".
+    expect(
+      GeeValidate.isRemoteRefusal("PermissionError: [Errno 13] Permission denied: '/Users/me/earthengine/out.tif'"),
+    ).toBe(false)
+
+    // And what a real refusal looks like: the traceback names the frame it was
+    // raised in and the exception's fully qualified type.
+    const refused = [
+      'Traceback (most recent call last):\n  File "<string>", line 3, in <module>\n  File "/env/lib/python3.12/site-packages/ee/__init__.py", line 130, in Initialize\nee.ee_exception.EEException: Caller does not have permission to access project demo',
+      "ee.ee_exception.EEException: Earth Engine API has not been used in project 12345 before or it is disabled.",
+      "google.auth.exceptions.RefreshError: invalid_grant: Token has been expired or revoked.",
+    ]
+    for (const stderr of refused) expect(GeeValidate.isRemoteRefusal(stderr)).toBe(true)
+
+    // An Earth Engine frame is necessary, not sufficient: a script that failed
+    // inside the library for its own reasons is still not a refusal.
+    expect(GeeValidate.isRemoteRefusal("ee.ee_exception.EEException: Image.load: parameter 'id' is required")).toBe(
+      false,
+    )
   })
 })
 
@@ -299,13 +335,18 @@ describe("gee remote authorization", () => {
           // "valid" can sit there indefinitely. Nothing polls for it — instead
           // the user's own call is the check, being the same operation against
           // the same remote with the same credentials (§5.5).
-          expect(yield* gee.reject("invalid_grant: Token has been expired or revoked.")).toBe(true)
+          expect(
+            yield* gee.reject("google.auth.exceptions.RefreshError: invalid_grant: Token has been expired or revoked."),
+          ).toBe(true)
           const after = yield* currentStatus
           expect(after?.runtime.status).toBe("failed")
           if (after?.runtime.status === "failed") expect(after.runtime.reason).toBe("credentials-expired")
 
           // And a script that simply had a bug leaves the conclusion alone.
           expect(yield* gee.reject("NameError: name 'ee' is not defined")).toBe(false)
+          // Nor does a local failure whose words merely resemble a refusal —
+          // an output file that cannot be written is not Google saying no.
+          expect(yield* gee.reject("PermissionError: [Errno 13] Permission denied: '/out.tif'")).toBe(false)
           // No remote call was made by either report.
           expect(yield* validations(rt.labels)).toBe(1)
         }),
@@ -350,7 +391,9 @@ describe("gee remote authorization", () => {
           // older answer must not land on top of it.
           const asking = yield* Effect.forkScoped(gee.validate())
           yield* Effect.sleep("100 millis")
-          expect(yield* gee.reject("invalid_grant: Token has been expired or revoked.")).toBe(true)
+          expect(
+            yield* gee.reject("google.auth.exceptions.RefreshError: invalid_grant: Token has been expired or revoked."),
+          ).toBe(true)
           yield* Fiber.join(asking)
 
           const after = yield* currentStatus
