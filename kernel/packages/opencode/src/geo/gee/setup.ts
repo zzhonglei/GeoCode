@@ -61,10 +61,19 @@ for dep in DEPS:
         module = importlib.import_module(dep["module"])
         if dep["module"] == "ee":
             report["version"] = getattr(module, "__version__", "")
-    except Exception:
+    except ImportError:
+        # Genuinely absent. Installing it is the fix, and the guidance says so.
         report["missing"].append(dep["pkg"])
+    except Exception as e:
+        # Present but unusable — an ABI mismatch against the installed GDAL, a
+        # native library that will not load, a half-written install. Reporting
+        # this as "missing" sends the user to install what they already have,
+        # and the sentence that would have explained it is thrown away. The
+        # broad catch stays, because a raising import must not kill the probe.
+        report["broken"] = {"pkg": dep["pkg"], "error": type(e).__name__ + ": " + str(e)}
+        break
 
-if report["missing"]:
+if report.get("broken") or report["missing"]:
     print("${MARKER}" + json.dumps(report))
     sys.stdout.flush()
     os._exit(0)
@@ -101,6 +110,14 @@ export type Report = {
   readonly version?: string
   /** Set when the credential check itself broke — which is not the same as no credentials. */
   readonly credentials_error?: string
+  /**
+   * Set when a package IS installed and still would not import.
+   *
+   * Separate from `missing` because the two have opposite fixes: one is
+   * installed, the other is repaired or reinstalled, and `pip install` on the
+   * first does nothing at all.
+   */
+  readonly broken?: { readonly pkg: string; readonly error: string }
 }
 
 /**
@@ -170,6 +187,19 @@ export function probe(
     const report = extracted.value as Partial<Report>
     if (!Array.isArray(report.missing)) {
       return { status: "probe-failed" as const, error: `the setup report was not the expected shape\n${tail(result)}` }
+    }
+    // An installed package that will not import is not a missing one, and the
+    // difference decides what the user is told to do: `pip install` cannot fix
+    // an ABI mismatch, so calling it "missing" starts a loop — install, still
+    // reported missing, install again. Nor is it a failed probe: this probe
+    // answered, and said which package.
+    if (report.broken) {
+      return {
+        status: "packages-broken" as const,
+        python,
+        pkg: String(report.broken.pkg),
+        error: String(report.broken.error),
+      }
     }
     if (report.missing.length > 0) {
       return { status: "packages-missing" as const, python, missing: report.missing.map(String) }

@@ -115,11 +115,41 @@ function progress(current: 1 | 2 | 3 | 4): string[] {
   ]
 }
 
-/** The smoke test that advances the chain, quoted the same way everywhere. */
-const SMOKE_TEST = ["  from geocode import init_gee", "  init_gee()", "  print('GEE ready')"]
+/**
+ * The smoke test that advances the chain, quoted the same way everywhere.
+ *
+ * Indent is a parameter because one caller is a numbered list whose other
+ * entries sit seven columns in; at the default it renders level with the
+ * number and reads as prose that escaped the step.
+ */
+const smokeTest = (indent = "  ") => [
+  `${indent}from geocode import init_gee`,
+  `${indent}init_gee()`,
+  `${indent}print('GEE ready')`,
+]
 
 /** Saving the file re-probes; no restart. The loop-closing fact (§3.1). */
 const WATCHED = "GeoCode watches machine.json and re-probes the moment it is saved — no restart."
+
+/**
+ * The rule that outranks every install instruction in this file.
+ *
+ * Every step of this chain that the agent can perform alone works by changing
+ * the user's Python environment, and those changes are not ours to make
+ * silently: an environment is something a geographer has usually built for
+ * their own work, with other projects depending on it. A package replaced
+ * without asking can break something that has nothing to do with us, and the
+ * person who has to fix it will not know what changed.
+ *
+ * Stated once and repeated into each state that installs anything, rather than
+ * left implicit in the response templates — those show what asking looks like,
+ * which is not the same as saying it is required.
+ */
+const PERMISSION = [
+  "ALWAYS get the user's agreement before changing their Python environment —",
+  "creating one, installing into one, replacing a package. Ask, and wait for",
+  "the answer. It is their machine and their environment.",
+]
 
 // Step 1 — the interpreter. Agent's to complete. --------------------------------
 
@@ -141,8 +171,8 @@ function unconfigured(): string {
     "",
     "There is no standard install location for this. Most users keep an",
     "isolated environment built with conda, miniforge, or venv. If one already",
-    `exists with ${GeeDeps.PACKAGES.join(", ")} installed, point "gee.python"`,
-    "at its interpreter and this step is done.",
+    `exists with ${GeeDeps.PACKAGES.join(", ")} installed,`,
+    `point "gee.python" at its interpreter and this step is done.`,
     "",
     "To configure, edit the file above:",
     "{",
@@ -152,6 +182,7 @@ function unconfigured(): string {
     "}",
     "",
     "Note for the agent: offer to find or create an environment for the user.",
+    ...PERMISSION,
     "",
     "  1. Look for one that already exists:",
     "       conda env list",
@@ -160,8 +191,15 @@ function unconfigured(): string {
     "     pick one automatically, especially when there are several — the user",
     "     knows which environment is theirs to change.",
     "",
+    // conda, because that is what this audience actually runs: geopandas and
+    // the GDAL stack under it install cleanly from conda-forge and routinely
+    // need compiling under a bare venv. The guardrail is separate from the
+    // choice of tool — using conda is fine, INSTALLING it is not ours to do
+    // (the same rule the QGIS branch carries about installers).
     "  2. If there is none, create one:",
     "       conda create -n <name> python=3.12 -y",
+    "     Do NOT install conda or miniforge yourself. If the user has neither,",
+    "     that is theirs to install.",
     "",
     "  3. Install the packages ONE AT A TIME, one command per package:",
     ...GeeDeps.PACKAGES.map((pkg) => `       <env-python> -m pip install ${pkg}`),
@@ -177,7 +215,7 @@ function unconfigured(): string {
     "     is how those get lost.",
     "",
     "  6. Then run a minimal script to reach the next step:",
-    ...SMOKE_TEST,
+    ...smokeTest("       "),
     "",
     "Default response template (adapt the wording, keep the intent):",
     "",
@@ -244,7 +282,14 @@ function packagesMissing(python: string, missing: readonly string[]): string {
           "If you would rather use conda-forge — worth it in a conda environment,",
           "because geopandas pulls in fiona and pyogrio, which bind to GDAL and",
           "can ABI-mismatch pip wheels against what conda already installed:",
-          ...packages.map((pkg) => `  conda install -c conda-forge ${pkg}`),
+          // ONE command, unlike the pip lines above. The reason those are split
+          // is pip's: it installs what it is told, one at a time, so separate
+          // commands are visible progress. conda solves the whole environment
+          // per invocation — asking four times can downgrade what the previous
+          // call just placed, and is markedly slower than one solve. The
+          // discipline is "do not leave the user staring at silence", not "one
+          // package per command"; here they point opposite ways.
+          `  conda install -c conda-forge ${packages.join(" ")}`,
           "  (this one needs `conda` on PATH; the commands above always work)",
         ]
       : []
@@ -273,6 +318,8 @@ function packagesMissing(python: string, missing: readonly string[]): string {
     ...condaForge,
     "",
     "Note for the agent: offer to run the installs for the user.",
+    ...PERMISSION,
+    "",
     "Default response template:",
     "",
     `  "Earth Engine is missing some Python packages (${packages.join(", ")}).`,
@@ -285,7 +332,66 @@ function packagesMissing(python: string, missing: readonly string[]): string {
     "so there. Then call the GEE tool again; the next check picks up what",
     "was installed.",
     "",
-    "Do NOT just print the commands and wait passively. Take initiative.",
+    // The old build's "Take initiative" full stop, narrowed to what it is
+    // initiative ABOUT. Beside the permission rule above, the bare version
+    // reads as licence to run the installs — the initiative is in offering.
+    "Do NOT just print the commands and leave them there. Offer to run them.",
+  ].join("\n")
+}
+
+/**
+ * Installed and unusable — the same step as a missing package, the opposite fix.
+ *
+ * The reason this is not folded into `packagesMissing` is that its advice would
+ * be actively wrong there: the package IS installed, so installing it does
+ * nothing and the next probe says the same thing again. What actually helps is
+ * replacing the installation, and in a conda environment, replacing it from the
+ * channel that built the rest of the environment.
+ */
+function packagesBroken(python: string, pkg: string, error: string): string {
+  const dep = GeeDeps.byPackage(pkg)
+  const conda = isConda(python)
+    ? [
+        "",
+        "This is a conda environment, and that is very likely the cause: a pip",
+        "wheel built against one version of a native library, sitting next to the",
+        "one conda installed. Prefer conda-forge here, which builds against the",
+        "same libraries as the rest of the environment:",
+        `  conda install -c conda-forge --force-reinstall ${pkg}`,
+      ]
+    : []
+  return [
+    `${pkg} is installed, but importing it fails.`,
+    "",
+    ...progress(2),
+    "",
+    `Configuration file: ${machineJson()}`,
+    `Python interpreter: ${python}`,
+    "",
+    "Error:",
+    `  ${error}`,
+    ...(dep ? ["", `${pkg} is needed for: ${dep.role}`] : []),
+    "",
+    "Installing it again will not fix this — it is already installed. An import",
+    "that raises like this is the installation itself being unusable: a native",
+    "library that will not load, or a binary built against a different version",
+    "of something it links to.",
+    ...conda,
+    "",
+    "Note for the agent: replace the installation rather than adding to it.",
+    ...PERMISSION,
+    "",
+    `  1. ${quote(python)} -m pip install --force-reinstall --no-cache-dir ${pkg}`,
+    "  2. Check it directly, without the rest of the chain:",
+    `       ${quote(python)} -c "import ${dep?.module ?? pkg}"`,
+    "  3. If it still raises, the environment is the problem, not the package.",
+    "     Offer to build a fresh one and point gee.python at it — that is step 1",
+    "     of this chain, and it is the reliable fix.",
+    "",
+    "Do NOT tell the user the package is missing. It is not, and they will have",
+    "watched it install successfully.",
+    "",
+    "Then call the GEE tool again; the check runs from the start.",
   ].join("\n")
 }
 
@@ -340,7 +446,7 @@ function credentialsMissing(python: string): string {
     "",
     "When the user says they are ready, run the command. When they say the",
     "browser part is done, verify with a minimal script:",
-    ...SMOKE_TEST,
+    ...smokeTest(),
     "",
     "Do NOT just print the command and wait passively. Take initiative.",
   ].join("\n")
@@ -389,7 +495,7 @@ function projectMissing(): string {
     "Once the user provides it, use the Read and Edit tools to add it to the gee",
     "block in the file above — in place, leaving the other blocks untouched.",
     "Then verify:",
-    ...SMOKE_TEST,
+    ...smokeTest(),
     "",
     WATCHED,
   ].join("\n")
@@ -457,6 +563,8 @@ function setupGuidance(setup: GeoEvent.GeeSetup): string {
       return "Earth Engine's environment is still being checked — the first check after a configuration change can take a while. Try again shortly."
     case "packages-missing":
       return packagesMissing(setup.python, setup.missing)
+    case "packages-broken":
+      return packagesBroken(setup.python, setup.pkg, setup.error)
     case "credentials-missing":
       return credentialsMissing(setup.python)
     case "project-missing":
@@ -562,7 +670,8 @@ function runtimeGuidance(python: string, project: string, runtime: GeoEvent.GeeR
       case "project-invalid":
         return [
           "  Check the configured project. If it is wrong, update gee.project in",
-          "  machine.json to the one shown in the Earth Engine editor.",
+          "  machine.json — the id is shown at the top of the Earth Engine editor,",
+          "  or in the Google Cloud console for a project created there.",
         ]
       case "unknown":
         return [
@@ -576,6 +685,7 @@ function runtimeGuidance(python: string, project: string, runtime: GeoEvent.GeeR
   return [
     "Google refused to authorize Earth Engine.",
     "",
+    `Configuration file: ${machineJson()}`,
     `Python interpreter: ${python}`,
     `Configured project: ${project}`,
     `Attributed to:      ${runtime.reason}`,
@@ -612,7 +722,7 @@ function runtimeGuidance(python: string, project: string, runtime: GeoEvent.GeeR
     "",
     "After the fix lands — a configuration edit, a new sign-in, or a change in",
     "the Google Cloud console — verify with a minimal script:",
-    ...SMOKE_TEST,
+    ...smokeTest(),
   ].join("\n")
 }
 

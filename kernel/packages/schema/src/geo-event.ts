@@ -146,6 +146,22 @@ export const GeeSetup = Schema.Union([
     python: Schema.String,
     missing: Schema.Array(Schema.String),
   }),
+  /**
+   * Installed, and still unusable — a native library that will not load, or a
+   * binary built against a different version of what it links to.
+   *
+   * Its own state rather than a shade of `packages-missing`, because the two
+   * have opposite fixes and the wrong one loops: installing what is already
+   * installed changes nothing, and the probe reports it missing again. Nor is
+   * it `probe-failed`, which means the check produced no usable answer — this
+   * check answered, and named the package.
+   */
+  Schema.Struct({
+    status: Schema.Literal("packages-broken"),
+    python: Schema.String,
+    pkg: Schema.String,
+    error: Schema.String,
+  }),
   Schema.Struct({ status: Schema.Literal("credentials-missing"), python: Schema.String }),
   Schema.Struct({ status: Schema.Literal("project-missing") }),
   Schema.Struct({ status: Schema.Literal("probe-timeout") }),

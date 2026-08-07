@@ -1,4 +1,4 @@
-import { afterAll, describe, expect } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -135,6 +135,59 @@ describe("gee setup chain", () => {
     )
     it.effect("missing packages are named individually and travel as data", body)
   }
+
+  {
+    // An installed package that will not import is NOT a missing one. The probe
+    // catches broadly so a raising import cannot kill it, and the breadth used
+    // to swallow the difference: an ABI mismatch against the installed GDAL, or
+    // a native library that fails to load, came back as "not installed". The
+    // guidance for that state is `pip install <pkg>`, which cannot fix either —
+    // so the user installs what they already have, is told again that it is
+    // missing, and installs it again. The exception text, which is the only
+    // thing that explains the real fault, was dropped on the floor.
+    const { it, body } = run(
+      // Shaped as the script really emits it: `missing` is always present, and
+      // `broken` rides alongside it when an import raised something other than
+      // ImportError.
+      [
+        {
+          stdout: marked({
+            missing: [],
+            broken: { pkg: "geopandas", error: "ImportError: DLL load failed while importing _fiona" },
+          }),
+        },
+      ],
+      (runtime) =>
+        Effect.gen(function* () {
+          const state = yield* GeeSetup.probe(runtime, { python, project: "p" })
+          // Its own state: not `packages-missing`, whose fix is an install that
+          // would do nothing here, and not `probe-failed`, which means the
+          // check produced no usable answer. This one answered.
+          expect(state.status).toBe("packages-broken")
+          if (state.status === "packages-broken") {
+            expect(state.pkg).toBe("geopandas")
+            expect(state.python).toBe(python)
+            // The sentence that says what is actually wrong survives.
+            expect(state.error).toContain("DLL load failed")
+          }
+        }),
+    )
+    it.effect("a package that is installed and unusable is not reported as absent", body)
+  }
+
+  test("the distinction is drawn in the Python, where no scripted runtime can see it", () => {
+    // The test above proves the STATE layer handles a `broken` report. It
+    // cannot prove the report is ever produced: the runtime is scripted, so the
+    // Python never runs here and a single broad `except` would erase the
+    // difference at its source with every TypeScript test still green.
+    //
+    // An assertion about source text is weak, and it is the strongest thing
+    // available without a real interpreter on the machine running the suite.
+    // What it holds down is the exact regression: catching everything as
+    // absence.
+    expect(GeeSetup.SCRIPT).toContain("except ImportError:")
+    expect(GeeSetup.SCRIPT).toMatch(/except Exception as e:[\s\S]*report\["broken"\]/)
+  })
 
   {
     const { it, body } = run([{ stdout: marked({ missing: [], credentials: false, version: "1.7.24" }) }], (runtime) =>

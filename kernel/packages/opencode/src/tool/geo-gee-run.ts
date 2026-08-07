@@ -48,6 +48,29 @@ const OUTPUT_BUDGET = 60_000
 /** Named in the launch-failure text, which points at the field to check. */
 const machineJson = () => path.join(Global.Path.config, "machine.json")
 
+/**
+ * The module a script imported and this environment does not have.
+ *
+ * The setup probe checks the four packages the runtime library itself needs
+ * (§5.3) — nothing more, because nothing more is knowable in advance. A script
+ * that imports scikit-learn, rasterio or a plotting library therefore passes
+ * the gate and fails HERE, at import time, with the gate still correctly open.
+ *
+ * Worth detecting because this is a failure the agent can actually repair, and
+ * the one thing it needs is which interpreter to repair: the configured one,
+ * never whatever `pip` resolves to on PATH (§5.11 安装纪律). A bare traceback
+ * says what is missing and nothing about where it belongs.
+ *
+ * Both spellings: `ModuleNotFoundError` is what modern CPython raises, and the
+ * older `ImportError: No module named x` still turns up from vendored code.
+ */
+export function missingModule(stderr: string): string | undefined {
+  const modern = stderr.match(/ModuleNotFoundError: No module named ['"]([\w.]+)['"]/)
+  if (modern) return modern[1]
+  const legacy = stderr.match(/ImportError: No module named ['"]?([\w.]+)['"]?/)
+  return legacy?.[1]
+}
+
 export const Parameters = Schema.Struct({
   script: Schema.optional(Schema.String).annotate({
     description:
@@ -297,6 +320,22 @@ export const RunGeeScriptTool = Tool.define<
       const refreshed = rejected ? yield* status.current("gee") : undefined
       const authGuidance = refreshed ? GeeService.GeeGuidance.render(refreshed) : undefined
 
+      /* Detected for the metadata channel only — the agent is told nothing.
+       *
+       * A script that imports something this environment lacks fails with a
+       * traceback naming the module, under a header naming the interpreter.
+       * That is the whole picture, and the agent reasons from it. Three
+       * successive attempts to "help" here were all padding: restating the
+       * module, explaining which packages the probe covers, spelling out the
+       * install command. Advice of that kind narrows a capable reader into
+       * following steps instead of thinking, and it is the tool's job to
+       * report, not to instruct.
+       *
+       * The field below is a different channel with a different consumer
+       * (§9.1): a surface can offer an action from it without anyone reading
+       * prose for it. */
+      const absent = succeeded ? undefined : missingModule(result.stderr)
+
       const structured = result.stderr.trim() ? GeoOutput.structuredError(result.stderr) : undefined
       const raw = structured ?? result.stderr.trim()
       // An idle stop is the one ending whose fix is a contract the script did
@@ -328,6 +367,9 @@ export const RunGeeScriptTool = Tool.define<
         ...(result.code !== null ? { exit_code: result.code } : {}),
         ...(result.drainIncomplete ? { partial: true } : {}),
         ...(rejected ? { auth_rejected: true } : {}),
+        // So a surface can offer the install as an action rather than asking
+        // the user to read a traceback for it.
+        ...(absent ? { missing_module: absent } : {}),
       }
       switch (result.reason) {
         case "abort":

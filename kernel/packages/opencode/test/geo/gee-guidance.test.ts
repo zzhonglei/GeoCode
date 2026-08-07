@@ -73,6 +73,7 @@ const ALL_SETUP: GeoEvent.GeeSetup[] = [
   { status: "python-missing", python: PYTHON },
   { status: "checking" },
   { status: "packages-missing", python: PYTHON, missing: ["geemap"] },
+  { status: "packages-broken", python: PYTHON, pkg: "geopandas", error: "ImportError: DLL load failed" },
   { status: "credentials-missing", python: PYTHON },
   { status: "project-missing" },
   { status: "probe-timeout" },
@@ -90,6 +91,7 @@ describe("GeeGuidance", () => {
       "checking",
       "config-error",
       "credentials-missing",
+      "packages-broken",
       "packages-missing",
       "probe-failed",
       "probe-timeout",
@@ -171,7 +173,10 @@ describe("GeeGuidance", () => {
       // The role line, so the user learns what they are installing and why.
       expect(text).toContain(GeeDeps.byPackage(pkg)!.role)
     }
-    expect(text).toContain("Take initiative")
+    // Initiative in OFFERING, which is what the old build's bare "Take
+    // initiative" meant and no longer reads as beside the permission rule.
+    expect(text).toMatch(/Offer to run them/)
+    expect(text).not.toMatch(/Take initiative/)
   })
 
   test("an empty missing list still names something to install", () => {
@@ -201,6 +206,74 @@ describe("GeeGuidance", () => {
     expect(noConda).not.toContain("conda-forge")
     // And the always-runnable command is still there in every case.
     expect(noConda).toContain("-m pip install geopandas")
+  })
+
+  test("an installed-but-broken package is never called missing", () => {
+    // The whole reason this state exists. Its guidance must not send anyone to
+    // install what is already installed — that is the loop it was split off to
+    // break — and it has to carry the exception text, which is the only thing
+    // that explains the real fault.
+    const text = GeeGuidance.render(
+      setup({
+        status: "packages-broken",
+        python: PYTHON,
+        pkg: "geopandas",
+        error: "ImportError: DLL load failed while importing _fiona",
+      }),
+    )
+    expect(text).toContain("DLL load failed while importing _fiona")
+    expect(text).toMatch(/Installing it again will not fix this/)
+    expect(text).toMatch(/Do NOT tell the user the package is missing/)
+    // The fix is a replacement, not an addition.
+    expect(text).toContain("--force-reinstall")
+    // Still step 2: the chain stopped in the same place, for a different reason.
+    expect(text).toContain("Step 2 of 4")
+
+    // conda gets the extra paragraph, because a pip wheel beside conda's own
+    // native libraries is the likeliest cause there. A venv does not.
+    const inConda = GeeGuidance.render(
+      setup({ status: "packages-broken", python: CONDA_PYTHON, pkg: "geopandas", error: "boom" }),
+    )
+    expect(inConda).toContain("conda install -c conda-forge --force-reinstall geopandas")
+    expect(text).not.toContain("conda-forge")
+  })
+
+  test("the conda alternative is one solve, not one command per package", () => {
+    // The pip lines are split because pip installs what it is told, one at a
+    // time, so separate commands are visible progress. conda solves the whole
+    // environment per invocation: four calls can each downgrade what the last
+    // one placed, and are markedly slower than one solve. Splitting these was
+    // this build's own mistake — the discipline is "do not leave the user
+    // staring at silence", and here that reasoning points the other way.
+    const text = GeeGuidance.render(
+      setup({ status: "packages-missing", python: CONDA_PYTHON, missing: ["geopandas", "geemap"] }),
+    )
+    expect(text).toContain("conda install -c conda-forge geopandas geemap")
+    expect(text.match(/conda install/g) ?? []).toHaveLength(1)
+    // The pip commands beside it stay one per package.
+    expect(text.match(/-m pip install \S+/g) ?? []).toHaveLength(2)
+  })
+
+  test("a rejected project is looked up in both places it can exist", () => {
+    // A project created in the Google Cloud console and never opened in the
+    // Earth Engine editor will not be "the one shown at the top of the editor".
+    // Naming only that place sends the user to look somewhere it is not.
+    //
+    // Scoped to the attributed fix, not the whole text: the closing paragraph
+    // mentions the Cloud console for an unrelated reason, so a whole-text match
+    // stays green with this paragraph's half deleted. It did, until this line.
+    const text = GeeGuidance.render(remote({ status: "failed", reason: "project-invalid", message: "no such project" }))
+    const fix = text.split("Most likely fix:")[1]?.split("\n\n")[0] ?? ""
+    expect(fix).toMatch(/Earth Engine editor/)
+    expect(fix).toMatch(/Google Cloud console/)
+  })
+
+  test("the remote refusal names the file it tells the agent to edit", () => {
+    // It asks for gee.project to be corrected in machine.json. Every setup
+    // state prints the absolute path; this one was the only state that did not,
+    // leaving an agent to guess where a file under the config directory lives.
+    const text = GeeGuidance.render(remote({ status: "failed", reason: "project-invalid", message: "no such project" }))
+    expect(text).toContain(MACHINE)
   })
 
   // Step 3 — the sign-in --------------------------------------------------------
@@ -302,6 +375,42 @@ describe("GeeGuidance", () => {
     expect(text).toMatch(/network connection is what cannot currently\s+reach Earth Engine/)
     expect(text).toContain("All four steps")
     expect(text).toMatch(/leave the connection itself to them/)
+  })
+
+  test("every state that installs anything asks permission first", () => {
+    /* The rule that outranks every install instruction here.
+     *
+     * An environment is usually something the user built for their own work,
+     * with other projects depending on it. A package replaced without asking
+     * can break something unrelated to us, and the person left fixing it will
+     * not know what changed.
+     *
+     * Asserted on all three states that change an environment, because the
+     * response templates already demonstrate asking — and a demonstration is
+     * not a requirement. The one that gets skipped is the one nobody stated.
+     */
+    const installers: GeoEvent.GeeSetup[] = [
+      { status: "unconfigured" },
+      { status: "packages-missing", python: PYTHON, missing: ["geemap"] },
+      { status: "packages-broken", python: PYTHON, pkg: "geopandas", error: "boom" },
+    ]
+    for (const state of installers) {
+      const text = GeeGuidance.render(setup(state))
+      expect(text).toMatch(/ALWAYS get the user's agreement before changing their Python environment/)
+      expect(text).toMatch(/Ask, and wait for\s+the answer/)
+    }
+  })
+
+  test("using conda is fine; installing it is not ours to do", () => {
+    // The example is conda because that is what this audience runs — geopandas
+    // and the GDAL stack under it install cleanly from conda-forge and
+    // routinely need compiling under a bare venv. The guardrail is a separate
+    // question from the choice of tool, and it is the same one the QGIS branch
+    // carries: putting software on the user's machine is not the agent's to do.
+    const text = GeeGuidance.render(setup({ status: "unconfigured" }))
+    expect(text).toContain("conda create -n <name> python=3.12 -y")
+    expect(text).toMatch(/Do NOT install conda or miniforge yourself/)
+    expect(text).toMatch(/that is theirs to install/)
   })
 
   test("writing the configuration names the tool that edits in place", () => {

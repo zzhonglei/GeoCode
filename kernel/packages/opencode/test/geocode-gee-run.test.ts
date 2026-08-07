@@ -332,6 +332,67 @@ describe("RunGeeScript, the endings", () => {
     { timeout: 20_000 },
   )
 
+  ending(
+    {
+      reason: "exit",
+      code: 1,
+      stderr:
+        "Traceback (most recent call last):\n  File \"<string>\", line 2, in <module>\nModuleNotFoundError: No module named 'sklearn'",
+    },
+    ["loading region\n"],
+  ).instance("a failed run carries the environment it ran in, beside what Python said", () =>
+    Effect.gen(function* () {
+      /* The two halves that make an import failure repairable — and the reason
+       * this tool adds almost nothing to them.
+       *
+       * The setup probe only covers the four packages the runtime library needs
+       * (§5.3), so a script importing scikit-learn passes the gate and fails
+       * here, correctly. Python's traceback already names the module. The one
+       * thing it cannot say is WHICH interpreter is missing it, and the
+       * environment header says exactly that on every post-spawn path.
+       *
+       * Registering the slot is what makes the header renderable at all: the
+       * status service is real here while the GEE service is a stub, so nothing
+       * else publishes a status — and without this, every assertion below about
+       * the header would have passed against no header at all.
+       */
+      const status = yield* GeoStatus.Service
+      yield* status.register("gee", READY)
+
+      const result = yield* succeed({ script: "import sklearn" })
+
+      // Half one: the environment, with the interpreter in it.
+      expect(result.output).toContain("<geo_env>")
+      expect(result.output).toContain(ENVIRONMENT.python)
+      // Half two: Python's own words, verbatim.
+      expect(result.output).toContain("ModuleNotFoundError: No module named 'sklearn'")
+      // The header comes FIRST, so the environment frames everything after it.
+      expect(result.output.indexOf("<geo_env>")).toBeLessThan(result.output.indexOf("ModuleNotFoundError"))
+
+      /* And NOTHING else. The agent reasons from those two facts; it does not
+       * need to be handed the command, told which packages the probe covers,
+       * or reminded that an import name can differ from a package name.
+       *
+       * Pinned as an absence because this is where the drift goes: three
+       * separate attempts to add exactly this advice were written and removed
+       * before the assertion below existed. Instructions crowd out reasoning,
+       * and the tool's job is to report. */
+      expect(result.output).not.toMatch(/pip install/i)
+      expect(result.output).not.toMatch(/install it|you should|make sure to/i)
+      expect(result.output).not.toMatch(/scikit-learn|opencv/i)
+
+      // The structured channel still carries it, for a surface to act on (§9.1).
+      expect(result.metadata.missing_module).toBe("sklearn")
+      expect(result.metadata.error_code).toBe("ScriptFailed")
+      expect(result.output).toContain("loading region")
+      // The stderr still goes to the kernel — it owns the judgement of what
+      // counts as a refusal — and the answer is no. An import error is not
+      // Google saying anything.
+      expect(seen.rejected).toHaveLength(1)
+      expect(result.metadata.auth_rejected).toBeUndefined()
+    }),
+  )
+
   ending({}, ["ndvi mean: 0.42\n"]).instance("a run that succeeded returns its output and its duration", () =>
     Effect.gen(function* () {
       const result = yield* succeed({ script: "print('ndvi mean: 0.42')" })
