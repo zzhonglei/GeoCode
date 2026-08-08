@@ -449,9 +449,9 @@ describe("osm download", () => {
           const points = path.join(root, "keep", "out-points.geojson")
           expect(fs.existsSync(points)).toBe(true)
 
-          // Same download, network gone. Writing an empty collection here would
-          // clear the siblings of a run that HAD succeeded, so a transient
-          // failure would destroy the data the re-run was meant to refresh.
+          // Same download, network gone. An empty run creates no file at all:
+          // there is nothing worth writing, and the earlier run's files are
+          // not this run's to touch (§6.7 — nothing overwrites).
           const second = yield* osm.downloadFeatures({
             extents: ["bbox:31.5,114,32,115"],
             tags: ["amenity"],
@@ -464,6 +464,32 @@ describe("osm download", () => {
           expect(JSON.parse(fs.readFileSync(points, "utf-8")).features).toHaveLength(1)
         }),
       { timeout: 30000 },
+    )
+  }
+
+  {
+    const http = scriptedHttp(() => json(elements))
+    const it = graph(http.layer)
+
+    it.live("a second download to the same path is numbered, not written over the first", () =>
+      Effect.gen(function* () {
+        const osm = yield* GeoOsm.Service
+        const output = path.join(root, "again", "roads.geojson")
+
+        const first = yield* osm.downloadFeatures({ extents: ["bbox:30,114,31,115"], tags: ["amenity"], output })
+        const second = yield* osm.downloadFeatures({ extents: ["bbox:30,114,31,115"], tags: ["amenity"], output })
+
+        // Asking for the same path again is the ordinary case, not a mistake:
+        // refreshing, recovering a dropped field, retrying a short result. It
+        // costs minutes of somebody's time, so the earlier run stays.
+        const firstPaths = first.outputs.map((entry) => entry.path)
+        const secondPaths = second.outputs.map((entry) => entry.path)
+        expect(secondPaths).not.toEqual(firstPaths)
+        for (const written of [...firstPaths, ...secondPaths]) expect(fs.existsSync(written)).toBe(true)
+        expect(second.features).toBe(first.features)
+        // The number lands on the base, so a split run's files stay one run.
+        expect(secondPaths.every((entry) => entry.includes("roads-1"))).toBe(true)
+      }),
     )
   }
 

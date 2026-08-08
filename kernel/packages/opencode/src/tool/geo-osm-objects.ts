@@ -23,10 +23,9 @@ import DESCRIPTION from "./geo-osm-objects.txt"
  * to fetch it on its own, which needs to know which one it was; "3 objects
  * were dropped" cannot be acted on at all.
  *
- * And a run that wrote nothing says so first. The kernel deliberately leaves an
- * existing file untouched when a run obtains nothing and something failed —
- * otherwise a transient network failure on a re-run erases the download it was
- * meant to refresh — but that protection only works if the caller does not read
+ * And a run that wrote nothing says so first. Nothing here overwrites — a
+ * name already taken is numbered instead (§6.7) — so an empty run simply
+ * creates no file, and the caller has to be told that rather than left to read
  * silence as success. --- */
 
 export const Parameters = Schema.Struct({
@@ -135,7 +134,9 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
       const asked = result.extentsAsked
 
       if (result.outputs.length === 0) {
-        lines.push(`No file was written, and none of the ${asked} requested object(s) was obtained.`)
+        // That no file exists is the kernel's note, printed above. This line
+        // carries the half that note cannot: how much was asked for.
+        lines.push(`None of the ${asked} requested object(s) could be obtained.`)
         return {
           title,
           output: lines.join("\n"),

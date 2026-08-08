@@ -349,29 +349,38 @@ describe("osm output files", () => {
     expect(fs.existsSync(base.replace(".geojson", "-points.geojson"))).toBe(true)
   })
 
-  test("a re-run leaves exactly its own files, both ways round", () => {
+  test("a re-run writes beside the last one, both ways round", () => {
     const base = path.join(root, "rerun", "out.geojson")
     const points = base.replace(".geojson", "-points.geojson")
     const lines = base.replace(".geojson", "-lines.geojson")
 
-    // Split first…
+    // This used to assert the opposite: a re-run deleted the siblings it had
+    // not produced, so a directory held exactly one run's files. That rule was
+    // replaced by numbering (§6.7) — a download costs minutes and the same path
+    // is asked for again all the time, so the earlier run stays and the later
+    // one takes the next name.
     OsmOutput.write(base, [feature(1, "Point"), feature(2, "LineString")])
     expect(fs.existsSync(points) && fs.existsSync(lines)).toBe(true)
 
-    // …then a run that produces only points. The line sibling described data
-    // this run did not produce, and nothing about it would say so.
-    OsmOutput.write(base, [feature(1, "Point")])
-    expect(fs.existsSync(base)).toBe(true)
-    expect(fs.existsSync(points)).toBe(false)
-    expect(fs.existsSync(lines)).toBe(false)
-
-    // And back the other way: the unsplit file is stale once a run splits.
-    OsmOutput.write(base, [feature(1, "Point"), feature(2, "LineString")])
-    expect(fs.existsSync(base)).toBe(false)
+    // …then a run that produces only points. It lands on a numbered base, and
+    // the previous run's two files are none of its business.
+    const second = OsmOutput.write(base, [feature(1, "Point")])
+    expect(second.outputs[0]!.path).toBe(path.join(root, "rerun", "out-1.geojson"))
     expect(fs.existsSync(points) && fs.existsSync(lines)).toBe(true)
+
+    // And back the other way: a splitting run after an unsplit one.
+    const third = OsmOutput.write(base, [feature(1, "Point"), feature(2, "LineString")])
+    expect(third.outputs.map((o) => o.path).sort()).toEqual([
+      path.join(root, "rerun", "out-2-lines.geojson"),
+      path.join(root, "rerun", "out-2-points.geojson"),
+    ])
+    expect(fs.existsSync(path.join(root, "rerun", "out-1.geojson"))).toBe(true)
   })
 
-  test("an empty result still writes a file rather than leaving the last one", () => {
+  test("an empty list still produces a file rather than throwing", () => {
+    // The service never calls it this way — `writeIfAny` stops at zero features
+    // because an empty file is not worth creating. The tolerance stays so that
+    // a direct call cannot fall off the end of an empty family map.
     const base = path.join(root, "empty", "out.geojson")
     const { outputs } = OsmOutput.write(base, [])
     expect(outputs[0]!.family).toBe("empty")

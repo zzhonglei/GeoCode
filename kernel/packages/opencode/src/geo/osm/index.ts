@@ -171,23 +171,25 @@ export interface DownloadResult {
 }
 
 /**
- * Write the results, unless writing would destroy better data than it creates.
+ * Write, unless there is nothing to write.
  *
- * §6.7 keeps partial results because on a multi-area download some data beats
- * none. When there is nothing at all AND something failed, the same code path
- * turns destructive: writing an empty collection and clearing the stale
- * siblings would replace a previous successful run's files with an empty one,
- * so a transient network failure on a re-run erases the download it was meant
- * to refresh. An empty result with no failures is a real answer and is written.
+ * One condition, and it asks about this run only: did anything come back. Not
+ * whether an extent failed, not whether the caller cancelled, not what is
+ * already on disk — those all used to matter here, because writing overwrote,
+ * and getting the condition wrong destroyed a finished download. Writing no
+ * longer overwrites (§6.7), so the only thing left to decide is whether a file
+ * is worth creating at all, and an empty one is not.
+ *
+ * Partial results still go to disk: on a multi-area download some data beats
+ * none, as long as the shortfall is stated (§6.7).
  */
-function writeOrKeep(
+function writeIfAny(
   output: string,
   features: readonly OsmConvert.Feature[],
-  anyFailure: boolean,
   notes: string[],
 ): { outputs: readonly OsmOutput.Written[]; bytes: number } {
-  if (features.length === 0 && anyFailure) {
-    notes.push("nothing was obtained, so any existing output file was left as it was")
+  if (features.length === 0) {
+    notes.push("nothing was obtained, so no file was written")
     return { outputs: [], bytes: 0 }
   }
   return OsmOutput.write(output, features)
@@ -623,7 +625,7 @@ const layer = Layer.effect(
         }
 
         const deduped = OsmConvert.dedupe(features)
-        const written = writeOrKeep(input.output, deduped, failed.length > 0, notes)
+        const written = writeIfAny(input.output, deduped, notes)
         return {
           outputs: written.outputs,
           features: deduped.length,
@@ -713,7 +715,7 @@ const layer = Layer.effect(
         // Whatever was obtained is written even when some extents failed: on a
         // multi-area download, partial results beat discarding everything
         // (§6.7 失败时保留已获得的部分结果并标记).
-        const written = writeOrKeep(input.output, features, failed.length > 0, notes)
+        const written = writeIfAny(input.output, features, notes)
         return {
           outputs: written.outputs,
           features: features.length,

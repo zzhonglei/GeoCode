@@ -248,21 +248,20 @@ describe("OsmGetObjects, what did not make it", () => {
               { extent: "R1", reason: "all 8 Overpass endpoints failed across 2 rounds" },
               { extent: "R2", reason: "all 8 Overpass endpoints failed across 2 rounds" },
             ],
-            notes: ["nothing was obtained, so any existing output file was left as it was"],
+            notes: ["nothing was obtained, so no file was written"],
           }),
         ),
     }),
   ).instance(
-    "a run that wrote nothing says so, and says the old file survived",
+    "a run that wrote nothing says so, and says how much was asked for",
     () =>
       Effect.gen(function* () {
-        // The kernel refuses to write an empty result over a previous good one:
-        // otherwise a transient failure on a re-run erases the download it was
-        // meant to refresh. The protection only works if the caller does not
-        // read silence as success.
+        // An empty run creates no file — nothing here overwrites, so there is
+        // nothing to protect and nothing to write either. What the caller must
+        // not do is read the silence as success, which is why the sentence
+        // states the size of the request rather than only the outcome.
         const result = yield* succeed({ ids: ["R1", "R2"], output: "/data/b.geojson" })
-        expect(result.output).toContain("No file was written")
-        expect(result.output).toContain("left as it was")
+        expect(result.output).toContain("None of the 2 requested object(s) could be obtained")
         expect(result.output).not.toContain("Wrote")
         expect(result.metadata.error_code).toBe("NothingObtained")
         expect(result.metadata.failed).toBe(true)
