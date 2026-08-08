@@ -1,0 +1,14 @@
+Use this tool to download specific OSM objects by id into GeoJSON — boundaries, named entities, multi-part campuses. Get the ids from OsmSearch first.
+
+Parameters:
+- ids: OSM object ids with an R/W/N prefix, e.g. ["R10717504", "R20406341"]. At most 25 in one call; for "every X inside an area" use OsmGetFeatures instead. Prefer relation ids for boundaries — a way or a node rarely carries the whole thing.
+- output: Absolute path for the result. A path not ending in .geojson gets it appended, and the report names the file(s) actually written.
+- fields: Extra tag keys to keep as columns, e.g. ["admin_level"]. By default only the core identity columns survive; every other tag is dropped and reported by key, so a second call with fields:[...] recovers any that mattered. Pass ["*"] to keep all tags losslessly in an "osm_tags" column.
+
+Behavior:
+- Every object is fetched with its geometry inlined in ONE query. Anything that query cannot serve falls back to a per-object route, whose assembly is checked against the nodes it was built from: a boundary it could only partly stitch is refused rather than handed over looking whole.
+- EPSG:4326. Relation multipolygons keep outer rings, inner rings and separate parts. Geometry is never simplified.
+- NEVER one mixed-geometry file. If the objects span several geometry families the result is split into single-family siblings, and every written path is listed in the report.
+- Anything lost is named in the report, by id — objects that could not be fetched, and objects that matched but produced no geometry. Whatever succeeded is already in the file.
+
+TIMING: this queries public services over the network. Seconds to a minute is normal; a large boundary, or a failover to another endpoint, stretches it further.
