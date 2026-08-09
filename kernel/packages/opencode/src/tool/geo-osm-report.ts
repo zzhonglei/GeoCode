@@ -39,6 +39,18 @@ export function caveats(
   },
 ): string[] {
   const lines: string[] = []
+  if (!result.exact) {
+    // First, because it rescales the whole result rather than one part of it.
+    //
+    // Stated as a fact about the data, with no tool named. Which algorithm to
+    // clip with is not this tool's to decide, and the agent that reads this
+    // holds `geo_osm_*` and `geo_qgis_read` only — it cannot run one, so
+    // naming one would send it somewhere it is not allowed to go (§4.3).
+    lines.push(
+      "NOTE: a boundary was too detailed or too fragmented to filter exactly, so it was widened outward." +
+        " This result covers more ground than the boundary asked for, and has to be clipped to it before use.",
+    )
+  }
   // The kernel's own prose: the route it had to fall back to, and the fact
   // that an empty run created no file at all.
   for (const note of result.notes) lines.push(`NOTE: ${note}`)

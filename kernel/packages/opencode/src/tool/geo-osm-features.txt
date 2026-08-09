@@ -1,0 +1,20 @@
+Use this tool to bulk-download OSM features by category inside one or more extents — road networks, buildings, water, land use, POI, AOI — into GeoJSON.
+
+Run an OsmProbe count first. Above roughly 30k features an extent is worth splitting into sub-areas; pass them all in "extents" and the results are merged with cross-extent duplicates removed.
+
+Parameters:
+- extents: One or more of "area:R<id>" (relations only) / "bbox:S,W,N,E" / "around:radius_m,lat,lon" / "file:/abs/path.geojson" (EPSG:4326). At most 12 per call.
+- tags: A tag union, e.g. ["amenity=hospital", "amenity=clinic", "healthcare"]. A category usually needs several tagging schemes at once, and which ones an area actually uses is what OsmProbe's distribution mode answers. Formats: "key=value", "key" (presence), "key~regex".
+- types: "nwr" (default), or a comma list. "way,relation" gives area features only. Do NOT use "node" for a POI dataset: facilities mapped as areas — often the majority — would be dropped without a word. Keep "nwr" and set geometry to "centroid" instead.
+- geometry: "original" (default) keeps geometry as mapped, mixing points, lines and polygons. "centroid" collapses every feature to one representative point and records its original type in an "original_geometry" column.
+- fields: Extra tag keys to keep as columns, e.g. ["maxspeed", "lanes"]. By default the core identity columns plus the queried tag keys survive; every other tag is dropped and reported by key. Pass ["*"] to keep all tags losslessly in an "osm_tags" column.
+- output: Absolute path for the result. A path not ending in .geojson gets it appended, and the report names the file(s) actually written.
+- timeout: Seconds the server may spend on each extent (default 120, raised to 30 if lower). Raising it is the fix when an extent comes back marked incomplete.
+
+Behavior:
+- EPSG:4326. Multipolygons keep their inner rings and separate parts. Geometry is never simplified.
+- NEVER one mixed-geometry file. When the result spans several geometry families it is split into single-family siblings, and every written path is listed in the report.
+- Anything lost is named in the report: extents that failed, extents that answered incompletely (in the service's own words), and elements that matched but produced no geometry. Whatever succeeded is already in the file.
+- A boundary file too detailed or too fragmented to filter exactly is widened OUTWARD — never fewer features, possibly extra ones outside the true boundary. When that happens the report says so, and the result has to be clipped to the boundary before it is used.
+
+TIMING: this queries public services over the network, one extent at a time. A dense area can use the whole per-extent budget, so a multi-extent download running for several minutes is normal.
