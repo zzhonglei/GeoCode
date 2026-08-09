@@ -37,6 +37,7 @@ echo "== geo kernel (opencode) =="
   test/geocode-osm-objects.test.ts \
   test/geocode-osm-features.test.ts \
   test/geocode-geo-permissions.test.ts \
+  test/geocode-osmfetch.test.ts \
   test/geocode-read-handoff.test.ts)
 
 echo

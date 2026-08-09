@@ -1,6 +1,7 @@
 export * as GeoCodeConfig from "./geocode"
 
 import type { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import OSMFETCH_PROMPT from "../session/prompt/osmfetch.txt"
 
 /* --- GeoCode: the factory assembly layer. This is where GeoCode's identity is
  * expressed as configuration rather than by editing upstream agent code, so the
@@ -68,6 +69,48 @@ export function base(): ConfigV1.Info {
         // Deliberately no `prompt`: GeoAgent picks up prompt/geocode.txt through
         // the base-prompt selector in session/system.ts, which GeoCode returns
         // for every model. Setting one here would only duplicate that.
+      },
+      /* The one agent that talks to the public OSM services.
+       *
+       * Not a convenience. Downloading is the part of geographic work with an
+       * outside party in it — services with published rate limits, run by
+       * volunteers — and it is the part whose result is hardest to check, since
+       * a file of the wrong features looks exactly like a file of the right
+       * ones. Both are better handled by something with one job, a prompt about
+       * that job, and a much smaller reach than the agent it works for.
+       *
+       * The reach is a whitelist rather than a list of forbidden things.
+       * `webfetch`, `websearch`, `task`, `skill`, editing — none of them are
+       * named here, and neither is any MCP tool a user may connect later, which
+       * is the point: what a locked agent must not touch cannot be enumerated
+       * in advance, only what it needs can.
+       *
+       * `bash` and `glob` ARE granted, deliberately. A downloader needs to look
+       * around a directory and move a file, and refusing that buys nothing that
+       * matters — the parent agent has a shell too, so this was never a barrier
+       * around the machine, only around this agent's habits. What the narrower
+       * reach still buys is that the OSM tools are the obvious route, and they
+       * are the route that keeps the rate limits.
+       */
+      osmfetch: {
+        mode: "subagent",
+        description:
+          "Retrieves OpenStreetMap data: finds places and features by name, sizes a download before making it, and downloads objects by id or features by area and tag. Everything that comes from OSM goes through this agent — no other agent can reach those services. Give it the area or the names, where to write, and what the data is for.",
+        prompt: OSMFETCH_PROMPT,
+        permission: {
+          "*": "deny",
+          osm: "allow",
+          // Reading back what it just wrote, which its prompt requires of it
+          // before reporting success. Not `qgis`: verifying a download is
+          // reading, and running processing algorithms is somebody else's job.
+          geodata: "allow",
+          bash: "allow",
+          glob: "allow",
+          // Restores upstream's default for paths outside the working
+          // directory: ask the user, rather than the flat refusal the wildcard
+          // above would otherwise produce for a perfectly ordinary output path.
+          external_directory: "ask",
+        },
       },
       /* Plan mode keeps SEEING the geographic tools, and that is the point.
        *
