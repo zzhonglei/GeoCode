@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { GeoOsm } from "@/geo"
+import { OsmReport } from "./geo-osm-report"
 import DESCRIPTION from "./geo-osm-objects.txt"
 
 /* --- GeoCode: OsmGetObjects, and the shape a download tool takes
@@ -58,10 +59,6 @@ type Metadata = {
   truncated: boolean
 }
 
-function kilobytes(bytes: number): string {
-  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : `${(bytes / 1024).toFixed(1)} KB`
-}
-
 export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Service>(
   "OsmGetObjects",
   Effect.gen(function* () {
@@ -104,29 +101,12 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
       }
       const result = outcome.success
 
-      // Caveats first, before the figures they qualify (the rule OsmProbe
-      // established). Here they carry more weight than there: this is the only
-      // place the absence of an object is ever mentioned, and the file itself
-      // will not say a word about what is not in it.
-      const lines: string[] = []
-      // The kernel's own prose, which is where the protection announces itself
-      // ("nothing was obtained, so any existing output file was left as it
-      // was") as well as the fallback route being taken.
-      for (const note of result.notes) lines.push(`NOTE: ${note}`)
-      for (const entry of result.incomplete) {
-        lines.push(`NOTE: ${entry.extent} came back incomplete. The service said: ${entry.remark}`)
-      }
-      for (const entry of result.failed) lines.push(`NOTE: ${entry.extent} — ${entry.reason}`)
-      if (result.unassembled.length > 0) {
-        // By identity: the fix for a dropped object is to ask for it alone.
-        lines.push(
-          `NOTE: ${result.unassembled.length} object(s) matched but produced no geometry —` +
-            ` ${result.unassembled.join(", ")}`,
-        )
-      }
-      if (ctx.abort.aborted) {
-        lines.push("NOTE: cancelled — objects not reached before it stopped were neither fetched nor reported by id.")
-      }
+      const lines = OsmReport.caveats(result, {
+        lostNoun: "object",
+        cancelled: ctx.abort.aborted
+          ? "cancelled — objects not reached before it stopped were neither fetched nor reported by id."
+          : undefined,
+      })
       if (lines.length > 0) lines.push("")
 
       // The kernel names these fields for extents because it shares the shape
@@ -151,33 +131,7 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
       }
 
       const scope = result.features === asked ? `${asked} object(s)` : `${result.features} of ${asked} object(s)`
-      if (result.outputs.length === 1) {
-        lines.push(`Wrote ${scope} to ${result.outputs[0]!.path} (${kilobytes(result.bytes)}).`)
-      } else {
-        const width = Math.max(...result.outputs.map((entry) => entry.path.length))
-        // Why it splits is a design decision, and it lives in the comment at the
-        // top of this file. What the caller needs is the list.
-        lines.push(
-          `Mixed geometry families, so the result was split into ${result.outputs.length} files` +
-            ` — ${scope}, ${kilobytes(result.bytes)}:`,
-          "",
-        )
-        for (const entry of result.outputs) {
-          lines.push(`  ${entry.path.padEnd(width)}  ${entry.family}: ${entry.count}`)
-        }
-        lines.push("")
-      }
-
-      const geometry = Object.entries(result.geometry)
-        .map(([type, count]) => `${type}×${count}`)
-        .join(", ")
-      lines.push(`Geometry: ${geometry || "none"}.  CRS: EPSG:4326.`, `Fields kept: ${result.keptFields.join(", ")}.`)
-      lines.push(
-        result.droppedFields.length > 0
-          ? `Fields dropped: ${result.droppedFields.join(", ")} — ask again with fields:[...] to keep any of them,` +
-              ' or fields:["*"] for a lossless osm_tags column.'
-          : "Fields dropped: none.",
-      )
+      lines.push(...OsmReport.files(result, scope), ...OsmReport.fields(result))
       if (result.duplicates > 0) {
         lines.push(`The same object arrived more than once and was kept once: ${result.duplicates} duplicate(s).`)
       }
