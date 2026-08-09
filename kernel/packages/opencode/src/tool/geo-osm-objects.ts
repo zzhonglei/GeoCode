@@ -75,7 +75,7 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
       // there is no later point at which permission would still mean anything.
       // The pattern is the path, which is the thing being acted on (§4.3).
       yield* ctx.ask({
-        permission: "geo_osm_objects",
+        permission: "osm",
         patterns: [params.output],
         always: ["*"],
         metadata: { ids: params.ids, output: params.output },

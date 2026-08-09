@@ -189,7 +189,7 @@ export const RunGeeScriptTool = Tool.define<
       // that must not happen on behalf of a user who has not yet agreed to run
       // anything at all.
       yield* ctx.ask({
-        permission: "geo_gee_run",
+        permission: "gee",
         patterns: [params.script_path ?? "inline_script"],
         always: ["*"],
         metadata: params.script_path ? { script: params.script_path } : {},

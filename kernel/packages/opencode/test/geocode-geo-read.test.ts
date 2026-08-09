@@ -77,29 +77,27 @@ describe("geo tool registration", () => {
     }),
   )
 
-  it.instance("the boundary holds: plan is refused, GeoAgent gets through", () =>
+  it.instance("reading is granted to both the working agent and the planner", () =>
     Effect.gen(function* () {
       const ctx = yield* InstanceState.context
       const target = path.join(ctx.directory, "no-such-scene.tif")
 
-      // plan has no geo grant, so the global "geo_*": "deny" is the last
-      // matching rule — the ask dies as a rule denial before the tool reveals
-      // anything about the file.
-      const denied = yield* executeAs("plan", target)
-      expect(Exit.isFailure(denied)).toBe(true)
-      if (Exit.isFailure(denied)) {
-        expect(Cause.pretty(denied.cause)).toContain("rule which prevents")
-      }
-
-      // GeoAgent's "geo_qgis_*": "allow" merges after the global deny, so the
-      // same call passes the ask and fails honestly at the missing file — the
-      // proof that the allow actually matched the key the tool asks with.
-      const missed = yield* executeAs("GeoAgent", target)
-      expect(Exit.isFailure(missed)).toBe(true)
-      if (Exit.isFailure(missed)) {
-        const cause = Cause.pretty(missed.cause)
-        expect(cause).toContain("File not found")
-        expect(cause).not.toContain("rule which prevents")
+      // Both get through, and the proof is the SHAPE of the failure: a call
+      // that dies at the missing file has already passed the ask, which is the
+      // only way to tell "the grant matched the key" from "the grant was
+      // written and silently never consulted" (docs/KERNEL.md §4.1).
+      //
+      // plan is included deliberately. Upstream lets plan read files; reading
+      // geographic data is the same act, and a planner that cannot look at the
+      // data cannot plan work on it.
+      for (const agent of ["GeoAgent", "plan"]) {
+        const missed = yield* executeAs(agent, target)
+        expect(Exit.isFailure(missed)).toBe(true)
+        if (Exit.isFailure(missed)) {
+          const cause = Cause.pretty(missed.cause)
+          expect(cause).toContain("File not found")
+          expect(cause).not.toContain("rule which prevents")
+        }
       }
     }),
   )

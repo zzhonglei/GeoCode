@@ -96,23 +96,65 @@ describe("QgisDoc", () => {
     }),
   )
 
-  it.instance("the boundary holds: plan is refused, GeoAgent gets through", () =>
+  it.instance("looking things up never interrupts, in plan mode least of all", () =>
     Effect.gen(function* () {
       yield* forceUnconfigured()
 
-      // The rule GeoAgent carries is the wildcard `geo_qgis_*`; the key this
-      // tool asks with is `geo_qgis_doc`. Nothing but a behavioural test can
-      // tell "the wildcard covers it" from "the wildcard silently misses it" —
-      // the old version's exact accident (docs/KERNEL.md §4.1).
-      const denied = yield* executeAs("plan", { action: "list_groups" })
-      expect(Exit.isFailure(denied)).toBe(true)
-      if (Exit.isFailure(denied)) {
-        expect(Cause.pretty(denied.cause)).toContain("rule which prevents")
-      }
-
+      // GeoAgent holds `qgis`, which is the key this tool asks with. Only a
+      // behavioural test tells "the grant matched" from "the grant was written
+      // and silently missed" — the old build's exact accident (KERNEL.md §4.1).
       const allowed = yield* executeAs("GeoAgent", { action: "list_groups" })
       expect(Exit.isSuccess(allowed)).toBe(true)
+
+      // plan holds `qgis: { "*": "ask", "doc:*": "allow" }`, and this tool
+      // namespaces its patterns under `doc:`. Success here is the proof that
+      // the namespace works: had the pattern not matched, the call would have
+      // fallen to the `ask` and hung waiting for a user who is not there.
+      // Consulting documentation is how a plan gets written; it must not
+      // require permission.
+      const planned = yield* executeAs("plan", { action: "list_groups" })
+      expect(Exit.isSuccess(planned)).toBe(true)
     }),
+    { timeout: 30_000 },
+  )
+
+  it.instance(
+    "approving a documentation lookup grants documentation, and nothing else",
+    () =>
+      Effect.gen(function* () {
+        yield* forceUnconfigured()
+        const seen: { patterns: readonly string[]; always: readonly string[] }[] = []
+
+        const registry = yield* ToolRegistry.Service
+        const qgisdoc = (yield* registry.all()).find((tool) => tool.id === "QgisDoc")
+        yield* qgisdoc!.execute(
+          { action: "read", algorithm: "native:buffer" },
+          {
+            sessionID: SessionID.make("ses_always"),
+            messageID: MessageID.make("msg_always"),
+            agent: "GeoAgent",
+            abort: AbortSignal.any([]),
+            messages: [],
+            metadata: () => Effect.void,
+            ask: (req: any) => {
+              seen.push({ patterns: req.patterns, always: req.always })
+              return Effect.void
+            },
+          } as any,
+        )
+
+        expect(seen).toHaveLength(1)
+        // The namespace, so a rule can tell this apart from running something.
+        expect(seen[0]!.patterns).toEqual(["doc:read:native:buffer"])
+        // And the half that decides what "always allow" hands over. Approving
+        // writes a rule using EXACTLY these patterns (permission/index.ts), and
+        // this tool shares the `qgis` key with RunQgisAlgorithm — so `["*"]`
+        // here would turn one approved lookup into a standing grant to execute
+        // algorithms. The user would have agreed to one thing and given away
+        // another, which is the failure shape this project exists to avoid.
+        expect(seen[0]!.always).toEqual(["doc:*"])
+        expect(seen[0]!.always).not.toContain("*")
+      }),
     // forceUnconfigured() alone is allowed 10s, which already crosses bun's
     // 5s default — a gate that fails at random teaches people to re-run it
     // rather than read it.

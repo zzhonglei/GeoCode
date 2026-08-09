@@ -164,7 +164,7 @@ export const GeoReadTool = Tool.define<
       // Ask before revealing anything about the file — including whether it
       // exists (read's ordering, kept for the same information-leak reason).
       yield* ctx.ask({
-        permission: "geo_qgis_read",
+        permission: "geodata",
         patterns: [title],
         always: ["*"],
         metadata: { file: title, mode: params.mode },

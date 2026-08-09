@@ -160,12 +160,16 @@ describe("RunQgisAlgorithm, pre-spawn refusals", () => {
       const registry = yield* ToolRegistry.Service
       expect(yield* registry.ids()).toContain("RunQgisAlgorithm")
 
-      // The wildcard GeoAgent carries is `geo_qgis_*`; the key this tool asks
-      // with is `geo_qgis_run`. Only a behavioural check tells "the wildcard
-      // covers it" from "it silently misses" (docs/KERNEL.md §4.1).
-      const denied = yield* execute({ algorithm: "native:buffer", parameters: "{}" }, "plan")
-      expect(Exit.isFailure(denied)).toBe(true)
-      if (Exit.isFailure(denied)) expect(Cause.pretty(denied.cause)).toContain("rule which prevents")
+      // GeoAgent holds `qgis`, which is the key this tool asks with. Only a
+      // behavioural check tells "the grant matched" from "the grant was
+      // written and silently missed" (docs/KERNEL.md §4.1).
+      //
+      // plan's side of this — asked rather than refused, so the tool stays
+      // visible to a planner — is a fact about the ruleset and is pinned in
+      // geocode-geo-permissions.test.ts, where it can be read without a user
+      // sitting there to answer the prompt.
+      const allowed = yield* execute({ algorithm: "native:buffer", parameters: "{}" })
+      expect(Exit.isSuccess(allowed)).toBe(true)
     }),
   )
 

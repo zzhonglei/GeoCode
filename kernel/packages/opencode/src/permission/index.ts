@@ -201,12 +201,44 @@ export function merge(...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule[] 
   return rulesets.flat()
 }
 
+/* --- GeoCode: the third of this function's tool-id-to-permission maps
+ * (docs/TOOLS.md §4.1, §9).
+ *
+ * Visibility is decided by TOOL ID, execution by the key a tool declares in
+ * `ctx.ask`. Upstream's own tools mostly spell those the same, and where they
+ * do not it keeps a table — `edits` and `reads` below. GeoCode's do not: the
+ * ids are the names the model reads (`ReadGeoData`), the keys are the groups a
+ * user reasons about (`geodata`). Without an entry here a rule written against
+ * a group would govern execution and silently miss visibility, which is the
+ * failure §4.1 records from the old build: the rule is written, it is simply
+ * never consulted.
+ *
+ * Four groups, matching the readiness conditions a user actually has: reading
+ * geographic data, the QGIS processing engine, the public OSM services, Earth
+ * Engine. Adding a geographic tool without adding it here is a defect the
+ * tripwires catch. --- */
+const GEO = {
+  ReadGeoData: "geodata",
+  QgisDoc: "qgis",
+  RunQgisAlgorithm: "qgis",
+  OsmSearch: "osm",
+  OsmProbe: "osm",
+  OsmGetObjects: "osm",
+  OsmGetFeatures: "osm",
+  RunGeeScript: "gee",
+} as const satisfies Record<string, string>
+
 export function disabled(tools: string[], ruleset: PermissionV1.Ruleset): Set<string> {
   const edits = ["edit", "write", "apply_patch"]
   const reads = ["list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"]
   return new Set(
     tools.filter((tool) => {
-      const permission = edits.includes(tool) ? "edit" : reads.includes(tool) ? "read" : tool
+      const permission =
+        edits.includes(tool)
+          ? "edit"
+          : reads.includes(tool)
+            ? "read"
+            : ((GEO as Record<string, string>)[tool] ?? tool) // GeoCode
       const rule = ruleset.findLast((rule) => Wildcard.match(permission, rule.permission))
       return rule?.pattern === "*" && rule.action === "deny"
     }),

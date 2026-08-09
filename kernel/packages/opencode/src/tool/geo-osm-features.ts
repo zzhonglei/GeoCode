@@ -106,7 +106,7 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
       // directories and files inside `downloadFeatures`, and a "file:" extent
       // reads a boundary off disk on the way there.
       yield* ctx.ask({
-        permission: "geo_osm_features",
+        permission: "osm",
         patterns: [params.output],
         always: ["*"],
         metadata: { extents: params.extents, tags: params.tags, output: params.output },

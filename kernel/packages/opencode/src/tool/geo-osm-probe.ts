@@ -143,7 +143,7 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
       }
 
       yield* ctx.ask({
-        permission: "geo_osm_probe",
+        permission: "osm",
         patterns: [...params.extents],
         always: ["*"],
         metadata: { extents: params.extents, ...(key !== "" ? { key } : { tags }) },

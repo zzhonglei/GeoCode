@@ -151,21 +151,19 @@ afterEach(async () => {
 describe("RunGeeScript, registration and the boundary", () => {
   const it = harness(runtimeEnding({}), open)
 
-  it.instance("is in the registry, and the wildcard actually covers its key", () =>
+  it.instance("is in the registry, and the grant actually covers its key", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
       expect(yield* registry.ids()).toContain("RunGeeScript")
 
-      // GeoAgent carries `geo_gee_*`; this tool asks under `geo_gee_run`. Only
-      // a behavioural check tells "the wildcard covers it" from "it silently
-      // misses", and a miss falls through to the global `geo_*: deny`
-      // (docs/TOOLS.md §4.1, §4.2).
+      // GeoAgent holds `gee`, which is the key this tool asks under. Only a
+      // behavioural check tells "the grant matched" from "it silently missed",
+      // and a miss falls through to the global deny (docs/TOOLS.md §4.1, §4.2).
+      //
+      // plan's side — asked rather than refused — is a ruleset fact, pinned in
+      // geocode-geo-permissions.test.ts where no user has to answer a prompt.
       const allowed = yield* execute({ script: "print(1)" })
       expect(Exit.isSuccess(allowed)).toBe(true)
-
-      const denied = yield* execute({ script: "print(1)" }, "plan")
-      expect(Exit.isFailure(denied)).toBe(true)
-      if (Exit.isFailure(denied)) expect(Cause.pretty(denied.cause)).toContain("rule which prevents")
     }),
   )
 })

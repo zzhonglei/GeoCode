@@ -83,7 +83,7 @@ export const OsmSearchTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Ser
       ctx: Tool.Context<Metadata>,
     ) {
       yield* ctx.ask({
-        permission: "geo_osm_search",
+        permission: "osm",
         patterns: [params.query],
         always: ["*"],
         metadata: { query: params.query },

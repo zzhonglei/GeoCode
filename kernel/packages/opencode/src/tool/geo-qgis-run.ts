@@ -172,7 +172,7 @@ export const RunQgisAlgorithmTool = Tool.define<
       }
 
       yield* ctx.ask({
-        permission: "geo_qgis_run",
+        permission: "qgis",
         patterns: [params.algorithm],
         always: ["*"],
         metadata: { algorithm: params.algorithm },

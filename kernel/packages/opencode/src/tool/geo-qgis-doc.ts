@@ -190,14 +190,32 @@ export const QgisDocTool = Tool.define<
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context<Metadata>,
     ) {
-      // The pattern dimension names the object being operated on (docs/TOOLS.md
-      // §4.3) — the algorithm, group or query this call is about, namespaced by
-      // the action so a rule about one action cannot match another by accident.
+      /* --- The pattern dimension names the object being operated on
+       * (docs/TOOLS.md §4.3) — the algorithm, group or query this call is
+       * about, namespaced by the action so a rule about one action cannot
+       * match another by accident.
+       *
+       * The `doc:` prefix is a narrow, deliberate exception to that rule: this
+       * tool shares the `qgis` permission with RunQgisAlgorithm, whose patterns
+       * are algorithm ids, and the prefix carves a namespace so the two can be
+       * told apart by a rule. That is what lets plan mode say "looking up
+       * documentation never interrupts, running an algorithm asks":
+       *
+       *   qgis: { "*": "ask", "doc:*": "allow" }
+       *
+       * Nothing is lost by it — RunQgisAlgorithm can still be ruled on per
+       * algorithm id, and this tool per action.
+       *
+       * `always` is the half that matters most. Approving with "always" writes
+       * a rule using EXACTLY these patterns (permission/index.ts), so `["*"]`
+       * would turn one approved documentation lookup into a standing grant to
+       * execute algorithms — a user agreeing to one thing and handing over
+       * another. Scoped to `doc:*`, it grants only what was asked about. --- */
       const target = params.algorithm ?? params.group ?? params.query
       yield* ctx.ask({
-        permission: "geo_qgis_doc",
-        patterns: [target ? `${params.action}:${target}` : params.action],
-        always: ["*"],
+        permission: "qgis",
+        patterns: [target ? `doc:${params.action}:${target}` : `doc:${params.action}`],
+        always: ["doc:*"],
         metadata: { action: params.action, ...(target === undefined ? {} : { target }) },
       })
 

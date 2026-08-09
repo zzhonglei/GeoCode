@@ -20,13 +20,29 @@ export function base(): ConfigV1.Info {
     // so too, so an attempt to share reports "disabled in configuration"
     // instead of silently handing back an empty URL.
     share: "disabled",
-    // Geographic capability is closed by default and opened per agent group
-    // below. The wildcard deny cannot be omitted: evaluate() falls back to
-    // "ask" when NO rule matches, so without it an unauthorized agent calling
-    // a geo tool would pop a permission prompt at the user instead of being
-    // refused — a silent boundary failure (docs/TOOLS.md §4.2).
+    /* Geographic capability is closed by default and opened per agent below.
+     *
+     * Four groups, one per readiness condition a user actually has: reading
+     * geographic data, the QGIS processing engine, the public OSM services,
+     * Earth Engine. The same four names appear in permission/index.ts, which
+     * maps tool ids onto them so visibility and execution agree.
+     *
+     * None of these may be omitted: evaluate() falls back to "ask" when NO rule
+     * matches, so a missing deny turns an unauthorized call into a permission
+     * prompt at the user instead of a refusal — a silent boundary failure
+     * (docs/TOOLS.md §4.2). A fifth group must add a fifth line here; there is
+     * no common prefix left to catch it automatically, which is the price of
+     * names a user can read.
+     *
+     * Merged FIRST, so a user's own config still wins — the same treatment
+     * upstream gives every one of its own tools (agent.ts places the user's
+     * rules last, and findLast makes last win). GeoCode does not invent a layer
+     * upstream has no equivalent of. */
     permission: {
-      "geo_*": "deny",
+      geodata: "deny",
+      qgis: "deny",
+      osm: "deny",
+      gee: "deny",
     },
     agent: {
       GeoAgent: {
@@ -37,21 +53,54 @@ export function base(): ConfigV1.Info {
         permission: {
           question: "allow",
           plan_enter: "allow",
-          // The QGIS group: ReadGeoData / QgisDoc / RunQgisAlgorithm ask under
-          // geo_qgis_* keys. Agent-level rules merge after the global deny
-          // above, so findLast picks this allow for GeoAgent and the deny for
-          // everyone else (docs/TOOLS.md §4.2 ③). OSM stays with the osmfetch
-          // subagent.
-          "geo_qgis_*": "allow",
-          // The GEE group, one tool for now. A group of its own rather than a
-          // second entry under the QGIS wildcard, because the two answer to
-          // different environments: turning one off is a statement about an
-          // install the user does or does not have (docs/TOOLS.md §3).
-          "geo_gee_*": "allow",
+          // Agent-level rules merge after the global denies above, so findLast
+          // picks these allows for GeoAgent and the denies for everyone else
+          // (docs/TOOLS.md §4.2 ③).
+          geodata: "allow",
+          qgis: "allow",
+          gee: "allow",
+          // No `osm`. Downloading from public services goes through the
+          // osmfetch subagent, whose exit is narrowed and whose prompt carries
+          // the verification discipline — so the four OSM tools are not just
+          // refused here, they do not appear in GeoAgent's tool list at all
+          // (docs/TOOLS.md §4.3).
         },
         // Deliberately no `prompt`: GeoAgent picks up prompt/geocode.txt through
         // the base-prompt selector in session/system.ts, which GeoCode returns
         // for every model. Setting one here would only duplicate that.
+      },
+      /* Plan mode keeps SEEING the geographic tools, and that is the point.
+       *
+       * Upstream's plan can see its edit tools — a tool vanishes only when the
+       * last rule matching it is a wildcard deny, and plan's edit rules end in
+       * a narrow allow for the plan file. A planner that cannot see what it
+       * will later be able to do cannot write a usable plan.
+       *
+       * So the executing groups are `ask` rather than `deny`: visible, and
+       * gated on the user at the moment of use. The reminder plan mode injects
+       * already tells the model not to run them ("they do not want you to
+       * execute YET"); this is what happens if it tries anyway.
+       *
+       * `doc:*` is allowed outright so looking up an algorithm never interrupts
+       * planning — the pattern namespace geo-qgis-doc.ts carves for exactly
+       * this. Reading geographic data is allowed for the same reason upstream
+       * lets plan read files.
+       */
+      plan: {
+        permission: {
+          geodata: "allow",
+          qgis: { "*": "ask", "doc:*": "allow" },
+          gee: "ask",
+          // `ask`, never `deny`: describeTask drops a subagent from the list
+          // when the rule denies it (tool/registry.ts), and a planner that does
+          // not know osmfetch exists cannot plan a download. Upstream makes
+          // exactly this mistake in the other direction — its plan prompt tells
+          // the model to launch `general` agents while its permission denies
+          // them, so the name is in the instructions and not in the list.
+          task: { osmfetch: "ask" },
+          // No `osm`: the four OSM tools belong to the subagent, so they are
+          // not in plan's list either. What plan sees is the subagent.
+        },
       },
       // Disable upstream's coding-oriented agents by config instead of deleting
       // their source: the kernel turns `disable` into a real removal, and the
