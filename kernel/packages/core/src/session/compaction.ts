@@ -13,6 +13,11 @@ const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const SUMMARY_OUTPUT_TOKENS = 4_096
+/* --- GeoCode: adds `Plan and Rules` (GEOKERNEL §10.1 #11). Upstream's sections
+ * were written for programming and hold no place for a settled convention or a
+ * dataset known to be partial — the latter being neither a rule nor a blocker.
+ * No marker inside the string: it reaches the model verbatim (KERNEL.md §5.3),
+ * so the tripwire carries the audit. --- */
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Objective
@@ -20,6 +25,9 @@ const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <te
 
 ## Important Details
 - [constraints/preferences, decisions and why, important facts/assumptions, exact context needed to continue, or "(none)"]
+
+## Plan and Rules
+- [the agreed sequence of work and where it stands; rules in force, such as projection or where files go; data known to be incomplete and in what way; or "(none)"]
 
 ## Work State
 ### Completed

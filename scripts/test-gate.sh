@@ -45,7 +45,8 @@ echo "== geo kernel (core) =="
 (cd "$ROOT/kernel/packages/core" && bun test \
   test/geo-extensions.test.ts \
   test/geo-watcher-ignore.test.ts \
-  test/geocode-brand.test.ts)
+  test/geocode-brand.test.ts \
+  test/geocode-compaction-template.test.ts)
 
 echo
 echo "gate green"
