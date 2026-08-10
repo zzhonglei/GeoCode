@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
-import { GeoOsm } from "@/geo"
+import { GeoOsm, GeoQgis, GeoRuntime } from "@/geo"
+import { OsmClip } from "./geo-osm-clip"
 import { OsmReport } from "./geo-osm-report"
 import DESCRIPTION from "./geo-osm-features.txt"
 
@@ -75,10 +76,20 @@ type Metadata = {
   truncated: boolean
 }
 
-export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Service>(
+export const OsmGetFeaturesTool = Tool.define<
+  typeof Parameters,
+  Metadata,
+  GeoOsm.Service | GeoQgis.Service | GeoQgis.QgisCatalog.Service | GeoRuntime.Service
+>(
   "OsmGetFeatures",
   Effect.gen(function* () {
     const osm = yield* GeoOsm.Service
+    // Taken here, once, because `execute` must resolve nothing: the engine
+    // types a tool's run as needing no services, and the registry's layer
+    // graph is what provides these (docs/TOOLS.md §7).
+    const qgis = yield* GeoQgis.Service
+    const catalog = yield* GeoQgis.QgisCatalog.Service
+    const runtime = yield* GeoRuntime.Service
 
     const run = Effect.fn("OsmGetFeaturesTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -128,7 +139,31 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
       // type list the builder cannot parse. Per-extent trouble never arrives
       // here; it arrives as `failed`, beside a file holding everything else.
       if (outcome._tag === "Failure") return refuse(outcome.failure.message)
-      const result = outcome.success
+      const raw = outcome.success
+
+      /* A widened boundary, corrected before anyone is told about it.
+       *
+       * The kernel errs outward on purpose (§6.4) — it has to, since the
+       *服务端 filter has a vertex budget and losing features near an edge is
+       * the one mistake nobody can see afterwards. What it cannot do is finish
+       * the job: correcting the margin needs a geometry engine, and OSM has
+       * none by design (§6.2).
+       *
+       * So the correction happens here, and what it produces is not reported
+       * as a correction. The caller asked for the data inside a boundary; when
+       * it gets exactly that, "we widened the query and then narrowed it back"
+       * is machinery, not an answer. All that changes is that the superset
+       * warning below has nothing to warn about.
+       *
+       * When it cannot run — no QGIS, no algorithm, a clip that failed or
+       * emptied a file — nothing changes at all, and the warning stands.
+       */
+      const result = raw.exact
+        ? raw
+        : OsmClip.applied(
+            raw,
+            yield* OsmClip.clip({ qgis, catalog, runtime, result: raw, extents: params.extents, abort: ctx.abort }),
+          )
 
       const lines = OsmReport.caveats(result, {
         lostNoun: "element",
