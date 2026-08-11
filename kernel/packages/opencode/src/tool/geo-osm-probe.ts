@@ -125,14 +125,18 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
       // rest and never mention what went missing.
       const tags = params.tags ?? []
       const key = params.key?.trim() ?? ""
+      // Named because the comparison below is otherwise `a > 0 === b`, which
+      // parses as intended and reads as a comparison chain that is not there.
+      const counting = tags.length > 0
+      const distributing = key !== ""
       // Exactly one. Both modes at once has no meaning, and neither leaves
       // nothing to ask — the two mistakes are the same mistake seen twice, so
       // they get the same sentence naming both options.
-      if (tags.length > 0 === (key !== "")) {
+      if (counting === distributing) {
         return refuse(
           "InvalidParameters",
           'Give exactly one of "tags" (count mode) or "key" (distribution mode) — this call gave ' +
-            (key !== "" ? "both." : "neither."),
+            (distributing ? "both." : "neither."),
         )
       }
       // Refused rather than answered, because the kernel would answer it: with
@@ -146,7 +150,7 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
         permission: "osm",
         patterns: [...params.extents],
         always: ["*"],
-        metadata: { extents: params.extents, ...(key !== "" ? { key } : { tags }) },
+        metadata: { extents: params.extents, ...(distributing ? { key } : { tags }) },
       })
 
       const asked = params.extents.length
@@ -174,7 +178,7 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
         }
       }
 
-      if (key !== "") {
+      if (distributing) {
         const outcome = yield* Effect.result(
           osm.distribution({ extents: params.extents, key, types: params.types, abort: ctx.abort }),
         )
