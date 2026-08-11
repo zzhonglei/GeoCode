@@ -389,12 +389,13 @@ describe("gdal raster pipeline", () => {
         // The refusal cost one metadata read and nothing else.
         const calls = yield* Ref.get(script.calls)
         expect(tools(calls)).toEqual(["gdalinfo"])
-        // And that read ASKED for the two domains georeferencing hides in.
-        // Whether gdalinfo volunteers them is a per-version default; a scene
-        // refused for lacking evidence nobody requested is the failure this
-        // catches (§7.9).
-        expect(flat(calls)[0]).toContain("-mdd RPC")
-        expect(flat(calls)[0]).toContain("-mdd GEOLOCATION")
+        // And it did NOT ask for the metadata domains. gdalinfo reports RPC
+        // and GEOLOCATION anyway, `-mdd` takes one domain and errors on a
+        // repeat, and `-mdd all` would pull every domain into an output
+        // collected with no cap. An earlier version of this file asked for
+        // both and asserted only that the flags were PASSED — which a stub
+        // runtime will always agree with, and a real gdalinfo never would.
+        expect(flat(calls)[0]).not.toContain("-mdd")
       }),
     )
   }

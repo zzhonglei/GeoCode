@@ -109,16 +109,6 @@ export const NO_SIDECARS = ["--config", "GDAL_PAM_ENABLED", "NO"] as const
  */
 const APPROXIMATE_STATS = "-approx_stats"
 
-/**
- * Ask for the two domains georeferencing can hide in.
- *
- * Asked EXPLICITLY rather than relied on: whether `gdalinfo -json` emits these
- * without being told is a default we would be depending on across every GDAL
- * version a user's QGIS might ship, and the official JSON schema enumerates no
- * domains at all. Naming them costs a header read and removes the question.
- */
-const GEOREFERENCE_DOMAINS = ["-mdd", "RPC", "-mdd", "GEOLOCATION"] as const
-
 /** Generous for a header read; a network-mounted file is the case that needs it. */
 const TIMEOUT = "30 seconds"
 
@@ -180,7 +170,16 @@ function populated(metadata: unknown, name: string): boolean {
   return typeof found === "object" && found !== null && Object.keys(found).length > 0
 }
 
-/** Read a raster's metadata out of `gdalinfo -json` output. */
+/**
+ * Read a raster's metadata out of `gdalinfo -json` output.
+ *
+ * The RPC and GEOLOCATION domains arrive without being asked for — `gdalinfo`
+ * reports them alongside the default domain, checked against GDAL 3.12.0 and
+ * 3.13.2. Asking anyway is not the safe extra it looks like: `-mdd` takes ONE
+ * domain and errors on a repeat, so a call naming both fails outright, and
+ * `-mdd all` pulls in every domain a driver has into an output collected with
+ * no size cap.
+ */
 export function parseRaster(stdout: string): RasterInfo {
   const raw = json(stdout, "gdalinfo")
 
@@ -309,7 +308,7 @@ export const inspectRaster = (environment: GdalTypes.Environment, file: string) 
   run(
     environment,
     environment.tools.gdalinfo,
-    [...NO_SIDECARS, "-json", ...GEOREFERENCE_DOMAINS, APPROXIMATE_STATS, file],
+    [...NO_SIDECARS, "-json", APPROXIMATE_STATS, file],
     "gdal:inspect-raster",
   ).pipe(Effect.flatMap(parsed(parseRaster)))
 
@@ -323,14 +322,9 @@ export const inspectRaster = (environment: GdalTypes.Environment, file: string) 
  * reprojection to run early, on top of running again at encode time.
  */
 export const inspectLayout = (environment: GdalTypes.Environment, file: string) =>
-  run(
-    environment,
-    environment.tools.gdalinfo,
-    // The domains ride along here too: same parser, so the same evidence, and
-    // one fewer "why is this call different" to answer later.
-    [...NO_SIDECARS, "-json", ...GEOREFERENCE_DOMAINS, file],
-    "gdal:inspect-layout",
-  ).pipe(Effect.flatMap(parsed(parseRaster)))
+  run(environment, environment.tools.gdalinfo, [...NO_SIDECARS, "-json", file], "gdal:inspect-layout").pipe(
+    Effect.flatMap(parsed(parseRaster)),
+  )
 
 export const inspectVector = (environment: GdalTypes.Environment, file: string) =>
   run(environment, environment.tools.ogrinfo, [...NO_SIDECARS, "-json", "-so", file], "gdal:inspect-vector").pipe(
