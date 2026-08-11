@@ -15,12 +15,24 @@ set -e
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# The same bound the package's own `test` script uses. Without it bun applies
+# its 5s default, which is tighter than anything here was written against: the
+# permission tests compile the whole layer graph and take about a second each,
+# so a machine busy with something else turns one of them red for no reason —
+# observed once, and a gate that cries wolf is a gate people stop reading.
+#
+# Nothing is left unguarded by widening it. The tests that can genuinely hang
+# — a permission ask with no user to answer it — carry their own
+# `Effect.timeout` inside, which is where a hang has a name; this one is only
+# the backstop behind those.
+TIMEOUT="--timeout 30000"
+
 echo "== typecheck =="
 (cd "$ROOT/kernel/packages/opencode" && bun run typecheck)
 
 echo
 echo "== geo kernel (opencode) =="
-(cd "$ROOT/kernel/packages/opencode" && bun test \
+(cd "$ROOT/kernel/packages/opencode" && bun test $TIMEOUT \
   test/geo/ \
   test/server/geo-content-limit.test.ts \
   test/server/geo-shutdown-sweep.test.ts \
@@ -42,7 +54,7 @@ echo "== geo kernel (opencode) =="
 
 echo
 echo "== geo kernel (core) =="
-(cd "$ROOT/kernel/packages/core" && bun test \
+(cd "$ROOT/kernel/packages/core" && bun test $TIMEOUT \
   test/geo-extensions.test.ts \
   test/geo-watcher-ignore.test.ts \
   test/geocode-brand.test.ts \
