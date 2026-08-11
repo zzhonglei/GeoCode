@@ -261,9 +261,8 @@ export const GeoReadTool = Tool.define<
         title,
         output: [
           header,
-          "This is an ordinary image saved with a raster extension, not geographic data: it carries no " +
-            "affine transform, no ground control points, no RPC coefficients, no geolocation arrays and " +
-            "no coordinate system.",
+          "This file has no georeferencing — no transform, control points, RPC coefficients, " +
+            "geolocation arrays or coordinate system. It is an image, not geographic data.",
         ]
           .filter(Boolean)
           .join("\n"),

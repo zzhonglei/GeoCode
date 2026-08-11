@@ -554,8 +554,12 @@ describe("ReadGeoData, and a raster that is only a picture", () => {
       Effect.gen(function* () {
         const result = yield* body()
         expect(result.metadata.error_code).toBe("NotGeographic")
-        // One sentence, one judgement, two modes (GEOKERNEL §7.9).
-        expect(result.output).toContain("ordinary image saved with a raster extension")
+        // One sentence, one judgement, two modes (GEOKERNEL §7.9) — the same
+        // five places named above, and the same conclusion drawn from them.
+        for (const place of ["transform", "control points", "RPC", "geolocation", "coordinate system"]) {
+          expect(result.output).toContain(place)
+        }
+        expect(result.output).toContain("an image, not geographic data")
         expect(result.output).not.toContain("Preview failed")
         // No picture: refusing and then handing one over would be neither.
         expect(result.attachments).toBeUndefined()

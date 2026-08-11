@@ -255,10 +255,8 @@ def read_raster(file_path):
     has_crs = crs is not None
 
     geotransform_warning = (
-        "This raster has no affine transform, so the 'extent' values below are "
-        "pixel indices rather than ground coordinates and 'extent_wgs84' is null. "
-        "Reprojection, overlay, area calculation and GEE upload need ground "
-        "coordinates and will be wrong if given these."
+        "No affine transform: the 'extent' below is pixel indices, not ground "
+        "coordinates -- anything spatial computed from them will be wrong."
     ) if no_geotransform else None
 
     # When there's no GeoTransform, applying any CRS to the extent is

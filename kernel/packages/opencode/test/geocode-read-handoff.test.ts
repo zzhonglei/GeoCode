@@ -80,7 +80,6 @@ describe("read hands geographic data to ReadGeoData", () => {
 
       const result = yield* readFile(target)
       expect(result.output).toContain("Use the ReadGeoData tool")
-      expect(result.output).toContain(".geojson")
       expect(result.output).not.toContain("Use offset=")
       expect(result.output).not.toContain("coordinates")
       expect(result.metadata.truncated).toBe(false)
@@ -166,6 +165,22 @@ describe("read hands geographic data to ReadGeoData", () => {
       expect(geoHandoff(`/tmp/file.${ext}`)).toContain("ReadGeoData")
       expect(geoHandoff(`/tmp/FILE.${ext.toUpperCase()}`)).toContain("ReadGeoData")
     }
+
+    // Two things the redirect must NOT say, both of which it once did.
+    //
+    // A claim about the file: this function has an extension and nothing else,
+    // while whether the thing IS geographic data is decided by ReadGeoData
+    // from the file itself — and comes back `none` often enough to matter,
+    // because a scan saved as `.tif` is exactly what started this.
+    //
+    // And a promise about a mode: `preview` is raster-only, so offering it for
+    // every format sends a caller that believes it to a refusal it earned by
+    // doing as it was told.
+    const message = geoHandoff("/tmp/file.shp")!
+    expect(message).not.toContain("geographic data")
+    expect(message.toLowerCase()).not.toContain("preview")
+    // The same sentence whatever the format: nothing here can tell them apart.
+    expect(geoHandoff("/tmp/file.tif")).toBe(message)
 
     // Narrower than the taxonomy on purpose: a format the taxonomy calls
     // geographic but ReadGeoData cannot open would be refused here AND turned

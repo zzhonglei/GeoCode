@@ -47,6 +47,21 @@ export function geoKind(filepath: string): GeoKind | undefined {
 }
 
 /**
+ * A redirect names the tool and stops.
+ *
+ * It used to say more, and both extras were wrong. "This is a geographic data
+ * file" is a claim about the FILE, and a scan saved as `.tif` makes it false —
+ * this function knows an extension, not a georeferencing (ReadGeoData decides
+ * that, from the file itself). "…or preview its content" promised a mode that
+ * exists for rasters only, so a caller who believed it and passed
+ * `mode: "preview"` for a shapefile earned a refusal for doing as it was told.
+ *
+ * What is left is the one thing `read` actually knows: which tool opens this.
+ * Where the caller goes from there is its own to work out.
+ */
+const REDIRECT = "Use the ReadGeoData tool to open this file."
+
+/**
  * The message `read` returns for a file ReadGeoData handles, or undefined to
  * let upstream proceed untouched.
  *
@@ -60,9 +75,7 @@ export function geoKind(filepath: string): GeoKind | undefined {
  * — convert to what, and why — rather than handing off.
  */
 export function geoHandoff(filepath: string): string | undefined {
-  if (!geoKind(filepath)) return undefined
-  const ext = path.extname(filepath).toLowerCase()
-  return `This is a geographic data file (${ext}). Use the ReadGeoData tool to inspect its metadata or preview its content.`
+  return geoKind(filepath) ? REDIRECT : undefined
 }
 
 export * as GeoHandoff from "./geo-handoff"

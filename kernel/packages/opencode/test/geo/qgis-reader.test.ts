@@ -93,6 +93,16 @@ describe("qgis reader script assets", () => {
     expect(Georeference.of(Georeference.reported(facts))).toBe("gcp")
   })
 
+  test("the no-transform warning keeps both halves", () => {
+    // The fact AND the consequence, because the fact alone is not enough: the
+    // payload still carries a set of `extent` numbers that look usable, and a
+    // caller not told otherwise will hand them to a reprojection or an upload.
+    // Everything else in that sentence was trimmed; these two are the reason
+    // it exists.
+    expect(RASTER_READ_PY).toContain("pixel indices, not ground")
+    expect(RASTER_READ_PY).toContain("anything spatial computed from them will be wrong")
+  })
+
   test("the raster extent comes back the way its field names promise", () => {
     // A transform may step negatively in x, and the identity GDAL hands back
     // for "no transform" steps POSITIVELY in y — either way the corner
