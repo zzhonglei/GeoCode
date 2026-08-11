@@ -54,6 +54,7 @@ const environment: GdalTypes.Environment = {
 
 const georeferenced = {
   size: [7531, 7691],
+  geoTransform: [300000, 30, 0, 3530730, 0, -30],
   cornerCoordinates: { lowerLeft: [300000, 3300000], upperRight: [525930, 3530730] },
   coordinateSystem: { projjson: { id: { authority: "EPSG", code: 32649 } } },
 }
@@ -386,7 +387,14 @@ describe("gdal raster pipeline", () => {
           expect((outcome.failure as GdalRaster.GdalRasterError).kind).toBe("not-geographic")
         }
         // The refusal cost one metadata read and nothing else.
-        expect(tools(yield* Ref.get(script.calls))).toEqual(["gdalinfo"])
+        const calls = yield* Ref.get(script.calls)
+        expect(tools(calls)).toEqual(["gdalinfo"])
+        // And that read ASKED for the two domains georeferencing hides in.
+        // Whether gdalinfo volunteers them is a per-version default; a scene
+        // refused for lacking evidence nobody requested is the failure this
+        // catches (§7.9).
+        expect(flat(calls)[0]).toContain("-mdd RPC")
+        expect(flat(calls)[0]).toContain("-mdd GEOLOCATION")
       }),
     )
   }

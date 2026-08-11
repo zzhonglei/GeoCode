@@ -204,38 +204,61 @@ def resolve_crs(srs, existing_warning=None):
     return wkt, name, warning
 
 
+def georeferencing_facts(ds):
+    """The five places a raster can say where it is on the earth.
+
+    Reported, never judged. What they add up to is one rule, and it lives in
+    TypeScript (geo/georeference.ts) so that there is only ever one of it --
+    the interface reads the same five facts out of gdalinfo and reaches its
+    verdict through the same function (GEOKERNEL.md section 7.9).
+    """
+    return {
+        "transform": list(ds.GetGeoTransform()),
+        "projection": bool(ds.GetProjection()),
+        "gcp_count": ds.GetGCPCount(),
+        "rpc": bool(ds.GetMetadata("RPC")),
+        "geolocation": bool(ds.GetMetadata("GEOLOCATION")),
+    }
+
+
 def read_raster(file_path):
     ds = gdal.Open(file_path)
     if ds is None:
         raise RuntimeError(f"Cannot open raster file: {file_path}")
 
     gt = ds.GetGeoTransform()
-    # GDAL silently returns the identity transform (0, 1, 0, 0, 0, 1)
-    # when the file has no GeoTransform set -- same shape as a real
-    # transform, so without explicit detection we'd report pixel-coordinate
-    # extents disguised as geographic. Most common cause: an ordinary
-    # image (e.g. PNG re-saved as .tif from Photoshop) opened as if it
-    # were a GeoTIFF. Surface as a separate warning so the caller knows
-    # the extent values aren't usable downstream.
+    # GDAL silently returns the identity transform (0, 1, 0, 0, 0, 1) when the
+    # file has no GeoTransform set -- same shape as a real transform, so
+    # without explicit detection we'd report pixel-coordinate extents
+    # disguised as geographic. This decides the EXTENT only; whether the file
+    # is geographic data at all is a wider question with a wider answer, and
+    # the caller reaches it from `georeferencing` below.
     no_geotransform = gt == (0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
 
     srs, srs_warning = import_srs_from_wkt(ds.GetProjection())
 
-    xmin = gt[0]
-    ymax = gt[3]
-    xmax = xmin + gt[1] * ds.RasterXSize
-    ymin = ymax + gt[5] * ds.RasterYSize
+    # The two corners the transform puts the grid between, then NORMALIZED,
+    # because the field names promise it and a transform is free not to: a
+    # negative x step flips one pair, and the identity GDAL hands back for "no
+    # transform" steps POSITIVELY in y, which flips the other. The GDAL face
+    # normalizes the same way (gdal/inspector.ts) -- one file must not come
+    # back with its extent one way round for the Agent and the other for the
+    # map. extent_to_wgs84 is unaffected either way: it transforms all four
+    # corners and takes the extremes of the results.
+    x0, y0 = gt[0], gt[3]
+    x1 = x0 + gt[1] * ds.RasterXSize
+    y1 = y0 + gt[5] * ds.RasterYSize
+    xmin, xmax = min(x0, x1), max(x0, x1)
+    ymin, ymax = min(y0, y1), max(y0, y1)
 
     crs, crs_name, crs_warning = resolve_crs(srs, srs_warning)
     has_crs = crs is not None
 
     geotransform_warning = (
-        "Raster has no georeferencing (identity GeoTransform). The 'extent' "
-        "values below are pixel coordinates, not geographic -- this file is "
-        "likely an ordinary image saved with .tif extension rather than a "
-        "real GeoTIFF. Downstream tools that assume geographic coordinates "
-        "(reprojection, overlay, area calculation, GEE upload) will produce "
-        "wrong results."
+        "This raster has no affine transform, so the 'extent' values below are "
+        "pixel indices rather than ground coordinates and 'extent_wgs84' is null. "
+        "Reprojection, overlay, area calculation and GEE upload need ground "
+        "coordinates and will be wrong if given these."
     ) if no_geotransform else None
 
     # When there's no GeoTransform, applying any CRS to the extent is
@@ -261,6 +284,7 @@ def read_raster(file_path):
             "height": ds.RasterYSize,
         },
         "band_count": ds.RasterCount,
+        "georeferencing": georeferencing_facts(ds),
         "crs": crs,
         "crs_name": crs_name,
         "crs_warning": crs_warning,

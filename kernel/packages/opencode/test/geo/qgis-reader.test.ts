@@ -6,6 +6,7 @@ import { Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import type { GeoRuntime } from "@/geo/runtime"
 import { GeoRuntime as GeoRuntimeModule } from "@/geo/runtime"
+import { Georeference } from "@/geo/georeference"
 import { QgisReader } from "@/geo/qgis/reader"
 import { RASTER_PREVIEW_PY, RASTER_READ_PY, VECTOR_READ_PY } from "@/geo/qgis/scripts.generated"
 import type { Environment } from "@/geo/qgis/types"
@@ -59,6 +60,52 @@ describe("qgis reader script assets", () => {
       // non-ASCII values raw rather than escaping them away.
       expect(script.constant).toContain("ensure_ascii=False")
     }
+  })
+
+  test("both raster scripts gather the five facts with the very same function", () => {
+    // Neither script judges: the rule is one function in TypeScript
+    // (geo/georeference.ts, §7.9). What they owe is the EVIDENCE, and they must
+    // owe the same of it — omit a place in one and metadata mode opens a scene
+    // that preview mode refuses.
+    //
+    // Compared rather than described. Python cannot share a function across two
+    // materialized scripts without a module to import, and that module cost
+    // more than it bought; what it can do is carry the same one twice and have
+    // this notice the day they stop being the same.
+    const gathering = (script: string) => /^def georeferencing_facts[\s\S]*?\n    \}$/m.exec(script)?.[0]
+    const fromRead = gathering(RASTER_READ_PY)
+    expect(fromRead).toBeDefined()
+    expect(gathering(RASTER_PREVIEW_PY)).toBe(fromRead!)
+
+    for (const call of [
+      "GetGeoTransform()",
+      "GetProjection()",
+      "GetGCPCount()",
+      'GetMetadata("RPC")',
+      'GetMetadata("GEOLOCATION")',
+    ]) {
+      expect(fromRead).toContain(call)
+    }
+    for (const script of [RASTER_READ_PY, RASTER_PREVIEW_PY]) expect(script).toContain('"georeferencing"')
+
+    // The other half of the seam: the key names, read by the side that judges.
+    const facts = { transform: [0, 1, 0, 0, 0, 1], projection: false, gcp_count: 3, rpc: false, geolocation: false }
+    expect(Georeference.of(Georeference.reported(facts))).toBe("gcp")
+  })
+
+  test("the raster extent comes back the way its field names promise", () => {
+    // A transform may step negatively in x, and the identity GDAL hands back
+    // for "no transform" steps POSITIVELY in y — either way the corner
+    // computed as the minimum can land above the one computed as the maximum.
+    // The GDAL face normalizes (its own test, gdal-inspector.test.ts); this
+    // one has to as well, or one file has its extent one way round for the
+    // Agent and the other for the map.
+    //
+    // Textual, like the §4.13 constraints above, and for the same reason: the
+    // script needs a GDAL to run. This is the line that would go quiet if
+    // someone tidied it back into two subtractions.
+    expect(RASTER_READ_PY).toContain("xmin, xmax = min(x0, x1), max(x0, x1)")
+    expect(RASTER_READ_PY).toContain("ymin, ymax = min(y0, y1), max(y0, y1)")
   })
 })
 

@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { optional } from "@opencode-ai/schema/schema"
+import { Georeference } from "@/geo/georeference"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQueryFields } from "../middleware/workspace-routing"
@@ -148,8 +149,13 @@ export const GeoVectorPage = Schema.Struct({
 }).annotate({ identifier: "GeoVectorPage" })
 
 export const GeoRasterMeta = Schema.Struct({
-  /** False for a plain image that happens to be a TIFF — show it, do not map it. */
-  geo: Schema.Boolean,
+  /**
+   * Where the raster's placement comes from; `none` is a plain image that
+   * happens to be a TIFF — show it, do not map it. `gcp` and `rpc` are data
+   * whose corners are still pixel indices, which a map can say rather than
+   * quietly place wrong.
+   */
+  georeference: Schema.Literals([...Georeference.KINDS]),
   projection: optional(Schema.String),
   width: PositiveInt,
   height: PositiveInt,

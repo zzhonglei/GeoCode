@@ -133,7 +133,7 @@ export const GeoPreviewHandler = HttpApiBuilder.group(InstanceHttpApi, "geo-prev
         const { file, environment, gdal } = yield* opened("raster", ctx.query.path)
         const meta = yield* reported(gdal.raster.meta(environment, file))
         return {
-          geo: meta.geographic,
+          georeference: meta.georeference,
           projection: meta.projection,
           width: meta.width,
           height: meta.height,

@@ -3,6 +3,7 @@ export * as GdalRaster from "./raster"
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { Duration, Effect, Scope } from "effect"
+import type { Georeference } from "../georeference"
 import { GeoRuntime } from "../runtime"
 import { GdalCache } from "./cache"
 import { GdalInspector } from "./inspector"
@@ -67,13 +68,15 @@ const ENCODE_TIMEOUT = "180 seconds"
 
 export interface Meta {
   /**
-   * Whether this is geographic data at all.
+   * Whether this is geographic data at all, and where its placement comes from.
    *
    * The interface needs it separately from the rest: a plain image saved as
    * `.tif` has a width and a band count like anything else, and the honest
-   * response is to show it as an image rather than to place it on a map.
+   * response is to show it as an image rather than to place it on a map. The
+   * kind travels rather than a boolean because `rpc` and `gcp` are data whose
+   * corners are still pixel indices — a map can say so instead of guessing.
    */
-  readonly geographic: boolean
+  readonly georeference: Georeference.Kind
   readonly projection?: string
   readonly width: number
   readonly height: number
@@ -165,6 +168,11 @@ export function selectBands(info: GdalInspector.RasterInfo): Selection {
  * fallbacks matter more than they look — a constant band, or one whose
  * statistics are missing, must still produce SOME window rather than a division
  * by zero.
+ *
+ * The Python face guards `isfinite` where this one does not: it reads the
+ * statistics straight off GDAL, where an infinity can arrive, while everything
+ * reaching here has been through the inspector's `num()` and cannot be one.
+ * One rule, filtered at different ends of the same pipe (§7.9).
  */
 export function stretch(band: GdalInspector.Band | undefined): readonly [number, number] {
   const minimum = band?.minimum
@@ -278,10 +286,10 @@ export const make = (): Effect.Effect<Rasters, never, Scope.Scope> =>
     const produce = (environment: GdalTypes.Environment, file: string, places: ReturnType<typeof artifacts>) =>
       Effect.gen(function* () {
         const info = yield* GdalInspector.inspectRaster(environment, file)
-        if (!info.geographic) {
+        if (info.georeference === "none") {
           return yield* Effect.fail(
             new GdalRasterError(
-              "this file carries no coordinate system, so it is an image rather than geographic data",
+              "this file carries no georeferencing, so it is an image rather than geographic data",
               "not-geographic",
             ),
           )
@@ -457,7 +465,7 @@ export const make = (): Effect.Effect<Rasters, never, Scope.Scope> =>
     const meta: Rasters["meta"] = (environment, file) =>
       GdalInspector.inspectRaster(environment, file).pipe(
         Effect.map((info) => ({
-          geographic: info.geographic,
+          georeference: info.georeference,
           projection: info.projection,
           width: info.width,
           height: info.height,

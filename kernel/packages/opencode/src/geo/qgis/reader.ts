@@ -72,6 +72,8 @@ export interface PreviewMeta {
   readonly original_height?: number
   readonly bands?: readonly number[]
   readonly bytes?: number
+  /** The five georeferencing facts, in the shape `Georeference.reported` reads. */
+  readonly georeferencing?: unknown
 }
 
 export type PreviewOutcome =

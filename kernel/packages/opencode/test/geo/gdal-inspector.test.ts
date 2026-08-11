@@ -12,6 +12,7 @@ import { GdalInspector } from "@/geo/gdal/inspector"
 /** China DEM, 1 km: one band, its own overviews, and NO authority code. */
 const DEM = JSON.stringify({
   size: [6857, 5537],
+  geoTransform: [73.4911734, 0.008983153, 0, 53.5665404, 0, -0.008983153],
   cornerCoordinates: {
     lowerLeft: [73.4911734, 3.8268231],
     upperRight: [135.0886524, 53.5665404],
@@ -62,7 +63,7 @@ describe("gdal raster metadata", () => {
     // this module builds (§7.5).
     expect(info.hasOverview).toBe(true)
     expect(info.bands[0]!.mean).toBeCloseTo(1762.131, 3)
-    expect(info.geographic).toBe(true)
+    expect(info.georeference).toBe("transform")
   })
 
   test("a coordinate system with no authority code still yields a name", () => {
@@ -75,20 +76,65 @@ describe("gdal raster metadata", () => {
   })
 
   test("an image that merely happens to be a TIFF is not geographic data", () => {
-    // No coordinate system, and an extent that is exactly the pixel grid. Into
-    // the pipeline it would become a reprojection of nothing onto nowhere.
+    // Nothing in any of the five places. Into the pipeline it would become a
+    // reprojection of nothing onto nowhere.
     const plain = GdalInspector.parseRaster(raster({ bands: [{ colorInterpretation: "Red" }] }))
-    expect(plain.geographic).toBe(false)
+    expect(plain.georeference).toBe("none")
 
-    // Georeferenced but at the origin: the extent alone is not the test.
-    const atOrigin = GdalInspector.parseRaster(
-      raster({
-        coordinateSystem: { projjson: { id: { authority: "EPSG", code: 4326 } } },
-        cornerCoordinates: { lowerLeft: [0, 0], upperRight: [1, 1] },
-        bands: [{ colorInterpretation: "Gray" }],
-      }),
+    // GDAL hands back the identity for a file with no transform, so a file
+    // carrying it literally must read the same as one carrying nothing.
+    const identity = GdalInspector.parseRaster(raster({ geoTransform: [0, 1, 0, 0, 0, 1] }))
+    expect(identity.georeference).toBe("none")
+
+    // Placed at the origin, which is a legitimate place to be: the corner
+    // coordinates alone were never the test.
+    const atOrigin = GdalInspector.parseRaster(raster({ geoTransform: [0, 0.01, 0, 1, 0, -0.01] }))
+    expect(atOrigin.georeference).toBe("transform")
+  })
+
+  test("a scene with no transform is still data when it says where it is another way", () => {
+    // Every one of these is real remote-sensing output, and every one would be
+    // thrown away by a rule that only looked at the transform — which is the
+    // expensive direction to be wrong in (§6.4, and georeference.ts).
+    const gcps = GdalInspector.parseRaster(raster({ gcps: { gcpList: [{ id: "1" }, { id: "2" }, { id: "3" }] } }))
+    expect(gcps.georeference).toBe("gcp")
+
+    const rpc = GdalInspector.parseRaster(raster({ metadata: { RPC: { LINE_OFF: "5000" } } }))
+    expect(rpc.georeference).toBe("rpc")
+
+    const swath = GdalInspector.parseRaster(raster({ metadata: { GEOLOCATION: { X_BAND: "1" } } }))
+    expect(swath.georeference).toBe("geolocation")
+
+    // A projection with nothing placed in it: named space, no position.
+    const named = GdalInspector.parseRaster(
+      raster({ coordinateSystem: { projjson: { id: { authority: "EPSG", code: 4326 } } } }),
     )
-    expect(atOrigin.geographic).toBe(true)
+    expect(named.georeference).toBe("crs-only")
+
+    // An empty domain is a key gdalinfo prints for some drivers, not evidence.
+    const empty = GdalInspector.parseRaster(raster({ metadata: { RPC: {}, GEOLOCATION: {} }, gcps: { gcpList: [] } }))
+    expect(empty.georeference).toBe("none")
+  })
+
+  test("the answer is the most directly usable one present, not the first one found", () => {
+    // Orthorectified products routinely keep the RPC block they were made
+    // from, and a warp leaves control points behind. Reporting either over the
+    // transform would tell the interface a placed raster is not placed.
+    const orthorectified = GdalInspector.parseRaster(
+      raster({ geoTransform: [300000, 30, 0, 3530730, 0, -30], metadata: { RPC: { LINE_OFF: "5000" } } }),
+    )
+    expect(orthorectified.georeference).toBe("transform")
+
+    const bothRaw = GdalInspector.parseRaster(
+      raster({ gcps: { gcpList: [{ id: "1" }] }, metadata: { RPC: { LINE_OFF: "5000" } } }),
+    )
+    expect(bothRaw.georeference).toBe("gcp")
+  })
+
+  test("a transform that cannot be inverted is not a placement", () => {
+    // Zero pixel size: a damaged write, not a position. Reported as no
+    // placement so the extent is never computed from it.
+    expect(GdalInspector.parseRaster(raster({ geoTransform: [100, 0, 0, 200, 0, 0] })).georeference).toBe("none")
   })
 
   test("grey with an alpha band colourizes like one band, not like three", () => {

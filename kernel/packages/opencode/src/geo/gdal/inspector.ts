@@ -1,6 +1,7 @@
 export * as GdalInspector from "./inspector"
 
 import { Effect } from "effect"
+import { Georeference } from "../georeference"
 import { GeoRuntime } from "../runtime"
 import type { GdalTypes } from "./types"
 
@@ -41,14 +42,15 @@ export interface RasterInfo {
   /** Overviews the file already carries. Free speed when present; never built (§7.5). */
   readonly hasOverview: boolean
   /**
-   * Whether this is geographic data at all.
+   * Whether this is geographic data at all, and where its placement comes from.
    *
    * A TIFF is not necessarily a raster dataset — a screenshot saved as `.tif`
    * parses perfectly and carries no georeferencing. Letting one into the
    * pipeline produces a reprojection of nothing onto nowhere, so the answer is
-   * decided here and the pipeline is never entered (§7.5).
+   * decided here and the pipeline is never entered (§7.5). `none` is that
+   * case; everything else is data, however awkwardly placed.
    */
-  readonly geographic: boolean
+  readonly georeference: Georeference.Kind
   readonly bands: readonly Band[]
 }
 
@@ -107,6 +109,16 @@ export const NO_SIDECARS = ["--config", "GDAL_PAM_ENABLED", "NO"] as const
  */
 const APPROXIMATE_STATS = "-approx_stats"
 
+/**
+ * Ask for the two domains georeferencing can hide in.
+ *
+ * Asked EXPLICITLY rather than relied on: whether `gdalinfo -json` emits these
+ * without being told is a default we would be depending on across every GDAL
+ * version a user's QGIS might ship, and the official JSON schema enumerates no
+ * domains at all. Naming them costs a header read and removes the question.
+ */
+const GEOREFERENCE_DOMAINS = ["-mdd", "RPC", "-mdd", "GEOLOCATION"] as const
+
 /** Generous for a header read; a network-mounted file is the case that needs it. */
 const TIMEOUT = "30 seconds"
 
@@ -142,6 +154,30 @@ export function projectionOf(coordinateSystem: unknown): string | undefined {
     return /^(?:GEOGCS|PROJCS|GEOGCRS|PROJCRS)\["([^"]+)"/.exec(cs.wkt)?.[1]
   }
   return undefined
+}
+
+/** The six affine coefficients, or undefined for anything that is not them. */
+function coefficients(value: unknown): number[] | undefined {
+  if (!Array.isArray(value) || value.length !== 6) return undefined
+  const parsed = value.map(num)
+  return parsed.every((item) => item !== undefined) ? (parsed as number[]) : undefined
+}
+
+/** `gcps` is absent entirely when there are none, present with a list when there are. */
+function gcpCount(value: unknown): number {
+  const list = (value as { gcpList?: unknown } | undefined)?.gcpList
+  return Array.isArray(list) ? list.length : 0
+}
+
+/**
+ * Whether a metadata domain carries anything.
+ *
+ * gdalinfo emits a domain key with an empty object for some drivers, so the
+ * key alone does not mean the file has RPC coefficients — only its contents do.
+ */
+function populated(metadata: unknown, name: string): boolean {
+  const found = (metadata as Record<string, unknown> | undefined)?.[name]
+  return typeof found === "object" && found !== null && Object.keys(found).length > 0
 }
 
 /** Read a raster's metadata out of `gdalinfo -json` output. */
@@ -190,12 +226,19 @@ export function parseRaster(stdout: string): RasterInfo {
   const hasOverview = rawBands.some((band) => Array.isArray(band.overviews) && band.overviews.length > 0)
 
   const projection = projectionOf(raw.coordinateSystem)
-  // No coordinate system AND an extent that is exactly the pixel grid: this is
-  // an image that happens to be a TIFF, not a raster dataset.
-  const pixelSpace = extent[0] === 0 && extent[1] === 0 && extent[2] === width && extent[3] === height
-  const geographic = !!projection && !pixelSpace
+  // Asked of the transform itself rather than inferred from the corner
+  // coordinates, which is the same question one indirection away — and asked
+  // of all five places georeferencing can live, because a scene carrying only
+  // RPC coefficients is data whose corners ARE the pixel grid.
+  const georeference = Georeference.of({
+    transform: coefficients(raw.geoTransform),
+    projection: projection !== undefined,
+    gcpCount: gcpCount(raw.gcps),
+    rpc: populated(raw.metadata, "RPC"),
+    geolocation: populated(raw.metadata, "GEOLOCATION"),
+  })
 
-  return { width, height, extent, projection, bandCount, singleBand, hasOverview, geographic, bands }
+  return { width, height, extent, projection, bandCount, singleBand, hasOverview, georeference, bands }
 }
 
 /** Read a vector layer's metadata out of `ogrinfo -json -so` output. */
@@ -266,7 +309,7 @@ export const inspectRaster = (environment: GdalTypes.Environment, file: string) 
   run(
     environment,
     environment.tools.gdalinfo,
-    [...NO_SIDECARS, "-json", APPROXIMATE_STATS, file],
+    [...NO_SIDECARS, "-json", ...GEOREFERENCE_DOMAINS, APPROXIMATE_STATS, file],
     "gdal:inspect-raster",
   ).pipe(Effect.flatMap(parsed(parseRaster)))
 
@@ -280,9 +323,14 @@ export const inspectRaster = (environment: GdalTypes.Environment, file: string) 
  * reprojection to run early, on top of running again at encode time.
  */
 export const inspectLayout = (environment: GdalTypes.Environment, file: string) =>
-  run(environment, environment.tools.gdalinfo, [...NO_SIDECARS, "-json", file], "gdal:inspect-layout").pipe(
-    Effect.flatMap(parsed(parseRaster)),
-  )
+  run(
+    environment,
+    environment.tools.gdalinfo,
+    // The domains ride along here too: same parser, so the same evidence, and
+    // one fewer "why is this call different" to answer later.
+    [...NO_SIDECARS, "-json", ...GEOREFERENCE_DOMAINS, file],
+    "gdal:inspect-layout",
+  ).pipe(Effect.flatMap(parsed(parseRaster)))
 
 export const inspectVector = (environment: GdalTypes.Environment, file: string) =>
   run(environment, environment.tools.ogrinfo, [...NO_SIDECARS, "-json", "-so", file], "gdal:inspect-vector").pipe(

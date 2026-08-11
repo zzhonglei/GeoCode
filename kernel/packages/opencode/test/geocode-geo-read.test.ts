@@ -60,7 +60,10 @@ const executeAs = Effect.fnUntraced(function* (agentName: string, filePath: stri
         abort: AbortSignal.any([]),
         messages: [],
         metadata: () => Effect.void,
-        ask: (req) => permission.ask({ ...req, sessionID: SessionID.make("ses_geo_read_test"), ruleset: agent!.permission }).pipe(Effect.orDie),
+        ask: (req) =>
+          permission
+            .ask({ ...req, sessionID: SessionID.make("ses_geo_read_test"), ruleset: agent!.permission })
+            .pipe(Effect.orDie),
       },
     )
     // Bounded so a counterproof cannot hang: with the global geo_* deny
@@ -440,4 +443,153 @@ describe("ReadGeoData, shaping a payload", () => {
       expect(result.output).not.toContain("Continue with offset=")
     }),
   )
+})
+
+describe("ReadGeoData, and a raster that is only a picture", () => {
+  const openGate = Layer.succeed(
+    GeoQgis.Service,
+    GeoQgis.Service.of({
+      gate: () =>
+        Effect.succeed({
+          ok: true,
+          environment: {
+            python: "/fake/python3.12",
+            prefix: "/fake/prefix",
+            env: {},
+            dllDirectories: [],
+            versions: { python: "3.12.11", gdal: "3.12.0", qgis: "3.44.9" },
+            processing: true,
+          },
+        }),
+    }),
+  )
+
+  /** Nothing anywhere: the identity transform is GDAL's way of saying "none". */
+  const NOTHING = { transform: [0, 1, 0, 0, 0, 1], projection: false, gcp_count: 0, rpc: false, geolocation: false }
+  /** A raw satellite scene: no transform, no CRS, and unmistakably geographic. */
+  const RAW_SCENE = { ...NOTHING, rpc: true }
+
+  const runtimeSaying = (stdout: string) =>
+    Layer.mock(GeoRuntime.Service)({
+      run: () =>
+        Effect.succeed({
+          code: 0,
+          reason: "exit",
+          stdout,
+          stderr: "",
+          durationMs: 4,
+          truncated: false,
+          drainIncomplete: false,
+        } satisfies GeoRuntime.Result),
+      killAllSync: () => {},
+    })
+
+  const call = (stdout: string, mode: "metadata" | "preview", name: string) => {
+    const it = testEffect(
+      LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
+        [RuntimeFlags.node, RuntimeFlags.layer()],
+        [GeoQgis.node, openGate],
+        [GeoRuntime.node, runtimeSaying(stdout)],
+      ]),
+    )
+    return {
+      it,
+      body: () =>
+        Effect.gen(function* () {
+          const registry = yield* ToolRegistry.Service
+          const permission = yield* Permission.Service
+          const agent = yield* Agent.Service.use((svc) => svc.get("GeoAgent"))
+          const ctx = yield* InstanceState.context
+          const target = path.join(ctx.directory, `${name}.tif`)
+          fs.writeFileSync(target, "pixels")
+          const georead = (yield* registry.all()).find((tool) => tool.id === "ReadGeoData")!
+          return yield* georead.execute(
+            { filePath: target, mode },
+            {
+              sessionID: SessionID.make(`ses_${name}`),
+              messageID: MessageID.make(`msg_${name}`),
+              agent: "GeoAgent",
+              abort: AbortSignal.any([]),
+              messages: [],
+              metadata: () => Effect.void,
+              ask: (req) =>
+                permission
+                  .ask({ ...req, sessionID: SessionID.make(`ses_${name}`), ruleset: agent!.permission })
+                  .pipe(Effect.orDie),
+            },
+          )
+        }),
+    }
+  }
+
+  const marked = (payload: object) => `${QgisReader.MARKER}${JSON.stringify(payload)}\n`
+  /** The preview protocol: marker line, then the image. Four characters encode three bytes. */
+  const rendered = (meta: object) => `${marked({ width: 10, height: 10, bytes: 3, ...meta })}AAAA\n`
+
+  {
+    const { it, body } = call(
+      marked({ data_type: "raster", georeferencing: NOTHING, size: { width: 1200, height: 900 }, band_count: 3 }),
+      "metadata",
+      "scan",
+    )
+    it.instance("metadata mode refuses it, and names what was looked for", () =>
+      Effect.gen(function* () {
+        const result = yield* body()
+        expect(result.metadata.error_code).toBe("NotGeographic")
+        expect(result.metadata.georeference).toBe("none")
+        // Named, not summarized: "not geographic data" alone reads like a guess
+        // about the file and invites a second attempt at the same one.
+        for (const place of ["transform", "control points", "RPC", "geolocation", "coordinate system"]) {
+          expect(result.output).toContain(place)
+        }
+        // And the metadata it did have does not leak out as if it were useful.
+        expect(result.output).not.toContain("1200")
+      }),
+    )
+  }
+
+  {
+    const { it, body } = call(rendered({ georeferencing: NOTHING }), "preview", "figure")
+    it.instance("preview mode refuses it with the same sentence, not as a failed render", () =>
+      Effect.gen(function* () {
+        const result = yield* body()
+        expect(result.metadata.error_code).toBe("NotGeographic")
+        // One sentence, one judgement, two modes (GEOKERNEL §7.9).
+        expect(result.output).toContain("ordinary image saved with a raster extension")
+        expect(result.output).not.toContain("Preview failed")
+        // No picture: refusing and then handing one over would be neither.
+        expect(result.attachments).toBeUndefined()
+      }),
+    )
+  }
+
+  {
+    const { it, body } = call(
+      marked({ data_type: "raster", georeferencing: RAW_SCENE, size: { width: 30000, height: 30000 } }),
+      "metadata",
+      "scene",
+    )
+    it.instance("an unrectified scene is data, and the Agent is told which kind", () =>
+      Effect.gen(function* () {
+        const result = yield* body()
+        expect(result.metadata.error_code).toBeUndefined()
+        expect(result.metadata.georeference).toBe("rpc")
+        // The five raw fields are replaced by what they add up to: `rpc` says
+        // the extent below is still pixel indices, which is the part that acts.
+        expect(result.output).toContain('"georeferencing":"rpc"')
+        expect(result.output).not.toContain("gcp_count")
+      }),
+    )
+  }
+
+  {
+    const { it, body } = call(rendered({ georeferencing: RAW_SCENE }), "preview", "raw")
+    it.instance("and it is previewed like any other raster", () =>
+      Effect.gen(function* () {
+        const result = yield* body()
+        expect(result.metadata.error_code).toBeUndefined()
+        expect(result.attachments?.[0]?.mime).toBe("image/png")
+      }),
+    )
+  }
 })

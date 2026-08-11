@@ -132,6 +132,27 @@ def preview_size(width, height):
 
 
 # ---------------------------------------------------------------------------
+# Georeferencing -- byte-for-byte the same function raster_read.py carries
+# ---------------------------------------------------------------------------
+
+def georeferencing_facts(ds):
+    """The five places a raster can say where it is on the earth.
+
+    Reported, never judged. What they add up to is one rule, and it lives in
+    TypeScript (geo/georeference.ts) so that there is only ever one of it --
+    the interface reads the same five facts out of gdalinfo and reaches its
+    verdict through the same function (GEOKERNEL.md section 7.9).
+    """
+    return {
+        "transform": list(ds.GetGeoTransform()),
+        "projection": bool(ds.GetProjection()),
+        "gcp_count": ds.GetGCPCount(),
+        "rpc": bool(ds.GetMetadata("RPC")),
+        "geolocation": bool(ds.GetMetadata("GEOLOCATION")),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Main render
 # ---------------------------------------------------------------------------
 
@@ -139,6 +160,9 @@ def render_preview(file_path):
     ds = gdal.Open(file_path)
     if ds is None:
         raise RuntimeError(f"Cannot open raster file: {file_path}")
+
+    # Taken while the dataset is still open; it is closed before encoding.
+    georeferencing = georeferencing_facts(ds)
 
     width = ds.RasterXSize
     height = ds.RasterYSize
@@ -237,6 +261,7 @@ def render_preview(file_path):
         "original_height": height,
         "bands": list(rgb_indices),
         "bytes": len(png_bytes),
+        "georeferencing": georeferencing,
     }, encoded
 
 

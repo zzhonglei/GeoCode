@@ -4,6 +4,7 @@ import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Tool from "./tool"
 import { GeoQgis, GeoRuntime, GeoStatus } from "@/geo"
+import { Georeference } from "@/geo/georeference"
 import { GeoTool } from "./geo-tool"
 import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
@@ -55,10 +56,7 @@ const measure = (payload: Record<string, unknown>) => Buffer.byteLength(JSON.str
  * wide schema's field statistics), which we ship honestly rather than cut.
  * Exported for the tripwire: this is pure shaping, testable without QGIS.
  */
-export function fitVectorPayload(
-  payload: Record<string, unknown>,
-  budget: number,
-): { dropped: number; fits: boolean } {
+export function fitVectorPayload(payload: Record<string, unknown>, budget: number): { dropped: number; fits: boolean } {
   const layer = payload.layer as Record<string, unknown> | undefined
   const features = layer?.features
   let dropped = 0
@@ -248,6 +246,37 @@ export const GeoReadTool = Tool.define<
         },
       })
 
+      /**
+       * A raster with no georeferencing is not this tool's to open.
+       *
+       * The five places are named rather than summarized. "Not geographic data"
+       * on its own reads like a guess about the file and invites a second
+       * attempt at it; a list of what was looked for and not found does not.
+       *
+       * Both modes reach it from the same five facts through the same
+       * function, so they cannot come back with two accounts of one file
+       * (GEOKERNEL §7.9).
+       */
+      const notGeographic = () => ({
+        title,
+        output: [
+          header,
+          "This is an ordinary image saved with a raster extension, not geographic data: it carries no " +
+            "affine transform, no ground control points, no RPC coefficients, no geolocation arrays and " +
+            "no coordinate system.",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        metadata: {
+          mode: params.mode,
+          truncated: false,
+          data_type: "raster",
+          georeference: "none",
+          error_code: "NotGeographic",
+          failed: true,
+        },
+      })
+
       if (params.mode === "preview") {
         const outcome = yield* GeoQgis.QgisReader.renderPreview(runtime, gate.environment, {
           file: filepath,
@@ -265,6 +294,10 @@ export const GeoReadTool = Tool.define<
           }
         }
         const meta = outcome.meta
+        // After the render rather than before it, because the facts arrive with
+        // it. The wasted encode falls exactly on the files being refused, and
+        // those are pictures — the scenes worth minutes all pass.
+        if (Georeference.of(Georeference.reported(meta.georeferencing)) === "none") return notGeographic()
         const size =
           meta.original_width !== undefined && meta.original_height !== undefined
             ? `${meta.original_width}×${meta.original_height}${meta.width !== undefined ? ` → ${meta.width}×${meta.height}` : ""}`
@@ -293,18 +326,19 @@ export const GeoReadTool = Tool.define<
 
       const offset = Math.max(1, params.offset ?? 1)
       const requested = Math.min(Math.max(1, params.limit ?? FEATURE_DEFAULT), FEATURE_CAP)
-      const outcome = yield* (isRaster
-        ? GeoQgis.QgisReader.readRaster(runtime, gate.environment, { file: filepath, abort: ctx.abort })
-        : GeoQgis.QgisReader.readVector(runtime, gate.environment, {
-            file: filepath,
-            offset,
-            maxFeatures: requested,
-            // Any multi-layer driver, not just GeoPackage: the reader emits an
-            // overview whenever layer_count > 1, so gating selection on .gpkg
-            // showed a .gpx's five layers and gave no way to reach past the first.
-            ...(params.layerIndex !== undefined ? { layerIndex: params.layerIndex } : {}),
-            abort: ctx.abort,
-          })
+      const outcome = yield* (
+        isRaster
+          ? GeoQgis.QgisReader.readRaster(runtime, gate.environment, { file: filepath, abort: ctx.abort })
+          : GeoQgis.QgisReader.readVector(runtime, gate.environment, {
+              file: filepath,
+              offset,
+              maxFeatures: requested,
+              // Any multi-layer driver, not just GeoPackage: the reader emits an
+              // overview whenever layer_count > 1, so gating selection on .gpkg
+              // showed a .gpx's five layers and gave no way to reach past the first.
+              ...(params.layerIndex !== undefined ? { layerIndex: params.layerIndex } : {}),
+              abort: ctx.abort,
+            })
       ).pipe(Effect.catch((error) => Effect.succeed({ ok: false as const, detail: error.message })))
 
       if (!outcome.ok) {
@@ -317,6 +351,15 @@ export const GeoReadTool = Tool.define<
       }
 
       const payload = outcome.payload
+      if (payload.georeferencing !== undefined) {
+        // The same judgement the preview path makes, from the same five facts.
+        // The block is then REPLACED by its verdict: the Agent is owed the
+        // conclusion — `rpc` says an extent it is about to read is still pixel
+        // indices — and not five raw fields it would have to combine itself.
+        const verdict = Georeference.of(Georeference.reported(payload.georeferencing))
+        if (verdict === "none") return notGeographic()
+        payload.georeferencing = verdict
+      }
       // The vector payload nests the layer detail under `layer` ({ driver,
       // layer_index, overview?, layer }); raster facts sit at the top level.
       // The layer object is where feature_count and the CRS facts live.
@@ -327,6 +370,7 @@ export const GeoReadTool = Tool.define<
       if (detail.feature_count !== undefined) metadata.feature_count = detail.feature_count
       if (detail.size !== undefined) metadata.size = detail.size
       if (detail.band_count !== undefined) metadata.band_count = detail.band_count
+      if (payload.georeferencing !== undefined) metadata.georeference = payload.georeferencing
       // Defect warnings ride at metadata top level so the Agent sees them
       // without parsing the payload (kept from the old tool: missing CRS and
       // identity-geotransform are the two classic silent data defects).
@@ -354,9 +398,10 @@ export const GeoReadTool = Tool.define<
         const continueWith = paged
           ? `Continue with offset=${offset + kept}, or reduce limit.`
           : `This layer mixes geometry types, so its sample is drawn per type rather than in order — reduce limit, or split the layer by geometry type first.`
-        notice = kept > 0
-          ? `(Size cap: showing ${kept} of the ${requested} requested features. ${continueWith})`
-          : `(Size cap: the sampled features are too large to inline even one. Retry with limit=1, or extract the attributes you need with a processing algorithm instead.)`
+        notice =
+          kept > 0
+            ? `(Size cap: showing ${kept} of the ${requested} requested features. ${continueWith})`
+            : `(Size cap: the sampled features are too large to inline even one. Retry with limit=1, or extract the attributes you need with a processing algorithm instead.)`
       } else if (!fit.fits) {
         notice = `(Size note: this layer's schema and statistics alone exceed the usual output budget; shipped whole.)`
       }
