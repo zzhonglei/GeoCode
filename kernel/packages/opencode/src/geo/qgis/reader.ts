@@ -37,11 +37,16 @@ const PREVIEW_TOTAL = "120 seconds"
 const METADATA_LIMIT = 32 * 1024 * 1024
 
 /**
- * The preview cap is sized to the preview's UPPER BOUND, explicitly: at
- * MAX_SIDE 4096 the raw RGBA plane is 64MB, a pathological PNG stays near
- * raw size, and base64 adds a third — ~90MB worst case. An undersized cap
- * here does not fail loudly: it truncates the payload and masquerades as an
- * unattributable "no marker" failure (§4.13 校准量).
+ * The preview cap is sized to the preview's UPPER BOUND, explicitly: at the
+ * script's MAX_SIDE of 2048 the raw RGBA plane is 16MB, a pathological PNG
+ * stays near raw size, and base64 adds a third — ~22MB worst case.
+ *
+ * Left at 128MB anyway, which is generous by design rather than by neglect.
+ * The two failures are not symmetrical: an oversized cap costs nothing, since
+ * this is a ceiling and not an allocation, while an undersized one does not
+ * fail loudly — it truncates the payload and masquerades as an unattributable
+ * "no marker" failure (§4.13 校准量). The margin also means lowering MAX_SIDE
+ * again needs no arithmetic here.
  */
 const PREVIEW_LIMIT = 128 * 1024 * 1024
 

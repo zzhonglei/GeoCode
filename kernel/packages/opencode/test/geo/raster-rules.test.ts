@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { GdalInspector } from "@/geo/gdal/inspector"
 import { GdalRaster } from "@/geo/gdal/raster"
+import { RASTER_PREVIEW_PY } from "@/geo/qgis/scripts.generated"
 
 /* The two faces of a raster preview, answering one list (§7.9 dual engines).
  *
@@ -115,6 +116,18 @@ describe("the raster preview rules, in TypeScript", () => {
   test("stretch", () => {
     STRETCH.forEach((item, index) => expect(rounded(ours.stretch[index]!), item.case).toEqual(rounded(item.window)))
   })
+})
+
+test("the two faces cap a preview at DIFFERENT sizes, and are meant to", () => {
+  // The one rule above that is not shared. A map preview is zoomed into, so it
+  // is drawn at 4096; a model attachment is read once and charged for, so it is
+  // drawn at 2048 — a quarter of the pixels, a quarter of the payload.
+  //
+  // This is here because the difference LOOKS like drift. Two constants that
+  // ought to match and do not is exactly the shape someone reaches out to fix,
+  // and the fix would silently delete the smaller cap.
+  expect(GdalRaster.previewSize(10_000, 10_000).width).toBe(4096)
+  expect(RASTER_PREVIEW_PY).toContain("MAX_SIDE = 2048")
 })
 
 const python = ["python3", "python"].find(

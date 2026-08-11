@@ -40,7 +40,12 @@ def emit_error(payload):
 
 gdal.UseExceptions()
 
-MAX_SIDE = 4096
+# HALF the GDAL face's cap, and deliberately so -- do not "fix" the two to
+# agree (gdal/raster.ts, section 7.9). That preview goes onto a map the user
+# zooms into, so it is drawn at 4096; this one becomes an attachment in a model's
+# context, which is the one place a pixel costs something per read. Quartering
+# the pixels quarters the payload, and nothing downstream reads the difference.
+MAX_SIDE = 2048
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +124,7 @@ def compute_stretch(band):
 
 
 # ---------------------------------------------------------------------------
-# Preview size -- max side 4096, maintain aspect ratio, never upscale
+# Preview size -- max side, maintain aspect ratio, never upscale
 # ---------------------------------------------------------------------------
 
 def preview_size(width, height):
