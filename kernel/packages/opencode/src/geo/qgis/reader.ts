@@ -45,6 +45,30 @@ const METADATA_LIMIT = 32 * 1024 * 1024
  */
 const PREVIEW_LIMIT = 128 * 1024 * 1024
 
+/**
+ * Reading must not write.
+ *
+ * The stretch needs statistics, `GetStatistics(force=True)` computes them, and
+ * GDAL then saves what it computed — as a `.aux.xml` BESIDE THE USER'S DATA,
+ * on a call that only asked to read it. Read-only opening does not prevent it;
+ * the save happens when the dataset closes. The GDAL face has carried this
+ * guard since it was built (`gdal/inspector.ts` NO_SIDECARS) and this one
+ * never did, so every raster read has been leaving a file behind (§7.6).
+ *
+ * On the READER ONLY. An algorithm that writes a raster may legitimately need
+ * PAM to persist a coordinate system its output format cannot hold, so the
+ * executor keeps it — turning this off there would damage real output rather
+ * than protect a directory.
+ *
+ * Two costs, both smaller than the one they replace. Statistics are recomputed
+ * instead of read back, which is what the GDAL face already does and is
+ * sampled rather than a full scan. And a coordinate system living ONLY in a
+ * sidecar goes unseen — the five raster formats this tool opens all carry
+ * their own, and `GDAL_PAM_PROXY_DIR` is no help here: it has no effect where
+ * the user can write, which is exactly where their data is.
+ */
+const NO_SIDECARS = { GDAL_PAM_ENABLED: "NO" } as const
+
 export interface VectorOptions {
   readonly file: string
   /** Features to sample. The caller owns range policy; the script defaults to 3. */
@@ -204,7 +228,7 @@ function runRead(
         // wrapScript preserves direct-execution semantics under the manual
         // Windows track's DLL bootstrap, and is the identity elsewhere (§4.5).
         args: QgisBootstrap.wrapScript(scriptPath, spec.args, environment.dllDirectories),
-        env: environment.env,
+        env: { ...environment.env, ...NO_SIDECARS },
         delivery: { mode: "collect", limit: spec.limit },
         clocks: { total: spec.total },
         abort: spec.abort,

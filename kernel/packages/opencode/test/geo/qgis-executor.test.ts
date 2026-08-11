@@ -174,6 +174,12 @@ describe("qgis executor pipeline", () => {
         // The verified environment rides the spawn whole, and the parameters
         // travel as the argument the runner reads.
         expect(captured[0]!.env).toBe(environment.env)
+        // Whole means whole: the reader turns PAM off so that reading cannot
+        // write a sidecar into the user's directory (reader.ts NO_SIDECARS),
+        // and an algorithm must NOT inherit that. Some output formats cannot
+        // hold a coordinate system themselves and rely on the sidecar to keep
+        // it, so the same guard here would damage what it wrote (§7.6).
+        expect(captured[0]!.env).not.toHaveProperty("GDAL_PAM_ENABLED")
         expect(captured[0]!.command).toBe(environment.python)
         expect(captured[0]!.args[1]).toContain("ProgressFeedback")
         expect(captured[0]!.args[2]).toBe("native:buffer")

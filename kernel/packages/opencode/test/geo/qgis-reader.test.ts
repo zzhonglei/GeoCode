@@ -198,7 +198,12 @@ describe("qgis reader pipeline", () => {
         // MATERIALIZED (a .py path, not -c), and defaults fill the argv.
         const options = calls[0]!.options
         expect(options.command).toBe(environment.python)
-        expect(options.env).toBe(environment.env)
+        expect(options.env).toMatchObject(environment.env)
+        // And one thing the verified environment does not carry: reading a
+        // raster computes statistics, and GDAL saves what it computed as a
+        // `.aux.xml` beside the user's data unless told not to (§7.6). The
+        // GDAL face has guarded this from the start; this one did not.
+        expect(options.env!.GDAL_PAM_ENABLED).toBe("NO")
         expect(options.args[0]!.endsWith(".py")).toBe(true)
         expect(options.args.slice(1)).toEqual(["/data/街道.geojson", "3", "1"])
         expect(options.delivery).toEqual({ mode: "collect", limit: 32 * 1024 * 1024 })
