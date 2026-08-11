@@ -315,7 +315,10 @@ describe("OsmProbe, counting", () => {
             totals: { nodes: 0, ways: 0, relations: 0, total: 0 },
             failed: [
               { extent: "area:R1", reason: "all 8 Overpass endpoints failed across 2 rounds" },
-              { extent: "bbox:1,2", reason: '"1,2" is not a bounding box: expected four numbers, south,west,north,east' },
+              {
+                extent: "bbox:1,2",
+                reason: '"1,2" is not a bounding box: expected four numbers, south,west,north,east',
+              },
             ],
           }),
         ),

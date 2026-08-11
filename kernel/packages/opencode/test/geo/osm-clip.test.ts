@@ -67,24 +67,32 @@ const DOWNLOAD = (outputs: { path: string; count: number }[]): GeoOsm.DownloadRe
   }) as GeoOsm.DownloadResult
 
 /** A QGIS that is ready, knows the algorithms, and writes what it is asked to. */
-function fakes(over: {
-  ready?: boolean
-  known?: (id: string) => boolean
-  /** What each run does: write the output with N features, or fail. */
-  run?: (algorithm: string, parameters: Record<string, unknown>) => { ok: boolean; features?: number }
-} = {}) {
+function fakes(
+  over: {
+    ready?: boolean
+    known?: (id: string) => boolean
+    /** What each run does: write the output with N features, or fail. */
+    run?: (algorithm: string, parameters: Record<string, unknown>) => { ok: boolean; features?: number }
+  } = {},
+) {
   const runs: { algorithm: string; parameters: Record<string, unknown> }[] = []
   const qgis = {
     gate: () =>
       Effect.succeed(
-        over.ready === false ? { ok: false as const, status: {} as never } : { ok: true as const, environment: {} as never },
+        over.ready === false
+          ? { ok: false as const, status: {} as never }
+          : { ok: true as const, environment: {} as never },
       ),
   }
   const catalog = {
     get: (id: string) => Effect.succeed((over.known ?? (() => true))(id) ? ({ id } as never) : undefined),
   }
   const runtime = {} as never
-  const runAlgorithm = ((_runtime: unknown, _environment: unknown, options: { algorithm: string; parameters: Record<string, unknown> }) => {
+  const runAlgorithm = ((
+    _runtime: unknown,
+    _environment: unknown,
+    options: { algorithm: string; parameters: Record<string, unknown> },
+  ) => {
     const { algorithm, parameters } = options
     runs.push({ algorithm, parameters })
     const outcome = (over.run ?? (() => ({ ok: true, features: 1 })))(algorithm, parameters)
@@ -212,7 +220,7 @@ describe("when it gives up, the download is left exactly as it was", () => {
           qgis: fake.qgis as never,
           catalog: fake.catalog as never,
           runtime: fake.runtime,
-        runAlgorithm: fake.runAlgorithm,
+          runAlgorithm: fake.runAlgorithm,
           result: DOWNLOAD([{ path: out, count: 7 }]),
           extents: item.extents ? item.extents(boundary) : [`file:${boundary}`],
         }),
@@ -235,10 +243,12 @@ describe("when it gives up, the download is left exactly as it was", () => {
     // exit code separates that from a finished clip — the checks after it see
     // a file that exists and is not empty, and would accept a partial result
     // as the corrected download.
-    const fake = fakes({ run: (_a, parameters) => {
-      collection(String(parameters.OUTPUT), 2)
-      return { ok: false }
-    } })
+    const fake = fakes({
+      run: (_a, parameters) => {
+        collection(String(parameters.OUTPUT), 2)
+        return { ok: false }
+      },
+    })
 
     const outcome = Effect.runSync(
       OsmClip.clip({

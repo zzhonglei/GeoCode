@@ -40,9 +40,7 @@ const DOWNLOAD = (over: Partial<GeoOsm.DownloadResult> = {}): GeoOsm.DownloadRes
   ...over,
 })
 
-function osmService(over: {
-  downloadFeatures?: (input: any) => Effect.Effect<GeoOsm.DownloadResult, Error>
-}) {
+function osmService(over: { downloadFeatures?: (input: any) => Effect.Effect<GeoOsm.DownloadResult, Error> }) {
   return Layer.mock(GeoOsm.Service)({
     downloadFeatures: over.downloadFeatures ?? (() => Effect.succeed(DOWNLOAD())),
   })

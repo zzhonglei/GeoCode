@@ -188,12 +188,7 @@ finally:
  * genuinely-required ones are the ones that then go unread.
  */
 export interface Hint {
-  readonly kind:
-    | "unknown-algorithm"
-    | "unknown-parameter"
-    | "missing-required"
-    | "invalid-choice"
-    | "defaults-applied"
+  readonly kind: "unknown-algorithm" | "unknown-parameter" | "missing-required" | "invalid-choice" | "defaults-applied"
   readonly message: string
 }
 

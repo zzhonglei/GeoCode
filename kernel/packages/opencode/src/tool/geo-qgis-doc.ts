@@ -403,9 +403,7 @@ export const QgisDocTool = Tool.define<
           const action: string = (params as { action: string }).action
           return {
             title: "Invalid action",
-            output: framed(
-              `Unknown action: "${action}".\nValid actions: list_groups, list_algorithms, read, search.`,
-            ),
+            output: framed(`Unknown action: "${action}".\nValid actions: list_groups, list_algorithms, read, search.`),
             metadata: { truncated: false },
           }
         }

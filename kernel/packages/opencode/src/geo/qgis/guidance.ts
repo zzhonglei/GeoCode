@@ -219,13 +219,9 @@ export function render(status: GeoEvent.QgisStatus): string {
         "line first; the file takes effect the moment it is saved.",
       ].join("\n")
     case "path-missing":
-      return fixable(
-        `The configured QGIS location does not exist${status.hint ? ` (${status.hint})` : ""}.`,
-      )
+      return fixable(`The configured QGIS location does not exist${status.hint ? ` (${status.hint})` : ""}.`)
     case "not-qgis":
-      return fixable(
-        `The configured location is not a QGIS installation${status.hint ? ` (${status.hint})` : ""}.`,
-      )
+      return fixable(`The configured location is not a QGIS installation${status.hint ? ` (${status.hint})` : ""}.`)
     case "probing":
     case "resolving":
       return "QGIS is still being validated — the first probe after a configuration change can take a while. Try again shortly."

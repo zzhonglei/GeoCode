@@ -39,7 +39,18 @@ const feature = (type: string, coordinates: unknown, id: number): OsmConvert.Fea
   }) as unknown as OsmConvert.Feature
 
 const POINT = feature("Point", [114, 30], 1)
-const AREA = feature("Polygon", [[[114, 30], [115, 30], [115, 31], [114, 30]]], 2)
+const AREA = feature(
+  "Polygon",
+  [
+    [
+      [114, 30],
+      [115, 30],
+      [115, 31],
+      [114, 30],
+    ],
+  ],
+  2,
+)
 
 describe("numbering, because a download is not disposable", () => {
   test("the first run gets the name it asked for", () => {

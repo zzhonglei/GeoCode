@@ -41,9 +41,7 @@ const DOWNLOAD = (over: Partial<GeoOsm.DownloadResult> = {}): GeoOsm.DownloadRes
 })
 
 /** An OSM service under the test's control — no network, no disk. */
-function osmService(over: {
-  downloadObjects?: (input: any) => Effect.Effect<GeoOsm.DownloadResult, Error>
-}) {
+function osmService(over: { downloadObjects?: (input: any) => Effect.Effect<GeoOsm.DownloadResult, Error> }) {
   return Layer.mock(GeoOsm.Service)({
     downloadObjects: over.downloadObjects ?? (() => Effect.succeed(DOWNLOAD())),
   })
@@ -300,7 +298,9 @@ describe("OsmGetObjects, what did not make it", () => {
   harness(
     osmService({
       downloadObjects: () =>
-        Effect.succeed(DOWNLOAD({ notes: ["the batched fetch failed (HTTP 504); falling back to one request per object"] })),
+        Effect.succeed(
+          DOWNLOAD({ notes: ["the batched fetch failed (HTTP 504); falling back to one request per object"] }),
+        ),
     }),
   ).instance(
     "a batch that did not answer at all",

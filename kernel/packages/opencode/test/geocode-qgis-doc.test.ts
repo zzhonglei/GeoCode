@@ -96,25 +96,27 @@ describe("QgisDoc", () => {
     }),
   )
 
-  it.instance("looking things up never interrupts, in plan mode least of all", () =>
-    Effect.gen(function* () {
-      yield* forceUnconfigured()
+  it.instance(
+    "looking things up never interrupts, in plan mode least of all",
+    () =>
+      Effect.gen(function* () {
+        yield* forceUnconfigured()
 
-      // GeoAgent holds `qgis`, which is the key this tool asks with. Only a
-      // behavioural test tells "the grant matched" from "the grant was written
-      // and silently missed" — the old build's exact accident (KERNEL.md §4.1).
-      const allowed = yield* executeAs("GeoAgent", { action: "list_groups" })
-      expect(Exit.isSuccess(allowed)).toBe(true)
+        // GeoAgent holds `qgis`, which is the key this tool asks with. Only a
+        // behavioural test tells "the grant matched" from "the grant was written
+        // and silently missed" — the old build's exact accident (KERNEL.md §4.1).
+        const allowed = yield* executeAs("GeoAgent", { action: "list_groups" })
+        expect(Exit.isSuccess(allowed)).toBe(true)
 
-      // plan holds `qgis: { "*": "ask", "doc:*": "allow" }`, and this tool
-      // namespaces its patterns under `doc:`. Success here is the proof that
-      // the namespace works: had the pattern not matched, the call would have
-      // fallen to the `ask` and hung waiting for a user who is not there.
-      // Consulting documentation is how a plan gets written; it must not
-      // require permission.
-      const planned = yield* executeAs("plan", { action: "list_groups" })
-      expect(Exit.isSuccess(planned)).toBe(true)
-    }),
+        // plan holds `qgis: { "*": "ask", "doc:*": "allow" }`, and this tool
+        // namespaces its patterns under `doc:`. Success here is the proof that
+        // the namespace works: had the pattern not matched, the call would have
+        // fallen to the `ask` and hung waiting for a user who is not there.
+        // Consulting documentation is how a plan gets written; it must not
+        // require permission.
+        const planned = yield* executeAs("plan", { action: "list_groups" })
+        expect(Exit.isSuccess(planned)).toBe(true)
+      }),
     { timeout: 30_000 },
   )
 
@@ -127,21 +129,18 @@ describe("QgisDoc", () => {
 
         const registry = yield* ToolRegistry.Service
         const qgisdoc = (yield* registry.all()).find((tool) => tool.id === "QgisDoc")
-        yield* qgisdoc!.execute(
-          { action: "read", algorithm: "native:buffer" },
-          {
-            sessionID: SessionID.make("ses_always"),
-            messageID: MessageID.make("msg_always"),
-            agent: "GeoAgent",
-            abort: AbortSignal.any([]),
-            messages: [],
-            metadata: () => Effect.void,
-            ask: (req: any) => {
-              seen.push({ patterns: req.patterns, always: req.always })
-              return Effect.void
-            },
-          } as any,
-        )
+        yield* qgisdoc!.execute({ action: "read", algorithm: "native:buffer" }, {
+          sessionID: SessionID.make("ses_always"),
+          messageID: MessageID.make("msg_always"),
+          agent: "GeoAgent",
+          abort: AbortSignal.any([]),
+          messages: [],
+          metadata: () => Effect.void,
+          ask: (req: any) => {
+            seen.push({ patterns: req.patterns, always: req.always })
+            return Effect.void
+          },
+        } as any)
 
         expect(seen).toHaveLength(1)
         // The namespace, so a rule can tell this apart from running something.
@@ -161,23 +160,24 @@ describe("QgisDoc", () => {
     { timeout: 30_000 },
   )
 
-  it.instance("an unconfigured environment answers with the kernel's guidance", () =>
-    Effect.gen(function* () {
-      // Without the gate this tool would answer an empty catalog as "no
-      // algorithms" — a wrong answer rather than a visible failure.
-      yield* forceUnconfigured()
+  it.instance(
+    "an unconfigured environment answers with the kernel's guidance",
+    () =>
+      Effect.gen(function* () {
+        // Without the gate this tool would answer an empty catalog as "no
+        // algorithms" — a wrong answer rather than a visible failure.
+        yield* forceUnconfigured()
 
-      const result = yield* executeAs("GeoAgent", { action: "list_groups" })
-      expect(Exit.isSuccess(result)).toBe(true)
-      if (Exit.isSuccess(result)) {
-        expect(result.value.metadata.error).toBe(true)
-        expect(result.value.metadata.geoStatus).toBe("unconfigured")
-        expect(result.value.output).toContain(path.join(Global.Path.config, "machine.json"))
-      }
-    }),
+        const result = yield* executeAs("GeoAgent", { action: "list_groups" })
+        expect(Exit.isSuccess(result)).toBe(true)
+        if (Exit.isSuccess(result)) {
+          expect(result.value.metadata.error).toBe(true)
+          expect(result.value.metadata.geoStatus).toBe("unconfigured")
+          expect(result.value.output).toContain(path.join(Global.Path.config, "machine.json"))
+        }
+      }),
     { timeout: 30_000 },
   )
-
 
   test("the doc anchor comes from the display name, not the algorithm id", () => {
     // The calibrated rule (GEOKERNEL §4.11): page name deletes non-alphanumerics
@@ -191,10 +191,11 @@ describe("QgisDoc", () => {
     expect(url).not.toContain("#reclassifybytable")
 
     // Ampersands are dropped outright, not turned into a dash run.
-    expect(docsUrl({ id: "gdal:cliprasterbymasklayer", name: "Clip raster by mask layer", group: "Raster extraction" }))
-      .toBe(
-        "https://docs.qgis.org/latest/en/docs/user_manual/processing_algs/gdal/rasterextraction.html#clip-raster-by-mask-layer",
-      )
+    expect(
+      docsUrl({ id: "gdal:cliprasterbymasklayer", name: "Clip raster by mask layer", group: "Raster extraction" }),
+    ).toBe(
+      "https://docs.qgis.org/latest/en/docs/user_manual/processing_algs/gdal/rasterextraction.html#clip-raster-by-mask-layer",
+    )
     expect(docsUrl({ id: "native:x", name: "Split & merge", group: "Vector general" })).toContain("#split-merge")
 
     // An algorithm with no group has no documentation page: link the index
@@ -316,12 +317,15 @@ describe("QgisDoc", () => {
  * it is the same harness RunQgisAlgorithm's ten return paths will need.
  */
 describe("QgisDoc, gate open", () => {
-  const algorithm = (
-    id: string,
-    name: string,
-    group: string,
-    description = "",
-  ): QgisCatalog.Algorithm => ({ id, name, group, description, helpText: "help", parameters: [], outputs: [] })
+  const algorithm = (id: string, name: string, group: string, description = ""): QgisCatalog.Algorithm => ({
+    id,
+    name,
+    group,
+    description,
+    helpText: "help",
+    parameters: [],
+    outputs: [],
+  })
 
   const ALGORITHMS = [
     algorithm("native:buffer", "Buffer", "Vector geometry", "Computes a buffer."),
@@ -382,9 +386,10 @@ describe("QgisDoc, gate open", () => {
       },
       search: (query, limit = 10) =>
         Effect.succeed(
-          ALGORITHMS.filter((item) =>
-            `${item.id} ${item.name}`.toLowerCase().includes(query.toLowerCase()),
-          ).slice(0, limit),
+          ALGORITHMS.filter((item) => `${item.id} ${item.name}`.toLowerCase().includes(query.toLowerCase())).slice(
+            0,
+            limit,
+          ),
         ),
       suggest: () => Effect.succeed(["native:buffer", "gdal:warpreproject"]),
     }),

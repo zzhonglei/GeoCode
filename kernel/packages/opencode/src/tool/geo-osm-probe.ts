@@ -128,7 +128,7 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
       // Exactly one. Both modes at once has no meaning, and neither leaves
       // nothing to ask — the two mistakes are the same mistake seen twice, so
       // they get the same sentence naming both options.
-      if ((tags.length > 0) === (key !== "")) {
+      if (tags.length > 0 === (key !== "")) {
         return refuse(
           "InvalidParameters",
           'Give exactly one of "tags" (count mode) or "key" (distribution mode) — this call gave ' +
@@ -201,7 +201,9 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
         }
 
         if (result.distinct === 0) {
-          lines.push(`No element inside these ${asked} extent(s) carries the key "${key}" (types ${typesLabel(params.types)}).`)
+          lines.push(
+            `No element inside these ${asked} extent(s) carries the key "${key}" (types ${typesLabel(params.types)}).`,
+          )
         } else {
           const shown = result.values.slice(0, TOP_VALUES)
           const width = column(
@@ -256,19 +258,14 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
       }
 
       const scope =
-        result.perExtent.length === asked
-          ? `${asked} extent(s)`
-          : `${result.perExtent.length} of ${asked} extent(s)`
+        result.perExtent.length === asked ? `${asked} extent(s)` : `${result.perExtent.length} of ${asked} extent(s)`
       const width = column(
         result.perExtent.map((entry) => entry.extent),
         3,
       )
       // Right-aligned. The point of asking about several extents at once is to
       // compare them (§6.8), and a ragged column turns a glance into arithmetic.
-      const figures = column(
-        [...result.perExtent.map((entry) => String(entry.total)), String(result.totals.total)],
-        1,
-      )
+      const figures = column([...result.perExtent.map((entry) => String(entry.total)), String(result.totals.total)], 1)
       const row = (label: string, counts: { total: number; nodes: number; ways: number; relations: number }) =>
         `  ${label.padEnd(width)}  total ${String(counts.total).padStart(figures)}` +
         `  (nodes ${counts.nodes}, ways ${counts.ways}, relations ${counts.relations})`
