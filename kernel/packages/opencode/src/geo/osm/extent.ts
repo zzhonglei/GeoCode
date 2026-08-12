@@ -2,6 +2,7 @@ export * as OsmExtent from "./extent"
 
 import { readFileSync } from "node:fs"
 import path from "node:path"
+import { OsmIntersect } from "./intersect"
 import { OsmQuery } from "./query"
 
 /* --- GeoCode: the spatial extent contract (docs/GEOKERNEL.md §6.4).
@@ -36,12 +37,28 @@ export interface Resolved {
   /** Human-readable, for the caller's report. */
   readonly label: string
   /**
-   * True when the extent is exactly the boundary asked for.
+   * True when the query sent to the server is exactly the boundary asked for.
    *
-   * False means the query covers MORE than requested and the result needs
-   * clipping. It is never the other way round.
+   * False means the QUERY covers more ground than requested. It is never the
+   * other way round. It says nothing about the finished result: when every
+   * extent carries a `boundary`, the download narrows itself back afterwards
+   * (`intersect.ts`) and what the caller receives is exact either way.
    */
   readonly exact: boolean
+  /**
+   * The real boundary, for repeating the test the server could not run.
+   *
+   * Present for every extent whose geometry we hold — today that is `file:`
+   * alone. `area:` names a relation whose shape only the server knows, and an
+   * extent that cannot state its own boundary makes the whole call unfilterable
+   * (§6.4): its features are legitimately outside the other extents, so
+   * filtering to those would delete them.
+   *
+   * Carried even when `exact` is true. On a multi-extent call the filter is the
+   * UNION of these, and a boundary left out of the union deletes the features
+   * that only it asked for.
+   */
+  readonly boundary?: readonly OsmIntersect.Polygon[]
 }
 
 export function parse(spec: string, readFile: (file: string) => string = defaultRead): Resolved {
@@ -137,8 +154,11 @@ function fromFile(value: string, readFile: (file: string) => string): Resolved {
     throw new Error(`the boundary file is not valid JSON: ${value}`)
   }
 
-  const rings = outerRings(document)
-  if (rings.length === 0) throw new Error(`the boundary file holds no Polygon or MultiPolygon geometry: ${value}`)
+  const shapes = polygons(document)
+  if (shapes.length === 0) throw new Error(`the boundary file holds no Polygon or MultiPolygon geometry: ${value}`)
+  // Widening reads the outer rings only; the holes travel with `boundary` to
+  // the filter, which is the one place they change an answer.
+  const rings = shapes.map((shape) => shape.outer)
   for (const ring of rings) assertWgs84(ring, value)
   const name = path.basename(value)
 
@@ -149,6 +169,7 @@ function fromFile(value: string, readFile: (file: string) => string): Resolved {
       spatial: { prelude: "", filters: [boundingFilter(rings)] },
       label: `bounding box of ${name} (${rings.length} polygons, too many to filter individually)`,
       exact: false,
+      boundary: shapes,
     }
   }
 
@@ -176,6 +197,7 @@ function fromFile(value: string, readFile: (file: string) => string): Resolved {
       `boundary file ${name} (${rings.length} polygon${rings.length > 1 ? "s" : ""}` +
       `${approximated ? ", reduced to convex hulls" : ""})`,
     exact: !approximated,
+    boundary: shapes,
   }
 }
 
@@ -199,19 +221,44 @@ function boundingFilter(rings: readonly (readonly Point[])[]): string {
   return `(${south},${west},${north},${east})`
 }
 
+function clean(ring: unknown): Point[] {
+  if (!Array.isArray(ring)) return []
+  return ring.filter(
+    (point): point is Point => Array.isArray(point) && typeof point[0] === "number" && typeof point[1] === "number",
+  )
+}
+
 /**
- * Every outer ring in the document, largest first.
+ * Every polygon in the document, largest first, holes included.
  *
  * All of them, not the biggest: a study area made of separated parts is
  * ordinary, and keeping only the largest would drop the others without a word.
+ *
+ * **The holes are kept even though widening ignores them.** Widening may: a
+ * boundary read without its holes is larger than the real one, and larger is
+ * the safe direction (§6.4). Filtering may not — a hole read as solid ground
+ * keeps every feature inside an enclave that was deliberately excluded, and
+ * that is the same wrong answer as never filtering at all.
  */
-export function outerRings(document: unknown): Point[][] {
-  const rings: Point[][] = []
+export function polygons(document: unknown): OsmIntersect.Polygon[] {
+  const found: OsmIntersect.Polygon[] = []
+  const take = (rings: unknown) => {
+    if (!Array.isArray(rings)) return
+    const outer = clean(rings[0])
+    if (outer.length < 4) return
+    found.push({
+      outer,
+      holes: rings
+        .slice(1)
+        .map(clean)
+        .filter((hole) => hole.length >= 4),
+    })
+  }
   const visit = (geometry: any) => {
     if (!geometry || typeof geometry !== "object") return
-    if (geometry.type === "Polygon" && Array.isArray(geometry.coordinates?.[0])) rings.push(geometry.coordinates[0])
+    if (geometry.type === "Polygon") take(geometry.coordinates)
     if (geometry.type === "MultiPolygon" && Array.isArray(geometry.coordinates)) {
-      for (const polygon of geometry.coordinates) if (Array.isArray(polygon?.[0])) rings.push(polygon[0])
+      for (const polygon of geometry.coordinates) take(polygon)
     }
     if (geometry.type === "GeometryCollection" && Array.isArray(geometry.geometries)) {
       for (const child of geometry.geometries) visit(child)
@@ -225,14 +272,12 @@ export function outerRings(document: unknown): Point[][] {
   } else {
     visit(root)
   }
-  return rings
-    .map((ring) =>
-      ring.filter(
-        (point): point is Point => Array.isArray(point) && typeof point[0] === "number" && typeof point[1] === "number",
-      ),
-    )
-    .filter((ring) => ring.length >= 4)
-    .sort((a, b) => b.length - a.length)
+  return found.sort((a, b) => b.outer.length - a.outer.length)
+}
+
+/** The outer rings alone — what widening works from, since it ignores holes. */
+export function outerRings(document: unknown): Point[][] {
+  return polygons(document).map((polygon) => [...polygon.outer])
 }
 
 function assertWgs84(ring: readonly Point[], file: string) {

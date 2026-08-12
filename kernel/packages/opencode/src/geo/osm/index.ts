@@ -8,6 +8,7 @@ import { OsmClient } from "./client"
 import { OsmConvert } from "./convert"
 import { OsmExtent } from "./extent"
 import { OsmHttp } from "./http"
+import { OsmIntersect } from "./intersect"
 import { OsmOutput } from "./output"
 import { OsmQuery } from "./query"
 import { OsmSearch } from "./search"
@@ -15,6 +16,7 @@ import { OsmSearch } from "./search"
 export { OsmClient } from "./client"
 export { OsmConvert } from "./convert"
 export { OsmExtent } from "./extent"
+export { OsmIntersect } from "./intersect"
 export { OsmQuery } from "./query"
 export { OsmSearch } from "./search"
 
@@ -697,6 +699,42 @@ const layer = Layer.effect(
 
         let features = OsmConvert.dedupe(collected)
         const duplicates = collected.length - features.length
+
+        /* The boundary test the server could not run, run here (§6.4).
+         *
+         * A widened query returns a superset. This asks each feature the same
+         * question Overpass would have asked — does it intersect the real
+         * boundary — and drops the ones only the widening brought in. What the
+         * caller receives is then what a simple boundary would have produced,
+         * so the two paths agree and nobody downstream has to know which one
+         * ran.
+         *
+         * **Before the centroid collapse, and that order is not cosmetic.** A
+         * road crossing the city line is judged by its whole geometry here;
+         * judged by the representative point it is about to become, a road
+         * whose midpoint fell outside would take its inside half with it —
+         * exactly the invisible loss §6.4 exists to prevent.
+         *
+         * **All or nothing across extents.** One `area:` among them and the
+         * answer legitimately holds features outside every boundary we hold,
+         * so filtering to those would delete them; the download stays a
+         * superset and says so. When it does run, the filter is the UNION of
+         * every extent's boundary — including the exact ones, whose features
+         * would otherwise be deleted by their neighbours' boundaries.
+         *
+         * There is no "it removed everything, so it must be wrong" guard, the
+         * one `native:clip` needed. That guard exists to distrust a foreign
+         * engine handed a foreign overlay; this reads the same file the query
+         * was built from, and an empty answer here is an answer — a convex
+         * hull can easily hold features that the boundary inside it does not.
+         */
+        const boundaries = resolved.map(({ extent }) => extent.boundary)
+        if (!exact && boundaries.every((boundary) => boundary !== undefined)) {
+          const idx = OsmIntersect.index(boundaries.flatMap((boundary) => boundary!))
+          features = features.filter((feature) => OsmIntersect.intersects(feature.geometry, idx))
+          exact = true
+        }
+
         let centroidConverted = 0
         if (input.geometry === "centroid") {
           const normalized = OsmCentroid.normalize(features)

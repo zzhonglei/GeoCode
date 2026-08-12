@@ -633,3 +633,117 @@ describe("osm download", () => {
     )
   }
 })
+
+describe("a widened boundary is narrowed back before anything is counted", () => {
+  /* The join the old QGIS clip got wrong: it corrected the file and left every
+   * figure describing the state before the correction, with the one warning
+   * that would have flagged it switched off at the same moment.
+   *
+   * So the assertions below read the FILE. A report agreeing with the value it
+   * was handed proves nothing; a report agreeing with what is on disk is the
+   * whole claim. */
+
+  // 400 vertices with deep notches: too detailed to send, and its convex hull
+  // (the 200 outer points) covers far more ground than the star itself.
+  const star: [number, number][] = []
+  for (let i = 0; i < 400; i++) {
+    const t = (i / 400) * Math.PI * 2
+    const r = i % 2 === 0 ? 0.1 : 0.03
+    star.push([114.3 + r * Math.cos(t), 30.5 + r * Math.sin(t)])
+  }
+  star.push(star[0]!)
+  const boundaryFile = path.join(root, "star.geojson")
+  fs.writeFileSync(
+    boundaryFile,
+    JSON.stringify({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [star] } }),
+  )
+
+  // One at the centre — inside the star. One 0.07 out along a notch: inside the
+  // hull the query was widened to, outside the boundary that was asked for.
+  const notch = (1 / 400) * Math.PI * 2
+  const elements = {
+    elements: [
+      { type: "node", id: 1, tags: { amenity: "cafe" }, lat: 30.5, lon: 114.3 },
+      {
+        type: "node",
+        id: 2,
+        tags: { amenity: "cafe" },
+        lat: 30.5 + 0.07 * Math.sin(notch),
+        lon: 114.3 + 0.07 * Math.cos(notch),
+      },
+    ],
+  }
+
+  const http = scriptedHttp(() => json(elements))
+  const it = graph(http.layer)
+
+  it.live("the count, the bytes and the geometry tally all describe the file on disk", () =>
+    Effect.gen(function* () {
+      const osm = yield* GeoOsm.Service
+      const output = path.join(root, "narrowed.geojson")
+      const result = yield* osm.downloadFeatures({
+        extents: [`file:${boundaryFile}`],
+        tags: ["amenity"],
+        output,
+      })
+
+      // The query really was widened — otherwise this proves nothing.
+      const sent = yield* Ref.get(http.sent)
+      expect(sent[0]).toContain("poly")
+      expect(result.features).toBe(1)
+
+      const written = JSON.parse(fs.readFileSync(result.outputs[0]!.path, "utf-8"))
+      expect(written.features).toHaveLength(result.features)
+      // The survivor is the one in the star, not the one in the notch.
+      expect(written.features[0].geometry.coordinates).toEqual([114.3, 30.5])
+      expect(result.outputs[0]!.count).toBe(written.features.length)
+      expect(result.bytes).toBe(fs.statSync(result.outputs[0]!.path).size)
+      expect(result.geometry).toEqual({ Point: written.features.length })
+
+      // And the caller is told it got what it asked for, because it did.
+      expect(result.exact).toBe(true)
+    }),
+  )
+
+  {
+    /* The order of the two steps, pinned.
+     *
+     * A road reaching into the study area and running far out of it has its
+     * midpoint outside. Filtered by whole geometry it survives; filtered by the
+     * representative point it is about to become, it disappears — taking the
+     * length inside the boundary with it, and leaving nothing to notice. */
+    const road = {
+      elements: [
+        {
+          type: "way",
+          id: 3,
+          tags: { amenity: "cafe" },
+          geometry: [
+            { lat: 30.5, lon: 114.3 }, // the centre of the star
+            { lat: 31.0, lon: 114.3 }, // five times the star's radius away
+          ],
+        },
+      ],
+    }
+    const roadHttp = scriptedHttp(() => json(road))
+    const roadIt = graph(roadHttp.layer)
+
+    roadIt.live("a road reaching in survives centroid mode, though its midpoint is outside", () =>
+      Effect.gen(function* () {
+        const osm = yield* GeoOsm.Service
+        const result = yield* osm.downloadFeatures({
+          extents: [`file:${boundaryFile}`],
+          tags: ["amenity"],
+          output: path.join(root, "centroid-order.geojson"),
+          geometry: "centroid",
+        })
+        expect(result.features).toBe(1)
+        expect(result.centroidConverted).toBe(1)
+        const written = JSON.parse(fs.readFileSync(result.outputs[0]!.path, "utf-8"))
+        // Collapsed to its midpoint, which lies outside the boundary — proving
+        // the judgement was made before the collapse rather than after it.
+        expect(written.features[0].geometry.coordinates[1]).toBeGreaterThan(30.6)
+      }),
+    )
+  }
+})
