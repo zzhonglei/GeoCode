@@ -142,6 +142,9 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
 
       const lines = OsmReport.caveats(result, {
         lostNoun: "element",
+        // Named because this caller can act on it: an agent holding the OSM
+        // group holds OsmGetObjects too, so the way out is one call away.
+        lostRemedy: "Fetch the ones that matter with OsmGetObjects.",
         cancelled: ctx.abort.aborted
           ? "cancelled — extents not reached before it stopped were neither downloaded nor listed above."
           : undefined,

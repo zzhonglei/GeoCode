@@ -1,4 +1,4 @@
-import type { GeoOsm } from "@/geo"
+import { GeoOsm } from "@/geo"
 
 /* --- GeoCode: the report both download tools write (docs/TOOLS.md §6).
  *
@@ -34,21 +34,38 @@ export function caveats(
   options: {
     /** What one lost element is called here: an object asked for, or a feature found. */
     readonly lostNoun: string
+    /**
+     * What to do about the lost ones — omitted when there is nothing to do.
+     *
+     * OsmGetObjects has no remedy to offer: it IS the fetch-by-id, so asking it
+     * again returns the same elements with the same geometry missing. Printing
+     * a way out that leads back here would cost the caller a round trip to
+     * learn what this line could have told it.
+     */
+    readonly lostRemedy?: string
     /** The sentence for a cancelled run, or undefined when it ran to the end. */
     readonly cancelled?: string
   },
 ): string[] {
   const lines: string[] = []
   if (!result.exact) {
-    // First, because it rescales the whole result rather than one part of it.
-    //
-    // Stated as a fact about the data, with no tool named. Which algorithm to
-    // clip with is not this tool's to decide, and the agent that reads this
-    // holds `geo_osm_*` and `geo_qgis_read` only — it cannot run one, so
-    // naming one would send it somewhere it is not allowed to go (§4.3).
+    /* First, because it rescales the whole result rather than one part of it.
+     *
+     * Reached only when the call MIXES boundary files with other extent kinds.
+     * A call made entirely of boundary files narrows itself back before
+     * anything is counted (§6.4, `osm/intersect.ts`) and never arrives here.
+     *
+     * What is left is the case where narrowing would be wrong: the other
+     * extents legitimately hold features outside those files, and cutting to
+     * the files would delete exactly those. So no clip is named — an earlier
+     * wording told the caller the result "has to be clipped to it before use",
+     * which in this one surviving case would have cost it the data it asked
+     * for. The way out that does work is to ask for the file on its own.
+     */
     lines.push(
-      "NOTE: a boundary was too detailed or too fragmented to filter exactly, so it was widened outward." +
-        " This result covers more ground than the boundary asked for, and has to be clipped to it before use.",
+      "NOTE: a boundary file was too detailed or too fragmented to filter exactly, so this result covers more" +
+        " ground than that boundary asked for. It stayed that way because the call mixes boundary files with" +
+        " other extent kinds — a call made only of boundary files comes back exact.",
     )
   }
   // The kernel's own prose: the route it had to fall back to, and the fact
@@ -62,11 +79,28 @@ export function caveats(
   }
   for (const entry of result.failed) lines.push(`NOTE: ${entry.extent} — ${entry.reason}`)
   if (result.unassembled.length > 0) {
-    // By identity, never a count: the fix for a dropped element is to fetch it
-    // on its own, which needs to know which one it was.
+    /* By identity, never a count: the fix for a dropped element is to fetch it
+     * on its own, which needs to know which one it was.
+     *
+     * Capped at what OsmGetObjects accepts in one call — the list is then
+     * exactly one follow-up's worth. More would hand over work that cannot be
+     * done in one go; fewer would waste room the caller already has. The total
+     * still leads, so a caller reading "1000" and seeing 25 knows the shape of
+     * what it is not being shown.
+     *
+     * The cap is also what keeps `truncated: false` honest. Everything else
+     * here is bounded by construction (§5.2); this is the one line whose length
+     * would otherwise follow the size of the download, and both download tools
+     * declare that it does not.
+     */
+    const shown = result.unassembled.slice(0, GeoOsm.MAX_IDS)
+    const rest = result.unassembled.length - shown.length
     lines.push(
-      `NOTE: ${result.unassembled.length} ${options.lostNoun}(s) matched but produced no geometry —` +
-        ` ${result.unassembled.join(", ")}`,
+      `NOTE: ${result.unassembled.length} ${options.lostNoun}(s) matched but produced no geometry — ` +
+        shown.join(", ") +
+        (rest > 0 ? `, and ${rest} more` : "") +
+        "." +
+        (options.lostRemedy ? ` ${options.lostRemedy}` : ""),
     )
   }
   if (options.cancelled) lines.push(`NOTE: ${options.cancelled}`)

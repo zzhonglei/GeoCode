@@ -169,16 +169,27 @@ describe("OsmGetFeatures, the superset contract", () => {
       downloadFeatures: () => Effect.succeed(DOWNLOAD({ exact: false })),
     }),
   ).instance(
-    "a widened boundary is stated, and stated before the figures",
+    "a widened boundary is stated before the figures, and never as something to clip",
     () =>
       Effect.gen(function* () {
-        const result = yield* succeed({ ...ARGS, extents: ["file:/data/study.geojson"] })
+        // The extents are mixed on purpose: that is the ONLY shape that still
+        // reaches this line. A call made entirely of boundary files narrows
+        // itself back before anything is counted (§6.4) and comes out exact.
+        const result = yield* succeed({ ...ARGS, extents: ["file:/data/study.geojson", "area:R123"] })
 
-        // Over-downloading can be clipped afterwards; under-downloading cannot
-        // even be noticed (§6.4). So the widening is deliberate — and useless
-        // unless the caller is told the file holds more than the boundary.
-        expect(result.output).toMatch(/widened outward/)
-        expect(result.output).toMatch(/clipped to it before use/)
+        // Over-downloading can be corrected afterwards; under-downloading
+        // cannot even be noticed (§6.4). The widening is deliberate — and
+        // useless unless the caller is told the file holds more than asked.
+        expect(result.output).toMatch(/covers more ground/)
+        // ★ Never a clip. In this one surviving shape the other extents
+        // legitimately hold features outside the boundary file, so cutting to
+        // that file would delete exactly those — which is what the previous
+        // wording, written before the automatic narrowing existed, advised.
+        expect(result.output).not.toMatch(/clip/i)
+        // A way out this caller can take, stated as a fact rather than an
+        // instruction — and without a "this one" that says nothing when two
+        // boundary files were widened.
+        expect(result.output).toMatch(/only of boundary files comes back exact/)
         expect(result.output.indexOf("NOTE:")).toBeLessThan(result.output.indexOf("Wrote"))
         expect(result.metadata.exact).toBe(false)
       }),

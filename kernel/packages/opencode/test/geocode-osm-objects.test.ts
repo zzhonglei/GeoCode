@@ -337,7 +337,11 @@ describe("OsmGetObjects, the description", () => {
   test("it states the limit the kernel actually enforces", () => {
     // The old build's copy said "keep the set under about 10" while the code
     // refused at 25 — a number nobody could act on, in either direction.
-    expect(OBJECTS_DESCRIPTION).toContain("25")
+    //
+    // Read off the constant rather than written out again: a test that spells
+    // the number itself asserts what someone typed, not what the kernel does,
+    // and goes on passing after the kernel changes its mind.
+    expect(OBJECTS_DESCRIPTION).toContain(String(GeoOsm.MAX_IDS))
     expect(OBJECTS_DESCRIPTION).not.toMatch(/under about 10/)
   })
 

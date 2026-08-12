@@ -40,7 +40,7 @@ const MAX_EXTENTS = 12
  * Past this the batched query stops being the right shape and an extent plus a
  * tag filter is — a hundred ids is a category download written the long way.
  */
-const MAX_IDS = 25
+export const MAX_IDS = 25
 const TAG_STATS_SAMPLE_LIMIT = 10_000
 /**
  * The server's budget for a reconnaissance query.
