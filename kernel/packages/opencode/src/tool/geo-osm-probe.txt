@@ -4,16 +4,13 @@ Use this tool to scout OSM data inside extents BEFORE downloading. Two modes —
 - Distribution mode (key): which values a tag key actually takes inside the extents, and how many of each. Grounds a tag union in this area's real tagging rather than a remembered one.
 
 Parameters:
-- extents: One or more of "area:R<id>" (relations only) / "bbox:S,W,N,E" / "around:radius_m,lat,lon" / "file:/abs/path.geojson" (EPSG:4326). Same forms as OsmGetFeatures.
+- extents: One or more of "area:R<id>" (relations only) / "bbox:S,W,N,E" / "around:radius_m,lat,lon" / "file:/abs/path.geojson" (EPSG:4326). At most 12 per call. Same forms as OsmGetFeatures.
 - tags: Count mode. A tag union, e.g. ["amenity=hospital", "amenity=clinic", "healthcare"]. Formats: "key=value", "key" (presence), "key~regex".
 - key: Distribution mode. One tag key, e.g. "amenity", "highway", "shop".
 - types: "nwr" (default), or a comma list of node/way/relation. Applies to both modes.
 
-TIMING: this queries public services over the network. Seconds to a minute is normal, and failing over from an unresponsive endpoint stretches it further. That wait is the tool working.
+TIMING: this queries public services over the network. A few seconds is normal, but one unresponsive endpoint is given two minutes before the tool moves on. That wait is the tool working.
 
-Lines starting with NOTE: qualify the numbers below them. There are three kinds and they mean different things:
-- a widened boundary — a boundary file too detailed or too fragmented to filter exactly is approximated OUTWARD, so the numbers cover more ground than was asked for and are an upper bound;
-- an incomplete answer — the service returned early and said why, in its own words. "Timed out" and "this query is too broad" call for different responses;
-- a failed extent — that extent contributed nothing to the numbers; the others still did.
+Lines starting with NOTE: qualify the numbers below them — read them before the figures. A widened boundary makes them an upper bound; a failed extent contributed nothing while the others still did; and when a service says why it stopped early, its own words matter — "timed out" and "this query is too broad" call for different responses.
 
 Example: extents ["area:R10717504"], tags ["amenity=hospital","healthcare"] → per-extent nodes/ways/relations/total.

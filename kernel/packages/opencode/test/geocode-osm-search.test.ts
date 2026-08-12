@@ -233,11 +233,18 @@ describe("OsmSearch, the description", () => {
     expect(SEARCH_DESCRIPTION).toMatch(/do not abandon the call and retry/i)
   })
 
-  test("it explains the bracket the code actually prints", () => {
-    // Spelled out because this is exactly where the old build drifted: the
-    // description taught a marker the code never emitted.
-    for (const source of ["[geocoder]", "[features]", "[site]", "[canonical]"]) {
-      expect(SEARCH_DESCRIPTION).toContain(source)
+  test("it never teaches a bracket marker the code does not print", () => {
+    // Where the old build drifted: the description taught `[both]`, which the
+    // renderer never emitted.
+    //
+    // The markers are no longer enumerated. Choosing between candidates needs
+    // "more sources, more confidence" — which lookup produced which name is a
+    // fact about this tool's insides, and the model has no decision to make
+    // with it. So the assertion is inverted: naming none is fine, naming one
+    // the code does not print is not.
+    const EMITTED = ["geocoder", "features", "site", "canonical"]
+    for (const [, marker] of SEARCH_DESCRIPTION.matchAll(/\[([a-z]+)\]/g)) {
+      expect(EMITTED).toContain(marker)
     }
     expect(SEARCH_DESCRIPTION).not.toContain("[both]")
   })

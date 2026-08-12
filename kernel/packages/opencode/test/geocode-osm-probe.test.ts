@@ -447,7 +447,7 @@ describe("OsmProbe, the description", () => {
 
   test("it explains all three kinds of NOTE, because they ask for different things", () => {
     expect(PROBE_DESCRIPTION).toMatch(/upper bound/)
-    expect(PROBE_DESCRIPTION).toMatch(/in its own words/)
+    expect(PROBE_DESCRIPTION).toMatch(/own words/)
     expect(PROBE_DESCRIPTION).toMatch(/contributed nothing/)
   })
 
