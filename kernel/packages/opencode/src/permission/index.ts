@@ -209,14 +209,14 @@ export function merge(...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule[] 
  * do not it keeps a table — `edits` and `reads` below. GeoCode's do not: the
  * ids are the names the model reads (`ReadGeoData`), the keys are the groups a
  * user reasons about (`geodata`). Without an entry here a rule written against
- * a group would govern execution and silently miss visibility, which is the
- * failure §4.1 records from the old build: the rule is written, it is simply
- * never consulted.
+ * a group would govern execution and silently miss visibility: the rule is
+ * written, it is simply never consulted.
  *
  * Four groups, matching the readiness conditions a user actually has: reading
  * geographic data, the QGIS processing engine, the public OSM services, Earth
- * Engine. Adding a geographic tool without adding it here is a defect the
- * tripwires catch. --- */
+ * Engine. A missing row shows up on a user-defined agent, which is the one
+ * ruleset that reaches this table — geocode-geo-permissions.test.ts pins it
+ * there, the way upstream pins `edits` in test/permission/next.test.ts. --- */
 const GEO = {
   ReadGeoData: "geodata",
   QgisDoc: "qgis",

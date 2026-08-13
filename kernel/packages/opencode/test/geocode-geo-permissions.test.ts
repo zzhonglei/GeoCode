@@ -1,4 +1,4 @@
-import { afterEach, describe, expect } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Agent } from "../src/agent/agent"
@@ -21,9 +21,9 @@ import { testEffect } from "./lib/effect"
  * GeoCode's ids and keys diverge on purpose: `ReadGeoData` is what the model
  * reads, `geodata` is what a user reasons about. A table in permission/index.ts
  * bridges them, and a missing entry there does not raise anything — the rule is
- * written, it is simply never consulted. That is the failure KERNEL.md §4.1
- * records from the old build, and the reason both layers are asserted here
- * rather than one being inferred from the other.
+ * written, it is simply never consulted. So both layers are asserted here rather
+ * than one being inferred from the other, and the table joining them is pinned
+ * on its own, below.
  *
  * Read as a matrix: for every agent, which geographic tools it can SEE and
  * which it can USE.
@@ -89,10 +89,13 @@ describe("what each agent can see", () => {
   it.instance("an agent that denies everything sees none of them", () =>
     Effect.gen(function* () {
       // `summary` carries its own `"*": "deny"` — the same shape the osmfetch
-      // subagent will use. A wildcard deny only reaches a geographic tool
-      // through the id-to-key table: drop an entry there and that tool's id
-      // stops matching anything, falls through to no rule at all, and
-      // reappears in the list of an agent meant to hold nothing.
+      // subagent uses.
+      //
+      // Worth being exact about what this does NOT prove. A wildcard deny
+      // matches any tool id directly, so it hides these eight whether or not
+      // the id-to-key table has an entry for them. The table is what a
+      // GROUP-level rule needs, and no agent in the line-up writes one that
+      // reaches here — so it is pinned separately, below.
       expect(yield* visible("summary")).toEqual([])
     }),
   )
@@ -104,9 +107,8 @@ describe("the keys the tools actually ask with", () => {
    * Every rule above is written against a key. Which key a tool ASKS with is
    * decided in its own source, and if the two drift there is no error: the
    * unmatched key falls through to the engine's default `"*": "allow"` and the
-   * tool is quietly permitted for everyone. That is the old build's accident
-   * (docs/KERNEL.md §4.1) in its purest form — the rule is written, the rule
-   * is correct, the rule is never consulted.
+   * tool is quietly permitted for everyone — the rule is written, the rule is
+   * correct, the rule is never consulted.
    *
    * So the keys are read off the live calls. The ask is made to fail the
    * instant it is recorded, which is also what keeps this test off the network
@@ -156,6 +158,51 @@ describe("the keys the tools actually ask with", () => {
         expect(asked).toContain(GROUPS[tool].key)
       }),
     )
+  }
+})
+
+/* The table that joins the two halves above, pinned on its own.
+ *
+ * Everything before this asserts an AGENT, and no agent in the line-up reaches
+ * the table: the ones holding geographic grants end in an allow or an ask, and
+ * the ones holding none carry `"*": "deny"`, which matches a tool id directly
+ * whether or not the table has an entry for it. Delete a row from GEO and every
+ * assertion above still passes.
+ *
+ * The ruleset below is where a row actually matters, and it is not a synthetic
+ * shape: it is what a user-defined agent gets. agent.ts builds one from
+ * `merge(defaults, user)` — the engine's `"*": "allow"`, then the geographic
+ * denies, which arrive through the user layer because the assembly layer merges
+ * first. Such an agent is closed to the geographic tools only if the table
+ * carries the rule from the group name to the ids.
+ *
+ * Upstream pins its own `edits` table exactly this way — a default allow plus
+ * one group-level deny, asserted per tool id (test/permission/next.test.ts,
+ * "disabled - disables edit/write/apply_patch when edit denied"). This is the
+ * same test for the third table.
+ */
+describe("a rule written against a group reaches every tool in it", () => {
+  const MEMBERS: Record<string, readonly string[]> = {
+    geodata: ["ReadGeoData"],
+    qgis: ["QgisDoc", "RunQgisAlgorithm"],
+    osm: ["OsmSearch", "OsmProbe", "OsmGetObjects", "OsmGetFeatures"],
+    gee: ["RunGeeScript"],
+  }
+
+  for (const [group, members] of Object.entries(MEMBERS)) {
+    test(`"${group}": "deny" hides ${members.join(", ")}, and only those`, () => {
+      const hidden = Permission.disabled(
+        [...GEO_TOOLS],
+        [
+          { permission: "*", pattern: "*", action: "allow" },
+          { permission: group, pattern: "*", action: "deny" },
+        ],
+      )
+      // Compared as a whole set rather than membership by membership: with
+      // eight ids mapped onto four groups, asking only "are my four hidden"
+      // would pass a row filed under the wrong group.
+      expect([...hidden].sort()).toEqual([...members].sort())
+    })
   }
 })
 
