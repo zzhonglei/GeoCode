@@ -23,6 +23,16 @@ import DESCRIPTION from "./geo-osm-probe.txt"
 /** Values printed before the tail is summarized. The old build settled on this. */
 const TOP_VALUES = 30
 
+/**
+ * Said where it qualifies figures that did come back.
+ *
+ * A cancelled run is PARTIAL, not failed: the numbers under this line are real,
+ * they simply do not cover every extent that was asked about. The two download
+ * tools say the same thing in their own nouns; this tool used to say nothing at
+ * all unless the run came back completely empty.
+ */
+const CANCELLED = "cancelled — extents not reached before it stopped contributed nothing to these numbers."
+
 export const Parameters = Schema.Struct({
   extents: Schema.Array(Schema.String).annotate({
     description:
@@ -71,14 +81,21 @@ type Metadata = {
  */
 function caveats(
   result: {
-    readonly exact?: boolean
+    // Required, not optional. It used to be optional because only `count`
+    // reported it, which made `result.exact === false` unreachable in
+    // distribution mode — a widened boundary rescaled that answer too and said
+    // nothing. The kernel now reports it for both, and typing it as required is
+    // what stops the branch going dead again.
+    readonly exact: boolean
     readonly incomplete: readonly GeoOsm.Incomplete[]
     readonly failed: readonly GeoOsm.Failure[]
   },
   verb: string,
+  /** The sentence for a cancelled run, or undefined when it ran to the end. */
+  cancelled?: string,
 ): string[] {
   const lines: string[] = []
-  if (result.exact === false) {
+  if (!result.exact) {
     lines.push(
       "NOTE: a boundary was too detailed or too fragmented to filter exactly, so it was widened outward." +
         " These numbers cover more ground than the boundary asked for — read them as an upper bound.",
@@ -90,6 +107,10 @@ function caveats(
   for (const entry of result.failed) {
     lines.push(`NOTE: ${entry.extent} was not ${verb} — ${entry.reason}`)
   }
+  // Last, because it qualifies whatever the ones above left standing: the run
+  // stopped early, so the extents it never reached are absent without being
+  // named as failures.
+  if (cancelled) lines.push(`NOTE: ${cancelled}`)
   return lines
 }
 
@@ -187,7 +208,11 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
         // arrives here; it arrives as `failed`.
         if (outcome._tag === "Failure") return refuse("InvalidParameters", outcome.failure.message)
         const result = outcome.success
-        const lines = caveats(result, "sampled")
+        // Only where it qualifies numbers that DID come back. When nothing
+        // survived, `nothing()` below says it more precisely — a run that was
+        // stopped before its first answer is a different event from one that
+        // answered for two extents out of four.
+        const lines = caveats(result, "sampled", ctx.abort.aborted && result.sampled > 0 ? CANCELLED : undefined)
         // With the other caveats, not below the list it qualifies. The cap
         // bounds what comes BACK, not what is there: every count under it is a
         // floor and a rare value can be absent altogether, which is the first
@@ -204,10 +229,13 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
           return nothing(lines, "sampled", result.failed.length, { mode: "distribution", key })
         }
 
+        // The shape count mode already uses: name how many actually answered
+        // when it is not all of them. Saying "across 4 extent(s)" after two of
+        // them failed claims a coverage the numbers do not have.
+        const scope = result.answered === asked ? `${asked} extent(s)` : `${result.answered} of ${asked} extent(s)`
+
         if (result.distinct === 0) {
-          lines.push(
-            `No element inside these ${asked} extent(s) carries the key "${key}" (types ${typesLabel(params.types)}).`,
-          )
+          lines.push(`No element inside ${scope} carries the key "${key}" (types ${typesLabel(params.types)}).`)
         } else {
           const shown = result.values.slice(0, TOP_VALUES)
           const width = column(
@@ -221,7 +249,7 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
             1,
           )
           lines.push(
-            `Values of "${key}" across ${asked} extent(s), types ${typesLabel(params.types)} —` +
+            `Values of "${key}" across ${scope}, types ${typesLabel(params.types)} —` +
               ` ${result.sampled} element(s) sampled, ${result.distinct} distinct value(s):`,
             "",
           )
@@ -243,6 +271,12 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
             distinct: result.distinct,
             sampled: result.sampled,
             sample_capped: result.truncated,
+            // Both modes say the same thing now. `exact` was absent here while
+            // count reported it, so a widened boundary was invisible to
+            // anything reading distribution through metadata.
+            exact: result.exact,
+            extents_answered: result.answered,
+            extents_asked: asked,
             extents_failed: result.failed.length,
             extents_incomplete: result.incomplete.length,
           } as Metadata,
@@ -254,7 +288,7 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
       )
       if (outcome._tag === "Failure") return refuse("InvalidParameters", outcome.failure.message)
       const result = outcome.success
-      const lines = caveats(result, "counted")
+      const lines = caveats(result, "counted", ctx.abort.aborted && result.perExtent.length > 0 ? CANCELLED : undefined)
       if (lines.length > 0) lines.push("")
 
       if (result.perExtent.length === 0) {

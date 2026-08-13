@@ -140,6 +140,26 @@ export interface DistributionResult {
   readonly truncated: boolean
   readonly failed: readonly Failure[]
   readonly incomplete: readonly Incomplete[]
+  /**
+   * How many extents actually answered.
+   *
+   * Not derivable from `failed`: a cancelled run leaves the extents it never
+   * reached in neither list, so `asked - failed.length` counts them as covered.
+   * `count` gets this for free from `perExtent`; an aggregate answer has to
+   * carry it.
+   */
+  readonly answered: number
+  /**
+   * True when every extent was queried exactly as asked.
+   *
+   * The same fact `count` reports, and it matters for the same reason: a
+   * distribution taken over a convex hull describes the hull. The values it
+   * finds only there are real values of the key, just not of the area the
+   * caller named — and a tag union grounded on them is grounded on the wrong
+   * area (§6.4). Unlike a download this cannot be narrowed back afterwards:
+   * the server returns counts, not the elements they were counted from.
+   */
+  readonly exact: boolean
 }
 
 export interface DownloadResult {
@@ -489,9 +509,14 @@ const layer = Layer.effect(
         const incomplete: Incomplete[] = []
         let sampled = 0
         let truncated = false
+        let exact = true
+        let answered = 0
 
         for (const { spec, extent } of resolved) {
           if (input.abort?.aborted) break
+          // Before the request, like `count` does: an extent that was widened
+          // taints the distribution whether or not its query then succeeds.
+          if (!extent.exact) exact = false
           const outcome = yield* Effect.result(
             client.overpass(
               OsmQuery.tagStats({
@@ -508,6 +533,7 @@ const layer = Layer.effect(
             failed.push({ extent: spec, reason: outcome.failure.message })
             continue
           }
+          answered += 1
           if (outcome.success.remark) incomplete.push({ extent: spec, remark: outcome.success.remark })
           const elements: any[] = (outcome.success.json as any).elements ?? []
           // The server applies the sample cap PER QUERY, so being truncated is a
@@ -530,6 +556,8 @@ const layer = Layer.effect(
           truncated,
           failed,
           incomplete,
+          answered,
+          exact,
         }
       })
 

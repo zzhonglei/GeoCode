@@ -45,6 +45,10 @@ const DISTRIBUTION = (over: Partial<GeoOsm.DistributionResult> = {}): GeoOsm.Dis
   truncated: false,
   failed: [],
   incomplete: [],
+  // The two the count fixture has always had. Distribution reported neither,
+  // which is what let a widened boundary go unmentioned in this mode.
+  answered: 1,
+  exact: true,
   ...over,
 })
 
@@ -96,7 +100,10 @@ const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, ag
  * design (§4.3), and the first test pins it. Everything below is about what
  * the tool prints, which would otherwise be untestable until osmfetch lands.
  */
-const succeed = Effect.fnUntraced(function* (params: Record<string, unknown>) {
+const succeed = Effect.fnUntraced(function* (
+  params: Record<string, unknown>,
+  abort: AbortSignal = AbortSignal.any([]),
+) {
   const registry = yield* ToolRegistry.Service
   const tool = (yield* registry.all()).find((item) => item.id === "OsmProbe")
   expect(tool).toBeDefined()
@@ -104,7 +111,7 @@ const succeed = Effect.fnUntraced(function* (params: Record<string, unknown>) {
     sessionID: SessionID.make("ses_probe_test"),
     messageID: MessageID.make("msg_probe_test"),
     agent: "GeoAgent",
-    abort: AbortSignal.any([]),
+    abort,
     messages: [],
     metadata: () => Effect.void,
     ask: () => Effect.void,
@@ -459,4 +466,58 @@ describe("OsmProbe, the description", () => {
     // model has never been able to read.
     expect(PROBE_DESCRIPTION).not.toMatch(/metadata/i)
   })
+})
+
+describe("OsmProbe, what qualifies the numbers", () => {
+  harness(osmService({ distribution: () => Effect.succeed(DISTRIBUTION({ exact: false })) })).instance(
+    "distribution mode reports a widened boundary too, which it used to swallow",
+    () =>
+      Effect.gen(function* () {
+        // The check read `result.exact === false` against a type that carried
+        // no `exact` — unreachable, so a distribution taken over a convex hull
+        // described the hull and said nothing. Count mode always said it, and
+        // the description file taught the note as common to both modes.
+        const result = yield* succeed({ extents: ["file:/study.geojson"], key: "amenity" })
+        expect(result.output).toContain("widened outward")
+        expect(result.output).toContain("upper bound")
+        expect(result.metadata.exact).toBe(false)
+      }),
+    { timeout: 20_000 },
+  )
+
+  harness(
+    osmService({
+      distribution: () =>
+        Effect.succeed(DISTRIBUTION({ answered: 2, failed: [{ extent: "area:R9", reason: "endpoints failed" }] })),
+    }),
+  ).instance(
+    "the coverage it claims is the coverage it got",
+    () =>
+      Effect.gen(function* () {
+        // Count mode already narrowed its wording to the extents that answered.
+        // Distribution printed the number ASKED for, so two failures out of
+        // four still read as an answer about four areas.
+        const result = yield* succeed({ extents: ["area:R1", "area:R9", "area:R3", "area:R4"], key: "amenity" })
+        expect(result.output).toContain("2 of 4 extent(s)")
+        expect(result.output).not.toMatch(/across 4 extent/)
+        expect(result.metadata.extents_answered).toBe(2)
+      }),
+    { timeout: 20_000 },
+  )
+
+  harness(osmService({ distribution: () => Effect.succeed(DISTRIBUTION({ answered: 2 })) })).instance(
+    "a run stopped partway says so, even though it has numbers to show",
+    () =>
+      Effect.gen(function* () {
+        // The cancellation used to be mentioned only when NOTHING came back, so
+        // the dangerous case — figures that look complete and are not — was the
+        // silent one. Both download tools always said it.
+        const stopped = new AbortController()
+        stopped.abort()
+        const result = yield* succeed({ extents: ["area:R1", "area:R2", "area:R3"], key: "amenity" }, stopped.signal)
+        expect(result.output).toContain("cancelled")
+        expect(result.output).toContain("parking")
+      }),
+    { timeout: 20_000 },
+  )
 })

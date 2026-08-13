@@ -82,6 +82,20 @@ export const OsmSearchTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Ser
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context<Metadata>,
     ) {
+      // Before the ask, like the other three: an unusable call is the caller's
+      // to fix, and there is nothing for a user to authorize about it.
+      //
+      // An empty query is not a harmless no-op here — it becomes an unanchored
+      // name regex against public services, which is the most expensive query
+      // this tool can send and the least useful answer it can get back.
+      if (params.query.trim() === "") {
+        return {
+          title: params.query,
+          output: '"query" is empty — name the place or entity to look for.',
+          metadata: { truncated: false, error_code: "InvalidParameters", failed: true },
+        }
+      }
+
       yield* ctx.ask({
         permission: "osm",
         patterns: [params.query],
@@ -100,7 +114,15 @@ export const OsmSearchTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Ser
       // Notes first, and never folded into the candidate list: they describe
       // the answer as a whole, and an answer built from one engine instead of
       // two is not wrong — it is incomplete in a way only this can say.
-      if (result.notes.length > 0) lines.push(...result.notes.map((note) => `NOTE: ${note}`), "")
+      // A cancelled search is partial, not failed — the same reading the other
+      // three tools give it. Said here rather than left to the engine notes,
+      // which describe an engine that answered badly, not a run that stopped.
+      const cancelled = ctx.abort.aborted
+      if (result.notes.length > 0 || cancelled) {
+        lines.push(...result.notes.map((note) => `NOTE: ${note}`))
+        if (cancelled) lines.push("NOTE: cancelled — the search stopped early, so these may not be all the matches.")
+        lines.push("")
+      }
 
       if (result.candidates.length === 0) {
         lines.push(
@@ -124,6 +146,7 @@ export const OsmSearchTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Ser
           // the search ran" (§6.8 任一单独使用都会漏).
           engines: result.engines,
           ...(result.notes.length > 0 ? { degraded: true } : {}),
+          ...(cancelled ? { partial: true } : {}),
         },
       }
     })

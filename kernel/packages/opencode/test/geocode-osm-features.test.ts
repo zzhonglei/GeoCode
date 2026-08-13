@@ -395,3 +395,31 @@ describe("OsmGetFeatures, the description", () => {
     expect(FEATURES_DESCRIPTION).toContain("TIMING")
   })
 })
+
+describe("OsmGetFeatures, a shortfall that does not look like one", () => {
+  harness(
+    osmService({
+      downloadFeatures: () =>
+        Effect.succeed(
+          DOWNLOAD({
+            incomplete: [{ extent: "bbox:30,114,31,115", remark: "runtime error: Query timed out after 120 seconds." }],
+          }),
+        ),
+    }),
+  ).instance(
+    "a service that answered early makes the run partial in metadata, not only in prose",
+    () =>
+      Effect.gen(function* () {
+        // §6.3 calls this the most dangerous failure there is: the answer is
+        // real and short, and nothing about it looks wrong. It was narrated and
+        // then left out of `partial` — an extent that stopped early is in
+        // neither `done < asked` nor `failed` — so anything reading the
+        // metadata channel saw a whole run.
+        const result = yield* succeed(ARGS)
+        expect(result.output).toContain("came back incomplete")
+        expect(result.metadata.partial).toBe(true)
+        expect(result.metadata.extents_incomplete).toBe(1)
+      }),
+    { timeout: 20_000 },
+  )
+})

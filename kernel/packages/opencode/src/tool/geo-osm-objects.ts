@@ -136,7 +136,13 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
         lines.push(`The same object arrived more than once and was kept once: ${result.duplicates} duplicate(s).`)
       }
 
-      const partial = result.features < asked || result.unassembled.length > 0 || result.failed.length > 0
+      // `incomplete` counts here too: a service that answered early is a real
+      // shortfall that does not look like one (§6.3).
+      const partial =
+        result.features < asked ||
+        result.unassembled.length > 0 ||
+        result.failed.length > 0 ||
+        result.incomplete.length > 0
       return {
         title,
         output: lines.join("\n"),

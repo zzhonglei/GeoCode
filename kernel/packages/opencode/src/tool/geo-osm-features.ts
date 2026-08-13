@@ -200,7 +200,16 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
         )
       }
 
-      const partial = result.extentsDone < asked || result.unassembled.length > 0 || result.failed.length > 0
+      // `incomplete` counts. A service that answered early returns a real but
+      // short answer — §6.3 calls it the most dangerous failure there is,
+      // precisely because it does not look like one. Leaving it out of `partial`
+      // let the shortfall show in the prose while metadata said the run was
+      // whole, and metadata is the half a frontend reads.
+      const partial =
+        result.extentsDone < asked ||
+        result.unassembled.length > 0 ||
+        result.failed.length > 0 ||
+        result.incomplete.length > 0
       return {
         title,
         output: lines.join("\n"),
@@ -210,6 +219,10 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
           extents_done: result.extentsDone,
           extents_asked: asked,
           extents_failed: result.failed.length,
+          // Counted, not just narrated: an extent that answered early is in
+          // neither `done < asked` nor `failed`, so without this the metadata
+          // channel cannot see the shortfall at all.
+          extents_incomplete: result.incomplete.length,
           bytes: result.bytes,
           geometry: result.geometry,
           outputs: result.outputs,

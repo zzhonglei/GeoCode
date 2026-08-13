@@ -85,7 +85,10 @@ const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, ag
  * the tool prints, which would otherwise be untestable until the subagent that
  * may call it lands.
  */
-const succeed = Effect.fnUntraced(function* (params: Record<string, unknown>) {
+const succeed = Effect.fnUntraced(function* (
+  params: Record<string, unknown>,
+  abort: AbortSignal = AbortSignal.any([]),
+) {
   const registry = yield* ToolRegistry.Service
   const tool = (yield* registry.all()).find((item) => item.id === "OsmSearch")
   expect(tool).toBeDefined()
@@ -93,7 +96,7 @@ const succeed = Effect.fnUntraced(function* (params: Record<string, unknown>) {
     sessionID: SessionID.make("ses_osm_test"),
     messageID: MessageID.make("msg_osm_test"),
     agent: "GeoAgent",
-    abort: AbortSignal.any([]),
+    abort,
     messages: [],
     metadata: () => Effect.void,
     ask: () => Effect.void,
@@ -248,4 +251,45 @@ describe("OsmSearch, the description", () => {
     }
     expect(SEARCH_DESCRIPTION).not.toContain("[both]")
   })
+})
+
+describe("OsmSearch, the two things it never said", () => {
+  const it = harness(osmService({ candidates: [CANDIDATE()] }))
+
+  it.instance(
+    "an empty query is refused rather than sent",
+    () =>
+      Effect.gen(function* () {
+        // The other three tools all guard their own empty input. This one let a
+        // blank string through to become an unanchored name regex against
+        // public services — the most expensive query it can send, for an answer
+        // that means nothing. Refused before the ask, because there is nothing
+        // for a user to authorize about a call that cannot work.
+        for (const query of ["", "   "]) {
+          const result = yield* succeed({ query })
+          expect(result.metadata.error_code).toBe("InvalidParameters")
+          expect(result.metadata.failed).toBe(true)
+          expect(result.output).toContain("empty")
+        }
+      }),
+    { timeout: 20_000 },
+  )
+
+  it.instance(
+    "a cancelled search says so, and still hands over what it found",
+    () =>
+      Effect.gen(function* () {
+        // Cancelled is PARTIAL, not failed — the reading the other three tools
+        // give it. Without this line the candidate list looks like the whole
+        // answer, and the engine notes cannot say it: they describe an engine
+        // that answered badly, not a run that stopped.
+        const stopped = new AbortController()
+        stopped.abort()
+        const result = yield* succeed({ query: "武汉大学" }, stopped.signal)
+        expect(result.output).toContain("cancelled")
+        expect(result.metadata.partial).toBe(true)
+        expect(result.metadata.candidates).toBe(1)
+      }),
+    { timeout: 20_000 },
+  )
 })
