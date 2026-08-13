@@ -66,7 +66,17 @@ export interface Writer<Name extends SlotName> {
   readonly commit: (token: Token, value: SlotValues[Name]) => Effect.Effect<boolean>
 }
 
-export type Snapshot = { readonly [Name in SlotName]: SlotValues[Name] }
+/**
+ * Every slot's current value.
+ *
+ * Each is OPTIONAL, and that is the honest shape rather than a convenience: a
+ * slot exists only once its owning capability module has registered it, so a
+ * snapshot taken while the process is still coming up is genuinely missing
+ * entries. The data face declares the same thing (httpapi/groups/geo.ts) and a
+ * tripwire pins it ("reports a slot that has not registered as absent"), so
+ * required fields here would have been the one place claiming otherwise.
+ */
+export type Snapshot = { readonly [Name in SlotName]?: SlotValues[Name] }
 
 export interface Interface {
   /** Claim a slot and seed its initial value. Registering twice is a defect and dies. */
@@ -143,7 +153,11 @@ const layer = Layer.effect(
     const current = <Name extends SlotName>(slot: Name) =>
       Effect.sync(() => values.get(slot) as SlotValues[Name] | undefined)
 
-    const snapshot = () => Effect.sync(() => Object.fromEntries(values) as unknown as Snapshot)
+    // The cast survives only because `Object.fromEntries` cannot keep a Map's
+    // key-to-value correlation — not because anything here is being asserted
+    // about which slots are present. `Snapshot` says "any of them may be
+    // missing", which is exactly what this map is.
+    const snapshot = () => Effect.sync(() => Object.fromEntries(values) as Snapshot)
 
     const watch = <Name extends SlotName>(slot: Name): Stream.Stream<SlotValues[Name]> =>
       Stream.unwrap(

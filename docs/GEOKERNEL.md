@@ -2034,7 +2034,7 @@ Windows 侧需要注入四类:
 | `GET /geo/vector/meta` | `path` | `{source, feature_count, geometry_types[], projection, properties[]}` |
 | `GET /geo/vector` | `path` | `{content}` — 目标坐标系下的矢量数据 |
 | `GET /geo/vector/page` | `path, offset, limit` | `{features[], total, offset, limit}` |
-| `GET /geo/raster/meta` | `path` | `{geo, projection, width, height, band_count}` |
+| `GET /geo/raster/meta` | `path` | `{georeference, projection, width, height, band_count}` —— `georeference` 是**种类**(§7.9 列全),不是布尔 |
 | `GET /geo/raster/image` | `path` | 二进制图像,预览元信息随响应头传递 |
 
 两项设计:

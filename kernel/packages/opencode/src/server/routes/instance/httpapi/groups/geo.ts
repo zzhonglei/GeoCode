@@ -267,8 +267,10 @@ export const GeoPreviewApi = HttpApi.make("geo-preview").add(
           identifier: "geo.rasterMeta",
           summary: "Read raster metadata",
           description:
-            "Size, band count and coordinate system. `geo` is false for a file that is an ordinary image " +
-            "carrying a raster extension — show those as pictures rather than placing them on a map (§7.5).",
+            "Size, band count, coordinate system, and where the raster's placement comes from. " +
+            "`georeference` is a kind, not a boolean: `none` is an ordinary image that happens to carry " +
+            "a raster extension — show those as pictures, and expect the image endpoint to refuse them " +
+            "with `not-geographic`. Every other kind previews (§7.5).",
         }),
       ),
       HttpApiEndpoint.get("rasterImage", GeoPaths.rasterImage, {
