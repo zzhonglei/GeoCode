@@ -67,6 +67,20 @@ const BANDS = [
     alpha: null,
   },
   { case: "a two-band pair reads its second as transparency", raster: "Undefined Undefined", rgb: [1, 1, 1], alpha: 2 },
+  {
+    // A netCDF, HDF or GRIB file of several variables opens with no bands at
+    // all. Neither preview draws one — the Python half refuses it by name
+    // before selection (qgis-reader.test.ts), and the TypeScript half is
+    // refused by GDAL itself at translate time — so neither answer here is ever
+    // used in anger. What this case holds level is that ASKING the question
+    // does not kill one of the two faces. It did: the Python half indexed band
+    // zero of an empty list and died with "list index out of range", where the
+    // TypeScript half reads `bands[0]?.color`.
+    case: "a container has no bands to choose between, and does not crash either face",
+    raster: "",
+    rgb: [1, 1, 1],
+    alpha: null,
+  },
 ]
 
 /** `[minimum, maximum, mean, stdDev]` in, the window that becomes 0–255 out. */
@@ -81,12 +95,18 @@ const STRETCH = [
 /** Pinned values are compared to six places; the two faces, exactly. */
 const rounded = (values: readonly number[]) => values.map((value) => Number(value.toFixed(6)))
 
-/** `BAND_4` in the spec is `BAND 4` in the file — the separator is the spec's, not GDAL's. */
+/**
+ * `BAND_4` in the spec is `BAND 4` in the file — the separator is the spec's, not GDAL's.
+ * The empty string is a raster with no bands at all: a container.
+ */
 const describedAs = (raster: string) =>
-  raster.split(" ").map((part) => {
-    const [colorInterpretation, description = ""] = part.split(":")
-    return { colorInterpretation, description: description.replace(/_/g, " ") }
-  })
+  raster
+    .split(" ")
+    .filter((part) => part !== "")
+    .map((part) => {
+      const [colorInterpretation, description = ""] = part.split(":")
+      return { colorInterpretation, description: description.replace(/_/g, " ") }
+    })
 
 const fromTypeScript = () => ({
   bands: BANDS.map((item) => {

@@ -64,9 +64,14 @@ class Dataset:
 
 
 def described_as(raster):
-    """`colour` or `colour:description`, space-separated. `_` stands for a space."""
+    """`colour` or `colour:description`, space-separated. `_` stands for a space.
+
+    The empty string is a raster with no bands at all -- a container.
+    """
     bands = []
     for part in raster.split(" "):
+        if not part:
+            continue
         colour, _, description = part.partition(":")
         bands.append(Band(colour, description.replace("_", " ")))
     return bands

@@ -117,6 +117,31 @@ describe("qgis reader script assets", () => {
     expect(RASTER_READ_PY).toContain("xmin, xmax = min(x0, x1), max(x0, x1)")
     expect(RASTER_READ_PY).toContain("ymin, ymax = min(y0, y1), max(y0, y1)")
   })
+
+  test("the preview refuses a container before it asks which bands to draw", () => {
+    // A netCDF, HDF or GRIB file of several variables opens with RasterCount 0
+    // and a placeholder size, and the variable names are the only actionable
+    // thing about it — MODIS, Sentinel and ERA5 all arrive this way, so this is
+    // an ordinary file for this audience rather than an edge case.
+    //
+    // The ORDER is the assertion, not just the guard. Selection now survives an
+    // empty band list to stay level with the TypeScript face (the shared case
+    // in raster-rules.test.ts), so a refusal moved below it stops nothing: the
+    // run reaches `GetRasterBand(1)` on a bandless dataset, gets None back, and
+    // reports an AttributeError about NoneType — less to go on than the "list
+    // index out of range" this replaced.
+    //
+    // Textual, like the §4.13 constraints above, and for the same reason: the
+    // script needs a real GDAL and a real container to run.
+    expect(RASTER_PREVIEW_PY).toContain('GetMetadata("SUBDATASETS")')
+    const refusal = RASTER_PREVIEW_PY.indexOf("subdatasets = container_subdatasets(ds)")
+    const selection = RASTER_PREVIEW_PY.indexOf("rgb_indices, alpha_idx = select_bands(ds)")
+    expect(refusal).toBeGreaterThan(-1)
+    expect(selection).toBeGreaterThan(refusal)
+    // And it hands the names over. "This is a container" without them is the
+    // same dead end in politer words.
+    expect(RASTER_PREVIEW_PY).toContain("Open one of them instead:")
+  })
 })
 
 describe("qgis reader materialization", () => {

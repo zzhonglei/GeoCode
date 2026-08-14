@@ -49,6 +49,34 @@ MAX_SIDE = 2048
 
 
 # ---------------------------------------------------------------------------
+# Containers -- files that hold variables rather than bands
+# ---------------------------------------------------------------------------
+
+def container_subdatasets(ds):
+    """The variables a container holds, or an empty list for an ordinary raster.
+
+    A netCDF, HDF4, HDF5 or GRIB file carrying several variables is not a raster
+    at all. GDAL opens it anyway and answers with RasterCount 0, a placeholder
+    512x512 size and no georeferencing, so every fact read off it afterwards is
+    fiction. The variables themselves are named in metadata, and handing those
+    names back is the whole difference between a dead end and a next call:
+    MODIS, Sentinel and ERA5 scenes all arrive this way.
+    """
+    if ds.RasterCount > 0:
+        return []
+    metadata = ds.GetMetadata("SUBDATASETS") or {}
+    names = []
+    index = 1
+    while True:
+        name = metadata.get(f"SUBDATASET_{index}_NAME")
+        if not name:
+            break
+        names.append(name)
+        index += 1
+    return names
+
+
+# ---------------------------------------------------------------------------
 # Band selection
 # ---------------------------------------------------------------------------
 
@@ -72,8 +100,12 @@ def select_bands(ds):
                 return b["idx"]
         return None
 
-    # Single band
-    single = (band_count == 1) or (band_count <= 2 and bands[0]["color"] == "gray")
+    # Single band. `bands` is empty for a container, which render_preview
+    # refuses before it ever reaches here -- the guard is what keeps this
+    # function's answer defined anyway, and equal to the TypeScript face's
+    # `bands[0]?.color` rather than an IndexError (section 7.9 dual engines).
+    grey_pair = band_count <= 2 and len(bands) > 0 and bands[0]["color"] == "gray"
+    single = (band_count == 1) or grey_pair
     if single:
         a = alpha if alpha else (2 if band_count >= 2 else None)
         return (1, 1, 1), a
@@ -165,6 +197,17 @@ def render_preview(file_path):
     ds = gdal.Open(file_path)
     if ds is None:
         raise RuntimeError(f"Cannot open raster file: {file_path}")
+
+    # Before a single fact is read off it. A container has no bands to draw, and
+    # the size and georeferencing it does report are GDAL's placeholders. The
+    # variable names are the way forward, so they are what the failure carries --
+    # without them this is a dead end wearing the costume of a broken file.
+    subdatasets = container_subdatasets(ds)
+    if subdatasets:
+        raise RuntimeError(
+            f"This file holds {len(subdatasets)} subdatasets rather than bands, so there is nothing"
+            f" to preview here. Open one of them instead: {', '.join(subdatasets)}"
+        )
 
     # Taken while the dataset is still open; it is closed before encoding.
     georeferencing = georeferencing_facts(ds)
