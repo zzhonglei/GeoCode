@@ -96,7 +96,20 @@ describe("machine.json config", () => {
         expect(state.ok).toBe(false)
         if (state.ok) continue
         expect(state.failure.file).toBe(FILE)
-        expect(state.failure.message.length).toBeGreaterThan(0)
+        // What the name of this test has promised all along. It asserted
+        // `length > 0`, which the literal class name "ConfigJsonError"
+        // satisfies — and §3.1 puts all four geographic capabilities behind
+        // this one sentence, so fifteen characters of nothing is what a user
+        // got at the moment everything went dark.
+        expect(state.failure.message).toMatch(/line \d+, column \d+/)
+        // And no more than that. The parser's readable report opens with a
+        // `--- JSONC Input ---` dump of the entire file, and this field is
+        // carried by `config-error` into the event stream and onto the
+        // interface. §3.1 has this file IGNORE unknown keys, so what a user
+        // keeps in it is not bounded by the schema; the path below stands in
+        // for whatever that turns out to be.
+        expect(state.failure.message).not.toContain("/Applications/QGIS-LTR.app")
+        expect(state.failure.message).not.toContain("JSONC Input")
         // Distinguished fingerprint, block-scoped so two blocks never collide.
         expect(state.fingerprint).toBe(`${block}:unparsable`)
       }

@@ -152,7 +152,9 @@ describe("qgis lifecycle", () => {
           // open in front of them (§3.1).
           if (status.status === "config-error") {
             expect(status.file).toBe(FILE)
-            expect(status.message.length).toBeGreaterThan(0)
+            // A position, not merely a non-empty string — see the same
+            // assertion in gdal-lifecycle.test.ts for what `length > 0` let by.
+            expect(status.message).toMatch(/line \d+, column \d+/)
           }
         }),
       { timeout: 30000 },

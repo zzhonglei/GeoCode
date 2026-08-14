@@ -360,7 +360,9 @@ describe("gee lifecycle", () => {
           // fix this line" apart from "your Python environment is broken", and
           // it needs the location as a field to do anything with it.
           expect(broken.setup).toMatchObject({ status: "config-error", file: FILE })
-          if (broken.setup.status === "config-error") expect(broken.setup.message.length).toBeGreaterThan(0)
+          // A position, not merely a non-empty string — see the same assertion
+          // in gdal-lifecycle.test.ts for what `length > 0` let by.
+          if (broken.setup.status === "config-error") expect(broken.setup.message).toMatch(/line \d+, column \d+/)
           expect(broken.facing).toBe("setup")
         }),
       { timeout: 30000 },

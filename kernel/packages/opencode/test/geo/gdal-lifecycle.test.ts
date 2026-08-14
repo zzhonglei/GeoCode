@@ -130,7 +130,11 @@ describe("gdal lifecycle", () => {
         // has a file to fix, the other has a field to fill. Reporting the first
         // as "unconfigured" sends them to redo work they already did (§8.1).
         expect(status).toMatchObject({ status: "config-error", file: FILE })
-        if (status.status === "config-error") expect(status.message.length).toBeGreaterThan(0)
+        // Not `length > 0`, which is what this asserted while the message was
+        // the literal class name "ConfigJsonError" — fifteen characters that
+        // pass that check and say nothing, at the moment §3.1 has switched every
+        // geographic capability off. A position is the least that is actionable.
+        if (status.status === "config-error") expect(status.message).toMatch(/line \d+, column \d+/)
 
         // And no track runs on a configuration nobody could read.
         for (const track of ["raster", "vector"] as const) {

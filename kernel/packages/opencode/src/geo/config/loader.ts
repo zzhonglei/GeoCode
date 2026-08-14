@@ -112,8 +112,38 @@ async function readOne(file: string): Promise<Loaded> {
 }
 
 function messageOf(err: unknown) {
-  if (err instanceof Error) return err.message
-  return String(err)
+  return positionOf(err) ?? (err instanceof Error ? err.message : String(err))
+}
+
+/**
+ * Where the syntax error is, and nothing else.
+ *
+ * `ConfigJsonError.message` is the class name. Fifteen characters, rendered
+ * downstream as "machine.json cannot be parsed: ConfigJsonError" — and §3.1
+ * makes a syntax error disable EVERY block, so that sentence is the whole of
+ * what a user gets when all four geographic capabilities go dark at once.
+ *
+ * The readable text is on `data.message`, and so is the entire file: the parser
+ * prefixes its report with a `--- JSONC Input ---` dump of what it was handed.
+ * That field is carried by `config-error` into the event stream and onto the
+ * interface, so passing it through would broadcast whatever the user keeps in
+ * this file — a screenshot-able copy of it, for a comma.
+ *
+ * The per-error source echo underneath ("Line 3:   \"gee\": {}") is dropped for
+ * the same reason at a smaller scale. §3.1 has this file IGNORE unknown keys,
+ * so its contents are not bounded by the schema and there is no version of
+ * "just one line" that is known to be safe. A position is actionable on its
+ * own — the guidance's next sentence is already "fix that line first" — and it
+ * cannot leak anything.
+ */
+function positionOf(err: unknown): string | undefined {
+  const data = (err as { data?: { message?: unknown } } | null | undefined)?.data
+  if (typeof data?.message !== "string") return undefined
+  const positions = data.message
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /\bat line \d+, column \d+$/.test(line))
+  return positions.length > 0 ? positions.join("; ") : undefined
 }
 
 /**
