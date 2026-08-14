@@ -31,3 +31,9 @@ logs/
 # OS / editor noise
 .DS_Store
 Thumbs.db
+
+# Python bytecode. `importlib` drops these NEXT TO THE SOURCE when a test
+# loads a shipping module by path — inside kernel/, whose own .gitignore is an
+# upstream file we do not widen for this.
+__pycache__/
+*.pyc
