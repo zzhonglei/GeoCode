@@ -382,6 +382,14 @@ describe("OsmGetFeatures, the description", () => {
     expect(FEATURES_DESCRIPTION).not.toMatch(/RunQgisAlgorithm/)
   })
 
+  test("and no clip at all, the same way the report names none", () => {
+    // The report retracted this when the automatic narrowing landed (§6.4) and
+    // is asserted on twice above; the description kept it, because nothing here
+    // was watching the prose — `/clipped:/` below is about the metadata field of
+    // that name, and a colon is what makes it miss a sentence.
+    expect(FEATURES_DESCRIPTION).not.toMatch(/clip/i)
+  })
+
   test("it never points the model at metadata, which the model cannot see", () => {
     expect(FEATURES_DESCRIPTION).not.toMatch(/metadata/i)
     expect(FEATURES_DESCRIPTION).not.toMatch(/clipped:/)

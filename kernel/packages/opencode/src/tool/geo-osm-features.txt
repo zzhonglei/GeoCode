@@ -15,6 +15,6 @@ Behavior:
 - EPSG:4326. Multipolygons keep their inner rings and separate parts. Geometry is never simplified.
 - NEVER one mixed-geometry file. When the result spans several geometry families it is split into single-family siblings, and every written path is listed in the report.
 - Anything lost is named in the report: extents that failed, extents that answered incompletely (in the service's own words), and elements that matched but produced no geometry. Whatever succeeded is already in the file.
-- A boundary file too detailed or too fragmented to filter exactly is widened OUTWARD — never fewer features, possibly extra ones outside the true boundary. When that happens the report says so, and the result has to be clipped to the boundary before it is used.
+- A boundary file too detailed or too fragmented to filter exactly is widened OUTWARD — never fewer features, possibly extra ones outside the true boundary. A call made only of boundary files is narrowed back before anything is counted and comes back exact; it stays widened only when the call mixes boundary files with other extent kinds, and the report says so when it does.
 
 TIMING: this queries public services over the network, one extent at a time. A dense area can use the whole per-extent budget, so a multi-extent download running for several minutes is normal.

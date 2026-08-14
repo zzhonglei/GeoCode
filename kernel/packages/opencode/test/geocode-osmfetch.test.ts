@@ -205,12 +205,17 @@ describe("the prompt it works under", () => {
     expect(OSMFETCH_PROMPT).toMatch(/every file/i)
   })
 
-  test("it requires the superset warning to be passed upward", () => {
+  test("it requires the superset warning to be passed upward, and names no remedy of its own", () => {
     // The chain is tool → osmfetch → caller. The tool states the result covers
-    // more ground than the boundary; osmfetch cannot clip it; the caller can.
-    // If osmfetch summarizes that note away, nobody clips and nobody knows.
-    expect(OSMFETCH_PROMPT).toMatch(/clipped/i)
-    expect(OSMFETCH_PROMPT).toMatch(/cannot clip/i)
+    // more ground than the boundary asked for; if osmfetch summarizes that note
+    // away, nobody knows. What to DO about it belongs to the caller, and since
+    // the automatic narrowing (§6.4) the answer is never a clip: in the one
+    // shape that still reaches the note the other extents legitimately hold
+    // features outside the boundary file, so cutting to it would delete exactly
+    // those. This prompt went on telling the caller to clip well after the
+    // narrowing landed, because the assertion here required the word.
+    expect(OSMFETCH_PROMPT).toMatch(/covers more ground/i)
+    expect(OSMFETCH_PROMPT).not.toMatch(/clip/i)
   })
 
   test("it separates a missing environment from a failed download", () => {
