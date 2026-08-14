@@ -481,15 +481,24 @@ def export_image(
 
     if final_state == "COMPLETED":
         print(f"Export completed ({elapsed}s) -> Drive/{folder}/{file_name_prefix}", flush=True)
-    elif final_state == "FAILED":
-        error = final_status.get("error_message", "unknown error")
-        print(f"Export failed ({elapsed}s): {error}", flush=True)
-    elif final_state == "CANCELLED":
-        print(f"Export cancelled ({elapsed}s)", flush=True)
-    else:
-        print(f"Export ended ({elapsed}s): {final_state}", flush=True)
+        return final_status
 
-    return final_status
+    # Anything else means no file was produced, and RETURNING here is how that
+    # became a successful run: the tool layer's verdict is the exit code
+    # (geo-gee-run.ts), so a printed line and a clean return is a finished
+    # export as far as the Agent can see -- no error_code, nothing marked
+    # failed. download_image() in this same module raises for its failures;
+    # this is that contract, arrived at late.
+    #
+    # CANCELLED raises as well. Someone stopping the task from the Code Editor
+    # is not an error, but it is not an export either, and the one thing the
+    # Agent must never do is report a file that is not there.
+    if final_state == "FAILED":
+        detail = final_status.get("error_message", "unknown error")
+        raise RuntimeError(f"Export failed after {elapsed}s (task {task.id}): {detail}")
+    if final_state == "CANCELLED":
+        raise RuntimeError(f"Export cancelled after {elapsed}s (task {task.id}) -- no file was written")
+    raise RuntimeError(f"Export ended after {elapsed}s in state {final_state}, not COMPLETED (task {task.id})")
 
 
 def check_coverage(image, roi, band=None, scale=30):

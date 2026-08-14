@@ -99,6 +99,51 @@ describe("gee runtime library", () => {
   })
 })
 
+const systemPython = ["python3", "python"].find(
+  (candidate) => Bun.spawnSync([candidate, "--version"], { stdout: "pipe", stderr: "pipe" }).success,
+)
+
+describe.skipIf(!systemPython)("gee export, at each terminal state", () => {
+  test("only COMPLETED returns — every other ending raises", () => {
+    // The runtime library had no execution coverage at all; everything about it
+    // was asserted as strings, and "does it raise" is not a question a string
+    // can answer. It is also the only question the tool layer asks:
+    // `geo-gee-run.ts` decides success from the exit code, so an export that
+    // ended FAILED and returned normally reached the Agent as a completed run
+    // — no error_code, nothing marked failed, a file reported that is not on
+    // anyone's Drive.
+    //
+    // The shipping module is executed rather than a copy of it: `import ee`
+    // happens inside the function, so a fake in sys.modules runs the real thing
+    // on any python3, with no Earth Engine account and no network.
+    const run = Bun.spawnSync(
+      [
+        systemPython!,
+        path.join(import.meta.dir, "fixtures", "gee-export-answer.py"),
+        path.join(import.meta.dir, "..", "..", "src", "geo", "gee", "pylib", "geocode.py"),
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    )
+    if (!run.success) throw new Error(`gee-export-answer.py failed:\n${run.stderr.toString()}`)
+    // The function prints progress before answering, so the payload is the last line.
+    const answers = JSON.parse(run.stdout.toString().trim().split("\n").pop()!) as Record<
+      string,
+      { outcome: string; message?: string }
+    >
+
+    expect(answers.COMPLETED!.outcome).toBe("returned")
+    // CANCELLED among them: someone stopping the task from the Code Editor is
+    // not an error, but it is not an export either, and the one thing the Agent
+    // must not do is report a file that is not there.
+    for (const state of ["FAILED", "CANCELLED", "UNKNOWN"]) expect(answers[state]!.outcome, state).toBe("raised")
+
+    // With the reason, and with the id that outlives the script — the export
+    // itself keeps running service-side, and that id is how a user reaches it.
+    expect(answers.FAILED!.message).toContain("quota exhausted")
+    for (const state of ["FAILED", "CANCELLED", "UNKNOWN"]) expect(answers[state]!.message, state).toContain("T-fake")
+  })
+})
+
 describe("gee library materialization", () => {
   test("the module lands under a content-hashed directory", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "geo-gee-lib-"))

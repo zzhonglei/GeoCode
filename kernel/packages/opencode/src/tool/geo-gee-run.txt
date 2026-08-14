@@ -42,4 +42,6 @@ Built-in module "geocode":
 
   - export_image(image: ee.Image, description: str, region: ee.Geometry, folder: str = "GEE_Exports", scale: int = 10) -> dict
     Export an ee.Image to Google Drive. Use for very large images that exceed direct download limits.
-    Note: the user MUST manually download the file from Google Drive after export.
+    Blocks until the task ends, then returns its status — or raises if it ended
+    as anything other than COMPLETED, so you do not have to inspect the state
+    yourself. Note: the user MUST manually download the file from Google Drive after export.
