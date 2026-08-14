@@ -84,11 +84,33 @@ const it = testEffect(
 )
 
 describe("session.system", () => {
-  test("selects the Meta prompt for Muse Spark model IDs", () => {
-    expect(SystemPrompt.provider({ api: { id: "meta/muse-spark-preview" } } as Provider.Model)[0]).toContain(
-      "Meta Muse Spark",
-    )
+  /* --- GeoCode: upstream picks one of nine prompts by model family; GeoCode
+   * returns its own single base for every model (docs/KERNEL.md §5.2), so the
+   * case this replaces could not pass and sat red in every vendored run —
+   * indistinguishable, to anyone reading that run, from a patch the merge had
+   * just undone.
+   *
+   * Generalized rather than deleted. `geocode-brand.test.ts` asserts the SOURCE
+   * of `session/system.ts`, which is a different question from what the
+   * function returns; CONVENTIONS.md §7 is explicit that compiling is not
+   * passing. This is the runtime half of that patch, and the only one.
+   *
+   * Upstream original:
+   *   test("selects the Meta prompt for Muse Spark model IDs", () => {
+   *     expect(SystemPrompt.provider({ api: { id: "meta/muse-spark-preview" } }
+   *       as Provider.Model)[0]).toContain("Meta Muse Spark")
+   *   })
+   */
+  test("GeoCode: every model gets the one base prompt, family branching and all", () => {
+    // A spread of provider prefixes, the first being the one upstream asserted
+    // here. If the branching ever comes back, it comes back for these.
+    for (const id of ["meta/muse-spark-preview", "anthropic/claude-opus-4", "openai/gpt-5", "unknown/model"]) {
+      const selected = SystemPrompt.provider({ api: { id } } as Provider.Model)
+      expect(selected.length, id).toBe(1)
+      expect(selected[0], id).toContain("You are GeoAgent")
+    }
   })
+  // --- /GeoCode ---
 
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {

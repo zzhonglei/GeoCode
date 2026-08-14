@@ -54,6 +54,30 @@ echo "== geo kernel (opencode) =="
   test/geocode-read-handoff.test.ts)
 
 echo
+echo "== shielding tripwires living inside upstream's own test files =="
+# The third shielded item (Claude Code's CLAUDE.md and .claude/skills, KERNEL.md
+# §6) is the one whose tripwires could not live in a geocode-*.test.ts: the flag
+# defaults are read in upstream's own suites and nowhere else. They were written
+# and then never run — reverting the two defaults turns fourteen assertions red
+# across these files while this gate stayed green, which is the exact failure
+# the gate exists to prevent.
+#
+# The first two files are green whole. skill.test.ts is not: six of its cases
+# assert the pre-rename `.opencode/skill` path and fail by design, so the
+# GeoCode-named case is selected out of it by name rather than the file being
+# dragged in with its expected red.
+#
+# system.test.ts is here for a different shielded thing — the prompt selector
+# (KERNEL.md §5.2). Its GeoCode case is the only RUNTIME check that every model
+# still resolves to the one base prompt; geocode-brand.test.ts reads the source
+# of system.ts, which is a different question.
+(cd "$ROOT/kernel/packages/opencode" && bun test $TIMEOUT \
+  test/effect/runtime-flags.test.ts \
+  test/session/instruction.test.ts \
+  test/session/system.test.ts)
+(cd "$ROOT/kernel/packages/opencode" && bun test $TIMEOUT -t "GeoCode:" test/skill/skill.test.ts)
+
+echo
 echo "== geo kernel (core) =="
 (cd "$ROOT/kernel/packages/core" && bun test $TIMEOUT \
   test/geo-extensions.test.ts \

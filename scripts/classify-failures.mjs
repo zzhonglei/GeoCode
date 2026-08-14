@@ -9,6 +9,27 @@
  * evidence for a failure is the run of lines since the previous one. */
 import fs from "node:fs"
 
+/* Bun prints a stack frame beneath the error text, and that frame carries the
+ * absolute path of the test file — which inside this package always contains
+ * the string `opencode`. The identity rule below matches on that string, so
+ * before the frames were dropped it claimed 75 of the package's 85 failures,
+ * and 41 of those named the old identity NOWHERE ELSE. They read as expected
+ * rename drift and were not: the prompt-selector failure was one of them.
+ *
+ * Assertion values are left alone. An on-disk identity failure legitimately
+ * shows a path in its Expected or Received, and that path is the evidence. */
+const withoutFrames = (text) =>
+  text
+    .split("\n")
+    .filter((line) => !/^\s*at /.test(line))
+    .join("\n")
+
+/** Assertions naming the pre-rename identity, against code that now derives
+ * every branded path and file name from the Brand module. */
+const namesOldIdentity = (text) =>
+  /opencode\.jsonc?|T\/opencode|tmpdir\(\), "opencode"|["'/]opencode["'/]|\.opencode\b/.test(text) &&
+  /Expected|NotFound|toBe|toEqual|toContain/.test(text)
+
 const RULES = [
   {
     name: "geographic handoff (expected)",
@@ -39,11 +60,17 @@ const RULES = [
   },
   {
     name: "on-disk identity (expected)",
-    // Assertions naming the pre-rename identity, against code that now derives
-    // every branded path and file name from the Brand module.
-    test: (text) =>
-      /opencode\.jsonc?|T\/opencode|tmpdir\(\), "opencode"|["'/]opencode["'/]|\.opencode\b/.test(text) &&
-      /Expected|NotFound|toBe|toEqual|toContain/.test(text),
+    test: (text) => namesOldIdentity(withoutFrames(text)),
+  },
+  {
+    name: "was claimed by the stack frame alone — triage debt",
+    // Exactly what the identity rule used to take on the strength of the file
+    // path. Named and counted rather than tipped into `unexplained`: they are
+    // not new, and letting forty of them bury the handful that ARE new would
+    // trade one blind spot for another. The bucket empties by classifying its
+    // contents into honest rules — never by widening one again. Full list is in
+    // the raw output this script was pointed at.
+    test: (text) => namesOldIdentity(text),
   },
   {
     name: "feature removed (expected)",

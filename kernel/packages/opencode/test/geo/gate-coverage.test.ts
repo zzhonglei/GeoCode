@@ -36,4 +36,38 @@ describe("the test gate", () => {
   test("it runs the geo kernel directory, which is how test/geo/ is covered", () => {
     expect(fs.readFileSync(GATE, "utf8")).toContain("test/geo/")
   })
+
+  test("and every upstream test file holding a GeoCode-named case is in it too", () => {
+    // The check above only sees one naming convention in one directory, and the
+    // tripwires for the shielded Claude Code flags fit neither: they had to be
+    // written inside upstream's own suites, where those defaults are read. So
+    // they sat unrun — reverting the defaults turned fourteen assertions red
+    // across them while the gate reported green.
+    //
+    // What makes them findable is the other convention: a GeoCode case inside
+    // an upstream file is named `GeoCode: …`, which is also how the gate selects
+    // one out of a file it cannot run whole. That is what this asserts against,
+    // so the next tripwire written that way cannot go quiet the same way.
+    const script = fs.readFileSync(GATE, "utf8")
+    const holders: string[] = []
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name)
+        // test/geo/ is covered by directory, so its files are never named.
+        if (entry.isDirectory()) {
+          if (full !== import.meta.dirname) walk(full)
+          continue
+        }
+        if (!entry.name.endsWith(".test.ts")) continue
+        if (/\b(?:test|it)(?:\.\w+)*\(\s*"GeoCode:/.test(fs.readFileSync(full, "utf8"))) {
+          holders.push(path.relative(path.dirname(HERE), full).split(path.sep).join("/"))
+        }
+      }
+    }
+    walk(HERE)
+
+    // The same sanity floor as above: an empty list would pass by doing nothing.
+    expect(holders.length).toBeGreaterThan(0)
+    for (const file of holders) expect(script).toContain(file)
+  })
 })
