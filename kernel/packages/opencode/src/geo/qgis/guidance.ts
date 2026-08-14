@@ -52,9 +52,11 @@ function fixable(opening: string): string {
           "}",
           "",
           "Note for the agent:",
-          "  1. Find the user's QGIS install:",
-          `       dir "C:\\Program Files\\QGIS*"`,
-          `       dir "C:\\OSGeo4W*"`,
+          "  1. Find the user's QGIS install. It is often NOT on the system",
+          "     drive, and `where qgis` only finds it if it is on PATH — so do",
+          "     not conclude it is missing until the other fixed drives are out:",
+          `       dir "C:\\Program Files\\QGIS*"      (then D:, E: … )`,
+          `       dir "C:\\OSGeo4W*"                  (then D:, E: … )`,
           "       where qgis",
           "  2. Confirm the location with the user, then write it to the file above.",
           "     GeoCode re-probes automatically after save — no restart needed.",
@@ -180,8 +182,30 @@ function broken(symptom: string, opts?: { error?: string; interpreter?: string }
     "Do not try to repair bindings or plugins by hand; that is not reliably",
     "fixable from here.",
     "",
-    "GeoCode re-probes automatically when machine.json is saved and after the",
-    "install changes underneath it. Then call any QGIS tool again.",
+    // The closing route, and the one place in this file where "saving re-probes"
+    // is FALSE.
+    //
+    // Deliberately so, and the dispatch is not the thing to change: config
+    // reloads PER BLOCK and drops one whose fingerprint is unchanged
+    // (`config/index.ts`), which is what keeps an edit to `qgis` from dragging
+    // the GEE environment through a re-probe it has no reason to run. Only what
+    // actually changed wakes up. `POST /geo/reload` does not get around it
+    // either — it re-reads the file, and the same per-block filter sits
+    // downstream of the read.
+    //
+    // What follows is that NOTHING re-probes an install that changed underneath
+    // an unchanged hint, and this branch's advice ends in a reinstall — after
+    // which the hint usually has not changed at all. The earlier wording
+    // promised precisely that re-probe. An agent believing it calls the tool
+    // again and reads this same text back, having spent the user's time.
+    `GeoCode re-probes when the "qgis" hint in machine.json CHANGES. Saving the`,
+    "same value again is not a change, and nothing runs. So once the user has",
+    "reinstalled:",
+    "  - if the new install sits at a different path — Windows version-numbered",
+    "    directories usually do — write that path here and the probe runs on save;",
+    "  - if the path is unchanged, GeoCode has to be restarted before it looks",
+    "    again.",
+    "Then call any QGIS tool again.",
   ].join("\n")
 }
 
@@ -196,17 +220,21 @@ export function render(status: GeoEvent.QgisStatus): string {
       // whose Processing framework is missing or whose catalog dump errors.
       if (status.catalog === "building")
         return "QGIS is ready and its algorithm catalog is still being built — the first build after a configuration change can take a while. Try again shortly."
-      if (!status.processing)
+      // `skipped` rides along rather than answering below. The kernel only ever
+      // commits it together with `processing: false` (`qgis/index.ts`), so a
+      // branch testing it on its own sat under this one and could not be
+      // reached — and its sentence said the same thing this one does, one
+      // remove further from the cause. Folded in instead of deleted: the tool
+      // layer keeps `catalog: "skipped"` as a state of its own
+      // (`tool/geo-tool.ts`), so if the pairing ever comes apart, what belongs
+      // here is still guidance and not silence.
+      if (!status.processing || status.catalog === "skipped")
         return broken("QGIS's Processing framework is not available in this installation", {
           interpreter: status.interpreter,
         })
       if (status.catalog === "failed")
         return broken(`The algorithm catalog could not be built`, {
           error: status.catalogError,
-          interpreter: status.interpreter,
-        })
-      if (status.catalog === "skipped")
-        return broken("The algorithm catalog was skipped because Processing is unavailable", {
           interpreter: status.interpreter,
         })
       return ""

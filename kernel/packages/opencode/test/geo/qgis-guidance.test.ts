@@ -138,6 +138,59 @@ describe("QgisGuidance", () => {
     expect(failed).toContain("reinstall")
   })
 
+  test("a broken install is not promised a re-probe that does not exist", () => {
+    // `config/index.ts` drops a block whose fingerprint is unchanged, so saving
+    // machine.json without editing it runs nothing — and after a reinstall the
+    // hint usually IS unchanged. The earlier wording promised a re-probe "after
+    // the install changes underneath it"; nothing watches the install. An agent
+    // believing it tells the user to reinstall, calls the tool again, and reads
+    // back the identical failure, having spent the user's time for nothing.
+    const text = QgisGuidance.render({ status: "gdal-missing", diagnostics: DIAG })
+    expect(text).not.toMatch(/install changes underneath/i)
+    // Both routes, because either alone strands a reader: a reinstall that moves
+    // the path needs an edit, one that does not needs a restart.
+    expect(text).toMatch(/restarted/i)
+    expect(text).toMatch(/different path/i)
+
+    // The contrast IS the finding. Saving does re-probe in the configure branch,
+    // because there the agent is writing a value that differs — one sentence,
+    // true in one branch and false in the other, is how it survived.
+    expect(QgisGuidance.render({ status: "unconfigured" })).toContain("re-probes automatically after save")
+  })
+
+  test("a skipped catalog answers even if it ever arrives without its cause", () => {
+    // The kernel only commits `catalog: "skipped"` alongside `processing: false`
+    // (qgis/index.ts), which is why the branch that tested it alone sat below
+    // the Processing check and could never run. That pairing is a convention,
+    // not a type, and the tool layer keeps the two apart (tool/geo-tool.ts) — so
+    // the orphan shape is built here on purpose. Silence is the one answer this
+    // state must never get.
+    const orphan = QgisGuidance.render({ status: "ready", processing: true, catalog: "skipped" } as never)
+    expect(orphan).not.toBe("")
+    expect(orphan).toContain("Processing framework is not available")
+  })
+
+  test("the Windows locate step does not stop at the system drive", () => {
+    // A second drive is ordinary on Windows, and `where qgis` only finds an
+    // install the installer put on PATH. An agent handed C:-only probes
+    // concludes "not installed" and sends the user to download software they
+    // already have.
+    //
+    // The platform is swapped rather than the test skipped off Windows: this
+    // branch has never run on real hardware (GEOKERNEL §11.1), so a guard here
+    // would mean nothing checks it at all, on any machine anyone owns.
+    const real = Object.getOwnPropertyDescriptor(process, "platform")!
+    try {
+      Object.defineProperty(process, "platform", { value: "win32", configurable: true })
+      const text = QgisGuidance.render({ status: "unconfigured" })
+      expect(text).toContain("Program Files")
+      expect(text).toMatch(/not conclude it is missing/i)
+      expect(text).toMatch(/D:/)
+    } finally {
+      Object.defineProperty(process, "platform", real)
+    }
+  })
+
   test("a fully ready environment has nothing to say", () => {
     expect(QgisGuidance.render({ status: "ready", processing: true, catalog: "ready" } as never)).toBe("")
   })
