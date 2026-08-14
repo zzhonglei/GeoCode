@@ -356,6 +356,38 @@ describe("osm download", () => {
     const http = scriptedHttp(() => json(elements))
     const it = graph(http.layer)
 
+    it.live("a write that cannot happen comes back as a failure, not a defect", () =>
+      Effect.gen(function* () {
+        // A full disk, a read-only directory, a path outside what the user may
+        // write: `OsmOutput.write` throws for every one of them, and a throw
+        // inside `Effect.gen` is a DEFECT — outside the error type, straight
+        // past `Effect.result`, surfacing as an unattributable tool crash after
+        // a download that had already succeeded and had data to show for it.
+        //
+        // Forced with a parent that is a file rather than a directory, which is
+        // ENOTDIR on both supported platforms and needs no permissions games.
+        const blocker = path.join(root, "blocker")
+        fs.writeFileSync(blocker, "not a directory")
+        const osm = yield* GeoOsm.Service
+        const outcome = yield* Effect.result(
+          osm.downloadFeatures({
+            extents: ["bbox:30,114,31,115"],
+            tags: ["amenity"],
+            output: path.join(blocker, "out.geojson"),
+          }),
+        )
+        // The channel is the assertion, not the wording. `Failure` means the
+        // caller is handed something it can read and report; `Die` means it
+        // never gets the chance to.
+        expect(outcome._tag).toBe("Failure")
+      }),
+    )
+  }
+
+  {
+    const http = scriptedHttp(() => json(elements))
+    const it = graph(http.layer)
+
     it.live("centroid mode reports how many areas it collapsed", () =>
       Effect.gen(function* () {
         const osm = yield* GeoOsm.Service

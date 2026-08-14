@@ -275,11 +275,6 @@ export function polygons(document: unknown): OsmIntersect.Polygon[] {
   return found.sort((a, b) => b.outer.length - a.outer.length)
 }
 
-/** The outer rings alone — what widening works from, since it ignores holes. */
-export function outerRings(document: unknown): Point[][] {
-  return polygons(document).map((polygon) => [...polygon.outer])
-}
-
 function assertWgs84(ring: readonly Point[], file: string) {
   for (const [lon, lat] of ring.slice(0, 50)) {
     if (Math.abs(lon) > 180 || Math.abs(lat) > 90) {

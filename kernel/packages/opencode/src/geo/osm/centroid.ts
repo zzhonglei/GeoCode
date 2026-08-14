@@ -1,6 +1,7 @@
 export * as OsmCentroid from "./centroid"
 
 import type { OsmConvert } from "./convert"
+import { OsmQuery } from "./query"
 
 /* --- GeoCode: collapsing features to representative points
  * (docs/GEOKERNEL.md §6.8 几何归一化).
@@ -92,7 +93,7 @@ export function lineMidpoint(line: readonly Position[]): Position {
   return line[line.length - 1]!
 }
 
-function representativePoint(geometry: any): Position | undefined {
+function pointOf(geometry: any): Position | undefined {
   switch (geometry?.type) {
     case "Point":
       return geometry.coordinates
@@ -118,6 +119,22 @@ function representativePoint(geometry: any): Position | undefined {
 }
 
 /**
+ * A point that can be plotted, or nothing.
+ *
+ * The finiteness check belongs here rather than in each branch above. A ring
+ * with no vertices divides by zero, so `ringCentroid` answers `[NaN, NaN]` —
+ * an array, therefore truthy, therefore counted as a success. It left as
+ * `[null, null]` the moment `JSON.stringify` saw it: invalid GeoJSON, written
+ * to the user's file, and absent from the loss list that exists to name
+ * precisely this. Every branch above can go degenerate the same way, and the
+ * contract all of them owe is the one in this docstring.
+ */
+function representativePoint(geometry: any): Position | undefined {
+  const point = pointOf(geometry)
+  return point && Number.isFinite(point[0]) && Number.isFinite(point[1]) ? point : undefined
+}
+
+/**
  * Collapse every feature to one point, recording what it used to be.
  *
  * `original_geometry` is what keeps the transformation traceable: a point that
@@ -133,7 +150,14 @@ export function normalize(features: readonly OsmConvert.Feature[]): {
   for (const feature of features) {
     const point = representativePoint(feature.geometry)
     if (!point) {
-      dropped.push(`${feature.properties.osm_type}/${feature.properties.osm_id}`)
+      // The id shape `OsmGetObjects` parses, which is the whole point of naming
+      // these rather than counting them: the caller is being told to fetch them
+      // on their own. `way/1` is not that shape — `OsmQuery.parseRef` throws on
+      // it — so half the list arrived unusable, from the half of the pipeline
+      // that filled it here instead of in `convert.ts`.
+      dropped.push(
+        OsmQuery.formatRef({ type: String(feature.properties.osm_type), id: Number(feature.properties.osm_id) }),
+      )
       continue
     }
     if (feature.geometry.type === "Point") {

@@ -187,8 +187,26 @@ export interface DownloadResult {
   readonly duplicates: number
   /** Features collapsed from an area or line to a point, in centroid mode. */
   readonly centroidConverted: number
-  /** False when any extent was approximated and the result needs clipping (§6.4). */
+  /**
+   * False when the query sent for some extent covered more ground than that
+   * extent asked for, and the result still does.
+   *
+   * NOT "needs clipping", which is what this said until the automatic narrowing
+   * (`intersect.ts`) made it wrong: the only shape that now reaches a caller
+   * with `exact: false` is a call MIXING boundary files with other extent kinds,
+   * and there the other extents legitimately hold features outside those files.
+   * Cutting to them deletes exactly what was asked for (§6.4).
+   */
   readonly exact: boolean
+  /**
+   * Which extents were widened, in the words `extent.ts` gave them.
+   *
+   * Empty whenever `exact` is true. Named rather than counted, for the reason
+   * `unassembled` is: with several extents in one call, "something was widened"
+   * leaves the caller unable to say WHICH boundary to ask for on its own — and
+   * asking for it on its own is the one route that comes back exact.
+   */
+  readonly widened: readonly string[]
   readonly notes: readonly string[]
 }
 
@@ -205,16 +223,31 @@ export interface DownloadResult {
  * Partial results still go to disk: on a multi-area download some data beats
  * none, as long as the shortfall is stated (§6.7).
  */
+/**
+ * The write, as a FAILURE rather than a defect — for the reason `checked()`
+ * below spells out, arrived at from the other direction.
+ *
+ * `OsmOutput.write` throws on a full disk, a read-only directory, a path the
+ * user cannot write. Called bare inside `Effect.gen`, every one of those became
+ * a defect: outside the error type, past `Effect.result`, surfacing as an
+ * unattributable tool crash after a download that had already succeeded and
+ * had a file's worth of data to show for it.
+ *
+ * Returned as an Effect rather than wrapped at the two call sites, because the
+ * call sites are what forgot the first time and the type is what cannot.
+ */
 function writeIfAny(
   output: string,
   features: readonly OsmConvert.Feature[],
   notes: string[],
-): { outputs: readonly OsmOutput.Written[]; bytes: number } {
-  if (features.length === 0) {
-    notes.push("nothing was obtained, so no file was written")
-    return { outputs: [], bytes: 0 }
-  }
-  return OsmOutput.write(output, features)
+): Effect.Effect<{ outputs: readonly OsmOutput.Written[]; bytes: number }, Error> {
+  return checked(() => {
+    if (features.length === 0) {
+      notes.push("nothing was obtained, so no file was written")
+      return { outputs: [], bytes: 0 }
+    }
+    return OsmOutput.write(output, features)
+  })
 }
 
 /**
@@ -655,7 +688,7 @@ const layer = Layer.effect(
         }
 
         const deduped = OsmConvert.dedupe(features)
-        const written = writeIfAny(input.output, deduped, notes)
+        const written = yield* writeIfAny(input.output, deduped, notes)
         return {
           outputs: written.outputs,
           features: deduped.length,
@@ -673,7 +706,9 @@ const layer = Layer.effect(
           extentsAsked: input.ids.length,
           duplicates: features.length - deduped.length,
           centroidConverted: 0,
+          // Fetch-by-id has no extent to widen: every object asked for is named.
           exact: true,
+          widened: [],
           notes,
         }
       })
@@ -696,6 +731,7 @@ const layer = Layer.effect(
         const incomplete: Incomplete[] = []
         const collected: OsmConvert.Feature[] = []
         const unassembled: string[] = []
+        const widened: string[] = []
         const droppedFields = new Map<string, number>()
         let exact = true
         // Counted as extents succeed rather than reconstructed afterwards by
@@ -705,7 +741,14 @@ const layer = Layer.effect(
 
         for (const { spec, extent } of resolved) {
           if (input.abort?.aborted) break
-          if (!extent.exact) exact = false
+          if (!extent.exact) {
+            exact = false
+            // `extent.ts` already words this — "boundary file X (3 polygons,
+            // reduced to convex hulls)" — and nothing read it until now.
+            // Collected right next to the flag it explains, so the two cannot
+            // drift apart.
+            widened.push(extent.label)
+          }
           const outcome = yield* Effect.result(
             client.overpass(
               OsmQuery.download({ spatial: extent.spatial, tags: input.tags, types, timeoutSec: budget }),
@@ -781,7 +824,7 @@ const layer = Layer.effect(
         // Whatever was obtained is written even when some extents failed: on a
         // multi-area download, partial results beat discarding everything
         // (§6.7 失败时保留已获得的部分结果并标记).
-        const written = writeIfAny(input.output, features, notes)
+        const written = yield* writeIfAny(input.output, features, notes)
         return {
           outputs: written.outputs,
           features: features.length,
@@ -797,6 +840,10 @@ const layer = Layer.effect(
           duplicates,
           centroidConverted,
           exact,
+          // Cleared when the narrowing ran: the query was widened, the RESULT
+          // is not, and naming boundaries the caller no longer has to think
+          // about is the same noise as a warning that fires every time.
+          widened: exact ? [] : widened,
           notes,
         }
       })

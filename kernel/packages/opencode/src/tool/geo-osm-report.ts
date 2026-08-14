@@ -62,10 +62,16 @@ export function caveats(
      * which in this one surviving case would have cost it the data it asked
      * for. The way out that does work is to ask for the file on its own.
      */
+    /* Named, because "a boundary file" is unanswerable when the call carried
+     * several. The way out is to ask for the widened boundary ON ITS OWN, and a
+     * caller cannot take a route it cannot name. `extent.ts` has always worded
+     * these — "boundary file X (3 polygons, reduced to convex hulls)" — and
+     * nothing read the field until now. */
+    const named = result.widened.length > 0 ? ` — ${result.widened.join("; ")}` : ""
     lines.push(
-      "NOTE: a boundary file was too detailed or too fragmented to filter exactly, so this result covers more" +
-        " ground than that boundary asked for. It stayed that way because the call mixes boundary files with" +
-        " other extent kinds — a call made only of boundary files comes back exact.",
+      `NOTE: this result covers more ground than was asked for${named}. A boundary file too detailed or too` +
+        " fragmented to filter exactly is queried wider, never narrower. It stayed that way because the call" +
+        " mixes boundary files with other extent kinds — a call made only of boundary files comes back exact.",
     )
   }
   // The kernel's own prose: the route it had to fall back to, and the fact

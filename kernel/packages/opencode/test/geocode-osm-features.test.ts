@@ -36,6 +36,7 @@ const DOWNLOAD = (over: Partial<GeoOsm.DownloadResult> = {}): GeoOsm.DownloadRes
   duplicates: 0,
   centroidConverted: 0,
   exact: true,
+  widened: [],
   notes: [],
   ...over,
 })
@@ -166,10 +167,16 @@ describe("OsmGetFeatures, what it refuses to answer", () => {
 describe("OsmGetFeatures, the superset contract", () => {
   harness(
     osmService({
-      downloadFeatures: () => Effect.succeed(DOWNLOAD({ exact: false })),
+      downloadFeatures: () =>
+        Effect.succeed(
+          DOWNLOAD({
+            exact: false,
+            widened: ["boundary file study.geojson (3 polygons, reduced to convex hulls)"],
+          }),
+        ),
     }),
   ).instance(
-    "a widened boundary is stated before the figures, and never as something to clip",
+    "a widened boundary is named, stated before the figures, and never something to clip",
     () =>
       Effect.gen(function* () {
         // The extents are mixed on purpose: that is the ONLY shape that still
@@ -181,6 +188,10 @@ describe("OsmGetFeatures, the superset contract", () => {
         // cannot even be noticed (§6.4). The widening is deliberate — and
         // useless unless the caller is told the file holds more than asked.
         expect(result.output).toMatch(/covers more ground/)
+        // WHICH boundary, because "a boundary file" is unanswerable when the
+        // call carried several — and the way out is to ask for that one on its
+        // own. `extent.ts` had always worded these; nothing read the field.
+        expect(result.output).toContain("boundary file study.geojson (3 polygons, reduced to convex hulls)")
         // ★ Never a clip. In this one surviving shape the other extents
         // legitimately hold features outside the boundary file, so cutting to
         // that file would delete exactly those — which is what the previous

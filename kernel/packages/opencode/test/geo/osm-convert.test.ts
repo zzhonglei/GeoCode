@@ -5,6 +5,7 @@ import path from "node:path"
 import { OsmCentroid } from "@/geo/osm/centroid"
 import { OsmConvert } from "@/geo/osm/convert"
 import { OsmOutput } from "@/geo/osm/output"
+import { OsmQuery } from "@/geo/osm/query"
 
 /* Conversion, normalization and output (docs/GEOKERNEL.md §6.6–§6.8).
  *
@@ -307,12 +308,36 @@ describe("osm representative points", () => {
     expect(features[1]!.geometry.type).toBe("Point")
   })
 
-  test("a feature with no reducible geometry is reported, not skipped", () => {
+  test("a feature with no reducible geometry is reported in a shape that can be re-fetched", () => {
     const { features, dropped } = OsmCentroid.normalize([
       { type: "Feature", properties: { osm_type: "way", osm_id: 9 }, geometry: null },
     ])
     expect(features).toEqual([])
-    expect(dropped).toEqual(["way/9"])
+    // Named rather than counted because the caller is being told to fetch it on
+    // its own — so the name has to be one `OsmGetObjects` accepts. This list
+    // read `way/9` until now, which `parseRef` throws on: `unassembled` is
+    // filled from two places, and only the one in convert.ts was usable.
+    expect(dropped).toEqual(["W9"])
+    // Against the real consumer, not against the string: a format that parses is
+    // the property that matters, and asserting the literal alone is what let the
+    // unusable one sit here.
+    expect(OsmQuery.parseRef(dropped[0]!)).toEqual({ type: "way", id: 9 })
+  })
+
+  test("a ring with no vertices is a loss, not a pair of nulls", () => {
+    // `ringCentroid` divides by zero on an empty ring and answers [NaN, NaN],
+    // which is an array and therefore truthy — so it passed as a success, and
+    // left as `[null, null]` the moment JSON.stringify saw it: invalid GeoJSON
+    // in the user's file, with nothing in the loss list to say so.
+    const { features, dropped } = OsmCentroid.normalize([
+      {
+        type: "Feature",
+        properties: { osm_type: "way", osm_id: 11 },
+        geometry: { type: "Polygon", coordinates: [[]] },
+      } as never,
+    ])
+    expect(features).toEqual([])
+    expect(dropped).toEqual(["W11"])
   })
 })
 

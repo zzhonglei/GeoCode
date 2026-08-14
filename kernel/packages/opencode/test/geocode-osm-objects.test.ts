@@ -36,6 +36,7 @@ const DOWNLOAD = (over: Partial<GeoOsm.DownloadResult> = {}): GeoOsm.DownloadRes
   duplicates: 0,
   centroidConverted: 0,
   exact: true,
+  widened: [],
   notes: [],
   ...over,
 })
