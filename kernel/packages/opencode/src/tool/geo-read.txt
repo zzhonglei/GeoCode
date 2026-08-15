@@ -12,6 +12,7 @@ Usage:
 - Read with metadata mode first; use preview mode only when you need visual inspection.
 - Use offset and limit to page through vector features: offset is the 1-based position of the first feature (default 1), limit is how many features to return (default 3, max 50). e.g. offset=4 with limit=3 reads features 4-6.
 - For GeoPackage, read with defaults first to see all available layers, then set layerIndex to inspect a specific layer.
+- Some files are containers rather than single rasters: netCDF, HDF and GRIB scenes such as MODIS, Sentinel and ERA5 hold several named variables instead of bands. Reading one returns a `subdatasets` list and a `container_warning`, and the size, pixel size, extent and CRS reported alongside them are GDAL placeholders for the container, not measurements of the data — do not use or pass them on. Read a variable by passing its `name` from that list as filePath; it is already a complete path.
 - Parameters that do not apply to the current format or mode are silently ignored.
 - Call this tool in parallel when you know there are multiple files you want to read.
 - A read reported as cancelled was stopped by the user — do not restart it on your own; ask what they want instead.

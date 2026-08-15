@@ -151,6 +151,22 @@ describe("geo tool registration", () => {
     expect(READ_DESCRIPTION).toContain("do not restart it on your own")
   })
 
+  test("the description says a container is a container, and what to do about it", () => {
+    // The one answer this tool gives that looks like an ordinary reading and is
+    // not: a size, a pixel size, an extent and a CRS, every one of them GDAL's
+    // placeholder. A reader who takes them at face value reprojects a scene
+    // that is not there. Naming the formats matters as much as the rule —
+    // MODIS, Sentinel and ERA5 are what this audience actually opens, and
+    // "netCDF container" alone does not tell them it applies.
+    expect(READ_DESCRIPTION).toContain("containers rather than single rasters")
+    for (const family of ["netCDF", "HDF", "GRIB", "MODIS", "Sentinel", "ERA5"]) {
+      expect(READ_DESCRIPTION).toContain(family)
+    }
+    expect(READ_DESCRIPTION).toContain("do not use or pass them on")
+    // The way out has to be actionable, not merely stated.
+    expect(READ_DESCRIPTION).toContain("passing its `name` from that list as filePath")
+  })
+
   test("overflow drops features, never cuts the string", () => {
     const feature = (i: number) => ({ id: i, name: "x".repeat(2_000) })
     const build = (count: number) => ({
@@ -563,6 +579,65 @@ describe("ReadGeoData, and a raster that is only a picture", () => {
         expect(result.output).not.toContain("Preview failed")
         // No picture: refusing and then handing one over would be neither.
         expect(result.attachments).toBeUndefined()
+      }),
+    )
+  }
+
+  {
+    /* A container carries the SAME five absences as the figure above, and must
+     * not get the same answer.
+     *
+     * netCDF, HDF and GRIB files of several variables — MODIS, Sentinel, ERA5 —
+     * open with no bands, a placeholder 512×512 and none of the five facts,
+     * because those belong to the variables inside. The verdict on that evidence
+     * is correctly `none`; `none` means "an ordinary image"; so the refusal
+     * above used to fire and take the variable names down with it. An ERA5 scene
+     * was answered "It is an image, not geographic data" and the payload naming
+     * the way in was discarded.
+     */
+    const SUBDATASETS = [
+      { name: 'NETCDF:"/data/era5.nc":t2m', description: "[1x48x64] 2 metre temperature" },
+      { name: 'NETCDF:"/data/era5.nc":tp', description: "[1x48x64] Total precipitation" },
+    ]
+    const { it, body } = call(
+      marked({
+        data_type: "raster",
+        driver: "netCDF",
+        georeferencing: NOTHING,
+        size: { width: 512, height: 512 },
+        band_count: 0,
+        crs_warning: "CRS is not set on the container itself. Each subdataset carries its own -- open one to see it.",
+        container_warning: "This file is a container holding 2 subdatasets rather than raster bands -- open one.",
+        subdatasets: SUBDATASETS,
+      }),
+      "metadata",
+      "container",
+    )
+    it.instance("a container of variables is answered with its variables, not refused as an image", () =>
+      Effect.gen(function* () {
+        const result = yield* body()
+        expect(result.metadata.error_code).toBeUndefined()
+        expect(result.output).not.toContain("an image, not geographic data")
+
+        // The doorknob: the name is a path the very same tool accepts, so the
+        // next call is already written for the reader.
+        expect(result.output).toContain('NETCDF:\\"/data/era5.nc\\":t2m')
+        // And what the variable IS. The name alone is a dead end for anyone who
+        // has not met the dataset, which is most of this tool's audience.
+        expect(result.output).toContain("2 metre temperature")
+
+        // Nothing is claimed about georeferencing. `none` here would be the
+        // placeholder's verdict reported as the file's.
+        expect(result.metadata.georeference).toBeUndefined()
+        expect(result.output).not.toContain('"georeferencing"')
+
+        // The count rides in the structured channel, which an interface reads
+        // instead of the prose (§9.1)…
+        expect(result.metadata.subdatasets).toBe(2)
+        expect(result.metadata.container_warning).toBeDefined()
+        // …and 512×512 does NOT, because a fiction in a field named `size` is
+        // one no warning beside it can undo.
+        expect(result.metadata.size).toBeUndefined()
       }),
     )
   }

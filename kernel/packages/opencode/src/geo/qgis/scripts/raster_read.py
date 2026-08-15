@@ -204,6 +204,39 @@ def resolve_crs(srs, existing_warning=None):
     return wkt, name, warning
 
 
+def container_subdatasets(ds):
+    """The variables a container holds, or an empty list for an ordinary raster.
+
+    A netCDF, HDF4, HDF5 or GRIB file carrying several variables is not a raster
+    at all. GDAL opens it anyway and answers with RasterCount 0, a placeholder
+    512x512 size and no georeferencing, so every fact read off it afterwards is
+    fiction. The variables themselves are named in metadata, and handing those
+    names back is the whole difference between a dead end and a next call:
+    MODIS, Sentinel and ERA5 scenes all arrive this way.
+
+    The description travels with the name because the name alone does not say
+    what the variable IS. `NETCDF:"era5.nc":t2m` means nothing to a reader who
+    has not met the dataset; GDAL's own `[1x48x64] 2 metre temperature` does.
+    Absent for some drivers, so it is optional rather than assumed.
+    """
+    if ds.RasterCount > 0:
+        return []
+    metadata = ds.GetMetadata("SUBDATASETS") or {}
+    found = []
+    index = 1
+    while True:
+        name = metadata.get(f"SUBDATASET_{index}_NAME")
+        if not name:
+            break
+        entry = {"name": name}
+        description = metadata.get(f"SUBDATASET_{index}_DESC")
+        if description:
+            entry["description"] = description
+        found.append(entry)
+        index += 1
+    return found
+
+
 def georeferencing_facts(ds):
     """The five places a raster can say where it is on the earth.
 
@@ -259,6 +292,33 @@ def read_raster(file_path):
         "coordinates -- anything spatial computed from them will be wrong."
     ) if no_geotransform else None
 
+    # A container answers every question above with fiction, and answers it in
+    # the same shape a real raster would -- which is what makes it dangerous
+    # rather than merely unhelpful. GDAL reports 512x512 because it has to
+    # report something, a unit transform because there is none to report, and no
+    # CRS because the CRS belongs to each variable rather than to the box. Left
+    # as they stand, those read as a small, unreferenced image, and the two
+    # warnings below would say the file is defective when it is simply not a
+    # raster at all.
+    subdatasets = container_subdatasets(ds)
+    container_warning = None
+    if subdatasets:
+        container_warning = (
+            f"This file is a container holding {len(subdatasets)} subdatasets rather than raster bands "
+            "-- netCDF, HDF and GRIB scenes such as MODIS, Sentinel and ERA5 are normally shaped this "
+            "way. Everything reported above about size, pixel size, extent and CRS describes GDAL's "
+            "placeholder for the container, NOT the data, and none of it should be used or passed on. "
+            "Read one of the subdatasets listed below by using its name as the file path."
+        )
+        # Both of these are TRUE of the container and MISLEADING about the file:
+        # "CRS is missing" reads as a defect to be repaired, and the transform
+        # note sends the reader looking for ground coordinates that live one
+        # level down. The container warning above says what is actually going on.
+        crs_warning = (
+            "CRS is not set on the container itself. Each subdataset carries its own -- open one to see it."
+        )
+        geotransform_warning = None
+
     # When there's no GeoTransform, applying any CRS to the extent is
     # meaningless -- extent values are pixel indices, not coordinates.
     # Force extent_wgs84=None in that case regardless of whether a CRS
@@ -287,6 +347,11 @@ def read_raster(file_path):
         "crs_name": crs_name,
         "crs_warning": crs_warning,
         "geotransform_warning": geotransform_warning,
+        "container_warning": container_warning,
+        # The doorknob. Absent for an ordinary raster, so its presence IS the
+        # answer to "is this a box or a scene" and no consumer has to infer that
+        # from a band count of zero.
+        "subdatasets": subdatasets,
         "pixel_size": {
             "x": gt[1],
             "y": gt[5],
