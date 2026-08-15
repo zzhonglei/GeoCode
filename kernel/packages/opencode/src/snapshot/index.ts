@@ -72,6 +72,31 @@ interface GitResult {
 
 type State = Omit<Interface, "init">
 
+/* --- GeoCode: which candidates may be staged, as a named rule rather than an
+ * inline filter (docs/GEOKERNEL.md §10.1 #6).
+ *
+ * Two exclusions, answering to different rule sets: `ignored` is the SOURCE
+ * repo's, `geoIgnored` is the snapshot repo's own `info/exclude`, where
+ * GEO_EXCLUDE lives.
+ *
+ * Dropping the second does NOT let geodata into the store — `git add` refuses a
+ * path its exclude file covers, on its own. What it does is make git exit
+ * non-zero, which `stage()` reports as "failed to add snapshot files" although
+ * every other file went in. On a geographic project that warning is then
+ * permanent, and the one that means something looks exactly like it.
+ *
+ * Extracted because that consequence is invisible from outside: the patch, the
+ * store and the files on disk all come out identical either way, so nothing
+ * observable could be asserted against this while it sat inline. --- */
+export function stageable(
+  all: readonly string[],
+  ignored: ReadonlySet<string>,
+  geoIgnored: ReadonlySet<string>,
+): string[] {
+  return all.filter((item) => !ignored.has(item) && !geoIgnored.has(item))
+}
+// --- /GeoCode ---
+
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly cleanup: () => Effect.Effect<void>
@@ -348,7 +373,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
             yield* drop(ignoredFiles)
           }
 
-          const allow = all.filter((item) => !ignored.has(item) && !geoIgnored.has(item))
+          const allow = stageable(all, ignored, geoIgnored) // GeoCode: named above, and tested there
           if (!allow.length) return
 
           const large = new Set(
