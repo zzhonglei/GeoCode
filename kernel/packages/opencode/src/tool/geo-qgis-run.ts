@@ -3,6 +3,7 @@ import * as Tool from "./tool"
 import { GeoQgis, GeoRuntime, GeoStatus } from "@/geo"
 import { GeoOutput } from "@/geo/runtime"
 import { GeoTool } from "./geo-tool"
+import { assertExternalDirectoryEffect } from "./external-directory"
 import { InstanceState } from "@/effect/instance-state"
 import DESCRIPTION from "./geo-qgis-run.txt"
 
@@ -231,6 +232,48 @@ export const RunQgisAlgorithmTool = Tool.define<
           ? [...hints.map((hint) => `Pre-flight: ${hint.message}`), ...(pointer ? [pointer] : [])].join("\n")
           : undefined
 
+      /* Settle where the outputs go before anything is spawned (§4.12).
+       *
+       * This is the tool that writes, and undo does not reach what it writes:
+       * geographic data is outside the checkpoint mechanism by design (§10.1
+       * #6), so an overwritten scene is gone with nothing to restore it from.
+       * The kernel numbers a taken name rather than refusing, the way OSM's
+       * writer does and the way a browser does.
+       *
+       * Only what the catalog calls a destination AND what looks like an
+       * absolute path — everything else passes through and QGIS decides. */
+      const reservation = yield* Effect.result(
+        Effect.try({
+          try: () => GeoQgis.QgisDestination.reserve(known, parsed as Record<string, unknown>),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        }),
+      )
+      if (reservation._tag === "Failure") {
+        return refuse(
+          "Output path unavailable",
+          ["A free name for an output could not be found — QGIS was NOT invoked.", "", reservation.failure.message],
+          {
+            truncated: false,
+            algorithm: params.algorithm,
+            error_code: "OutputUnavailable",
+            error: true,
+          },
+        )
+      }
+      const reserved = reservation.success
+
+      // Upstream asks this for every tool that touches a path, and this one was
+      // missing it. It only speaks when the target sits outside the working
+      // directory, which the agent's own instructions already tell it not to do.
+      for (const destination of reserved) {
+        yield* assertExternalDirectoryEffect(ctx, destination.actual, {
+          kind: destination.folder ? "directory" : "file",
+        })
+      }
+      GeoQgis.QgisDestination.ensureParents(reserved)
+      const destinations = GeoQgis.QgisDestination.apply(parsed as Record<string, unknown>, reserved)
+      const relocated = GeoQgis.QgisDestination.report(reserved)
+
       // ---- Spawn. Every path below carries an elapsed footer ----
 
       let streamed = ""
@@ -243,7 +286,9 @@ export const RunQgisAlgorithmTool = Tool.define<
         // passing the raw key through would let a call clear pre-flight and
         // then fail inside the interpreter for a reason nothing can explain.
         algorithm: known?.id ?? params.algorithm,
-        parameters: parsed as Record<string, unknown>,
+        // Destinations already re-pointed: what runs is what was reserved, so
+        // the path in the report and the path on disk cannot come apart.
+        parameters: destinations,
         idleSeconds: params.timeout,
         abort: ctx.abort,
         cwd: instance.directory,
@@ -333,6 +378,12 @@ export const RunQgisAlgorithmTool = Tool.define<
         // that far", and an absent field is the only honest way to say the
         // second.
         precheck: hints,
+        // Where every recognised output really went, moved or not. The prose
+        // below mentions only the moved ones; a frontend showing "open the
+        // result" needs all of them, and it never parses prose (§9.1).
+        ...(reserved.length > 0
+          ? { destinations: reserved.map((item) => ({ parameter: item.parameter, path: item.actual })) }
+          : {}),
         ...(result.code !== null ? { exit_code: result.code } : {}),
         ...(result.drainIncomplete ? { partial: true } : {}),
       }
@@ -367,10 +418,15 @@ export const RunQgisAlgorithmTool = Tool.define<
 
       // Four parts, in the order the old build settled on: what ran it, what we
       // warned about before it started, what it said, and how it ended.
+      //
+      // Where the data landed joins them, and only on success: a run that ended
+      // any other way wrote nothing to point at, and naming a path for it would
+      // send the caller looking for a file that is not there.
       const output = [
         header,
         precheck,
         streamed.trim() || undefined,
+        succeeded ? relocated : undefined,
         banner || undefined,
         GeoTool.elapsedFooter(elapsedMs),
       ]

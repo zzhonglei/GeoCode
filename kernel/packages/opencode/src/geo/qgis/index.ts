@@ -16,6 +16,7 @@ import type { Diagnostics, Environment } from "./types"
  * Anything importing `qgis/executor` or `qgis/reader` directly has gone around
  * the front — which is how one module ends up with two calling conventions. */
 export { QgisCatalog } from "./catalog"
+export { QgisDestination } from "./destination"
 export { QgisExecutor } from "./executor"
 export { QgisGuidance } from "./guidance"
 export { QgisReader } from "./reader"

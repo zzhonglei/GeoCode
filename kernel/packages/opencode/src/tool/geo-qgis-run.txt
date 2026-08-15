@@ -21,6 +21,8 @@ Example:
   algorithm: "native:xxxxxx"
   parameters: '{"Parameter 0": "/path/to/input.shp", "Parameter 1": 100, "Parameter 2": "/path/to/output.shp"}'
 
+Existing files are never overwritten. When an output path is already taken, the run writes to a numbered name beside it — "out.shp" becomes "out (1).shp" — and the output tells you the path it actually wrote. Use that path for the next step, not the one you asked for. This applies to the file you name; a shapefile's .dbf, .shx and .prj follow it automatically.
+
 The output ends with how the run terminated and how long it took. A run reported as cancelled was stopped by the user — do not restart it on your own; ask what they want instead.
 
 This tool needs the user's QGIS environment. When that environment is not ready, the output says exactly what is missing and who can fix it — relay that to the user instead of retrying.

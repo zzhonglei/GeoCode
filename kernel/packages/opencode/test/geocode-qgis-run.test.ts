@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import * as fs from "fs"
+import * as os from "os"
 import * as path from "path"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -63,6 +64,46 @@ const openGate = Layer.succeed(
   }),
 )
 
+/* An algorithm that WRITES, which the buffer fixture above deliberately is not.
+ *
+ * Its OUTPUT carries the shape a real destination carries: non-optional, with
+ * `TEMPORARY_OUTPUT` as the default, and `type: "sink"` — the commonest of the
+ * six the catalog uses for something the algorithm produces (§4.12). */
+const WRITER: QgisCatalog.Algorithm = {
+  id: "native:writeout",
+  name: "Write Out",
+  group: "Vector geometry",
+  description: "Writes a layer.",
+  helpText: "help",
+  parameters: [
+    { name: "INPUT", description: "in", type: "source", defaultValue: null, options: [], optional: false },
+    {
+      name: "OUTPUT",
+      description: "out",
+      type: "sink",
+      defaultValue: "TEMPORARY_OUTPUT",
+      options: [],
+      optional: false,
+    },
+  ],
+  outputs: [],
+}
+
+/** The one destination that is a directory: a tile pyramid, size not known in advance. */
+const TILER: QgisCatalog.Algorithm = {
+  ...WRITER,
+  id: "native:tiler",
+  name: "Tiler",
+  parameters: [
+    WRITER.parameters[0]!,
+    { name: "OUTPUT", description: "out", type: "folderDestination", defaultValue: null, options: [], optional: false },
+  ],
+}
+
+const CATALOG = [ALGORITHM, WRITER, TILER]
+
+const known = (id: string) => (id === "Buffer" ? ALGORITHM : CATALOG.find((algorithm) => algorithm.id === id))
+
 const stubCatalog = Layer.succeed(
   QgisCatalog.Service,
   QgisCatalog.Service.of({
@@ -70,13 +111,11 @@ const stubCatalog = Layer.succeed(
     invalidate: () => Effect.void,
     groups: () => Effect.succeed([]),
     inGroup: () => Effect.succeed([]),
-    resolve: (id) =>
-      Effect.succeed(
-        id === "native:buffer" || id === "Buffer"
-          ? { kind: "found" as const, algorithm: ALGORITHM }
-          : { kind: "missing" as const },
-      ),
-    get: (id) => Effect.succeed(id === "native:buffer" || id === "Buffer" ? ALGORITHM : undefined),
+    resolve: (id) => {
+      const found = known(id)
+      return Effect.succeed(found ? { kind: "found" as const, algorithm: found } : { kind: "missing" as const })
+    },
+    get: (id) => Effect.succeed(known(id)),
     search: () => Effect.succeed([]),
     suggest: () => Effect.succeed(["native:buffer"]),
   }),
@@ -139,6 +178,38 @@ const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, ag
           .pipe(Effect.orDie),
     })
     .pipe(Effect.timeout(5_000), Effect.exit)
+})
+
+/**
+ * Run the tool with every permission granted, recording what it asked for.
+ *
+ * The engine's VERDICT for a key belongs to geocode-geo-permissions.test.ts,
+ * which can read it without a user sitting there to answer. What can only be
+ * seen from here is the other half — that the tool asks at all, with the key
+ * and the path it should. A grant that is never requested and a request that is
+ * never granted look identical from either side alone.
+ */
+const asksOf = Effect.fnUntraced(function* (params: Record<string, unknown>) {
+  const registry = yield* ToolRegistry.Service
+  const tool = (yield* registry.all()).find((item) => item.id === "RunQgisAlgorithm")
+  expect(tool).toBeDefined()
+  const asked: { permission: string; patterns?: readonly string[] }[] = []
+  const result = yield* tool!
+    .execute(params, {
+      sessionID: SessionID.make("ses_ask_test"),
+      messageID: MessageID.make("msg_ask_test"),
+      agent: "GeoAgent",
+      abort: AbortSignal.any([]),
+      messages: [],
+      metadata: () => Effect.void,
+      ask: (req) =>
+        Effect.sync(() => {
+          asked.push({ permission: req.permission, patterns: req.patterns })
+        }),
+    })
+    .pipe(Effect.timeout(5_000), Effect.exit)
+  expect(Exit.isSuccess(result)).toBe(true)
+  return asked
 })
 
 const succeed = Effect.fnUntraced(function* (params: Record<string, unknown>) {
@@ -507,6 +578,15 @@ describe("RunQgisAlgorithm, shapes", () => {
     expect(RUN_DESCRIPTION).toContain("a 500m buffer becomes 500 degrees")
     expect(RUN_DESCRIPTION).toContain("MUST use QgisDoc")
     expect(RUN_DESCRIPTION).toContain("GeoJSON output MUST be in WGS-84")
+
+    // The one behaviour that makes the tool answer with a path the caller did
+    // not ask for. An agent that does not know this chains its next step onto
+    // the name it requested and reads a file that was never written — which is
+    // worse than the overwrite the numbering exists to prevent, because it
+    // fails silently against stale data.
+    expect(RUN_DESCRIPTION).toContain("never overwritten")
+    expect(RUN_DESCRIPTION).toContain('"out.shp" becomes "out (1).shp"')
+    expect(RUN_DESCRIPTION).toContain("Use that path for the next step")
   })
 })
 
@@ -601,4 +681,233 @@ describe("the QGIS group's shut-gate answer", () => {
     // just move the ambiguity rather than remove it.
     expect(new Set(labels).size).toBe(refused.length)
   })
+})
+
+describe("RunQgisAlgorithm, where the output lands", () => {
+  /* The tool that writes, guarded at the only point that can guard it.
+   *
+   * Undo does not reach geographic data — it is outside the checkpoint
+   * mechanism by design (§10.1 #6), so a scene written over is gone with
+   * nothing to restore it from. `qgis/destination.ts` owns the rule and is
+   * tested on its own; what is asserted HERE is the wiring, because a correct
+   * rule computed and then not passed on protects nothing at all.
+   *
+   * Outputs are placed inside the instance directory throughout, which is where
+   * the agent's own instructions put them. That is also the case worth pinning:
+   * the added `external_directory` check has to stay silent for the ordinary
+   * workflow, or every algorithm run starts costing the user a prompt.
+   */
+  const it = harness(runtimeEnding({}))
+
+  /**
+   * The parameters the runner was actually handed, decoded.
+   *
+   * `runScript` builds `["-c", <wrapped script>, <algorithm>, <parameters>]`
+   * (executor.ts), so the payload is the last argument — read that way rather
+   * than by index, since the bootstrap wrapper's shape is not this file's
+   * business.
+   */
+  const sentParameters = (): Record<string, unknown> => JSON.parse(spawned.args.at(-1)!)
+
+  it.instance("a taken output is re-pointed BEFORE the run, not merely reported after", () =>
+    Effect.gen(function* () {
+      const instance = yield* InstanceState.context
+      const asked = path.join(instance.directory, "out.shp")
+      fs.writeFileSync(asked, "the earlier result")
+
+      const result = yield* succeed({
+        algorithm: "native:writeout",
+        parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: asked }),
+      })
+
+      // THE assertion. Reporting a new path while running with the old one is
+      // exactly the failure that looks fine in every test that only reads the
+      // prose, and it destroys the file anyway.
+      const expected = path.join(instance.directory, "out (1).shp")
+      expect(sentParameters().OUTPUT).toBe(expected)
+      expect(sentParameters().OUTPUT).not.toBe(asked)
+      // And the run really did go through, so this is not passing on a refusal.
+      expect(result.metadata.error_code).toBeUndefined()
+      // Untouched on disk: the mocked runtime writes nothing, so what this can
+      // still show is that nothing on OUR side removed or rewrote it.
+      expect(fs.readFileSync(asked, "utf8")).toBe("the earlier result")
+    }),
+  )
+
+  it.instance("the caller is told the real path, and that its earlier file survived", () =>
+    Effect.gen(function* () {
+      const instance = yield* InstanceState.context
+      const asked = path.join(instance.directory, "scene.tif")
+      fs.writeFileSync(asked, "first")
+
+      const result = yield* succeed({
+        algorithm: "native:writeout",
+        parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: asked }),
+      })
+
+      expect(result.output).toContain(path.join(instance.directory, "scene (1).tif"))
+      expect(result.output).toContain("untouched")
+      // The structured channel carries every recognised output, moved or not —
+      // a frontend offering "open the result" never parses prose (§9.1).
+      expect(result.metadata.destinations).toEqual([
+        { parameter: "OUTPUT", path: path.join(instance.directory, "scene (1).tif") },
+      ])
+    }),
+  )
+
+  it.instance("an untaken output is passed through and never mentioned", () =>
+    Effect.gen(function* () {
+      // A note that fires on every run is the noise that gets the channel
+      // skipped. Nothing moved, so there is nothing to say.
+      const instance = yield* InstanceState.context
+      const asked = path.join(instance.directory, "fresh.shp")
+
+      const result = yield* succeed({
+        algorithm: "native:writeout",
+        parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: asked }),
+      })
+
+      expect(sentParameters().OUTPUT).toBe(asked)
+      expect(result.output).not.toContain("already existed")
+    }),
+  )
+
+  it.instance("an INPUT that happens to name an existing file is never re-pointed", () =>
+    Effect.gen(function* () {
+      /* The restraint half, end to end.
+       *
+       * §4.12 lets a metadata check ADVISE; re-pointing is stronger than that,
+       * so it is fenced on the catalog calling the parameter a destination.
+       * Renaming an input would send the algorithm to read a file that does not
+       * exist — a correct call broken by the thing meant to protect it. */
+      const instance = yield* InstanceState.context
+      const input = path.join(instance.directory, "in.shp")
+      fs.writeFileSync(input, "source data")
+
+      yield* succeed({
+        algorithm: "native:writeout",
+        parameters: JSON.stringify({ INPUT: input, OUTPUT: path.join(instance.directory, "out.shp") }),
+      })
+
+      expect(sentParameters().INPUT).toBe(input)
+    }),
+  )
+
+  it.instance("writing inside the working directory costs the user no prompt", () =>
+    Effect.gen(function* () {
+      /* The check added here is upstream's, which every other path-touching
+       * tool carries and this one was missing. Its worth depends entirely on
+       * staying quiet for ordinary work: the agent is instructed to put results
+       * in a task folder under the working directory, and a permission dialog
+       * on every single algorithm run would be a tax on the whole product.
+       *
+       * `qgis` is asked once and answered by the grant GeoAgent holds — that is
+       * capability isolation, not a prompt (docs/TOOLS.md §4). */
+      const instance = yield* InstanceState.context
+      const asked = yield* asksOf({
+        algorithm: "native:writeout",
+        parameters: JSON.stringify({
+          INPUT: "/data/in.shp",
+          OUTPUT: path.join(instance.directory, "results", "out.shp"),
+        }),
+      })
+      expect(asked.map((item) => item.permission)).toEqual(["qgis"])
+    }),
+  )
+
+  it.instance("writing outside the working directory goes through the same gate as every other tool", () =>
+    Effect.gen(function* () {
+      // And the guard has to be REACHED, not merely written. Removing the call
+      // leaves every other assertion in this file green, which is exactly how
+      // a guard ends up shipped and never run.
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), "geocode-outside-"))
+      try {
+        const asked = yield* asksOf({
+          algorithm: "native:writeout",
+          parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: path.join(outside, "out.shp") }),
+        })
+        expect(asked.map((item) => item.permission)).toEqual(["qgis", "external_directory"])
+        // Scoped to the directory it is going to write in, the way upstream's
+        // own callers scope it — not to the single file, or the grant would
+        // have to be given again for the next output beside it.
+        const external = asked.find((item) => item.permission === "external_directory")
+        expect(external!.patterns?.[0]).toContain(outside)
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true })
+      }
+    }),
+  )
+
+  it.instance("a folder destination is asked for as the folder, not as its parent", () =>
+    Effect.gen(function* () {
+      /* `assertExternalDirectoryEffect` scopes the grant to `dirname(target)`
+       * for a file and to `target` itself for a directory. Getting that wrong
+       * for a folder output does not fail — it silently asks for one level too
+       * high, so answering "always" hands over the PARENT of the output folder
+       * and everything else sitting in it.
+       *
+       * The eight folder algorithms are the only place this distinction exists,
+       * which is exactly why nothing else would notice it going. */
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), "geocode-folder-"))
+      const target = path.join(outside, "tiles")
+      try {
+        const asked = yield* asksOf({
+          algorithm: "native:tiler",
+          parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: target }),
+        })
+        const external = asked.find((item) => item.permission === "external_directory")
+        expect(external).toBeDefined()
+        expect(external!.patterns?.[0]).toBe(path.join(target, "*").replaceAll("\\", "/"))
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true })
+      }
+    }),
+  )
+
+  it.instance("an algorithm the catalog does not know has every parameter left alone", () =>
+    Effect.gen(function* () {
+      // No metadata, no way to tell a destination from any other string. The
+      // call still runs — §4.12 forbids blocking on what the catalog cannot
+      // express — it just runs with exactly what it was given.
+      const instance = yield* InstanceState.context
+      const asked = path.join(instance.directory, "unknown.shp")
+      fs.writeFileSync(asked, "existing")
+
+      yield* succeed({
+        algorithm: "native:notinthecatalog",
+        parameters: JSON.stringify({ OUTPUT: asked }),
+      })
+
+      expect(sentParameters().OUTPUT).toBe(asked)
+    }),
+  )
+})
+
+describe("RunQgisAlgorithm, a run that failed points at no file", () => {
+  const it = harness(runtimeEnding({ code: 1, stderr: "Error: algorithm failed" }))
+
+  it.instance("no path is claimed for a run that wrote nothing", () =>
+    Effect.gen(function* () {
+      // The re-point happens before the spawn, so the sentence exists whether
+      // or not the run succeeds. Printing it for a failure sends the caller
+      // looking for a file that was never created.
+      const instance = yield* InstanceState.context
+      const asked = path.join(instance.directory, "out.shp")
+      fs.writeFileSync(asked, "the earlier result")
+
+      const result = yield* succeed({
+        algorithm: "native:writeout",
+        parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: asked }),
+      })
+
+      expect(result.metadata.failed).toBe(true)
+      expect(result.output).not.toContain("already existed")
+      expect(result.output).not.toContain("out (1).shp")
+      // Still recorded structurally: the frontend may want to show what the run
+      // was aiming at, and it can read `failed` beside it.
+      expect(result.metadata.destinations).toEqual([
+        { parameter: "OUTPUT", path: path.join(instance.directory, "out (1).shp") },
+      ])
+    }),
+  )
 })
