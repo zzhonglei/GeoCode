@@ -67,11 +67,11 @@ describe("numbering, because a download is not disposable", () => {
     const before = fs.readFileSync(asked, "utf-8")
 
     const second = OsmOutput.write(asked, [POINT])
-    expect(second.outputs.map((entry) => entry.path)).toEqual([path.join(where, "wuhan-1.geojson")])
+    expect(second.outputs.map((entry) => entry.path)).toEqual([path.join(where, "wuhan (1).geojson")])
     // Byte for byte: the point of the whole scheme is that the earlier run
     // survives a later one, whatever the later one turned out to be.
     expect(fs.readFileSync(asked, "utf-8")).toBe(before)
-    expect(JSON.parse(fs.readFileSync(path.join(where, "wuhan-1.geojson"), "utf-8")).features).toHaveLength(1)
+    expect(JSON.parse(fs.readFileSync(path.join(where, "wuhan (1).geojson"), "utf-8")).features).toHaveLength(1)
   })
 
   test("and a third keeps counting", () => {
@@ -79,7 +79,7 @@ describe("numbering, because a download is not disposable", () => {
     const asked = path.join(where, "wuhan.geojson")
     OsmOutput.write(asked, [AREA])
     OsmOutput.write(asked, [AREA])
-    expect(OsmOutput.write(asked, [AREA]).outputs[0]!.path).toBe(path.join(where, "wuhan-2.geojson"))
+    expect(OsmOutput.write(asked, [AREA]).outputs[0]!.path).toBe(path.join(where, "wuhan (2).geojson"))
   })
 
   test("the number goes on the base, so a split run's files stay one run", () => {
@@ -89,8 +89,8 @@ describe("numbering, because a download is not disposable", () => {
 
     const second = OsmOutput.write(asked, [POINT, AREA])
     expect(second.outputs.map((entry) => entry.path).sort()).toEqual([
-      path.join(where, "mixed-1-points.geojson"),
-      path.join(where, "mixed-1-polygons.geojson"),
+      path.join(where, "mixed (1)-points.geojson"),
+      path.join(where, "mixed (1)-polygons.geojson"),
     ])
     // Never one mixed-geometry file, numbered or not (§6.7).
     expect(second.outputs.map((entry) => entry.family).sort()).toEqual(["points", "polygons"])
@@ -107,7 +107,7 @@ describe("numbering, because a download is not disposable", () => {
     expect(fs.existsSync(path.join(where, "campus-points.geojson"))).toBe(true)
 
     const second = OsmOutput.write(asked, [AREA])
-    expect(second.outputs[0]!.path).toBe(path.join(where, "campus-1.geojson"))
+    expect(second.outputs[0]!.path).toBe(path.join(where, "campus (1).geojson"))
   })
 
   test("a split run beside a split run, which is the case the other three miss", () => {
@@ -121,8 +121,8 @@ describe("numbering, because a download is not disposable", () => {
 
     const second = OsmOutput.write(asked, [POINT, AREA])
     expect(second.outputs.map((entry) => entry.path).sort()).toEqual([
-      path.join(where, "keep-1-points.geojson"),
-      path.join(where, "keep-1-polygons.geojson"),
+      path.join(where, "keep (1)-points.geojson"),
+      path.join(where, "keep (1)-polygons.geojson"),
     ])
     expect(JSON.parse(fs.readFileSync(points, "utf-8")).features).toHaveLength(1)
   })

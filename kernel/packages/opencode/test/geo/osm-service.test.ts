@@ -519,8 +519,10 @@ describe("osm download", () => {
         expect(secondPaths).not.toEqual(firstPaths)
         for (const written of [...firstPaths, ...secondPaths]) expect(fs.existsSync(written)).toBe(true)
         expect(second.features).toBe(first.features)
-        // The number lands on the base, so a split run's files stay one run.
-        expect(secondPaths.every((entry) => entry.includes("roads-1"))).toBe(true)
+        // The number lands on the base, so a split run's files stay one run —
+        // spelled the way a browser spells it, which is the shape the QGIS side
+        // answers with too (geo/naming.ts).
+        expect(secondPaths.every((entry) => entry.includes("roads (1)"))).toBe(true)
       }),
     )
   }

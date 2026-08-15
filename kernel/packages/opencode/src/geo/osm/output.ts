@@ -2,6 +2,7 @@ export * as OsmOutput from "./output"
 
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import { GeoNaming } from "../naming"
 import { OsmConvert } from "./convert"
 
 /* --- GeoCode: writing results to disk (docs/GEOKERNEL.md §6.7).
@@ -16,7 +17,10 @@ import { OsmConvert } from "./convert"
  * of somebody's time and a public service's, and the same path gets asked for
  * again all the time: to refresh, to add a field that was dropped, to retry
  * what came back short. When a name is taken the run numbers itself instead,
- * the way a browser does.
+ * the way a browser does — literally, since `geo/naming.ts` owns that shape and
+ * RunQgisAlgorithm answers with it too. This header claimed as much for a while
+ * before it was true: the numbering here read `out-1.geojson`, which is a
+ * programmer's convention and not the one the sentence promised.
  *
  * That replaces a conditional protection that used to sit above this module —
  * "do not write an empty result over a good one when something failed" — and
@@ -31,9 +35,6 @@ import { OsmConvert } from "./convert"
  * rather than losing it. --- */
 
 const FAMILIES: OsmConvert.Family[] = ["points", "lines", "polygons"]
-
-/** Enough that reaching it means something is wrong, not that someone was busy. */
-const MAX_ATTEMPTS = 10_000
 
 export interface Written {
   readonly path: string
@@ -73,21 +74,23 @@ function taken(base: string): boolean {
 
 /**
  * The first free name at or after the requested one: `x.geojson`, then
- * `x-1.geojson`, `x-2.geojson`.
+ * `x (1).geojson`, `x (2).geojson`.
+ *
+ * The shape is `geo/naming.ts`'s and is deliberately not restated here — the
+ * other tool that writes uses the same one, and a user who has seen a numbered
+ * download should not have to learn a second convention for an algorithm
+ * output. What IS this module's own is the meaning of `taken` below.
  *
  * The number goes on the BASE, so a split run's files share it and stay
- * legible as one run: `x-1-points.geojson`, `x-1-lines.geojson`.
+ * legible as one run: `x (1)-points.geojson`, `x (1)-lines.geojson`.
  */
 export function free(requested: string): string {
   const base = normalizeBase(requested)
-  if (!taken(base)) return base
-  const extension = path.extname(base)
-  const stem = path.join(path.dirname(base), path.basename(base, extension))
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const candidate = `${stem}-${attempt}${extension}`
-    if (!taken(candidate)) return candidate
-  }
-  throw new Error(`${MAX_ATTEMPTS} numbered names beside ${base} are all taken; clear some before downloading again`)
+  return GeoNaming.firstFree(
+    base,
+    taken,
+    `${GeoNaming.MAX_ATTEMPTS} numbered names beside ${base} are all taken; clear some before downloading again`,
+  )
 }
 
 export function write(

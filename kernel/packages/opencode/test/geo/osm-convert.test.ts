@@ -390,16 +390,16 @@ describe("osm output files", () => {
     // …then a run that produces only points. It lands on a numbered base, and
     // the previous run's two files are none of its business.
     const second = OsmOutput.write(base, [feature(1, "Point")])
-    expect(second.outputs[0]!.path).toBe(path.join(root, "rerun", "out-1.geojson"))
+    expect(second.outputs[0]!.path).toBe(path.join(root, "rerun", "out (1).geojson"))
     expect(fs.existsSync(points) && fs.existsSync(lines)).toBe(true)
 
     // And back the other way: a splitting run after an unsplit one.
     const third = OsmOutput.write(base, [feature(1, "Point"), feature(2, "LineString")])
     expect(third.outputs.map((o) => o.path).sort()).toEqual([
-      path.join(root, "rerun", "out-2-lines.geojson"),
-      path.join(root, "rerun", "out-2-points.geojson"),
+      path.join(root, "rerun", "out (2)-lines.geojson"),
+      path.join(root, "rerun", "out (2)-points.geojson"),
     ])
-    expect(fs.existsSync(path.join(root, "rerun", "out-1.geojson"))).toBe(true)
+    expect(fs.existsSync(path.join(root, "rerun", "out (1).geojson"))).toBe(true)
   })
 
   test("an empty list still produces a file rather than throwing", () => {
