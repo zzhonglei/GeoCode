@@ -87,10 +87,10 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
           output: params.output,
           fields: params.fields,
           abort: ctx.abort,
-          // Same shape OsmGetFeatures reports with, worded for objects. The
-          // batched query settles most of them in one step and cannot be ticked
-          // through; the per-object fallback behind it is the part that runs
-          // long, and it is exactly the part that used to be silent.
+          // Same reserved interface OsmGetFeatures uses (§6.2), worded for
+          // objects. The batched query settles most of them in one step and
+          // cannot be ticked through; the per-object fallback behind it is the
+          // part that runs long, and it is the only part a count can describe.
           onProgress: (settled, total) =>
             ctx.metadata({
               title,

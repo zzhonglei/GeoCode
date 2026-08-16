@@ -122,10 +122,12 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
           geometry: params.geometry,
           timeoutSec: params.timeout,
           abort: ctx.abort,
-          // The slowest thing this group does, and until now the quietest: a
-          // dense city can spend minutes per extent with nothing said. The
-          // kernel owns the loop, so it owns the count — this end only words it
-          // (docs/GEOKERNEL.md §6.8).
+          // Reserved for an interface that does not exist yet (§6.2). Nothing
+          // is promised a real-time view of a download, and none is being
+          // built; what this does is put the count on the live channel so that
+          // an interface which later wants one finds it already there. The
+          // kernel owns the loop, so it owns the number — this end only words
+          // it.
           //
           // `settled`, not done: an extent that failed is one nobody is waiting
           // on, and the outcome fields below say how it ended. Kept out of that

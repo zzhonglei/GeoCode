@@ -282,7 +282,14 @@ function keptFieldsOf(policy: OsmConvert.FieldPolicy): string[] {
 }
 
 /**
- * Called as a download finishes each unit of work it can count (§6.8).
+ * Called as a download finishes each unit of work it can count (§6.2).
+ *
+ * **A reserved interface, not a feature.** §6.2's judgement stands: OSM is
+ * called by a subagent, nothing here is promised a real-time view, and no
+ * interface is being built to show one. What this adds is the hook — so that an
+ * interface which later decides it wants a progress bar does not have to reopen
+ * a kernel contract to get one. Same footing as the other frontend-stage
+ * placeholders in §12.
  *
  * The tool layer cannot see this for itself. A shell tool streams because it
  * holds the process and the bytes arrive in its own hands; a download holds
