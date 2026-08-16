@@ -281,6 +281,28 @@ function keptFieldsOf(policy: OsmConvert.FieldPolicy): string[] {
   ]
 }
 
+/**
+ * Called as a download finishes each unit of work it can count (§6.8).
+ *
+ * The tool layer cannot see this for itself. A shell tool streams because it
+ * holds the process and the bytes arrive in its own hands; a download holds
+ * nothing — the loop is in here, and how far it has got is a counter only this
+ * module can read. RunQgisAlgorithm has the same shape for the same reason
+ * (`QgisExecutor.runAlgorithm`'s `onChunk`), and it is deliberately the same
+ * shape: two capabilities reporting progress two different ways is a cost paid
+ * by every reader of either.
+ *
+ * What a unit IS belongs to the caller, which knows whether it asked for
+ * extents or objects. Passing a number and a total is the whole of it.
+ *
+ * ⚠️ `settled` is not `extentsDone`. It counts the units no longer being waited
+ * on, failures included, because the question a running download is being asked
+ * is "how much longer" — and a run whose extents are failing would otherwise
+ * sit at 0 of 5 while working hard. The outcome is a separate question, and the
+ * result's own `extentsDone` / `failed` answer it when the run is over.
+ */
+export type OnProgress = (settled: number, total: number) => Effect.Effect<void>
+
 export interface Interface {
   readonly search: (input: {
     readonly query: string
@@ -307,6 +329,8 @@ export interface Interface {
     readonly output: string
     readonly fields?: readonly string[]
     readonly abort?: AbortSignal
+    /** Objects settled out of the objects asked for. */
+    readonly onProgress?: OnProgress
   }) => Effect.Effect<DownloadResult, Error>
   readonly downloadFeatures: (input: {
     readonly extents: readonly string[]
@@ -319,6 +343,8 @@ export interface Interface {
     /** Server-side seconds per extent. Raise it for dense areas (§6.3). */
     readonly timeoutSec?: number
     readonly abort?: AbortSignal
+    /** Extents settled out of the extents asked for. */
+    readonly onProgress?: OnProgress
   }) => Effect.Effect<DownloadResult, Error>
 }
 
@@ -654,6 +680,24 @@ const layer = Layer.effect(
           notes.push(`the batched fetch failed (${batched.failure.message}); falling back to one request per object`)
         }
 
+        /* Progress starts where the batch left off (§6.8).
+         *
+         * The batched query is one request for every object at once, so it
+         * cannot be ticked through — but what it settles is known the moment it
+         * returns, and that is usually most of them. The loop below is the part
+         * that can take minutes: one request per object, and it only runs when
+         * the batch fell short, which is also when there is most to wait for.
+         *
+         * The denominator is what the caller ASKED for, which is also what the
+         * result reports — an id that never parsed is already in `failed` and
+         * is as settled as anything gets. Counting only the parseable ones here
+         * would give `objects_asked` a second meaning on the live channel, and
+         * one word meaning two things is how a channel stops being read.
+         */
+        const settleable = input.ids.length
+        let settled = settleable - missing.length
+        if (input.onProgress) yield* input.onProgress(settled, settleable)
+
         // The fallback's assembly is the unreliable one, so its output is
         // checked against the nodes it was built from before being accepted.
         for (const ref of [...missing]) {
@@ -662,6 +706,10 @@ const layer = Layer.effect(
           // service problem instead of a user pressing stop.
           if (input.abort?.aborted) break
           const single = yield* Effect.result(client.osmApi(ref.type, ref.id, { abort: input.abort }))
+          // Before the branches below, all four of which leave this object
+          // settled — fetched, refused, unconvertible or partial.
+          settled += 1
+          if (input.onProgress) yield* input.onProgress(settled, settleable)
           if (single._tag === "Failure") {
             failed.push({ extent: OsmQuery.formatRef(ref), reason: single.failure.message })
             continue
@@ -738,6 +786,14 @@ const layer = Layer.effect(
         // subtracting failures: `failed` also holds the extents that never
         // parsed, and the two denominators are not the same.
         let done = 0
+        // Extents that never parsed are already in `failed`, and they are as
+        // settled as anything gets. Starting from them is what keeps the count
+        // and its total describing the same set.
+        let settled = failed.length
+        // Announced before the first request, not after it: a one-extent
+        // download would otherwise report nothing at all until it was over,
+        // and that is the shape most downloads have.
+        if (input.onProgress) yield* input.onProgress(settled, input.extents.length)
 
         for (const { spec, extent } of resolved) {
           if (input.abort?.aborted) break
@@ -755,6 +811,12 @@ const layer = Layer.effect(
               { abort: input.abort, timeoutMs: clientBudgetMs(budget) },
             ),
           )
+          // Ticked here rather than at the end of the body, because the body
+          // has a `continue` in it: an extent that failed is one nobody is
+          // waiting on any more, and skipping it would stall the count on
+          // exactly the runs that take longest.
+          settled += 1
+          if (input.onProgress) yield* input.onProgress(settled, input.extents.length)
           if (outcome._tag === "Failure") {
             failed.push({ extent: spec, reason: outcome.failure.message })
             continue

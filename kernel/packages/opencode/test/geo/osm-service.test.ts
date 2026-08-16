@@ -328,6 +328,55 @@ describe("osm download", () => {
   }
 
   {
+    /* Saying so while it runs (§6.8).
+     *
+     * A download is the slowest thing this kernel does and it used to be the
+     * quietest: the loop is in here, so how far it has got is a number only
+     * this module can read, and there was no way to hand it out. What the tool
+     * layer does with it is its own test; what is pinned here is that the
+     * counting is honest.
+     */
+    // Three extents, the middle one refused by the service.
+    const http = scriptedHttp((_url, body) =>
+      decodeURIComponent(body ?? "").includes("114.9") ? { error: new Error("connect ETIMEDOUT") } : json(elements),
+    )
+    const it = graph(http.layer)
+
+    it.live("progress counts every extent that settles, failures included, and opens before the first one", () =>
+      Effect.gen(function* () {
+        const osm = yield* GeoOsm.Service
+        const ticks: [number, number][] = []
+        const result = yield* osm.downloadFeatures({
+          extents: ["bbox:30,114,31,114.5", "bbox:30,114.9,31,115", "bbox:30,115.5,31,116"],
+          tags: ["amenity"],
+          output: path.join(root, "progress", "out.geojson"),
+          onProgress: (settled, total) => Effect.sync(() => void ticks.push([settled, total])),
+        })
+
+        // The opening tick is not decoration: most downloads ask for ONE
+        // extent, and without it that download reports nothing whatsoever
+        // until it is already over.
+        expect(ticks[0]).toEqual([0, 3])
+        expect(ticks).toEqual([
+          [0, 3],
+          [1, 3],
+          [2, 3],
+          [3, 3],
+        ])
+
+        // The middle extent failed, and it still advanced the count — a run
+        // whose extents are timing out is the one that takes longest, and it is
+        // exactly the run that must not look frozen.
+        expect(result.failed).toHaveLength(1)
+        expect(result.extentsDone).toBe(2)
+        // Which is the whole reason the two words are kept apart: the last tick
+        // and `extentsDone` disagree here, and both are right.
+        expect(ticks.at(-1)![0]).not.toBe(result.extentsDone)
+      }),
+    )
+  }
+
+  {
     const http = scriptedHttp(() => json(elements))
     const it = graph(http.layer)
 
@@ -589,6 +638,60 @@ describe("osm download", () => {
         // fallback's troubles as "those objects are a problem" (§6.3).
         expect(result.incomplete).toEqual([{ extent: "the batched fetch", remark: "runtime error: Query timed out" }])
         expect(result.features).toBe(1)
+      }),
+    )
+  }
+
+  {
+    /* The batch settles most of them at once; the fallback is what runs long.
+     *
+     * One request per object, and it only happens when the batched query fell
+     * short — which is also when there is most left to wait for. Progress that
+     * started from zero here would report a step backwards after the batch.
+     */
+    const http = scriptedHttp((url) =>
+      url.includes("openstreetmap.org/api")
+        ? json({ elements: [elements.elements[0]] })
+        : json({ elements: [elements.elements[1]] }),
+    )
+    const it = graph(http.layer)
+
+    it.live("progress picks up where the batched fetch left off", () =>
+      Effect.gen(function* () {
+        const osm = yield* GeoOsm.Service
+        const ticks: [number, number][] = []
+        const result = yield* osm.downloadObjects({
+          ids: ["N1", "W2"],
+          output: path.join(root, "objprogress", "out.geojson"),
+          onProgress: (settled, total) => Effect.sync(() => void ticks.push([settled, total])),
+        })
+        // The batch answered for one of the two, so the first thing the caller
+        // hears is "1 of 2" — not "0 of 2", which would be a lie about work
+        // already finished, and not a jump that looks like a restart.
+        expect(ticks).toEqual([
+          [1, 2],
+          [2, 2],
+        ])
+        expect(result.features).toBe(2)
+      }),
+    )
+
+    it.live("an id that never parsed is counted in the denominator, the way the result counts it", () =>
+      Effect.gen(function* () {
+        // The total on the live channel and the total in the result are the
+        // same word — `objects_asked` — so they had better be the same number.
+        // Counting only the parseable ids here would have given it a second
+        // meaning that only shows up on a call with a typo in it.
+        const osm = yield* GeoOsm.Service
+        const ticks: [number, number][] = []
+        const result = yield* osm.downloadObjects({
+          ids: ["W2", "not-an-id"],
+          output: path.join(root, "objdenominator", "out.geojson"),
+          onProgress: (settled, total) => Effect.sync(() => void ticks.push([settled, total])),
+        })
+        expect(ticks.at(-1)).toEqual([2, 2])
+        expect(result.extentsAsked).toBe(2)
+        for (const [, total] of ticks) expect(total).toBe(result.extentsAsked)
       }),
     )
   }

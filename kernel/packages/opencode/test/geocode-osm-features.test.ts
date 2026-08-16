@@ -95,6 +95,27 @@ const succeed = Effect.fnUntraced(function* (params: Record<string, unknown>) {
   })
 })
 
+/** Runs the tool and keeps every live metadata push it made along the way. */
+const pushesOf = Effect.fnUntraced(function* (params: Record<string, unknown>) {
+  const registry = yield* ToolRegistry.Service
+  const tool = (yield* registry.all()).find((item) => item.id === "OsmGetFeatures")
+  expect(tool).toBeDefined()
+  const pushed: Record<string, unknown>[] = []
+  const result = yield* tool!.execute(params, {
+    sessionID: SessionID.make("ses_feat_progress"),
+    messageID: MessageID.make("msg_feat_progress"),
+    agent: "GeoAgent",
+    abort: AbortSignal.any([]),
+    messages: [],
+    metadata: (update) =>
+      Effect.sync(() => {
+        pushed.push((update as { metadata: Record<string, unknown> }).metadata)
+      }),
+    ask: () => Effect.void,
+  })
+  return { pushed, result }
+})
+
 afterEach(async () => {
   await disposeAllInstances()
 })
@@ -441,4 +462,71 @@ describe("OsmGetFeatures, a shortfall that does not look like one", () => {
       }),
     { timeout: 20_000 },
   )
+})
+
+describe("OsmGetFeatures, saying so while it runs", () => {
+  /* The slowest thing the OSM group does, and until now the quietest.
+   *
+   * A dense city can spend minutes on a single extent, and this tool said
+   * nothing at all until the whole download was over — the one call whose
+   * caller most needs to know it is still alive. RunQgisAlgorithm solved the
+   * same problem the same way (`onChunk`), which is why the shape here is not a
+   * new invention (docs/GEOKERNEL.md §6.8).
+   */
+
+  it_progress()
+  function it_progress() {
+    /** A kernel that reports its way through five extents, the third failing. */
+    const reporting = osmService({
+      downloadFeatures: (input) =>
+        Effect.gen(function* () {
+          // Typed here rather than left to the `any` the mock helper takes:
+          // yielding an untyped effect widens this generator's error channel to
+          // `unknown`, and the mock no longer satisfies the service.
+          const report = input.onProgress as GeoOsm.OnProgress
+          // Exactly what the kernel does: an opening tick so a one-extent
+          // download is not silent, then one per extent as it settles.
+          yield* report(0, 5)
+          for (let settled = 1; settled <= 5; settled++) yield* report(settled, 5)
+          return DOWNLOAD({ extentsDone: 4, extentsAsked: 5, failed: [{ extent: "bbox:3", reason: "timeout" }] })
+        }),
+    })
+
+    harness(reporting).instance("the count reaches the caller while the download is still running", () =>
+      Effect.gen(function* () {
+        const { pushed } = yield* pushesOf({ ...ARGS, extents: ["a", "b", "c", "d", "e"] })
+
+        // THE assertion: the callback exists, is handed over, and what it
+        // carries arrives on the live channel. A kernel counting into a
+        // callback nobody passed is the failure this cannot see from either
+        // side alone.
+        expect(pushed.map((entry) => entry.extents_settled)).toEqual([0, 1, 2, 3, 4, 5])
+        for (const entry of pushed) expect(entry.extents_asked).toBe(5)
+
+        // Opening tick included: a one-extent download is the common shape, and
+        // without it that download reports nothing until it is over.
+        expect(pushed[0]!.extents_settled).toBe(0)
+
+        // Never the generic head-truncation, which keeps the head and drops the
+        // tail — where a download's ending lives (docs/TOOLS.md §5).
+        for (const entry of pushed) expect(entry.truncated).toBe(false)
+      }),
+    )
+
+    harness(reporting).instance("progress counts what is settled, and the result still says what happened", () =>
+      Effect.gen(function* () {
+        // The two vocabularies stay apart on purpose. `extents_settled` answers
+        // "how much longer" and counts the failed extent; `extents_done`
+        // answers "what did I get" and does not. One word doing both is how a
+        // channel stops being read.
+        const { pushed, result } = yield* pushesOf({ ...ARGS, extents: ["a", "b", "c", "d", "e"] })
+        expect(pushed.at(-1)!.extents_settled).toBe(5)
+        expect(result.metadata.extents_done).toBe(4)
+        expect(result.metadata.extents_failed).toBe(1)
+        // And the live pushes never claim the outcome fields, which would let a
+        // reader take a mid-run number for a final one.
+        for (const entry of pushed) expect(entry.extents_done).toBeUndefined()
+      }),
+    )
+  }
 })

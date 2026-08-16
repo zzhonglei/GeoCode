@@ -94,6 +94,27 @@ const succeed = Effect.fnUntraced(function* (params: Record<string, unknown>) {
   })
 })
 
+/** Runs the tool and keeps every live metadata push it made along the way. */
+const pushesOf = Effect.fnUntraced(function* (params: Record<string, unknown>) {
+  const registry = yield* ToolRegistry.Service
+  const tool = (yield* registry.all()).find((item) => item.id === "OsmGetObjects")
+  expect(tool).toBeDefined()
+  const pushed: Record<string, unknown>[] = []
+  yield* tool!.execute(params, {
+    sessionID: SessionID.make("ses_obj_progress"),
+    messageID: MessageID.make("msg_obj_progress"),
+    agent: "GeoAgent",
+    abort: AbortSignal.any([]),
+    messages: [],
+    metadata: (update) =>
+      Effect.sync(() => {
+        pushed.push((update as { metadata: Record<string, unknown> }).metadata)
+      }),
+    ask: () => Effect.void,
+  })
+  return pushed
+})
+
 afterEach(async () => {
   await disposeAllInstances()
 })
@@ -364,4 +385,43 @@ describe("OsmGetObjects, the description", () => {
   test("it warns about the wait", () => {
     expect(OBJECTS_DESCRIPTION).toContain("TIMING")
   })
+})
+
+describe("OsmGetObjects, saying so while it runs", () => {
+  /* The description already warns the reader this one is slow ("TIMING"); until
+   * now that warning was all they got. The batched query settles most objects
+   * in a single step and cannot be ticked through, but the per-object fallback
+   * behind it runs one request at a time — and that is precisely the path taken
+   * when the batch fell short, which is when there is most left to wait for
+   * (docs/GEOKERNEL.md §6.8).
+   */
+  harness(
+    osmService({
+      downloadObjects: (input) =>
+        Effect.gen(function* () {
+          // Typed here rather than left to the `any` the mock helper takes:
+          // yielding an untyped effect widens this generator's error channel to
+          // `unknown`, and the mock no longer satisfies the service.
+          const report = input.onProgress as GeoOsm.OnProgress
+          // What the kernel reports: the batch settled two of four, then the
+          // fallback works through the rest.
+          yield* report(2, 4)
+          yield* report(3, 4)
+          yield* report(4, 4)
+          return DOWNLOAD()
+        }),
+    }),
+  ).instance("the count reaches the caller, and it starts where the batch left off", () =>
+    Effect.gen(function* () {
+      const pushed = yield* pushesOf({ ids: ["W2", "N1", "R7", "W9"], output: "/data/objects.geojson" })
+
+      // The wiring, which neither side can see alone: a kernel counting into a
+      // callback the tool never passed looks correct from both ends.
+      expect(pushed.map((entry) => entry.objects_settled)).toEqual([2, 3, 4])
+      for (const entry of pushed) expect(entry.objects_asked).toBe(4)
+      // Same word as OsmGetFeatures uses, worded for objects: two capabilities
+      // reporting progress two different ways is a cost paid by every reader.
+      for (const entry of pushed) expect(entry.truncated).toBe(false)
+    }),
+  )
 })

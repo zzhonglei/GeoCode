@@ -122,6 +122,20 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
           geometry: params.geometry,
           timeoutSec: params.timeout,
           abort: ctx.abort,
+          // The slowest thing this group does, and until now the quietest: a
+          // dense city can spend minutes per extent with nothing said. The
+          // kernel owns the loop, so it owns the count — this end only words it
+          // (docs/GEOKERNEL.md §6.8).
+          //
+          // `settled`, not done: an extent that failed is one nobody is waiting
+          // on, and the outcome fields below say how it ended. Kept out of that
+          // vocabulary on purpose — `extents_done` means answered, and one word
+          // meaning two things is how a channel stops being read.
+          onProgress: (settled, total) =>
+            ctx.metadata({
+              title,
+              metadata: { truncated: false, extents_settled: settled, extents_asked: total },
+            }),
         }),
       )
       // Whole-call mistakes only — more extents than one call takes, a tag or
