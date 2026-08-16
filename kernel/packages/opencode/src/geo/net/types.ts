@@ -69,7 +69,11 @@ export type Reachability =
       readonly detail?: string
       /** Paths actually attempted this round. */
       readonly tried?: readonly RouteId[]
-      /** Declarations that could not be attempted at all, credentials stripped. */
+      /**
+       * Declarations that could not be attempted at all, named the same way
+       * `routeId` names a route: `socks5:127.0.0.1:1080`. Built from parsed
+       * fields rather than redacted, so a credential cannot be present.
+       */
       readonly skipped?: readonly string[]
     }
 

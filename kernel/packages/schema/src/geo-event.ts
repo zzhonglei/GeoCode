@@ -184,11 +184,12 @@ export type GeeSetup = typeof GeeSetup.Type
 /**
  * Read from Net, never computed here (§8.3). `route` identifies the path in use.
  *
- * `unreachable` carries the two facts that make it actionable, and neither can
- * hold a credential: `tried` is route identifiers (`direct`,
- * `proxy:host:port`), `skipped` is declarations that could not be used at all,
- * redacted at the boundary. The underlying error stays inside — it is
- * diagnostics, and the wording a user reads is one sentence either way (§3.3).
+ * `unreachable` carries the two facts that make it actionable, and neither CAN
+ * hold a credential — both are identifiers assembled from parsed fields, not
+ * text that was cleaned: `tried` is `direct` / `proxy:host:port`, `skipped` is
+ * `socks5:host:port` for a declaration nothing could be attempted with. The
+ * underlying error stays inside — it is diagnostics, and the wording a user
+ * reads is one sentence either way (§3.3).
  *
  * `skipped` exists for one case that had no way of being seen at all: a SOCKS
  * declaration is deliberately refused (§12), and the user whose network only

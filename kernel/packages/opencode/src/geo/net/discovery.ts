@@ -1,7 +1,6 @@
 export * as NetDiscovery from "./discovery"
 
 import { NetProbe } from "./probe"
-import { NetRedact } from "./redact"
 import { NetTunnel } from "./tunnel"
 import type { Target } from "./types"
 
@@ -53,7 +52,57 @@ export function normalize(value: string | undefined): string | undefined {
 }
 
 /**
- * Declarations that were found and could not be used, credentials stripped.
+ * A declaration named the way `routeId` names a route: scheme, host, port.
+ *
+ * **The password is never taken, rather than taken and wiped.** Redaction is a
+ * safety net and this is a credential path, so the value that leaves is built
+ * from parsed fields — a hostname and a port cannot carry a `user:password@`
+ * even in principle. The raw declaration does not go anywhere.
+ *
+ * THREE ways a value fails to yield a host, and all of them end the same. The
+ * first is obvious and the other two are not:
+ *   - it does not parse at all (`socks5://user:pa/ss@host` — a `/` in the
+ *     PASSWORD is enough for the URL parser to give up)
+ *   - it parses and the host comes back EMPTY (`socks5:host:1080`, with no
+ *     `//`) — nothing is thrown for that one, so a bare try/catch would let a
+ *     useless `scheme::` through
+ *   - it parses and the host comes back WRONG. A `/` in the USERNAME ends the
+ *     authority early, so `socks5://al/ice:secret@10.0.0.9:1080` yields the
+ *     host `al` — half a username, published as if it were a machine. Nothing
+ *     is thrown and the host is not empty; the only tell is that the value
+ *     plainly has an `@` while the parse found no user at all.
+ * All three answer `scheme:unparseable`, the direction `routeId` fails in too.
+ */
+function identify(value: string): string {
+  // Read off the front of the string, so it survives the cases the parser
+  // rejects. It stops at the first colon and can never reach the userinfo.
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(value)?.[1]?.toLowerCase() ?? "socks"
+  let host = ""
+  let port = ""
+  let user = ""
+  try {
+    const parsed = new URL(value)
+    host = parsed.hostname
+    port = parsed.port
+    user = parsed.username
+  } catch {
+    // Handled below: an unusable host is the single condition, however it arose.
+  }
+  // Credentials the parser did not see mean it read the string as something
+  // other than what was written, and whatever it calls the host then comes from
+  // the wrong side of the `@`. Conservative on purpose: a proxy URL carrying an
+  // `@` anywhere else is odd, and refusing to name it costs a reader nothing
+  // they cannot get from their own configuration.
+  if (value.includes("@") && !user) return `${scheme}:unparseable`
+  if (!host) return `${scheme}:unparseable`
+  // A port the user did not write is not invented. Saying which port is the
+  // whole value of this to a reader recognising their own configuration, and a
+  // guessed 1080 would be a fact we made up.
+  return port ? `${scheme}:${host}:${port}` : `${scheme}:${host}`
+}
+
+/**
+ * Proxy declarations that were found and could not be used.
  *
  * Skipping a SOCKS proxy is the right call — the runtimes underneath need an
  * extra dependency to speak it and raise without one, which would break users
@@ -65,10 +114,6 @@ export function normalize(value: string | undefined): string | undefined {
  * Reported rather than acted on. Nothing here changes what gets tried; it only
  * stops the reason from being invisible, which is the whole of what §12 left
  * open.
- *
- * Redacted at this exit like every other (`redact.ts` — three exits, and
- * missing one is the same as not doing it at all), because `ALL_PROXY` carrying
- * `user:password@` is ordinary.
  */
 export function skipped(env: NodeJS.ProcessEnv = process.env): string[] {
   const found: string[] = []
@@ -77,8 +122,9 @@ export function skipped(env: NodeJS.ProcessEnv = process.env): string[] {
     // The same test `normalize` refuses on, so the two cannot disagree about
     // what was skipped and why.
     if (!value || !/^socks/i.test(value)) continue
-    const safe = NetRedact.url(value)
-    if (!found.includes(safe)) found.push(safe)
+    const id = identify(value)
+    // One declaration exported under three names is one thing to report.
+    if (!found.includes(id)) found.push(id)
   }
   return found
 }

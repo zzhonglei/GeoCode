@@ -81,9 +81,13 @@ describe("net service", () => {
           // have a proxy listening on one of the known ports, and that would be
           // a correct extra entry rather than a failure.
           expect(settled.tried).toContain("direct")
-          // And the declaration that could not be attempted, with the password
-          // gone — this value goes to the interface.
-          expect(settled.skipped).toEqual(["socks5://127.0.0.1:1080"])
+          // And the declaration that could not be attempted, named the way a
+          // route is named. The password is not in it because it was never
+          // taken: this value is assembled from parsed fields, so it is the
+          // whole string that reaches the interface and there is no cleaning
+          // step that could have been skipped.
+          expect(settled.skipped).toEqual(["socks5:127.0.0.1:1080"])
+          for (const item of settled.skipped ?? []) expect(item).not.toContain("hunter2")
         } finally {
           if (before === undefined) delete process.env.ALL_PROXY
           else process.env.ALL_PROXY = before

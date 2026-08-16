@@ -161,7 +161,7 @@ describe("net path resolution", () => {
     expect(NetDiscovery.declared({ HTTPS_PROXY: "127.0.0.1:7890" })).toBe("http://127.0.0.1:7890")
   })
 
-  test("and skipping it is now said out loud, with the credentials taken off", () => {
+  test("and skipping it is now said out loud, named the way a route is named", () => {
     /* Skipping is the right call; doing it in silence was not.
      *
      * A user whose network only works through that proxy was told "cannot be
@@ -169,24 +169,67 @@ describe("net path resolution", () => {
      * gets — while the one fact explaining it was known here and dropped. §12
      * recorded the skip as a tradeoff and left this half open.
      */
-    expect(NetDiscovery.skipped({ ALL_PROXY: "socks5://127.0.0.1:1080" })).toEqual(["socks5://127.0.0.1:1080"])
+    expect(NetDiscovery.skipped({ ALL_PROXY: "socks5://127.0.0.1:1080" })).toEqual(["socks5:127.0.0.1:1080"])
     // Nothing to say when nothing was skipped: a field that is always present
     // is one an interface has to render around forever.
     expect(NetDiscovery.skipped({ HTTPS_PROXY: "http://127.0.0.1:7890" })).toEqual([])
     expect(NetDiscovery.skipped({})).toEqual([])
 
-    // THE assertion. This is a FOURTH outward exit, and redact.ts says missing
-    // any one of them is the same as not doing it at all — `ALL_PROXY` carrying
-    // `user:password@` is ordinary, and this value is published to the
-    // interface.
-    const secret = NetDiscovery.skipped({ ALL_PROXY: "socks5://alice:hunter2@10.0.0.9:1080" })
-    expect(secret).toHaveLength(1)
-    expect(secret[0]).not.toContain("hunter2")
-    expect(secret[0]).not.toContain("alice")
-    // Host and port survive, which is the whole reason a user is told at all —
-    // they have to recognise their own configuration in it.
-    expect(secret[0]).toContain("10.0.0.9:1080")
-    expect(secret[0]).toBe(NetRedact.url("socks5://alice:hunter2@10.0.0.9:1080"))
+    // The scheme is kept because it is the REASON — "we refused this because it
+    // is SOCKS" — and the host and port because a user has to recognise their
+    // own configuration in it.
+    expect(NetDiscovery.skipped({ ALL_PROXY: "SOCKS5H://proxy.example.com:1080" })).toEqual([
+      "socks5h:proxy.example.com:1080",
+    ])
+    // A port nobody wrote is not invented. 1080 is a convention, not a fact
+    // about this user's declaration.
+    expect(NetDiscovery.skipped({ ALL_PROXY: "socks5://127.0.0.1" })).toEqual(["socks5:127.0.0.1"])
+    expect(NetDiscovery.skipped({ ALL_PROXY: "socks5://[::1]:1080" })).toEqual(["socks5:[::1]:1080"])
+
+    // No credentials at all, and still no host to name: without the `//` the
+    // parser puts the whole thing in the path and reports an empty host. The
+    // check for that is separate from the credential one — this is the only
+    // case that reaches it, and without it the answer would be a bare
+    // `socks5:` that says nothing and looks like it does.
+    expect(NetDiscovery.skipped({ ALL_PROXY: "socks5:127.0.0.1:1080" })).toEqual(["socks5:unparseable"])
+    expect(NetDiscovery.skipped({ ALL_PROXY: "socks5://" })).toEqual(["socks5:unparseable"])
+  })
+
+  test("no credential can be present, because none is ever taken", () => {
+    /* THE assertion of this fix, and the one the first attempt failed.
+     *
+     * That attempt published the declaration itself and leaned on `redact.url`
+     * to wipe it — which FAILS OPEN, returning the value untouched, for exactly
+     * the inputs a URL parser chokes on. The tripwire then used the password
+     * `hunter2`, the one shape that happens to survive parsing, so it passed.
+     *
+     * The value published now is ASSEMBLED from parsed fields, so there is no
+     * cleaning step to get wrong: a hostname and a port cannot carry a
+     * `user:password@` even in principle. These four are the shapes that broke
+     * the old one, plus the ordinary one it handled.
+     */
+    const secrets = [
+      ["socks5://alice:hunter2@10.0.0.9:1080", "socks5:10.0.0.9:1080"],
+      // A `/` in the password: `new URL` throws outright.
+      ["socks5://alice:pa/ss@10.0.0.9:1080", "socks5:unparseable"],
+      // …and in the username.
+      ["socks5://al/ice:secret@10.0.0.9:1080", "socks5:unparseable"],
+      // No `//` at all. This one does NOT throw — it parses with an EMPTY host,
+      // so a bare try/catch would let `socks5::` through and call it safe.
+      ["socks5:alice:hunter2@10.0.0.9:1080", "socks5:unparseable"],
+      ["socks5://alice:p@ssw0rd@10.0.0.9:1080", "socks5:10.0.0.9:1080"],
+    ] as const
+
+    for (const [declared, expected] of secrets) {
+      const published = NetDiscovery.skipped({ ALL_PROXY: declared })
+      expect(published).toEqual([expected])
+      // Belt and braces: whatever the shape, nothing secret survives.
+      for (const item of published) {
+        for (const secret of ["hunter2", "secret", "pa/ss", "p@ssw0rd", "alice", "al/ice"]) {
+          expect(item).not.toContain(secret)
+        }
+      }
+    }
   })
 
   test("the same value is never reported twice, however many variables carry it", () => {
@@ -194,7 +237,7 @@ describe("net path resolution", () => {
     // identical lines in a status panel reads as three problems.
     expect(
       NetDiscovery.skipped({ ALL_PROXY: "socks5://127.0.0.1:1080", all_proxy: "socks5://127.0.0.1:1080" }),
-    ).toEqual(["socks5://127.0.0.1:1080"])
+    ).toEqual(["socks5:127.0.0.1:1080"])
   })
 })
 
