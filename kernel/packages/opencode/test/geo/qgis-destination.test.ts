@@ -88,6 +88,34 @@ describe("numbering", () => {
     fs.writeFileSync(asked, "x")
     expect(QgisDestination.free(asked)).toBe(path.join(at, "report (1)"))
   })
+
+  test("a name QGIS would grow into an existing file counts as taken", () => {
+    // Measured on 3.44: `native:buffer` with OUTPUT=/x/noext writes noext.gpkg,
+    // and with OUTPUT=/x/weird.xyz writes weird.xyz.gpkg — QGIS appends its own
+    // extension to anything it does not recognise. Asking `existsSync` about
+    // the literal string therefore answers "free" for a name that is about to
+    // be written over, which is the single outcome this module exists to
+    // prevent and the one no test was making.
+    const at = dir()
+    fs.writeFileSync(path.join(at, "noext.gpkg"), "previous run")
+    expect(QgisDestination.free(path.join(at, "noext"))).toBe(path.join(at, "noext (1)"))
+
+    // The number still goes before the extension, unrecognised or not — the
+    // rule above about a format staying readable does not get an exception for
+    // a name QGIS is going to add to anyway.
+    fs.writeFileSync(path.join(at, "weird.xyz.gpkg"), "previous run")
+    expect(QgisDestination.free(path.join(at, "weird.xyz"))).toBe(path.join(at, "weird (1).xyz"))
+  })
+
+  test("a longer name that merely starts the same way is not taken", () => {
+    // The rule is "a name plus an extension", not "a name plus anything". A
+    // dataset called `census_2020.gpkg` says nothing about whether `census` is
+    // free, and numbering away from a name nothing occupies would leave the
+    // caller chasing paths it never asked for.
+    const at = dir()
+    fs.writeFileSync(path.join(at, "census_2020.gpkg"), "unrelated")
+    expect(QgisDestination.free(path.join(at, "census"))).toBe(path.join(at, "census"))
+  })
 })
 
 describe("what counts as a destination", () => {
@@ -167,6 +195,136 @@ describe("what counts as a destination", () => {
       ["SIDECAR", freeName],
     ])
   })
+
+  test("two destinations of one call cannot be sent to the same place", () => {
+    // The collision this module can cause by itself: OUTPUT is moved off a
+    // taken name onto `out (1).shp`, and `out (1).shp` is exactly what SIDECAR
+    // was asked for. Both then write to one path — the same overwrite as any
+    // other, only arranged here rather than by the caller — and the report
+    // would describe it as a rescue.
+    const at = dir()
+    fs.writeFileSync(path.join(at, "out.shp"), "x")
+    const reserved = QgisDestination.reserve(
+      algorithm(param("OUTPUT", "sink"), param("SIDECAR", "fileDestination")),
+      { OUTPUT: path.join(at, "out.shp"), SIDECAR: path.join(at, "out (1).shp") },
+    )
+    expect(reserved[0]!.actual).toBe(path.join(at, "out (1).shp"))
+    // The property, not the spelling: what matters is that the second output
+    // was moved off the first one's name, not which free name it landed on.
+    expect(reserved[1]!.actual).not.toBe(reserved[0]!.actual)
+    expect(fs.existsSync(reserved[1]!.actual)).toBe(false)
+  })
+})
+
+describe("an algorithm that owns the question itself", () => {
+  // Measured on the same 3.44 registry: 366 algorithms declare a destination,
+  // 622 distinct parameter names between them, and exactly two of those names
+  // decide what happens to a pre-existing file.
+  const OWNED = ["OVERWRITE", "ACTION_ON_EXISTING_FILE"]
+
+  test("its destination is left exactly where it was asked for", () => {
+    // `native:package` appends layers to a GeoPackage and `native:savefeatures`
+    // appends features to a file: for both, the target ALREADY EXISTING is the
+    // point of the call. Numbering it answers a correct call by appending to a
+    // brand new empty file, leaving the user's data untouched, and reporting
+    // success — the silently wrong result §6.3 rates worse than a failure.
+    for (const control of OWNED) {
+      const at = dir()
+      const asked = path.join(at, "atlas.gpkg")
+      fs.writeFileSync(asked, "the user's database")
+      const reserved = QgisDestination.reserve(algorithm(param("OUTPUT", "fileDestination"), param(control, "enum")), {
+        OUTPUT: asked,
+      })
+      expect(reserved).toHaveLength(1)
+      expect(reserved[0]!.actual).toBe(asked)
+      expect(reserved[0]!.governedBy).toBe(control)
+    }
+  })
+
+  test("and the caller is told, because this is where the promise stops", () => {
+    // The one case in which `geo-qgis-run.txt`'s "not overwritten" does not
+    // hold. Standing aside silently would leave the caller reading protection
+    // into a run that has none, over the very data undo cannot bring back.
+    const at = dir()
+    const asked = path.join(at, "atlas.gpkg")
+    fs.writeFileSync(asked, "the user's database")
+    const line = QgisDestination.report(
+      QgisDestination.reserve(algorithm(param("OUTPUT", "fileDestination"), param("OVERWRITE", "boolean")), {
+        OUTPUT: asked,
+      }),
+    )
+    expect(line).toContain(asked)
+    expect(line).toContain("OVERWRITE")
+    // Nothing at all is said when the target was not there: the promise is
+    // whole in that case, and a note that fires anyway is noise.
+    expect(
+      QgisDestination.report(
+        QgisDestination.reserve(algorithm(param("OUTPUT", "fileDestination"), param("OVERWRITE", "boolean")), {
+          OUTPUT: path.join(at, "fresh.gpkg"),
+        }),
+      ),
+    ).toBeUndefined()
+  })
+
+  test("a parameter that only sounds like one does not switch the protection off", () => {
+    // Both of these are real, and both came back from the same sweep that found
+    // the two above. `GEOREFERENCE` is "Append georeference information" onto a
+    // PDF layout; `gdal:proximity`'s `REPLACE` is a pixel value. A keyword test
+    // at run time would have matched them and quietly disarmed the numbering
+    // for algorithms that need it — which is why the list is measured.
+    for (const lookalike of ["GEOREFERENCE", "REPLACE", "UPDATE_EXISTING", "APPEND_MODE"]) {
+      const at = dir()
+      const asked = path.join(at, "out.shp")
+      fs.writeFileSync(asked, "x")
+      const reserved = QgisDestination.reserve(
+        algorithm(param("OUTPUT", "sink"), param(lookalike, "boolean")),
+        { OUTPUT: asked },
+      )
+      expect(reserved[0]!.actual).toBe(path.join(at, "out (1).shp"))
+      expect(reserved[0]!.governedBy).toBeUndefined()
+    }
+  })
+})
+
+describe("where the output really landed", () => {
+  test("a file QGIS named for itself is resolved before it is reported", () => {
+    // `free()` keeps the data safe without knowing what QGIS will write, but
+    // the report has to name a file that is THERE: the caller is told to use
+    // that path for its next step, and `/x/result` is not openable when the
+    // run produced `/x/result.gpkg`.
+    const at = dir()
+    const asked = path.join(at, "result")
+    const reserved = QgisDestination.reserve(algorithm(param("OUTPUT", "sink")), { OUTPUT: asked })
+    expect(reserved[0]!.actual).toBe(asked)
+
+    fs.writeFileSync(path.join(at, "result.gpkg"), "what QGIS wrote")
+    const settled = QgisDestination.settle(reserved)
+    expect(settled[0]!.landed).toBe(path.join(at, "result.gpkg"))
+    expect(QgisDestination.report(settled)).toContain(path.join(at, "result.gpkg"))
+  })
+
+  test("an output that landed where it was sent is left alone and says nothing", () => {
+    const at = dir()
+    const asked = path.join(at, "out.shp")
+    const reserved = QgisDestination.reserve(algorithm(param("OUTPUT", "sink")), { OUTPUT: asked })
+    fs.writeFileSync(asked, "exactly where it was sent")
+    const settled = QgisDestination.settle(reserved)
+    expect(settled[0]!.landed).toBeUndefined()
+    expect(QgisDestination.report(settled)).toBeUndefined()
+  })
+
+  test("several candidates mean nobody is named", () => {
+    // A driver that wrote a family, or left a sidecar beside its output. There
+    // is no way to tell which one the caller should open next, and naming one
+    // of them would be a guess presented as a fact — `actual` is at least what
+    // was asked for.
+    const at = dir()
+    const asked = path.join(at, "family")
+    const reserved = QgisDestination.reserve(algorithm(param("OUTPUT", "sink")), { OUTPUT: asked })
+    fs.writeFileSync(path.join(at, "family.shp"), "x")
+    fs.writeFileSync(path.join(at, "family.dbf"), "x")
+    expect(QgisDestination.settle(reserved)[0]!.landed).toBeUndefined()
+  })
 })
 
 describe("what the caller is handed back", () => {
@@ -190,8 +348,12 @@ describe("what the caller is handed back", () => {
 
   test("the report names the moved paths and says nothing when none moved", () => {
     // A note that fires on every run is the kind of noise that gets the whole
-    // channel skipped — the same reasoning §6.4 applies to an always-true
-    // warning. An output that landed where it was asked for needs no sentence.
+    // channel skipped. An output that landed where it was asked for needs no
+    // sentence. (This used to cite §6.4 for the reasoning; §6.4 is the spatial
+    // extent contract and says nothing of the kind. The argument stands on its
+    // own, and a citation to a section that does not carry it is worth less
+    // than none — it sends the next reader looking for an authority that is
+    // not there.)
     const at = dir()
     const taken = path.join(at, "taken.shp")
     fs.writeFileSync(taken, "x")

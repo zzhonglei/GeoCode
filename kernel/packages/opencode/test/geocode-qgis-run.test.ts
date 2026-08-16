@@ -100,7 +100,30 @@ const TILER: QgisCatalog.Algorithm = {
   ],
 }
 
-const CATALOG = [ALGORITHM, WRITER, TILER]
+/* The shape of `native:package` and `native:savefeatures`: a destination, plus
+ * the algorithm's OWN parameter for a file that is already there. Three
+ * algorithms in a real 3.44 catalog carry one, and for them an existing target
+ * is the point of the call — numbering it appends to a new empty file and
+ * reports success. */
+const PACKAGER: QgisCatalog.Algorithm = {
+  ...WRITER,
+  id: "native:packager",
+  name: "Package",
+  parameters: [
+    WRITER.parameters[0]!,
+    { name: "OUTPUT", description: "out", type: "fileDestination", defaultValue: null, options: [], optional: false },
+    {
+      name: "OVERWRITE",
+      description: "Overwrite existing spreadsheet",
+      type: "boolean",
+      defaultValue: "false",
+      options: [],
+      optional: true,
+    },
+  ],
+}
+
+const CATALOG = [ALGORITHM, WRITER, TILER, PACKAGER]
 
 const known = (id: string) => (id === "Buffer" ? ALGORITHM : CATALOG.find((algorithm) => algorithm.id === id))
 
@@ -142,6 +165,36 @@ function runtimeEnding(result: Partial<GeoRuntime.Result>, chunks: readonly stri
           truncated: false,
           drainIncomplete: false,
           ...result,
+        } satisfies GeoRuntime.Result
+      }),
+    killAllSync: () => {},
+  })
+}
+
+/**
+ * A runtime that leaves files behind, the way a real algorithm does.
+ *
+ * The mock above writes nothing, which answers every question about what was
+ * SENT and none about what is THERE. Only the second kind can catch the tool
+ * reporting a reserved path instead of the file that exists — QGIS names the
+ * output itself when the extension it was handed means nothing to it, and a
+ * caller told to use the path from the report cannot use one that was never
+ * written.
+ */
+function runtimeWriting(files: () => readonly string[]) {
+  return Layer.mock(GeoRuntime.Service)({
+    run: (options) =>
+      Effect.gen(function* () {
+        spawned.args = options.args ?? []
+        for (const file of files()) fs.writeFileSync(file, "written by the algorithm")
+        return {
+          code: 0,
+          reason: "exit",
+          stdout: "",
+          stderr: "",
+          durationMs: 5,
+          truncated: false,
+          drainIncomplete: false,
         } satisfies GeoRuntime.Result
       }),
     killAllSync: () => {},
@@ -584,9 +637,26 @@ describe("RunQgisAlgorithm, shapes", () => {
     // the name it requested and reads a file that was never written — which is
     // worse than the overwrite the numbering exists to prevent, because it
     // fails silently against stale data.
-    expect(RUN_DESCRIPTION).toContain("never overwritten")
     expect(RUN_DESCRIPTION).toContain('"out.shp" becomes "out (1).shp"')
     expect(RUN_DESCRIPTION).toContain("Use that path for the next step")
+
+    /* And the limits of that promise, which are the part a description drifts
+     * away from first.
+     *
+     * This sentence used to read "Existing files are never overwritten" — an
+     * unconditional claim in front of a conditional guarantee, which is the one
+     * kind of sentence §七 rules out outright, because the agent acts on it.
+     * Both exceptions are real: three catalogued algorithms carry their own
+     * parameter for a pre-existing file, and a directory output is written into
+     * as it stands. Pinned by their consequences rather than by phrasing, so
+     * the wording stays free to improve.
+     */
+    expect(RUN_DESCRIPTION).not.toContain("never overwritten")
+    expect(RUN_DESCRIPTION).toContain("OVERWRITE")
+    expect(RUN_DESCRIPTION).toContain("ACTION_ON_EXISTING_FILE")
+    expect(RUN_DESCRIPTION).toMatch(/directory is written into as it stands/i)
+    // The mistake that puts a caller in the renaming case in the first place.
+    expect(RUN_DESCRIPTION).toMatch(/give every output a real extension/i)
   })
 })
 
@@ -827,11 +897,18 @@ describe("RunQgisAlgorithm, where the output lands", () => {
           parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: path.join(outside, "out.shp") }),
         })
         expect(asked.map((item) => item.permission)).toEqual(["qgis", "external_directory"])
-        // Scoped to the directory it is going to write in, the way upstream's
-        // own callers scope it — not to the single file, or the grant would
-        // have to be given again for the next output beside it.
+        /* Scoped to the directory it is going to write in, the way upstream's
+         * own callers scope it — not to the single file, or the grant would
+         * have to be given again for the next output beside it.
+         *
+         * Spelled out rather than searched for. This read `toContain(outside)`,
+         * which the WRONG scope satisfies just as well: asking at directory
+         * granularity for a file produces `<outside>/out.shp/*`, and that
+         * contains `outside` too. The folder case below was always exact, so
+         * the pair looked covered while only one of them was — and the mutation
+         * that swaps the granularity stayed green. */
         const external = asked.find((item) => item.permission === "external_directory")
-        expect(external!.patterns?.[0]).toContain(outside)
+        expect(external!.patterns?.[0]).toBe(path.join(outside, "*").replaceAll("\\", "/"))
       } finally {
         fs.rmSync(outside, { recursive: true, force: true })
       }
@@ -908,6 +985,113 @@ describe("RunQgisAlgorithm, a run that failed points at no file", () => {
       expect(result.metadata.destinations).toEqual([
         { parameter: "OUTPUT", path: path.join(instance.directory, "out (1).shp") },
       ])
+    }),
+  )
+})
+
+describe("RunQgisAlgorithm, the path the caller is sent to", () => {
+  /* The two cases where the reserved path is NOT the answer, wired end to end.
+   *
+   * Both are computed in `qgis/destination.ts` and tested there. What can only
+   * be seen from here is whether this tool passes them on — the failure that
+   * has come up more than any other in this codebase is a rule that is correct
+   * on one side, consumed on neither, and green on both.
+   *
+   * These need a runtime that actually writes, because both questions are about
+   * what is on disk when the run is over. */
+  let writes: readonly string[] = []
+  const it = harness(runtimeWriting(() => writes))
+  const sentParameters = (): Record<string, unknown> => JSON.parse(spawned.args.at(-1)!)
+
+  it.instance("the file QGIS named for itself is the one reported, not the one reserved", () =>
+    Effect.gen(function* () {
+      const instance = yield* InstanceState.context
+      const asked = path.join(instance.directory, "result")
+      writes = [path.join(instance.directory, "result.gpkg")]
+
+      const result = yield* succeed({
+        algorithm: "native:writeout",
+        parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: asked }),
+      })
+
+      // What was SENT is untouched: this tool does not predict formats, and the
+      // renaming is QGIS's.
+      expect(sentParameters().OUTPUT).toBe(asked)
+      // What is REPORTED is what exists. The caller is told to use this path for
+      // its next step, and `/…/result` is not openable.
+      expect(result.metadata.destinations).toEqual([
+        { parameter: "OUTPUT", path: path.join(instance.directory, "result.gpkg") },
+      ])
+      expect(result.output).toContain(path.join(instance.directory, "result.gpkg"))
+    }),
+  )
+
+  it.instance("the directory an output is going into is made before the run, not after it", () =>
+    Effect.gen(function* () {
+      /* `ensureParents` is tested on its own in qgis-destination.test.ts, and
+       * that test passes whether or not this tool ever calls it — the fifth
+       * time in this codebase that a correct rule was computed on one side,
+       * consumed on neither, and green on both.
+       *
+       * It has to happen BEFORE the spawn: QGIS given a path whose directory
+       * does not exist fails with a driver message about the file, and upstream's
+       * `write` settled the same question the same way (`writeWithDirs`) rather
+       * than teaching every caller to make its own folder. */
+      const instance = yield* InstanceState.context
+      const deep = path.join(instance.directory, "results", "2026", "out.shp")
+      writes = [deep]
+      expect(fs.existsSync(path.dirname(deep))).toBe(false)
+
+      yield* succeed({
+        algorithm: "native:writeout",
+        parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: deep }),
+      })
+
+      expect(fs.existsSync(path.dirname(deep))).toBe(true)
+    }),
+  )
+
+  it.instance("an output that landed where it was sent is not commented on", () =>
+    Effect.gen(function* () {
+      const instance = yield* InstanceState.context
+      const asked = path.join(instance.directory, "plain.shp")
+      writes = [asked]
+
+      const result = yield* succeed({
+        algorithm: "native:writeout",
+        parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: asked }),
+      })
+
+      expect(result.metadata.destinations).toEqual([{ parameter: "OUTPUT", path: asked }])
+      expect(result.output).not.toContain("chose the format")
+    }),
+  )
+
+  it.instance("an algorithm that owns the question keeps its target, and the caller is told", () =>
+    Effect.gen(function* () {
+      /* The one case where "existing files are not overwritten" does not hold.
+       *
+       * `native:package` appends layers to a GeoPackage that has to be there
+       * already. Numbering it would append to a new empty file and report
+       * success, leaving the user's database untouched — and standing aside
+       * silently would let the caller read protection into a run with none,
+       * over data undo cannot bring back (§10.1 #6). */
+      const instance = yield* InstanceState.context
+      const asked = path.join(instance.directory, "atlas.gpkg")
+      fs.writeFileSync(asked, "the user's database")
+      writes = [asked]
+
+      const result = yield* succeed({
+        algorithm: "native:packager",
+        parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: asked, OVERWRITE: false }),
+      })
+
+      expect(sentParameters().OUTPUT).toBe(asked)
+      expect(result.metadata.destinations).toEqual([{ parameter: "OUTPUT", path: asked }])
+      // Named, not merely hinted at: the caller can act on the parameter and
+      // cannot act on "something decided elsewhere".
+      expect(result.output).toContain("OVERWRITE")
+      expect(result.output).toContain(asked)
     }),
   )
 })

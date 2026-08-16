@@ -21,7 +21,9 @@ Example:
   algorithm: "native:xxxxxx"
   parameters: '{"Parameter 0": "/path/to/input.shp", "Parameter 1": 100, "Parameter 2": "/path/to/output.shp"}'
 
-Existing files are never overwritten. When an output path is already taken, the run writes to a numbered name beside it — "out.shp" becomes "out (1).shp" — and the output tells you the path it actually wrote. Use that path for the next step, not the one you asked for. This applies to the file you name; a shapefile's .dbf, .shx and .prj follow it automatically.
+An output path that is already taken is not overwritten: the run writes to a numbered name beside it — "out.shp" becomes "out (1).shp". Name only the file you want; a shapefile's .dbf, .shx and .prj follow it automatically. Give every output a real extension, because with an unfamiliar one — or none — QGIS picks the format itself and names the file accordingly.
+
+Whenever the path you asked for is not the path that was written, the output says so and names the one that was. Use that path for the next step. There are two cases where an existing file is left in the algorithm's hands rather than numbered away from, and the output says which applies: an algorithm carrying its own parameter for a pre-existing file (such as OVERWRITE or ACTION_ON_EXISTING_FILE) is left to honour it, and an output that is a directory is written into as it stands.
 
 The output ends with how the run terminated and how long it took. A run reported as cancelled was stopped by the user — do not restart it on your own; ask what they want instead.
 

@@ -272,7 +272,6 @@ export const RunQgisAlgorithmTool = Tool.define<
       }
       GeoQgis.QgisDestination.ensureParents(reserved)
       const destinations = GeoQgis.QgisDestination.apply(parsed as Record<string, unknown>, reserved)
-      const relocated = GeoQgis.QgisDestination.report(reserved)
 
       // ---- Spawn. Every path below carries an elapsed footer ----
 
@@ -349,6 +348,15 @@ export const RunQgisAlgorithmTool = Tool.define<
       label = label ?? GeoQgis.QgisExecutor.displayName(streamed)
       const succeeded = result.reason === "exit" && result.code === 0
 
+      // Where the outputs really are, which is only knowable now. Reserving a
+      // free name keeps the data safe on its own, but QGIS writes `result.gpkg`
+      // for an OUTPUT of `result`, and a caller told to use the path from the
+      // report cannot use one that is not there. A run that failed is left as
+      // reserved: nothing was written, so there is nothing to resolve against
+      // and a resolution would only invent a file.
+      const settled = succeeded ? GeoQgis.QgisDestination.settle(reserved) : reserved
+      const relocated = GeoQgis.QgisDestination.report(settled)
+
       // A script that fails deliberately emits one JSON object with an `error`
       // field; showing that sentence beats showing the traceback around it.
       const structured = result.stderr.trim() ? GeoOutput.structuredError(result.stderr) : undefined
@@ -379,10 +387,16 @@ export const RunQgisAlgorithmTool = Tool.define<
         // second.
         precheck: hints,
         // Where every recognised output really went, moved or not. The prose
-        // below mentions only the moved ones; a frontend showing "open the
-        // result" needs all of them, and it never parses prose (§9.1).
-        ...(reserved.length > 0
-          ? { destinations: reserved.map((item) => ({ parameter: item.parameter, path: item.actual })) }
+        // below mentions only the ones worth a sentence; a frontend showing
+        // "open the result" needs all of them, and it never parses prose (§9.1).
+        //
+        // `landed` first, for the same reason the prose prefers it: a path this
+        // tool reserved is what QGIS was TOLD, and on the vector side QGIS may
+        // have appended its own extension on the way to disk. The channel a
+        // frontend opens files from is the one that can least afford a path
+        // that is not there.
+        ...(settled.length > 0
+          ? { destinations: settled.map((item) => ({ parameter: item.parameter, path: item.landed ?? item.actual })) }
           : {}),
         ...(result.code !== null ? { exit_code: result.code } : {}),
         ...(result.drainIncomplete ? { partial: true } : {}),
