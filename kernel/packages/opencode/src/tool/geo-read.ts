@@ -349,37 +349,15 @@ export const GeoReadTool = Tool.define<
         }
       }
 
-      /* A container is not a scene and is not an image either (§7.9).
-       *
-       * netCDF, HDF and GRIB files holding several variables — MODIS, Sentinel,
-       * ERA5 — open with no bands, a placeholder size and none of the five
-       * georeferencing facts, because those belong to the variables inside. The
-       * verdict on that evidence is correctly `none`, and `none` means "an
-       * ordinary image" — so without this branch an ERA5 scene is answered with
-       * "It is an image, not geographic data" and the payload naming its
-       * variables is thrown away with it.
-       *
-       * Read off the payload rather than from a second guess at the band count:
-       * the script already decided, and one decision is better than two that
-       * can disagree. */
       const payload = outcome.payload
-      const container = Array.isArray(payload.subdatasets) && payload.subdatasets.length > 0
       if (payload.georeferencing !== undefined) {
-        if (container) {
-          // Not judged at all, rather than judged and set aside: the five facts
-          // here describe the placeholder, so any verdict drawn from them would
-          // be a statement about the box wearing the name of the file.
-          // `container_warning` and the subdataset list say what it really is.
-          delete payload.georeferencing
-        } else {
-          // The same judgement the preview path makes, from the same five facts.
-          // The block is then REPLACED by its verdict: the Agent is owed the
-          // conclusion — `rpc` says an extent it is about to read is still pixel
-          // indices — and not five raw fields it would have to combine itself.
-          const verdict = Georeference.of(Georeference.reported(payload.georeferencing))
-          if (verdict === "none") return notGeographic()
-          payload.georeferencing = verdict
-        }
+        // The same judgement the preview path makes, from the same five facts.
+        // The block is then REPLACED by its verdict: the Agent is owed the
+        // conclusion — `rpc` says an extent it is about to read is still pixel
+        // indices — and not five raw fields it would have to combine itself.
+        const verdict = Georeference.of(Georeference.reported(payload.georeferencing))
+        if (verdict === "none") return notGeographic()
+        payload.georeferencing = verdict
       }
       // The vector payload nests the layer detail under `layer` ({ driver,
       // layer_index, overview?, layer }); raster facts sit at the top level.
@@ -389,23 +367,14 @@ export const GeoReadTool = Tool.define<
       if (payload.driver !== undefined) metadata.driver = payload.driver
       if (detail.crs_name !== undefined) metadata.crs = detail.crs_name
       if (detail.feature_count !== undefined) metadata.feature_count = detail.feature_count
-      // A container's size is GDAL's placeholder, so it is withheld rather than
-      // published: the double-channel contract (§9.1) means an interface reads
-      // this and never the prose, and 512×512 in a field named `size` is a
-      // fiction no warning alongside it can undo.
-      if (detail.size !== undefined && !container) metadata.size = detail.size
+      if (detail.size !== undefined) metadata.size = detail.size
       if (detail.band_count !== undefined) metadata.band_count = detail.band_count
       if (payload.georeferencing !== undefined) metadata.georeference = payload.georeferencing
-      // What the file actually offers, for an interface that has to show it
-      // without parsing prose. The count, not the list — the names are long and
-      // the payload already carries them in full.
-      if (container) metadata.subdatasets = (payload.subdatasets as unknown[]).length
       // Defect warnings ride at metadata top level so the Agent sees them
       // without parsing the payload (kept from the old tool: missing CRS and
       // identity-geotransform are the two classic silent data defects).
       if (detail.crs_warning) metadata.crs_warning = detail.crs_warning
       if (detail.geotransform_warning) metadata.geotransform_warning = detail.geotransform_warning
-      if (detail.container_warning) metadata.container_warning = detail.container_warning
 
       // Size is OUR gate, never upstream's (docs/TOOLS.md §5): over budget we
       // drop sampled features and say so — `truncated: true` here carries

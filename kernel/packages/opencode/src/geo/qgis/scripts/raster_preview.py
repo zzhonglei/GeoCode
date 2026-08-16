@@ -61,28 +61,19 @@ def container_subdatasets(ds):
     fiction. The variables themselves are named in metadata, and handing those
     names back is the whole difference between a dead end and a next call:
     MODIS, Sentinel and ERA5 scenes all arrive this way.
-
-    The description travels with the name because the name alone does not say
-    what the variable IS. `NETCDF:"era5.nc":t2m` means nothing to a reader who
-    has not met the dataset; GDAL's own `[1x48x64] 2 metre temperature` does.
-    Absent for some drivers, so it is optional rather than assumed.
     """
     if ds.RasterCount > 0:
         return []
     metadata = ds.GetMetadata("SUBDATASETS") or {}
-    found = []
+    names = []
     index = 1
     while True:
         name = metadata.get(f"SUBDATASET_{index}_NAME")
         if not name:
             break
-        entry = {"name": name}
-        description = metadata.get(f"SUBDATASET_{index}_DESC")
-        if description:
-            entry["description"] = description
-        found.append(entry)
+        names.append(name)
         index += 1
-    return found
+    return names
 
 
 # ---------------------------------------------------------------------------
@@ -215,8 +206,7 @@ def render_preview(file_path):
     if subdatasets:
         raise RuntimeError(
             f"This file holds {len(subdatasets)} subdatasets rather than bands, so there is nothing"
-            f" to preview here. Open one of them instead:"
-            f" {', '.join(entry['name'] for entry in subdatasets)}"
+            f" to preview here. Open one of them instead: {', '.join(subdatasets)}"
         )
 
     # Taken while the dataset is still open; it is closed before encoding.

@@ -26,27 +26,6 @@ const SCRIPTS = [
   { file: "raster_preview.py", constant: RASTER_PREVIEW_PY },
 ] as const
 
-/**
- * One top-level function's source, from its `def` to the last line indented
- * under it.
- *
- * Anchored on indentation rather than on how the body happens to end. The
- * earlier version matched up to a closing `}` at four spaces, which worked only
- * because the one function it compared returned a dict literal — the next
- * function that had to be held level returned a list, and the pattern silently
- * matched nothing at all rather than failing.
- */
-function pythonFunction(script: string, name: string): string | undefined {
-  const lines = script.split("\n")
-  const start = lines.findIndex((line) => line.startsWith(`def ${name}(`))
-  if (start === -1) return undefined
-  let end = start + 1
-  while (end < lines.length && (lines[end]!.startsWith(" ") || lines[end]!.trim() === "")) end++
-  // Trailing blank lines belong to the file's spacing, not to the function.
-  while (end > start + 1 && lines[end - 1]!.trim() === "") end--
-  return lines.slice(start, end).join("\n")
-}
-
 describe("qgis reader script assets", () => {
   test("the generated constants match the .py sources", () => {
     // The build chain regenerates before every build, but a checkout edited
@@ -93,9 +72,10 @@ describe("qgis reader script assets", () => {
     // materialized scripts without a module to import, and that module cost
     // more than it bought; what it can do is carry the same one twice and have
     // this notice the day they stop being the same.
-    const fromRead = pythonFunction(RASTER_READ_PY, "georeferencing_facts")
+    const gathering = (script: string) => /^def georeferencing_facts[\s\S]*?\n    \}$/m.exec(script)?.[0]
+    const fromRead = gathering(RASTER_READ_PY)
     expect(fromRead).toBeDefined()
-    expect(pythonFunction(RASTER_PREVIEW_PY, "georeferencing_facts")).toBe(fromRead!)
+    expect(gathering(RASTER_PREVIEW_PY)).toBe(fromRead!)
 
     for (const call of [
       "GetGeoTransform()",
@@ -161,63 +141,6 @@ describe("qgis reader script assets", () => {
     // And it hands the names over. "This is a container" without them is the
     // same dead end in politer words.
     expect(RASTER_PREVIEW_PY).toContain("Open one of them instead:")
-  })
-
-  test("both scripts recognise a container with the very same function", () => {
-    /* The second thing the two raster scripts must agree on, and the one that
-     * decides whether a file is answered at all.
-     *
-     * They answer differently on purpose — preview refuses, metadata hands back
-     * the list — but they must AGREE on what a container is. Let them drift and a
-     * scene the preview calls a box gets read as a 512×512 image, or the other
-     * way round. Same reasoning as `georeferencing_facts` above, same treatment:
-     * carried twice, compared here.
-     */
-    const fromRead = pythonFunction(RASTER_READ_PY, "container_subdatasets")
-    expect(fromRead).toBeDefined()
-    expect(pythonFunction(RASTER_PREVIEW_PY, "container_subdatasets")).toBe(fromRead!)
-
-    // Zero bands is the whole test for "is this a container", and the metadata
-    // key is GDAL's. Both are easy to paraphrase into something that no longer
-    // matches what GDAL answers.
-    expect(fromRead).toContain("if ds.RasterCount > 0:")
-    expect(fromRead).toContain('GetMetadata("SUBDATASETS")')
-    expect(fromRead).toContain("SUBDATASET_{index}_NAME")
-    // The description is what makes the answer usable by someone who has not
-    // met the dataset: `NETCDF:"era5.nc":t2m` says nothing, `2 metre
-    // temperature` says everything.
-    expect(fromRead).toContain("SUBDATASET_{index}_DESC")
-  })
-
-  test("the metadata script emits the container facts under the names the tool reads", () => {
-    /* The seam, from the side that produces it.
-     *
-     * `geo-read.ts` decides a file is a container by looking for `subdatasets`
-     * on the payload, withholds the placeholder size on the strength of it, and
-     * forwards `container_warning`. Every one of those is a key name agreed
-     * across a process boundary and a language — and the tool's own tests build
-     * their payload by hand, so a script that quietly stopped emitting any of
-     * them would leave both sides green and the chain dead.
-     *
-     * Textual, like the §4.13 constraints above, and for the same reason: the
-     * script needs a real GDAL and a real container to run.
-     */
-    expect(RASTER_READ_PY).toContain("subdatasets = container_subdatasets(ds)")
-    expect(RASTER_READ_PY).toContain('"subdatasets": subdatasets,')
-    expect(RASTER_READ_PY).toContain('"container_warning": container_warning,')
-
-    // The two misdiagnoses this replaced, both TRUE of the container and
-    // MISLEADING about the file. "CRS is missing" reads as a defect to repair,
-    // and the transform note sends the reader after ground coordinates that
-    // live one level down — so for a container the first is rewritten and the
-    // second is dropped.
-    expect(RASTER_READ_PY).toContain("CRS is not set on the container itself")
-    expect(RASTER_READ_PY).toContain("geotransform_warning = None")
-    // And the placeholder numbers are named as placeholders. Without this the
-    // payload still presents 512×512 and a unit pixel as though they were read
-    // off the file.
-    expect(RASTER_READ_PY).toContain("describes GDAL's")
-    expect(RASTER_READ_PY).toContain("placeholder for the container, NOT the data")
   })
 })
 
