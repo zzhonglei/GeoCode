@@ -41,7 +41,15 @@ export const FAILURE_STREAK = 2
 /** What one round of probing concluded. */
 export type Verdict =
   | { readonly ok: true; readonly routeId: RouteId }
-  | { readonly ok: false; readonly kind: FailureKind; readonly detail: string }
+  | {
+      readonly ok: false
+      readonly kind: FailureKind
+      readonly detail: string
+      /** Paths attempted this round, carried through to the state (§3.3). */
+      readonly tried?: readonly RouteId[]
+      /** Declarations that could not be attempted, credentials already stripped. */
+      readonly skipped?: readonly string[]
+    }
 
 export interface Machine {
   readonly state: Reachability
@@ -65,7 +73,7 @@ export function step(current: Machine, verdict: Verdict): Machine {
   // Waiting out a debounce here would leave the application claiming to be
   // online while the machine plainly is not (§3.3 快速降级).
   if (verdict.kind === "offline") {
-    return { state: { state: "unreachable", detail: verdict.detail }, streak: 0 }
+    return { state: unreachable(verdict), streak: 0 }
   }
 
   const streak = current.streak + 1
@@ -74,7 +82,23 @@ export function step(current: Machine, verdict: Verdict): Machine {
     return { state: current.state, streak }
   }
 
-  return { state: { state: "unreachable", detail: verdict.detail }, streak }
+  return { state: unreachable(verdict), streak }
+}
+
+/**
+ * The unreachable state, built in one place.
+ *
+ * Two exits reached it and each spelled it out, which is how one of them ends
+ * up carrying a field the other forgot — and `tried` / `skipped` are exactly
+ * the kind of field that goes missing without anything failing.
+ */
+function unreachable(verdict: Verdict & { ok: false }): Reachability {
+  return {
+    state: "unreachable",
+    detail: verdict.detail,
+    ...(verdict.tried ? { tried: verdict.tried } : {}),
+    ...(verdict.skipped && verdict.skipped.length > 0 ? { skipped: verdict.skipped } : {}),
+  }
 }
 
 /** How long to wait before the next round. */

@@ -181,12 +181,30 @@ export const GeeSetup = Schema.Union([
 ]).annotate({ identifier: "GeoEvent.GeeSetup" })
 export type GeeSetup = typeof GeeSetup.Type
 
-/** Read from Net, never computed here (§8.3). `route` identifies the path in use. */
+/**
+ * Read from Net, never computed here (§8.3). `route` identifies the path in use.
+ *
+ * `unreachable` carries the two facts that make it actionable, and neither can
+ * hold a credential: `tried` is route identifiers (`direct`,
+ * `proxy:host:port`), `skipped` is declarations that could not be used at all,
+ * redacted at the boundary. The underlying error stays inside — it is
+ * diagnostics, and the wording a user reads is one sentence either way (§3.3).
+ *
+ * `skipped` exists for one case that had no way of being seen at all: a SOCKS
+ * declaration is deliberately refused (§12), and the user whose network only
+ * works through it used to be told nothing but "cannot be reached" — the same
+ * three words a user with no network at all gets, with nothing to tell the two
+ * of them apart.
+ */
 export const GeeNetwork = Schema.Union([
   Schema.Struct({ status: Schema.Literal("idle") }),
   Schema.Struct({ status: Schema.Literal("checking") }),
   Schema.Struct({ status: Schema.Literal("reachable"), route: Schema.String }),
-  Schema.Struct({ status: Schema.Literal("unreachable") }),
+  Schema.Struct({
+    status: Schema.Literal("unreachable"),
+    tried: optional(Schema.Array(Schema.String)),
+    skipped: optional(Schema.Array(Schema.String)),
+  }),
 ]).annotate({ identifier: "GeoEvent.GeeNetwork" })
 export type GeeNetwork = typeof GeeNetwork.Type
 

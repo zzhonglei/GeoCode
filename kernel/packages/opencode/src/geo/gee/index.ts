@@ -501,13 +501,25 @@ const layer = Layer.effect(
  * Exhaustive on purpose — no default. A state added to Net's vocabulary should
  * stop the build here and be answered deliberately, not fall silently into
  * "idle", which happens to be the one state that means "nothing is watching".
+ *
+ * Exported for the same reason `Snapshot.stageable` is: this is the last hop
+ * before the published schema, and a field dropped here is invisible from both
+ * ends — Net still carries it, the interface simply never sees it, and nothing
+ * fails.
  */
-function toNetwork(reachability: NetTypes.Reachability): GeoEvent.GeeNetwork {
+export function toNetwork(reachability: NetTypes.Reachability): GeoEvent.GeeNetwork {
   switch (reachability.state) {
     case "reachable":
       return { status: "reachable", route: reachability.route }
     case "unreachable":
-      return { status: "unreachable" }
+      // Forwarded, not re-derived. `detail` is the one field that stays behind:
+      // it is the raw error, and §3.3 keeps that as diagnostics rather than
+      // something a reader is handed.
+      return {
+        status: "unreachable",
+        ...(reachability.tried ? { tried: reachability.tried } : {}),
+        ...(reachability.skipped ? { skipped: reachability.skipped } : {}),
+      }
     case "checking":
       return { status: "checking" }
     case "idle":

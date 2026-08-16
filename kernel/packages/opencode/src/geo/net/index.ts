@@ -113,6 +113,11 @@ const layer = Layer.effect(
         // waits, instead of opening a socket every round to be told the same
         // thing. It is also the unambiguous signal that skips hysteresis (§3.3).
         if (!NetClassifier.hasNetworkInterface()) {
+          // Neither `tried` nor `skipped`, deliberately: nothing was attempted
+          // and nothing could have been. An empty `tried` would read as "we
+          // looked and found nowhere to go", and naming a skipped proxy would
+          // offer an explanation that is not the one — a machine with its radio
+          // off does not have a proxy problem.
           return { verdict: { ok: false, kind: "offline", detail: "no network interface is up" } }
         }
 
@@ -128,14 +133,34 @@ const layer = Layer.effect(
               ? await NetProbe.direct(entry.target)
               : await NetProbe.viaProxy(entry.target, held.url)
           if (result.ok) return { verdict: { ok: true, routeId: routeId(held) }, route: held }
-          return { verdict: { ok: false, kind: NetClassifier.classify(result.reason), detail: result.reason } }
+          return {
+            verdict: {
+              ok: false,
+              kind: NetClassifier.classify(result.reason),
+              detail: result.reason,
+              // One path, because re-verification deliberately re-tests the
+              // held one rather than searching again.
+              tried: [routeId(held)],
+              skipped: NetDiscovery.skipped(),
+            },
+          }
         }
 
         // No route in hand, so search from scratch: this is what picks up a
         // proxy the user has only just started, with nothing to click.
         const resolution = await NetResolver.resolve(entry.target)
         if (resolution.ok) return { verdict: { ok: true, routeId: resolution.routeId }, route: resolution.route }
-        return { verdict: { ok: false, kind: NetClassifier.classify(resolution.reason), detail: resolution.reason } }
+        return {
+          verdict: {
+            ok: false,
+            kind: NetClassifier.classify(resolution.reason),
+            detail: resolution.reason,
+            // The resolver has counted these all along and had nowhere to put
+            // them; `tried` is RouteIds, so it is publishable as it stands.
+            tried: resolution.tried,
+            skipped: NetDiscovery.skipped(),
+          },
+        }
       })
 
     const applyVerdict = (entry: Entry, verdict: NetMonitor.Verdict) =>

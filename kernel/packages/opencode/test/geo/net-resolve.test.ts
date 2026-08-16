@@ -160,6 +160,42 @@ describe("net path resolution", () => {
     expect(NetDiscovery.declared({ ALL_PROXY: "socks5://127.0.0.1:1080" })).toBeUndefined()
     expect(NetDiscovery.declared({ HTTPS_PROXY: "127.0.0.1:7890" })).toBe("http://127.0.0.1:7890")
   })
+
+  test("and skipping it is now said out loud, with the credentials taken off", () => {
+    /* Skipping is the right call; doing it in silence was not.
+     *
+     * A user whose network only works through that proxy was told "cannot be
+     * reached" forever — the same three words a user with no network at all
+     * gets — while the one fact explaining it was known here and dropped. §12
+     * recorded the skip as a tradeoff and left this half open.
+     */
+    expect(NetDiscovery.skipped({ ALL_PROXY: "socks5://127.0.0.1:1080" })).toEqual(["socks5://127.0.0.1:1080"])
+    // Nothing to say when nothing was skipped: a field that is always present
+    // is one an interface has to render around forever.
+    expect(NetDiscovery.skipped({ HTTPS_PROXY: "http://127.0.0.1:7890" })).toEqual([])
+    expect(NetDiscovery.skipped({})).toEqual([])
+
+    // THE assertion. This is a FOURTH outward exit, and redact.ts says missing
+    // any one of them is the same as not doing it at all — `ALL_PROXY` carrying
+    // `user:password@` is ordinary, and this value is published to the
+    // interface.
+    const secret = NetDiscovery.skipped({ ALL_PROXY: "socks5://alice:hunter2@10.0.0.9:1080" })
+    expect(secret).toHaveLength(1)
+    expect(secret[0]).not.toContain("hunter2")
+    expect(secret[0]).not.toContain("alice")
+    // Host and port survive, which is the whole reason a user is told at all —
+    // they have to recognise their own configuration in it.
+    expect(secret[0]).toContain("10.0.0.9:1080")
+    expect(secret[0]).toBe(NetRedact.url("socks5://alice:hunter2@10.0.0.9:1080"))
+  })
+
+  test("the same value is never reported twice, however many variables carry it", () => {
+    // Declaring a proxy usually means exporting it under three names. Three
+    // identical lines in a status panel reads as three problems.
+    expect(
+      NetDiscovery.skipped({ ALL_PROXY: "socks5://127.0.0.1:1080", all_proxy: "socks5://127.0.0.1:1080" }),
+    ).toEqual(["socks5://127.0.0.1:1080"])
+  })
 })
 
 describe("net route forms", () => {

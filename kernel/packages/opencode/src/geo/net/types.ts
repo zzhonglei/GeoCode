@@ -55,7 +55,23 @@ export type Reachability =
   /** First probe since subscription, or a re-probe after the route was cleared. */
   | { readonly state: "checking" }
   | { readonly state: "reachable"; readonly route: RouteId }
-  | { readonly state: "unreachable"; readonly detail?: string }
+  /**
+   * `detail` is the underlying error and stays INSIDE — it is diagnostics, and
+   * the wording a user reads is one sentence either way (see `FailureKind`).
+   *
+   * `tried` and `skipped` are the opposite: RouteIds and redacted addresses,
+   * safe to publish by construction, and the only two facts that turn "cannot
+   * be reached" into something a person can act on. A user who declared a SOCKS
+   * proxy and a user with no network at all currently see the same three words.
+   */
+  | {
+      readonly state: "unreachable"
+      readonly detail?: string
+      /** Paths actually attempted this round. */
+      readonly tried?: readonly RouteId[]
+      /** Declarations that could not be attempted at all, credentials stripped. */
+      readonly skipped?: readonly string[]
+    }
 
 /**
  * How a failure should be acted on.

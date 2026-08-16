@@ -113,6 +113,44 @@ describe("gee composition", () => {
   const ready: GeoEvent.GeeSetup = { status: "ready", python: "/p", project: "demo" }
   const reachable: GeoEvent.GeeNetwork = { status: "reachable", route: "direct" }
 
+  test("the last hop to the interface forwards what it was given, and keeps the raw error back", () => {
+    /* The published schema's edge.
+     *
+     * Net now records the two facts that turn "cannot be reached" into
+     * something a person can act on — the paths tried, and the declarations
+     * that could not be tried at all. Dropping either of them HERE is invisible
+     * from both ends: Net still carries it and the interface simply never sees
+     * it, which is how the SOCKS skip stayed silent for as long as it did.
+     */
+    expect(
+      GeeService.toNetwork({
+        state: "unreachable",
+        detail: "connect ETIMEDOUT",
+        tried: ["direct", "proxy:127.0.0.1:7890"],
+        skipped: ["socks5://127.0.0.1:1080"],
+      }),
+    ).toEqual({
+      status: "unreachable",
+      tried: ["direct", "proxy:127.0.0.1:7890"],
+      skipped: ["socks5://127.0.0.1:1080"],
+    })
+
+    // `detail` is the one field that stays behind. It is the raw error, kept as
+    // diagnostics rather than handed to a reader (§3.3) — and unlike the other
+    // two it has never been through redaction.
+    expect(GeeService.toNetwork({ state: "unreachable", detail: "connect ETIMEDOUT" })).toEqual({
+      status: "unreachable",
+    })
+
+    // The other three states are unchanged by any of this.
+    expect(GeeService.toNetwork({ state: "reachable", route: "direct" })).toEqual({
+      status: "reachable",
+      route: "direct",
+    })
+    expect(GeeService.toNetwork({ state: "idle" })).toEqual({ status: "idle" })
+    expect(GeeService.toNetwork({ state: "checking" })).toEqual({ status: "checking" })
+  })
+
   test("local comes before network comes before remote", () => {
     // The priority IS the design (§5.6): one problem at a time, and never the
     // wrong attribution. Telling someone their credentials were rejected while

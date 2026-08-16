@@ -1,6 +1,7 @@
 export * as NetDiscovery from "./discovery"
 
 import { NetProbe } from "./probe"
+import { NetRedact } from "./redact"
 import { NetTunnel } from "./tunnel"
 import type { Target } from "./types"
 
@@ -49,6 +50,37 @@ export function normalize(value: string | undefined): string | undefined {
   // would break users whose direct connection works fine today (§12).
   if (/^socks/i.test(trimmed)) return undefined
   return trimmed.includes("://") ? trimmed : `http://${trimmed}`
+}
+
+/**
+ * Declarations that were found and could not be used, credentials stripped.
+ *
+ * Skipping a SOCKS proxy is the right call — the runtimes underneath need an
+ * extra dependency to speak it and raise without one, which would break users
+ * whose direct connection works today (§12). What was wrong was doing it
+ * SILENTLY. A user whose network only works through that proxy sees "cannot be
+ * reached" forever, and neither they nor a support conversation has anything to
+ * go on: the one fact that explains it was known here and thrown away.
+ *
+ * Reported rather than acted on. Nothing here changes what gets tried; it only
+ * stops the reason from being invisible, which is the whole of what §12 left
+ * open.
+ *
+ * Redacted at this exit like every other (`redact.ts` — three exits, and
+ * missing one is the same as not doing it at all), because `ALL_PROXY` carrying
+ * `user:password@` is ordinary.
+ */
+export function skipped(env: NodeJS.ProcessEnv = process.env): string[] {
+  const found: string[] = []
+  for (const key of ENV_KEYS) {
+    const value = env[key]?.trim()
+    // The same test `normalize` refuses on, so the two cannot disagree about
+    // what was skipped and why.
+    if (!value || !/^socks/i.test(value)) continue
+    const safe = NetRedact.url(value)
+    if (!found.includes(safe)) found.push(safe)
+  }
+  return found
 }
 
 /** The proxy the user declared through the environment, if any. */

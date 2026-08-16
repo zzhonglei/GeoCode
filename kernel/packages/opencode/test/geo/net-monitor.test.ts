@@ -47,6 +47,54 @@ describe("net monitor transitions", () => {
     expect(immediate.state.state).toBe("unreachable")
   })
 
+  test("what was tried and what was skipped survive BOTH ways into unreachable", () => {
+    /* Two exits reach the unreachable state — the offline fast path and the
+     * ordinary streak path — and each used to spell the state out for itself.
+     * That is how one of them ends up carrying a field the other forgot, with
+     * nothing failing: the value is simply absent on some failures and present
+     * on others, which reads as "we did not look" rather than "we did not say".
+     */
+    const carrying: NetMonitor.Verdict = {
+      ok: false,
+      kind: "other",
+      detail: "connect ETIMEDOUT",
+      tried: ["direct", "proxy:127.0.0.1:7890"],
+      skipped: ["socks5://127.0.0.1:1080"],
+    }
+
+    // The streak path.
+    const first = NetMonitor.step(reachable("direct"), carrying)
+    const settled = NetMonitor.step(first, carrying)
+    expect(settled.state).toEqual({
+      state: "unreachable",
+      detail: "connect ETIMEDOUT",
+      tried: ["direct", "proxy:127.0.0.1:7890"],
+      skipped: ["socks5://127.0.0.1:1080"],
+    })
+
+    // And the offline fast path, which bypasses the streak entirely.
+    const offline = NetMonitor.step(reachable("direct"), { ...carrying, kind: "offline" })
+    expect(offline.state).toEqual({
+      state: "unreachable",
+      detail: "connect ETIMEDOUT",
+      tried: ["direct", "proxy:127.0.0.1:7890"],
+      skipped: ["socks5://127.0.0.1:1080"],
+    })
+  })
+
+  test("nothing skipped means no field at all, rather than an empty one", () => {
+    // An interface should not have to tell "we skipped nothing" from "we did
+    // not check" — and a field that is always there is one it must render
+    // around forever.
+    const state = NetMonitor.step(reachable("direct"), {
+      ok: false,
+      kind: "offline",
+      detail: "no interface",
+      skipped: [],
+    }).state
+    expect(state).toEqual({ state: "unreachable", detail: "no interface" })
+  })
+
   test("recovery needs no streak of its own", () => {
     const down: NetMonitor.Machine = { state: { state: "unreachable" }, streak: 5 }
     const back = NetMonitor.step(down, { ok: true, routeId: "proxy:127.0.0.1:7890" })
