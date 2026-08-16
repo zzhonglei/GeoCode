@@ -55,12 +55,25 @@ MAX_SIDE = 2048
 def container_subdatasets(ds):
     """The variables a container holds, or an empty list for an ordinary raster.
 
-    A netCDF, HDF4, HDF5 or GRIB file carrying several variables is not a raster
-    at all. GDAL opens it anyway and answers with RasterCount 0, a placeholder
+    A netCDF, HDF4 or HDF5 file carrying several variables is not a raster at
+    all. GDAL opens it anyway and answers with RasterCount 0, a placeholder
     512x512 size and no georeferencing, so every fact read off it afterwards is
     fiction. The variables themselves are named in metadata, and handing those
     names back is the whole difference between a dead end and a next call:
     MODIS, Sentinel and ERA5 scenes all arrive this way.
+
+    GRIB is NOT one of them, though it is the format most often listed beside
+    them. Measured on GDAL 3.12: a GRIB2 file of three messages answers with
+    RasterCount 3 and no SUBDATASETS at all, because the driver exposes each
+    message as a band. So this returns an empty list for GRIB, correctly, and
+    naming it here would have described a branch it can never take.
+
+    ReadGeoData cannot reach this today either way: its format list
+    (`tool/geo-handoff.ts`) deliberately admits only the extensions the reader
+    scripts were validated against, and .nc/.hdf are not among them. What is
+    live is the guard this feeds -- an ordinary raster that reports no bands
+    would otherwise index an empty list -- and the answer is kept whole so that
+    opening the format list later needs no second implementation.
     """
     if ds.RasterCount > 0:
         return []

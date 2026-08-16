@@ -12,13 +12,15 @@ import path from "node:path"
  * do instead.
  *
  * **There is one of it, for the same reason `georeference.ts` is one of it.**
- * The rule was written twice before this module existed, and the two had
- * already drifted: OSM produced `out-1.geojson` while its own header claimed it
- * numbered "the way a browser does", and the QGIS side genuinely did. Two
- * implementations held level by nothing at all agree until one of them is
- * edited. What differs between the callers is only what "taken" MEANS — OSM has
- * to count sibling files it invents itself — so that is the parameter, and the
- * shape is not.
+ * OSM had the only implementation, and its header had ALREADY come apart from
+ * it: the comment said it numbered "the way a browser does" while the code
+ * produced `out-1.geojson`, which is a programmer's shape and not a browser's.
+ * That is what a lone implementation costs — nothing holds a claim about the
+ * rule level with the rule, and nobody noticed for as long as both halves were
+ * only ever read together. Giving RunQgisAlgorithm a copy would have made two
+ * of them; this module is the copy that was not made. What differs between the
+ * callers is only what "taken" MEANS — OSM has to count sibling files it
+ * invents itself — so that is the parameter, and the shape is not.
  *
  * **The browser's shape, and not a programmer's.** `out (1).shp`, not
  * `out-1.shp` or `out_1.shp`. The audience is geographers, and this is the one

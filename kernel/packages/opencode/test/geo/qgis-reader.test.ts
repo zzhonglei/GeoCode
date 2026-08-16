@@ -119,7 +119,7 @@ describe("qgis reader script assets", () => {
   })
 
   test("the preview refuses a container before it asks which bands to draw", () => {
-    // A netCDF, HDF or GRIB file of several variables opens with RasterCount 0
+    // A netCDF, HDF4 or HDF5 file of several variables opens with RasterCount 0
     // and a placeholder size, and the variable names are the only actionable
     // thing about it — MODIS, Sentinel and ERA5 all arrive this way, so this is
     // an ordinary file for this audience rather than an edge case.
@@ -141,6 +141,30 @@ describe("qgis reader script assets", () => {
     // And it hands the names over. "This is a container" without them is the
     // same dead end in politer words.
     expect(RASTER_PREVIEW_PY).toContain("Open one of them instead:")
+  })
+
+  test("GRIB is not named as a container, because it is not one", () => {
+    /* Measured on GDAL 3.12: a GRIB2 file of three messages answers with
+     * RasterCount 3 and zero SUBDATASETS, while a four-variable netCDF answers
+     * with RasterCount 0 and six. The GRIB driver exposes each message as a
+     * BAND, so `container_subdatasets` returns an empty list for it — correctly,
+     * and forever.
+     *
+     * It is listed beside netCDF and HDF almost everywhere the three appear
+     * together, which is how it got into this docstring in the first place, and
+     * why the name is pinned out rather than left to the next reader's
+     * recollection. A format named in a branch it can never take sends whoever
+     * debugs a GRIB file to the one function that will never have an opinion
+     * about it.
+     */
+    const container = RASTER_PREVIEW_PY.slice(
+      RASTER_PREVIEW_PY.indexOf("def container_subdatasets"),
+      RASTER_PREVIEW_PY.indexOf("def", RASTER_PREVIEW_PY.indexOf("def container_subdatasets") + 4),
+    )
+    expect(container).toContain("netCDF")
+    expect(container).toMatch(/GRIB is NOT one of them/)
+    // The list of what IS a container must not name it.
+    expect(container).not.toMatch(/netCDF, HDF4, HDF5 or GRIB/)
   })
 })
 
