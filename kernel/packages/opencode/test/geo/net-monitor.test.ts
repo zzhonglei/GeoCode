@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { GeoNet } from "@/geo/net"
 import { NetClassifier } from "@/geo/net/classifier"
 import { NetMonitor } from "@/geo/net/monitor"
 
@@ -180,6 +181,53 @@ describe("net failure classification", () => {
       // Stated explicitly, so the assertion is about the classification rule
       // rather than about whether the machine running the test has a network.
       expect(NetClassifier.classify(reason, true)).toBe("other")
+    }
+  })
+})
+
+describe("what a failed round carries out with it", () => {
+  /* Both failure sites in `net/index.ts` go through `GeoNet.failed`, and this
+   * is the only place either can be reached from.
+   *
+   * `probeOnce` builds them inside a promise inside the service constructor,
+   * and reaching the re-verification one through the public interface needs a
+   * route to be HELD first — which needs a completed TLS handshake against a
+   * genuinely trusted endpoint, and there is no such thing in a unit test. So
+   * the shape is asserted where it is written, the way `snapshot/stageable`
+   * was pulled out for the same reason.
+   *
+   * Worth asserting at all because losing these costs nothing visible: an
+   * `unreachable` with no `tried` is still a perfectly good `unreachable`, and
+   * the user it fails is the one who WAS online a moment ago — the commonest
+   * way anybody arrives at this state.
+   */
+  test("the route that was tried, named the way a route is named", () => {
+    const verdict = GeoNet.failed("ECONNREFUSED: connection refused", ["proxy:127.0.0.1:7890"])
+    if (verdict.ok) throw new Error("expected a failure")
+    expect(verdict.tried).toEqual(["proxy:127.0.0.1:7890"])
+    expect(verdict.detail).toBe("ECONNREFUSED: connection refused")
+    // Classified, not copied: the caller hands over a reason and gets back the
+    // verdict the state machine branches on.
+    expect(verdict.kind).toBe("other")
+  })
+
+  test("a declaration that could not be attempted travels with it", () => {
+    const before = process.env.ALL_PROXY
+    process.env.ALL_PROXY = "socks5://alice:hunter2@127.0.0.1:1080"
+    try {
+      const verdict = GeoNet.failed("timed out after 5000ms", ["direct"])
+      if (verdict.ok) throw new Error("expected a failure")
+      // The resolver refuses SOCKS either way (§12); saying nothing about it is
+      // what left a user whose only working path is that proxy with no way to
+      // find out why nothing connects.
+      expect(verdict.skipped).toEqual(["socks5:127.0.0.1:1080"])
+      // Assembled from parsed fields, so there is no cleaning step that could
+      // have been skipped — the password is not in it because it was never
+      // taken.
+      for (const item of verdict.skipped ?? []) expect(item).not.toContain("hunter2")
+    } finally {
+      if (before === undefined) delete process.env.ALL_PROXY
+      else process.env.ALL_PROXY = before
     }
   })
 })

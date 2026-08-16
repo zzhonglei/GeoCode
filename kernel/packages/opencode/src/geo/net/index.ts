@@ -35,6 +35,33 @@ export interface Change {
   readonly state: Reachability
 }
 
+/**
+ * The verdict a failed round produces, with the two facts that make it
+ * actionable attached.
+ *
+ * Named rather than written out at each of the two failure sites, and exported
+ * so a test can reach it. Both fields are the kind that go missing without
+ * anything failing — the state is a perfectly good `unreachable` either way —
+ * and the sites themselves are object literals inside a promise inside a
+ * service constructor, which no test can get at without a completed TLS
+ * handshake against a real endpoint. `snapshot/stageable` was pulled out for
+ * exactly this reason (F19): a rule invisible to tests is a rule nothing keeps.
+ *
+ * The two sites differ ONLY in what was tried: re-verification deliberately
+ * re-tests the one route in hand, while a search from scratch reports every
+ * path it walked. `skipped` is the same question on both — what could not be
+ * attempted at all — so it is asked here rather than by the caller.
+ */
+export function failed(reason: string, tried: readonly string[]): NetMonitor.Verdict {
+  return {
+    ok: false,
+    kind: NetClassifier.classify(reason),
+    detail: reason,
+    tried,
+    skipped: NetDiscovery.skipped(),
+  }
+}
+
 export interface Interface {
   /** Declare a target whose connectivity matters. */
   readonly register: (target: Target) => Effect.Effect<void>
@@ -133,34 +160,18 @@ const layer = Layer.effect(
               ? await NetProbe.direct(entry.target)
               : await NetProbe.viaProxy(entry.target, held.url)
           if (result.ok) return { verdict: { ok: true, routeId: routeId(held) }, route: held }
-          return {
-            verdict: {
-              ok: false,
-              kind: NetClassifier.classify(result.reason),
-              detail: result.reason,
-              // One path, because re-verification deliberately re-tests the
-              // held one rather than searching again.
-              tried: [routeId(held)],
-              skipped: NetDiscovery.skipped(),
-            },
-          }
+          // One path, because re-verification deliberately re-tests the held one
+          // rather than searching again.
+          return { verdict: failed(result.reason, [routeId(held)]) }
         }
 
         // No route in hand, so search from scratch: this is what picks up a
         // proxy the user has only just started, with nothing to click.
         const resolution = await NetResolver.resolve(entry.target)
         if (resolution.ok) return { verdict: { ok: true, routeId: resolution.routeId }, route: resolution.route }
-        return {
-          verdict: {
-            ok: false,
-            kind: NetClassifier.classify(resolution.reason),
-            detail: resolution.reason,
-            // The resolver has counted these all along and had nowhere to put
-            // them; `tried` is RouteIds, so it is publishable as it stands.
-            tried: resolution.tried,
-            skipped: NetDiscovery.skipped(),
-          },
-        }
+        // The resolver has counted these all along and had nowhere to put them;
+        // `tried` is RouteIds, so it is publishable as it stands.
+        return { verdict: failed(resolution.reason, resolution.tried) }
       })
 
     const applyVerdict = (entry: Entry, verdict: NetMonitor.Verdict) =>

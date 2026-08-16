@@ -287,4 +287,71 @@ describe("net redaction", () => {
     expect(NetRedact.url("http://127.0.0.1:7890")).toBe("http://127.0.0.1:7890")
     expect(NetRedact.url(undefined)).toBeUndefined()
   })
+
+  test("the four shapes that used to come back with the password still in them", () => {
+    /* Every one of these was measured returning its own input.
+     *
+     * The first two PARSE — a `/` anywhere in the username or password puts it
+     * outside userinfo, so `new URL` finds nothing to clear and reports success
+     * — and the parser's success was being taken as proof the value was clean.
+     * The last two carry no `//`, which the textual fallback required before it
+     * would match anything at all.
+     *
+     * Together they are most of the ways a person actually writes ALL_PROXY,
+     * and each of the three tests above passes on all four regardless: the one
+     * form that survived redaction, `alice:hunter2@`, is exactly the form the
+     * samples were written with.
+     */
+    const leaking = [
+      "socks5://alice:pa/ss@10.0.0.9:1080",
+      "socks5://al/ice:secret@10.0.0.9:1080",
+      "socks5:alice:hunter2@10.0.0.9:1080",
+      "alice:hunter2@10.0.0.9:1080",
+    ]
+    for (const value of leaking) {
+      const redacted = NetRedact.url(value)
+      for (const secret of ["hunter2", "pa/ss", "secret", "alice"]) {
+        expect(redacted).not.toContain(secret)
+      }
+      // Host and port survive, or the value stops being diagnosable and users
+      // who need a proxy lose the only line that tells them which one was read.
+      expect(redacted).toContain("10.0.0.9:1080")
+    }
+
+    /* ★ The last of the four is why `alice` is in that secret list.
+     *
+     * `alice:` is a syntactically perfect URL scheme, so a rule that preserves
+     * "the scheme" preserves the USERNAME on a declaration written without one
+     * — the first version of this fix returned `alice:10.0.0.9:1080` and this
+     * assertion is what caught it. A real scheme is kept, and that is a
+     * separate question from whether the prefix looks like one. */
+    expect(NetRedact.url("alice:hunter2@10.0.0.9:1080")).toBe("10.0.0.9:1080")
+    expect(NetRedact.url("socks5:alice:hunter2@10.0.0.9:1080")).toBe("socks5:10.0.0.9:1080")
+  })
+
+  test("nothing with an @ still in it is ever handed back", () => {
+    // The rule that replaced "trust the parser": an `@` surviving redaction
+    // means something in front of it was not understood, and everything this
+    // module exists to remove sits in front of an `@`.
+    for (const value of [
+      "socks5://alice:hunter2@10.0.0.9:1080",
+      "socks5://alice:pa/ss@10.0.0.9:1080",
+      "http://alice:hunter2@proxy.example:8080",
+      "not a url //bob:secret@host:1/",
+      "https://u:p@a@b@host:443",
+    ]) {
+      expect(NetRedact.url(value)).not.toContain("@")
+    }
+  })
+
+  test("environment values go through the same filter, one by one", () => {
+    // `env` is the diagnostics exit's half of the job, and it inherits whatever
+    // `url` does — including, until now, the failing-open.
+    const cleaned = NetRedact.env({
+      ALL_PROXY: "socks5://alice:pa/ss@10.0.0.9:1080",
+      GDAL_DATA: "/opt/gdal",
+    })
+    expect(cleaned.ALL_PROXY).not.toContain("pa/ss")
+    expect(cleaned.GDAL_DATA).toBe("/opt/gdal")
+  })
 })

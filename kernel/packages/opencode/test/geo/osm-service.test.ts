@@ -374,6 +374,41 @@ describe("osm download", () => {
         expect(ticks.at(-1)![0]).not.toBe(result.extentsDone)
       }),
     )
+
+    it.live("an extent that never parsed is settled before the first request goes out", () =>
+      Effect.gen(function* () {
+        /* The other way into `failed`, and the only one that is there BEFORE
+         * the loop starts.
+         *
+         * The test above never reaches this: all three of its extents parse,
+         * so `failed` is empty at the opening tick and seeding the counter from
+         * it or from zero produce the same numbers. Nothing else in this suite
+         * mixes a malformed extent with real ones either, which left the seed —
+         * the line its own comment calls "what keeps the count and its total
+         * describing the same set" — held level by nothing at all.
+         *
+         * Getting it wrong is invisible at the end and wrong throughout: a
+         * download of two extents, one of them nonsense, would open at 0/2 and
+         * finish at 1/2, so the progress a watcher reads never arrives while
+         * the run is over.
+         */
+        const osm = yield* GeoOsm.Service
+        const ticks: [number, number][] = []
+        const result = yield* osm.downloadFeatures({
+          extents: ["bbox:this is not an extent", "bbox:30,114,31,114.5"],
+          tags: ["amenity"],
+          output: path.join(root, "unparseable", "out.geojson"),
+          onProgress: (settled, total) => Effect.sync(() => void ticks.push([settled, total])),
+        })
+
+        // One of the two is settled before anything is asked of the network.
+        expect(ticks[0]).toEqual([1, 2])
+        expect(ticks.at(-1)).toEqual([2, 2])
+        // And it is settled the same way the result counts it.
+        expect(result.failed).toHaveLength(1)
+        expect(result.extentsDone).toBe(1)
+      }),
+    )
   }
 
   {

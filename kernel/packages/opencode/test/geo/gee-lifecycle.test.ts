@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { Effect, Layer, PubSub, Ref, Stream } from "effect"
+import { Effect, Layer, PubSub, Ref, Schema, Stream } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Global } from "@opencode-ai/core/global"
@@ -149,6 +149,32 @@ describe("gee composition", () => {
     })
     expect(GeeService.toNetwork({ state: "idle" })).toEqual({ status: "idle" })
     expect(GeeService.toNetwork({ state: "checking" })).toEqual({ status: "checking" })
+  })
+
+  test("and the wire keeps them, which is a separate question from whether the code does", () => {
+    /* `toNetwork` above returns a plain object; the interface receives an
+     * ENCODED one, and the encoding is what decides which keys survive.
+     *
+     * The two come apart in one specific and entirely ordinary way. `GeeNetwork`
+     * is a union, and a union member is chosen by matching — so a second
+     * `unreachable` member without these fields, sitting anywhere ahead of the
+     * real one, silently wins and strips them. That is precisely the residue a
+     * merge conflict leaves behind, it type-checks cleanly, and every assertion
+     * above still passes because none of them encodes anything.
+     */
+    const encoded = Schema.encodeUnknownSync(GeoEvent.GeeNetwork)({
+      status: "unreachable",
+      tried: ["direct", "proxy:127.0.0.1:7890"],
+      skipped: ["socks5:127.0.0.1:1080"],
+    }) as Record<string, unknown>
+
+    expect(encoded.tried).toEqual(["direct", "proxy:127.0.0.1:7890"])
+    expect(encoded.skipped).toEqual(["socks5:127.0.0.1:1080"])
+    // Both are optional, so an unreachable with neither is still valid — the
+    // offline branch publishes exactly that on purpose.
+    expect(Schema.encodeUnknownSync(GeoEvent.GeeNetwork)({ status: "unreachable" })).toEqual({
+      status: "unreachable",
+    })
   })
 
   test("local comes before network comes before remote", () => {
