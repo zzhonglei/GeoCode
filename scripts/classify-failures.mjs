@@ -5,9 +5,26 @@
  * block apart from a real regression. This can, so the question after a merge
  * becomes "did the unexplained bucket grow".
  *
- * bun prints a failure's error text BEFORE its `(fail) <name>` line, so the
- * evidence for a failure is the run of lines since the previous one. */
+ * bun prints a failure's error text BEFORE the line naming it, so the evidence
+ * for a failure is the run of lines since the previous one. */
 import fs from "node:fs"
+
+/* Colour comes off before anything is matched.
+ *
+ * bun writes its reporter output with ANSI escapes even into a file, and they
+ * sit INSIDE the text the rules below read — a stack frame reads
+ * `<esc>[0m      <esc>[2mat ...`, so the frame filter's `^\s*at ` never fired,
+ * and assertion values carry escapes between the characters the identity rule
+ * looks for.
+ *
+ * The failure marker was the worst of it: bun 1.3 writes `✗ <name> [12ms]`,
+ * coloured, and this script matched `(fail) <name>`. Nothing matched, so every
+ * run reported ZERO failures — the one shape a broken classifier must never
+ * take, because "nothing to see" is word for word what a clean merge looks
+ * like. Both spellings are accepted so a bun version that restores the older
+ * word does not break it a second time. */
+const decolour = (text) => text.replace(/\x1b\[[0-9;]*m/g, "")
+const FAILURE_LINE = /^(?:✗|\(fail\)) (.+?) \[[\d.]+m?s\]$/
 
 /* Bun prints a stack frame beneath the error text, and that frame carries the
  * absolute path of the test file — which inside this package always contains
@@ -98,11 +115,12 @@ const UNEXPLAINED = "unexplained — look at these"
 
 for (const file of process.argv.slice(2)) {
   if (!fs.existsSync(file)) continue
-  const lines = fs.readFileSync(file, "utf8").split("\n")
+  const raw = fs.readFileSync(file, "utf8")
+  const lines = decolour(raw).split("\n")
   const failures = []
   let evidence = []
   for (const line of lines) {
-    const hit = /^\(fail\) (.+?) \[[\d.]+m?s\]$/.exec(line)
+    const hit = FAILURE_LINE.exec(line)
     if (hit) {
       failures.push({ name: hit[1], evidence: evidence.join("\n") })
       evidence = []
@@ -112,6 +130,21 @@ for (const file of process.argv.slice(2)) {
     // Long enough to reach the error printed above a failure, bounded so one
     // huge dump cannot leak its cause onto the next test.
     if (evidence.length > 120) evidence.shift()
+  }
+
+  /* Cross-check against the tally bun printed for itself.
+   *
+   * Everything above depends on one regex still matching the reporter's output,
+   * and when it stopped matching the script did not fail — it reported a clean
+   * run, which is exactly the answer a clean run gives. This is the only check
+   * that does not go through the parser, so it is the only one that can catch
+   * the parser. */
+  const reported = /^\s*(\d+) fail\b/m.exec(decolour(raw))?.[1]
+  if (reported !== undefined && Number(reported) !== failures.length) {
+    console.log(
+      `\n!! ${file}: bun reported ${reported} failures, this script found ${failures.length}.` +
+        `\n   The reporter's format has moved — fix FAILURE_LINE before trusting anything below.`,
+    )
   }
 
   const buckets = new Map()

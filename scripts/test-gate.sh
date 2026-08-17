@@ -4,10 +4,11 @@
 #
 # Deliberately NOT the vendored kernel's full suite. That suite asserts
 # upstream's identity and upstream's agent line-up, both of which GeoCode
-# changed on purpose — roughly ninety of its tests fail by design, which leaves
-# it unable to tell a real regression from the expected noise. Running it is
-# still worth doing after a merge; see scripts/test-upstream.sh, which reports
-# rather than gates.
+# changed on purpose, so a large permanent block of it fails and a plain pass
+# or fail says nothing about whether anything regressed. Running it is still
+# worth doing after a merge; see scripts/test-upstream.sh, which groups the
+# failures by cause and reports rather than gates. The current tally lives in
+# docs/CONVENTIONS.md §7 — one place, not two.
 #
 # Zero patch surface inside kernel/: this file lives outside the vendored tree
 # and names test paths rather than editing upstream's package.json.
