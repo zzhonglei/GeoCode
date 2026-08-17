@@ -104,7 +104,11 @@ grep -rnE '// GeoCode:|--- GeoCode|"GeoCode: ' kernel/packages/
 
 上游套件用 `scripts/test-upstream.sh` 跑,它按成因分堆后**报告而不拦截**。**该关注的不是失败总数,而是"unexplained"那一堆有没有变大**——那一堆里才是真问题。每次上游合并后跑一次。
 
-**当前基线**(2026-08-16 实测,方法即跑一次 `scripts/test-upstream.sh`):**88 个失败,unexplained 8 个**——opencode 包 85、core 包 3。按成因分堆:磁盘身份 36 · 堆栈帧存疑 38 · 已移除功能 4 · agent 阵容 1 · 地理交接 1 · unexplained 8。
+**当前基线**(2026-08-18 实测,内核 v1.18.18,方法即跑一次 `scripts/test-upstream.sh`):**88 个失败,unexplained 8 个**——opencode 包 85、core 包 3。按成因分堆:磁盘身份 36 · 堆栈帧存疑 38 · 已移除功能 4 · agent 阵容 1 · 地理交接 1 · unexplained 8。
+
+**这份画像跨过一次内核升级而一字未变**(v1.18.4 → v1.18.18,14 个版本、上游 319 个 commit,见 `KERNEL.md` §4.4)。同一组数字在两个上游版本上重合,是它作为基线可信的最好证据;也意味着下次它要是动了,动的多半是我们这边。
+
+⚠️ 读 unexplained 那一堆时先扣掉一条:`osm download > progress counts every extent that settles…` 是**我们自己的测试**,它在门里(单独跑 `test/geo/`)是绿的,只在全量并跑的负载下超时——与 `METHOD.md §4` 记的那类并跑假红同源。
 
 「堆栈帧存疑」那 38 个是一笔明账:它们只在堆栈帧里出现旧身份,分不清是真的改名漂移还是别的原因。分类尝试过,没有便宜的归法。它不阻塞任何事,但**「unexplained 有没有变大」这个问题的可信度,受限于这 38 个还没被看过**。
 
