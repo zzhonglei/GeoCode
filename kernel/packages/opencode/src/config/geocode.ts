@@ -9,9 +9,16 @@ import OSMFETCH_PROMPT from "../session/prompt/osmfetch.txt"
  *
  * `base()` is merged FIRST in the config pipeline (config.ts), so anything here
  * is an out-of-the-box default the user's own config can still override — model,
- * temperature, extra agents, and so on. Hard security rules that must NOT be
- * user-overridable will live in a separate `enforced()` layer merged LAST, once
- * geo tools exist; it is intentionally absent while there is nothing to lock. --- */
+ * temperature, extra agents, and so on.
+ *
+ * There is deliberately NO second `enforced()` layer merged last. An earlier
+ * version of this comment promised one "once geo tools exist"; the tools exist
+ * now and the question settled the other way. Upstream sets no such layer over
+ * any of its own tools, and the geographic denies below are meant to be
+ * overridable for exactly the reason upstream's are: a user's own config wins,
+ * and inventing a layer upstream has no equivalent of is not a decision this
+ * fork gets to make quietly. geocode-geo-permissions.test.ts asserts that
+ * property through the engine, so adding the layer would turn it red. --- */
 export function base(): ConfigV1.Info {
   return {
     // GeoAgent is the sole primary agent GeoCode surfaces.

@@ -325,9 +325,6 @@ export function Session() {
     if (part.id === lastSwitch) return
 
     if (part.tool === "plan_exit") {
-      // GeoCode: experimental-only path (see tool/plan.ts) — plan_exit is not
-      // registered while plan mode is off, so this never fires today. "build" is
-      // disabled in GeoCode; switch to the default agent here when enabling it.
       local.agent.set("build")
       lastSwitch = part.id
     } else if (part.tool === "plan_enter") {
