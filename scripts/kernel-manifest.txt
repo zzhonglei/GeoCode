@@ -1,0 +1,66 @@
+# The kernel closure: what gets vendored from the opencode upstream.
+#
+# One path per line, relative to the upstream repository root. A directory is
+# taken whole, a file is taken alone, and `#` starts a comment.
+#
+# THIS FILE IS THE CLOSURE. Before it existed the selection lived only in the
+# session that performed it once, on 2026-07-23, and nothing afterwards could
+# check it — which is why two of kernel-upstream's three commits are fixes to
+# that selection (a file swallowed by an upstream .gitignore, and one nobody
+# noticed was read at import time).
+#
+# Editing a line here is a structural change, not a preference: the next merge
+# reads a removed line as "upstream deleted these files" and an added one as
+# "upstream added them", and neither produces a conflict. Both are silent.
+# See docs/KERNEL.md §4.4.
+
+# --- Root project infrastructure. The packages do not install or build without
+# these, so they are part of the closure even though they are not packages. ---
+package.json
+bunfig.toml
+turbo.json
+tsconfig.json
+patches
+LICENSE
+.gitignore
+
+# Upstream's own lockfile, taken pristine like everything else here. On main it
+# is NOT this file: it is the product of `bun install` over the closure, which
+# is why a conflict in it is resolved by regenerating rather than by hand
+# (docs/CONVENTIONS.md §5).
+bun.lock
+
+# Read by packages/script at import time. The rest of .github is CI we do not
+# run — workflows, issue templates, CODEOWNERS.
+.github/TEAM_MEMBERS
+
+# --- Runtime (11 packages) ---
+packages/opencode
+packages/core
+packages/llm
+packages/schema
+packages/protocol
+packages/server
+packages/plugin
+packages/codemode
+packages/effect-drizzle-sqlite
+packages/effect-sqlite-node
+
+# The JS SDK, and only it. `packages/sdk` is a container, not a package —
+# root package.json declares the workspace as `packages/sdk/js`, and the two
+# files beside it (a 1 MB generated openapi.json and a .gitignore for build
+# output) take part in nothing we build. This narrowing was made during the
+# first import and never written down anywhere; the first run of
+# kernel-vendor.sh found it by reconciling against the branch.
+packages/sdk/js
+
+# --- TUI test bed (2 packages). `ui` is here only because tui imports five mp3
+# alert sounds from it (21.5 KB out of 11 MB); it is carried whole anyway,
+# because narrowing the closure is the one operation this environment has no
+# automatic guard against, and we touch none of its files. ---
+packages/tui
+packages/ui
+
+# --- Tooling (2 packages) ---
+packages/script
+packages/http-recorder
