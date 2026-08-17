@@ -70,19 +70,27 @@
 **① 只有"通配全拒"才让工具消失。**
 
 ```
-"geo_qgis_run": "deny"                  → 工具从模型清单消失
-"geo_qgis_run": { "buffer": "deny" }    → 工具仍在册,只在调 buffer 时拒
+"qgis": "deny"                    → QgisDoc 与 RunQgisAlgorithm 一并从模型清单消失
+"qgis": { "buffer": "deny" }      → 两者仍在册,只在 pattern 命中 buffer 时拒
 ```
 
 两种是**不同的产品行为**。地理工具一律用前者,不做算法级细则——规则读起来就是产品行为,不需要在两种语义之间换算。
 
-**② 未命中的默认是 `ask`,不是 `deny`。**
+一个键下的两个工具靠 **pattern 命名空间**分档:`RunQgisAlgorithm` 用算法 id 作 pattern,`QgisDoc` 用 `doc:` 前缀。计划模态正是靠这一点做到"查文档随便查、执行要问"(见 §4.3)。
+
+**② 引擎地板是 `"*": "allow"`,所以缺一条拒绝就等于放行。**
+
+`evaluate` 的结尾确实写着一句看上去很安全的兜底:
 
 ```ts
 findLast(...) ?? { action: "ask", permission, pattern: "*" }
 ```
 
-所以全局那条 `"geo_*": "deny"` 不能省。少了它,未授权的 agent 调地理工具会**弹窗问用户**——对用户是莫名其妙的授权请求,对我们是边界静默失效。
+**但任何真实 agent 都够不到它。** 每个 agent 的规则集是 `Permission.merge(defaults, user)`,而引擎 `defaults` 的第一条就是 `"*": "allow"`(`agent/agent.ts`),`findLast` 永远能命中它,兜底那一支只对空规则集成立。
+
+实测:向 GeoAgent 问一个没人写过规则的键,拿到的是 `allow`。
+
+所以四条地理拒绝**一条都不能少**。少了哪一条,未授权的 agent 调那一组工具会被**静默放行**——不报错、不弹窗、不留痕,而且四个键之间已经没有共同前缀可以兜住第五组。这是边界失效里最坏的一种形态,也是这一条写在这里的全部理由。
 
 **③ 后来者胜,而 agent 层永远在最后。**
 

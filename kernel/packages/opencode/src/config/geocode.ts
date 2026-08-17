@@ -28,12 +28,15 @@ export function base(): ConfigV1.Info {
      * Earth Engine. The same four names appear in permission/index.ts, which
      * maps tool ids onto them so visibility and execution agree.
      *
-     * None of these may be omitted: evaluate() falls back to "ask" when NO rule
-     * matches, so a missing deny turns an unauthorized call into a permission
-     * prompt at the user instead of a refusal — a silent boundary failure
-     * (docs/TOOLS.md §4.2). A fifth group must add a fifth line here; there is
-     * no common prefix left to catch it automatically, which is the price of
-     * names a user can read.
+     * None of these may be omitted, and the reason is worse than it reads.
+     * `evaluate` does end in `?? { action: "ask" }`, but no real agent ever
+     * reaches it: every ruleset is `merge(defaults, user)` and the engine's
+     * defaults open with `"*": "allow"` (agent/agent.ts), which findLast always
+     * matches. A missing deny is therefore not a prompt at the user — it is a
+     * SILENT ALLOW. Measured: asking GeoAgent about a key nobody wrote a rule
+     * for returns "allow" (docs/TOOLS.md §4.2). A fifth group must add a fifth
+     * line here; there is no common prefix left to catch it automatically,
+     * which is the price of names a user can read.
      *
      * Merged FIRST, so a user's own config still wins — the same treatment
      * upstream gives every one of its own tools (agent.ts places the user's
