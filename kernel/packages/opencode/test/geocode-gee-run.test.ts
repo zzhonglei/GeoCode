@@ -401,6 +401,38 @@ describe("RunGeeScript, the endings", () => {
       expect(result.metadata.error_code).toBeUndefined()
     }),
   )
+
+  ending({}, ["ok\n"]).instance("the environment header never mentions the proxy", () =>
+    Effect.gen(function* () {
+      /* An absence, pinned because it was there once.
+       *
+       * The header used to carry `route proxy:127.0.0.1:7890`. No credential is
+       * in a RouteId by construction, so it was never a leak — but the copy rule
+       * for anything the model reads is that we do not mention proxies at all,
+       * so that a network failure does not send it reasoning that way. A fact
+       * repeated in every single return is precisely what gets reasoned from.
+       *
+       * The route is REACHABLE and non-direct here on purpose: with the fixture's
+       * usual `direct` the header would be clean whether or not the line exists,
+       * and this test would pass against the very code it is meant to forbid.
+       */
+      const status = yield* GeoStatus.Service
+      yield* status.register("gee", {
+        ...READY,
+        network: { status: "reachable", route: "proxy:127.0.0.1:7890" },
+      })
+
+      const result = yield* succeed({ script: "print('ok')" })
+
+      // The header is really there — otherwise the absences below prove nothing.
+      expect(result.output).toContain("<geo_env>")
+      expect(result.output).toContain(ENVIRONMENT.python)
+
+      expect(result.output).not.toContain("proxy")
+      expect(result.output).not.toContain("7890")
+      expect(result.output).not.toMatch(/\broute\b/)
+    }),
+  )
 })
 
 describe("RunGeeScript, the authorization loop", () => {

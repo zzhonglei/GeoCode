@@ -140,10 +140,20 @@ export const geeHeader = Effect.fn("GeoTool.geeHeader")(function* (status: GeoSt
   const current = yield* status.current("gee")
   if (!current || current.setup.status !== "ready") return undefined
   if (current.facing !== "runtime" || current.runtime.status !== "valid") return undefined
+  /* --- GeoCode: the route is deliberately NOT here.
+   *
+   * It used to be, as `route proxy:127.0.0.1:7890`. No credential is in a
+   * `RouteId` by construction, so this was never a leak — but it put "this
+   * machine is behind a proxy, on this port" into every single return, and the
+   * copy rule for anything the model reads is that we do not mention proxies
+   * at all. The rule exists because the model must not start reasoning toward
+   * the proxy when the network fails; the simplification of that whole module
+   * is deliberate, and a fact repeated every turn is exactly what gets reasoned
+   * from. Diagnosis keeps the route — it rides the status plane, which the
+   * interface reads and the model does not. --- */
   const parts = [
     current.setup.version ? `GEE ${current.setup.version}` : "GEE ready",
     `project ${current.setup.project}`,
-    current.network.status === "reachable" && current.network.route ? `route ${current.network.route}` : undefined,
     current.setup.python,
   ].filter((part): part is string => part !== undefined)
   return `<geo_env>${parts.join(" · ")}</geo_env>`
