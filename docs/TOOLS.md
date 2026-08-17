@@ -4,51 +4,49 @@
 
 地理内核提供执行能力,Agent 内核提供会话与调度,**工具层是把两者接起来的那一层**:它把地理内核的门面 API 包装成模型可调用的工具,并决定哪个 agent 能调哪一组。
 
-它是一个真实的层,不是某份文档的边角。两份相邻文档都明确把它交出去:
+本文回答的问题是:这些职责**由谁承担、放在哪里**。内核交出来的契约本身不在这里——正本是 GEOKERNEL.md §11.2 的移交清单,本文只引用不复制,因为复述必然漂移(KERNEL.md §6 立过同一条规矩)。
 
-> GEOKERNEL.md §1.4:不定义 Agent、**工具与权限规则**;
-> GEOKERNEL.md §11.2:**M4 移交清单**——内核完成后,旧版工具层中不能静默消失的职责;
-> KERNEL.md §4.1:地理工具注册 | 工具注册表 + 权限分组 | 未开始。
-
-**移交清单的正本在 GEOKERNEL.md §11.2,本文只引用不复制。** 那份清单描述的是内核交出来的契约,复述必然漂移(KERNEL.md §6 立过同一条规矩)。本文回答的是另一个问题:这些职责在工具层**由谁承担、放在哪里**。
-
-依赖方向:工具层依赖地理内核的门面与 Agent 内核的工具契约,反向皆无。地理内核不认识工具,Agent 内核不认识地理。
+依赖方向:工具层依赖地理内核的门面与 Agent 内核的工具契约。地理内核不认识工具层;Agent 内核只在登记在册的注入点上引用它(§7)。
 
 ## 2. 引擎的形状:会咬到我们的那几条
 
 上游的工具契约(`tool/tool.ts` 的 `Tool.define`)不在这里复述。只记录**违反了就出事**的约束,每条都实测确认过。
 
-| # | 约束 | 位置 | 后果 |
+| # | 约束 | 在哪 | 后果 |
 |---|---|---|---|
-| 1 | **不自报截断就被代截**——包装层见 `metadata.truncated === undefined` 即调 `truncate.output` | `tool/tool.ts:131` | 见 §5,对地理工具是致命的 |
-| 2 | `ctx.metadata()` 走 `updateToolCall`,**是实时广播** | `session/tools.ts:67` | 环境头绝不能走这里(GEOKERNEL §9.1 第二条硬性形态) |
-| 3 | 附件形态是 `{ type:"file", mime, url:"data:<mime>;base64,…" }`,id 与会话字段由装配层补 | `tool/read.ts:317`、`session/tools.ts:114` | 预览图给模型的唯一通道 |
-| 4 | **权限过滤发生在最后一步**,不在工具注册表里 | `session/llm/request.ts:208` | 注册表只按 provider 与模型家族筛 |
-| 5 | 工具是 `Effect<Info, never, R>`,`R` 传导到注册表 | `tool/tool.ts:151` | 见 §7:这是必须打补丁的根因 |
-| 6 | 参数解码失败抛 `InvalidArgumentsError`,`formatValidationError` 可定制 | `tool/tool.ts:24` | §11.2 那条"参数 JSON 解析失败的归因文案"的挂点 |
+| 1 | **不自报截断就被代截**——`Tool.define` 的包装只在 `metadata.truncated !== undefined` 时放行,否则调 `truncate.output` | `tool/tool.ts` | 见 §5,对地理工具是致命的 |
+| 2 | `ctx.metadata()` 走 `updateToolCall`,**是实时广播** | `session/tools.ts` | 环境头绝不能走这里(GEOKERNEL §9.1 第二条硬性形态) |
+| 3 | 附件形态是 `{ type:"file", mime, url:"data:<mime>;base64,…" }`,id 与会话字段由装配层补 | `tool/read.ts` 构造,`session/tools.ts` 补全 | 预览图给模型的唯一通道 |
+| 4 | **权限过滤发生在最后一步**,不在工具注册表里 | `session/llm/request.ts` 的请求装配 | 注册表只按 provider 与模型家族筛 |
+| 5 | 工具是 `Effect<Info, never, R>`,`R` 传导到注册表 | `Tool.define` 的签名 | 见 §7:这是必须打补丁的根因 |
+| 6 | 参数解码失败抛 `InvalidArgumentsError`,`formatValidationError` 可定制 | `tool/tool.ts` | GEOKERNEL §11.2 那条"参数 JSON 解析失败的归因文案"的挂点 |
 
-第 5 条值得展开。上游给了两条装配路径接入自定义工具——配置目录扫描 `{tool,tools}/*.ts`、插件的 `tool` 字段——**两条都经 `fromPlugin`**(`tool/registry.ts:120`),而它把工具锁死在插件形态:Zod 参数、`Promise` 执行、**没有 Effect 服务上下文**。地理工具必须 `yield* GeoQgis.Service` 一类,插件形态给不了,也没有全局逃生口能把服务句柄递进去。
+第 5 条值得展开。上游给了两条装配路径接入自定义工具——配置目录扫描 `{tool,tools}/*.ts`、插件的 `tool` 字段——**两条都经 `fromPlugin`**(`tool/registry.ts`),而它把工具锁死在插件形态:Zod 参数、`Promise` 执行、**没有 Effect 服务上下文**。地理工具必须 `yield* GeoQgis.Service` 一类,插件形态给不了,也没有全局逃生口能把服务句柄递进去。
 
-所以工具层有且只有一处源码补丁,理由记在 §7。
+所以地理工具进不了那两条装配路径,只能补丁注册表本身——这是 §7 那三处补丁里的第一处,也是唯一一处由引擎的类型形状逼出来的。
 
 ## 3. 八个工具
 
-| 工具 id | 能力 | 权限键 | 组 | 门禁 |
+| 工具 id | 能力 | 权限键 | pattern | 门禁 |
 |---|---|---|---|---|
-| `ReadGeoData` | 读矢量/栅格元信息与预览 | `geo_qgis_read` | **QGIS** | QGIS 统一门禁 |
-| `QgisDoc` | 算法文档与检索 | `geo_qgis_doc` | QGIS | 同上 |
-| `RunQgisAlgorithm` | 执行 Processing 算法 | `geo_qgis_run` | QGIS | 同上 |
-| `RunGeeScript` | 执行 GEE 脚本 | `geo_gee_run` | **GEE** | GEE 三层状态 |
-| `OsmSearch` | 搜索地名与要素 | `geo_osm_search` | **OSM** | 无环境 |
-| `OsmProbe` | 下载前侦察数据量 | `geo_osm_probe` | OSM | 无环境 |
-| `OsmGetObjects` | 按对象下载 | `geo_osm_objects` | OSM | 无环境 |
-| `OsmGetFeatures` | 按范围与标签批量下载 | `geo_osm_features` | OSM | 无环境 |
+| `ReadGeoData` | 读矢量/栅格元信息与预览 | `geodata` | 文件路径 | QGIS 统一门禁 |
+| `QgisDoc` | 算法文档与检索 | `qgis` | `doc:<action>:<target>` | 同上 |
+| `RunQgisAlgorithm` | 执行 Processing 算法 | `qgis` | 算法 id | 同上 |
+| `RunGeeScript` | 执行 GEE 脚本 | `gee` | 脚本路径 | GEE 三层状态 |
+| `OsmSearch` | 搜索地名与要素 | `osm` | 查询串 | 无环境 |
+| `OsmProbe` | 下载前侦察数据量 | `osm` | 各个 extent | 无环境 |
+| `OsmGetObjects` | 按对象下载 | `osm` | 输出路径 | 无环境 |
+| `OsmGetFeatures` | 按范围与标签批量下载 | `osm` | 输出路径 | 无环境 |
+
+**权限键有四个:`geodata` / `qgis` / `osm` / `gee`**,与工具 id 是多对一。id 是模型看到的名字,键是用户在配置里读写的名字,两者刻意不同——`ReadGeoData` 对模型准确,`geodata` 对人准确。桥接它们的映射表在 `permission/index.ts`(§4.1)。
 
 **工具 id 逐字沿用旧版**,不改名。它们是模型看到的名字,而旧版那八份经多轮打磨的描述文件通篇以它们为准(§8);改名等于让那份积累失去锚点,换来的只是好看一点。
 
-**分组按环境依赖划分,不按功能。** 三组恰好对应三种就绪条件,所以"关掉一组"在用户心里对应"这套环境我没配"——这个心智模型是准确的,而按功能分组(读/写/查)则不是。
+**分组按环境依赖划分,不按功能。** "关掉一组"在用户心里对应"这套环境我没配",这个心智模型是准确的;按功能分组(读 / 写 / 查)则不是。
 
-`ReadGeoData` 归入 QGIS 组不是归类方便:工具侧的数据读取**走 QGIS 的 Python**(GEOKERNEL §7.9),并与算法执行**共用同一个就绪门禁**(§4.9)。QGIS 没就绪它一样不能用。
+四个组,三种就绪条件——`geodata` 与 `qgis` 共用 QGIS 那一个门禁,因为工具侧的数据读取**走 QGIS 的 Python**(GEOKERNEL §7.9),QGIS 没就绪它一样不能用。
+
+两者仍然分开,因为**门禁与授权是两件事**:读一个图层,和跑一个会写盘的算法,是用户会分开考虑的两种授权,尽管它们恰好需要同一套环境。这个区分不是理论上的——osmfetch 拿的正是它:有 `geodata` 用来验证自己刚下载的东西,没有 `qgis`,因为验证下载是读,跑算法是别人的活。
 
 ## 4. 权限体系
 
@@ -56,14 +54,16 @@
 
 这是最容易搞错的地方:**同一个工具在两个层面用不同的键**。
 
-| 层 | 键 | 判定 | 效果 |
+| 层 | 用什么键 | 判定 | 效果 |
 |---|---|---|---|
-| **可见性** | 工具 id(`ReadGeoData`) | `Permission.disabled`(`permission/index.ts:204`) | 工具**从模型的工具清单里消失** |
-| **执行** | `ctx.ask` 的 permission(`geo_qgis_read`) | `Permission.evaluate`(`permission/index.ts:28`) | 调用时放行 / 询问 / 拒绝 |
+| **可见性** | 工具 id(`ReadGeoData`),经映射表换成组名 | `Permission.disabled` | 工具**从模型的工具清单里消失** |
+| **执行** | 工具在 `ctx.ask` 里声明的权限键(`geodata`) | `Permission.evaluate` | 调用时放行 / 询问 / 拒绝 |
 
-可见性层的键无法自定义——`disabled` 直接拿工具 id 当权限键(edit/write/apply_patch 与三个 MCP 资源工具是仅有的例外映射)。执行层的键由工具自己在 `ctx.ask` 里声明,因此可以任意设计。
+可见性层原本不接受自定义:`disabled` 直接拿工具 id 去查规则,只为 edit/write/apply_patch 与三个 MCP 资源工具做过映射。GeoCode 加了第三张表 `GEO`,把八个工具 id 映到四个组名。**没有它,一条 `"osm": "deny"` 只拦得住执行,四个 OSM 工具照样出现在模型的清单里。**
 
-一处订正:KERNEL.md 早期记载旧版的蛇形权限规则"很可能从未真正生效过"。实测不成立——旧版的规则**在执行层精确命中**,落空的只有可见性层。这个区分很重要,因为它决定了"名字对不上"到底会漏掉什么。
+⚠️ 这张表**缺一项不会报错**——规则写了,只是从不被查。所以两层各配各的绊线,而不是从一层推断另一层。
+
+一处订正留在这里,因为它是这个区分为什么要紧的证据:早期曾记载旧版的蛇形权限规则"很可能从未真正生效过"。实测不成立——旧版规则**在执行层精确命中**,落空的只有可见性层。**"名字对不上"的后果取决于是哪一层的名字**:一层表现为弹窗或拒绝,另一层表现为静默的可见。
 
 ### 4.2 三条裁决语义
 
@@ -94,36 +94,46 @@ findLast(...) ?? { action: "ask", permission, pattern: "*" }
 
 **③ 后来者胜,而 agent 层永远在最后。**
 
-合成顺序是 `defaults → 全局 user → agent 自己的`(`agent/agent.ts:279` 与 `:295`),裁决用 `findLast`。所以 agent 级规则盖过全局规则。
+合成顺序是 `defaults → 全局 user → agent 自己的`(`agent/agent.ts` 的 `Permission.merge` 两处),裁决用 `findLast`。所以 agent 级规则盖过全局规则。
 
 同一条规则里,键序也有语义:`fromConfig` 按 `Object.entries` 顺序生成规则。**泛的写前面、具体的写后面**,写反了结果相反。
 
 ### 4.3 装配
 
 ```jsonc
-"permission": { "geo_*": "deny" },
+"permission": { "geodata": "deny", "qgis": "deny", "osm": "deny", "gee": "deny" },
 
 "agent": {
   "GeoAgent": {
-    "permission": { "geo_qgis_*": "allow", "geo_gee_*": "allow" }
+    "permission": { "geodata": "allow", "qgis": "allow", "gee": "allow" }
   },
   "osmfetch": {
     "permission": {
-      "geo_osm_*": "allow",
-      "geo_qgis_read": "allow",
-      "webfetch": "deny", "websearch": "deny",
-      "task": { "*": "deny" }, "question": "deny", "skill": "deny"
+      "*": "deny",
+      "osm": "allow", "geodata": "allow", "bash": "allow", "glob": "allow",
+      "external_directory": "ask"
     }
   },
-  "plan": { "permission": { "task": { "osmfetch": "deny" } } }
+  "plan": {
+    "permission": {
+      "geodata": "allow",
+      "qgis": { "*": "ask", "doc:*": "allow" },
+      "gee": "ask",
+      "task": { "osmfetch": "ask" }
+    }
+  }
 }
 ```
 
-四件事同时成立:三组各一条通配 · 单个工具可单独授权(osmfetch 只拿 `geo_qgis_read`,不带算法执行) · `geo_*` 是整个地理能力的总开关 · 工具 id 不受权限设计牵连。
+**四个键必须逐条写,没有通配可用。** 名字取的是用户读得懂的词,代价就是它们之间不存在共同前缀:将来加第五组,这里必须加第五行,不会被自动兜住。
 
-**GeoAgent 不放行 `geo_osm_*`**:OSM 下载只走 osmfetch 子代理,这是刻意的能力隔离。osmfetch 的网络出口锁是点名禁 `webfetch`/`websearch`/`task` 三样,**不是** `"*": "deny"`——后者会连带砍掉它写下载结果所需的 write 权限。
+**GeoAgent 不放行 `osm`**:OSM 下载只走 osmfetch 子代理,这是刻意的能力隔离。
 
-`patterns` 这一维留给操作对象(哪个文件、哪个算法),不用来区分工具。占用了它,就再也写不出"允许读 `./data/*.tif`,其他要问"。
+**osmfetch 的出口锁是 `"*": "deny"` 加一份短白名单**,不是点名禁几样。白名单里每一项都有具体用途:`osm` 是它的本职;`geodata` 用来读回自己刚写下的东西——它的提示词要求在报告成功之前验证一遍;`bash` 与 `glob` 用来看产物。
+
+`external_directory: "ask"` 单独列出来,因为它是把上游默认**恢复**回来:通配拒绝会让一个再正常不过的、位于工作目录之外的输出路径被直接回绝,而上游对这种情况的处理是问用户。
+
+`patterns` 这一维留给操作对象(哪个文件、哪个算法、哪种文档查询),不用来区分工具。计划模态的 `qgis: { "*": "ask", "doc:*": "allow" }` 正是靠它做到"查文档随便查、执行要问"。占用这一维去区分工具,就再也写不出"允许读 `./data/*.tif`,其他要问"。
 
 ### 4.4 阵容与上游一一对应
 
@@ -132,8 +142,10 @@ task 规则不发明自己的机制,逐个对应上游的形状:
 | GeoCode | 对应上游 | task 规则 |
 |---|---|---|
 | GeoAgent | build | **无**——继承 defaults 的放行,用户自定义的子代理即刻可派、即刻出现在 task 工具的描述里 |
-| plan | plan | `{ "osmfetch": "deny" }`,镜像上游的 `{ general: "deny" }`:点名那个往磁盘写东西的子代理。随 osmfetch 一起落地——在那之前它约束的对象不存在,无从验证 |
-| osmfetch | (自有) | 自身 `task` 全拒,不得递归派生——出口锁的一部分 |
+| plan | plan | `{ "osmfetch": "ask" }`。位置对应上游的 `{ general: "deny" }`——点名那个往磁盘写东西的子代理——但动作是 `ask` 而非 `deny`,理由见下 |
+| osmfetch | (自有) | 通配拒绝之下 `task` 不在白名单里,不得递归派生——出口锁的一部分 |
+
+**为什么 plan 用 `ask` 而不是 `deny`。** `describeTask` 会把被拒绝的子代理**从清单里删掉**,而一个不知道 osmfetch 存在的规划者写不出含下载的计划。上游在同一处犯的是反方向的错:它的计划模式提示词让模型去派 `general`,而它的权限拒绝了 `general`——名字在指令里,不在清单里。
 
 一个被否决的方案要记下来,因为它看上去很聪明。曾试过给 GeoAgent 写 `task: { "*": "deny", "osmfetch": "allow" }`,一石二鸟:子代理白名单,同时让 `tool/truncate.ts` 的超限提示落到不点名 explore 的那支(它按 `evaluate("task","*")` 二选一,字面量 `"*"` 只有通配规则能匹配)。否决,两个代价当场兑现:白名单让**用户自定义的子代理静默消失**——`describeTask` 按权限过滤,定义了却不出现,无处报错;plan 的通配拒绝打翻两个上游测试(它们断言 plan 可派只读与自定义子代理)。拿权限语义换一段文案,影响面不成比例。
 
@@ -143,11 +155,11 @@ task 规则不发明自己的机制,逐个对应上游的形状:
 
 ### 5.1 为什么不能用上游机制
 
-上游是 **head 截断**:保留开头、丢弃结尾,超限全文写盘,模型拿到前 2000 行或 50 KB。而 §11.2 要求"不能静默消失"的东西**恰恰都在结尾**——五种终止路径的横幅、耗时页脚、`drainIncomplete`/`truncated` 的呈现、接在非零退出上的结构化错误。
+上游是 **head 截断**:保留开头、丢弃结尾,超限全文写盘,模型拿到前 2000 行或 50 KB。而 GEOKERNEL §11.2 要求"不能静默消失"的东西**恰恰都在结尾**——五种终止路径的横幅、耗时页脚、`drainIncomplete`/`truncated` 的呈现、接在非零退出上的结构化错误。
 
 一次超限的算法执行,上游机制会**精确切掉归因所需的全部信息**,只留下前 2000 行进度刷屏。这不是截得不够好,是截反了方向。
 
-逃生口是 `tool/tool.ts:131`:自设 `metadata.truncated` 即完全跳过 `truncate.output`。判定是 `!== undefined`,所以 `false` 也算表过态。
+逃生口在 `Tool.define` 的包装里:自设 `metadata.truncated` 即完全跳过 `truncate.output`。判定是 `!== undefined`,所以 `false` 也算表过态。
 
 ### 5.2 三种策略
 
@@ -169,30 +181,37 @@ task 规则不发明自己的机制,逐个对应上游的形状:
 
 自设 `truncated: true` 时**必须同时给 `outputPath`**,否则界面找不到完整输出。
 
-## 6. 公共包装
+## 6. 共享零件
 
-八个工具共享大量职责——环境头、门禁等待、结构化错误、终止横幅、耗时页脚、凭据脱敏、参数归因文案。各写一遍就是八份会漂移的实现,而其中脱敏那条,GEOKERNEL §3.3 的原话是"**漏掉任何一个等于完全没做**"。
+八个工具共享一批职责。各写一遍就是八份会漂移的实现,所以它们集中在 `tool/geo-tool.ts`:
 
-因此在 `Tool.define` 之上加一层地理工具专用包装 `tool/geo-tool.ts`,承担 §11.2 中属于全体工具的那部分:
+| 零件 | 承担什么 |
+|---|---|
+| `settledQgisGate` / `settledGeeGate` | 门禁检查与中间态等待,带上限 |
+| `qgisHeader` / `geeHeader` | 环境头快照。**只前缀于返回值**,绝不经 `ctx.metadata`(§2 第 2 条) |
+| `gateStatus` / `geeGateStatus` | 环境未就绪时的指导文案,整组同一个声音 |
+| `terminationBanner` | 五种终止路径的横幅 |
+| `elapsedFooter` | 耗时页脚 |
 
-- 门禁检查与中间态等待(带上限)
-- 环境头快照:入口取一次、门禁后重取一次,**只前缀于返回值**
-- **`NetRedact` 在构造输出的那一刻调用**——唯一出口
-- 结构化错误提取、终止横幅、耗时页脚
-- §5.2 的结构化保留规则(哪些段不可裁),各工具只声明自己的策略与阈值
-- `formatValidationError` 的归因文案
+**它是一组被调用的零件,不是一层包住 `Tool.define` 的壳。** 八个工具各自 `Tool.define`,各自决定调哪几个;截断策略、结构化错误提取、参数归因文案也都留在各工具里。
 
-收益不在少写代码,而在**脱敏从"要记得八次"变成结构上不可能漏**。
+这个形态的代价是"记得调"仍然是每个工具的责任。收益是每个工具的执行序自己读得出来,而那个序本身就是设计——顺序错一步,后果是具体的(OVERVIEW.md §5.3)。
 
-各工具自己实现的只有领域逻辑与"哪些段属于结构化"。
+### 6.1 凭据不靠这一层拦住
+
+早期设想是让这一层在构造输出的那一刻统一调 `NetRedact`,做成唯一出口,"脱敏从要记得八次变成结构上不可能漏"。**实际不是这样**:`NetRedact` 在生产代码里的调用点为零。
+
+真正起作用的是更上游的一件事——状态面只携带 `RouteId`(`geo/net/types.ts`),凭据从不进入可展示的数据。**不取用,胜过取用后再擦干净。**
+
+这条有过一次实证。`geo/net/discovery.ts` 原本走的正是"擦干净"那条路:把用户的代理声明整串拿来,再交给脱敏函数。而脱敏依赖 URL 解析,解析不了就原样返回——密码里有一个 `/` 就漏。改法不是把脱敏写得更严,是**不再取那一串**,改成从解析出的字段拼一个标识。没有可擦的东西,就没有擦不干净。
 
 ## 7. 注入点与绊线
 
 工具层对上游有**三处**源码补丁:
 
-1. **`tool/registry.ts`**(GEOKERNEL §10.1 注入点 #9,已落地)——地理工具进 `builtin` 数组,`node` 的 `deps` 加 `GeoKernel.node`。后者是 §2 第 5 条的必然结果:工具的服务依赖 `R` 会传导到注册表,层图因此把"工具依赖地理内核"显式化。
-2. **`tool/truncate.ts`**(已落地)——超限提示合并为一条。为什么不走配置,记录在 §4.4。
-3. **`tool/read.ts`**(注入点 #10,已落地)——地理数据文件交给 `ReadGeoData`,三行。
+1. **`tool/registry.ts`**(GEOKERNEL §10.1 注入点 #9)——地理工具进 `builtin` 数组,`node` 的 `deps` 加 `GeoKernel.node`。后者是 §2 第 5 条的必然结果:工具的服务依赖 `R` 会传导到注册表,层图因此把"工具依赖地理内核"显式化。
+2. **`tool/truncate.ts`**——超限提示合并为一条。为什么不走配置,记录在 §4.4。
+3. **`tool/read.ts`**(注入点 #10)——地理数据文件交给 `ReadGeoData`,三行。
 
 第 3 处值得说明为什么非补丁不可。`read` 打不开地理数据,但它**失败的方式有两种**,而危险的是第二种:二进制格式(`.shp` `.tif` `.gpkg`)撞上它的二进制守卫,止于"无法读取二进制文件"——是死路,但至少是显式的;而**文本格式**(`.geojson` `.gml` `.kml` `.gpx` `.asc`)会一路通过所有检查,被当作纯文本读取、在坐标数组中间截断,末尾还附一句"用 offset=N 继续"。模型拿到的是一段看起来像数据的碎片,并被鼓励继续索取更多。这不是配置能拦的,提示词也只是软约束。
 
@@ -208,23 +227,26 @@ task 规则不发明自己的机制,逐个对应上游的形状:
 
 1. 八个工具 id 确实出现在 `registry.ids()` 里;
 2. **换一个 agent 调用时工具确实不在模型清单中**——断言"拦住了",不是断言"写了规则";
-3. 超限提示不点名已删除的 agent,且始终给出可行路径(`test/geocode-truncation-hint.test.ts`,已落地)。
+3. 超限提示不点名已删除的 agent,且始终给出可行路径(`test/geocode-truncation-hint.test.ts`)。
 
 第二条是旧版事故的直接教训:规则写进去了不等于命中了。
 
 ## 8. 描述文件
 
-八份描述迁自旧版(`tool/geo/*.txt`,共 181 行),它们经过多轮打磨,逐字迁移。但对照 §11.2 有三处不能照抄:
+八份描述(`tool/geo-*.txt`)迁自旧版,经过多轮打磨,逐字迁移。迁移时有三处不能照抄,三处的理由至今成立:
 
-| 文件 | 处理 |
-|---|---|
-| `run-processing.txt` | 三处点名旧工具名 `QgisDoc`,改为新 id。**这是旧版事故的镜像**:描述里写一个名字、注册用另一个,模型照做就失败 |
-| `osm-search.txt` | **新写**耗时说明。§11.2 要求写明"这一步可能要等几分钟",旧版一个字都没有——不写则 Agent 会把正常等待判为卡死并重试,而重试只是再付一次同样的代价 |
-| `gee-run.txt` | 心跳契约已完备(含 `heartbeat()` 用法与"60s idle timeout will FORCE-KILL"的后果)。两处小改:去掉对模型无意义的架构词 sidecar;补上 `download_image` 的 `dtype` 参数——代码里一直有,旧版描述漏了。那个 60s 由绊线钉在 `IDLE_FLOOR_SECONDS` 上,因为模型会按它来摆放 `heartbeat()` |
+| 文件 | 改了什么 | 为什么值得记下 |
+|---|---|---|
+| `geo-qgis-run.txt` | 三处点名的旧工具名改成新 id | **旧版事故的镜像**:描述里写一个名字、注册表用另一个,模型照做就失败。因此凡改名,`.ts` 与 `.txt` 两侧都要扫(KERNEL.md §4.3) |
+| `geo-osm-search.txt` | **新写**耗时说明 | 不写,Agent 会把正常等待判成卡死并重试,而重试只是再付一次同样的代价 |
+| `geo-gee-run.txt` | 去掉架构词 sidecar;补上 `download_image` 的 `dtype` | 前者对模型没有意义;后者代码里一直有,旧版描述漏了。心跳契约本就完备,而其中那个 60s 由绊线钉在 `IDLE_FLOOR_SECONDS` 上——模型会按它来摆放 `heartbeat()` |
 
 描述文件**无法承载 `GeoCode:` 标记**——内容原样送进模型,注释会污染指令。可审计性只能由绊线提供,与提示词文件同一处理方式(KERNEL.md §5.3)。
 
-## 9. 挂起项
+绊线读描述常量本身,而断言写的是**后果而不是措辞**:"不点名裁剪"、"不许出现 never overwritten"、"必须点名 OVERWRITE"。这样措辞可以继续改进,而约束不会跟着松掉——一条钉死原句的断言,会在下一次改写时被顺手放宽。
 
-- **Task 工具的空清单**:`tool/registry.ts:262` 的 `describeTask` 无条件追加"Available agent types and the tools they have access to:",子代理清单为空时后面是空串。osmfetch 落地后自然消失,在那之前模型看到一个用不了的工具。不单独处理,视作 osmfetch 的排期压力。
-- **可见性层未启用**:地理工具对所有 agent 可见,执行层拦截。补齐需要在配置里同时维护工具 id 与权限键两套名字,而当前只有 GeoAgent 一个领域 agent,补了也无从验证。**引入第二个领域 agent 时必须重新评估。**
+## 9. 待重新评估
+
+两条曾挂在这里的都已解决:task 工具的空清单随 osmfetch 落地而消失;可见性层已经启用——`permission/index.ts` 的 `GEO` 表把八个工具 id 映到四个组名(§4.1)。
+
+留下一条,要在特定时机重看:**引入第二个领域 agent 时,重新评估四个组的边界。** 现在只有 GeoAgent 一个领域 agent,"地理能力默认拒绝、仅对它放行"这条边界因此从未真正被检验过——第二个领域 agent 出现的那一刻,它才第一次有对照物。
