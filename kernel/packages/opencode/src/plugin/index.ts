@@ -13,6 +13,7 @@ import { CodexAuthPlugin } from "./openai/codex"
 import { Session } from "@/session/session"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
+import { ModalPlugin } from "./modal/modal"
 /* --- GeoCode: GitLab Duo and Poe login are not part of GeoCode. Their npm
  * bundles embed a published copy of core whose import mkdirs opencode-branded
  * XDG dirs on the user's disk — a brand leak our source patches can never
@@ -77,6 +78,7 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
         experimentalWebSockets: experimentalWebSocketsEnabled({ enabled: flags.experimentalWebSockets }),
       }),
     CopilotAuthPlugin,
+    ModalPlugin,
     // --- GeoCode: GitLab Duo / Poe auth removed (see import note above) ---
     // GitlabAuthPlugin,
     // PoeAuthPlugin,
