@@ -79,6 +79,7 @@ describe("LocationServiceMap", () => {
           })
           yield* Effect.promise(() =>
             fs.writeFile(
+              // GeoCode: fixtures write the branded name the loader reads (docs/PATHS.md §5).
               path.join(blocked.path, Brand.configJson),
               JSON.stringify({
                 experimental: { policies: [{ effect: "deny", action: "provider.use", resource: "test" }] },
@@ -151,6 +152,7 @@ describe("LocationServiceMap", () => {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
           yield* Effect.promise(() =>
             fs.writeFile(
+              // GeoCode: fixtures write the branded name the loader reads (docs/PATHS.md §5).
               path.join(dir.path, Brand.configJson),
               JSON.stringify({
                 providers: {
