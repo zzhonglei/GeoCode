@@ -10,6 +10,7 @@ import { Permission } from "../src/permission"
 import { RuntimeFlags } from "../src/effect/runtime-flags"
 import { ToolRegistry } from "../src/tool/registry"
 import { geoHandoff, geoKind, RASTER_SUPPORTED, VECTOR_SUPPORTED } from "../src/tool/geo-handoff"
+import READ_DESCRIPTION from "../src/tool/geo-read.txt"
 import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
@@ -194,5 +195,30 @@ describe("read hands geographic data to ReadGeoData", () => {
       expect(geoHandoff(`/tmp/file.${ext}`)).toBeUndefined()
     }
     expect(geoHandoff("/tmp/no-extension")).toBeUndefined()
+  })
+
+  test("the list the model reads is the list the code uses", () => {
+    /* The one copy the shared array does not cover.
+     *
+     * `read.ts` and `geo-read.ts` were deliberately made to share one array so
+     * the two sides of the handoff cannot disagree — the old build kept a
+     * hand-copy in `read.ts` and relied on someone editing both. But there is a
+     * third side: `geo-read.txt` spells the formats out for the model, and that
+     * spelling is a hand-copy again. Widening the array without touching the
+     * description leaves the model refusing a file the tool would open, and the
+     * refusal names the shorter list as if it were the whole truth.
+     *
+     * Asserted against the description text, not derived from it, because a
+     * derivation would be true by construction.
+     */
+    const listed = (label: string) =>
+      READ_DESCRIPTION.split("\n")
+        .find((line) => line.startsWith(`- ${label}:`))!
+        .replace(`- ${label}:`, "")
+        .split(",")
+        .map((item) => item.trim().replace(/^\./, ""))
+
+    expect(listed("Vector")).toEqual([...VECTOR_SUPPORTED])
+    expect(listed("Raster")).toEqual([...RASTER_SUPPORTED])
   })
 })
