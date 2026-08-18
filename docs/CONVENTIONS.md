@@ -71,6 +71,8 @@ else return 2
 - 提示词与描述文件(`.txt`)——内容原样送进模型,注释会污染指令(KERNEL.md §5.3);
 - `package.json` 一类的 **JSON**——没有注释语法。树上有两处:`kernel/package.json` 的闭包圈选、`opencode/package.json` 的构建脚本与新依赖。
 
+**这两类的完整清单不在本文维护**,因为手工维护的清单会漂(KERNEL.md §4.1 记过一次:一份点名清单曾把六处健康补丁判成欠账,其中一处根本不存在)。它由一条命令给出——`git diff --name-status kernel-upstream main:kernel` 与上面那条 grep 的**差集**,就是"改过但查不到"的全部(KERNEL.md §4.4 第 3 步)。命令是代码,不会漂。
+
 `bun.lock` 与上游差着数千行,但它**不是补丁**,是闭包圈选后 `bun install` 的产物。它不需要审计,也不该手工解冲突——重新生成即可(KERNEL.md §4.4)。
 
 上游测试文件里的自有用例改用名字前缀 `it("GeoCode: …")`,定位命令一并覆盖。
