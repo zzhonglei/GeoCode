@@ -170,7 +170,9 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
   if (!input.previousSummary)
     return [
       conversation,
-      "Create a new anchored summary from the conversation history in the <conversation> tags above so another coding agent can continue the work.",
+      // GeoCode: "coding agent" → "agent". The summary is what the next turns
+      // reason from, and this fork's agent does geographic work.
+      "Create a new anchored summary from the conversation history in the <conversation> tags above so another agent can continue the work.",
       SUMMARY_TEMPLATE,
     ].join("\n\n")
   return [
