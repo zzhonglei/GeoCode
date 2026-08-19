@@ -1,7 +1,9 @@
+import path from "path"
 import { afterEach, describe, expect, test } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Agent } from "../src/agent/agent"
+import { InstanceState } from "../src/effect/instance-state"
 import { GeoKernel, GeoOsm } from "../src/geo"
 import { Permission } from "../src/permission"
 import { RuntimeFlags } from "../src/effect/runtime-flags"
@@ -94,6 +96,27 @@ const succeed = Effect.fnUntraced(function* (params: Record<string, unknown>) {
   })
 })
 
+/** Runs the tool with everything granted, keeping each permission it asked for. */
+const asksOf = Effect.fnUntraced(function* (params: Record<string, unknown>) {
+  const registry = yield* ToolRegistry.Service
+  const tool = (yield* registry.all()).find((item) => item.id === "OsmGetObjects")
+  expect(tool).toBeDefined()
+  const asked: { permission: string; patterns: readonly string[] }[] = []
+  yield* tool!.execute(params, {
+    sessionID: SessionID.make("ses_obj_ask"),
+    messageID: MessageID.make("msg_obj_ask"),
+    agent: "GeoAgent",
+    abort: AbortSignal.any([]),
+    messages: [],
+    metadata: () => Effect.void,
+    ask: (req) =>
+      Effect.sync(() => {
+        asked.push({ permission: req.permission, patterns: req.patterns })
+      }),
+  })
+  return asked
+})
+
 /** Runs the tool and keeps every live metadata push it made along the way. */
 const pushesOf = Effect.fnUntraced(function* (params: Record<string, unknown>) {
   const registry = yield* ToolRegistry.Service
@@ -117,6 +140,44 @@ const pushesOf = Effect.fnUntraced(function* (params: Record<string, unknown>) {
 
 afterEach(async () => {
   await disposeAllInstances()
+})
+
+describe("OsmGetObjects, what it asks permission for", () => {
+  /* Two properties, both invisible from the tool's output.
+   *
+   * The pattern has to be worktree-relative because that is the form every
+   * path rule in this product is written against — `"osm": { "data/*.geojson":
+   * "allow" }`, the same shape upstream's `read` and `write` accept (§4.3). An
+   * absolute path here matches no such rule, and nothing reports the miss.
+   *
+   * And a download landing outside the working directory has to reach
+   * `external_directory`. osmfetch's ruleset carries `external_directory:
+   * "ask"` for exactly this case (config/geocode.ts) — a rule that, before this
+   * guard existed, was written and never consulted.
+   */
+  harness(osmService({})).instance("the pattern is worktree-relative, and an outside path asks for the directory", () =>
+    Effect.gen(function* () {
+      const instance = yield* InstanceState.context
+
+      const inside = yield* asksOf({
+        ids: ["R10717504"],
+        output: path.join(instance.directory, "data", "wuhan.geojson"),
+      })
+      const pattern = inside.find((item) => item.permission === "osm")?.patterns[0]
+      // The property, not the exact string: an absolute path is what no path
+      // rule can match. Asserting the relative spelling would only restate the
+      // implementation's own expression.
+      expect(pattern).toBeDefined()
+      expect(path.isAbsolute(pattern!)).toBe(false)
+      expect(pattern).toContain("wuhan.geojson")
+      expect(inside.map((item) => item.permission)).not.toContain("external_directory")
+
+      // Absolute, and outside the instance directory under any layout — the
+      // test project's worktree is "/" (no git), which containsPath skips.
+      const outside = yield* asksOf({ ids: ["R10717504"], output: "/geocode-outside-test.geojson" })
+      expect(outside.map((item) => item.permission)).toContain("external_directory")
+    }),
+  )
 })
 
 describe("OsmGetObjects, the capability boundary", () => {

@@ -1,6 +1,10 @@
+import * as path from "path"
 import { Effect, Schema } from "effect"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Tool from "./tool"
 import { GeoOsm } from "@/geo"
+import { InstanceState } from "@/effect/instance-state"
+import { assertExternalDirectoryEffect } from "./external-directory"
 import { OsmReport } from "./geo-osm-report"
 import DESCRIPTION from "./geo-osm-objects.txt"
 
@@ -68,23 +72,44 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context<Metadata>,
     ) {
-      const title = params.output
+      // Resolved here rather than left to the kernel: `osm/output.ts` hands the
+      // path straight to `mkdirSync`, so a relative one would land against the
+      // process cwd instead of the instance directory. Upstream's `write` does
+      // the same resolution for the same reason (tool/write.ts).
+      const instance = yield* InstanceState.context
+      let filepath = params.output
+      if (!path.isAbsolute(filepath)) filepath = path.resolve(instance.directory, filepath)
+      if (process.platform === "win32") filepath = FSUtil.normalizePath(filepath)
+      const title = path.relative(instance.worktree, filepath)
 
       // Asked BEFORE the call, because the call is what writes: the kernel
       // creates directories and replaces files inside `downloadObjects`, so
       // there is no later point at which permission would still mean anything.
-      // The pattern is the path, which is the thing being acted on (§4.3).
+      // The pattern is the path relative to the worktree, which is the form
+      // every path rule in this product is written against (§4.3).
       yield* ctx.ask({
         permission: "osm",
-        patterns: [params.output],
+        patterns: [title],
         always: ["*"],
-        metadata: { ids: params.ids, output: params.output },
+        metadata: { ids: params.ids, output: filepath },
       })
+
+      // Then the boundary. Upstream's `write` asks these two the other way
+      // round, and RunQgisAlgorithm already departs from it for a mechanical
+      // reason — it cannot know the real path until the destination is
+      // reserved. The reason here is about what a refusal costs: `osm` is
+      // denied for every agent but osmfetch, so guarding first would open a
+      // prompt about a directory for a call that was never going to run. Ask
+      // what the caller may do, then where it may write.
+      //
+      // osmfetch's ruleset already carries the matching `external_directory:
+      // "ask"` (config/geocode.ts), which until now nothing here consulted.
+      yield* assertExternalDirectoryEffect(ctx, filepath)
 
       const outcome = yield* Effect.result(
         osm.downloadObjects({
           ids: params.ids,
-          output: params.output,
+          output: filepath,
           fields: params.fields,
           abort: ctx.abort,
           // Same reserved interface OsmGetFeatures uses (§6.2), worded for

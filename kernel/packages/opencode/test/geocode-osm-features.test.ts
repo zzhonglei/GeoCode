@@ -1,7 +1,9 @@
+import path from "path"
 import { afterEach, describe, expect, test } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Agent } from "../src/agent/agent"
+import { InstanceState } from "../src/effect/instance-state"
 import { GeoKernel, GeoOsm } from "../src/geo"
 import { Permission } from "../src/permission"
 import { RuntimeFlags } from "../src/effect/runtime-flags"
@@ -95,6 +97,27 @@ const succeed = Effect.fnUntraced(function* (params: Record<string, unknown>) {
   })
 })
 
+/** Runs the tool with everything granted, keeping each permission it asked for. */
+const asksOf = Effect.fnUntraced(function* (params: Record<string, unknown>) {
+  const registry = yield* ToolRegistry.Service
+  const tool = (yield* registry.all()).find((item) => item.id === "OsmGetFeatures")
+  expect(tool).toBeDefined()
+  const asked: { permission: string; patterns: readonly string[] }[] = []
+  yield* tool!.execute(params, {
+    sessionID: SessionID.make("ses_feat_ask"),
+    messageID: MessageID.make("msg_feat_ask"),
+    agent: "GeoAgent",
+    abort: AbortSignal.any([]),
+    messages: [],
+    metadata: () => Effect.void,
+    ask: (req) =>
+      Effect.sync(() => {
+        asked.push({ permission: req.permission, patterns: req.patterns })
+      }),
+  })
+  return asked
+})
+
 /** Runs the tool and keeps every live metadata push it made along the way. */
 const pushesOf = Effect.fnUntraced(function* (params: Record<string, unknown>) {
   const registry = yield* ToolRegistry.Service
@@ -118,6 +141,46 @@ const pushesOf = Effect.fnUntraced(function* (params: Record<string, unknown>) {
 
 afterEach(async () => {
   await disposeAllInstances()
+})
+
+describe("OsmGetFeatures, what it asks permission for", () => {
+  /* Same two properties OsmGetObjects guards, and for the same reasons — the
+   * reasoning is written out there. Repeated here because the two tools carry
+   * separate copies of this code, so one can drift without the other.
+   *
+   * The ordering is also pinned: a malformed call must not raise a permission
+   * prompt at all, which is why the parameter refusals sit ahead of both asks.
+   */
+  harness(osmService({})).instance("the pattern is worktree-relative, and an outside path asks for the directory", () =>
+    Effect.gen(function* () {
+      const instance = yield* InstanceState.context
+
+      const inside = yield* asksOf({
+        extents: ["bbox:114.0,30.4,114.5,30.7"],
+        tags: ["amenity=hospital"],
+        output: path.join(instance.directory, "data", "hospitals.geojson"),
+      })
+      const pattern = inside.find((item) => item.permission === "osm")?.patterns[0]
+      expect(pattern).toBeDefined()
+      expect(path.isAbsolute(pattern!)).toBe(false)
+      expect(pattern).toContain("hospitals.geojson")
+      expect(inside.map((item) => item.permission)).not.toContain("external_directory")
+
+      const outside = yield* asksOf({
+        extents: ["bbox:114.0,30.4,114.5,30.7"],
+        tags: ["amenity=hospital"],
+        output: "/geocode-outside-test.geojson",
+      })
+      expect(outside.map((item) => item.permission)).toContain("external_directory")
+    }),
+  )
+
+  harness(osmService({})).instance("a malformed call raises no prompt at all", () =>
+    Effect.gen(function* () {
+      const asked = yield* asksOf({ extents: [], tags: ["amenity=hospital"], output: "/geocode-outside-test.geojson" })
+      expect(asked).toEqual([])
+    }),
+  )
 })
 
 describe("OsmGetFeatures, the capability boundary", () => {

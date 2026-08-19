@@ -1,6 +1,10 @@
+import * as path from "path"
 import { Effect, Schema } from "effect"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Tool from "./tool"
 import { GeoOsm } from "@/geo"
+import { InstanceState } from "@/effect/instance-state"
+import { assertExternalDirectoryEffect } from "./external-directory"
 import { OsmReport } from "./geo-osm-report"
 import DESCRIPTION from "./geo-osm-features.txt"
 
@@ -84,7 +88,16 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context<Metadata>,
     ) {
-      const title = params.output
+      // Resolved here rather than left to the kernel: `osm/output.ts` hands the
+      // path straight to `mkdirSync`, so a relative one would land against the
+      // process cwd instead of the instance directory. Upstream's `write` does
+      // the same resolution for the same reason (tool/write.ts).
+      const instance = yield* InstanceState.context
+      let filepath = params.output
+      if (!path.isAbsolute(filepath)) filepath = path.resolve(instance.directory, filepath)
+      if (process.platform === "win32") filepath = FSUtil.normalizePath(filepath)
+      const title = path.relative(instance.worktree, filepath)
+
       const refuse = (message: string) => ({
         title,
         output: message,
@@ -104,19 +117,27 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
 
       // Before the call, because the call is what writes: the kernel creates
       // directories and files inside `downloadFeatures`, and a "file:" extent
-      // reads a boundary off disk on the way there.
+      // reads a boundary off disk on the way there. The pattern is the path
+      // relative to the worktree, which is the form every path rule in this
+      // product is written against (§4.3).
       yield* ctx.ask({
         permission: "osm",
-        patterns: [params.output],
+        patterns: [title],
         always: ["*"],
-        metadata: { extents: params.extents, tags: params.tags, output: params.output },
+        metadata: { extents: params.extents, tags: params.tags, output: filepath },
       })
+
+      // Then the boundary — after the capability, and after the parameter
+      // refusals above, so neither a malformed call nor one from an agent
+      // without `osm` ever raises a prompt about a directory. Same ordering as
+      // OsmGetObjects; the reasoning is written out there.
+      yield* assertExternalDirectoryEffect(ctx, filepath)
 
       const outcome = yield* Effect.result(
         osm.downloadFeatures({
           extents: params.extents,
           tags: params.tags,
-          output: params.output,
+          output: filepath,
           types: params.types,
           fields: params.fields,
           geometry: params.geometry,
