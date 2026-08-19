@@ -3,7 +3,6 @@ import * as Tool from "./tool"
 import { GeoQgis, GeoRuntime, GeoStatus } from "@/geo"
 import { GeoOutput } from "@/geo/runtime"
 import { GeoTool } from "./geo-tool"
-import { assertExternalDirectoryEffect } from "./external-directory"
 import { InstanceState } from "@/effect/instance-state"
 import DESCRIPTION from "./geo-qgis-run.txt"
 
@@ -38,6 +37,55 @@ const STREAM_BUDGET = 30_000
  * that breaks on a user's Windows box.
  */
 export const PARAMETERS_LIMIT = 24_000
+
+/**
+ * The longest a single parameter VALUE may be before the prompt abbreviates it.
+ *
+ * Chosen against paths rather than against screens: Windows caps a path at 260
+ * characters, so nothing this tool could be asked to read or write reaches this
+ * length, and the one thing the user must be able to read in full never gets
+ * cut. What does get cut is an inlined geometry or a pasted table — 24 000
+ * characters of coordinates (`PARAMETERS_LIMIT`) tells a user nothing that the
+ * parameter's NAME did not already tell them, and burying the paths under it
+ * defeats the point of showing the call at all.
+ *
+ * Abbreviated, never silently: the remainder is counted in the text, because a
+ * prompt that quietly drops half its content is worse than one that shows less.
+ */
+const VALUE_LIMIT = 256
+
+/**
+ * The call as the user will be asked about it.
+ *
+ * `RunQgisAlgorithm` aligns with upstream's `bash`, and this is the part of that
+ * alignment that carries the weight: bash's pattern is the COMMAND ITSELF
+ * (`shell.ts` adds `source(node)`), so the user approves a thing they can read
+ * rather than a category they have to trust. An algorithm id alone — which is
+ * what this used to pass — says `native:truncatetable` without saying to WHAT.
+ *
+ * **Paths stay absolute and verbatim.** OSM's writer normalises its pattern to
+ * a worktree-relative form because it aligns with `write`, whose pattern is a
+ * relative title; here the opposite is required. The single thing this prompt
+ * exists to let the user judge is whether a path sits outside their working
+ * directory, and a relative form is exactly what would hide that.
+ *
+ * Ordering follows the caller's JSON rather than the catalog's parameter order:
+ * what is being approved is the call that was made, not a tidied version of it.
+ */
+export function describeCall(algorithm: string, parameters: Record<string, unknown>): string {
+  const rendered = Object.entries(parameters).map(([key, value]) => {
+    const text =
+      typeof value === "string"
+        ? value
+        : typeof value === "number" || typeof value === "boolean" || value === null
+          ? String(value)
+          : JSON.stringify(value)
+    const shown =
+      text.length > VALUE_LIMIT ? `${text.slice(0, VALUE_LIMIT)}…(+${text.length - VALUE_LIMIT} chars)` : text
+    return `${key}=${shown}`
+  })
+  return `${algorithm}(${rendered.join(", ")})`
+}
 
 export const Parameters = Schema.Struct({
   algorithm: Schema.String.annotate({
@@ -172,11 +220,44 @@ export const RunQgisAlgorithmTool = Tool.define<
         )
       }
 
+      /* The only prompt this tool raises, and it is asked BEFORE anything else
+       * costs anything (docs/TOOLS.md §4.3).
+       *
+       * One prompt is a decision, not an omission. The alternative — a second
+       * `external_directory` ask for paths outside the working directory, the
+       * way `read`, `write` and `bash` each raise one — was measured against
+       * what it would add here and removed. Two reasons, and the second is the
+       * one that decides it:
+       *
+       * - the boundary prompt says strictly LESS than this one. It reports a
+       *   directory; this reports the algorithm and every path it was given, so
+       *   a user who can answer the boundary question can already answer it
+       *   from here, and a user who cannot is not helped by being asked twice;
+       * - it could only ever cover what `QgisDestination.reserve` recognises,
+       *   and reserve recognises a destination by its PARAMETER TYPE. Measured
+       *   against a real 3.44 registry: 56 of 422 algorithms declare no
+       *   destination parameter at all, ~26 of those write anyway — atlas
+       *   exports write a whole directory through a plain `file` parameter,
+       *   `native:truncatetable` empties its own INPUT, `native:alignrasters`
+       *   hides output paths inside an array of dicts. A boundary check fed by
+       *   reserve is silent for every one of them, and no fix for that is
+       *   portable: the catalog is built from whatever QGIS the USER has, so a
+       *   list of exceptions measured here would be a list about this machine.
+       *
+       * ⟹ Showing the call and letting the user judge it is the only guard that
+       * holds on a version of QGIS we have never seen. `always: ["*"]` is what
+       * makes that bearable — approve once and the group is quiet until the app
+       * restarts (upstream stores approvals in InstanceState, in memory, and
+       * says so in its own prompt: "until OpenCode is restarted").
+       */
       yield* ctx.ask({
         permission: "qgis",
-        patterns: [params.algorithm],
+        patterns: [describeCall(params.algorithm, parsed as Record<string, unknown>)],
         always: ["*"],
-        metadata: { algorithm: params.algorithm },
+        // Both channels, because they answer different questions: the id is
+        // what a rule would be written against, the parameters are what a
+        // frontend renders. Prose is never parsed for either (§9.1).
+        metadata: { algorithm: params.algorithm, parameters: parsed },
       })
 
       const gate = yield* GeoTool.settledQgisGate(qgis, ctx.abort)
@@ -262,14 +343,10 @@ export const RunQgisAlgorithmTool = Tool.define<
       }
       const reserved = reservation.success
 
-      // Upstream asks this for every tool that touches a path, and this one was
-      // missing it. It only speaks when the target sits outside the working
-      // directory, which the agent's own instructions already tell it not to do.
-      for (const destination of reserved) {
-        yield* assertExternalDirectoryEffect(ctx, destination.actual, {
-          kind: destination.folder ? "directory" : "file",
-        })
-      }
+      // No `external_directory` ask here, and the reasoning is at the ctx.ask
+      // above: this tool raises exactly one prompt, and it carries more than a
+      // boundary prompt could. Numbering stays — it costs the user nothing,
+      // asks nothing, and protects the outputs reserve CAN see.
       GeoQgis.QgisDestination.ensureParents(reserved)
       const destinations = GeoQgis.QgisDestination.apply(parsed as Record<string, unknown>, reserved)
 

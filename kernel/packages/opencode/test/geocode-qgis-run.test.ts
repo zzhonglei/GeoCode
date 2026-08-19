@@ -12,7 +12,7 @@ import { Permission } from "../src/permission"
 import { RuntimeFlags } from "../src/effect/runtime-flags"
 import { ToolRegistry } from "../src/tool/registry"
 import { GeoTool } from "../src/tool/geo-tool"
-import { PARAMETERS_LIMIT } from "../src/tool/geo-qgis-run"
+import { PARAMETERS_LIMIT, describeCall } from "../src/tool/geo-qgis-run"
 import DOC_DESCRIPTION from "../src/tool/geo-qgis-doc.txt"
 import READ_DESCRIPTION from "../src/tool/geo-read.txt"
 import RUN_DESCRIPTION from "../src/tool/geo-qgis-run.txt"
@@ -89,17 +89,6 @@ const WRITER: QgisCatalog.Algorithm = {
   outputs: [],
 }
 
-/** The one destination that is a directory: a tile pyramid, size not known in advance. */
-const TILER: QgisCatalog.Algorithm = {
-  ...WRITER,
-  id: "native:tiler",
-  name: "Tiler",
-  parameters: [
-    WRITER.parameters[0]!,
-    { name: "OUTPUT", description: "out", type: "folderDestination", defaultValue: null, options: [], optional: false },
-  ],
-}
-
 /* The shape of `native:package` and `native:savefeatures`: a destination, plus
  * the algorithm's OWN parameter for a file that is already there. Three
  * algorithms in a real 3.44 catalog carry one, and for them an existing target
@@ -123,7 +112,13 @@ const PACKAGER: QgisCatalog.Algorithm = {
   ],
 }
 
-const CATALOG = [ALGORITHM, WRITER, TILER, PACKAGER]
+/* No folder-destination fixture here any more, and that is not an oversight.
+ * The tool layer used to treat one specially — `assertExternalDirectoryEffect`
+ * scoped the grant to the folder itself rather than its parent — and that call
+ * is gone (see "one prompt, wherever the output goes"). What remains of folder
+ * behaviour lives entirely in `qgis/destination.ts` (never numbered, parent
+ * created rather than leaf) and is tested there, in geo/qgis-destination.ts. */
+const CATALOG = [ALGORITHM, WRITER, PACKAGER]
 
 const known = (id: string) => (id === "Buffer" ? ALGORITHM : CATALOG.find((algorithm) => algorithm.id === id))
 
@@ -211,6 +206,22 @@ const harness = (runtime: Layer.Layer<GeoRuntime.Service>) =>
     ]),
   )
 
+/**
+ * A user who has already approved the group, standing in.
+ *
+ * `qgis` is `ask` for GeoAgent, which is the whole point of the design — but
+ * almost every test in this file is about what the tool DOES once it is allowed
+ * to run. Without this the engine parks each one at an unanswered prompt until
+ * its timeout, and they all fail for the single reason none of them is testing.
+ *
+ * Appended LAST on purpose: `evaluate` takes the last matching rule, so this is
+ * the exact shape a real approval takes when the user answers "always"
+ * (permission/index.ts pushes onto the same ruleset). The verdict itself — that
+ * GeoAgent is asked at all — is asserted in geocode-geo-permissions.test.ts,
+ * which can read it without anyone having to answer.
+ */
+const GRANTED = { permission: "qgis", pattern: "*", action: "allow" } as const
+
 const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, agentName = "GeoAgent") {
   const registry = yield* ToolRegistry.Service
   const permission = yield* Permission.Service
@@ -227,7 +238,7 @@ const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, ag
       metadata: () => Effect.void,
       ask: (req) =>
         permission
-          .ask({ ...req, sessionID: SessionID.make("ses_run_test"), ruleset: agent!.permission })
+          .ask({ ...req, sessionID: SessionID.make("ses_run_test"), ruleset: [...agent!.permission, GRANTED] })
           .pipe(Effect.orDie),
     })
     .pipe(Effect.timeout(5_000), Effect.exit)
@@ -473,7 +484,7 @@ describe("RunQgisAlgorithm, endings", () => {
               }),
             ask: (req) =>
               permission
-                .ask({ ...req, sessionID: SessionID.make("ses_stream"), ruleset: agent!.permission })
+                .ask({ ...req, sessionID: SessionID.make("ses_stream"), ruleset: [...agent!.permission, GRANTED] })
                 .pipe(Effect.orDie),
           },
         )
@@ -703,7 +714,7 @@ describe("the QGIS group's shut-gate answer", () => {
               metadata: () => Effect.void,
               ask: (req) =>
                 permission
-                  .ask({ ...req, sessionID: SessionID.make("ses_shut"), ruleset: agent!.permission })
+                  .ask({ ...req, sessionID: SessionID.make("ses_shut"), ruleset: [...agent!.permission, GRANTED] })
                   .pipe(Effect.orDie),
             })
             .pipe(Effect.timeout(10_000))
@@ -763,9 +774,9 @@ describe("RunQgisAlgorithm, where the output lands", () => {
    * rule computed and then not passed on protects nothing at all.
    *
    * Outputs are placed inside the instance directory throughout, which is where
-   * the agent's own instructions put them. That is also the case worth pinning:
-   * the added `external_directory` check has to stay silent for the ordinary
-   * workflow, or every algorithm run starts costing the user a prompt.
+   * the agent's own instructions put them — but the permission prompt is pinned
+   * for both placements, because "one prompt regardless of where the output
+   * goes" is the decision this tool now rests on (docs/TOOLS.md §4.3).
    */
   const it = harness(runtimeEnding({}))
 
@@ -863,78 +874,67 @@ describe("RunQgisAlgorithm, where the output lands", () => {
     }),
   )
 
-  it.instance("writing inside the working directory costs the user no prompt", () =>
+  it.instance("one prompt, wherever the output goes", () =>
     Effect.gen(function* () {
-      /* The check added here is upstream's, which every other path-touching
-       * tool carries and this one was missing. Its worth depends entirely on
-       * staying quiet for ordinary work: the agent is instructed to put results
-       * in a task folder under the working directory, and a permission dialog
-       * on every single algorithm run would be a tax on the whole product.
+      /* ONE. This tool used to raise a second `external_directory` ask for
+       * targets outside the working directory, the way `read`, `write` and
+       * `bash` each do, and it was removed deliberately (docs/TOOLS.md §4.3):
+       * that prompt could only ever see what `QgisDestination.reserve` sees,
+       * and reserve is blind to 56 of 422 algorithms in a real registry — so it
+       * charged the ordinary case a second dialog while staying silent for the
+       * dangerous one. What replaced it is the prompt below, which carries the
+       * whole call.
        *
-       * `qgis` is asked once and answered by the grant GeoAgent holds — that is
-       * capability isolation, not a prompt (docs/TOOLS.md §4). */
+       * Asserted for BOTH placements in one test on purpose. Split apart, a
+       * change that re-introduced a second ask for outside targets only would
+       * leave the inside case green, and green is what gets read as covered. */
       const instance = yield* InstanceState.context
-      const asked = yield* asksOf({
-        algorithm: "native:writeout",
-        parameters: JSON.stringify({
-          INPUT: "/data/in.shp",
-          OUTPUT: path.join(instance.directory, "results", "out.shp"),
-        }),
-      })
-      expect(asked.map((item) => item.permission)).toEqual(["qgis"])
-    }),
-  )
-
-  it.instance("writing outside the working directory goes through the same gate as every other tool", () =>
-    Effect.gen(function* () {
-      // And the guard has to be REACHED, not merely written. Removing the call
-      // leaves every other assertion in this file green, which is exactly how
-      // a guard ends up shipped and never run.
       const outside = fs.mkdtempSync(path.join(os.tmpdir(), "geocode-outside-"))
       try {
-        const asked = yield* asksOf({
-          algorithm: "native:writeout",
-          parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: path.join(outside, "out.shp") }),
-        })
-        expect(asked.map((item) => item.permission)).toEqual(["qgis", "external_directory"])
-        /* Scoped to the directory it is going to write in, the way upstream's
-         * own callers scope it — not to the single file, or the grant would
-         * have to be given again for the next output beside it.
-         *
-         * Spelled out rather than searched for. This read `toContain(outside)`,
-         * which the WRONG scope satisfies just as well: asking at directory
-         * granularity for a file produces `<outside>/out.shp/*`, and that
-         * contains `outside` too. The folder case below was always exact, so
-         * the pair looked covered while only one of them was — and the mutation
-         * that swaps the granularity stayed green. */
-        const external = asked.find((item) => item.permission === "external_directory")
-        expect(external!.patterns?.[0]).toBe(path.join(outside, "*").replaceAll("\\", "/"))
+        for (const target of [path.join(instance.directory, "results", "out.shp"), path.join(outside, "out.shp")]) {
+          const asked = yield* asksOf({
+            algorithm: "native:writeout",
+            parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: target }),
+          })
+          expect(asked.map((item) => item.permission)).toEqual(["qgis"])
+        }
       } finally {
         fs.rmSync(outside, { recursive: true, force: true })
       }
     }),
   )
 
-  it.instance("a folder destination is asked for as the folder, not as its parent", () =>
+  it.instance("the prompt names the algorithm AND every path it was given", () =>
     Effect.gen(function* () {
-      /* `assertExternalDirectoryEffect` scopes the grant to `dirname(target)`
-       * for a file and to `target` itself for a directory. Getting that wrong
-       * for a folder output does not fail — it silently asks for one level too
-       * high, so answering "always" hands over the PARENT of the output folder
-       * and everything else sitting in it.
+      /* The whole design rests on this one string. With a second boundary ask
+       * gone, what the user is shown here is the only thing standing between
+       * the model and an in-place overwrite of data undo cannot restore — so it
+       * has to say more than "an algorithm ran".
        *
-       * The eight folder algorithms are the only place this distinction exists,
-       * which is exactly why nothing else would notice it going. */
-      const outside = fs.mkdtempSync(path.join(os.tmpdir(), "geocode-folder-"))
-      const target = path.join(outside, "tiles")
+       * Three separate ways to lose it, one assertion each below:
+       *
+       * - passing `[params.algorithm]` again (what this used to do) drops the
+       *   paths entirely — `native:truncatetable` without saying to WHAT;
+       * - normalising paths to a worktree-relative form, which is right for
+       *   OSM's writer because it aligns with `write`, hides the one fact this
+       *   prompt exists to reveal: that the target is outside the workspace;
+       * - dropping parameters that are not paths would hide `BURN=99` on
+       *   `gdal:rasterize_over` — a value burnt into an existing raster. */
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), "geocode-outside-"))
       try {
+        const target = path.join(outside, "out.shp")
         const asked = yield* asksOf({
-          algorithm: "native:tiler",
-          parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: target }),
+          algorithm: "native:writeout",
+          parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: target, DISTANCE: 100 }),
         })
-        const external = asked.find((item) => item.permission === "external_directory")
-        expect(external).toBeDefined()
-        expect(external!.patterns?.[0]).toBe(path.join(target, "*").replaceAll("\\", "/"))
+        const pattern = asked[0]!.patterns![0]!
+        expect(pattern).toContain("native:writeout")
+        // Absolute and verbatim — `toContain` on the full path fails for any
+        // relative form, which is the mutation worth catching.
+        expect(pattern).toContain(target)
+        expect(path.isAbsolute(target)).toBe(true)
+        expect(pattern).toContain("/data/in.shp")
+        expect(pattern).toContain("DISTANCE=100")
       } finally {
         fs.rmSync(outside, { recursive: true, force: true })
       }
@@ -1094,4 +1094,40 @@ describe("RunQgisAlgorithm, the path the caller is sent to", () => {
       expect(result.output).toContain(asked)
     }),
   )
+})
+
+describe("the string the user is asked to approve", () => {
+  /* `describeCall` on its own, because the one thing it must never do cannot be
+   * reached through the tool: abbreviating a PATH. The tool-level tests pass
+   * ordinary paths, so a limit set too low would stay green there and only
+   * surface in front of a user, on the one prompt they are meant to judge.
+   */
+
+  test("a path is never the thing that gets abbreviated", () => {
+    // 250 characters — longer than any real path, still under the limit. The
+    // limit is chosen against Windows' 260-character cap on purpose, so this
+    // is the case that pins the two numbers together.
+    const long = `/${"d".repeat(240)}/out.shp`
+    expect(long.length).toBeGreaterThan(240)
+    expect(describeCall("native:buffer", { OUTPUT: long })).toContain(long)
+  })
+
+  test("an inlined value is abbreviated, and says how much it dropped", () => {
+    // What this is FOR: a pasted geometry can run to `PARAMETERS_LIMIT`
+    // characters and tells the user nothing the parameter name did not. Cutting
+    // it is fine; cutting it silently is not, because a prompt that hides half
+    // its content reads as a complete one.
+    const huge = "0".repeat(5_000)
+    const shown = describeCall("native:buffer", { GEOMETRY: huge })
+    expect(shown).not.toContain(huge)
+    expect(shown).toContain("+4744 chars")
+    expect(shown.length).toBeLessThan(400)
+  })
+
+  test("non-string values survive, because they are what makes a call dangerous", () => {
+    // `gdal:rasterize_over` burns BURN into an existing raster. Rendering only
+    // the paths would show a call that looks like every other one.
+    const shown = describeCall("gdal:rasterize_over", { INPUT_RASTER: "/data/dem.tif", BURN: 99, ADD: false })
+    expect(shown).toBe("gdal:rasterize_over(INPUT_RASTER=/data/dem.tif, BURN=99, ADD=false)")
+  })
 })

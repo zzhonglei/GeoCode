@@ -210,9 +210,24 @@ describe("what each agent can do", () => {
   it.instance("GeoAgent works, and does not download", () =>
     Effect.gen(function* () {
       expect(yield* verdict("GeoAgent", "geodata")).toBe("allow")
-      expect(yield* verdict("GeoAgent", "qgis")).toBe("allow")
       expect(yield* verdict("GeoAgent", "gee")).toBe("allow")
       expect(yield* verdict("GeoAgent", "osm")).toBe("deny")
+
+      /* `qgis` is the one group GeoCode asks about, and the only place it is
+       * stricter than upstream is with its own tools.
+       *
+       * Not a leftover from plan mode: running an algorithm is the one thing
+       * this product does that undo cannot reach (geographic data is outside
+       * the checkpoint mechanism), and numbering only protects the outputs
+       * `QgisDestination.reserve` can see — 56 of 422 algorithms in a real 3.44
+       * registry declare no destination parameter at all. Flipping this back to
+       * a plain "allow" removes the last thing standing between the model and
+       * an in-place overwrite of the user's data. */
+      expect(yield* verdict("GeoAgent", "qgis", "native:buffer(INPUT=/data/a.shp, OUTPUT=/data/b.shp)")).toBe("ask")
+      // And looking something up never interrupts, at any time. A prompt for
+      // reading documentation is a prompt that teaches the user to dismiss
+      // prompts, which costs exactly the one above.
+      expect(yield* verdict("GeoAgent", "qgis", "doc:search:buffer")).toBe("allow")
     }),
   )
 

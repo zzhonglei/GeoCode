@@ -68,7 +68,34 @@ export function base(): ConfigV1.Info {
           // picks these allows for GeoAgent and the denies for everyone else
           // (docs/TOOLS.md §4.2 ③).
           geodata: "allow",
-          qgis: "allow",
+          /* The one group that asks, and the only permission in GeoCode that is
+           * stricter than upstream's treatment of its own tools.
+           *
+           * Upstream sets no tool to `ask` — all seven built-in agents use only
+           * `allow` and `deny`, and `edit`/`write`/`bash` land on the engine's
+           * `"*": "allow"`. That is a defensible default THERE because a bad
+           * edit is recoverable: the checkpoint mechanism holds a snapshot to
+           * revert to. Geographic data is deliberately outside that mechanism
+           * (§10.1 #6 — a scene per turn would dwarf the project), so the same
+           * trade-off has a different answer here. "Do not destroy it in the
+           * first place" is already why outputs are numbered rather than
+           * overwritten; this is that same rule where numbering cannot reach.
+           *
+           * And it cannot reach far. `QgisDestination.reserve` finds outputs by
+           * PARAMETER TYPE, which is sound for what it recognises and blind to
+           * the rest: measured on a real 3.44 registry, 56 of 422 algorithms
+           * declare no destination parameter and about 26 of those write
+           * anyway. Since the catalog is built from whichever QGIS the user
+           * installed, that blind spot cannot be closed by a list — only by
+           * showing the call and letting the user decide (tool/geo-qgis-run.ts).
+           *
+           * `doc:*` stays open at all times: looking up an algorithm changes
+           * nothing, and a prompt for it would train the user to dismiss
+           * prompts. The pattern namespace exists for exactly this split, and
+           * the shape is upstream's own — `read` is `{"*": "allow", "*.env":
+           * "ask"}`, the same key divided by how much the operation can cost.
+           * Plan mode already carries this exact rule. */
+          qgis: { "*": "ask", "doc:*": "allow" },
           gee: "allow",
           // No `osm`. Downloading from public services goes through the
           // osmfetch subagent, whose exit is narrowed and whose prompt carries

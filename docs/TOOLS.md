@@ -31,7 +31,7 @@
 |---|---|---|---|---|
 | `ReadGeoData` | 读矢量/栅格元信息与预览 | `geodata` | 文件路径 | QGIS 统一门禁 |
 | `QgisDoc` | 算法文档与检索 | `qgis` | `doc:<action>:<target>` | 同上 |
-| `RunQgisAlgorithm` | 执行 Processing 算法 | `qgis` | 算法 id | 同上 |
+| `RunQgisAlgorithm` | 执行 Processing 算法 | `qgis` | 完整调用 `id(k=v, …)` | 同上 |
 | `RunGeeScript` | 执行 GEE 脚本 | `gee` | 脚本路径 | GEE 三层状态 |
 | `OsmSearch` | 搜索地名与要素 | `osm` | 查询串 | 无环境 |
 | `OsmProbe` | 下载前侦察数据量 | `osm` | 各个 extent | 无环境 |
@@ -107,7 +107,11 @@ findLast(...) ?? { action: "ask", permission, pattern: "*" }
 
 "agent": {
   "GeoAgent": {
-    "permission": { "geodata": "allow", "qgis": "allow", "gee": "allow" }
+    "permission": {
+      "geodata": "allow",
+      "qgis": { "*": "ask", "doc:*": "allow" },
+      "gee": "allow"
+    }
   },
   "osmfetch": {
     "permission": {
@@ -136,6 +140,23 @@ findLast(...) ?? { action: "ask", permission, pattern: "*" }
 `external_directory: "ask"` 单独列出来,因为它是把上游默认**恢复**回来:通配拒绝会让一个再正常不过的、位于工作目录之外的输出路径被直接回绝,而上游对这种情况的处理是问用户。
 
 `patterns` 这一维留给操作对象(哪个文件、哪个算法、哪种文档查询),不用来区分工具。计划模态的 `qgis: { "*": "ask", "doc:*": "allow" }` 正是靠它做到"查文档随便查、执行要问"。占用这一维去区分工具,就再也写不出"允许读 `./data/*.tif`,其他要问"。
+
+**`qgis` 是 GeoCode 唯一会问的键,也是唯一比上游更严的地方。** 上游七个内置 agent 的权限值只有 `allow` 与 `deny`,没有任何一个工具默认 `ask`——`edit`/`write`/`bash` 全落在引擎的 `"*": "allow"` 上。那在**那边**站得住,因为改错了能撤销:快照存着可回滚的版本。地理数据被刻意排除在快照之外(GEOKERNEL §10.1 #6,体积理由),所以同一道权衡在**这边**答案不同。"一开始就别毁"本来就是输出编号而非覆盖的理由,这条只是同一规则在编号够不着的地方的第二个实现。
+
+而编号够不着的范围不小。`QgisDestination.reserve` 按**参数类型**认输出,对它认得出的那部分可靠,对其余完全无声——2026-08-20 在真实 3.44 目录上实测:**422 个算法里 366 个声明 destination 参数,56 个一个都不声明,而那 56 个里约 26 个照写不误**。形态有三种:atlas 出图把一整个目录写进类型为 `file` 的普通参数、`native:truncatetable` 清空自己的 `INPUT`(文档原话 `deleted features cannot be restored`)、`native:alignrasters` 把输出路径藏在数组元素的字典里。
+
+⚠️ **这个缺口不能用清单补。** 算法目录是在**用户那台机器上、用他那一版 QGIS** 建出来的(`catalog.ts` 的 `EXPORT_SCRIPT`),3.28 LTR 少几十个算法、Windows 上 GDAL provider 的组成也不同——把这 56 个 id 写死进产品,等于把一台 macOS + 3.44.9 的偶然状态当成全部。`DESTINATION_TYPES` 之所以站得住,是因为它枚举的是 **QGIS API 的类型常量**而不是算法。⟹ 在没见过的 QGIS 版本上仍然成立的守卫只剩一个:**把调用如实摆给用户,由他判断**。
+
+**所以 `RunQgisAlgorithm` 只问一次,pattern 是完整调用。** 询问里带算法 id 和全部参数(`native:buffer(INPUT=/data/a.shp, DISTANCE=100, OUTPUT=/out/b.shp)`),`always` 保持 `["*"]`——批一次就安静到应用重启(上游把批准放在 `InstanceState` 的内存里,它自己的提示文案就写着 `until OpenCode is restarted`)。此前那道额外的 `external_directory` 询问**已经移除**:它说的严格更少(只报一个目录,不报算法也不报参数),而它能看见的又只是 `reserve` 看得见的那部分——对上面 26 个算法一声不吭,却让每次普通调用多花一次弹窗。
+
+**pattern 里的路径写成什么形式,跟着对齐目标走,不做全局统一:**
+
+| 工具 | 对齐 | 路径形式 | 判据 |
+|---|---|---|---|
+| `OsmGetObjects` / `OsmGetFeatures` | `write` | **worktree 相对** | 上游 `write` 的 pattern 就是相对 title |
+| `RunQgisAlgorithm` | `bash` | **绝对、原样** | 上游 `bash` 的 pattern 就是完整命令原文 |
+
+⚠️ QGIS 这边**必须**是绝对路径:这个询问存在的唯一意义,就是让用户一眼看出 `/Users/me/thesis/data/final.shp` 在工作目录之外,而相对形式恰好把这件事藏起来。照搬 OSM 的归一化会静默抽掉整个设计的依据。
 
 ### 4.4 阵容与上游一一对应
 
