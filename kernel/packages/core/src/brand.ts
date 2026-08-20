@@ -39,8 +39,16 @@ export const Brand = {
    * plan agent's edit permission joins it into a glob. Spreading one array in
    * both places makes a drift between "where we write" and "what we allow"
    * impossible to express.
+   *
+   * `readonly string[]` rather than `as const`, which is what this used to be.
+   * Every other field here widens to `string` (a template literal in an object
+   * without `as const`), so a literal tuple made this the one field whose
+   * elements had a different type from `projectDir` itself — and the brand test
+   * compares exactly those two, which is where it surfaced. Nothing reads these
+   * as literals; all four call sites spread them into `path.join`, which wants
+   * `string`. Keeping `readonly` is the part that mattered.
    */
-  plansSegments: [projectDir, "plans"] as const,
+  plansSegments: [projectDir, "plans"] as readonly string[],
   /** mDNS default host and service name */
   mdnsHost: `${name}.local`,
   mdnsService: (port: number) => `${name}-${port}`,

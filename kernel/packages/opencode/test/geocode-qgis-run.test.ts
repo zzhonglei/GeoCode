@@ -657,15 +657,22 @@ describe("RunQgisAlgorithm, shapes", () => {
      * This sentence used to read "Existing files are never overwritten" — an
      * unconditional claim in front of a conditional guarantee, which is the one
      * kind of sentence §七 rules out outright, because the agent acts on it.
-     * Both exceptions are real: three catalogued algorithms carry their own
-     * parameter for a pre-existing file, and a directory output is written into
-     * as it stands. Pinned by their consequences rather than by phrasing, so
-     * the wording stays free to improve.
+     *
+     * ⚠️ 2026-08-20: the two named parameters changed SIDES here. They used to
+     * be listed as exceptions — an algorithm carrying `OVERWRITE` was left to
+     * honour it — and that exemption is gone (see geo/qgis/destination.ts).
+     * They stay named for the opposite reason now: a model that reaches for
+     * `OVERWRITE` to add a layer to an existing GeoPackage has to learn from
+     * the description that it will get a new file instead, and what to do about
+     * it. Dropping the names would leave that model with no warning at all.
      */
     expect(RUN_DESCRIPTION).not.toContain("never overwritten")
+    expect(RUN_DESCRIPTION).not.toMatch(/in the algorithm's hands|left to honour/i)
     expect(RUN_DESCRIPTION).toContain("OVERWRITE")
     expect(RUN_DESCRIPTION).toContain("ACTION_ON_EXISTING_FILE")
-    expect(RUN_DESCRIPTION).toMatch(/directory is written into as it stands/i)
+    expect(RUN_DESCRIPTION).toMatch(/directory destination is written into as it stands/i)
+    // The way out, without which the warning is just a dead end.
+    expect(RUN_DESCRIPTION).toMatch(/move or remove it/i)
     // The mistake that puts a caller in the renaming case in the first place.
     expect(RUN_DESCRIPTION).toMatch(/give every output a real extension/i)
   })
@@ -1067,31 +1074,36 @@ describe("RunQgisAlgorithm, the path the caller is sent to", () => {
     }),
   )
 
-  it.instance("an algorithm that owns the question keeps its target, and the caller is told", () =>
+  it.instance("an algorithm that claims to own the question is numbered anyway", () =>
     Effect.gen(function* () {
-      /* The one case where "existing files are not overwritten" does not hold.
+      /* ⚠️ Reversed on 2026-08-20. This asserted that `native:package` kept its
+       * target, because appending a layer to a GeoPackage needs the file to be
+       * there. The exemption behind it is gone — it keyed on the parameter
+       * EXISTING rather than on what the call set it to, while the real
+       * defaults overwrite (`ACTION_ON_EXISTING_FILE` defaults to "Create or
+       * overwrite file"), so it stood aside for the very case it was meant to
+       * catch. Full reasoning at the top of geo/qgis/destination.ts.
        *
-       * `native:package` appends layers to a GeoPackage that has to be there
-       * already. Numbering it would append to a new empty file and report
-       * success, leaving the user's database untouched — and standing aside
-       * silently would let the caller read protection into a run with none,
-       * over data undo cannot bring back (§10.1 #6). */
+       * What is pinned here is the wiring: the tool has to pass the numbered
+       * path on to QGIS and report it, not merely compute it. */
       const instance = yield* InstanceState.context
       const asked = path.join(instance.directory, "atlas.gpkg")
+      const numbered = path.join(instance.directory, "atlas (1).gpkg")
       fs.writeFileSync(asked, "the user's database")
-      writes = [asked]
+      writes = [numbered]
 
       const result = yield* succeed({
         algorithm: "native:packager",
         parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: asked, OVERWRITE: false }),
       })
 
-      expect(sentParameters().OUTPUT).toBe(asked)
-      expect(result.metadata.destinations).toEqual([{ parameter: "OUTPUT", path: asked }])
-      // Named, not merely hinted at: the caller can act on the parameter and
-      // cannot act on "something decided elsewhere".
-      expect(result.output).toContain("OVERWRITE")
-      expect(result.output).toContain(asked)
+      expect(sentParameters().OUTPUT).toBe(numbered)
+      expect(result.metadata.destinations).toEqual([{ parameter: "OUTPUT", path: numbered }])
+      // The user's database is still the user's database.
+      expect(fs.readFileSync(asked, "utf8")).toBe("the user's database")
+      // And the caller is told what this file is not, so a call that meant to
+      // append can tell that it did not.
+      expect(result.output).toContain("not an addition")
     }),
   )
 })

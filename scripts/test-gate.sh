@@ -28,8 +28,23 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # the backstop behind those.
 TIMEOUT="--timeout 30000"
 
+# The WHOLE workspace, not just packages/opencode — which is all this used to
+# check, and the gap was invisible from inside the gate.
+#
+# `bun test` executes TypeScript by stripping types, never by checking them, so
+# a type error is not something the suites below can fail on. That left every
+# package except one with no type checking anywhere in the gate. Measured on
+# 2026-08-20: packages/core carried a real error (geocode-brand.test.ts, a
+# literal tuple whose elements no longer matched `Brand.projectDir` after the
+# object widened it) that had been sitting there green, and it only surfaced
+# because a full `turbo typecheck` was run by hand for an unrelated reason.
+#
+# core is not a corner of the tree: Brand, Global.Path, FSUtil and the geodata
+# snapshot-exclusion list all live in it. Cost is not the reason to keep the
+# narrow version either — turbo caches per package, so the full pass is about
+# eleven seconds warm.
 echo "== typecheck =="
-(cd "$ROOT/kernel/packages/opencode" && bun run typecheck)
+(cd "$ROOT/kernel" && bun run typecheck)
 
 echo
 echo "== geo kernel (opencode) =="

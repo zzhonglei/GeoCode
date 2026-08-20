@@ -143,11 +143,11 @@ findLast(...) ?? { action: "ask", permission, pattern: "*" }
 
 **`qgis` 是 GeoCode 唯一会问的键,也是唯一比上游更严的地方。** 上游七个内置 agent 的权限值只有 `allow` 与 `deny`,没有任何一个工具默认 `ask`——`edit`/`write`/`bash` 全落在引擎的 `"*": "allow"` 上。那在**那边**站得住,因为改错了能撤销:快照存着可回滚的版本。地理数据被刻意排除在快照之外(GEOKERNEL §10.1 #6,体积理由),所以同一道权衡在**这边**答案不同。"一开始就别毁"本来就是输出编号而非覆盖的理由,这条只是同一规则在编号够不着的地方的第二个实现。
 
-而编号够不着的范围不小。`QgisDestination.reserve` 按**参数类型**认输出,对它认得出的那部分可靠,对其余完全无声——2026-08-20 在真实 3.44 目录上实测:**422 个算法里 366 个声明 destination 参数,56 个一个都不声明,而那 56 个里约 26 个照写不误**。形态有三种:atlas 出图把一整个目录写进类型为 `file` 的普通参数、`native:truncatetable` 清空自己的 `INPUT`(文档原话 `deleted features cannot be restored`)、`native:alignrasters` 把输出路径藏在数组元素的字典里。
+而编号够不着的范围不小。`QgisDestination.reserve` 按**参数类型**认输出,对它认得出的那部分可靠,对其余完全无声——实测一份 3.44 目录:**422 个算法里 366 个声明 destination 参数,56 个一个都不声明,而那 56 个里约 26 个照写不误**。形态有三种:atlas 出图把一整个目录写进类型为 `file` 的普通参数、`native:truncatetable` 清空自己的 `INPUT`(文档原话 `deleted features cannot be restored`)、`native:alignrasters` 把输出路径藏在数组元素的字典里。
 
 ⚠️ **这个缺口不能用清单补。** 算法目录是在**用户那台机器上、用他那一版 QGIS** 建出来的(`catalog.ts` 的 `EXPORT_SCRIPT`),3.28 LTR 少几十个算法、Windows 上 GDAL provider 的组成也不同——把这 56 个 id 写死进产品,等于把一台 macOS + 3.44.9 的偶然状态当成全部。`DESTINATION_TYPES` 之所以站得住,是因为它枚举的是 **QGIS API 的类型常量**而不是算法。⟹ 在没见过的 QGIS 版本上仍然成立的守卫只剩一个:**把调用如实摆给用户,由他判断**。
 
-**所以 `RunQgisAlgorithm` 只问一次,pattern 是完整调用。** 询问里带算法 id 和全部参数(`native:buffer(INPUT=/data/a.shp, DISTANCE=100, OUTPUT=/out/b.shp)`),`always` 保持 `["*"]`——批一次就安静到应用重启(上游把批准放在 `InstanceState` 的内存里,它自己的提示文案就写着 `until OpenCode is restarted`)。此前那道额外的 `external_directory` 询问**已经移除**:它说的严格更少(只报一个目录,不报算法也不报参数),而它能看见的又只是 `reserve` 看得见的那部分——对上面 26 个算法一声不吭,却让每次普通调用多花一次弹窗。
+**所以 `RunQgisAlgorithm` 只问一次,pattern 是完整调用。** 询问里带算法 id 和全部参数(`native:buffer(INPUT=/data/a.shp, DISTANCE=100, OUTPUT=/out/b.shp)`),`always` 保持 `["*"]`——批一次就安静到应用重启(上游把批准放在 `InstanceState` 的内存里,它自己的提示文案就写着 `until OpenCode is restarted`)。**不设第二道 `external_directory` 询问**,尽管上游 read / write / bash 各设一道。它说的严格更少——只报一个目录,不报算法也不报参数;而它能看见的又只是 `reserve` 看得见的那部分,对上面那 26 个算法一声不吭,却让每次普通调用多付一次弹窗。
 
 **pattern 里的路径写成什么形式,跟着对齐目标走,不做全局统一:**
 

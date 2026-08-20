@@ -216,19 +216,31 @@ describe("what counts as a destination", () => {
   })
 })
 
-describe("an algorithm that owns the question itself", () => {
-  // Measured on the same 3.44 registry: 366 algorithms declare a destination,
-  // 622 distinct parameter names between them, and exactly two of those names
-  // decide what happens to a pre-existing file.
-  const OWNED = ["OVERWRITE", "ACTION_ON_EXISTING_FILE"]
+describe("no parameter name switches the numbering off", () => {
+  /* ⚠️ This block asserted the OPPOSITE until 2026-08-20, and the reversal is
+   * the point — read the note at the top of destination.ts before changing it
+   * back.
+   *
+   * There was an exemption: an algorithm carrying `OVERWRITE` or
+   * `ACTION_ON_EXISTING_FILE` had its destination left alone, because for
+   * `native:package` and `native:savefeatures` an existing target is the point
+   * of the call. Two measurements on a real 3.44 registry killed it. The
+   * exemption tested whether the parameter EXISTED and never what the call set
+   * it to, while the defaults run the other way — `ACTION_ON_EXISTING_FILE`
+   * defaults to 0, "Create or overwrite file", and `native:exporttospreadsheet`
+   * defaults `OVERWRITE` to True — so an ordinary call that left the parameter
+   * alone had its protection waived and its file overwritten. And a list of
+   * names measured on this machine cannot describe the QGIS a user installed.
+   *
+   * The trade that remains is between two failures of different size: numbering
+   * an append leaves the original intact and the result recoverable; waiving it
+   * lets an overwrite land on data checkpoints do not hold. Take the
+   * recoverable one.
+   */
+  const CONTROLS = ["OVERWRITE", "ACTION_ON_EXISTING_FILE"]
 
-  test("its destination is left exactly where it was asked for", () => {
-    // `native:package` appends layers to a GeoPackage and `native:savefeatures`
-    // appends features to a file: for both, the target ALREADY EXISTING is the
-    // point of the call. Numbering it answers a correct call by appending to a
-    // brand new empty file, leaving the user's data untouched, and reporting
-    // success — the silently wrong result §6.3 rates worse than a failure.
-    for (const control of OWNED) {
+  test("a destination is numbered even when the algorithm has a parameter for pre-existing files", () => {
+    for (const control of CONTROLS) {
       const at = dir()
       const asked = path.join(at, "atlas.gpkg")
       fs.writeFileSync(asked, "the user's database")
@@ -236,15 +248,17 @@ describe("an algorithm that owns the question itself", () => {
         OUTPUT: asked,
       })
       expect(reserved).toHaveLength(1)
-      expect(reserved[0]!.actual).toBe(asked)
-      expect(reserved[0]!.governedBy).toBe(control)
+      expect(reserved[0]!.actual).toBe(path.join(at, "atlas (1).gpkg"))
+      // And the user's file is still the user's file.
+      expect(fs.readFileSync(asked, "utf8")).toBe("the user's database")
     }
   })
 
-  test("and the caller is told, because this is where the promise stops", () => {
-    // The one case in which `geo-qgis-run.txt`'s "not overwritten" does not
-    // hold. Standing aside silently would leave the caller reading protection
-    // into a run that has none, over the very data undo cannot bring back.
+  test("the report says the new file is NOT an addition to the old one", () => {
+    /* The sentence that makes the trade honest. A call that meant to append now
+     * writes beside the target instead, and "already existed and is untouched"
+     * on its own reads as pure good news — the caller would file a silently
+     * relocated append as a success. */
     const at = dir()
     const asked = path.join(at, "atlas.gpkg")
     fs.writeFileSync(asked, "the user's database")
@@ -253,8 +267,8 @@ describe("an algorithm that owns the question itself", () => {
         OUTPUT: asked,
       }),
     )
-    expect(line).toContain(asked)
-    expect(line).toContain("OVERWRITE")
+    expect(line).toContain(path.join(at, "atlas (1).gpkg"))
+    expect(line).toContain("not an addition")
     // Nothing at all is said when the target was not there: the promise is
     // whole in that case, and a note that fires anyway is noise.
     expect(
@@ -266,22 +280,23 @@ describe("an algorithm that owns the question itself", () => {
     ).toBeUndefined()
   })
 
-  test("a parameter that only sounds like one does not switch the protection off", () => {
-    // Both of these are real, and both came back from the same sweep that found
-    // the two above. `GEOREFERENCE` is "Append georeference information" onto a
-    // PDF layout; `gdal:proximity`'s `REPLACE` is a pixel value. A keyword test
-    // at run time would have matched them and quietly disarmed the numbering
-    // for algorithms that need it — which is why the list is measured.
-    for (const lookalike of ["GEOREFERENCE", "REPLACE", "UPDATE_EXISTING", "APPEND_MODE"]) {
+  test("nor does anything that merely sounds like one", () => {
+    /* Kept from the version of this block that had a name list, because it is
+     * now guarding the opposite thing: that nobody reintroduces one. Every
+     * structural alternative was probed against a real registry and each failed
+     * — `supports_append` is a property of the sink type and matches 83
+     * algorithms, `widget_wrapper.dontconfirmoverwrite` matches 2 of the 3 and
+     * is a GUI hint, and a keyword test matches `GEOREFERENCE` ("Append
+     * georeference information", onto a PDF) and `gdal:proximity`'s `REPLACE`
+     * (a pixel value). */
+    for (const lookalike of ["GEOREFERENCE", "REPLACE", "UPDATE_EXISTING", "APPEND_MODE", "OVERWRITE"]) {
       const at = dir()
       const asked = path.join(at, "out.shp")
       fs.writeFileSync(asked, "x")
-      const reserved = QgisDestination.reserve(
-        algorithm(param("OUTPUT", "sink"), param(lookalike, "boolean")),
-        { OUTPUT: asked },
-      )
+      const reserved = QgisDestination.reserve(algorithm(param("OUTPUT", "sink"), param(lookalike, "boolean")), {
+        OUTPUT: asked,
+      })
       expect(reserved[0]!.actual).toBe(path.join(at, "out (1).shp"))
-      expect(reserved[0]!.governedBy).toBeUndefined()
     }
   })
 })

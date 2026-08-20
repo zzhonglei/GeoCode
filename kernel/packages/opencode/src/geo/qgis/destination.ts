@@ -69,29 +69,42 @@ const DESTINATION_TYPES = new Set([
  */
 const FOLDER_TYPE = "folderDestination"
 
-/**
- * The parameters through which an algorithm decides for itself what happens to
- * a file that is already there.
+/* --- There is deliberately NO exemption for "algorithms that manage a
+ * pre-existing file themselves", and it must not be added back.
  *
- * Measured on the same 3.44 registry across the same three providers: **366
- * algorithms declare a destination, with 622 distinct parameter names between
- * them, and exactly two of those names govern a pre-existing file** —
- * `ACTION_ON_EXISTING_FILE` on `native:savefeatures`, and `OVERWRITE` on
- * `native:package` and `native:exporttospreadsheet`.
+ * There used to be one: a measured set of two parameter names
+ * (`ACTION_ON_EXISTING_FILE`, `OVERWRITE`) whose presence made `reserve` leave
+ * the path alone, on the reasoning that for `native:package` and
+ * `native:savefeatures` an existing target is the POINT of the call — appending
+ * a layer to a GeoPackage, adding a sheet to a spreadsheet — and numbering it
+ * would append to a brand new empty file and report success.
  *
- * For those three an existing target is the POINT of the call: appending a
- * layer to a GeoPackage, adding a sheet to a spreadsheet. Numbering would
- * answer a correct call by appending to a brand new empty file, leaving the
- * user's data untouched, and reporting success — a silently wrong result, which
- * §6.3 rates worse than a failure.
+ * Removed 2026-08-20 for two reasons, measured on a real 3.44 registry:
  *
- * A measured list rather than a keyword test at run time, because the same
- * sweep also matched `GEOREFERENCE` ("Append georeference information", onto a
- * PDF) and `gdal:proximity`'s `REPLACE` (a pixel value). Neither has anything
- * to do with an existing file, and either would have switched the protection
- * off for an algorithm that needs it.
- */
-const EXISTING_FILE_CONTROLS = new Set(["ACTION_ON_EXISTING_FILE", "OVERWRITE"])
+ * 1. **It read the wrong thing.** It tested whether the PARAMETER EXISTS, never
+ *    what the call SET IT TO — and the defaults run the other way:
+ *    `native:savefeatures` defaults `ACTION_ON_EXISTING_FILE` to 0, "Create or
+ *    overwrite file", and `native:exporttospreadsheet` defaults `OVERWRITE` to
+ *    True. So a call that named an existing .gpkg and left the parameter alone
+ *    got its numbering waived and its file overwritten — the exemption stood
+ *    aside for exactly the case it was meant to catch.
+ * 2. **A name list cannot survive the user's QGIS.** The catalog is built from
+ *    whichever version they installed; two names measured here describe this
+ *    machine. Every structural alternative was probed and each one failed:
+ *    `supports_append` is a property of the sink TYPE and matches 83 algorithms,
+ *    `widget_wrapper.dontconfirmoverwrite` matches only 2 of the 3 (and is a GUI
+ *    hint besides), and a keyword test on the name matches `GEOREFERENCE` and
+ *    `gdal:proximity`'s `REPLACE`, neither of which has anything to do with an
+ *    existing file.
+ *
+ * What settles it is that the two failures are not the same size. Numbering an
+ * append writes the new data BESIDE the old: the user's file is intact and the
+ * result is recoverable by hand. Waiving the numbering lets an overwrite land
+ * on data that checkpoints do not hold (§10.1 #6) — gone, with nothing to
+ * restore from. ⟹ When the two cannot be told apart reliably, take the
+ * recoverable failure. `report()` names the new path, and says in as many words
+ * that it is not an addition to the old file, so an append that was meant to
+ * happen is visible rather than silent. --- */
 
 export interface Reservation {
   /** The parameter name as the algorithm spells it. */
@@ -100,12 +113,8 @@ export interface Reservation {
   readonly asked: string
   /** The path that will be written. Differs from `asked` only when it was taken. */
   readonly actual: string
-  /** A directory destination: never numbered, and permission is asked for the directory itself. */
+  /** A directory destination: never numbered, so this is the one kind of output that can land on something already there. */
   readonly folder: boolean
-  /** Whether anything was already occupying the requested name. Read before the run, because after it there is always something there. */
-  readonly existed: boolean
-  /** The algorithm's own parameter for a pre-existing file, when it has one — the reason this destination was left alone. */
-  readonly governedBy?: string
   /** Where the output really is, once the run is over (`settle`). Absent until then, and absent when it landed exactly where it was sent. */
   readonly landed?: string
 }
@@ -193,11 +202,6 @@ export function free(requested: string, taken?: ReadonlySet<string>): string {
  */
 export function reserve(algorithm: Algorithm | undefined, parameters: Record<string, unknown>): Reservation[] {
   if (!algorithm) return []
-  // Read once for the whole algorithm rather than per destination: the control
-  // is declared beside the outputs, not on one of them, so there is no way to
-  // tell which output it governs — and on all three algorithms that have one
-  // there is only a single destination anyway.
-  const governedBy = algorithm.parameters.find((parameter) => EXISTING_FILE_CONTROLS.has(parameter.name))?.name
   const reservations: Reservation[] = []
   // One listing per directory, shared by every destination that writes there —
   // and then added to, so that a name this call has already issued is taken for
@@ -219,24 +223,16 @@ export function reserve(algorithm: Algorithm | undefined, parameters: Record<str
       taken = occupants(directory)
       listings.set(directory, taken)
     }
-    const existed = taken.has(path.basename(value))
     const folder = parameter.type === FOLDER_TYPE
-    // Two reasons to leave a path alone, and they are not the same reason. A
-    // folder destination means "put the results in here", so an existing
-    // directory is the ordinary case. A governed destination means the
-    // algorithm was given a parameter for exactly this question, and answering
-    // it on the algorithm's behalf is how a correct call gets written to the
-    // wrong file.
-    const actual = folder || governedBy ? value : free(value, taken)
+    // One reason left to leave a path alone, and it is about what the path
+    // MEANS rather than about the algorithm: a folder destination says "put the
+    // results in here", so an existing directory is the ordinary case and
+    // numbering it would invent `output (1)/` for a perfectly correct call.
+    // Everything else is numbered — see the note above on why there is no
+    // exemption for algorithms that claim to manage the target themselves.
+    const actual = folder ? value : free(value, taken)
     taken.add(path.basename(actual))
-    reservations.push({
-      parameter: parameter.name,
-      asked: value,
-      actual,
-      folder,
-      existed,
-      ...(governedBy ? { governedBy } : {}),
-    })
+    reservations.push({ parameter: parameter.name, asked: value, actual, folder })
   }
   return reservations
 }
@@ -311,29 +307,31 @@ export function ensureParents(reservations: readonly Reservation[]): void {
  *
  * Nothing is said about an output that landed exactly where it was asked for:
  * the caller already knows that, and a note firing on every run is the kind of
- * noise that gets the whole channel skipped. Three things are worth a line
- * because none of them can be inferred from the call:
+ * noise that gets the whole channel skipped. Two things are worth a line
+ * because neither can be inferred from the call:
  *
  * - it was numbered, so the next step needs a path nobody typed;
- * - QGIS named the file itself, same consequence;
- * - the target was already there and the algorithm — not this module — is what
- *   decides its fate. That last one is the only place where the promise made in
- *   `geo-qgis-run.txt` does not hold, so it is the one place the caller has to
- *   be told, rather than left to read silence as protection.
+ * - QGIS named the file itself, same consequence.
+ *
+ * The numbered line carries a second sentence, and it is load-bearing. With the
+ * governed-destination exemption gone (see the note at the top of this module),
+ * a call that MEANT to append — a layer into a GeoPackage, a sheet into a
+ * spreadsheet — now gets a new file beside the old one instead. That is the
+ * recoverable half of an unavoidable trade, but only if the caller can tell it
+ * happened: "already existed and is untouched" on its own reads as pure good
+ * news, and an append that silently went somewhere else is exactly what §6.3
+ * rates worse than a failure. So the line says what the new file is NOT.
  */
 export function report(reservations: readonly Reservation[]): string | undefined {
   const lines: string[] = []
   for (const reservation of reservations) {
     const at = reservation.landed ?? reservation.actual
-    if (reservation.governedBy && reservation.existed) {
-      lines.push(
-        `${reservation.parameter}: ${reservation.asked} already existed and was left as it is —` +
-          ` this algorithm decides what happens to it through its "${reservation.governedBy}" parameter.`,
-      )
-      continue
-    }
     if (reservation.actual !== reservation.asked) {
-      lines.push(`${reservation.parameter} written to ${at} — ${reservation.asked} already existed and is untouched.`)
+      lines.push(
+        `${reservation.parameter} written to ${at} — ${reservation.asked} already existed and is untouched.` +
+          ` This is a new file, not an addition to that one: if this call was meant to add to it, delete` +
+          ` ${at} and run again once you have checked what is in the way.`,
+      )
       continue
     }
     if (reservation.landed) {
