@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
+import type { PermissionRequest } from "@opencode-ai/sdk/v2"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { permissionInfo } from "../src/cli/cmd/run/permission.shared"
 import { Agent } from "../src/agent/agent"
 import { GeoCodeConfig } from "../src/config/geocode"
 import { Permission } from "../src/permission"
@@ -210,8 +212,18 @@ describe("what each agent can do", () => {
   it.instance("GeoAgent works, and does not download", () =>
     Effect.gen(function* () {
       expect(yield* verdict("GeoAgent", "geodata")).toBe("allow")
-      expect(yield* verdict("GeoAgent", "gee")).toBe("allow")
       expect(yield* verdict("GeoAgent", "osm")).toBe("deny")
+
+      /* Both executing groups ask, for reasons that do not transfer between
+       * them — which is why the prompts they raise are shaped differently
+       * (cli/cmd/run/permission.shared.ts).
+       *
+       * `qgis` is asked because the call can be READ and judged. `gee` is asked
+       * because it CANNOT: a script is arbitrary Python and its output path
+       * lives inside a string literal, so what the user grants is the
+       * capability — credentials, quota, and imagery landing somewhere on their
+       * disk — rather than any particular operation. */
+      expect(yield* verdict("GeoAgent", "gee")).toBe("ask")
 
       /* `qgis` is the one group GeoCode asks about, and the only place it is
        * stricter than upstream is with its own tools.
@@ -301,4 +313,79 @@ describe("the user still owns their own machine", () => {
       expect(Permission.evaluate("osm", "*", overridden).action).toBe("allow")
     }),
   )
+})
+
+describe("what the prompt actually says", () => {
+  /* The other half of a permission decision, and the half that has no engine
+   * behind it: a verdict of `ask` is only worth what the dialog shows.
+   *
+   * Kept in this file rather than beside the CLI's own tests because the two
+   * halves fail together. Flip `gee` back to `allow` and the rendering below is
+   * dead code; delete the rendering and the `ask` verdicts above become dialogs
+   * reading "Call tool gee" with nothing in them. Neither shows up in the other
+   * file.
+   *
+   * `permissionInfo` is a pure function, so no instance is needed — hence plain
+   * `test` here rather than the `it.instance` used above.
+   */
+  const request = (permission: string, extra: Partial<PermissionRequest> = {}): PermissionRequest => ({
+    id: "perm-geo",
+    sessionID: "ses-geo",
+    permission,
+    patterns: [],
+    metadata: {},
+    always: ["*"],
+    ...extra,
+  })
+
+  test("none of the four keys falls through to the generic dialog", () => {
+    /* The tripwire that matters most, because the fallback is SILENT: a key
+     * that is not recognised still renders, still offers Allow/Reject, and
+     * still looks like a working prompt — it just contains nothing to judge.
+     * Upstream's table (`tool.ts`'s TOOL_RULES) is keyed by tool NAME, so none
+     * of these four can ever be registered there, and any refactor that routes
+     * them back through it lands exactly here. */
+    for (const key of ["geodata", "qgis", "osm", "gee"]) {
+      const info = permissionInfo(request(key, { patterns: ["x"], metadata: { algorithm: "native:buffer" } }))
+      expect(info.title).not.toBe(`Call tool ${key}`)
+      expect(info.lines).not.toEqual([`Tool: ${key}`])
+    }
+  })
+
+  test("an algorithm call is spelled out, parameter by parameter", () => {
+    // What the user is asked to judge is whether a path sits outside their
+    // work — so the path has to survive into the dialog, absolute and whole.
+    const info = permissionInfo(
+      request("qgis", {
+        patterns: ["native:buffer(INPUT=/data/a.shp, OUTPUT=/tmp/out.shp)"],
+        metadata: { algorithm: "native:buffer", parameters: { INPUT: "/data/a.shp", OUTPUT: "/tmp/out.shp" } },
+      }),
+    )
+    expect(info.title).toContain("native:buffer")
+    expect(info.lines.join("\n")).toContain("/data/a.shp")
+    expect(info.lines.join("\n")).toContain("/tmp/out.shp")
+  })
+
+  test("a GEE script is NOT spelled out, and that is the design", () => {
+    /* Deliberately asserting an absence. A script is arbitrary Python; folding
+     * it into a dialog would produce something nobody reads, and a prompt that
+     * is never read is worse than none — it manufactures the impression of
+     * review. What is granted is the capability, so that is all the dialog
+     * claims. A well-meaning change that starts printing the body lands here.
+     */
+    /* ⚠️ The body has to be PRESENT in the metadata for this to mean anything.
+     * Written first with `metadata: { script: "" }`, it asserted that something
+     * never supplied did not appear — green forever, and green for the wrong
+     * reason (LESSONS §二①). The tool does not put the body there today, but a
+     * dialog that would print it if it were there is exactly the regression
+     * worth catching, and the observability fix that adds it must not silently
+     * turn this prompt into a wall of Python. */
+    const body = "import ee\ndownload_image(image, '/data/scene.tif', roi)"
+    const info = permissionInfo(
+      request("gee", { patterns: ["inline_script"], metadata: { script: "", source: body } }),
+    )
+    expect(info.title).toMatch(/earth engine/i)
+    expect(info.lines.join("\n")).not.toContain(body)
+    expect(info.lines.join("\n")).not.toContain("download_image")
+  })
 })

@@ -111,6 +111,20 @@ const harness = (runtime: Layer.Layer<GeoRuntime.Service>, gee: Layer.Layer<GeeS
     ]),
   )
 
+/**
+ * A user who has already granted the capability, standing in.
+ *
+ * `gee` is `ask` for GeoAgent — that is the design, and the verdict itself is
+ * asserted in geocode-geo-permissions.test.ts, which can read it without anyone
+ * having to answer. Every test reached through `execute` is about what the tool
+ * DOES once it is allowed to run, and without this each one parks at an
+ * unanswered prompt until its timeout.
+ *
+ * Appended last, which is the shape a real approval takes: `evaluate` returns
+ * the last matching rule, and answering "always" pushes onto the same ruleset.
+ */
+const GRANTED = { permission: "gee", pattern: "*", action: "allow" } as const
+
 const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, agentName = "GeoAgent") {
   const registry = yield* ToolRegistry.Service
   const permission = yield* Permission.Service
@@ -127,7 +141,7 @@ const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, ag
       metadata: () => Effect.void,
       ask: (req) =>
         permission
-          .ask({ ...req, sessionID: SessionID.make("ses_gee_test"), ruleset: agent!.permission })
+          .ask({ ...req, sessionID: SessionID.make("ses_gee_test"), ruleset: [...agent!.permission, GRANTED] })
           .pipe(Effect.orDie),
     })
     .pipe(Effect.timeout(10_000), Effect.exit)

@@ -96,7 +96,24 @@ export function base(): ConfigV1.Info {
            * "ask"}`, the same key divided by how much the operation can cost.
            * Plan mode already carries this exact rule. */
           qgis: { "*": "ask", "doc:*": "allow" },
-          gee: "allow",
+          /* Asked too, but for a different reason and with a different prompt.
+           *
+           * QGIS is asked because the call can be READ: an algorithm id and its
+           * parameters fit in a dialog, and judging them is the only guard left
+           * where numbering cannot reach. None of that transfers here. A GEE
+           * script is arbitrary Python — `download_image(image, "…", roi)` puts
+           * the output path inside a string literal in the code, so nothing at
+           * this layer can see it, and unfolding the script into a prompt would
+           * only teach the user to confirm without reading.
+           *
+           * What is granted is therefore the CAPABILITY, not the operation:
+           * running against the user's Earth Engine credentials and quota, and
+           * writing imagery somewhere on their disk. That is worth one prompt —
+           * scripts are rare next to algorithm calls, and `always` keeps it to
+           * one per app run — and the prompt says exactly that much
+           * (cli/cmd/run/permission.shared.ts), the way upstream's `task`
+           * prompt names a subagent without pretending to know what it will do. */
+          gee: "ask",
           // No `osm`. Downloading from public services goes through the
           // osmfetch subagent, whose exit is narrowed and whose prompt carries
           // the verification discipline — so the four OSM tools are not just

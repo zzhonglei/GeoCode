@@ -55,6 +55,23 @@ function text(v: unknown): string {
   return typeof v === "string" ? v : ""
 }
 
+/* --- GeoCode: one parameter value as one line of a dialog.
+ *
+ * The cut is at a terminal line rather than at the 256 `geo-qgis-run.ts` uses
+ * for the same values, and the two numbers are not a drift: that one keeps a
+ * PATTERN from exploding and is sized so no real path ever reaches it, this one
+ * keeps a DIALOG readable. A path longer than this is already unreadable in a
+ * prompt, and the full value stays in the tool's metadata either way. --- */
+function render(value: unknown): string {
+  const raw =
+    typeof value === "string"
+      ? value
+      : typeof value === "number" || typeof value === "boolean" || value === null
+        ? String(value)
+        : JSON.stringify(value)
+  return raw.length > 160 ? `${raw.slice(0, 160)}…` : raw
+}
+
 function data(request: PermissionRequest): Dict {
   const meta = dict(request.metadata)
   return {
@@ -114,6 +131,70 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
       title: "Continue after repeated failures",
       lines: ["This keeps the session running despite repeated failures."],
     }
+  }
+
+  /* --- GeoCode: the four geographic permission keys (docs/TOOLS.md §4).
+   *
+   * Here rather than in tool.ts's TOOL_RULES for the same reason
+   * `external_directory` and `doom_loop` are here: that table is keyed by TOOL
+   * NAME and demands a `view` and a `run`, while these are PERMISSION KEYS —
+   * `qgis` covers two tools, `osm` covers four, and no tool is named after any
+   * of them. Registering them there would mean inventing a rendering for a tool
+   * that does not exist.
+   *
+   * Without this the fallback at the bottom renders `Call tool qgis` over
+   * `Tool: qgis`, which is a dialog containing none of what the user is being
+   * asked to judge — and for `qgis` that judgement is the ONLY guard left
+   * (TOOLS.md §4.3: the destination check cannot see 56 of 422 algorithms, and
+   * no list of exceptions survives the user's own QGIS version).
+   *
+   * Two shapes, on purpose. An algorithm call can be read and judged, so it is
+   * spelled out; a GEE script cannot — it is arbitrary Python, and unfolding it
+   * into a dialog would teach the user to confirm without reading. What that
+   * one is asked about is the CAPABILITY, the way upstream's `task` prompt asks
+   * about a subagent without pretending to know what it will do. --- */
+  if (request.permission === "qgis") {
+    const algorithm = text(input.algorithm)
+    // `doc:` patterns reach here only if a user narrows the key by hand; the
+    // shipped rules allow them outright, since a prompt for reading
+    // documentation is a prompt that trains the user to dismiss prompts.
+    if (!algorithm) {
+      return { icon: "#", title: "QGIS documentation", lines: pats.map((item) => `- ${item}`) }
+    }
+    const parameters = dict(input.parameters)
+    const width = Math.max(0, ...Object.keys(parameters).map((key) => key.length))
+    return {
+      icon: "#",
+      title: `Run QGIS algorithm ${algorithm}`,
+      // One parameter per line rather than the single-line form carried in
+      // `patterns`: an atlas export takes seventeen of them, and the one that
+      // matters — a path outside the working directory — is the one that would
+      // wrap off the end of a terminal line.
+      lines: Object.entries(parameters).map(([key, value]) => `${key.padEnd(width)} = ${render(value)}`),
+    }
+  }
+
+  if (request.permission === "gee") {
+    const script = text(input.script)
+    return {
+      icon: "#",
+      title: "Run an Earth Engine script",
+      // Deliberately not the script body. It runs against the user's Earth
+      // Engine credentials and quota, and that — not any one line of Python —
+      // is what is being granted.
+      lines: [script ? toolPath(script, { home: true }) : "Inline script"],
+    }
+  }
+
+  if (request.permission === "geodata") {
+    return { icon: "#", title: "Read geographic data", lines: pats.map((item) => `- ${item}`) }
+  }
+
+  if (request.permission === "osm") {
+    // Four tools with four different pattern meanings — a query, a set of
+    // extents, an output path — so the patterns are listed as they are rather
+    // than given a shape that would be wrong for three of them.
+    return { icon: "#", title: "OpenStreetMap", lines: pats.map((item) => `- ${item}`) }
   }
 
   return {
