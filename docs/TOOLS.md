@@ -173,8 +173,12 @@ GEE 授权的是凭据、配额,以及影像落到磁盘某处——不是任何
 
 | 工具 | 对齐 | 路径形式 | 判据 |
 |---|---|---|---|
+| `ReadGeoData` | `read` | **worktree 相对** | 上游 `read` 的 pattern 就是同一个表达式 |
 | `OsmGetObjects` / `OsmGetFeatures` | `write` | **worktree 相对** | 上游 `write` 的 pattern 就是相对 title |
+| `RunGeeScript` | `task` | **worktree 相对**;内联脚本用标识符 `inline_script` | 它是一条路径,归一化后才能被规则稳定匹配 |
 | `RunQgisAlgorithm` | `bash` | **绝对、原样** | 上游 `bash` 的 pattern 就是完整命令原文 |
+
+⚠️ **归一化不只是形式问题。** 路径若原样透传,它同时是**存在性检查、权限 pattern 与执行入参**的取值——一条相对路径于是按 `process.cwd()` 解析,而工具的一切其它判断都以实例目录为基准:检查问的可能是一个文件,真正跑的是另一个。所以除 `RunQgisAlgorithm` 外,四个工具都在入口处解析一次(`!isAbsolute → resolve(instance.directory, …)`,Windows 上再过一次 `normalizePath`),之后只用解析后的那个值。
 
 ⚠️ QGIS 这边**必须**是绝对路径:这个询问存在的唯一意义,就是让用户一眼看出 `/Users/me/thesis/data/final.shp` 在工作目录之外,而相对形式恰好把这件事藏起来。照搬 OSM 的归一化会静默抽掉整个设计的依据。
 

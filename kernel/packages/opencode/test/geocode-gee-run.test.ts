@@ -214,6 +214,68 @@ describe("RunGeeScript, pre-spawn refusals", () => {
     }),
   )
 
+  it.instance("a script path is resolved against the instance and asked for in worktree form", () =>
+    Effect.gen(function* () {
+      /* Two faults in one place, both of which were live until 2026-08-20.
+       *
+       * `script_path` used to travel raw through all eleven of its uses. A
+       * RELATIVE one therefore resolved against `process.cwd()`, so the
+       * existence check could answer about a different file than the one that
+       * would run — and the permission pattern changed shape depending on how
+       * the model happened to spell the argument, which makes a rule like
+       * `"gee": { "scripts/*.py": "allow" }` impossible to write reliably.
+       *
+       * The instance directory is a temp dir and the process cwd is the package
+       * root, so a relative path that resolves is proof it resolved against the
+       * right one.
+       */
+      const instance = yield* InstanceState.context
+      const registry = yield* ToolRegistry.Service
+      const tool = (yield* registry.all()).find((item) => item.id === "RunGeeScript")!
+      fs.writeFileSync(path.join(instance.directory, "pipeline.py"), "print(1)")
+
+      const asked: string[][] = []
+      const record = (params: Record<string, unknown>) =>
+        tool
+          .execute(params, {
+            sessionID: SessionID.make("ses_gee_path"),
+            messageID: MessageID.make("msg_gee_path"),
+            agent: "GeoAgent",
+            abort: AbortSignal.any([]),
+            messages: [],
+            metadata: () => Effect.void,
+            ask: (req: any) => Effect.sync(() => void asked.push(req.patterns)),
+          } as any)
+          .pipe(Effect.timeout(5_000), Effect.exit)
+
+      /* Asserted as properties, not as a literal string. The test instance is
+       * not a git repository, so its worktree is `/` and the relative form is a
+       * long absolute-looking path — pinning the literal would pin the fixture
+       * rather than the behaviour. (OSM's tripwire learned this the same way.)
+       */
+      // Relative: only reaches the prompt at all if it resolved against the
+      // instance — otherwise the existence check refuses before asking.
+      yield* record({ script_path: "pipeline.py" })
+      const fromRelative = asked.at(-1)!
+      expect(fromRelative).toHaveLength(1)
+
+      // Absolute: the SAME pattern, because one file must not produce two
+      // patterns depending on how the model spelled the argument — that is what
+      // makes `"gee": { "scripts/*.py": "allow" }` writable at all.
+      yield* record({ script_path: path.join(instance.directory, "pipeline.py") })
+      expect(asked.at(-1)).toEqual(fromRelative)
+
+      // And normalised rather than passed through: worktree-relative, the form
+      // `read` and OSM's writer both use.
+      expect(path.isAbsolute(fromRelative[0]!)).toBe(false)
+
+      // Inline keeps an identifier rather than `title`'s prose, because this
+      // string is what a rule is written against.
+      yield* record({ script: "print(1)" })
+      expect(asked.at(-1)).toEqual(["inline_script"])
+    }),
+  )
+
   it.instance("no refusal claims a duration for a run that never happened", () =>
     Effect.gen(function* () {
       // A synthetic footer here would tell the Agent the script ran and

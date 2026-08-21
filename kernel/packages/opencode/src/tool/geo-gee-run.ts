@@ -2,6 +2,7 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import { Effect, Schema } from "effect"
 import { Global } from "@opencode-ai/core/global"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Tool from "./tool"
 import { GeeService, GeoRuntime, GeoStatus } from "@/geo"
 import { GeoOutput } from "@/geo/runtime"
@@ -163,25 +164,43 @@ export const RunGeeScriptTool = Tool.define<
         )
       }
 
-      if (params.script_path && !existsSync(params.script_path)) {
+      /* Resolved once, here, and used everywhere below (docs/TOOLS.md §4.3).
+       *
+       * `script_path` was previously passed through raw to all eleven of its
+       * uses — the existence check, the permission pattern, the metadata, and
+       * the runner. A relative path therefore resolved against `process.cwd()`
+       * rather than the instance: `existsSync` could answer about a different
+       * file than the one that would run, and the pattern a permission rule had
+       * to match changed shape depending on how the model happened to spell the
+       * argument. Same fault OSM's writer carried before 2026-08-19, same fix,
+       * and the shape is `read`'s (geo-read.ts) rather than a third one.
+       *
+       * The schema still asks for an absolute path. That is guidance for the
+       * model; this is what holds when the guidance is not followed.
+       */
+      let scriptPath = params.script_path
+      if (scriptPath && !path.isAbsolute(scriptPath)) scriptPath = path.resolve(instance.directory, scriptPath)
+      if (scriptPath && process.platform === "win32") scriptPath = FSUtil.normalizePath(scriptPath)
+
+      if (scriptPath && !existsSync(scriptPath)) {
         return refuse(
           "Script not found",
           [
-            `No file at \`script_path\` — Python was NOT invoked: ${params.script_path}`,
+            `No file at \`script_path\` — Python was NOT invoked: ${scriptPath}`,
             "Fix: write the script to that path first, or correct the path. It must be absolute.",
           ],
           {
             truncated: false,
             mode: "file",
-            script: params.script_path,
+            script: scriptPath,
             error_code: "ScriptNotFound",
             param_error: true,
           },
         )
       }
 
-      const mode: "inline" | "file" = params.script_path ? "file" : "inline"
-      const title = params.script_path ? path.relative(instance.worktree, params.script_path) : "GEE inline script"
+      const mode: "inline" | "file" = scriptPath ? "file" : "inline"
+      const title = scriptPath ? path.relative(instance.worktree, scriptPath) : "GEE inline script"
 
       // Permission BEFORE the gate, unlike a tool whose gate is purely local.
       // Passing this gate performs the lazy authorization check (§5.5) — a real
@@ -190,9 +209,15 @@ export const RunGeeScriptTool = Tool.define<
       // anything at all.
       yield* ctx.ask({
         permission: "gee",
-        patterns: [params.script_path ?? "inline_script"],
+        // `title` for a file, which is the worktree-relative form `read` and
+        // OSM's writer both use — so a rule written against a path matches the
+        // same way whichever geographic tool touches it. The inline case gets
+        // an identifier rather than `title`'s "GEE inline script": one is for
+        // rule matching, the other is prose for a human, and merging them makes
+        // the rule harder to write for no gain.
+        patterns: [scriptPath ? title : "inline_script"],
         always: ["*"],
-        metadata: params.script_path ? { script: params.script_path } : {},
+        metadata: scriptPath ? { script: scriptPath } : {},
       })
 
       const gate = yield* GeoTool.settledGeeGate(gee, ctx.abort)
@@ -206,7 +231,7 @@ export const RunGeeScriptTool = Tool.define<
           {
             truncated: false,
             mode,
-            ...(params.script_path ? { script: params.script_path } : {}),
+            ...(scriptPath ? { script: scriptPath } : {}),
             error: true,
             geoStatus: GeoTool.geeGateStatus(gate.status),
           },
@@ -227,14 +252,14 @@ export const RunGeeScriptTool = Tool.define<
         metadata: {
           truncated: false,
           mode,
-          ...(params.script_path ? { script: params.script_path } : {}),
+          ...(scriptPath ? { script: scriptPath } : {}),
           output: "",
         },
       })
 
       const outcome = yield* GeeService.GeeExecutor.run(runtime, gate.environment, {
         script: params.script,
-        scriptPath: params.script_path,
+        scriptPath: scriptPath,
         abort: ctx.abort,
         cwd: instance.directory,
         onChunk: (chunk) =>
@@ -251,7 +276,7 @@ export const RunGeeScriptTool = Tool.define<
               metadata: {
                 truncated: live.truncated,
                 mode,
-                ...(params.script_path ? { script: params.script_path } : {}),
+                ...(scriptPath ? { script: scriptPath } : {}),
                 output: live.truncated ? `…(earlier output trimmed)\n${live.text}` : live.text,
               },
             })
@@ -284,7 +309,7 @@ export const RunGeeScriptTool = Tool.define<
           {
             truncated: false,
             mode,
-            ...(params.script_path ? { script: params.script_path } : {}),
+            ...(scriptPath ? { script: scriptPath } : {}),
             // `error` is what both runners already use for "the environment is
             // in the way", and the shut gate beside this one sets it too. The
             // old build's separate `env_error` is not revived here: it would be
@@ -361,7 +386,7 @@ export const RunGeeScriptTool = Tool.define<
       const metadata: Metadata = {
         truncated: body.truncated,
         mode,
-        ...(params.script_path ? { script: params.script_path } : {}),
+        ...(scriptPath ? { script: scriptPath } : {}),
         ...(outputPath ? { outputPath } : {}),
         elapsed_ms: elapsedMs,
         ...(result.code !== null ? { exit_code: result.code } : {}),
