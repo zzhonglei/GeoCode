@@ -108,6 +108,8 @@ grep -rnE '// GeoCode:|--- GeoCode|"GeoCode: ' kernel/packages/
 
 **当前基线**(2026-08-18 实测,内核 v1.18.18,方法即跑一次 `scripts/test-upstream.sh`):**88 个失败,unexplained 8 个**——opencode 包 85、core 包 3。按成因分堆:磁盘身份 36 · 堆栈帧存疑 38 · 已移除功能 4 · agent 阵容 1 · 地理交接 1 · unexplained 8。
 
+⚠️ **`unexplained` 那一堆会在 7–9 之间浮动,浮动的是同一批时序敏感的用例**(并跑时的重试退避、进度计数、监听端口复用)。看到 9 不等于出事:先问**这次改动碰过那段代码吗**,再单跑那个文件——两条证据都指向别处,才是波动。其余各堆是稳定的,它们变了才值得停下来。
+
 **这份画像跨过一次内核升级而一字未变**(v1.18.4 → v1.18.18,14 个版本、上游 319 个 commit,见 `KERNEL.md` §4.4)。同一组数字在两个上游版本上重合,是它作为基线可信的最好证据;也意味着下次它要是动了,动的多半是我们这边。
 
 ⚠️ 读 unexplained 那一堆时先扣掉一条:`osm download > progress counts every extent that settles…` 是**我们自己的测试**,它在门里(单独跑 `test/geo/`)是绿的,只在全量并跑的负载下超时——与 `METHOD.md §4` 记的那类并跑假红同源。
