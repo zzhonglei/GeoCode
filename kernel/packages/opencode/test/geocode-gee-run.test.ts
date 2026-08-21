@@ -16,6 +16,7 @@ import RUN_DESCRIPTION from "../src/tool/geo-gee-run.txt"
 import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
+import { statusHolding } from "./lib/geocode-status"
 
 /* Tripwires for RunGeeScript (docs/TOOLS.md §3; GEOKERNEL §5.9, §5.5, §11.2).
  *
@@ -289,29 +290,6 @@ describe("RunGeeScript, pre-spawn refusals", () => {
   )
 })
 
-/* A status plane holding one fixed answer, so the local chain can be posed as a
- * settled fact rather than probed. Only `current` is exercised here; the rest of
- * the interface dies loudly if something starts depending on it. */
-function statusHolding(gee: GeoEvent.GeeStatus | undefined) {
-  // `register` has to work rather than die: the kernel claims its slots while
-  // the layer is coming up, long before any tool runs. It just publishes
-  // nowhere — what this stub exists to control is the answer to `current`.
-  const writer = {
-    claim: () => Effect.succeed({} as never),
-    publish: () => Effect.succeed(true),
-    set: () => Effect.succeed(true),
-  }
-  return Layer.succeed(
-    GeoStatus.Service,
-    GeoStatus.Service.of({
-      current: (slot: string) => Effect.succeed(slot === "gee" ? (gee as never) : undefined),
-      register: () => Effect.succeed(writer as never),
-      snapshot: () => Effect.succeed({}),
-      watch: () => Stream.empty,
-    } as never),
-  )
-}
-
 describe("RunGeeScript, a local dead end costs the user nothing", () => {
   /* The prompt is worth what it costs. Asking before the gate is deliberate —
    * passing that gate is a real credentialed call (§5.5) and must not happen
@@ -327,7 +305,7 @@ describe("RunGeeScript, a local dead end costs the user nothing", () => {
         [RuntimeFlags.node, RuntimeFlags.layer()],
         [GeeService.node, open],
         [GeoRuntime.node, runtimeEnding({})],
-        [GeoStatus.node, statusHolding(gee)],
+        [GeoStatus.node, statusHolding({ gee })],
       ]),
     )
 

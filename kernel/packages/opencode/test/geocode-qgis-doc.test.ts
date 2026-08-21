@@ -5,7 +5,7 @@ import { Cause, Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { Agent } from "../src/agent/agent"
-import { GeoKernel, GeoQgis } from "../src/geo"
+import { GeoKernel, GeoQgis, GeoStatus } from "../src/geo"
 import { QgisCatalog } from "../src/geo/qgis/catalog"
 import { Permission } from "../src/permission"
 import { RuntimeFlags } from "../src/effect/runtime-flags"
@@ -16,6 +16,7 @@ import READ_DESCRIPTION from "../src/tool/geo-read.txt"
 import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
+import { QGIS_READY, statusHolding } from "./lib/geocode-status"
 
 /* Tripwires for QgisDoc (docs/TOOLS.md §3; GEOKERNEL §4.11).
  *
@@ -120,11 +121,25 @@ describe("QgisDoc", () => {
     { timeout: 30_000 },
   )
 
-  it.instance(
+  /* Needs a READY environment, which is the opposite of what it used to need.
+   *
+   * The tool checks the environment before it raises a prompt (docs/TOOLS.md
+   * §4.3), so an unconfigured install — which this test used to force, because
+   * it was the cheapest way to reach the ask and stop — now returns guidance
+   * without asking anything at all. The ask is only observable once the
+   * environment is out of the way.
+   */
+  const itReady = testEffect(
+    LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
+      [RuntimeFlags.node, RuntimeFlags.layer()],
+      [GeoStatus.node, statusHolding({ qgis: QGIS_READY })],
+    ]),
+  )
+
+  itReady.instance(
     "approving a documentation lookup grants documentation, and nothing else",
     () =>
       Effect.gen(function* () {
-        yield* forceUnconfigured()
         const seen: { patterns: readonly string[]; always: readonly string[] }[] = []
 
         const registry = yield* ToolRegistry.Service
@@ -154,9 +169,6 @@ describe("QgisDoc", () => {
         expect(seen[0]!.always).toEqual(["doc:*"])
         expect(seen[0]!.always).not.toContain("*")
       }),
-    // forceUnconfigured() alone is allowed 10s, which already crosses bun's
-    // 5s default — a gate that fails at random teaches people to re-run it
-    // rather than read it.
     { timeout: 30_000 },
   )
 

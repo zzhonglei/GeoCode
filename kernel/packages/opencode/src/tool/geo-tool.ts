@@ -121,6 +121,34 @@ export const settledGeeGate = Effect.fn("GeoTool.settledGeeGate")(function* (
   return gate
 })
 
+/* --- GeoCode: has QGIS already settled into an unusable state?
+ *
+ * The same rule as `geeLocalDeadEnd` below, and for the same reason: an
+ * environment check belongs BEFORE the permission prompt, because a user must
+ * never be asked to decide about an operation that cannot run either way. QGIS
+ * is where this matters most — it is not an optional capability but the first
+ * thing a new user configures, so "not configured yet" is a state every install
+ * passes through.
+ *
+ * Simpler than the GEE version in one way that is worth stating: **no re-probe
+ * here**. QGIS deliberately does not re-probe a failed state (docs/GEOKERNEL.md
+ * §12) — that would be a probe plus a full catalog rebuild, during which all
+ * three QGIS capabilities stop — and it does not need to: every fix goes
+ * through machine.json, which the config watcher is already following. GEE
+ * needed one because two of its four setup steps never touch that file.
+ *
+ * ⚠️ One known state is stale-by-design and unaffected: reinstalling QGIS over
+ * the SAME path does not trigger a re-probe until restart (OPEN.md D8). The
+ * short-circuit refuses on a stale verdict there — but so would the gate, so
+ * nothing is lost. --- */
+const qgisStopped = (status: GeoEvent.QgisStatus) =>
+  status.status !== "ready" && status.status !== "probing" && status.status !== "resolving"
+
+export const qgisLocalDeadEnd = Effect.fn("GeoTool.qgisLocalDeadEnd")(function* (status: GeoStatus.Interface) {
+  const current = yield* status.current("qgis")
+  return current && qgisStopped(current) ? current : undefined
+})
+
 /* --- GeoCode: has the LOCAL dependency chain already stopped?
  *
  * Answers with the status to report, or undefined to carry on. Its purpose is

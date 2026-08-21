@@ -220,6 +220,25 @@ export const RunQgisAlgorithmTool = Tool.define<
         )
       }
 
+      /* The environment, before the prompt.
+       *
+       * QGIS is not an optional capability — it is the first thing a new user
+       * configures — so "not configured yet" is a state every install passes
+       * through, and reaching it through a permission dialog means being asked
+       * to approve something that was never going to run. Reading the settled
+       * verdict costs nothing and starts no probe; only the gate below does
+       * that, and it stays where it is.
+       */
+      const deadEnd = yield* GeoTool.qgisLocalDeadEnd(status)
+      if (deadEnd) {
+        return refuse("QGIS environment unavailable", [GeoQgis.QgisGuidance.render(deadEnd)], {
+          truncated: false,
+          algorithm: params.algorithm,
+          error: true,
+          geoStatus: GeoTool.gateStatus(deadEnd),
+        })
+      }
+
       /* The only prompt this tool raises, and it is asked BEFORE anything else
        * costs anything (docs/TOOLS.md §4.3).
        *

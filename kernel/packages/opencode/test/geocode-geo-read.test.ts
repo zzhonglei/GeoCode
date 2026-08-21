@@ -6,7 +6,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { RASTER_MAIN, VECTOR_MAIN } from "@opencode-ai/core/filesystem/geo-extensions"
 import { Global } from "@opencode-ai/core/global"
 import { Agent } from "../src/agent/agent"
-import { GeoKernel, GeoQgis, GeoRuntime } from "../src/geo"
+import { GeoKernel, GeoQgis, GeoRuntime, GeoStatus } from "../src/geo"
 import { QgisReader } from "../src/geo/qgis/reader"
 import { InstanceState } from "../src/effect/instance-state"
 import { Permission } from "../src/permission"
@@ -17,6 +17,7 @@ import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
 import READ_DESCRIPTION from "../src/tool/geo-read.txt"
 import { testEffect } from "./lib/effect"
+import { QGIS_READY, statusHolding } from "./lib/geocode-status"
 
 /* Tripwires for the geo tool registration (GEOKERNEL §10.1 #9; docs/TOOLS.md §7).
  *
@@ -80,7 +81,19 @@ describe("geo tool registration", () => {
     }),
   )
 
-  it.instance("reading is granted to both the working agent and the planner", () =>
+  /* Needs a READY environment now: the tool checks it before either prompt
+   * (docs/TOOLS.md §4.3), so on a machine without QGIS the call stops at the
+   * guidance and never reaches the grant this test is about. The failure shape
+   * below — dying at the missing FILE — is precisely what proves the ask was
+   * passed, so the environment has to be out of the way for it to mean that. */
+  const itReady = testEffect(
+    LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
+      [RuntimeFlags.node, RuntimeFlags.layer()],
+      [GeoStatus.node, statusHolding({ qgis: QGIS_READY })],
+    ]),
+  )
+
+  itReady.instance("reading is granted to both the working agent and the planner", () =>
     Effect.gen(function* () {
       const ctx = yield* InstanceState.context
       const target = path.join(ctx.directory, "no-such-scene.tif")

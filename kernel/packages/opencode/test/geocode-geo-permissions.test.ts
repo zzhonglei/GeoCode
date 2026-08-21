@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { Effect, Layer, Stream } from "effect"
+import { Effect } from "effect"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
-import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { permissionInfo } from "../src/cli/cmd/run/permission.shared"
 import { Agent } from "../src/agent/agent"
@@ -13,6 +12,7 @@ import { MessageID, SessionID } from "../src/session/schema"
 import { GeoKernel, GeoStatus } from "../src/geo"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
+import { GEE_READY, QGIS_READY, statusHolding } from "./lib/geocode-status"
 
 /* The geographic permission model, both layers (docs/TOOLS.md §4).
  *
@@ -104,41 +104,17 @@ describe("what each agent can see", () => {
   )
 })
 
-/* A status plane that says Earth Engine is ready.
- *
- * `RunGeeScript` refuses a stopped LOCAL dependency chain before asking anyone
- * anything (geo-gee-run.ts) — the answer is already known and a prompt would
- * spend the user's attention on a decision with one outcome. Correct behaviour,
- * and it means the key below can only be observed once the chain is open: a
- * test machine with no Earth Engine set up never reaches the ask at all.
- *
- * Only the `gee` slot is answered. Everything else gets `undefined`, which is
- * what the other tools would see anyway.
+/* The keys below can only be observed from an ask, and every geographic tool
+ * checks its environment BEFORE it raises one (docs/TOOLS.md §4.3) — so a
+ * machine with nothing installed reaches no ask at all. Both environments are
+ * handed over ready; what is under test here is the permission model, not the
+ * kernel's readiness logic.
  */
-const GEE_READY: GeoEvent.GeeStatus = {
-  facing: "runtime",
-  setup: { status: "ready", python: "/fake/python3", project: "ee-demo", version: "1.7.24" },
-  network: { status: "reachable", route: "direct" },
-  runtime: { status: "valid", route: "direct" },
-}
-
-const statusReady = Layer.succeed(
-  GeoStatus.Service,
-  GeoStatus.Service.of({
-    current: (slot: string) => Effect.succeed(slot === "gee" ? (GEE_READY as never) : undefined),
-    // Claimed while the kernel comes up, long before any tool runs.
-    register: () =>
-      Effect.succeed({ claim: () => Effect.succeed({} as never), publish: () => Effect.succeed(true) } as never),
-    snapshot: () => Effect.succeed({}),
-    watch: () => Stream.empty,
-  } as never),
-)
-
 describe("the keys the tools actually ask with", () => {
   const it = testEffect(
     LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
       [RuntimeFlags.node, RuntimeFlags.layer()],
-      [GeoStatus.node, statusReady],
+      [GeoStatus.node, statusHolding({ qgis: QGIS_READY, gee: GEE_READY })],
     ]),
   )
 

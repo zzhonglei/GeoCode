@@ -211,6 +211,25 @@ export const QgisDocTool = Tool.define<
        * would turn one approved documentation lookup into a standing grant to
        * execute algorithms — a user agreeing to one thing and handing over
        * another. Scoped to `doc:*`, it grants only what was asked about. --- */
+      /* The environment, before the prompt — the same rule the other two QGIS
+       * tools follow (docs/TOOLS.md §4.3).
+       *
+       * Reached less often than the others, since `doc:*` is allowed outright
+       * for the shipped agents, so this branch only matters for an agent whose
+       * author narrowed the key by hand. It is here anyway: the rule is that a
+       * user is never asked about an operation the environment cannot run, and
+       * a rule with an exception in one of three places is one someone will
+       * later "fix" in the wrong direction.
+       */
+      const deadEnd = yield* GeoTool.qgisLocalDeadEnd(status)
+      if (deadEnd) {
+        return {
+          title: "QGIS algorithm catalog unavailable",
+          output: GeoQgis.QgisGuidance.render(deadEnd),
+          metadata: { truncated: false, error: true, geoStatus: GeoTool.gateStatus(deadEnd) },
+        }
+      }
+
       const target = params.algorithm ?? params.group ?? params.query
       yield* ctx.ask({
         permission: "qgis",

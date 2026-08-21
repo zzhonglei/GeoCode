@@ -155,6 +155,24 @@ export const GeoReadTool = Tool.define<
         ),
       )
 
+      /* The environment, before EITHER prompt (docs/TOOLS.md §4.3).
+       *
+       * Placed above the boundary guard rather than merely above `ctx.ask`,
+       * because the guard is a prompt too — and it is the one a user actually
+       * meets here, since `geodata` is granted outright while
+       * `external_directory` is not. Reading a file outside the workspace with
+       * QGIS unconfigured would otherwise ask the user to hand over a directory
+       * for a call that cannot read anything at all.
+       */
+      const deadEnd = yield* GeoTool.qgisLocalDeadEnd(status)
+      if (deadEnd) {
+        return {
+          title,
+          output: GeoQgis.QgisGuidance.render(deadEnd),
+          metadata: { truncated: false, error: true, geoStatus: GeoTool.gateStatus(deadEnd) },
+        }
+      }
+
       yield* assertExternalDirectoryEffect(ctx, filepath, {
         kind: stat?.type === "Directory" ? "directory" : "file",
       })

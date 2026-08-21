@@ -4,8 +4,9 @@ import * as os from "os"
 import * as path from "path"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { Agent } from "../src/agent/agent"
-import { GeoKernel, GeoQgis, GeoRuntime } from "../src/geo"
+import { GeoKernel, GeoQgis, GeoRuntime, GeoStatus } from "../src/geo"
 import { QgisCatalog } from "../src/geo/qgis/catalog"
 import { InstanceState } from "../src/effect/instance-state"
 import { Permission } from "../src/permission"
@@ -19,6 +20,7 @@ import RUN_DESCRIPTION from "../src/tool/geo-qgis-run.txt"
 import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
+import { statusHolding } from "./lib/geocode-status"
 
 /* Tripwires for RunQgisAlgorithm (docs/TOOLS.md §3; GEOKERNEL §4.12, §11.2).
  *
@@ -1104,6 +1106,88 @@ describe("RunQgisAlgorithm, the path the caller is sent to", () => {
       // And the caller is told what this file is not, so a call that meant to
       // append can tell that it did not.
       expect(result.output).toContain("not an addition")
+    }),
+  )
+})
+
+describe("the environment comes before the prompt", () => {
+  /* A user is never asked to decide about an operation that cannot run.
+   *
+   * QGIS is where this matters most: it is not an optional capability but the
+   * first thing a new user configures, so "not configured yet" is a state every
+   * install passes through — and reaching it through a permission dialog means
+   * approving something that was never going to happen. Worse, `always` would
+   * record that approval, so the one prompt this tool relies on gets spent on
+   * a call that did nothing.
+   *
+   * Pinned across the settled failure states rather than one of them, and with
+   * the in-flight states pinned the other way: a probe still running is not a
+   * failure, and an absent status is not a negative answer.
+   */
+  const STOPPED: GeoEvent.QgisStatus[] = [
+    { status: "unconfigured" },
+    { status: "config-error", file: "/x/machine.json", message: "bad" },
+    { status: "path-missing" },
+    { status: "not-qgis" },
+  ]
+
+  const askedUnder = (qgis?: GeoEvent.QgisStatus) =>
+    testEffect(
+      LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
+        [RuntimeFlags.node, RuntimeFlags.layer()],
+        [GeoQgis.node, openGate],
+        [QgisCatalog.node, stubCatalog],
+        [GeoRuntime.node, runtimeEnding({})],
+        [GeoStatus.node, statusHolding(qgis ? { qgis } : {})],
+      ]),
+    )
+
+  const record = Effect.fnUntraced(function* () {
+    const registry = yield* ToolRegistry.Service
+    const tool = (yield* registry.all()).find((item) => item.id === "RunQgisAlgorithm")!
+    const asked: string[] = []
+    const result = yield* tool
+      .execute({ algorithm: "native:buffer", parameters: '{"INPUT":"/a.shp"}' }, {
+        sessionID: SessionID.make("ses_env"),
+        messageID: MessageID.make("msg_env"),
+        agent: "GeoAgent",
+        abort: AbortSignal.any([]),
+        messages: [],
+        metadata: () => Effect.void,
+        ask: (req: any) => Effect.sync(() => void asked.push(req.permission)),
+      } as any)
+      .pipe(Effect.timeout(10_000), Effect.exit)
+    return { asked, result }
+  })
+
+  for (const qgis of STOPPED) {
+    askedUnder(qgis).instance(`"${qgis.status}" is answered without a prompt`, () =>
+      Effect.gen(function* () {
+        const { asked, result } = yield* record()
+        expect(asked).toEqual([])
+        expect(Exit.isSuccess(result)).toBe(true)
+        if (!Exit.isSuccess(result)) throw new Error("refused")
+        // Guidance, not an empty refusal — this answer is how the user learns
+        // what to configure.
+        expect(result.value.output.length).toBeGreaterThan(20)
+        expect(result.value.metadata.error).toBe(true)
+      }),
+    )
+  }
+
+  askedUnder({ status: "probing" }).instance("a probe in flight is not a dead end", () =>
+    Effect.gen(function* () {
+      // `settledQgisGate` exists to wait this out; refusing here would turn a
+      // cold start into a failure.
+      const { asked } = yield* record()
+      expect(asked).toContain("qgis")
+    }),
+  )
+
+  askedUnder(undefined).instance("an unknown status is not a dead end either", () =>
+    Effect.gen(function* () {
+      const { asked } = yield* record()
+      expect(asked).toContain("qgis")
     }),
   )
 })
