@@ -183,6 +183,30 @@ describe("brand literal scan", () => {
     expect(/opencode/i.test(prompt)).toBe(false)
   })
 
+  test("the explore subagent's brief is not limited to code", () => {
+    // GeoCode keeps this subagent and hands it ReadGeoData, so its prompt has
+    // to say the job reaches geographic data: the tool list can tell an agent
+    // what it holds, never what counts as its work.
+    //
+    // Asserts consequences rather than sentences — the wording is still being
+    // worked on, the coverage is not allowed to regress. Two of them, checked
+    // separately: a single "does the word appear anywhere" test would be
+    // satisfied by either line alone, so losing one to a merge would stay
+    // green.
+    const prompt = readFileSync(path.join(repo, "packages/opencode/src/agent/prompt/explore.txt"), "utf8")
+    // The opening brief, which is what sets the scope of the job.
+    expect(/geographic/i.test(prompt.split("\n")[0])).toBe(true)
+
+    // The reader, named in BOTH blocks. That is upstream's own shape: glob,
+    // grep and read are each written twice, once as a strength and once as a
+    // guideline. Checking the two separately is the point — a single
+    // `prompt.includes` would stay green with either mention gone.
+    const strengths = prompt.split("Your strengths:")[1]?.split("Guidelines:")[0] ?? ""
+    const guidelines = prompt.split("Guidelines:")[1] ?? ""
+    expect(strengths.includes("ReadGeoData")).toBe(true)
+    expect(guidelines.includes("ReadGeoData")).toBe(true)
+  })
+
   test("plan mode reminders stay agent-neutral", () => {
     // Prompt files are fed verbatim to the model, so they cannot carry inline
     // GeoCode markers — this assertion is their only guard against an upstream
