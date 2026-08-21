@@ -1,6 +1,9 @@
 #!/bin/sh
 # Launch the vendored kernel (TUI by default) inside an isolated sandbox.
-# Vanilla upstream behaviour for now — the GeoCode assembly layer comes later.
+# WARNING: the TUI lists agents from the v2 endpoint, which the GeoCode assembly
+# layer does not reach — it shows upstream's agents, not GeoAgent, and picking one
+# fails the prompt. To check the assembly, run `serve` and ask /agent instead
+# (docs/KERNEL.md §4.2).
 # XDG dirs, auth and the working project all land in the sandbox, never in the
 # real opencode/geocode dirs. Delete the sandbox dir for a factory reset.
 set -e
