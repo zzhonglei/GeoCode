@@ -15,11 +15,12 @@ import { testEffect } from "./lib/effect"
 
 /* Tripwire for the merged overflow hint in tool/truncate.ts.
  *
- * Upstream's hint for agents holding the task tool names the explore agent —
- * disabled in GeoCode — and forbids reading the saved file directly, which
- * leaves the model with a dead route and a ban on the live one. The patch
- * merges the two branches; this test goes red if an upstream merge restores
- * the original wording.
+ * Upstream's hint for agents holding the task tool names the explore agent and
+ * forbids reading the saved file directly — one route, and it holds only while
+ * that one name exists. GeoCode keeps `explore`, so the name resolves for the
+ * default line-up; a user who defines their own is left with a dead route and a
+ * ban on the live one. The patch merges the two branches; this test goes red if
+ * an upstream merge restores the original wording.
  *
  * It reads the agent the assembly layer actually produces, not a hand-built
  * ruleset: GeoAgent holds the task tool through the defaults, so upstream's

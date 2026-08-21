@@ -199,18 +199,51 @@ export function base(): ConfigV1.Info {
           // not in plan's list either. What plan sees is the subagent.
         },
       },
-      // Disable upstream's coding-oriented agents by config instead of deleting
-      // their source: the kernel turns `disable` into a real removal, and the
-      // upstream definitions stay byte-identical for clean merges.
-      //
-      // `build` is replaced by GeoAgent above. `explore` and `general` are
-      // code-search and code-task subagents with no role in geographic work;
-      // the task tool advertises its subagent list dynamically, so removing
-      // them simply shrinks that list rather than leaving a dangling name.
-      build: {
-        disable: true,
-      },
+      /* Upstream's read-only search subagent, kept — and given the one
+       * geographic tool that is reading.
+       *
+       * It was disabled here at first, on the reasoning that code search has no
+       * role in geographic work. Two things were wrong with that.
+       *
+       * The smaller one: users bring code. A remote-sensing processing project
+       * is a directory of scripts like any other, and a user who hands one over
+       * expects the agent to find its way around.
+       *
+       * The larger one: `explore` is not only an agent, it is the far end of
+       * upstream's context-offloading mechanism. Three live hints send work to
+       * it — `grep.txt`, `glob.txt` ("use the Task tool instead" for open-ended
+       * searches) and the overflow hint in tool/truncate.ts. Disabling it left
+       * all three telling the model to delegate, at a subagent list holding one
+       * OSM downloader — and left the primary agent carrying every large output
+       * in its own context window.
+       *
+       * `geodata` is the whole of the change to its reach. Everything else is
+       * upstream's: `"*": "deny"` with grep/glob/list/read/bash/webfetch/
+       * websearch opened, and `external_directory` at `ask`. What that buys is
+       * "scan this directory and report what each dataset is" — a genuinely
+       * context-heavy opening move in geographic work, done in somebody else's
+       * context. Reading is also the whole of what it can do to that data:
+       * `qgis`, `gee` and `osm` are left at the global deny above.
+       *
+       * ⚠️ Its prompt and description are still upstream's, and both talk about
+       * codebases only. Rewriting them is a separate decision — a config-layer
+       * one (agent.ts folds `prompt`/`description` in from here), not a patch. */
       explore: {
+        permission: {
+          geodata: "allow",
+        },
+      },
+      // Disable upstream's remaining coding-oriented agents by config instead
+      // of deleting their source: the kernel turns `disable` into a real
+      // removal, and the upstream definitions stay byte-identical for clean
+      // merges.
+      //
+      // `build` is replaced by GeoAgent above. `general` is a general-purpose
+      // code-task subagent — unlike `explore` it is not read-only, and nothing
+      // in the tree routes work to it by name; the task tool advertises its
+      // subagent list dynamically, so removing it simply shrinks that list
+      // rather than leaving a dangling name.
+      build: {
         disable: true,
       },
       general: {

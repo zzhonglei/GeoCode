@@ -127,16 +127,16 @@ const layer = Layer.effect(
       const file = yield* write(text)
 
       /* --- GeoCode: one hint instead of upstream's two. The task-tool branch
-       * named the explore agent — which GeoCode disables — and forbade reading
-       * the file directly, steering the model into "Unknown agent type" while
-       * banning the one route that works. Config could flip the branch (deny
-       * task's "*" pattern), but only by turning subagents into a whitelist
-       * that silently hides user-defined ones from the task tool's description
-       * — a permission-semantics price for a wording problem. So the wording is
-       * fixed where the wording lives: the Grep/Read route is always offered,
-       * delegation is appended when subagents are reachable, and no agent is
-       * named — which also repairs the same defect for upstream's own custom
-       * line-ups. Tripwired by test/geocode-truncation-hint.test.ts.
+       * names the explore agent and forbids reading the file directly, so it
+       * offers exactly one route and that route depends on one agent existing
+       * under one name. GeoCode keeps `explore` (config/geocode.ts), so the
+       * name resolves here — but it resolves for the DEFAULT line-up only, and
+       * any user who defines their own is back to a dead route with a ban on
+       * the live one. So the wording is fixed where the wording lives: the
+       * Grep/Read route is always offered, delegation is appended when
+       * subagents are reachable, and no agent is named — which also repairs
+       * the same defect for upstream's own custom line-ups.
+       * Tripwired by test/geocode-truncation-hint.test.ts.
        * Upstream original:
        *   const hint = hasTaskTool(agent)
        *     ? `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`

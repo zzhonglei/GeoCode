@@ -154,12 +154,16 @@ describe("brand literal scan", () => {
   })
 
   test("coding-oriented upstream agents are disabled by config", () => {
-    // build/explore/general are removed through the assembly layer, never by
-    // editing agent.ts — that file is upstream's hottest churn area.
+    // build/general are removed through the assembly layer, never by editing
+    // agent.ts — that file is upstream's hottest churn area.
     const content = readFileSync(path.join(repo, "packages/opencode/src/config/geocode.ts"), "utf8")
-    for (const agent of ["build", "explore", "general"]) {
+    for (const agent of ["build", "general"]) {
       expect(new RegExp(`${agent}:\\s*\\{\\s*disable:\\s*true`).test(content)).toBe(true)
     }
+    // `explore` is deliberately NOT among them: it is the far end of upstream's
+    // context-offloading route, and three live hints send work to it. What it
+    // can reach is asserted for real in opencode/test/geocode-geo-permissions.
+    expect(/explore:\s*\{\s*disable:\s*true/.test(content)).toBe(false)
   })
 
   test("system prompt selector returns the GeoCode base for every model", () => {
@@ -181,14 +185,15 @@ describe("brand literal scan", () => {
 
   test("plan mode reminders stay agent-neutral", () => {
     // Prompt files are fed verbatim to the model, so they cannot carry inline
-    // GeoCode markers — these assertions are their only guard against an
-    // upstream merge restoring the "build" wording or the explore-subagent
-    // reference (GeoCode has neither).
+    // GeoCode markers — this assertion is their only guard against an upstream
+    // merge restoring the "build" wording (GeoCode replaces that agent).
+    //
+    // `plan.txt` used to be guarded here too, for naming the explore subagent.
+    // GeoCode keeps explore now, so that file is byte-identical to upstream
+    // again and has nothing left to defend.
     const dir = path.join(repo, "packages/opencode/src/session/prompt")
     const buildSwitch = readFileSync(path.join(dir, "build-switch.txt"), "utf8")
     expect(/\bbuild\b/i.test(buildSwitch)).toBe(false)
-    const plan = readFileSync(path.join(dir, "plan.txt"), "utf8")
-    expect(plan.includes("delegate explore agents")).toBe(false)
   })
 
   test("plan reminder switch-back is generalized off hardcoded build", () => {

@@ -89,6 +89,24 @@ describe("what each agent can see", () => {
     }),
   )
 
+  it.instance("explore sees reading, and only reading", () =>
+    Effect.gen(function* () {
+      /* Upstream's read-only search subagent, kept rather than disabled, and
+       * given exactly one geographic tool.
+       *
+       * The point of the one is that surveying a folder of datasets — open
+       * each, report its CRS, extent and fields — is a context-heavy opening
+       * move in geographic work, and this is the agent that carries such work
+       * in somebody else's context window (grep.txt, glob.txt and the overflow
+       * hint in tool/truncate.ts all route to it).
+       *
+       * The point of the ONLY one is that surveying is reading. `qgis`, `gee`
+       * and `osm` stay on the global deny, so nothing this agent does can
+       * change the data it is describing. */
+      expect(yield* visible("explore")).toEqual(["ReadGeoData"])
+    }),
+  )
+
   it.instance("an agent that denies everything sees none of them", () =>
     Effect.gen(function* () {
       // `summary` carries its own `"*": "deny"` — the same shape the osmfetch
@@ -306,6 +324,50 @@ describe("what each agent can do", () => {
       for (const key of ["geodata", "qgis", "osm", "gee"]) {
         expect(Permission.evaluate(key, "*", closed).action).toBe("deny")
       }
+    }),
+  )
+})
+
+describe("the subagent line-up", () => {
+  it.instance("explore may read geographic data, and may not act on it", () =>
+    Effect.gen(function* () {
+      expect(yield* verdict("explore", "geodata")).toBe("allow")
+      // One line in the assembly layer opens `geodata`; these three are what it
+      // deliberately leaves shut. They are not restated there — they hold
+      // because the global denies do, so this is the assertion that would catch
+      // a later `"*": "allow"` slipping into this agent.
+      expect(yield* verdict("explore", "qgis")).toBe("deny")
+      expect(yield* verdict("explore", "gee")).toBe("deny")
+      expect(yield* verdict("explore", "osm")).toBe("deny")
+    }),
+  )
+
+  it.instance("and GeoAgent can actually reach it", () =>
+    Effect.gen(function* () {
+      /* The two conditions ToolRegistry.describeTask applies before a subagent
+       * is named to the model (tool/registry.ts): not primary, and the caller's
+       * `task` rule does not deny it.
+       *
+       * Both have to hold or the agent exists and the model never hears of it
+       * — which is precisely what disabling it cost: `grep.txt`, `glob.txt` and
+       * the overflow hint kept telling the model to delegate, at a list with
+       * one OSM downloader on it.
+       *
+       * ⚠️ What this does NOT cover, despite reading like it does: whether the
+       * assembly layer still ships `explore` at all. test/preload.ts writes
+       * `explore: { disable: false }` into the test config, and user config
+       * merges AFTER the assembly layer — so the agent is present here however
+       * geocode.ts is written, and `toBeDefined` below can never fail for that
+       * reason. Re-disabling it is caught by the source scan in
+       * core/test/geocode-brand.test.ts. Measured, not assumed: flipping the
+       * assembly layer back to `disable: true` turns that scan red and leaves
+       * this test green. */
+      const explore = yield* Agent.Service.use((svc) => svc.get("explore"))
+      expect(explore).toBeDefined()
+      expect(explore!.mode).not.toBe("primary")
+
+      const geo = yield* Agent.Service.use((svc) => svc.get("GeoAgent"))
+      expect(Permission.evaluate("task", "explore", geo!.permission).action).not.toBe("deny")
     }),
   )
 })
