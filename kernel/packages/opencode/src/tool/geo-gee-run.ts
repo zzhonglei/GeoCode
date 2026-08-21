@@ -202,11 +202,40 @@ export const RunGeeScriptTool = Tool.define<
       const mode: "inline" | "file" = scriptPath ? "file" : "inline"
       const title = scriptPath ? path.relative(instance.worktree, scriptPath) : "GEE inline script"
 
-      // Permission BEFORE the gate, unlike a tool whose gate is purely local.
-      // Passing this gate performs the lazy authorization check (§5.5) — a real
-      // call carrying real credentials into the remote's quota visibility — and
-      // that must not happen on behalf of a user who has not yet agreed to run
-      // anything at all.
+      /* A local dead end is reported without asking anyone anything.
+       *
+       * Permission still comes BEFORE the gate below, and that ordering is not
+       * negotiable: passing the gate performs the lazy authorization check
+       * (§5.5), a real call carrying real credentials into the remote's quota
+       * visibility, which must not happen for a user who has not agreed to run
+       * anything. But that argument only covers the layers that need the
+       * REMOTE. The local dependency chain — no configuration, an unparseable
+       * machine.json, a missing interpreter, missing packages, no credentials —
+       * is settled facts already sitting in the status plane, and reading them
+       * costs nothing and touches no network.
+       *
+       * So when the chain has already stopped, this refuses here. Asking first
+       * would spend the user's attention on a decision with one outcome, and
+       * teach them that the prompt is a formality — which is exactly what makes
+       * the prompt worthless on the day it matters.
+       *
+       * `geeLocalDeadEnd` re-probes before it answers, and that is load-bearing
+       * rather than tidy: two of the four setup steps — installing packages,
+       * running the authentication command — do not touch machine.json, so the
+       * watcher never fires and only a retry can discover that the user has
+       * done what they were told. See the note on it in geo-tool.ts.
+       */
+      const deadEnd = yield* GeoTool.geeLocalDeadEnd(gee, status)
+      if (deadEnd) {
+        return refuse("Earth Engine unavailable", [GeeService.GeeGuidance.render(deadEnd)], {
+          truncated: false,
+          mode,
+          ...(scriptPath ? { script: scriptPath } : {}),
+          error: true,
+          geoStatus: GeoTool.geeGateStatus(deadEnd),
+        })
+      }
+
       yield* ctx.ask({
         permission: "gee",
         // `title` for a file, which is the worktree-relative form `read` and

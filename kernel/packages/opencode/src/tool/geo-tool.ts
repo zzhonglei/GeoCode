@@ -121,6 +121,44 @@ export const settledGeeGate = Effect.fn("GeoTool.settledGeeGate")(function* (
   return gate
 })
 
+/* --- GeoCode: has the LOCAL dependency chain already stopped?
+ *
+ * Answers with the status to report, or undefined to carry on. Its purpose is
+ * to let `RunGeeScript` refuse a settled local failure WITHOUT a permission
+ * prompt: the outcome is known before anyone is asked, and asking anyway
+ * spends the user's attention on a decision with one outcome — which is how a
+ * prompt becomes a formality (docs/TOOLS.md §4.3).
+ *
+ * ⚠️ The re-probe is why this lives here rather than as a status read at the
+ * call site. **Two of the four setup steps do not touch machine.json** — the
+ * user installs packages, the user runs the authentication command — so the
+ * config watcher never fires and the conclusion on file stays "missing" for as
+ * long as anyone waits. A tool retry is the only signal that the world may
+ * have changed, and it has to be honoured on this path too. Skip it and the
+ * user who just did exactly what they were told is told the same thing again,
+ * forever: the short-circuit would read the stale verdict and return before
+ * `settledGeeGate` — the other place that re-probes — is ever reached.
+ *
+ * `checking` is deliberately not a dead end: it is the one setup state still
+ * in motion, and `settledGeeGate` exists to wait it out. Neither is an absent
+ * status — nothing has probed yet, and no answer is not a negative answer. --- */
+const geeStopped = (status: GeoEvent.GeeStatus) =>
+  status.setup.status !== "ready" && status.setup.status !== "checking"
+
+export const geeLocalDeadEnd = Effect.fn("GeoTool.geeLocalDeadEnd")(function* (
+  gee: GeeService.Interface,
+  status: GeoStatus.Interface,
+) {
+  let current = yield* status.current("gee")
+  if (!current || !geeStopped(current)) return undefined
+  // The retry, treated as the signal it is.
+  if (yield* gee.recheck()) {
+    yield* Effect.sleep(SETTLE_POLL_MS)
+    current = yield* status.current("gee")
+  }
+  return current && geeStopped(current) ? current : undefined
+})
+
 /**
  * The environment header for a usable Earth Engine.
  *

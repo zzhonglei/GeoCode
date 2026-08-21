@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
+import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { permissionInfo } from "../src/cli/cmd/run/permission.shared"
 import { Agent } from "../src/agent/agent"
@@ -9,7 +10,7 @@ import { Permission } from "../src/permission"
 import { RuntimeFlags } from "../src/effect/runtime-flags"
 import { ToolRegistry } from "../src/tool/registry"
 import { MessageID, SessionID } from "../src/session/schema"
-import { GeoKernel } from "../src/geo"
+import { GeoKernel, GeoStatus } from "../src/geo"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
 
@@ -103,7 +104,44 @@ describe("what each agent can see", () => {
   )
 })
 
+/* A status plane that says Earth Engine is ready.
+ *
+ * `RunGeeScript` refuses a stopped LOCAL dependency chain before asking anyone
+ * anything (geo-gee-run.ts) — the answer is already known and a prompt would
+ * spend the user's attention on a decision with one outcome. Correct behaviour,
+ * and it means the key below can only be observed once the chain is open: a
+ * test machine with no Earth Engine set up never reaches the ask at all.
+ *
+ * Only the `gee` slot is answered. Everything else gets `undefined`, which is
+ * what the other tools would see anyway.
+ */
+const GEE_READY: GeoEvent.GeeStatus = {
+  facing: "runtime",
+  setup: { status: "ready", python: "/fake/python3", project: "ee-demo", version: "1.7.24" },
+  network: { status: "reachable", route: "direct" },
+  runtime: { status: "valid", route: "direct" },
+}
+
+const statusReady = Layer.succeed(
+  GeoStatus.Service,
+  GeoStatus.Service.of({
+    current: (slot: string) => Effect.succeed(slot === "gee" ? (GEE_READY as never) : undefined),
+    // Claimed while the kernel comes up, long before any tool runs.
+    register: () =>
+      Effect.succeed({ claim: () => Effect.succeed({} as never), publish: () => Effect.succeed(true) } as never),
+    snapshot: () => Effect.succeed({}),
+    watch: () => Stream.empty,
+  } as never),
+)
+
 describe("the keys the tools actually ask with", () => {
+  const it = testEffect(
+    LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
+      [RuntimeFlags.node, RuntimeFlags.layer()],
+      [GeoStatus.node, statusReady],
+    ]),
+  )
+
   /* The half a config file cannot state.
    *
    * Every rule above is written against a key. Which key a tool ASKS with is

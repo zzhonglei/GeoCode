@@ -289,6 +289,228 @@ describe("RunGeeScript, pre-spawn refusals", () => {
   )
 })
 
+/* A status plane holding one fixed answer, so the local chain can be posed as a
+ * settled fact rather than probed. Only `current` is exercised here; the rest of
+ * the interface dies loudly if something starts depending on it. */
+function statusHolding(gee: GeoEvent.GeeStatus | undefined) {
+  // `register` has to work rather than die: the kernel claims its slots while
+  // the layer is coming up, long before any tool runs. It just publishes
+  // nowhere — what this stub exists to control is the answer to `current`.
+  const writer = {
+    claim: () => Effect.succeed({} as never),
+    publish: () => Effect.succeed(true),
+    set: () => Effect.succeed(true),
+  }
+  return Layer.succeed(
+    GeoStatus.Service,
+    GeoStatus.Service.of({
+      current: (slot: string) => Effect.succeed(slot === "gee" ? (gee as never) : undefined),
+      register: () => Effect.succeed(writer as never),
+      snapshot: () => Effect.succeed({}),
+      watch: () => Stream.empty,
+    } as never),
+  )
+}
+
+describe("RunGeeScript, a local dead end costs the user nothing", () => {
+  /* The prompt is worth what it costs. Asking before the gate is deliberate —
+   * passing that gate is a real credentialed call (§5.5) and must not happen
+   * for a user who has not agreed — but that argument only covers layers that
+   * need the REMOTE. When the LOCAL chain has already stopped, the answer is
+   * known before anyone is asked, and asking anyway spends attention on a
+   * decision with one outcome. Do that a few times and the prompt reads as a
+   * formality, which is what makes it worthless on the day it matters.
+   */
+  const withStatus = (gee: GeoEvent.GeeStatus | undefined) =>
+    testEffect(
+      LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
+        [RuntimeFlags.node, RuntimeFlags.layer()],
+        [GeeService.node, open],
+        [GeoRuntime.node, runtimeEnding({})],
+        [GeoStatus.node, statusHolding(gee)],
+      ]),
+    )
+
+  /** Runs the tool, recording whether the user was asked anything at all. */
+  const askedFor = Effect.fnUntraced(function* (params: Record<string, unknown>) {
+    const registry = yield* ToolRegistry.Service
+    const tool = (yield* registry.all()).find((item) => item.id === "RunGeeScript")!
+    const asked: string[] = []
+    const result = yield* tool
+      .execute(params, {
+        sessionID: SessionID.make("ses_dead_end"),
+        messageID: MessageID.make("msg_dead_end"),
+        agent: "GeoAgent",
+        abort: AbortSignal.any([]),
+        messages: [],
+        metadata: () => Effect.void,
+        ask: (req: any) => Effect.sync(() => void asked.push(req.permission)),
+      } as any)
+      // 10s to match `execute` above rather than a tighter number of its own:
+      // each case compiles the whole layer graph, and a machine busy with
+      // something else should not turn a correctness test red (test-gate.sh).
+      .pipe(Effect.timeout(10_000), Effect.exit)
+    return { asked, result }
+  })
+
+  /* A world the user can change from outside, which is what installing a
+   * package looks like from here: `recheck` only reports that it looked, and
+   * whether anything changed is decided by `installed` — not by the act of
+   * looking. Wiring the flip into `recheck` itself would make the first call
+   * recover on its own and prove nothing. */
+  let installed = false
+  const it_recovers = testEffect(
+    LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
+      [RuntimeFlags.node, RuntimeFlags.layer()],
+      [
+        GeeService.node,
+        Layer.succeed(
+          GeeService.Service,
+          GeeService.Service.of({
+            gate: () =>
+              Effect.succeed(installed ? { ok: true, environment: ENVIRONMENT } : { ok: false, status: SHUT }),
+            recheck: () =>
+              Effect.sync(() => {
+                seen.rechecks += 1
+                return true
+              }),
+            validate: () => Effect.succeed({ status: "unknown" }),
+            reject: () => Effect.succeed(false),
+          } as never),
+        ),
+      ],
+      [GeoRuntime.node, runtimeEnding({})],
+      [
+        GeoStatus.node,
+        Layer.succeed(
+          GeoStatus.Service,
+          GeoStatus.Service.of({
+            current: (slot: string) => Effect.succeed(slot === "gee" ? ((installed ? READY : SHUT) as never) : undefined),
+            register: () =>
+              Effect.succeed({ claim: () => Effect.succeed({} as never), publish: () => Effect.succeed(true) } as never),
+            snapshot: () => Effect.succeed({}),
+            watch: () => Stream.empty,
+          } as never),
+        ),
+      ],
+    ]),
+  )
+
+  withStatus(SHUT).instance("a stopped local chain is reported without a prompt", () =>
+    Effect.gen(function* () {
+      const { asked, result } = yield* askedFor({ script: "print(1)" })
+      expect(asked).toEqual([])
+      expect(Exit.isSuccess(result)).toBe(true)
+      if (!Exit.isSuccess(result)) throw new Error("refused")
+      // And it still says the same thing the gate would have said — the user
+      // loses the prompt, not the guidance.
+      expect(result.value.metadata.error).toBe(true)
+      expect(result.value.output).not.toBe("")
+    }),
+  )
+
+  /* Every state the user passes through while setting Earth Engine up, not
+   * just the one that happened to be handy.
+   *
+   * The requirement is about the WHOLE journey: an agent walking a user through
+   * the four steps calls this tool repeatedly to read the next instruction, and
+   * none of those calls is a decision anyone needs to approve — the tool is
+   * being used as documentation, not as a capability. The prompt belongs on the
+   * first call that can actually do something.
+   *
+   * Pinned state by state rather than as "credentials-missing does not ask",
+   * because the guarantee is the set, and a new setup state added to the schema
+   * without a thought here would slip through a single-case test.
+   */
+  const SETUP_FAILURES: GeoEvent.GeeStatus["setup"][] = [
+    { status: "unconfigured" },
+    { status: "config-error", file: "/x/machine.json", message: "bad" },
+    { status: "python-missing", python: "/x/py" },
+    { status: "packages-missing", python: "/x/py", missing: ["geemap"] },
+    { status: "packages-broken", python: "/x/py", pkg: "geemap", error: "boom" },
+    { status: "credentials-missing", python: "/x/py" },
+    { status: "project-missing" },
+    { status: "probe-timeout" },
+    { status: "probe-failed", error: "boom" },
+  ]
+
+  for (const setup of SETUP_FAILURES) {
+    withStatus({
+      facing: "setup",
+      setup,
+      network: { status: "idle" },
+      runtime: { status: "unknown" },
+    }).instance(`"${setup.status}" is answered without a prompt`, () =>
+      Effect.gen(function* () {
+        const { asked, result } = yield* askedFor({ script: "print(1)" })
+        expect(asked).toEqual([])
+        expect(Exit.isSuccess(result)).toBe(true)
+        if (!Exit.isSuccess(result)) throw new Error("refused")
+        // Guidance, not an empty refusal: the call is how the agent reads the
+        // next step, so an answer with nothing in it strands the user.
+        expect(result.value.output.length).toBeGreaterThan(40)
+      }),
+    )
+  }
+
+  const CHECKING: GeoEvent.GeeStatus = {
+    facing: "setup",
+    setup: { status: "checking" },
+    network: { status: "idle" },
+    runtime: { status: "unknown" },
+  }
+
+  withStatus(CHECKING).instance("a probe still in flight is NOT short-circuited", () =>
+    Effect.gen(function* () {
+      /* The one setup state still in motion. `settledGeeGate` exists to wait it
+       * out, so refusing here would turn a slow probe into a failure — and the
+       * short-circuit above is exactly the kind of check that grows to swallow
+       * cases it was never meant to.
+       */
+      const { asked } = yield* askedFor({ script: "print(1)" })
+      expect(asked).toContain("gee")
+    }),
+  )
+
+  it_recovers.instance("a user who just did what they were told is not told it again", () =>
+    Effect.gen(function* () {
+      /* ★ The regression this whole helper exists to prevent, and the one that
+       * would be invisible from the outside: the user would simply be stuck.
+       *
+       * Two of the four setup steps — installing packages, running the
+       * authentication command — never touch machine.json, so the config
+       * watcher does not fire and the stored verdict stays "missing" no matter
+       * how long anyone waits. The ONLY signal that the world changed is the
+       * model retrying the tool. A short-circuit that reads the stored status
+       * and returns before `settledGeeGate` skips the re-probe entirely, and
+       * the user who has done exactly what the guidance asked is told the same
+       * thing forever.
+       *
+       * So: first call refuses, `recheck` fires, the world has moved on, and
+       * the second call gets through.
+       */
+      installed = false
+      const first = yield* askedFor({ script: "print(1)" })
+      expect(first.asked).toEqual([])
+      // ★ The re-probe happened. Without this line the test would still pass
+      // with the short-circuit reading a stale verdict and never looking again.
+      expect(seen.rechecks).toBeGreaterThan(0)
+
+      installed = true // the user installs the package the guidance named
+      const second = yield* askedFor({ script: "print(1)" })
+      expect(second.asked).toContain("gee")
+    }),
+  )
+
+  withStatus(undefined).instance("an unknown status is not treated as a failure", () =>
+    Effect.gen(function* () {
+      // Nothing has probed yet. Absence of an answer is not a negative answer.
+      const { asked } = yield* askedFor({ script: "print(1)" })
+      expect(asked).toContain("gee")
+    }),
+  )
+})
+
 describe("RunGeeScript, a shut gate", () => {
   const it = harness(runtimeEnding({}), geeService({ ok: false, status: SHUT }))
 
