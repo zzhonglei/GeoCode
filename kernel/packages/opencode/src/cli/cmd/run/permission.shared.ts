@@ -155,11 +155,27 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
    * about a subagent without pretending to know what it will do. --- */
   if (request.permission === "qgis") {
     const algorithm = text(input.algorithm)
-    // `doc:` patterns reach here only if a user narrows the key by hand; the
-    // shipped rules allow them outright, since a prompt for reading
-    // documentation is a prompt that trains the user to dismiss prompts.
+    /* Two tools share this key, and they get two different dialogs.
+     *
+     * The shipped agents allow `doc:*` outright, so this branch is reached only
+     * when a user narrows the key by hand — writing `"qgis": "ask"` on an agent
+     * of their own, which is the natural thing to write and costs them one
+     * extra prompt. That is a fair trade rather than a defect: an agent works
+     * in two passes, reading documentation repeatedly and only then running
+     * something, so the two grants land on a boundary the work already has.
+     * `QgisDoc`'s `always` is `["doc:*"]`, so approving the reading pass never
+     * quietly approves the running one.
+     *
+     * The title carries all of it, and there is no second line on purpose.
+     * WHICH algorithm's documentation is being read changes nothing a user
+     * would decide on — the operation is read-only either way — so spelling it
+     * out spends attention that the algorithm dialog below actually needs.
+     * Showing the raw pattern would be worse still: `doc:read:native:buffer` is
+     * a string built for rule matching, and putting it in front of a user asks
+     * them to parse our internal syntax.
+     */
     if (!algorithm) {
-      return { icon: "#", title: "QGIS documentation", lines: pats.map((item) => `- ${item}`) }
+      return { icon: "#", title: "Look up QGIS documentation", lines: [] }
     }
     const parameters = dict(input.parameters)
     const width = Math.max(0, ...Object.keys(parameters).map((key) => key.length))
@@ -175,19 +191,42 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
   }
 
   if (request.permission === "gee") {
-    const script = text(input.script)
-    return {
-      icon: "#",
-      title: "Run an Earth Engine script",
-      // Deliberately not the script body. It runs against the user's Earth
-      // Engine credentials and quota, and that — not any one line of Python —
-      // is what is being granted.
-      lines: [script ? toolPath(script, { home: true }) : "Inline script"],
-    }
+    /* The title, and nothing else — not the body, and not the script's path
+     * either.
+     *
+     * The body is out because a script is arbitrary Python that nobody would
+     * read in a dialog, and a prompt that is never read is worse than none: it
+     * manufactures the impression of review. The PATH is out for a subtler
+     * reason — showing it suggests the user is judging THIS script, when what
+     * they can actually judge is only whether Earth Engine may run at all,
+     * against their credentials and quota. A detail that invites a judgement
+     * the user cannot make is worse than no detail.
+     */
+    return { icon: "#", title: "Run an Earth Engine script", lines: [] }
   }
 
   if (request.permission === "geodata") {
-    return { icon: "#", title: "Read geographic data", lines: pats.map((item) => `- ${item}`) }
+    /* `permRead`'s shape, deliberately down to the details.
+     *
+     * `ReadGeoData` already matches upstream's `read` on the input side —
+     * `patterns: [path.relative(instance.worktree, filepath)]` and
+     * `always: ["*"]`, the same two lines — so the dialog has the same data to
+     * work with and no reason to look different. `toolPath` is what upstream
+     * runs the pattern through, and it is the reason a file outside the
+     * workspace reads as `~/thesis/data/scene.tif` rather than as a run of
+     * `../`.
+     *
+     * Unlike the documentation dialog above, this one keeps the detail: WHICH
+     * file is being read is the only thing the user is judging here. The rule
+     * is not "read-only means no detail", it is "no detail the user cannot act
+     * on".
+     */
+    const file = pats[0] || ""
+    return {
+      icon: "→",
+      title: `Read geographic data ${toolPath(file, { home: true })}`.trimEnd(),
+      lines: file ? [`Path: ${toolPath(file, { home: true })}`] : [],
+    }
   }
 
   if (request.permission === "osm") {

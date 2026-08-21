@@ -366,6 +366,58 @@ describe("what the prompt actually says", () => {
     expect(info.lines.join("\n")).toContain("/tmp/out.shp")
   })
 
+  test("the two tools sharing the qgis key get two different dialogs", () => {
+    /* One key, two tools — and a user who narrows it by hand (`"qgis": "ask"`
+     * on an agent of their own) gets asked by both. If the dialogs were
+     * interchangeable, the user would be approving "qgis" without knowing
+     * whether this one reads documentation or runs something that writes.
+     *
+     * The reading dialog also must not leak the pattern syntax: `doc:` is a
+     * namespace we invented for rule matching, and showing it asks the user to
+     * parse our internals. */
+    const doc = permissionInfo(
+      request("qgis", { patterns: ["doc:read:native:buffer"], metadata: { action: "read", target: "native:buffer" } }),
+    )
+    const run = permissionInfo(
+      request("qgis", { patterns: ["native:buffer(…)"], metadata: { algorithm: "native:buffer", parameters: {} } }),
+    )
+    expect(doc.title).not.toBe(run.title)
+    expect(doc.title).toMatch(/documentation/i)
+    // The reading dialog stays at the title. WHICH algorithm is being looked up
+    // changes nothing a user decides — it is read-only either way — so spending
+    // a line on it spends attention the dialog below actually needs.
+    expect(doc.lines.join("\n")).not.toContain("native:buffer")
+    // And never the raw pattern, which is a rule-matching string, not English.
+    expect(doc.lines.join("\n")).not.toContain("doc:")
+    // The running dialog is the opposite: it has to name what it will run.
+    expect(`${run.title}\n${run.lines.join("\n")}`).toContain("native:buffer")
+  })
+
+  test("reading geographic data looks like upstream reading a file", () => {
+    /* `ReadGeoData` aligns with upstream's `read`, and the alignment is already
+     * exact on the input side — both ask with
+     * `path.relative(instance.worktree, filepath)` and `always: ["*"]`. Since
+     * the two dialogs are handed the same shape of data, a user who has learned
+     * one should not have to learn the other.
+     *
+     * The part worth pinning is `toolPath`: without it a file outside the
+     * workspace renders as a run of `../`, which is a path the user has to do
+     * arithmetic on. Asserted by comparing against the upstream dialog for the
+     * same pattern rather than against a hardcoded string, so this keeps
+     * holding if upstream changes how it abbreviates.
+     */
+    for (const pattern of ["data/scene.tif", "../../elsewhere/scene.tif"]) {
+      const ours = permissionInfo(request("geodata", { patterns: [pattern] }))
+      const theirs = permissionInfo(request("read", { patterns: [pattern] }))
+      expect(ours.icon).toBe(theirs.icon)
+      expect(ours.lines).toEqual(theirs.lines)
+      // The abbreviated form upstream shows has to appear in ours too — and for
+      // an outside path that is NOT the raw pattern.
+      const shownByUpstream = theirs.lines.join("\n").replace("Path: ", "")
+      expect(ours.title).toContain(shownByUpstream)
+    }
+  })
+
   test("a GEE script is NOT spelled out, and that is the design", () => {
     /* Deliberately asserting an absence. A script is arbitrary Python; folding
      * it into a dialog would produce something nobody reads, and a prompt that
@@ -382,10 +434,19 @@ describe("what the prompt actually says", () => {
      * turn this prompt into a wall of Python. */
     const body = "import ee\ndownload_image(image, '/data/scene.tif', roi)"
     const info = permissionInfo(
-      request("gee", { patterns: ["inline_script"], metadata: { script: "", source: body } }),
+      request("gee", {
+        patterns: ["/Users/me/secret-pipeline.py"],
+        metadata: { script: "/Users/me/secret-pipeline.py", source: body },
+      }),
     )
+    const shown = `${info.title}\n${info.lines.join("\n")}`
     expect(info.title).toMatch(/earth engine/i)
-    expect(info.lines.join("\n")).not.toContain(body)
-    expect(info.lines.join("\n")).not.toContain("download_image")
+    // Not the body — nobody reads Python in a dialog.
+    expect(shown).not.toContain("download_image")
+    // And not the path either. Showing it suggests the user is judging THIS
+    // script, when all they can actually judge is whether Earth Engine may run
+    // at all. A detail that invites a judgement the user cannot make is worse
+    // than no detail.
+    expect(shown).not.toContain("secret-pipeline")
   })
 })
