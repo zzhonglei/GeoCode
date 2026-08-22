@@ -140,9 +140,24 @@ describe("brand literal scan", () => {
     //
     // The behavioural backstop is geocode-project-config.test.ts, which runs a
     // real loader and asserts the project directory gains no node_modules.
-    const active = (file: string) => read(file).replace(/\/\*[\s\S]*?\*\//g, "")
+    //
+    // Stripping is a regex, not a parser, so a `/*` or `*/` inside a string
+    // would pair with the wrong delimiter and swallow a span of live code. That
+    // fails OPEN — an over-stripped file has nothing left to match and the
+    // assertion passes for the wrong reason — so the precondition is checked
+    // directly instead: in a file whose only delimiters are real comments the
+    // two counts are equal, and any stray one in a string unbalances them.
+    //
+    // Checking the delimiters rather than sampling a live line is deliberate. A
+    // sampled line only fires if the over-strip happens to reach it, and in
+    // both of these files the last `*/` sits above everything worth sampling —
+    // an anchor below it could never have been swallowed, so it would have
+    // asserted nothing at all.
+    const count = (text: string, needle: string) => text.split(needle).length - 1
     for (const file of ["packages/opencode/src/config/config.ts", "packages/opencode/src/config/tui.ts"]) {
-      expect(active(file).includes('name: "@opencode-ai/plugin"')).toBe(false)
+      const content = read(file)
+      expect(count(content, "/*"), `${file}: unbalanced comment delimiters`).toBe(count(content, "*/"))
+      expect(content.replace(/\/\*[\s\S]*?\*\//g, "").includes('name: "@opencode-ai/plugin"')).toBe(false)
     }
   })
 
