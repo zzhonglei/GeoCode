@@ -126,27 +126,9 @@ const layer = Layer.effect(
       const preview = out.join("\n")
       const file = yield* write(text)
 
-      /* --- GeoCode: one hint instead of upstream's two. The task-tool branch
-       * names the explore agent and forbids reading the file directly, so it
-       * offers exactly one route and that route depends on one agent existing
-       * under one name. GeoCode keeps `explore` (config/geocode.ts), so the
-       * name resolves here — but it resolves for the DEFAULT line-up only, and
-       * any user who defines their own is back to a dead route with a ban on
-       * the live one. So the wording is fixed where the wording lives: the
-       * Grep/Read route is always offered, delegation is appended when
-       * subagents are reachable, and no agent is named — which also repairs
-       * the same defect for upstream's own custom line-ups.
-       * Tripwired by test/geocode-truncation-hint.test.ts.
-       * Upstream original:
-       *   const hint = hasTaskTool(agent)
-       *     ? `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`
-       *     : `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
-       * --- */
-      const hint = [
-        `The tool call succeeded but the output was truncated. Full output saved to: ${file}`,
-        `Use Grep to search the full content or Read with offset/limit to view specific sections.` +
-          (hasTaskTool(agent) ? ` To save context, you can instead use the Task tool to have a subagent do that.` : ``),
-      ].join("\n")
+      const hint = hasTaskTool(agent)
+        ? `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`
+        : `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
 
       return {
         content:
