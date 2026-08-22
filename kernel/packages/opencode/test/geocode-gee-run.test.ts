@@ -363,9 +363,13 @@ describe("RunGeeScript, a local dead end costs the user nothing", () => {
         Layer.succeed(
           GeoStatus.Service,
           GeoStatus.Service.of({
-            current: (slot: string) => Effect.succeed(slot === "gee" ? ((installed ? READY : SHUT) as never) : undefined),
+            current: (slot: string) =>
+              Effect.succeed(slot === "gee" ? ((installed ? READY : SHUT) as never) : undefined),
             register: () =>
-              Effect.succeed({ claim: () => Effect.succeed({} as never), publish: () => Effect.succeed(true) } as never),
+              Effect.succeed({
+                claim: () => Effect.succeed({} as never),
+                publish: () => Effect.succeed(true),
+              } as never),
             snapshot: () => Effect.succeed({}),
             watch: () => Stream.empty,
           } as never),

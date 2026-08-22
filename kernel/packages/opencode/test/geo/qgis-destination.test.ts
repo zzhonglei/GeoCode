@@ -204,10 +204,10 @@ describe("what counts as a destination", () => {
     // would describe it as a rescue.
     const at = dir()
     fs.writeFileSync(path.join(at, "out.shp"), "x")
-    const reserved = QgisDestination.reserve(
-      algorithm(param("OUTPUT", "sink"), param("SIDECAR", "fileDestination")),
-      { OUTPUT: path.join(at, "out.shp"), SIDECAR: path.join(at, "out (1).shp") },
-    )
+    const reserved = QgisDestination.reserve(algorithm(param("OUTPUT", "sink"), param("SIDECAR", "fileDestination")), {
+      OUTPUT: path.join(at, "out.shp"),
+      SIDECAR: path.join(at, "out (1).shp"),
+    })
     expect(reserved[0]!.actual).toBe(path.join(at, "out (1).shp"))
     // The property, not the spelling: what matters is that the second output
     // was moved off the first one's name, not which free name it landed on.

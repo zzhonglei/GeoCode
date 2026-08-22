@@ -170,8 +170,7 @@ export const qgisLocalDeadEnd = Effect.fn("GeoTool.qgisLocalDeadEnd")(function* 
  * `checking` is deliberately not a dead end: it is the one setup state still
  * in motion, and `settledGeeGate` exists to wait it out. Neither is an absent
  * status — nothing has probed yet, and no answer is not a negative answer. --- */
-const geeStopped = (status: GeoEvent.GeeStatus) =>
-  status.setup.status !== "ready" && status.setup.status !== "checking"
+const geeStopped = (status: GeoEvent.GeeStatus) => status.setup.status !== "ready" && status.setup.status !== "checking"
 
 export const geeLocalDeadEnd = Effect.fn("GeoTool.geeLocalDeadEnd")(function* (
   gee: GeeService.Interface,
