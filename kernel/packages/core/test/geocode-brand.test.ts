@@ -63,6 +63,11 @@ describe("brand literal scan", () => {
     "packages/core/src/skill/discovery.ts": ['".opencode-version"'],
     "packages/opencode/src/skill/discovery.ts": ['".opencode-version"'],
     "packages/opencode/src/server/mdns.ts": ['"opencode.local"', "opencode-${"],
+    // The same host name, quoted back at the user in the config schema. A row
+    // of its own because it is a different file: restoring the sentence there
+    // would advertise a default the server above does not serve, and the mdns
+    // row cannot see it.
+    "packages/core/src/v1/config/server.ts": ["opencode.local"],
     "packages/opencode/src/config/managed.ts": [
       '"ai.opencode.managed"',
       "Application Support/opencode",

@@ -266,9 +266,12 @@ const layer = Layer.effect(
             tool.skill,
             tool.patch,
             // GeoCode: the geographic toolset, built in beside the native tools
-            // (docs/TOOLS.md §3; GEOKERNEL §10.1 #9). Visible to every agent —
-            // the boundary is enforced at the execution layer, where each geo
-            // tool asks under its geo_* permission key (docs/TOOLS.md §4, §9).
+            // (docs/TOOLS.md §3; GEOKERNEL §10.1 #9). Registered for every
+            // agent; WHICH of them an agent can see is settled afterwards by
+            // the GEO map in permission/index.ts, and whether a call goes
+            // through by the key each tool names in `ctx.ask` — `geodata`,
+            // `qgis`, `osm` or `gee`. Four keys, and deliberately no common
+            // prefix: they are names a user reads (docs/TOOLS.md §4.1).
             tool.georead,
             tool.qgisdoc,
             tool.qgisrun,
