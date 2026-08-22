@@ -220,15 +220,39 @@ export function base(): ConfigV1.Info {
        * `geodata` is the whole of the change to its reach. Everything else is
        * upstream's: `"*": "deny"` with grep/glob/list/read/bash/webfetch/
        * websearch opened, and `external_directory` at `ask`. What that buys is
-       * "scan this directory and report what each dataset is" — a genuinely
-       * context-heavy opening move in geographic work, done in somebody else's
-       * context. Reading is also the whole of what it can do to that data:
-       * `qgis`, `gee` and `osm` are left at the global deny above.
+       * a folder of two hundred files narrowed to the handful worth opening —
+       * a genuinely context-heavy opening move in geographic work, done in
+       * somebody else's context.
        *
-       * ⚠️ Its prompt and description are still upstream's, and both talk about
-       * codebases only. Rewriting them is a separate decision — a config-layer
-       * one (agent.ts folds `prompt`/`description` in from here), not a patch. */
+       * Narrowed, not summarised. The metadata a decision rests on — CRS,
+       * extent, fields — is read first-hand by the agent that decides, because
+       * a relayed summary loses a layer and nobody downstream can tell. So
+       * reading is both the whole of what this agent may do to the data
+       * (`qgis`, `gee` and `osm` stay on the global deny above) and only ever
+       * a means to the shortlist it hands back. */
       explore: {
+        /* Upstream's own description, with two additions and nothing removed:
+         * the opening line names geographic datasets beside codebases, and a
+         * fourth case joins the list of what to send this agent.
+         *
+         * The fourth case is not the first one restated. `find files by
+         * patterns` is a COMPLETE answer in a codebase, where `user-service.ts`
+         * says what is inside it. In a folder of geographic data it is only the
+         * first step: `clip_2.tif` says nothing at all, so every candidate has
+         * to be opened before it can be ruled in or out. That reason is left
+         * out of the text and carried by the example instead — "which of these
+         * might be useful for this study?" is a question no filename can
+         * answer, and `might` says the answer comes back as candidates rather
+         * than as conclusions.
+         *
+         * ⚠️ This is a full copy, and copies drift in silence. agent.ts assigns
+         * the field wholesale (`value.description ?? item.description`), so one
+         * sentence cannot be extended without restating all of them — after
+         * which upstream is free to edit its own copy with nothing here
+         * conflicting and nothing going red. geocode-brand.test.ts diffs the
+         * two, so drift fails a test instead of quietly leaving one agent
+         * described two ways. */
+        description: `Fast agent specialized for exploring codebases and geographic datasets. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), answer questions about the codebase (eg. "how do API endpoints work?"), or find relevant datasets in a folder of geographic data (eg. "which of these might be useful for this study?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
         permission: {
           geodata: "allow",
         },

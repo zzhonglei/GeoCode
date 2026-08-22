@@ -161,8 +161,8 @@ describe("brand literal scan", () => {
       expect(new RegExp(`${agent}:\\s*\\{\\s*disable:\\s*true`).test(content)).toBe(true)
     }
     // `explore` is deliberately NOT among them: it is the far end of upstream's
-    // context-offloading route, and three live hints send work to it. What it
-    // can reach is asserted for real in opencode/test/geocode-geo-permissions.
+    // context-offloading route, and three live hints send work to it. The
+    // reasoning is in config/geocode.ts beside the entry itself.
     expect(/explore:\s*\{\s*disable:\s*true/.test(content)).toBe(false)
   })
 
@@ -183,28 +183,47 @@ describe("brand literal scan", () => {
     expect(/opencode/i.test(prompt)).toBe(false)
   })
 
-  test("the explore subagent's brief is not limited to code", () => {
-    // GeoCode keeps this subagent and hands it ReadGeoData, so its prompt has
-    // to say the job reaches geographic data: the tool list can tell an agent
-    // what it holds, never what counts as its work.
-    //
-    // Asserts consequences rather than sentences — the wording is still being
-    // worked on, the coverage is not allowed to regress. Two of them, checked
-    // separately: a single "does the word appear anywhere" test would be
-    // satisfied by either line alone, so losing one to a merge would stay
-    // green.
-    const prompt = readFileSync(path.join(repo, "packages/opencode/src/agent/prompt/explore.txt"), "utf8")
-    // The opening brief, which is what sets the scope of the job.
-    expect(/geographic/i.test(prompt.split("\n")[0])).toBe(true)
+  test("the explore description stays in step with upstream's", () => {
+    /* The assembly layer holds a FULL COPY of upstream's description, because
+     * agent.ts assigns the field wholesale — one sentence cannot be extended
+     * without restating all of them (config/geocode.ts carries the reasoning).
+     *
+     * A copy drifts in silence, and that is the whole point of this test:
+     * upstream edits its own line, git finds nothing to conflict with because
+     * our copy sits in our own file, no test goes red, and from then on one
+     * agent is described two different ways depending on which file you read.
+     *
+     * So the copy is never asserted literally. Upstream's text is read from
+     * source, the two intended edits are applied to it, and the result has to
+     * equal ours — which pins the additions and, more importantly, every word
+     * we did not touch.
+     */
+    const read = (file: string) => readFileSync(path.join(repo, file), "utf8")
+    const grab = (source: string) => source.match(/description: `(Fast agent specialized[^`]*)`/)?.[1]
 
-    // The reader, named in BOTH blocks. That is upstream's own shape: glob,
-    // grep and read are each written twice, once as a strength and once as a
-    // guideline. Checking the two separately is the point — a single
-    // `prompt.includes` would stay green with either mention gone.
-    const strengths = prompt.split("Your strengths:")[1]?.split("Guidelines:")[0] ?? ""
-    const guidelines = prompt.split("Guidelines:")[1] ?? ""
-    expect(strengths.includes("ReadGeoData")).toBe(true)
-    expect(guidelines.includes("ReadGeoData")).toBe(true)
+    const upstream = grab(read("packages/opencode/src/agent/agent.ts"))
+    const ours = grab(read("packages/opencode/src/config/geocode.ts"))
+    expect(upstream).toBeDefined()
+    expect(ours).toBeDefined()
+
+    // Checked before the edits are applied: `replace` misses silently, so an
+    // upstream rewrite would otherwise surface as two walls of text differing
+    // somewhere in the middle.
+    const OPENING = "exploring codebases."
+    const THIRD_CASE = `, or answer questions about the codebase (eg. "how do API endpoints work?").`
+    expect(upstream).toContain(OPENING)
+    expect(upstream).toContain(THIRD_CASE)
+
+    const expected = upstream!
+      // Geographic data named in the opening line, in the same words explore.txt uses.
+      .replace(OPENING, "exploring codebases and geographic datasets.")
+      // A fourth case joined to the list, not bolted on after it: `or` moves along.
+      .replace(
+        THIRD_CASE,
+        `, answer questions about the codebase (eg. "how do API endpoints work?"), or find relevant` +
+          ` datasets in a folder of geographic data (eg. "which of these might be useful for this study?").`,
+      )
+    expect(ours).toBe(expected)
   })
 
   test("plan mode reminders stay agent-neutral", () => {
