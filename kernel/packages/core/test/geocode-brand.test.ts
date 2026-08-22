@@ -130,8 +130,19 @@ describe("brand literal scan", () => {
 
     // The plugin SDK is installed only so a user's own plugin or tool file can
     // import it; neither loads, so neither config loader may install it.
+    //
+    // Upstream's install block is commented out byte-identically rather than
+    // deleted (docs/CONVENTIONS.md §5), so the literal is still somewhere in
+    // the file and a plain text search would match it. Comments are stripped
+    // first because the question this assertion means is whether the call is
+    // ACTIVE, not whether the words appear anywhere. Un-commenting the block
+    // turns this red again — confirmed by mutation.
+    //
+    // The behavioural backstop is geocode-project-config.test.ts, which runs a
+    // real loader and asserts the project directory gains no node_modules.
+    const active = (file: string) => read(file).replace(/\/\*[\s\S]*?\*\//g, "")
     for (const file of ["packages/opencode/src/config/config.ts", "packages/opencode/src/config/tui.ts"]) {
-      expect(read(file).includes('name: "@opencode-ai/plugin"')).toBe(false)
+      expect(active(file).includes('name: "@opencode-ai/plugin"')).toBe(false)
     }
   })
 
@@ -170,11 +181,18 @@ describe("brand literal scan", () => {
     // Upstream picks one of nine coding-agent prompts by model id; GeoCode must
     // return its own single base instead, or agents start calling themselves
     // OpenCode again.
+    //
+    // What is pinned is that the GeoCode return comes BEFORE any branching.
+    // Upstream's branches are still in the file, byte-identical and unreachable
+    // (docs/KERNEL.md §5.2) — so asserting their names are absent, which this
+    // used to do, would now be asserting the shape of the patch rather than
+    // what it achieves. Move the return below a branch and this turns red.
+    //
+    // The behavioural backstop is opencode/test/session/system.test.ts, which
+    // runs the selector over every model family and asserts one prompt out.
     const content = readFileSync(path.join(repo, "packages/opencode/src/session/system.ts"), "utf8")
-    expect(content.includes("PROMPT_GEOCODE")).toBe(true)
-    for (const upstream of ["PROMPT_ANTHROPIC", "PROMPT_BEAST", "PROMPT_GPT", "PROMPT_DEFAULT"]) {
-      expect(content.includes(upstream)).toBe(false)
-    }
+    const selector = content.slice(content.indexOf("export function provider("))
+    expect(selector.slice(0, selector.indexOf("if (")).includes("return [PROMPT_GEOCODE]")).toBe(true)
   })
 
   test("geocode base prompt is present and speaks as GeoAgent", () => {

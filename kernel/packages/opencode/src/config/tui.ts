@@ -234,8 +234,33 @@ const layer = Layer.effect(
     const data = yield* loadState({ directory })
     /* --- GeoCode: same as the instance loader — the plugin SDK is installed
      * only so a user's own plugin file can import it, and GeoCode loads none
-     * (docs/PATHS.md §7). --- */
+     * (docs/PATHS.md §7).
+     *
+     * Upstream's block is commented out WITHOUT being touched, rather than
+     * deleted. Deleting it conflicts the moment upstream edits anything inside;
+     * left byte-identical it merges straight in, and what changed stays visible
+     * right here (docs/CONVENTIONS.md §5). --- */
+    /*
+    const deps = yield* Effect.forEach(
+      data.dirs,
+      (dir) =>
+        npm
+          .install(dir, {
+            add: [
+              {
+                name: "@opencode-ai/plugin",
+                version: InstallationLocal ? undefined : InstallationVersion,
+              },
+            ],
+          })
+          .pipe(Effect.forkScoped),
+      {
+        concurrency: "unbounded",
+      },
+    )
+    */
     const deps: Fiber.Fiber<void>[] = []
+    // --- /GeoCode ---
 
     const get = Effect.fn("TuiConfig.get")(() => Effect.succeed(data.config))
     const pluginOrigins = Effect.fn("TuiConfig.pluginOrigins")(() => Effect.succeed(data.pluginOrigins))
