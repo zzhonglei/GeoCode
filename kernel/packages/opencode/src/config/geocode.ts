@@ -188,12 +188,20 @@ export function base(): ConfigV1.Info {
           geodata: "allow",
           qgis: { "*": "ask", "doc:*": "allow" },
           gee: "ask",
-          // `ask`, never `deny`: describeTask drops a subagent from the list
+          // Only osmfetch is named here, and as `ask` rather than `deny`.
+          //
+          // Not `deny`, because describeTask drops a subagent from the list
           // when the rule denies it (tool/registry.ts), and a planner that does
           // not know osmfetch exists cannot plan a download. Upstream makes
           // exactly this mistake in the other direction — its plan prompt tells
           // the model to launch `general` agents while its permission denies
           // them, so the name is in the instructions and not in the list.
+          //
+          // Only osmfetch, because the line is drawn at side effects. `explore`
+          // is left to fall through to the engine's allow: it only reads, and
+          // reading is what a planner does. Upstream draws the line in the same
+          // place — its own plan denies `general`, which writes, and says
+          // nothing about explore.
           task: { osmfetch: "ask" },
           // No `osm`: the four OSM tools belong to the subagent, so they are
           // not in plan's list either. What plan sees is the subagent.
