@@ -161,6 +161,7 @@ QGIS、GDAL 与 GEE 是用户机器上的外部软件。GeoCode 仅执行探测�
 | Agent | 授权 | 说明 |
 |---|---|---|
 | GeoAgent | `geodata`、`qgis`、`gee` | 唯一暴露的主 agent。**不含 `osm`** |
+| explore | `geodata`,其余照上游的只读白名单 | 子代理,只读勘察:筛出相关数据,不改动数据 |
 | osmfetch | `osm`、`geodata`、`bash`、`glob`,其余通配拒绝 | 子代理,承担全部 OSM 下载 |
 | plan | `geodata` 放行;`qgis` 询问、其中 `doc:*` 放行;`gee` 询问 | 计划模态 |
 
@@ -283,7 +284,7 @@ GeoCode 不直接调用 QGIS 的 API。QGIS 携带独立的 Python 解释器、�
 | 三个出口面 | 已完成 | 工具面见工具注册表;状态面见状态事件;数据面见 §6 |
 | 工具层:八个工具注册 | 已完成 | `tool/registry.ts` 的内置工具数组 |
 | 工具层:四组权限装配 | 已完成 | `config/geocode.ts` |
-| osmfetch 子代理 | 已完成 | `config/geocode.ts` 中的定义与出口锁 |
+| 两个子代理:osmfetch 与 explore | 已完成 | `config/geocode.ts` 中的定义、出口锁与地理读取权 |
 | 凭据脱敏的三处出口:状态事件 / 诊断包 / 日志 | 未开始 | `NetRedact` 全仓无生产调用方 |
 | 界面 | 未开始 | 仓库根不存在界面包目录 |
 | 桌面壳 | 未开始 | 仓库根不存在壳包目录 |
