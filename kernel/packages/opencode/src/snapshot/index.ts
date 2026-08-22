@@ -48,11 +48,32 @@ const GEO_EXCLUDE = [
   ...geoSection("Container-dataset folders", GeoExtensions.CONTAINER_DIRS),
   ...geoSection("Dataset sidecars", GeoExtensions.SNAPSHOT_BLANKET_SIDECARS),
   ...geoSection("Transient churn (SQLite WAL / QGIS locks)", GeoExtensions.TRANSIENT_SUFFIXES),
-  // Snapshot-only, and too aggressive for any other consumer: a checkpoint has
-  // no use for these, while a file tree that hid them would be hiding the
-  // metadata a GIS user reads.
+  /* Snapshot-only, and too aggressive for any other consumer: a checkpoint has
+   * no use for these, while a file tree that hid them would be hiding the
+   * metadata a GIS user reads.
+   *
+   * Qualified by what they sit beside, NOT a bare `*.xml`. Every other rule in
+   * this block names a geo extension, so it can only ever match geodata; a bare
+   * `*.xml` was the one that could not, and it swallowed `pom.xml`, `.csproj`,
+   * `web.xml` and every other ordinary config alongside the metadata. The cost
+   * was invisible rather than loud: those files simply never entered a
+   * checkpoint, so an agent's edit to one SURVIVED a revert while the rest of
+   * the turn rolled back, and nothing anywhere said so.
+   *
+   * `.aux.xml` is GDAL's PAM sidecar — rewritten whenever a read computes
+   * statistics, and load-bearing besides: formats that cannot store a CRS
+   * themselves keep it there (§4.13). `.shp.xml` is ArcGIS metadata for a
+   * dataset this block already excludes, so keeping it alone would checkpoint a
+   * description of something that is not there.
+   *
+   * ArcGIS can write `<name>.<ext>.xml` beside other formats too, and those now
+   * ride into checkpoints. Deliberate: they are small and are not rewritten on
+   * open, so the churn this rule exists for is served by `.aux.xml` alone —
+   * deriving `*.<ext>.xml` over the whole taxonomy would add forty rules to
+   * catch a file that costs nothing to keep. */
   "# GeoCode: GIS metadata",
-  "*.xml",
+  "*.aux.xml",
+  "*.shp.xml",
   "# GeoCode: OpenStreetMap PBF",
   "*.osm.pbf",
   "# GeoCode: macOS",

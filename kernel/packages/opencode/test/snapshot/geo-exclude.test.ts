@@ -84,6 +84,48 @@ it.live(
 )
 
 it.live(
+  "the metadata rule is qualified by what it sits beside, and spares ordinary XML",
+  Effect.gen(function* () {
+    /* Every other rule in GEO_EXCLUDE names a geo extension, so it can only
+     * ever match geodata. `*.xml` was the one that could not: it took
+     * `pom.xml`, `.csproj`, `web.xml` and every other ordinary config with it.
+     *
+     * Pinned through a checkpoint rather than by reading the rule, because what
+     * went wrong was not visible in the rule — it was visible one step later,
+     * in a revert. A file outside the checkpoint is not restored AND not
+     * deleted, so an agent's edit to `pom.xml` simply outlived the rollback
+     * that was supposed to undo it, silently, while every other file returned. */
+    const dir = yield* gitTmpdir()
+    yield* write(`${dir}/readme.md`, "start")
+    yield* exec(dir, ["git", "add", "."])
+    yield* exec(dir, ["git", "commit", "-m", "init"])
+
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+
+      // GDAL's PAM sidecar and ArcGIS metadata: companions to data this block
+      // already excludes, so they go with it.
+      yield* write(`${dir}/scene.tif.aux.xml`, "<PAMDataset/>")
+      yield* write(`${dir}/roads.shp.xml`, "<metadata/>")
+      // Ordinary project files, at the root and nested — a bare `*.xml` matches
+      // at any depth, so both were at risk and both have to come back.
+      yield* write(`${dir}/pom.xml`, "<project/>")
+      yield* write(`${dir}/config/web.xml`, "<web-app/>")
+
+      const patch = yield* snapshot.patch(before!)
+      for (const excluded of ["scene.tif.aux.xml", "roads.shp.xml"]) {
+        expect(patch.files).not.toContain(fwd(dir, excluded))
+      }
+      for (const kept of ["pom.xml", fwd("config", "web.xml")]) {
+        expect(patch.files).toContain(fwd(dir, kept))
+      }
+    }).pipe(provideInstance(dir))
+  }),
+)
+
+it.live(
   "geodata already committed in the user's repo is dropped too",
   Effect.gen(function* () {
     // THE case that costs real money. The source repo's check-ignore never sees
