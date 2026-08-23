@@ -5,23 +5,16 @@ import { Georeference } from "../georeference"
 import { GeoRuntime } from "../runtime"
 import type { GdalTypes } from "./types"
 
-/* --- GeoCode: reading what a file is, before deciding what to do with it
- * (docs/GEOKERNEL.md §7.4, §7.5).
+/* --- GeoCode: reading what a file is, before deciding what to do with it (docs/GEOKERNEL.md §7.4, §7.5).
  *
- * Both pipelines start here, and both need this step to stay CHEAP — it is the
- * "light" half of the light/heavy split that lets the interface draw a skeleton
- * before any pixels exist (§7.2). Everything below reads headers and samples;
- * nothing walks a full raster.
- *
- * The parsing is separated from the subprocess on purpose. What the tools emit
- * is the part that drifts between versions, and a pure function over their
- * output can be pinned against real captured output without a toolchain being
- * installed. --- */
+ * Both pipelines start here and both need it cheap — this is the light half of the light/heavy split (§7.2), so
+ * everything below reads headers and samples and nothing walks a full raster. The parsing is kept out of the
+ * subprocess so it can be pinned against real captured output, with no toolchain (gdal-inspector.test.ts). --- */
 
 /** Per-band facts the preview needs: which channel it is, and how to stretch it. */
 export interface Band {
   readonly index: number
-  /** Lowercased colour interpretation, e.g. `red`, `gray`, `alpha`, `undefined`. */
+  /** GDAL's colour interpretation, lowercased: `red`, `gray` (not `grey`), `alpha`, `undefined`. */
   readonly color?: string
   readonly description?: string
   readonly minimum?: number
@@ -39,38 +32,16 @@ export interface RasterInfo {
   readonly bandCount: number
   /** True when the data is one measured quantity, so the preview colourizes it. */
   readonly singleBand: boolean
-  /** Overviews the file already carries. Free speed when present; never built (§7.5). */
+  /** Reported and so far unread: the preview passes `-ovr AUTO` and lets GDAL decide (§7.5). */
   readonly hasOverview: boolean
-  /**
-   * Whether this is geographic data at all, and where its placement comes from.
-   *
-   * A TIFF is not necessarily a raster dataset — a screenshot saved as `.tif`
-   * parses perfectly and carries no georeferencing. Letting one into the
-   * pipeline produces a reprojection of nothing onto nowhere, so the answer is
-   * decided here and the pipeline is never entered (§7.5). `none` is that
-   * case; everything else is data, however awkwardly placed.
-   */
   readonly georeference: Georeference.Kind
   readonly bands: readonly Band[]
 }
 
 export interface VectorInfo {
-  /**
-   * The layer name the engine knows it by.
-   *
-   * Needed verbatim to query the layer later. Deriving it from the filename
-   * is right often enough to look correct and wrong often enough to matter —
-   * and it is right here in the output, so guessing is a choice.
-   */
+  /** The engine's own name for the layer, needed verbatim: `vector.ts` puts it into an `-sql` query. */
   readonly name: string
   readonly featureCount: number
-  /**
-   * The geometry types present.
-   *
-   * A HARD contract for the interface: it picks a renderer from this, and a
-   * point-only layer takes a path that the general one cannot match. Reporting
-   * it wrong is not a cosmetic error (§7.4).
-   */
   readonly geometryTypes: readonly string[]
   readonly properties: readonly string[]
   readonly projection?: string
@@ -87,29 +58,16 @@ export class GdalInspectError extends Error {
 }
 
 /**
- * Carried by **every** GDAL subprocess in this module, not only these.
- *
- * `GDAL_PAM_ENABLED NO` stops the library writing computed statistics as a
- * sidecar **next to the source data**. Without it a read-only preview request
- * silently modifies the user's directory — the same class of problem that cost
- * the overview step its existence (§7.6).
- *
- * Exported because that rule is module-wide: the raster pipeline runs four more
- * tools over the same source, and a copy of this array in each file is a copy
- * that can be forgotten in one of them.
+ * Carried by every GDAL subprocess that opens a dataset, here and in `raster.ts`, which is why it is exported
+ * rather than copied: `GDAL_PAM_ENABLED NO` stops the library writing computed statistics as a sidecar next to
+ * the source data, turning a read-only metadata request into a write to the user's directory (§7.5, §7.6).
  */
 export const NO_SIDECARS = ["--config", "GDAL_PAM_ENABLED", "NO"] as const
 
-/**
- * Sample rather than walk every pixel.
- *
- * Exact statistics would make this step scale with file size, which is
- * precisely what the light/heavy split exists to avoid (§7.2), and the stretch
- * they feed is not sensitive to the difference.
- */
+/** Sampled rather than walked: exact statistics would make this step scale with file size (§7.2, §7.5). */
 const APPROXIMATE_STATS = "-approx_stats"
 
-/** Generous for a header read; a network-mounted file is the case that needs it. */
+/** Generous for a metadata read; a network-mounted file is the case that needs it. */
 const TIMEOUT = "30 seconds"
 
 function json(stdout: string, tool: string): Record<string, unknown> {
@@ -126,14 +84,7 @@ function num(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
-/**
- * A coordinate system's short identifier.
- *
- * The authority code when the file carries one, because that is what a caller
- * can act on; otherwise the human name out of the WKT, which at least says
- * where the data thinks it is. Neither is guaranteed — plenty of real files
- * have no coordinate system at all, and `undefined` is the honest answer.
- */
+/** The authority code when the file carries one, else the name out of the WKT; real files often have neither. */
 export function projectionOf(coordinateSystem: unknown): string | undefined {
   const cs = coordinateSystem as { wkt?: unknown; projjson?: { id?: { authority?: unknown; code?: unknown } } }
   const id = cs?.projjson?.id
@@ -153,32 +104,21 @@ function coefficients(value: unknown): number[] | undefined {
   return parsed.every((item) => item !== undefined) ? (parsed as number[]) : undefined
 }
 
-/** `gcps` is absent entirely when there are none, present with a list when there are. */
+/** `gdalinfo` leaves `gcps` out entirely when the file has none. */
 function gcpCount(value: unknown): number {
   const list = (value as { gcpList?: unknown } | undefined)?.gcpList
   return Array.isArray(list) ? list.length : 0
 }
 
-/**
- * Whether a metadata domain carries anything.
- *
- * gdalinfo emits a domain key with an empty object for some drivers, so the
- * key alone does not mean the file has RPC coefficients — only its contents do.
- */
 function populated(metadata: unknown, name: string): boolean {
   const found = (metadata as Record<string, unknown> | undefined)?.[name]
   return typeof found === "object" && found !== null && Object.keys(found).length > 0
 }
 
 /**
- * Read a raster's metadata out of `gdalinfo -json` output.
- *
- * The RPC and GEOLOCATION domains arrive without being asked for — `gdalinfo`
- * reports them alongside the default domain, checked against GDAL 3.12.0 and
- * 3.13.2. Asking anyway is not the safe extra it looks like: `-mdd` takes ONE
- * domain and errors on a repeat, so a call naming both fails outright, and
- * `-mdd all` pulls in every domain a driver has into an output collected with
- * no size cap.
+ * Read a raster's metadata out of `gdalinfo -json` output. The RPC and GEOLOCATION domains arrive alongside the
+ * default one without being asked for, and asking anyway is not the safe extra it looks: `-mdd` takes one domain
+ * and errors on a repeat, so a call naming both fails outright.
  */
 export function parseRaster(stdout: string): RasterInfo {
   const raw = json(stdout, "gdalinfo")
@@ -215,20 +155,13 @@ export function parseRaster(stdout: string): RasterInfo {
   }))
 
   const bandCount = Math.max(1, bands.length)
-  // Two bands where the first is grey is grey-plus-alpha, which colourizes the
-  // same way one band does — the second band is transparency, not a channel.
+  // Grey plus alpha colourizes the way one band does: the second band is transparency, not a second channel.
   const singleBand = bandCount === 1 || (bandCount <= 2 && bands[0]?.color === "gray")
 
-  // Any band reporting overviews counts. GDAL keeps them in lockstep across
-  // bands, so this is the same answer as checking the first, and it survives
-  // the odd file where it is not.
   const hasOverview = rawBands.some((band) => Array.isArray(band.overviews) && band.overviews.length > 0)
 
   const projection = projectionOf(raw.coordinateSystem)
-  // Asked of the transform itself rather than inferred from the corner
-  // coordinates, which is the same question one indirection away — and asked
-  // of all five places georeferencing can live, because a scene carrying only
-  // RPC coefficients is data whose corners ARE the pixel grid.
+  // Five facts reported, one verdict reached in `georeference.ts` — the two pipelines share that one (§7.9).
   const georeference = Georeference.of({
     transform: coefficients(raw.geoTransform),
     projection: projection !== undefined,
@@ -264,12 +197,9 @@ export function parseVector(stdout: string): VectorInfo {
 }
 
 /**
- * A pure reader, lifted into the error channel.
- *
- * The parsers throw because they are ordinary functions and that is how
- * ordinary functions refuse. Left alone inside an Effect that becomes a
- * DEFECT — outside the declared error type, uncatchable by every caller, and
- * fatal to a request whose honest answer was "this file is not readable".
+ * A pure reader, lifted into the error channel: the parsers throw the way ordinary functions do, and a throw
+ * left alone inside an Effect is a defect — outside the declared error type, so no caller handling the error
+ * channel will see it.
  */
 const parsed = <A>(reader: (stdout: string) => A) =>
   Effect.fnUntraced(function* (stdout: string) {
@@ -313,13 +243,9 @@ export const inspectRaster = (environment: GdalTypes.Environment, file: string) 
   ).pipe(Effect.flatMap(parsed(parseRaster)))
 
 /**
- * The same shape, without paying for statistics.
- *
- * For reading back an intermediate the pipeline just produced, where the
- * questions are "where did it land" and "how many bands came out" — neither of
- * which needs a single pixel read. Asking for statistics here would not be a
- * cheap extra: the intermediate is a virtual dataset, so sampling it forces the
- * reprojection to run early, on top of running again at encode time.
+ * The same shape without `APPROXIMATE_STATS`, for reading back an intermediate the pipeline just produced. Its
+ * one caller hands it a virtual dataset, so sampling here would not be a cheap extra — it would run the
+ * reprojection early, on top of running it again at encode time.
  */
 export const inspectLayout = (environment: GdalTypes.Environment, file: string) =>
   run(environment, environment.tools.gdalinfo, [...NO_SIDECARS, "-json", file], "gdal:inspect-layout").pipe(
@@ -332,26 +258,20 @@ export const inspectVector = (environment: GdalTypes.Environment, file: string) 
   )
 
 /**
- * Whether this build of `gdalwarp` can select bands itself.
- *
- * Older builds cannot, and the raster pipeline has to insert a separate
- * band-selection step for them. Asked of the binary rather than assumed from a
- * version string: the flag is what matters, version-to-feature mapping is a
- * second thing to get wrong, and users install whatever their platform ships.
+ * Whether this build of `gdalwarp` can select bands itself; older ones cannot, and `raster.ts` inserts a separate
+ * band-selection step for them. Asked of the binary, because a version-to-feature mapping is a second thing to
+ * get wrong and users install whatever their platform ships.
  */
 export function warpSelectsBands(help: string): boolean {
-  // Matched on a token boundary rather than a fixed spelling: builds differ on
-  // whether the flag appears as `-b <band>` or `[-b <band>]`, and a substring
-  // check tuned to one of those silently answers "no" for the other — which
-  // costs the pipeline an extra pass on a toolchain that never needed it.
+  // A token boundary rather than a fixed spelling: GDAL 3.13.3 prints `[-srcband <band>]...`, and builds that
+  // spell the same flag `-b` put it in brackets; a check tuned to one answers "no" for the other.
   return /(^|[\s[])-b[\s<]/.test(help) || help.includes("-srcband")
 }
 
 export const probeWarpBands = (environment: GdalTypes.Environment) =>
   run(environment, environment.tools.gdalwarp, ["--help"], "gdal:probe-warp").pipe(
     Effect.map(warpSelectsBands),
-    // `--help` exits non-zero on some builds. Not being able to ask is not the
-    // same as the answer being no, but the safe reading is the one that still
-    // works everywhere: take the extra step.
+    // `--help` exits non-zero on some builds, so a probe that could not run answers no: an extra pass the
+    // toolchain may not have needed, rather than a flag it may not have.
     Effect.catch(() => Effect.succeed(false)),
   )
