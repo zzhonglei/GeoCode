@@ -16,19 +16,8 @@ export { NetRedact } from "./redact"
 export { NetRoute } from "./route"
 export * from "./types"
 
-/* --- GeoCode: the Net module of GeoKernel's infrastructure layer
- * (docs/GEOKERNEL.md §3.3). The ONLY place network reachability is decided.
- *
- * Everything about the network lives here: how a path is resolved, when to
- * probe, how to probe, how often to re-verify, what makes a verdict change, and
- * how recovery happens. Capability modules read the conclusion and reproduce
- * none of it (§8.3) — a rule that only survives if there is nothing left for
- * them to reproduce.
- *
- * Net starts no subprocesses. All probing is socket work in this process, which
- * is what makes the four infrastructure modules mutually independent (§2.3) and
- * follows from the decision not to read the operating system's proxy settings
- * (§12) — the one thing that would have needed one. --- */
+/* --- GeoCode: the Net module of GeoKernel's infrastructure layer (docs/GEOKERNEL.md §3.3), the only place network
+ * reachability is decided — capability modules read the conclusion and reproduce none of it (§8.3). --- */
 
 export interface Change {
   readonly target: string
@@ -36,21 +25,8 @@ export interface Change {
 }
 
 /**
- * The verdict a failed round produces, with the two facts that make it
- * actionable attached.
- *
- * Named rather than written out at each of the two failure sites, and exported
- * so a test can reach it. Both fields are the kind that go missing without
- * anything failing — the state is a perfectly good `unreachable` either way —
- * and the sites themselves are object literals inside a promise inside a
- * service constructor, which no test can get at without a completed TLS
- * handshake against a real endpoint. `snapshot/stageable` was pulled out for
- * exactly this reason (F19): a rule invisible to tests is a rule nothing keeps.
- *
- * The two sites differ ONLY in what was tried: re-verification deliberately
- * re-tests the one route in hand, while a search from scratch reports every
- * path it walked. `skipped` is the same question on both — what could not be
- * attempted at all — so it is asked here rather than by the caller.
+ * Both failure sites build their verdict here, so neither can omit `tried` or `skipped` — the two optional fields,
+ * whose absence nothing else would report.
  */
 export function failed(reason: string, tried: readonly string[]): NetMonitor.Verdict {
   return {
@@ -68,29 +44,15 @@ export interface Interface {
   /** Current connectivity of a target. */
   readonly status: (id: string) => Effect.Effect<Reachability>
   /**
-   * Current connectivity followed by every change.
-   *
-   * Subscribing is what starts the monitoring; when the last subscriber goes
-   * away it stops. Nothing probes on behalf of a target nobody is asking about
-   * (§3.3 按需驱动).
+   * Current connectivity followed by every change. Subscribing is what starts the monitoring and the last
+   * unsubscribe stops it (§3.3 按需驱动).
    */
   readonly watch: (id: string) => Stream.Stream<Reachability>
   /** The route in use for a target, if it currently has one. */
   readonly route: (id: string) => Effect.Effect<Route | undefined>
   /**
-   * A usable proxy on this machine, if there is one.
-   *
-   * The whole of Net's involvement for a consumer that picks its own servers.
-   * Net answers "does this machine have a proxy" — a fact about the machine,
-   * settled by asking a short fixed list of loopback addresses one protocol
-   * question each, and verified rather than assumed: a declared variable can
-   * name a proxy that stopped running months ago, and something answering on a
-   * conventional port may just be a development server.
-   *
-   * It says nothing about WHICH server to ask or in what order. A consumer with
-   * its own opinion about its endpoints — a reference deployment it prefers,
-   * mirrors it falls back to — keeps that opinion, and only needs to know how to
-   * get out of the building.
+   * A usable proxy on this machine, if there is one — verified rather than assumed, and saying nothing about which
+   * server a consumer should ask or in what order (§3.3).
    */
   readonly proxy: (target: Target) => Effect.Effect<string | undefined>
 }
@@ -113,46 +75,24 @@ const layer = Layer.effect(
     const pubsub = yield* PubSub.unbounded<Change>()
     yield* Effect.addFinalizer(() => PubSub.shutdown(pubsub))
 
-    // Monitor loops belong to the MODULE's lifetime, not to whoever happened to
-    // start one. Two consumers watching the same target must not put the same
-    // loop on two different clocks; the watcher count decides when it runs, and
-    // this decides where it lives.
+    // Forked into the module's scope, not a subscriber's, so the loop outlives the watcher that started it.
     const scope = yield* Effect.scope
 
     const entries = new Map<string, Entry>()
 
     const publish = (entry: Entry) => PubSub.publish(pubsub, { target: entry.target.id, state: entry.machine.state })
 
-    /**
-     * One round of probing for a target.
-     *
-     * Returns the route alongside the verdict so the caller never has to
-     * resolve a second time to find out which path just worked — resolving is
-     * real handshakes, and doing them twice per round would double the cost of
-     * every recovery.
-     */
+    /** Returns the route beside the verdict so the caller never resolves twice — resolving is real handshakes. */
     const probeOnce = (entry: Entry) =>
       Effect.promise(async (): Promise<{ verdict: NetMonitor.Verdict; route?: Route }> => {
-        // The cheapest question first, and the only one that costs no network at
-        // all: does this machine have anywhere to send a packet? Asking the
-        // operating system takes microseconds and no traffic, so a laptop with
-        // its radio off — or one on a plane — spends nothing at all while it
-        // waits, instead of opening a socket every round to be told the same
-        // thing. It is also the unambiguous signal that skips hysteresis (§3.3).
+        // First because it costs no traffic at all, and it is the unambiguous signal that skips hysteresis (§3.3).
         if (!NetClassifier.hasNetworkInterface()) {
-          // Neither `tried` nor `skipped`, deliberately: nothing was attempted
-          // and nothing could have been. An empty `tried` would read as "we
-          // looked and found nowhere to go", and naming a skipped proxy would
-          // offer an explanation that is not the one — a machine with its radio
-          // off does not have a proxy problem.
+          // Neither `tried` nor `skipped`: an empty `tried` would read as "we looked and found nowhere to go", and
+          // a machine with its radio off does not have a proxy problem.
           return { verdict: { ok: false, kind: "offline", detail: "no network interface is up" } }
         }
 
-        // Route-aware re-verification: a held direct route is re-tested
-        // directly, a held proxy route is re-tested as "can this proxy still
-        // reach the target". A user losing their connection and a user closing
-        // their proxy software therefore travel the same detection path and
-        // differ only in where they fail (§3.3).
+        // Route-aware re-verification, so a lost connection and a closed proxy fail on the same path (§3.3).
         const held = entry.route
         if (!NetMonitor.shouldRediscover(entry.machine) && held) {
           const result =
@@ -160,17 +100,11 @@ const layer = Layer.effect(
               ? await NetProbe.direct(entry.target)
               : await NetProbe.viaProxy(entry.target, held.url)
           if (result.ok) return { verdict: { ok: true, routeId: routeId(held) }, route: held }
-          // One path, because re-verification deliberately re-tests the held one
-          // rather than searching again.
           return { verdict: failed(result.reason, [routeId(held)]) }
         }
 
-        // No route in hand, so search from scratch: this is what picks up a
-        // proxy the user has only just started, with nothing to click.
         const resolution = await NetResolver.resolve(entry.target)
         if (resolution.ok) return { verdict: { ok: true, routeId: resolution.routeId }, route: resolution.route }
-        // The resolver has counted these all along and had nowhere to put them;
-        // `tried` is RouteIds, so it is publishable as it stands.
         return { verdict: failed(resolution.reason, resolution.tried) }
       })
 
@@ -186,10 +120,7 @@ const layer = Layer.effect(
     const runLoop = (entry: Entry): Effect.Effect<void> =>
       Effect.gen(function* () {
         while (true) {
-          // A probe that throws is not a probe that failed — without this the
-          // defect propagates and takes the loop's fiber with it, so one bad
-          // target would silently end monitoring for good. Treated as an
-          // ambiguous failure, which is what it is: we learned nothing.
+          // An uncaught defect would take the loop's fiber with it and end monitoring for this target for good.
           const round = yield* probeOnce(entry).pipe(
             Effect.catchDefect(
               (defect): Effect.Effect<{ verdict: NetMonitor.Verdict; route?: Route }> =>
@@ -245,18 +176,15 @@ const layer = Layer.effect(
 
     const proxy = (target: Target) =>
       Effect.promise(async () => (await NetDiscovery.candidates(target))[0]).pipe(
-        // Discovery opens sockets, and a socket layer that raises where it is
-        // documented to resolve would otherwise become a defect — outside the
-        // error type, taking the caller down over a question whose honest
-        // answer is simply "then we know of no proxy".
+        // Discovery opens sockets, and a raise there is outside the error type: it would take the caller down over
+        // a question whose honest answer is "then we know of no proxy".
         Effect.catchDefect(() => Effect.succeed(undefined)),
       )
 
     const watch = (id: string): Stream.Stream<Reachability> =>
       Stream.unwrap(
         Effect.gen(function* () {
-          // Subscribe before reading, for the reason §9.2 gives: the reverse
-          // loses any change landing between the two calls.
+          // Subscribe before reading (§9.2): the reverse loses any change landing between the two calls.
           const subscription = yield* PubSub.subscribe(pubsub)
           yield* Effect.acquireRelease(acquire(id), () => release(id))
           const current = entries.get(id)?.machine.state ?? { state: "idle" as const }
@@ -274,6 +202,5 @@ const layer = Layer.effect(
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [] })
 
-/** Re-exported so consumers reach the two route forms through one import. */
 export const subprocessEnv = NetRoute.subprocessEnv
 export const agent = NetRoute.agent

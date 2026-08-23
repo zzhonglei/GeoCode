@@ -15,19 +15,6 @@ export type Resolution =
   | { readonly ok: true; readonly route: Route; readonly routeId: RouteId; readonly latencyMs: number }
   | { readonly ok: false; readonly reason: string; readonly tried: readonly RouteId[] }
 
-/**
- * Find a working path to `target`.
- *
- * **Direct first.** One real handshake with the target. If it succeeds nothing
- * else happens — proxy discovery never starts. Users with reachable networks,
- * and users whose proxy software captures traffic transparently, stop here and
- * never meet any of the machinery below.
- *
- * **Proxy fallback, only after direct has failed.** Every candidate has to
- * complete a handshake with the target through its tunnel before it is adopted,
- * including one the user declared: a declaration says what they intended, not
- * what is currently running.
- */
 export async function resolve(target: Target, options: Options = {}): Promise<Resolution> {
   const tried: RouteId[] = ["direct"]
 
@@ -50,9 +37,7 @@ export async function resolve(target: Target, options: Options = {}): Promise<Re
 
   return {
     ok: false,
-    // One sentence, whatever the underlying failure was. The split between
-    // failure kinds drives behaviour, never wording (§3.3); the specific error
-    // travels as diagnostics rather than as the message a user reads.
+    // The direct failure, whatever the proxies then did: failure kinds drive behaviour, never wording (§3.3).
     reason: direct.reason,
     tried,
   }

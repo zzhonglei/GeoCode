@@ -4,20 +4,17 @@ import net from "node:net"
 
 /* --- GeoCode: the CONNECT handshake, in one place (docs/GEOKERNEL.md §3.3).
  *
- * Two callers need it and must not drift apart: the probe, which asks whether a
- * candidate is a usable proxy, and the in-process route, which carries real
- * traffic through the adopted one. If they built their tunnels differently, a
- * candidate could pass the probe and then fail in use — the exact class of bug
- * the three-stage probe exists to prevent. --- */
+ * The probe and the in-process route share it, so a candidate cannot pass verification and then tunnel differently
+ * once it carries real traffic. --- */
 
 export type Stage = "connect" | "tunnel"
 
 export type Result =
-  /** The tunnel is open. The socket is raw — the caller starts TLS over it. */
+  /** The socket is raw — the caller starts TLS over it. */
   | { readonly ok: true; readonly socket: net.Socket }
   | { readonly ok: false; readonly stage: Stage; readonly reason: string }
 
-/** Header bytes a proxy may send before the terminator. Anything past this is not one. */
+/** Header bytes a proxy may send before the terminator; anything still talking past this is not one. */
 const MAX_HEAD = 8192
 
 function reasonOf(err: unknown): string {
@@ -28,13 +25,7 @@ function reasonOf(err: unknown): string {
   return String(err)
 }
 
-/**
- * Ask a proxy to open a tunnel to `authority` (`host:port`).
- *
- * On success the socket is handed over still raw and with no listeners of ours
- * left on it, so the caller can start a TLS session across it. On failure the
- * socket is destroyed here.
- */
+/** Ask a proxy to open a tunnel to `authority` (`host:port`). On failure the socket is destroyed here. */
 export function open(proxyUrl: string, authority: string, timeoutMs: number): Promise<Result> {
   let parsed: URL
   try {
@@ -61,8 +52,7 @@ export function open(proxyUrl: string, authority: string, timeoutMs: number): Pr
       if (settled) return
       settled = true
       clearTimeout(deadline)
-      // Hand the socket over clean: leftover listeners of ours would otherwise
-      // keep firing into a promise that has already settled.
+      // Leftover listeners of ours would keep firing into a promise that has already settled.
       socket.removeListener("error", onError)
       resolve({ ok: true, socket })
     }
@@ -83,8 +73,6 @@ export function open(proxyUrl: string, authority: string, timeoutMs: number): Pr
       const onData = (chunk: Buffer) => {
         head += chunk.toString("latin1")
         if (head.indexOf("\r\n\r\n") < 0) {
-          // A proxy answers in one short write. Something still talking at this
-          // length is not speaking the protocol at all.
           if (head.length > MAX_HEAD) fail("tunnel response has no header terminator")
           return
         }
