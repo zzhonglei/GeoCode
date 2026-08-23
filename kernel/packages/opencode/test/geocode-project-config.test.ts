@@ -7,7 +7,7 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { Effect } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Brand } from "@opencode-ai/core/brand"
@@ -15,6 +15,8 @@ import { Global } from "@opencode-ai/core/global"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Config } from "@/config/config"
 import { Plugin } from "@/plugin"
+import { ShareNext } from "@/share/share-next"
+import { SessionID } from "@/session/schema"
 import { ToolRegistry } from "@/tool/registry"
 import { Session } from "@/session/session"
 import { provideInstanceEffect, testInstanceStoreLayer, TestInstance, tmpdirScoped } from "./fixture/fixture"
@@ -203,8 +205,8 @@ describe("GeoCode session sharing", () => {
         }),
       )
 
-      // The assembly layer is a factory default, not a lock: a user who wants
-      // the upstream behaviour back can still ask for it.
+      // The assembly layer is a factory default, not a lock: the config surface
+      // is the user's to set, and setting it takes effect.
       yield* write(path.join(globalDir, Brand.configJson), JSON.stringify({ share: "manual" }))
       yield* withInstance(
         project,
@@ -214,6 +216,28 @@ describe("GeoCode session sharing", () => {
         }),
       )
     }),
+  )
+
+  it.live("and the gate at the network boundary answers for itself", () =>
+    /* Sharing is off in two places, and only one of them reads config. This
+     * pins the other.
+     *
+     * The config default above exists so an attempt to share reports
+     * "disabled in configuration" rather than the empty record upstream hands
+     * back — but a user may set `share` to anything, and doing so removes that
+     * message without moving this gate. Left as upstream wrote it, that path
+     * ends in `share: { url: "" }` written onto the session: shared, at
+     * nothing, with no error anywhere.
+     *
+     * Asserted on the message too, not just the failure. This gate opens only
+     * for the env var, so a refusal that does not say which one leaves the user
+     * with a working config option and no working share. */
+    Effect.gen(function* () {
+      const result = yield* Effect.exit(ShareNext.use.create(SessionID.make("ses_gate_probe")))
+      expect(Exit.isFailure(result)).toBe(true)
+      const message = Exit.isFailure(result) ? Cause.squash(result.cause) : undefined
+      expect(String(message)).toContain("OPENCODE_DISABLE_SHARE")
+    }).pipe(Effect.provide(LayerNode.compile(ShareNext.node)), Effect.provide(testInstanceStoreLayer)),
   )
 })
 

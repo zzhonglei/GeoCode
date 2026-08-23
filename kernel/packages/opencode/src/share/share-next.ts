@@ -316,6 +316,31 @@ const layer = Layer.effect(
     })
 
     const create = Effect.fn("ShareNext.create")(function* (sessionID: SessionID) {
+      /* --- GeoCode: refuse, rather than hand back a share that is not one.
+       *
+       * Upstream's line below returns an empty record, which its own caller
+       * then writes onto the session as `share: { url: "" }` — a session that
+       * reports itself shared, at nothing. Upstream only reaches that with the
+       * env var deliberately set; GeoCode reaches it by default, so it is the
+       * normal path here rather than an opted-into one.
+       *
+       * `config/geocode.ts` ships `share: "disabled"` so the caller refuses
+       * first with a message about configuration — but that is a factory
+       * default a user may change, and changing it re-exposes exactly the empty
+       * record that default was added to hide. This gate is the one at the
+       * network boundary, so it answers for itself instead of relying on the
+       * layer above to keep the question from arriving.
+       *
+       * The message names the env var because it is the only thing that opens
+       * this gate: the `share` config option is read by the caller and never
+       * reaches here (docs/PATHS.md §7). --- */
+      if (disabled)
+        return yield* Effect.fail(
+          new Error(
+            'Sharing is disabled in this build. Set OPENCODE_DISABLE_SHARE=false to enable it; the "share" config option alone does not reach this gate.',
+          ),
+        )
+      // --- /GeoCode ---
       if (disabled) return { id: "", url: "", secret: "" }
       yield* Effect.logInfo("creating share", { sessionID: sessionID })
       const req = yield* request()
