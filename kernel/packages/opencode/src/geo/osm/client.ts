@@ -7,111 +7,51 @@ import { GeoNet } from "../net"
 import type { NetTypes } from "../net/types"
 import { OsmHttp } from "./http"
 
-/* --- GeoCode: the reliability layer (docs/GEOKERNEL.md §6.3).
+/* --- GeoCode: the reliability layer over three public OSM services (docs/GEOKERNEL.md §6.3).
  *
- * Public OSM services are unreliable as a matter of course, not as an
- * exception: a single backend can be sick for hours, reachability differs
- * enormously between users' networks, and rapid requests get throttled. This
- * module is where that is absorbed, and it is the module's core asset.
- *
- * The division of labour with Net is one sentence: **Net says how to get out of
- * the building, this module decides who to ask.** Net answers "is there a proxy
- * on this machine" — a fact about the machine, cheap and local. Which server to
- * ask, in what order, and when to give up on one are questions about the OSM
- * ecosystem, and they are answered here, without measuring anything: a
- * handshake tells you about the road, and what decides an answer is whether the
- * server is willing to work. Only a real request reveals that. --- */
-
-/* --- The endpoint order is FIXED and TIERED, not measured (§6.3).
- *
- * The official instance first, third-party mirrors only after it has actually
- * failed a request. The tiers rest on what these services ARE, not on how they
- * performed somewhere:
- *
- * - the official instance is the reference deployment — the one whose data
- *   currency and behaviour the project itself stands behind, and the one whose
- *   quirks the rest of the ecosystem is written against;
- * - a mirror is somebody's donated hardware. It may lag, it may be rebuilt from
- *   a stale planet file, it may quietly serve a region-limited extract. When it
- *   is right it is indistinguishable from the official instance, so preferring
- *   it buys nothing; when it is wrong the caller cannot tell.
- *
- * This deliberately replaces ordering by measured latency. Measuring means
- * probing every mirror on a fresh process before asking anyone anything — a
- * cost paid by every user, and a burst of handshakes aimed at donated servers
- * for the privilege of not using them. It also ranks on the wrong evidence: a
- * handshake measures the ROAD, and what decides an answer is whether the server
- * is willing to work, which only a real request reveals (§6.3). Mirrors exist
- * to be a fallback; they are used like one. --- */
+ * Net is asked one question — has this machine got a proxy — and which server to ask, in what order and when to
+ * give up on one are settled here from what the services are, never from a measurement. --- */
 
 /** Tier one: the reference deployment, plus its two named backends. */
 const OFFICIAL_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
-  // The main name has been observed to round-robin over these two, so a sick
-  // backend behind it can be stepped past by asking for the other by name.
+  // The main name has been observed to round-robin over these two, so a sick backend behind it can be stepped past
+  // by asking for the other by name.
   "https://lz4.overpass-api.de/api/interpreter",
   "https://z.overpass-api.de/api/interpreter",
 ] as const
 
 /**
- * Tier two: third-party mirrors, reached only when tier one fails.
- *
- * FULL-PLANET INSTANCES ONLY. A region-limited mirror answers successfully with
- * data that silently excludes everything outside its region, which is worse
- * than an error by a wide margin — the caller has no way to notice. The order
- * within this tier carries no claim; it is only reached when the reference
- * deployment is unusable, and one donated server is not knowably better than
- * the next.
+ * Tier two, and full-planet instances only: a region-limited one answers a query about anywhere else with success
+ * and no data, which nothing in the response distinguishes from an area that really is empty (§6.3).
  */
 const MIRROR_ENDPOINTS = [
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
   "https://overpass.openstreetmap.fr/api/interpreter",
   "https://overpass.osm.jp/api/interpreter",
-  // Checked full-planet by asking it for an object in China and comparing with
-  // the official answer — the only check that means anything, since a
-  // region-limited instance answers a foreign query with success and no data.
+  // Checked full-planet by asking it for an object in China and comparing with the official answer.
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ] as const
 
-/**
- * A built-in constant rather than configuration: running a private instance is
- * advanced usage, and it does not justify a configuration surface every user
- * would have to understand (§6.3, §12).
- */
 export const OVERPASS_ENDPOINTS = [...OFFICIAL_ENDPOINTS, ...MIRROR_ENDPOINTS] as const
 
-/** The host Net is asked about, and the one every tunnel is opened towards. */
+/** Only Net's proxy question is asked about this host; the answer is then worn for every endpoint and service. */
 const AUTHORITY = { id: "osm", host: "overpass-api.de", port: 443 }
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 const OSM_API_BASE = "https://api.openstreetmap.org/api/0.6"
 
 /**
- * Minimum spacing between requests to one service.
- *
- * These are shared public services with published etiquette; going faster gets
- * everyone throttled. Each service keeps its own clock — a Nominatim call must
- * not have to wait behind an Overpass one.
+ * The public services throttle a caller who goes faster. A clock each, so a
+ * Nominatim call does not wait behind an Overpass one.
  */
 const MIN_INTERVAL_MS = { overpass: 1_100, nominatim: 1_100, api: 1_000 }
 
 /**
- * Passes over the endpoint list, and the wait between them.
- *
- * **The pool is the redundancy; passes are redundancy of redundancy.** Eight
- * endpoints already give one call eight independent chances, and a pass only
- * ends early — at the first endpoint that answers. So reaching a second pass
- * means the entire pool just failed, and asking the same eight servers again is
- * worth something only if the trouble is measured in seconds. Public instance
- * sickness is measured in minutes to hours.
- *
- * One retry, because the throttle already spreads a pass over about ten seconds
- * and a momentary 503 can clear in that time. Not two: a third pass would only
- * postpone the same answer, and it postpones it expensively — an endpoint that
- * accepts the connection and then says nothing costs the full client budget,
- * and a third pass over two such endpoints is another five minutes of silence
- * before the caller is told what was already known.
+ * One retry over the pool and no more: eight endpoints are themselves the redundancy, so a further pass repeats a
+ * verdict the first one reached, at the price of the full timeout of every endpoint that connects and then says
+ * nothing (§6.3 轮间退避).
  */
 const MAX_ROUNDS = 2
 const RETRY_BACKOFF_MS = 3_000
@@ -120,14 +60,8 @@ export interface OverpassResult {
   readonly json: unknown
   readonly endpoint: string
   /**
-   * The soft failure (§6.3 第四种失败).
-   *
-   * A normal status code and a well-formed body, carrying a note that says the
-   * result is incomplete — typically a server-side query timeout. It does NOT
-   * fail the endpoint over, because the data that did arrive is usable, but the
-   * call must be recorded as incomplete and say so. Checking only the status
-   * code and the parse would call this a complete success, which is the most
-   * dangerous of the four failure shapes.
+   * The server's own words for a result it reports incomplete, carried in a normal status code and a well-formed
+   * body — so a status-and-parse check alone reads this as a clean success (§6.3 第四种失败).
    */
   readonly remark?: string
 }
@@ -149,11 +83,8 @@ export interface Options {
 }
 
 export interface Interface {
-  /** Run an Overpass QL query, failing over across the ranked endpoints. */
   readonly overpass: (ql: string, options?: Options) => Effect.Effect<OverpassResult, OsmError>
-  /** Ask the geocoding service for fuzzy name candidates. */
   readonly nominatim: (query: string, options?: Options & { limit?: number }) => Effect.Effect<unknown, OsmError>
-  /** Fetch one object with its members from the canonical API. */
   readonly osmApi: (
     type: "relation" | "way" | "node",
     id: number,
@@ -173,8 +104,7 @@ const layer = Layer.effect(
 
     /** Where the last success was, so a healthy endpoint keeps being used (§6.3 粘性端点). */
     let sticky = 0
-    // Undefined means "not yet asked", which is not the same as "asked at time
-    // zero": there is nothing to space the first request away from.
+    // Undefined rather than zero: there is nothing to space the first request of a session away from.
     const lastAt: Partial<Record<keyof typeof MIN_INTERVAL_MS, number>> = {}
     /** One request at a time per service, so the spacing below cannot be raced past. */
     const turns = {
@@ -197,22 +127,9 @@ const layer = Layer.effect(
       )
 
     /**
-     * How this machine gets out — asked of Net once, then reused.
-     *
-     * One decision for all three OSM services, because it is a fact about the
-     * MACHINE, not about which server is being asked: these are ordinary public
-     * hosts, and a network that needs a proxy to reach one needs it to reach all
-     * of them. Where no proxy exists this settles to `direct` after a handful of
-     * refused loopback connections and never costs anything again.
-     *
-     * Re-asked only after a whole call has failed everywhere, which is the one
-     * moment the answer might have changed — a proxy started, stopped, or moved
-     * while the session was running.
-     *
-     * Serialized, because the two search engines are asked in PARALLEL: without
-     * this, the first search of a session would send two discovery sweeps at the
-     * same moment to learn the same thing. The second caller waits, finds the
-     * answer already there, and returns.
+     * One decision for all three services, because needing a proxy is a fact about the machine rather than about
+     * which public host is asked. Serialized because a search asks two of the services at once (index.ts), and the
+     * two would otherwise open a discovery sweep each to learn the same thing.
      */
     let known: NetTypes.Route | undefined
     const asking = Semaphore.makeUnsafe(1)
@@ -231,11 +148,6 @@ const layer = Layer.effect(
     const overpass = (ql: string, options: Options = {}): Effect.Effect<OverpassResult, OsmError> =>
       Effect.gen(function* () {
         const timeoutMs = options.timeoutMs ?? 120_000
-        // ONE route decision for the whole pool, taken against the official
-        // instance. These are all ordinary public hosts on the open internet:
-        // whether this machine needs a proxy to reach OSM is a fact about the
-        // machine, not about which mirror is being asked. Net answers it once —
-        // direct if direct works, the proxy it found if not.
         const route = yield* currentRoute
         const attempts: string[] = []
         const routeId = route.kind === "direct" ? "direct" : "proxy"
@@ -243,9 +155,6 @@ const layer = Layer.effect(
         for (let round = 0; round < MAX_ROUNDS; round++) {
           if (round > 0) yield* Effect.sleep(RETRY_BACKOFF_MS)
           for (let step = 0; step < OVERPASS_ENDPOINTS.length; step++) {
-            // From wherever the last success was, so a run that has already
-            // fallen through to a mirror does not re-pay the official
-            // instance timeout on every subsequent call (§6.3 粘性端点).
             const index = (sticky + step) % OVERPASS_ENDPOINTS.length
             const endpoint = OVERPASS_ENDPOINTS[index]!
             if (options.abort?.aborted) {
@@ -268,8 +177,7 @@ const layer = Layer.effect(
               const error = outcome.failure
               if (error instanceof DOMException)
                 return yield* Effect.fail(new OsmError("cancelled", "exhausted", attempts))
-              // A body that outgrew the ceiling is the caller's problem to
-              // solve by asking for less; another endpoint would do the same.
+              // Another endpoint would produce the same enormous answer; only asking for less can fix it.
               if (error.oversized) return yield* Effect.fail(new OsmError(error.message, "oversized", attempts))
               attempts.push(`${host(endpoint)} via ${routeId}: ${error.message}`)
               continue
@@ -285,9 +193,7 @@ const layer = Layer.effect(
             try {
               json = JSON.parse(response.body)
             } catch {
-              // The third failure shape, and the one a status check misses
-              // entirely: a busy instance answers 200 with an HTML error page.
-              // Parseability is therefore a failover criterion in its own right.
+              // A busy instance answers 200 with an HTML error page, so parseability is a failover test of its own.
               attempts.push(`${host(endpoint)} via ${routeId}: body was not JSON`)
               continue
             }
@@ -298,10 +204,8 @@ const layer = Layer.effect(
           }
         }
 
-        // Every endpoint just failed, which is the one moment worth doubting the
-        // route rather than the servers: a proxy may have started, stopped or
-        // moved since it was last asked about. Any other time, re-asking would
-        // be loopback connections spent to be told the same thing.
+        // Everything failed, which is the one moment worth doubting the route rather than the servers: a proxy may
+        // have started, stopped or moved since Net was asked.
         yield* forgetRoute
         return yield* Effect.fail(
           new OsmError(
@@ -382,8 +286,7 @@ const layer = Layer.effect(
             continue
           }
           const response = outcome.success
-          // Both are settled answers about the object, not transport trouble —
-          // retrying would only repeat them.
+          // Settled answers about the object rather than transport trouble, so another attempt only repeats them.
           if (response.status === 404) {
             return yield* Effect.fail(new OsmError(`${type}/${id} does not exist`, "not-found", attempts))
           }

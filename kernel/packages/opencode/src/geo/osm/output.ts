@@ -7,32 +7,11 @@ import { OsmConvert } from "./convert"
 
 /* --- GeoCode: writing results to disk (docs/GEOKERNEL.md §6.7).
  *
- * Two rules, both about what the NEXT reader of the directory will believe.
- *
- * A mixed-geometry file is a hazard downstream — GIS tools work a family at a
- * time and format conversion refuses it outright — so results with more than
- * one family are split into single-family siblings.
- *
- * And **nothing here ever overwrites an existing file**. A download is minutes
- * of somebody's time and a public service's, and the same path gets asked for
- * again all the time: to refresh, to add a field that was dropped, to retry
- * what came back short. When a name is taken the run numbers itself instead,
- * the way a browser does — literally, since `geo/naming.ts` owns that shape and
- * RunQgisAlgorithm answers with it too. This header claimed as much for a while
- * before it was true: the numbering here read `out-1.geojson`, which is a
- * programmer's convention and not the one the sentence promised.
- *
- * That replaces a conditional protection that used to sit above this module —
- * "do not write an empty result over a good one when something failed" — and
- * it is a better trade than tuning that condition was. A condition has to be
- * right about every way a run can end, and it was not: cancellation left no
- * failure behind, so a cancelled run wrote an empty collection over a
- * finished download. Not overwriting removes the question rather than
- * answering it (§12).
- *
- * The cost is real and belongs in the open: repeated runs accumulate files,
- * and geographic data is large. The user's disk fills with their own history
- * rather than losing it. --- */
+ * Two rules: a result spanning more than one geometry family is split into single-family siblings, because GIS
+ * readers work a family at a time and format conversion fails on a mixed file; and nothing here overwrites, so a
+ * taken name is numbered through `geo/naming.ts`. Repeated runs accumulate files rather than replace them: the
+ * conditional guard it replaced — never write an empty result over a good one — was defeated by cancellation,
+ * which left no failure behind (§12). --- */
 
 const FAMILIES: OsmConvert.Family[] = ["points", "lines", "polygons"]
 
@@ -43,12 +22,8 @@ export interface Written {
 }
 
 /**
- * The path a caller asked for, made safe to derive sibling names from.
- *
- * What we write is GeoJSON, so a path that does not say so gets told to. This
- * is not cosmetic: the sibling names below are built by inserting the family
- * before the extension, and a base with no recognizable extension would produce
- * a sibling identical to the base itself.
+ * What is written is GeoJSON, so a path that does not say so is told to. Not cosmetic: `siblingPath` inserts the
+ * family before the extension, and a base without one yields `out-points`, which no reader can dispatch on.
  */
 function normalizeBase(base: string): string {
   const extension = path.extname(base).toLowerCase()
@@ -61,29 +36,14 @@ function siblingPath(base: string, family: OsmConvert.Family): string {
 }
 
 /**
- * Whether a base name is spoken for.
- *
- * The siblings count, not just the base. Whether this run splits is not known
- * until its features have been grouped, so a base whose `-points` sibling
- * already exists is taken even when nothing sits at the base itself —
- * otherwise a splitting run would land on top of an earlier splitting run.
+ * The siblings count too: whether this run splits is unknown until its features are grouped, so a base whose
+ * `-points` sibling exists is taken even with nothing at the base — otherwise one split run overwrites another.
  */
 function taken(base: string): boolean {
   return existsSync(base) || FAMILIES.some((family) => existsSync(siblingPath(base, family)))
 }
 
-/**
- * The first free name at or after the requested one: `x.geojson`, then
- * `x (1).geojson`, `x (2).geojson`.
- *
- * The shape is `geo/naming.ts`'s and is deliberately not restated here — the
- * other tool that writes uses the same one, and a user who has seen a numbered
- * download should not have to learn a second convention for an algorithm
- * output. What IS this module's own is the meaning of `taken` below.
- *
- * The number goes on the BASE, so a split run's files share it and stay
- * legible as one run: `x (1)-points.geojson`, `x (1)-lines.geojson`.
- */
+/** Numbered on the base, before the split, so one run's files share a number: `x (1)-points.geojson` and siblings. */
 export function free(requested: string): string {
   const base = normalizeBase(requested)
   return GeoNaming.firstFree(
@@ -110,12 +70,6 @@ export function write(
       family: groups.size === 1 ? [...groups.keys()][0]! : "empty",
     })
   } else {
-    // The cleanup pass that used to sit here — deleting the siblings a run did
-    // not produce, so a directory held exactly one run's files — is gone. Not
-    // because it had become dangerous: it keyed on the base, and the base is
-    // now numbered, so it could only ever have removed this run's own names.
-    // It is gone because it had become pointless, and a reader would have
-    // spent time working out whether it still mattered.
     for (const family of FAMILIES) {
       const group = groups.get(family)
       if (!group || group.length === 0) continue

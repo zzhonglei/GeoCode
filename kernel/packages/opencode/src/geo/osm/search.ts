@@ -1,12 +1,8 @@
 export * as OsmSearch from "./search"
 
-/* --- GeoCode: finding an object by name (docs/GEOKERNEL.md §6.8 检索是双引擎).
- *
- * Two services, asked in parallel, merged and ranked once. They recall very
- * different sets — the geocoder is forgiving about word order, missing
- * suffixes and address context; the feature service matches official names
- * literally, which is what reaches campus and parenthesised variants — and
- * **either one alone misses**. The merge is the point of asking twice. --- */
+/* --- GeoCode: finding an object by name (docs/GEOKERNEL.md §6.8 检索是双引擎). The geocoder is forgiving about word
+ * order and address context, the feature service matches official names literally, and their recall differs enough
+ * that either alone misses — so this file is the merge and the one ranking over both. --- */
 
 export type OsmType = "relation" | "way" | "node"
 
@@ -20,7 +16,7 @@ export interface Candidate {
   center?: { lat: number; lon: number }
   importance?: number
   displayName?: string
-  /** Which engines found it. Two is the strongest confidence signal there is. */
+  /** Which lookups found it; more than one earns the bonus in `score`, including two paths of one engine. */
   readonly sources: Set<string>
   transit: boolean
   siteParent?: string
@@ -30,12 +26,8 @@ export interface Candidate {
 const TRANSIT_RELATION_TYPES = new Set(["route", "route_master", "public_transport"])
 
 /**
- * Whether this is a transport stop rather than the place it is named after.
- *
- * A stop named after a landmark is almost always noise in a place search, and
- * there are usually many of them — a metro station, its entrances, the bus
- * stops outside — so by count they can bury the one thing being looked for
- * (§6.8 对同名交通站点的降权).
+ * A stop named after a landmark is noise in a place search, and one landmark has many — the station, its entrances,
+ * the bus stops outside — so by count they bury what was asked for unless `score` pushes them down (§6.8 降权).
  */
 export function isTransit(tags: Record<string, string>): boolean {
   if (tags.public_transport) return true
@@ -71,12 +63,8 @@ function deriveClass(tags: Record<string, string>): { key: string; value: string
 }
 
 /**
- * Merge a candidate into the set, keyed by identity.
- *
- * Existing values win: whichever engine spoke first had a complete answer for
- * the field it filled, and the second engine's blank must not overwrite it.
- * `transit` is the exception and combines with AND — one engine saying "this
- * is a real place" is enough to stop treating it as a stop.
+ * Filled fields win, so a later engine's blank cannot erase an earlier engine's answer. `transit` is the exception
+ * and is ANDed: it is a guess from tags, and one engine not making it is enough to stop the penalty.
  */
 export function upsert(into: Map<string, Candidate>, incoming: Candidate) {
   const key = `${incoming.type}/${incoming.id}`
@@ -139,13 +127,8 @@ export function fromGeocoder(hit: GeocoderHit): Candidate | undefined {
 }
 
 /**
- * The ranking, from the four signals §6.8 names.
- *
- * The weights encode one ordering decision worth stating: **importance
- * dominates the dual-source bonus**. A famous place the geocoder knows well
- * must outrank an obscure namesake that happened to match both engines
- * literally — otherwise searching for a mountain returns a hill somewhere that
- * shares its name, purely because both engines saw the same string.
+ * The four signals of §6.8, weighted so that importance outruns the dual-source bonus: a well-known place must beat
+ * an obscure namesake that both engines merely happened to match on the same string.
  */
 export function score(candidate: Candidate): number {
   let value = 0
@@ -161,19 +144,13 @@ export function rank(candidates: Iterable<Candidate>, limit = 25): Candidate[] {
   return [...candidates].sort((a, b) => score(b) - score(a)).slice(0, limit)
 }
 
-/**
- * The first segment of a geocoder's display name.
- *
- * Used by the recovery path: when the literal search found no area, the
- * geocoder's canonical name is a better literal query than what the user typed
- * (§6.8 用地理编码服务返回的规范名反查要素服务).
- */
+/** The first segment of a display name, which is the place itself with the address context after it dropped. */
 export function canonicalName(hit: GeocoderHit): string | undefined {
   const name = hit.display_name?.split(",")[0]?.trim()
   return name && name.length >= 2 ? name : undefined
 }
 
-/** Whether the set holds anything area-like, which is what the recovery path looks for. */
+/** Area-like: a relation or way, transit excluded, since a downweighted stop is not the area a caller is missing. */
 export function hasArea(candidates: Iterable<Candidate>): boolean {
   for (const candidate of candidates) {
     if ((candidate.type === "relation" || candidate.type === "way") && !candidate.transit) return true

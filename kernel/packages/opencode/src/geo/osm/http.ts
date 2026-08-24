@@ -10,26 +10,14 @@ import type { NetTypes } from "../net/types"
 
 /* --- GeoCode: the HTTP floor of the OSM module (docs/GEOKERNEL.md §6.3).
  *
- * `node:https` rather than `fetch`, and the reason is structural: Net hands out
- * its in-process route as a Node agent (§3.3), because a dispatcher would mean
- * a dependency the target runtime cannot resolve. The route is carried PER
- * REQUEST rather than installed globally — a process-wide setting would reach
- * every other thing the kernel does, and the caller here is one module deciding
- * how its own traffic travels, not how the process does.
- *
- * Nothing here decides WHICH endpoint to use or what to do when one fails;
- * that is the client's business. This module only knows how to make one
- * request safely. --- */
+ * `node:https` rather than `fetch`, because Net hands its route out as a Node agent (§3.3) and it is worn per
+ * request; which endpoint to use and what to do when one fails belong to the client above. --- */
 
 export const USER_AGENT = "GeoCode-osm/1.0"
 
 /**
- * The ceiling on a single response body.
- *
- * Counted while receiving, never from a header: the public instances answer
- * with chunked transfer encoding and send no length at all, so a header check
- * is not a weak guard but no guard whatsoever. A runaway query has to be cut
- * off mid-flight or it takes the process down with it.
+ * The ceiling on one response body, counted while receiving rather than read from a header: the public instances
+ * answer chunked and send no length at all, so a header check would be no guard whatsoever (§6.3 流式字节护栏).
  */
 export const MAX_RESPONSE_BYTES = 200 * 1024 * 1024
 
@@ -38,7 +26,6 @@ export class OsmHttpError extends Error {
     message: string,
     readonly status?: number,
     readonly endpoint?: string,
-    /** True when the body was cut off for exceeding the ceiling. */
     readonly oversized = false,
   ) {
     super(message)
@@ -49,7 +36,7 @@ export class OsmHttpError extends Error {
 export interface Request {
   readonly url: string
   readonly method?: "GET" | "POST"
-  /** Form body for POST; the public query interface takes `data=<QL>`. */
+  /** Sent as `application/x-www-form-urlencoded`, which is how the Overpass interface takes its `data=<QL>`. */
   readonly body?: string
   readonly route: NetTypes.Route
   readonly timeoutMs: number
@@ -62,11 +49,8 @@ export interface Response {
 }
 
 /**
- * One request, one route, with the size ceiling enforced as bytes arrive.
- *
- * Fails with `OsmHttpError` for anything the caller might want to fail over
- * from, and passes an abort straight through — a cancelled call is not a
- * failed endpoint and must not cost one.
+ * One request over one route, with the ceiling enforced as bytes arrive. An abort surfaces as `DOMException` and
+ * everything else as `OsmHttpError`, which is how the caller tells a cancelled call from a failed endpoint.
  */
 export function request(input: Request): Effect.Effect<Response, OsmHttpError | DOMException> {
   return Effect.callback<Response, OsmHttpError | DOMException>((resume) => {
@@ -145,7 +129,7 @@ export function request(input: Request): Effect.Effect<Response, OsmHttpError | 
 
     function cleanup() {
       input.abort?.removeEventListener("abort", onAbort)
-      // The tunnel agent is built per request, so its sockets are ours to close.
+      // A tunnel agent is built for this request alone, so its sockets are ours to close; a direct route has none.
       agent?.destroy()
     }
 
@@ -159,14 +143,6 @@ export function request(input: Request): Effect.Effect<Response, OsmHttpError | 
   })
 }
 
-/**
- * The request surface as a service.
- *
- * Same shape as Runtime's: the one place that touches the outside world sits
- * behind an interface, so the reliability layer above can be exercised against
- * scripted responses — failover, stickiness, soft failures — without a network.
- * The real path is proven by running against the real services.
- */
 export interface Interface {
   readonly request: (input: Request) => Effect.Effect<Response, OsmHttpError | DOMException>
 }

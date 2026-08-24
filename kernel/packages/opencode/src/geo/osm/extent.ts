@@ -7,25 +7,11 @@ import { OsmQuery } from "./query"
 
 /* --- GeoCode: the spatial extent contract (docs/GEOKERNEL.md §6.4).
  *
- * One string with an explicit kind prefix, so the four forms can never be
- * mistaken for one another:
- *
- *   area:R10717504                    an OSM relation, used as an area
- *   bbox:30.52,114.34,30.56,114.38    south,west,north,east in EPSG:4326
- *   around:1000,30.54,114.37          radius in metres, then centre
- *   file:/abs/path/boundary.geojson   a local study-area boundary
- *
- * THE SUPERSET RULE governs everything below it:
- *
- *   any spatial reduction of a boundary must produce a SUPERSET of it.
- *
- * The asymmetry is the whole argument. Downloading too much can be clipped
- * afterwards, exactly and at leisure. Downloading too little cannot be
- * noticed at all — features near the edge are simply absent, and nobody can
- * see what is not there. That is the worst failure available to a data
- * acquisition tool, so every approximation here is chosen to err outward. --- */
+ * One string, one explicit kind prefix — area, bbox, around, file — and every reduction of a boundary below errs
+ * outward, which is the superset rule: too much comes back and can be clipped afterwards, too little is a strip of
+ * features near the edge that nobody can see is missing. --- */
 
-/** Vertices the server accepts in one polygon filter, with margin. */
+/** Above this a ring degrades to its convex hull; 300 sits under the server's vertex budget with margin (§6.4). */
 const MAX_POLY_VERTICES = 300
 /** Rings queried individually before falling back to one bounding box over all. */
 const MAX_RINGS = 8
@@ -36,27 +22,12 @@ export interface Resolved {
   readonly spatial: OsmQuery.Spatial
   /** Human-readable, for the caller's report. */
   readonly label: string
-  /**
-   * True when the query sent to the server is exactly the boundary asked for.
-   *
-   * False means the QUERY covers more ground than requested. It is never the
-   * other way round. It says nothing about the finished result: when every
-   * extent carries a `boundary`, the download narrows itself back afterwards
-   * (`intersect.ts`) and what the caller receives is exact either way.
-   */
+  /** True when the query is the boundary asked for, holes aside; false means it covers more ground, never less. */
   readonly exact: boolean
   /**
-   * The real boundary, for repeating the test the server could not run.
-   *
-   * Present for every extent whose geometry we hold — today that is `file:`
-   * alone. `area:` names a relation whose shape only the server knows, and an
-   * extent that cannot state its own boundary makes the whole call unfilterable
-   * (§6.4): its features are legitimately outside the other extents, so
-   * filtering to those would delete them.
-   *
-   * Carried even when `exact` is true. On a multi-extent call the filter is the
-   * UNION of these, and a boundary left out of the union deletes the features
-   * that only it asked for.
+   * The real boundary, so `intersect.ts` can repeat the test the server could not run — `file:` alone today, since
+   * `area:` names a relation whose shape only the server holds, and one extent without a boundary makes the whole
+   * call unfilterable (§6.4).
    */
   readonly boundary?: readonly OsmIntersect.Polygon[]
 }
@@ -146,9 +117,8 @@ function fromFile(value: string, readFile: (file: string) => string): Resolved {
   }
   let document: unknown
   try {
-    // Written as an escape on purpose: a literal byte-order mark in source is
-    // invisible, and any editor or tool that normalizes it away would silently
-    // turn this into a no-op.
+    // An escape rather than the mark itself, which is invisible in source and would be dropped by anything that
+    // normalizes the file. `JSON.parse` throws on a leading mark.
     document = JSON.parse(raw.replace(/^\uFEFF/, ""))
   } catch {
     throw new Error(`the boundary file is not valid JSON: ${value}`)
@@ -156,14 +126,12 @@ function fromFile(value: string, readFile: (file: string) => string): Resolved {
 
   const shapes = polygons(document)
   if (shapes.length === 0) throw new Error(`the boundary file holds no Polygon or MultiPolygon geometry: ${value}`)
-  // Widening reads the outer rings only; the holes travel with `boundary` to
-  // the filter, which is the one place they change an answer.
+  // Widening reads the outer rings only; the holes travel with `boundary` to the filter, which runs only when !exact.
   const rings = shapes.map((shape) => shape.outer)
   for (const ring of rings) assertWgs84(ring, value)
   const name = path.basename(value)
 
-  // More parts than we will query one by one. One box over everything is a
-  // superset of all of them — coarse, but never short.
+  // One box over everything: coarse, and still a superset of every part.
   if (rings.length > MAX_RINGS) {
     return {
       spatial: { prelude: "", filters: [boundingFilter(rings)] },
@@ -181,11 +149,8 @@ function fromFile(value: string, readFile: (file: string) => string): Resolved {
       filters.push(polygonFilter(deduped))
       continue
     }
-    // Too detailed to send as-is. The convex hull is the reduction that CANNOT
-    // lose anything: it contains every original vertex by construction. A
-    // conventional line simplifier would be a better fit visually and a
-    // disaster here — it cuts inward, and every metre it cuts is a strip of
-    // features that vanish without trace (§6.4 不使用常规的线简化算法).
+    // A hull, never a line simplifier: simplifiers cut inward, and every metre cut is features that vanish without
+    // trace (§6.4 不使用常规的线简化算法).
     approximated = true
     const hull = convexHull(deduped)
     filters.push(hull.length <= MAX_POLY_VERTICES ? polygonFilter(hull) : boundingFilter([ring]))
@@ -229,16 +194,8 @@ function clean(ring: unknown): Point[] {
 }
 
 /**
- * Every polygon in the document, largest first, holes included.
- *
- * All of them, not the biggest: a study area made of separated parts is
- * ordinary, and keeping only the largest would drop the others without a word.
- *
- * **The holes are kept even though widening ignores them.** Widening may: a
- * boundary read without its holes is larger than the real one, and larger is
- * the safe direction (§6.4). Filtering may not — a hole read as solid ground
- * keeps every feature inside an enclave that was deliberately excluded, and
- * that is the same wrong answer as never filtering at all.
+ * Every polygon in the document, most vertices first, holes included: a study area in separated parts is ordinary,
+ * and a hole read as solid ground returns the features of an enclave that was deliberately excluded (§6.4).
  */
 export function polygons(document: unknown): OsmIntersect.Polygon[] {
   const found: OsmIntersect.Polygon[] = []
@@ -295,13 +252,7 @@ function dropRepeats(ring: readonly Point[]): Point[] {
   return out
 }
 
-/**
- * Andrew's monotone chain convex hull, returned as a closed ring.
- *
- * Guaranteed to contain every input point — which is the entire reason it is
- * used here rather than a simplifier that would follow the boundary more
- * closely (§6.4).
- */
+/** Andrew's monotone chain, returned as a closed ring that contains every input point by construction (§6.4). */
 export function convexHull(points: readonly Point[]): Point[] {
   const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1])
   const unique: Point[] = []
@@ -329,13 +280,7 @@ export function convexHull(points: readonly Point[]): Point[] {
   return hull
 }
 
-/**
- * Whether every point lies inside or on the ring.
- *
- * Not used in production — it exists so the superset rule can be TESTED rather
- * than asserted, which for the one rule this module is built around is worth
- * the few lines.
- */
+/** Whether every point lies inside or on the ring — how the tests check the superset rule instead of asserting it. */
 export function containsAll(ring: readonly Point[], points: readonly Point[]): boolean {
   return points.every((point) => inside(ring, point))
 }
@@ -346,8 +291,7 @@ function inside(ring: readonly Point[], point: Point): boolean {
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const [xi, yi] = ring[i]!
     const [xj, yj] = ring[j]!
-    // On an edge counts as inside: the hull passes through the original
-    // vertices, and those must not read as outside it.
+    // On an edge counts as inside: a hull runs through the original vertices, which must not read as outside it.
     const cross = (xj - xi) * (y - yi) - (yj - yi) * (x - xi)
     const withinX = Math.min(xi, xj) - 1e-12 <= x && x <= Math.max(xi, xj) + 1e-12
     const withinY = Math.min(yi, yj) - 1e-12 <= y && y <= Math.max(yi, yj) + 1e-12

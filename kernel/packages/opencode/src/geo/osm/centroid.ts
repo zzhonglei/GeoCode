@@ -3,31 +3,17 @@ export * as OsmCentroid from "./centroid"
 import type { OsmConvert } from "./convert"
 import { OsmQuery } from "./query"
 
-/* --- GeoCode: collapsing features to representative points
- * (docs/GEOKERNEL.md §6.8 几何归一化).
+/* --- GeoCode: collapsing features to representative points (docs/GEOKERNEL.md §6.8 几何归一化).
  *
- * Not a convenience. The correct way to build a point dataset of facilities is
- * to collect EVERY type and normalize afterwards — asking only for point
- * elements silently omits everything mapped as an area, and for most kinds of
- * facility that is the majority of them. A hospital is a building; a park is a
- * polygon; a school is a campus. Requesting `node` returns the handful that
- * happen to be mapped as a dot and reports success. --- */
+ * A correctness rule rather than a convenience: a point dataset of facilities is built by collecting every type and
+ * normalizing here, because requesting `node` alone drops everything mapped as an area and reports success. --- */
 
 type Position = [number, number]
 
 /**
- * Area-weighted centroid of a ring, falling back to the vertex mean when degenerate.
- *
- * **Computed relative to the ring's first vertex, and the shift is not
- * optional.** The cross products are differences of products of the raw
- * coordinates, and in longitude/latitude those products are around 3500 while
- * a building-sized ring makes them differ by about 0.01 — five significant
- * digits cancel on every term, and the accumulated error reaches the size of
- * the answer. Measured on a real 40 m car park in Wuhan: the unshifted result
- * landed 2 m outside the ring's own bounding box, which a centroid cannot do.
- *
- * The failure is worst exactly where this is used most — small features, far
- * from the origin, which is what a city is made of.
+ * Area-weighted centroid of a ring, or the vertex mean when degenerate. Relative to the first vertex, and the shift
+ * is not optional: on raw longitude and latitude the cross products of a building-sized ring cancel five significant
+ * digits, enough to put the answer outside the ring's own bounding box.
  */
 export function ringCentroid(ring: readonly Position[]): Position {
   const [ox, oy] = ring[0] ?? [0, 0]
@@ -106,8 +92,7 @@ function pointOf(geometry: any): Position | undefined {
     case "Polygon":
       return geometry.coordinates[0] ? ringCentroid(geometry.coordinates[0]) : undefined
     case "MultiPolygon": {
-      // The largest part, so a country's representative point does not land on
-      // an offshore island.
+      // The largest part, so a country's representative point does not land on an offshore island.
       const largest = [...geometry.coordinates].sort(
         (a: Position[][], b: Position[][]) => ringArea(b[0] ?? []) - ringArea(a[0] ?? []),
       )[0]
@@ -119,15 +104,9 @@ function pointOf(geometry: any): Position | undefined {
 }
 
 /**
- * A point that can be plotted, or nothing.
- *
- * The finiteness check belongs here rather than in each branch above. A ring
- * with no vertices divides by zero, so `ringCentroid` answers `[NaN, NaN]` —
- * an array, therefore truthy, therefore counted as a success. It left as
- * `[null, null]` the moment `JSON.stringify` saw it: invalid GeoJSON, written
- * to the user's file, and absent from the loss list that exists to name
- * precisely this. Every branch above can go degenerate the same way, and the
- * contract all of them owe is the one in this docstring.
+ * A point that can be plotted, or nothing. An empty ring divides by zero, so `ringCentroid` answers `[NaN, NaN]` —
+ * an array, therefore truthy, and `JSON.stringify` writes it as `[null, null]`: invalid GeoJSON on the user's disk,
+ * missing from the dropped list. Every branch above can go degenerate the same way, so the check is here.
  */
 function representativePoint(geometry: any): Position | undefined {
   const point = pointOf(geometry)
@@ -135,11 +114,8 @@ function representativePoint(geometry: any): Position | undefined {
 }
 
 /**
- * Collapse every feature to one point, recording what it used to be.
- *
- * `original_geometry` is what keeps the transformation traceable: a point that
- * was a campus is a different fact from a point that was mapped as a dot, and
- * an analysis may well care.
+ * Collapse every feature to one point. A feature already a point passes through untouched, so `original_geometry`
+ * marks exactly the ones that were converted.
  */
 export function normalize(features: readonly OsmConvert.Feature[]): {
   features: OsmConvert.Feature[]
@@ -150,11 +126,7 @@ export function normalize(features: readonly OsmConvert.Feature[]): {
   for (const feature of features) {
     const point = representativePoint(feature.geometry)
     if (!point) {
-      // The id shape `OsmGetObjects` parses, which is the whole point of naming
-      // these rather than counting them: the caller is being told to fetch them
-      // on their own. `way/1` is not that shape — `OsmQuery.parseRef` throws on
-      // it — so half the list arrived unusable, from the half of the pipeline
-      // that filled it here instead of in `convert.ts`.
+      // `W1`, the shape `OsmQuery.parseRef` accepts, because the caller is told to fetch these objects on their own.
       dropped.push(
         OsmQuery.formatRef({ type: String(feature.properties.osm_type), id: Number(feature.properties.osm_id) }),
       )

@@ -1,9 +1,7 @@
 export * as OsmQuery from "./query"
 
-/* --- GeoCode: building Overpass QL (docs/GEOKERNEL.md §6.5).
- *
- * Pure functions, no network — which is why every rule below can be pinned by
- * a test rather than discovered against a live service. --- */
+/* --- GeoCode: building Overpass QL (docs/GEOKERNEL.md §6.5). Pure functions, no network, so the rules below are
+ * pinned by test/geo/osm-query.test.ts rather than against a live service. --- */
 
 export type OsmType = "relation" | "way" | "node"
 
@@ -30,14 +28,8 @@ export function formatRef(ref: { readonly type: string; readonly id: number }): 
 }
 
 /**
- * The area id an Overpass area filter needs.
- *
- * Relations only, and the refusal is deliberate. Way-derived area ids are no
- * longer materialized by the public instances — the filter resolves to an
- * empty set while the very same place still matches by proximity — so
- * accepting a way here would download nothing and report success. §6.5 calls
- * this class out by name: a known limitation is refused with an explanation,
- * never answered with silence.
+ * Relations only: the public instances no longer materialize way-derived area ids, so returning one would build a
+ * filter that matches nothing and a download that reports success over an empty set (§6.5 已知限制).
  */
 export function areaId(ref: OsmRef): number {
   if (ref.type === "relation") return 3_600_000_000 + ref.id
@@ -52,13 +44,7 @@ export function escapeLiteral(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
 }
 
-/**
- * Escape regex metacharacters so a name matches literally.
- *
- * Without this a name containing `()[]{}.*+?|^$` — ordinary in official names,
- * for instance a branch written as `成都(高新)店` — either breaks the query
- * outright or, worse, silently matches nothing (§6.5 字面转义).
- */
+/** Official names carry metacharacters — a branch written `成都(高新)店` — and unescaped they match something else. */
 export function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -80,12 +66,8 @@ export function normalizeTypes(types: string | undefined): TypeSelector[] {
 }
 
 /**
- * Turn a caller-friendly tag filter into Overpass bracket syntax.
- *
- *   `amenity=hospital`      → `["amenity"="hospital"]`
- *   `healthcare`            → `["healthcare"]`
- *   `highway~primary|trunk` → `["highway"~"primary|trunk"]`
- *   `["amenity"="clinic"]`  → passed through, already bracketed
+ * `amenity=hospital` → `["amenity"="hospital"]`, `healthcare` → `["healthcare"]`, `highway~primary|trunk` →
+ * `["highway"~"primary|trunk"]`, and anything already bracketed passes through untouched.
  */
 export function tagClause(tag: string): string {
   const text = tag.trim()
@@ -98,7 +80,7 @@ export function tagClause(tag: string): string {
   return `["${escapeLiteral(text)}"]`
 }
 
-/** The tag KEY out of any accepted filter form — what the field policy keeps by. */
+/** The key out of any of those forms — what the field policy keeps by. */
 export function tagKey(tag: string): string {
   const text = tag.trim()
   if (text.startsWith("[")) return /^\[\s*"([^"]+)"/.exec(text)?.[1] ?? text
@@ -108,13 +90,7 @@ export function tagKey(tag: string): string {
 export interface Spatial {
   /** Statements to put before the union, e.g. `area(3610717504)->.a;`. */
   readonly prelude: string
-  /**
-   * Filter suffixes, one clause emitted per entry.
-   *
-   * A list rather than a single value because a study area is often several
-   * separated parts, and querying only the largest would silently drop the
-   * rest (§6.4 多部分边界).
-   */
+  /** One clause per entry: a study area is often several parts, and querying only the largest loses the rest. */
   readonly filters: readonly string[]
 }
 
@@ -181,7 +157,7 @@ export function tagStats(input: {
   ])
 }
 
-/** Per-type caps for a name search. Relations first — see `nameSearch`. */
+/** Per-type caps for a name search. */
 export interface Caps {
   readonly relation: number
   readonly way: number
@@ -191,20 +167,9 @@ export interface Caps {
 const DEFAULT_CAPS: Caps = { relation: 15, way: 15, node: 10 }
 
 /**
- * Search by name.
- *
- * Three decisions, each one paid for:
- *
- * - **Unanchored substring**, because official names carry campus, branch and
- *   parenthesised suffixes that nobody types.
- * - **Case folding only when the pattern has latin letters.** Lowercase input
- *   is the norm in latin scripts and literal matching would go blind, but the
- *   folding scan costs measurably more server-side and CJK has no case to fold
- *   — paying for it there buys nothing.
- * - **A cap per type, relations emitted first.** With one global cap a
- *   planet-wide name match is consumed by nodes and ways before a single
- *   relation appears, and the relation is usually the thing being looked for
- *   (§6.5 类型配额).
+ * Unanchored, since official names carry campus and branch suffixes nobody types. Case folding costs server-side
+ * time and CJK has no case, so it is added only for a pattern with latin letters; each type gets its own cap and
+ * relations are asked for first, because a shared cap is spent on nodes before a relation appears (§6.5 类型配额).
  */
 export function nameSearch(input: {
   readonly query: string
@@ -229,13 +194,7 @@ export function nameSearch(input: {
   ])
 }
 
-/**
- * Expand a site relation into its members.
- *
- * A campus or complex is often mapped as a site relation whose members carry
- * quite different names, so a name search alone reaches the parent and stops
- * (§6.8 展开成员名称不同的组合关系).
- */
+/** A campus is a site relation whose members are named differently, so a name search reaches the parent and stops. */
 export function siteExpansion(input: { readonly query: string; readonly timeoutSec: number }): string {
   const name = escapeLiteral(escapeRegex(input.query))
   return assemble([
@@ -250,12 +209,8 @@ export function siteExpansion(input: { readonly query: string; readonly timeoutS
 }
 
 /**
- * Fetch a set of objects with geometry inlined, in ONE query.
- *
- * Inlined rather than assembled from sibling elements afterwards: the
- * cross-element form silently produces partial boundaries on large relations,
- * which is the worst outcome available here — a partial boundary looks like a
- * boundary (§6.8 按标识下载).
+ * One query for the whole set, with `out geom` rather than stitching sibling elements afterwards: the cross-element
+ * form silently produces partial boundaries on large relations, and a partial boundary looks like a boundary (§6.8).
  */
 export function objects(input: { readonly refs: readonly OsmRef[]; readonly timeoutSec: number }): string {
   const groups = new Map<OsmType, number[]>()

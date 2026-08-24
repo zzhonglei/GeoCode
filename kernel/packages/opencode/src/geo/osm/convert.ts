@@ -3,15 +3,10 @@ export * as OsmConvert from "./convert"
 import osm2geojson from "osm2geojson-lite"
 import { OsmQuery } from "./query"
 
-/* --- GeoCode: OSM elements into features (docs/GEOKERNEL.md §6.6).
- *
- * The assembly itself — filling coordinates back into ways, stitching ways
- * into closed rings, deciding which ring is a hole — belongs to the library.
- * What lives here is everything around it: which feature is the one that was
- * asked for, what the field set is, and the checks that stop a partial
- * assembly from being handed over as a whole one. --- */
+/* --- GeoCode: OSM elements into features (docs/GEOKERNEL.md §6.6). Assembly is the library's; what is here is
+ * picking out the feature that was asked for, the field set, and the check for a partial assembly. --- */
 
-/** Keys that classify a feature, in the order a category is derived from them. */
+/** Classification keys in priority order — a category is the first one present. */
 const CLASS_KEYS = [
   "amenity",
   "boundary",
@@ -30,19 +25,13 @@ const CLASS_KEYS = [
   "public_transport",
 ] as const
 
-/** Always present, whatever the field policy says. */
+/** Always written, whatever the policy keeps. */
 export const CORE_FIELDS = ["osm_id", "osm_type", "name", "category"] as const
 
 /** Consumed by a core column, so never counted as dropped. */
 const CORE_TAG_KEYS = new Set(["name"])
 
-/**
- * Metadata the library mixes into properties alongside the real tags.
- *
- * `id` and `bounds` come from the element and the query, not from the map —
- * letting them into the field set would present them as tags that could be
- * filtered on (§6.6 一处细节).
- */
+/** The library mixes these into properties: `id` is a string, so without this `rawTags` would pass it as a tag. */
 const INTERNAL_PROPERTY_KEYS = new Set(["id", "bounds"])
 
 export interface Feature {
@@ -57,15 +46,7 @@ export interface FieldPolicy {
   readonly keepAll: boolean
 }
 
-/**
- * What to keep: the keys the download was queried by, plus anything the caller
- * named. `*` switches to lossless mode instead.
- *
- * A lean set by default because the alternative is a table nobody can read —
- * OSM tags are freeform, and a busy area contributes hundreds of distinct
- * keys. Everything dropped is COUNTED and reported, so the caller can see what
- * it did not get and ask again for exactly that (§6.6 字段契约).
- */
+/** The keys the download was queried by, plus any the caller named; `*` asks for lossless instead of a field. */
 export function fieldPolicy(queryTags: readonly string[], fields?: readonly string[]): FieldPolicy {
   const keep = new Set<string>()
   for (const tag of queryTags) {
@@ -120,9 +101,6 @@ export function buildProperties(
     osm_id: id,
     osm_type: type,
     name: tags.name ?? null,
-    // One "key=value" string rather than a key column and a value column: a
-    // bare `type` column would collide with GeoJSON's own, and the pair is
-    // only ever read together (§6.6).
     category: derived.category ?? null,
   }
   const dropped: string[] = []
@@ -141,9 +119,9 @@ export function buildProperties(
 
 export interface Converted {
   readonly features: Feature[]
-  /** Elements that matched but could not be assembled — reported, never silent. */
+  /** Elements that matched but would not assemble. */
   readonly unassembled: string[]
-  /** Dropped tag keys with counts, so the caller can ask again for what it needs. */
+  /** Dropped tag keys with counts, so the caller can ask again for what it lost. */
   readonly droppedFields: Map<string, number>
 }
 
@@ -152,14 +130,8 @@ function tally(target: Map<string, number>, keys: readonly string[]) {
 }
 
 /**
- * Convert a result set ELEMENT BY ELEMENT.
- *
- * Each element from `out geom` carries its own geometry inline, so converting
- * it alone is enough — and isolation is the point. Handed the whole set at
- * once, the library lets elements consume one another: a relation absorbs its
- * member ways even when those are tagged in their own right, and a relation
- * that fails to assemble takes its members down with it. That is a SILENT
- * loss — the features simply are not in the output (§6.6 逐元素隔离转换).
+ * One element per call, which `out geom` allows because each carries its geometry inline. Handed the whole set, the
+ * library lets elements consume one another, and a relation that will not assemble takes its members with it (§6.6).
  */
 export function convertElements(raw: unknown, policy: FieldPolicy): Converted {
   const elements: any[] = (raw as any)?.elements ?? []
@@ -193,11 +165,8 @@ export function convertElements(raw: unknown, policy: FieldPolicy): Converted {
 }
 
 /**
- * Convert a whole batch at once, and pick one object out of it.
- *
- * ONLY safe when a single object is wanted, for exactly the reason above: in a
- * batch the elements interfere. Used for the classic full-object format, where
- * member geometry lives in sibling elements and one-at-a-time is not possible.
+ * Only ever for one object, because the interference above applies to any batch. Used on the OSM API's `/full`
+ * response, where a relation's geometry sits in sibling elements and element-by-element assembles nothing at all.
  */
 export function convertBatch(
   raw: unknown,
@@ -217,7 +186,6 @@ export function convertBatch(
   return { features, droppedFields }
 }
 
-/** The feature matching a reference, out of whatever a conversion produced. */
 export function pick(features: readonly Feature[], ref: OsmQuery.OsmRef): Feature | undefined {
   return features.find((feature) => feature.properties.osm_type === ref.type && feature.properties.osm_id === ref.id)
 }
@@ -232,17 +200,9 @@ export function countVertices(geometry: any): number {
 }
 
 /**
- * Whether an assembled geometry plausibly used the nodes it was given.
- *
- * The failure this guards against is specific and was seen in production: a
- * large boundary assembles from a fraction of its nodes and comes back looking
- * like a perfectly ordinary polygon. Nothing downstream can tell — a partial
- * boundary IS a boundary, just the wrong one, and every area, clip and count
- * computed from it is quietly wrong.
- *
- * Deliberately loose. Rings close and share endpoints, so an exact match is
- * not expected; only a shortfall large enough to mean whole segments went
- * missing counts (§6.6 大型关系的装配校验).
+ * A partial boundary is still a shape nothing downstream can question, so a large one is checked against the nodes
+ * it was built from. Small objects are exempt and the ratio is generous because the two counts never line up
+ * exactly — only a shortfall big enough to mean whole segments went missing counts (§6.6 大型关系的装配校验).
  */
 export function assemblyLooksComplete(geometry: any, rawNodeCount: number): boolean {
   if (rawNodeCount <= 50) return true
@@ -295,7 +255,6 @@ export function splitByFamily(features: readonly Feature[]): Map<Family, Feature
   return groups
 }
 
-/** The dropped-field tally as "key(count)", commonest first. */
 export function formatDroppedFields(droppedFields: Map<string, number>, cap = 30): string[] {
   return [...droppedFields.entries()]
     .sort((a, b) => b[1] - a[1])
