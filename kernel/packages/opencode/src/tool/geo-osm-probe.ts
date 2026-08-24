@@ -3,34 +3,13 @@ import * as Tool from "./tool"
 import { GeoOsm } from "@/geo"
 import DESCRIPTION from "./geo-osm-probe.txt"
 
-/* --- GeoCode: OsmProbe, the step that makes the OSM group a workflow
- * (docs/TOOLS.md §3, GEOKERNEL §6.8).
- *
- * Reconnaissance exists because of how public services answer a query that is
- * too big: not with an error, but with a timeout or a truncation that arrives
- * looking like data. Knowing the size beforehand is the difference between a
- * download and a mystery, and that is the whole reason the four capabilities
- * are a workflow rather than a list.
- *
- * Like the rest of this group there is no environment, no gate and no
- * guidance (§6.2). What the tool layer owns here is the numbers' CAVEATS — an
- * approximated boundary, a service that answered early, an extent that never
- * answered. Each one changes what the numbers mean, and none of them is
- * visible in the numbers themselves. So they are printed first, before the
- * figures they qualify: a reader who meets them afterwards has already read
- * the figures as complete. --- */
+/* --- GeoCode: OsmProbe, the reconnaissance step (docs/TOOLS.md §3, GEOKERNEL §6.8). No environment, gate or
+ * guidance (§6.2); what this layer owns is the caveats — a widened boundary, a service that answered early, an
+ * extent that never answered — none of which shows in the numbers, so they are printed above the numbers. --- */
 
-/** Values printed before the tail is summarized. The old build settled on this. */
 const TOP_VALUES = 30
 
-/**
- * Said where it qualifies figures that did come back.
- *
- * A cancelled run is PARTIAL, not failed: the numbers under this line are real,
- * they simply do not cover every extent that was asked about. The two download
- * tools say the same thing in their own nouns; this tool used to say nothing at
- * all unless the run came back completely empty.
- */
+/** Partial, not failed: passed only where figures came back, since `nothing()` covers a run that produced none. */
 const CANCELLED = "cancelled — extents not reached before it stopped contributed nothing to these numbers."
 
 export const Parameters = Schema.Struct({
@@ -52,17 +31,10 @@ export const Parameters = Schema.Struct({
 })
 
 /**
- * `truncated: false` is a claim about this tool, and a sound one.
- *
- * Both modes are bounded by construction — one line per extent, and a value
- * list cut to `TOP_VALUES` with the remainder summarized — so the size of this
- * output does not follow the size of the area. §5.2's first strategy, and the
- * declaration is what keeps upstream's head truncation away from an answer
- * whose caveats sit at the top and whose totals sit at the bottom.
- *
- * Failures are `error_code`, never `error: true`: that flag is reserved for an
- * environment that is not ready, and this group has no environment to be
- * (§6.2). Everything that can go wrong here is data or parameters.
+ * Setting `truncated` at all skips upstream's truncation (tool.ts), which keeps the head and drops the tail — here
+ * the totals. False is honest: one line per extent, and a value list cut to `TOP_VALUES` (docs/TOOLS.md §5.2).
+ * Failures are `error_code`, never `error: true`, which means an environment is not ready and this group has none
+ * to be (§6.2).
  */
 type Metadata = {
   [key: string]: unknown
@@ -70,28 +42,18 @@ type Metadata = {
 }
 
 /**
- * The caveats, in the order they change the reading.
- *
- * A widened boundary rescales every number at once, so it comes first; an
- * incomplete answer and a failed extent are per-extent and follow. The
- * service's own wording is carried through verbatim rather than summarized as
- * "incomplete" — "timed out" and "this query is too broad" ask the caller to
- * do opposite things, and only the service knows which one happened
- * (§6.3 第四种失败).
+ * Ordered by reach: a widened boundary rescales every number at once, the per-extent notes follow. The service's
+ * wording is carried through verbatim — "timed out" and "this query is too broad" ask for opposite things, and only
+ * the service knows which happened (§6.3 第四种失败).
  */
 function caveats(
   result: {
-    // Required, not optional. It used to be optional because only `count`
-    // reported it, which made `result.exact === false` unreachable in
-    // distribution mode — a widened boundary rescaled that answer too and said
-    // nothing. The kernel now reports it for both, and typing it as required is
-    // what stops the branch going dead again.
+    /** Required rather than optional: an omitted field is falsy here, so the note below would print on every run. */
     readonly exact: boolean
     readonly incomplete: readonly GeoOsm.Incomplete[]
     readonly failed: readonly GeoOsm.Failure[]
   },
   verb: string,
-  /** The sentence for a cancelled run, or undefined when it ran to the end. */
   cancelled?: string,
 ): string[] {
   const lines: string[] = []
@@ -107,14 +69,12 @@ function caveats(
   for (const entry of result.failed) {
     lines.push(`NOTE: ${entry.extent} was not ${verb} — ${entry.reason}`)
   }
-  // Last, because it qualifies whatever the ones above left standing: the run
-  // stopped early, so the extents it never reached are absent without being
-  // named as failures.
+  // Last, because it qualifies whatever the notes above left standing: an extent the run never reached is in
+  // neither list.
   if (cancelled) lines.push(`NOTE: ${cancelled}`)
   return lines
 }
 
-/** What the caller wrote, echoed rather than the normalized form they did not. */
 function typesLabel(types: string | undefined): string {
   return types?.trim() || "nwr"
 }
@@ -139,20 +99,14 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
         metadata: { truncated: false, error_code: code, failed: true } as Metadata,
       })
 
-      // Asymmetric, and deliberately so. A blank `key` means the parameter was
-      // not given — one value, and empty is absent. A blank entry among tags is
-      // a mistake in a list of real ones, so it is passed through: the kernel
-      // refuses the whole call by name, where dropping it here would count the
-      // rest and never mention what went missing.
+      // Asymmetric on purpose: a blank `key` is an absent parameter, while a blank entry among real tags is a
+      // mistake the kernel refuses by name ("a tag filter cannot be empty"), where dropping it here would count
+      // the rest and never mention it.
       const tags = params.tags ?? []
       const key = params.key?.trim() ?? ""
-      // Named because the comparison below is otherwise `a > 0 === b`, which
-      // parses as intended and reads as a comparison chain that is not there.
       const counting = tags.length > 0
       const distributing = key !== ""
-      // Exactly one. Both modes at once has no meaning, and neither leaves
-      // nothing to ask — the two mistakes are the same mistake seen twice, so
-      // they get the same sentence naming both options.
+      // Both modes at once and neither are one mistake seen twice, so one sentence names both options.
       if (counting === distributing) {
         return refuse(
           "InvalidParameters",
@@ -160,9 +114,8 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
             (distributing ? "both." : "neither."),
         )
       }
-      // Refused rather than answered, because the kernel would answer it: with
-      // no extent the loop never runs and every figure comes back zero, which
-      // is indistinguishable from an area that genuinely holds nothing.
+      // Refused rather than answered, because the kernel would answer it: with no extent its loop never runs and
+      // every figure comes back zero, which is what an area holding nothing looks like.
       if (params.extents.length === 0) {
         return refuse("InvalidParameters", '"extents" is empty — name at least one area to look in.')
       }
@@ -175,11 +128,7 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
       })
 
       const asked = params.extents.length
-      /**
-       * Nothing came back — one event told twice, so it gets one sentence.
-       * Every extent failed, or the user stopped the call; the caveats already
-       * printed carry the reasons, this only says nothing survived them.
-       */
+      /** Every extent failed, or the run was cancelled with nothing counted; the caveats above carry the reasons. */
       const nothing = (lines: string[], verb: string, failed: number, mode: Record<string, unknown>) => {
         const aborted = ctx.abort.aborted
         lines.push(
@@ -203,20 +152,13 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
         const outcome = yield* Effect.result(
           osm.distribution({ extents: params.extents, key, types: params.types, abort: ctx.abort }),
         )
-        // The kernel's error channel holds whole-call mistakes only — too many
-        // extents, a tag or type list it cannot parse. Per-extent trouble never
-        // arrives here; it arrives as `failed`.
+        // The kernel's error channel holds whole-call mistakes only — too many extents, a tag or type list it
+        // cannot parse. Per-extent trouble arrives as `failed`.
         if (outcome._tag === "Failure") return refuse("InvalidParameters", outcome.failure.message)
         const result = outcome.success
-        // Only where it qualifies numbers that DID come back. When nothing
-        // survived, `nothing()` below says it more precisely — a run that was
-        // stopped before its first answer is a different event from one that
-        // answered for two extents out of four.
         const lines = caveats(result, "sampled", ctx.abort.aborted && result.sampled > 0 ? CANCELLED : undefined)
-        // With the other caveats, not below the list it qualifies. The cap
-        // bounds what comes BACK, not what is there: every count under it is a
-        // floor and a rare value can be absent altogether, which is the first
-        // thing to know about this list rather than a footnote to it.
+        // With the other caveats rather than under the list it qualifies: the cap bounds what came back, not what
+        // is there, so every count is a floor and a rare value can be missing from the list entirely.
         if (result.truncated) {
           lines.push(
             "NOTE: an extent reached the sample cap, so these counts are a lower bound and rare values may be" +
@@ -229,9 +171,8 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
           return nothing(lines, "sampled", result.failed.length, { mode: "distribution", key })
         }
 
-        // The shape count mode already uses: name how many actually answered
-        // when it is not all of them. Saying "across 4 extent(s)" after two of
-        // them failed claims a coverage the numbers do not have.
+        // How many actually answered, when it is not all of them: "across 4 extent(s)" after two failed claims a
+        // coverage the numbers do not have.
         const scope = result.answered === asked ? `${asked} extent(s)` : `${result.answered} of ${asked} extent(s)`
 
         if (result.distinct === 0) {
@@ -242,8 +183,7 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
             shown.map((entry) => entry.value),
             8,
           )
-          // Right-aligned, because a column of counts is read by comparing
-          // them, and ragged digits make that a per-line act.
+          // Right-aligned, because a column of counts is read by comparing them.
           const figures = column(
             shown.map((entry) => String(entry.count)),
             1,
@@ -271,9 +211,6 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
             distinct: result.distinct,
             sampled: result.sampled,
             sample_capped: result.truncated,
-            // Both modes say the same thing now. `exact` was absent here while
-            // count reported it, so a widened boundary was invisible to
-            // anything reading distribution through metadata.
             exact: result.exact,
             extents_answered: result.answered,
             extents_asked: asked,
@@ -301,16 +238,14 @@ export const OsmProbeTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Serv
         result.perExtent.map((entry) => entry.extent),
         3,
       )
-      // Right-aligned. The point of asking about several extents at once is to
-      // compare them (§6.8), and a ragged column turns a glance into arithmetic.
+      // Right-aligned: the point of asking about several extents at once is to compare them (§6.8).
       const figures = column([...result.perExtent.map((entry) => String(entry.total)), String(result.totals.total)], 1)
       const row = (label: string, counts: { total: number; nodes: number; ways: number; relations: number }) =>
         `  ${label.padEnd(width)}  total ${String(counts.total).padStart(figures)}` +
         `  (nodes ${counts.nodes}, ways ${counts.ways}, relations ${counts.relations})`
       lines.push(`Counted [${tags.join(", ")}] across ${scope}, types ${typesLabel(params.types)}:`, "")
       for (const entry of result.perExtent) lines.push(row(entry.extent, entry))
-      // Only when there is something to sum. On a single extent the row would
-      // repeat the one above it and invite it to be read as a second area.
+      // Only with something to sum: on a single extent the row repeats the one above it and reads as a second area.
       if (result.perExtent.length > 1) lines.push(row("SUM", result.totals))
 
       return {

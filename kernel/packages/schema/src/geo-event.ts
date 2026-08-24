@@ -6,60 +6,42 @@ import { Event } from "./event"
 
 /* --- GeoCode: the status face of GeoKernel (docs/GEOKERNEL.md §8.1, §9.2).
  *
- * Three environment status slots — QGIS, GEE, GDAL. OSM has none on purpose:
- * it has no configuration and no local dependency, so a red light there would
- * be neither actionable nor fixable (§6.2, and the tradeoff record in §12).
- *
- * Every slot follows the same shape (§8.1):
- *   - a discriminated union keyed on `status`;
- *   - intermediate states are members, not an absence of state, because probing
- *     and building take tens of seconds and users watch them happen (§2.4);
- *   - failure members carry the facts needed to locate the problem, so the UI
- *     never has to send the user to a log file.
- *
- * Event payloads are the whole state object: the channel is replace-the-slot,
- * not patch-the-slot (§3.4). --- */
+ * Three slots — QGIS, GEE, GDAL. OSM has none, having no configuration and no local dependency to report (§6.2).
+ * Every set carries a `config-error` member because a syntax error fails every block (§3.1), which is a different
+ * fact from unconfigured and must not collapse into it. Event payloads are the whole state object: the channel
+ * replaces a slot, it does not patch one (§3.4). --- */
 
 // QGIS ----------------------------------------------------------------------
 
-/** How far the algorithm catalog got. Only meaningful once the environment is ready. */
 export const QgisCatalog = Schema.Literals(["building", "ready", "failed", "skipped"])
 export type QgisCatalog = typeof QgisCatalog.Type
 
 /**
- * Facts gathered while resolving the environment, carried by every failure so
- * the user sees what was chosen AND what else was available — when a machine
- * holds two QGIS installs, "what was selected" alone cannot explain the failure
- * (§4.10).
+ * Facts for locating a failure without a log file (§4.10), carried by the five probe outcomes below. Candidates
+ * travel with the choice made: on a machine holding two QGIS installs, what was selected cannot explain the
+ * failure on its own.
  */
 export const QgisDiagnostics = Schema.Struct({
-  /** Which assembly track produced this environment, and which were attempted. */
+  /** The track in effect, and every track attempted — only Windows has more than one (§4.10). */
   track: optional(Schema.String),
   attempted: optional(Schema.Array(Schema.String)),
   interpreter: optional(Schema.String),
   prefix: optional(Schema.String),
-  /** Candidate lists paired with the choice made, keyed by what was being chosen. */
   candidates: optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
   selected: optional(Schema.Record(Schema.String, Schema.String)),
-  /** Per-path existence checks, so a missing file is visible without a log dive. */
   checks: optional(Schema.Record(Schema.String, Schema.Boolean)),
-  /**
-   * Registered dynamic-library directories, when the track registers any.
-   * §4.10 lists them as part of the bundle: on the manual Windows track the
-   * WIDTH of this set is load-bearing (§4.5), and a reader cannot judge it
-   * without seeing it.
-   */
+  /** Registered dynamic-library directories: the manual Windows track needs a wide set (§4.5), and a reader
+   * cannot judge the width without seeing it. Absent on the tracks that register none (§4.3 principle 5). */
   dllDirectories: optional(Schema.Array(Schema.String)),
-  /** Environment variables in effect, filtered at this exit (§4.3 principle 8). */
+  /** Filtered to a display keep-list before it reaches here; execution keeps the complete set (§4.3 principle 8). */
   environment: optional(Schema.Record(Schema.String, Schema.String)),
-  /** Raw probe output. Present when the probe never reached its output marker. */
+  /** Raw probe output, present when the probe never reached its result marker. */
   output: optional(Schema.String),
   error: optional(Schema.String),
 })
 export interface QgisDiagnostics extends Schema.Schema.Type<typeof QgisDiagnostics> {}
 
-// Generic so each literal survives as itself: widening these to `string`
-// silently breaks discrimination for every consumer of the union.
+// Generic over the literal: widening `status` to `string` breaks discrimination for every consumer of the union.
 const qgisFailure = <const S extends string>(status: S) =>
   Schema.Struct({
     status: Schema.Literal(status),
@@ -68,12 +50,7 @@ const qgisFailure = <const S extends string>(status: S) =>
 
 export const QgisStatus = Schema.Union([
   Schema.Struct({ status: Schema.Literal("unconfigured") }),
-  /**
-   * machine.json cannot be parsed. Mandated by the config contract: a syntax
-   * error fails EVERY block, and each module shows that honestly instead of
-   * pretending to be merely unconfigured (§3.1). Carries the location so the
-   * user can fix the line, not hunt for it.
-   */
+  /** Carries the location so the user can fix the line rather than hunt for it. */
   Schema.Struct({ status: Schema.Literal("config-error"), file: Schema.String, message: Schema.String }),
   Schema.Struct({ status: Schema.Literal("path-missing"), hint: optional(Schema.String) }),
   Schema.Struct({ status: Schema.Literal("not-qgis"), hint: optional(Schema.String) }),
@@ -90,12 +67,7 @@ export const QgisStatus = Schema.Union([
     processing: Schema.Boolean,
     catalog: QgisCatalog,
     catalogError: optional(Schema.String),
-    /**
-     * The facts a status surface shows on the happy path: which interpreter,
-     * which versions, which track produced them. Without these the ready state
-     * has nothing to render and no source to fetch it from — the verified
-     * environment object itself never leaves the kernel (§9.1).
-     */
+    /** A ready face has no other source for these: the verified environment never leaves the kernel (§9.1). */
     interpreter: optional(Schema.String),
     track: optional(Schema.String),
     versions: optional(
@@ -112,34 +84,20 @@ export type QgisStatus = typeof QgisStatus.Type
 // GEE -----------------------------------------------------------------------
 
 /**
- * The local dependency chain, probed in order and short-circuited at the first
- * gap, so guidance can say "step N of 4" instead of listing every problem at
- * once (§5.3, §5.11).
+ * The local dependency chain, probed in order and short-circuited at the first gap, so guidance can render "step N
+ * of 4" instead of listing every problem at once (§5.3, §5.11).
  */
 export const GeeSetup = Schema.Union([
   Schema.Struct({ status: Schema.Literal("unconfigured") }),
-  /**
-   * machine.json cannot be parsed. The same mandated member every status set
-   * carries, and it belongs on THIS layer because the local chain is the one
-   * the file describes — the network and the remote authorization know nothing
-   * about it (§3.1, §8.1).
-   */
+  /** On this layer of the three, because the local chain is the one machine.json describes (§3.1). */
   Schema.Struct({ status: Schema.Literal("config-error"), file: Schema.String, message: Schema.String }),
   Schema.Struct({ status: Schema.Literal("python-missing"), python: Schema.String }),
   Schema.Struct({ status: Schema.Literal("checking") }),
   /**
-   * These two carry the interpreter for the same reason `ready` carries its
-   * three: once the chain stops here, nothing else holds it. Guidance for both
-   * steps is a command — install these packages, run this authentication — and
-   * both commands are located FROM the interpreter (§5.11 安装纪律, 认证命令的
-   * 定位). Without it the copy degrades to "use the interpreter you
-   * configured", which is precisely the sentence that leaves a user installing
-   * into the wrong environment.
-   *
-   * The probe states deliberately do not: their guidance names the
-   * configuration file and asks the reader to look, which costs one read and
-   * keeps the field off a state the lifecycle can reach without a config in
-   * hand.
+   * These two carry the interpreter because their guidance is a command — install these packages, run this
+   * authentication — and both are built from it (§5.11). Without it the copy degrades to "use the interpreter you
+   * configured", which is what leaves a user installing into the wrong environment. The probe states do not carry
+   * it: their guidance names machine.json instead and has the reader read `gee.python` back out of it.
    */
   Schema.Struct({
     status: Schema.Literal("packages-missing"),
@@ -147,14 +105,10 @@ export const GeeSetup = Schema.Union([
     missing: Schema.Array(Schema.String),
   }),
   /**
-   * Installed, and still unusable — a native library that will not load, or a
-   * binary built against a different version of what it links to.
-   *
-   * Its own state rather than a shade of `packages-missing`, because the two
-   * have opposite fixes and the wrong one loops: installing what is already
-   * installed changes nothing, and the probe reports it missing again. Nor is
-   * it `probe-failed`, which means the check produced no usable answer — this
-   * check answered, and named the package.
+   * Installed and still unusable — a native library that will not load, or a binary built against a different
+   * version of what it links to. Its own state rather than a shade of `packages-missing`, whose fix would loop
+   * here; and not `probe-failed`, which means the check produced no answer, where this one answered and named the
+   * package.
    */
   Schema.Struct({
     status: Schema.Literal("packages-broken"),
@@ -166,12 +120,7 @@ export const GeeSetup = Schema.Union([
   Schema.Struct({ status: Schema.Literal("project-missing") }),
   Schema.Struct({ status: Schema.Literal("probe-timeout") }),
   Schema.Struct({ status: Schema.Literal("probe-failed"), error: Schema.String }),
-  /**
-   * Ready carries what the happy path has to show: which interpreter, which
-   * project, which client version. The guidance in §5.11 names the project,
-   * and the tool layer's environment header names all three — none of which
-   * exists anywhere else once the chain has passed.
-   */
+  /** The tool layer's environment header renders all three, and has no other source for them. */
   Schema.Struct({
     status: Schema.Literal("ready"),
     python: Schema.String,
@@ -182,20 +131,10 @@ export const GeeSetup = Schema.Union([
 export type GeeSetup = typeof GeeSetup.Type
 
 /**
- * Read from Net, never computed here (§8.3). `route` identifies the path in use.
- *
- * `unreachable` carries the two facts that make it actionable, and neither CAN
- * hold a credential — both are identifiers assembled from parsed fields, not
- * text that was cleaned: `tried` is `direct` / `proxy:host:port`, `skipped` is
- * `socks5:host:port` for a declaration nothing could be attempted with. The
- * underlying error stays inside — it is diagnostics, and the wording a user
- * reads is one sentence either way (§3.3).
- *
- * `skipped` exists for one case that had no way of being seen at all: a SOCKS
- * declaration is deliberately refused (§12), and the user whose network only
- * works through it used to be told nothing but "cannot be reached" — the same
- * three words a user with no network at all gets, with nothing to tell the two
- * of them apart.
+ * Read from Net, never computed here (§8.3). The three route fields are identifiers assembled from parsed
+ * scheme/host/port and so cannot carry a credential; the underlying error stays inside as diagnostics (§3.3).
+ * `skipped` is the only thing that tells a user whose network works solely through a refused SOCKS declaration
+ * (§12) apart from a user with no network at all — both otherwise read "cannot be reached".
  */
 export const GeeNetwork = Schema.Union([
   Schema.Struct({ status: Schema.Literal("idle") }),
@@ -232,12 +171,9 @@ export const GeeRuntime = Schema.Union([
 export type GeeRuntime = typeof GeeRuntime.Type
 
 /**
- * All three facts plus the layer whose state is the one to act on.
- *
- * `facing` is the short-circuit of §5.6 — local before network before remote —
- * and it exists so the user is shown exactly one problem at a time. The three
- * layers travel with it because diagnostics need them; the priority rule stays
- * a pure function of the three, computed by the GEE module, never here.
+ * `facing` is §5.6's short-circuit — local before network before remote — so exactly one problem is shown at a
+ * time; the three layers travel with it because diagnostics need them. It is a pure function of the three,
+ * computed by the GEE module, never here.
  */
 export const GeeStatus = Schema.Struct({
   facing: Schema.Literals(["setup", "network", "runtime"]),
@@ -250,18 +186,12 @@ export interface GeeStatus extends Schema.Schema.Type<typeof GeeStatus> {}
 // GDAL ----------------------------------------------------------------------
 
 /**
- * Two tracks with disjoint tool sets, so the gate is per-track rather than
- * unified — the opposite of QGIS, where three capabilities share one
- * environment and therefore one verdict (§7.3 vs §4.9).
+ * Raster and vector depend on disjoint tools, so readiness is per track rather than one verdict as in QGIS
+ * (§7.3 vs §4.9) — one half being unusable says nothing about the other.
  */
 export const GdalStatus = Schema.Union([
   Schema.Struct({ status: Schema.Literal("unconfigured") }),
-  /**
-   * machine.json cannot be parsed. Mandated by the config contract, and NOT
-   * interchangeable with `unconfigured`: the user did configure this, the file
-   * is simply unreadable, and telling them to configure it sends them to do a
-   * thing they have already done (§3.1, §8.1).
-   */
+  /** Not interchangeable with `unconfigured`: the user did configure this, and the file is simply unreadable. */
   Schema.Struct({ status: Schema.Literal("config-error"), file: Schema.String, message: Schema.String }),
   Schema.Struct({ status: Schema.Literal("dir-missing"), directory: Schema.String }),
   Schema.Struct({ status: Schema.Literal("unusable"), missing: Schema.Array(Schema.String) }),

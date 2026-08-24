@@ -3,23 +3,10 @@ import * as Tool from "./tool"
 import { GeoOsm } from "@/geo"
 import DESCRIPTION from "./geo-osm-search.txt"
 
-/* --- GeoCode: OsmSearch, the first step of the OSM workflow
- * (docs/TOOLS.md §3, GEOKERNEL §6.8).
- *
- * The OSM group is shaped unlike the other two, and this file is where that
- * shows for the first time (§6.2). There is no configuration, no environment
- * probe, no status slot and no gate — so no environment header, no settling
- * wait, and no guidance for a state the user could fix. Reliability is not a
- * property of an install here; it is solved inside each call, by an endpoint
- * pool and failover the kernel owns.
- *
- * What that leaves this layer is presentation, and one job that matters more
- * than it looks: a degraded answer must not read like a complete one. The
- * search asks two engines whose recall sets differ a lot, and when one of them
- * does not answer the other's results are still returned — correctly, but they
- * are half the answer. The notes are what say so. --- */
+/* --- GeoCode: OsmSearch, the first step of the OSM workflow (docs/TOOLS.md §3, GEOKERNEL §6.8). No configuration,
+ * environment probe, status slot or gate (§6.2), so what is left here is presentation — and the one thing it must
+ * not do is let an answer built from one engine read like an answer from two. --- */
 
-/** The kernel ranks and caps; this is only the shape of a printed line. */
 function reference(candidate: GeoOsm.OsmSearch.Candidate): string {
   const prefix = candidate.type === "relation" ? "R" : candidate.type === "way" ? "W" : "N"
   return `${prefix}${candidate.id}`
@@ -29,10 +16,8 @@ function formatCandidate(candidate: GeoOsm.OsmSearch.Candidate): string {
   const category = candidate.className
     ? `${candidate.className}=${candidate.classValue}${candidate.adminLevel ? ` L${candidate.adminLevel}` : ""}`
     : "-"
-  // Every source that matched, not a "both" flag: which engine found something
-  // is a diagnosis when only one did, and the count is the confidence signal
-  // when more than one did. The old build's description promised "[both]" while
-  // its code printed the engine names — the code had it right.
+  // Every label that matched, not a "both" flag: three of the four — features, site, canonical — come off the
+  // feature service and one off the geocoder (osm/index.ts), so a lone `geocoder` means the literal search missed it.
   const sources = `[${[...candidate.sources].join("+")}]`
   const importance = candidate.importance !== undefined ? `  imp=${candidate.importance.toFixed(3)}` : ""
   const center = candidate.center
@@ -60,13 +45,8 @@ export const Parameters = Schema.Struct({
 })
 
 /**
- * `truncated: false` is a claim about this tool, and a sound one.
- *
- * The kernel ranks and caps the candidate list, so the size of this output is
- * bounded by that cap and a line's width — not by how much data the area
- * holds. This is §5.2's first strategy: the tools that cannot produce a flood
- * say so, and the declaration keeps upstream's head-truncation off an answer
- * whose closing lines are the advice for when nothing matched.
+ * Setting `truncated` at all skips upstream's truncation (tool.ts), which keeps the head and drops the tail — here
+ * the advice for when nothing matched. False is honest: `OsmSearch.rank` caps the list at 25 (docs/TOOLS.md §5.2).
  */
 type Metadata = {
   [key: string]: unknown
@@ -82,12 +62,8 @@ export const OsmSearchTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Ser
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context<Metadata>,
     ) {
-      // Before the ask, like the other three: an unusable call is the caller's
-      // to fix, and there is nothing for a user to authorize about it.
-      //
-      // An empty query is not a harmless no-op here — it becomes an unanchored
-      // name regex against public services, which is the most expensive query
-      // this tool can send and the least useful answer it can get back.
+      // Refused before the ask, since there is nothing for a user to authorize: an empty query is not a no-op but
+      // `rel["name"~""]` (osm/query.ts `nameSearch`), which matches every named element on the planet.
       if (params.query.trim() === "") {
         return {
           title: params.query,
@@ -111,12 +87,8 @@ export const OsmSearchTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Ser
       })
 
       const lines: string[] = []
-      // Notes first, and never folded into the candidate list: they describe
-      // the answer as a whole, and an answer built from one engine instead of
-      // two is not wrong — it is incomplete in a way only this can say.
-      // A cancelled search is partial, not failed — the same reading the other
-      // three tools give it. Said here rather than left to the engine notes,
-      // which describe an engine that answered badly, not a run that stopped.
+      // Notes first, never folded into the candidate list: they qualify the answer as a whole. Cancellation is said
+      // here rather than left to the kernel's notes, which describe an engine that answered badly, not a stopped run.
       const cancelled = ctx.abort.aborted
       if (result.notes.length > 0 || cancelled) {
         lines.push(...result.notes.map((note) => `NOTE: ${note}`))
@@ -141,9 +113,6 @@ export const OsmSearchTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Ser
         metadata: {
           truncated: false,
           candidates: result.candidates.length,
-          // Per engine, because the merge hides which one answered — and one
-          // engine silent is the difference between "no such place" and "half
-          // the search ran" (§6.8 任一单独使用都会漏).
           engines: result.engines,
           ...(result.notes.length > 0 ? { degraded: true } : {}),
           ...(cancelled ? { partial: true } : {}),

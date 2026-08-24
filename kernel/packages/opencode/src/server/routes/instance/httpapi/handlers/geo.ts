@@ -37,18 +37,8 @@ export const GeoHandler = HttpApiBuilder.group(RootHttpApi, "geo", (handlers) =>
 )
 
 /**
- * What every preview request has to establish before it can do anything.
- *
- * Path first, environment second, and the order is deliberate: an escaping path
- * is refused whether or not a toolchain is installed, and answering "GDAL is
- * not configured" to a request that was never allowed to name that file would
- * be telling the caller something about a machine they have no business
- * reading (§7.8).
- *
- * The service is yielded here rather than while the handler layer is built —
- * GeoKernel is mounted on the application runtime's service graph rather than
- * the route layer's, so a construction-time requirement has nowhere to be
- * satisfied. The status handlers above do the same.
+ * Path first, gate second: a request that was never allowed to name this file must not learn from the answer
+ * whether the machine has a toolchain (§7.8).
  */
 const opened = (track: GdalTypes.Track, requested: string) =>
   Effect.gen(function* () {
@@ -73,13 +63,6 @@ const opened = (track: GdalTypes.Track, requested: string) =>
     return { file: resolved.file, environment: gate.environment, gdal }
   })
 
-/**
- * A pipeline failure, in the terms the interface acts on.
- *
- * Two of these are not faults at all: a plain image gets shown as a picture and
- * an oversized layer gets read by page. Collapsing them into one message would
- * leave the interface with a sentence it cannot reason about (§7.7).
- */
 const reported = <A, R>(effect: Effect.Effect<A, Error, R>) =>
   Effect.mapError(effect, (error) => {
     if (error instanceof GdalRaster.GdalRasterError && error.kind === "not-geographic") {
@@ -95,7 +78,6 @@ const reported = <A, R>(effect: Effect.Effect<A, Error, R>) =>
     return new ApiGeoPreviewError({ message: error.message, kind: "unreadable" })
   })
 
-/** The format family, as the interface knows it: `geojson`, `shp`, `gpkg`, … */
 const family = (file: string) => path.extname(file).toLowerCase().replace(/^\./, "")
 
 export const GeoPreviewHandler = HttpApiBuilder.group(InstanceHttpApi, "geo-preview", (handlers) =>
@@ -154,9 +136,7 @@ export const GeoPreviewHandler = HttpApiBuilder.group(InstanceHttpApi, "geo-prev
           headers: {
             "content-type": "image/webp",
             "content-length": String(bytes.byteLength),
-            // Where the image goes rides in a header rather than the body: a
-            // multi-megabyte image inside a JSON envelope costs a third more
-            // bytes and a conversion at each end (§7.7).
+            // Placement in a header, not the body: JSON costs a third more bytes on a multi-megabyte image (§7.7).
             [PREVIEW_META_HEADER]: Buffer.from(
               JSON.stringify({
                 preview_projection: preview.projection,
@@ -168,12 +148,9 @@ export const GeoPreviewHandler = HttpApiBuilder.group(InstanceHttpApi, "geo-prev
                 limited: preview.downscaled,
               }),
             ).toString("base64"),
-            // Without this a browser hides the header from the very script
-            // that needs it.
+            // Without this a browser hides the header from the script that reads it (§11).
             "access-control-expose-headers": PREVIEW_META_HEADER,
-            // The artifact is keyed to the source's size and timestamp, so a
-            // stale copy in an intermediate cache would outlive the edit that
-            // should have retired it (§7.6).
+            // The URL is the same after an edit, so a cached copy would outlive the file it was made from (§7.6).
             "cache-control": "no-store",
           },
         })

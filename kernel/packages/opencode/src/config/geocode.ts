@@ -3,52 +3,22 @@ export * as GeoCodeConfig from "./geocode"
 import type { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import OSMFETCH_PROMPT from "../session/prompt/osmfetch.txt"
 
-/* --- GeoCode: the factory assembly layer. This is where GeoCode's identity is
- * expressed as configuration rather than by editing upstream agent code, so the
- * agent engine in kernel/ stays a thin fork (docs/KERNEL.md §3, docs/PATHS.md §5).
- *
- * `base()` is merged FIRST in the config pipeline (config.ts), so anything here
- * is an out-of-the-box default the user's own config can still override — model,
- * temperature, extra agents, and so on.
- *
- * There is deliberately NO second `enforced()` layer merged last. An earlier
- * version of this comment promised one "once geo tools exist"; the tools exist
- * now and the question settled the other way. Upstream sets no such layer over
- * any of its own tools, and the geographic denies below are meant to be
- * overridable for exactly the reason upstream's are: a user's own config wins,
- * and inventing a layer upstream has no equivalent of is not a decision this
- * fork gets to make quietly. geocode-geo-permissions.test.ts asserts that
- * property through the engine, so adding the layer would turn it red. --- */
+/* --- GeoCode: the agent lineup as configuration rather than as edits to upstream's agent table
+ * (docs/KERNEL.md §3, §5.1). Merged FIRST in the config pipeline (config.ts), so everything here is a
+ * default the user's own config still overrides. --- */
 export function base(): ConfigV1.Info {
   return {
-    // GeoAgent is the sole primary agent GeoCode surfaces.
+    // Named explicitly because `build` is disabled below and the fallback picks the first visible
+    // primary agent, which would be `plan` (agent/agent.ts).
     default_agent: "GeoAgent",
-    // Session sharing uploads to a service GeoCode does not run. The module
-    // itself is off (share/share-next.ts); this makes the config surface say
-    // so too, so an attempt to share reports "disabled in configuration"
-    // instead of silently handing back an empty URL.
+    // The module is off in share/share-next.ts; saying so on the config surface too makes share/session.ts
+    // refuse first, naming the configuration rather than the env var the gate below it names.
     share: "disabled",
-    /* Geographic capability is closed by default and opened per agent below.
-     *
-     * Four groups, one per readiness condition a user actually has: reading
-     * geographic data, the QGIS processing engine, the public OSM services,
-     * Earth Engine. The same four names appear in permission/index.ts, which
-     * maps tool ids onto them so visibility and execution agree.
-     *
-     * None of these may be omitted, and the reason is worse than it reads.
-     * `evaluate` does end in `?? { action: "ask" }`, but no real agent ever
-     * reaches it: every ruleset is `merge(defaults, user)` and the engine's
-     * defaults open with `"*": "allow"` (agent/agent.ts), which findLast always
-     * matches. A missing deny is therefore not a prompt at the user — it is a
-     * SILENT ALLOW. Measured: asking GeoAgent about a key nobody wrote a rule
-     * for returns "allow" (docs/TOOLS.md §4.2). A fifth group must add a fifth
-     * line here; there is no common prefix left to catch it automatically,
-     * which is the price of names a user can read.
-     *
-     * Merged FIRST, so a user's own config still wins — the same treatment
-     * upstream gives every one of its own tools (agent.ts places the user's
-     * rules last, and findLast makes last win). GeoCode does not invent a layer
-     * upstream has no equivalent of. */
+    /* Closed here, opened per agent below; the same four names appear in permission/index.ts, which maps tool
+     * ids onto them so visibility and execution agree. None may be omitted: every agent's ruleset starts from
+     * the engine's `"*": "allow"` (agent/agent.ts) and `findLast` always reaches it, so a missing deny is a
+     * silent allow rather than the `evaluate` fallback's prompt — and the four names share no common prefix
+     * that a fifth group would be caught by (docs/TOOLS.md §4.2 ②). */
     permission: {
       geodata: "deny",
       qgis: "deny",
@@ -59,93 +29,30 @@ export function base(): ConfigV1.Info {
       GeoAgent: {
         mode: "primary",
         description: "GeoCode's assistant for geographic work.",
-        // Mirror the upstream `build` agent's opt-ins (its permission defaults
-        // deny both): allow clarifying questions and entering plan mode.
+        // The engine's defaults deny both (agent/agent.ts); upstream opts back in on `build`, which GeoAgent
+        // replaces.
         permission: {
           question: "allow",
           plan_enter: "allow",
-          // Agent-level rules merge after the global denies above, so findLast
-          // picks these allows for GeoAgent and the denies for everyone else
-          // (docs/TOOLS.md §4.2 ③).
+          // Agent-level rules merge after the global denies above, so findLast picks these (docs/TOOLS.md
+          // §4.2 ③).
           geodata: "allow",
-          /* The one group that asks, and the only permission in GeoCode that is
-           * stricter than upstream's treatment of its own tools.
-           *
-           * Upstream sets no tool to `ask` — all seven built-in agents use only
-           * `allow` and `deny`, and `edit`/`write`/`bash` land on the engine's
-           * `"*": "allow"`. That is a defensible default THERE because a bad
-           * edit is recoverable: the checkpoint mechanism holds a snapshot to
-           * revert to. Geographic data is deliberately outside that mechanism
-           * (§10.1 #6 — a scene per turn would dwarf the project), so the same
-           * trade-off has a different answer here. "Do not destroy it in the
-           * first place" is already why outputs are numbered rather than
-           * overwritten; this is that same rule where numbering cannot reach.
-           *
-           * And it cannot reach far. `QgisDestination.reserve` finds outputs by
-           * PARAMETER TYPE, which is sound for what it recognises and blind to
-           * the rest: measured on a real 3.44 registry, 56 of 422 algorithms
-           * declare no destination parameter and about 26 of those write
-           * anyway. Since the catalog is built from whichever QGIS the user
-           * installed, that blind spot cannot be closed by a list — only by
-           * showing the call and letting the user decide (tool/geo-qgis-run.ts).
-           *
-           * `doc:*` stays open at all times: looking up an algorithm changes
-           * nothing, and a prompt for it would train the user to dismiss
-           * prompts. The pattern namespace exists for exactly this split, and
-           * the shape is upstream's own — `read` is `{"*": "allow", "*.env":
-           * "ask"}`, the same key divided by how much the operation can cost.
-           * Plan mode already carries this exact rule. */
+          /* What the pattern namespace is for: a lookup changes nothing and never spends a prompt, while a run
+           * asks because `QgisDestination.reserve` recognises outputs by parameter type and is silent about
+           * the rest, leaving the dialog as the only guard there (docs/TOOLS.md §4.3). */
           qgis: { "*": "ask", "doc:*": "allow" },
-          /* Asked too, but for a different reason and with a different prompt.
-           *
-           * QGIS is asked because the call can be READ: an algorithm id and its
-           * parameters fit in a dialog, and judging them is the only guard left
-           * where numbering cannot reach. None of that transfers here. A GEE
-           * script is arbitrary Python — `download_image(image, "…", roi)` puts
-           * the output path inside a string literal in the code, so nothing at
-           * this layer can see it, and unfolding the script into a prompt would
-           * only teach the user to confirm without reading.
-           *
-           * What is granted is therefore the CAPABILITY, not the operation:
-           * running against the user's Earth Engine credentials and quota, and
-           * writing imagery somewhere on their disk. That is worth one prompt —
-           * scripts are rare next to algorithm calls, and `always` keeps it to
-           * one per app run — and the prompt says exactly that much
-           * (cli/cmd/run/permission.shared.ts), the way upstream's `task`
-           * prompt names a subagent without pretending to know what it will do. */
+          /* Grants the capability rather than the operation: a GEE script is arbitrary Python holding its
+           * output path in a string literal, so the dialog can only say that Earth Engine is about to run
+           * (cli/cmd/run/permission.shared.ts), and `always: ["*"]` in geo-gee-run.ts keeps it to one prompt
+           * per app run. */
           gee: "ask",
-          // No `osm`. Downloading from public services goes through the
-          // osmfetch subagent, whose exit is narrowed and whose prompt carries
-          // the verification discipline — so the four OSM tools are not just
-          // refused here, they do not appear in GeoAgent's tool list at all
-          // (docs/TOOLS.md §4.3).
+          // No `osm`: downloads go through the osmfetch subagent, and the wildcard deny above also keeps the
+          // four OSM tools out of GeoAgent's tool list (docs/TOOLS.md §4.2 ①).
         },
-        // Deliberately no `prompt`: GeoAgent picks up prompt/geocode.txt through
-        // the base-prompt selector in session/system.ts, which GeoCode returns
-        // for every model. Setting one here would only duplicate that.
       },
-      /* The one agent that talks to the public OSM services.
-       *
-       * Not a convenience. Downloading is the part of geographic work with an
-       * outside party in it — services with published rate limits, run by
-       * volunteers — and it is the part whose result is hardest to check, since
-       * a file of the wrong features looks exactly like a file of the right
-       * ones. Both are better handled by something with one job, a prompt about
-       * that job, and a much smaller reach than the agent it works for.
-       *
-       * The reach is a whitelist rather than a list of forbidden things.
-       * `webfetch`, `websearch`, `task`, `skill`, editing — none of them are
-       * named here, and neither is any MCP tool a user may connect later, which
-       * is the point: what a locked agent must not touch cannot be enumerated
-       * in advance, only what it needs can.
-       *
-       * `bash` and `glob` ARE granted, deliberately. A downloader needs to look
-       * around a directory and move a file, and refusing that buys nothing that
-       * matters — the parent agent has a shell too, so this was never a barrier
-       * around the machine, only around this agent's habits. What the narrower
-       * reach still buys is that the OSM tools are the obvious route, and they
-       * are the route that keeps the rate limits.
-       */
+      /* The only agent that reaches the public OSM services, and its exit is a whitelist rather than a list of
+       * forbidden things: `webfetch`, `websearch`, `task` and any MCP tool a user connects later are unnamed
+       * and therefore denied by the wildcard below (docs/KERNEL.md §5.1). */
       osmfetch: {
         mode: "subagent",
         description:
@@ -154,127 +61,44 @@ export function base(): ConfigV1.Info {
         permission: {
           "*": "deny",
           osm: "allow",
-          // Reading back what it just wrote, which its prompt requires of it
-          // before reporting success. Not `qgis`: verifying a download is
-          // reading, and running processing algorithms is somebody else's job.
+          // Its prompt requires verifying every file the report names, with ReadGeoData, before reporting.
           geodata: "allow",
           bash: "allow",
           glob: "allow",
-          // Restores upstream's default for paths outside the working
-          // directory: ask the user, rather than the flat refusal the wildcard
-          // above would otherwise produce for a perfectly ordinary output path.
+          // The wildcard deny above also swallows the engine's `external_directory` rules; this puts back
+          // upstream's ask, so an ordinary output path outside the worktree is not flatly refused.
           external_directory: "ask",
         },
       },
-      /* Plan mode keeps SEEING the geographic tools, and that is the point.
-       *
-       * Upstream's plan can see its edit tools — a tool vanishes only when the
-       * last rule matching it is a wildcard deny, and plan's edit rules end in
-       * a narrow allow for the plan file. A planner that cannot see what it
-       * will later be able to do cannot write a usable plan.
-       *
-       * So the executing groups are `ask` rather than `deny`: visible, and
-       * gated on the user at the moment of use. The reminder plan mode injects
-       * already tells the model not to run them ("they do not want you to
-       * execute YET"); this is what happens if it tries anyway.
-       *
-       * `doc:*` is allowed outright so looking up an algorithm never interrupts
-       * planning — the pattern namespace geo-qgis-doc.ts carves for exactly
-       * this. Reading geographic data is allowed for the same reason upstream
-       * lets plan read files.
-       */
+      /* The executing groups are `ask` rather than `deny` so plan keeps SEEING them: only a wildcard deny
+       * removes a tool from the model's list (docs/TOOLS.md §4.2 ①), and a planner that cannot see what will
+       * later be available cannot write a usable plan. Not running them is what plan.txt already says. */
       plan: {
         permission: {
           geodata: "allow",
           qgis: { "*": "ask", "doc:*": "allow" },
           gee: "ask",
-          // Only osmfetch is named here, and as `ask` rather than `deny`.
-          //
-          // Not `deny`, because describeTask drops a subagent from the list
-          // when the rule denies it (tool/registry.ts), and a planner that does
-          // not know osmfetch exists cannot plan a download. Upstream makes
-          // exactly this mistake in the other direction — its plan prompt tells
-          // the model to launch `general` agents while its permission denies
-          // them, so the name is in the instructions and not in the list.
-          //
-          // Only osmfetch, because the line is drawn at side effects. `explore`
-          // is left to fall through to the engine's allow: it only reads, and
-          // reading is what a planner does. Upstream draws the line in the same
-          // place — its own plan denies `general`, which writes, and says
-          // nothing about explore.
+          // `ask` and not `deny`, because describeTask drops a subagent whose `task` rule denies it
+          // (tool/registry.ts) and a planner that does not know osmfetch exists cannot plan a download.
+          // `explore` is left unnamed and falls through to the engine's allow: it only reads.
           task: { osmfetch: "ask" },
-          // No `osm`: the four OSM tools belong to the subagent, so they are
-          // not in plan's list either. What plan sees is the subagent.
         },
       },
-      /* Upstream's read-only search subagent, kept — and given the one
-       * geographic tool that is reading.
-       *
-       * It was disabled here at first, on the reasoning that code search has no
-       * role in geographic work. Two things were wrong with that.
-       *
-       * The smaller one: users bring code. A remote-sensing processing project
-       * is a directory of scripts like any other, and a user who hands one over
-       * expects the agent to find its way around.
-       *
-       * The larger one: `explore` is not only an agent, it is the far end of
-       * upstream's context-offloading mechanism. Three live hints send work to
-       * it — `grep.txt`, `glob.txt` ("use the Task tool instead" for open-ended
-       * searches) and the overflow hint in tool/truncate.ts. Disabling it left
-       * all three telling the model to delegate, at a subagent list holding one
-       * OSM downloader — and left the primary agent carrying every large output
-       * in its own context window.
-       *
-       * `geodata` is the whole of the change to its reach. Everything else is
-       * upstream's: `"*": "deny"` with grep/glob/list/read/bash/webfetch/
-       * websearch opened, and `external_directory` at `ask`. What that buys is
-       * a folder of two hundred files narrowed to the handful worth opening —
-       * a genuinely context-heavy opening move in geographic work, done in
-       * somebody else's context.
-       *
-       * Narrowed, not summarised. The metadata a decision rests on — CRS,
-       * extent, fields — is read first-hand by the agent that decides, because
-       * a relayed summary loses a layer and nobody downstream can tell. So
-       * reading is both the whole of what this agent may do to the data
-       * (`qgis`, `gee` and `osm` stay on the global deny above) and only ever
-       * a means to the shortlist it hands back. */
+      /* Kept rather than disabled, because it is the far end of upstream's context offloading: `grep.txt` and
+       * `glob.txt` send open-ended searches to the task tool and the overflow hint in tool/truncate.ts names
+       * this agent. `geodata` is the whole of the change to its reach — it narrows a folder of candidates, so
+       * `qgis`, `gee` and `osm` stay on the global deny above (docs/KERNEL.md §5.1). */
       explore: {
-        /* Upstream's own description, with two additions and nothing removed:
-         * the opening line names geographic datasets beside codebases, and a
-         * fourth case joins the list of what to send this agent.
-         *
-         * The fourth case is not the first one restated. `find files by
-         * patterns` is a COMPLETE answer in a codebase, where `user-service.ts`
-         * says what is inside it. In a folder of geographic data it is only the
-         * first step: `clip_2.tif` says nothing at all, so every candidate has
-         * to be opened before it can be ruled in or out. That reason is left
-         * out of the text and carried by the example instead — "which of these
-         * might be useful for this study?" is a question no filename can
-         * answer, and `might` says the answer comes back as candidates rather
-         * than as conclusions.
-         *
-         * ⚠️ This is a full copy, and copies drift in silence. agent.ts assigns
-         * the field wholesale (`value.description ?? item.description`), so one
-         * sentence cannot be extended without restating all of them — after
-         * which upstream is free to edit its own copy with nothing here
-         * conflicting and nothing going red. geocode-brand.test.ts diffs the
-         * two, so drift fails a test instead of quietly leaving one agent
-         * described two ways. */
+        /* A full copy of upstream's description with two edits, because agent.ts assigns the field wholesale
+         * and one sentence cannot be extended without restating all of them. Copies drift in silence, so
+         * geocode-brand.test.ts applies the same two edits to upstream's source and diffs. */
         description: `Fast agent specialized for exploring codebases and geographic datasets. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), answer questions about the codebase (eg. "how do API endpoints work?"), or find relevant datasets in a folder of geographic data (eg. "which of these might be useful for this study?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
         permission: {
           geodata: "allow",
         },
       },
-      // Disable upstream's remaining coding-oriented agents by config instead
-      // of deleting their source: the kernel turns `disable` into a real
-      // removal, and the upstream definitions stay byte-identical for clean
-      // merges.
-      //
-      // `build` is replaced by GeoAgent above. `general` is a general-purpose
-      // code-task subagent — unlike `explore` it is not read-only, and nothing
-      // in the tree routes work to it by name; the task tool advertises its
-      // subagent list dynamically, so removing it simply shrinks that list
-      // rather than leaving a dangling name.
+      // Disabled by config rather than by deleting definitions that stay byte-identical for merges; `disable`
+      // deletes the agent outright (agent/agent.ts).
       build: {
         disable: true,
       },

@@ -8,30 +8,10 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 import { OsmReport } from "./geo-osm-report"
 import DESCRIPTION from "./geo-osm-objects.txt"
 
-/* --- GeoCode: OsmGetObjects, and the shape a download tool takes
- * (docs/TOOLS.md §3, GEOKERNEL §6.7, §6.8).
- *
- * The first tool in the set that leaves something behind. Everything before it
- * answered a question; this one writes a file that will be opened later by
- * someone who was not here, and that changes what the report is for: it is the
- * only record of what the file does NOT contain.
- *
- * Three consequences run through the rendering below.
- *
- * The paths printed are the ones the KERNEL wrote, never the one that was
- * asked for. A base without a recognizable extension gets one appended (the
- * sibling names are built from it), and a run that spans several geometry
- * families is split into siblings — so the requested path can name a file that
- * does not exist (§6.7).
- *
- * Losses are named by identity, not counted. The answer to a missing object is
- * to fetch it on its own, which needs to know which one it was; "3 objects
- * were dropped" cannot be acted on at all.
- *
- * And a run that wrote nothing says so first. Nothing here overwrites — a
- * name already taken is numbered instead (§6.7) — so an empty run simply
- * creates no file, and the caller has to be told that rather than left to read
- * silence as success. --- */
+/* --- GeoCode: OsmGetObjects (docs/TOOLS.md §3, GEOKERNEL §6.7, §6.8). The file it writes is opened later by
+ * someone who was not here, so the report is the only record of what the file does not hold: the paths the kernel
+ * wrote rather than the one asked for, losses named by id so the caller can refetch them, and a run that wrote
+ * nothing saying so — nothing here overwrites, so an empty run just leaves no file (§6.7). --- */
 
 export const Parameters = Schema.Struct({
   ids: Schema.Array(Schema.String).annotate({
@@ -49,14 +29,9 @@ export const Parameters = Schema.Struct({
 })
 
 /**
- * `truncated: false` — §5.2's first strategy, and true by construction here.
- *
- * The data goes to disk; what comes back is a handful of paths, a geometry
- * tally and the names of what was lost. Its size follows the number of ids
- * asked for, which is capped at 25, not the size of the data.
- *
- * Failures are `error_code`, never `error: true`: that flag means an
- * environment is not ready, and this group has no environment (§6.2).
+ * Setting `truncated` at all skips upstream's truncation (tool.ts), and false is honest: the data goes to disk, so
+ * the output follows the number of ids, capped at `GeoOsm.MAX_IDS` (docs/TOOLS.md §5.2). Failures are `error_code`,
+ * never `error: true`, which means an environment is not ready and this group has none to be (§6.2).
  */
 type Metadata = {
   [key: string]: unknown
@@ -72,21 +47,16 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context<Metadata>,
     ) {
-      // Resolved here rather than left to the kernel: `osm/output.ts` hands the
-      // path straight to `mkdirSync`, so a relative one would land against the
-      // process cwd instead of the instance directory. Upstream's `write` does
-      // the same resolution for the same reason (tool/write.ts).
+      // Resolved here rather than left to the kernel: `osm/output.ts` hands the path straight to `mkdirSync`, so a
+      // relative one would land against the process cwd instead of the instance directory (§4.3).
       const instance = yield* InstanceState.context
       let filepath = params.output
       if (!path.isAbsolute(filepath)) filepath = path.resolve(instance.directory, filepath)
       if (process.platform === "win32") filepath = FSUtil.normalizePath(filepath)
       const title = path.relative(instance.worktree, filepath)
 
-      // Asked BEFORE the call, because the call is what writes: the kernel
-      // creates directories and replaces files inside `downloadObjects`, so
-      // there is no later point at which permission would still mean anything.
-      // The pattern is the path relative to the worktree, which is the form
-      // every path rule in this product is written against (§4.3).
+      // Before the call, because the call is what writes: `downloadObjects` creates directories and files. The
+      // pattern is worktree-relative, the form every path rule in this product is written against (§4.3).
       yield* ctx.ask({
         permission: "osm",
         patterns: [title],
@@ -94,16 +64,9 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
         metadata: { ids: params.ids, output: filepath },
       })
 
-      // Then the boundary. Upstream's `write` asks these two the other way
-      // round, and RunQgisAlgorithm already departs from it for a mechanical
-      // reason — it cannot know the real path until the destination is
-      // reserved. The reason here is about what a refusal costs: `osm` is
-      // denied for every agent but osmfetch, so guarding first would open a
-      // prompt about a directory for a call that was never going to run. Ask
-      // what the caller may do, then where it may write.
-      //
-      // osmfetch's ruleset already carries the matching `external_directory:
-      // "ask"` (config/geocode.ts), which until now nothing here consulted.
+      // Then the boundary, the reverse of upstream's `write`: `osm` is denied for every agent but osmfetch
+      // (config/geocode.ts), so guarding first would raise a prompt about a directory for a call that was never
+      // going to run. Ask what the caller may do, then where it may write.
       yield* assertExternalDirectoryEffect(ctx, filepath)
 
       const outcome = yield* Effect.result(
@@ -112,10 +75,8 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
           output: filepath,
           fields: params.fields,
           abort: ctx.abort,
-          // Same reserved interface OsmGetFeatures uses (§6.2), worded for
-          // objects. The batched query settles most of them in one step and
-          // cannot be ticked through; the per-object fallback behind it is the
-          // part that runs long, and it is the only part a count can describe.
+          // The reserved per-unit channel (§6.2), worded for objects: the batched query settles most of them in one
+          // step, and the per-object fallback behind it is the part a count can describe.
           onProgress: (settled, total) =>
             ctx.metadata({
               title,
@@ -123,9 +84,8 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
             }),
         }),
       )
-      // Whole-call mistakes only — more ids than one call takes, or not one
-      // parseable id among them. Per-object trouble never arrives here; it
-      // arrives as `failed`, alongside a file that holds everything else.
+      // Whole-call mistakes only — more ids than one call takes, or not one parseable id among them. Per-object
+      // trouble arrives as `failed`, alongside a file that holds everything else.
       if (outcome._tag === "Failure") {
         return {
           title,
@@ -143,13 +103,11 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
       })
       if (lines.length > 0) lines.push("")
 
-      // The kernel names these fields for extents because it shares the shape
-      // with the extent-driven download; here they hold objects.
+      // Extent-named because `DownloadResult` is shared with the extent-driven download; here they count objects.
       const asked = result.extentsAsked
 
       if (result.outputs.length === 0) {
-        // That no file exists is the kernel's note, printed above. This line
-        // carries the half that note cannot: how much was asked for.
+        // That no file exists is the kernel's note, printed above; this line adds how much was asked for.
         lines.push(`None of the ${asked} requested object(s) could be obtained.`)
         return {
           title,
@@ -170,8 +128,8 @@ export const OsmGetObjectsTool = Tool.define<typeof Parameters, Metadata, GeoOsm
         lines.push(`The same object arrived more than once and was kept once: ${result.duplicates} duplicate(s).`)
       }
 
-      // `incomplete` counts here too: a service that answered early is a real
-      // shortfall that does not look like one (§6.3).
+      // `incomplete` counts too, and it can be the only one set: the batched fetch reporting a truncated answer
+      // makes the run partial even where the per-object fallback then filled the gap (§6.3).
       const partial =
         result.features < asked ||
         result.unassembled.length > 0 ||

@@ -11,50 +11,33 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 import { geoKind, RASTER_SUPPORTED, VECTOR_SUPPORTED } from "./geo-handoff"
 import DESCRIPTION from "./geo-read.txt"
 
-/* --- GeoCode: ReadGeoData, the geographic counterpart of `read`
- * (docs/TOOLS.md §3, GEOKERNEL §10.1 #9).
+/* --- GeoCode: ReadGeoData, the geographic counterpart of `read` (docs/TOOLS.md §3, GEOKERNEL §10.1 #9).
  *
- * Same skeleton as read on purpose: resolve the path, stat tolerantly, gate
- * external directories, ask BEFORE revealing whether the file exists, offer
- * nearby candidates on a miss, hand images to the model as attachments. What
- * read cannot do — and why this tool exists — is open the binary geo formats:
- * its binary guard rejects exactly the files this tool is for, and its text
- * path would silently truncate a large GeoJSON at 50 KB and call it data.
- *
- * The QGIS work itself lives in the geo kernel (reader.ts): scripts, JSON
- * markers, BOM, timeouts. This layer holds only what a *tool* owes the
- * session: permission, the readiness gate, the environment header, and the
- * shaping of outcomes. --- */
+ * Same skeleton as read on purpose: resolve the path, stat tolerantly, guard external directories, ask BEFORE
+ * revealing whether the file exists, offer nearby candidates on a miss. The QGIS half — scripts, JSON markers,
+ * BOM, timeouts — is the kernel's (qgis/reader.ts); what lives here is what a *tool* owes the session:
+ * permission, the readiness gate, the environment header and the shaping of outcomes. --- */
 
-/* The advertised formats live next to the `read` handoff that redirects them
- * here, so the two cannot disagree about what this tool accepts — the old
- * build kept a second hand-copied list in read.ts and had nothing but memory
- * holding them together. */
+/* One array for both sides of the handoff, so what `read` redirects and what this tool accepts cannot disagree
+ * (docs/TOOLS.md §7). */
 export { RASTER_SUPPORTED, VECTOR_SUPPORTED } from "./geo-handoff"
 
 const FEATURE_DEFAULT = 3
 const FEATURE_CAP = 50
 
 /**
- * The model-facing size budget for one read, in BYTES of the exact string the
- * model receives (compact JSON — the fit and the output must share one
- * serialization, or the budget is fiction; and bytes, not code units, or CJK
- * attribute values count one for three). Overflow here has exactly one
- * realistic cause — sampled features with fat attributes or geometry — so the
- * remedy is to DROP FEATURES, never to cut the string: a head-cut JSON is
- * syntactically dead, while a shorter feature list is still the same honest
- * shape with a smaller sample (docs/TOOLS.md §5).
+ * Bytes of the exact compact JSON the model receives (docs/TOOLS.md §5.2). Measuring anything else makes the
+ * budget fiction: the fit and the output must share one serialization, and code units would count a CJK attribute
+ * value one for three. Overflow drops sampled features rather than cutting the string, which would be dead JSON.
  */
 const OUTPUT_BUDGET = 50 * 1024
 
 const measure = (payload: Record<string, unknown>) => Buffer.byteLength(JSON.stringify(payload), "utf-8")
 
 /**
- * Trim `payload.layer.features` from the tail until the serialized payload
- * fits the budget. Returns how many were dropped and whether it fits now —
- * `fits: false` means even the featureless payload is over budget (a very
- * wide schema's field statistics), which we ship honestly rather than cut.
- * Exported for the tripwire: this is pure shaping, testable without QGIS.
+ * Drops `payload.layer.features` from the tail until the payload fits. `fits: false` means even the featureless
+ * payload is over budget — a very wide schema's field statistics — which ships whole rather than cut. Exported
+ * because it is pure shaping, so the tripwire can exercise it without QGIS.
  */
 export function fitVectorPayload(payload: Record<string, unknown>, budget: number): { dropped: number; fits: boolean } {
   const layer = payload.layer as Record<string, unknown> | undefined
@@ -91,9 +74,8 @@ export const Parameters = Schema.Struct({
 
 type Metadata = {
   [key: string]: unknown
-  /** Always set: output is bounded by the kernel's read caps, so the generic
-   * head-truncation must never run — it would cut the tail, where everything
-   * a failed read needs for attribution lives (docs/TOOLS.md §5). */
+  /** Never left unset: `Tool.define` skips its own truncation once this field exists, and that truncation keeps
+   * the head and drops the tail, where the notice and the banner are (docs/TOOLS.md §5.1). */
   truncated: boolean
 }
 
@@ -109,8 +91,7 @@ export const GeoReadTool = Tool.define<
     const runtime = yield* GeoRuntime.Service
     const status = yield* GeoStatus.Service
 
-    // Same shape as read's miss(): a not-found error that names up to three
-    // similarly-named neighbours instead of leaving the model to guess.
+    // read's miss(), same shape: a not-found error naming up to three similarly-named neighbours.
     const miss = Effect.fn("GeoReadTool.miss")(function* (filepath: string) {
       const dir = path.dirname(filepath)
       const base = path.basename(filepath)
@@ -155,15 +136,8 @@ export const GeoReadTool = Tool.define<
         ),
       )
 
-      /* The environment, before EITHER prompt (docs/TOOLS.md §4.3).
-       *
-       * Placed above the boundary guard rather than merely above `ctx.ask`,
-       * because the guard is a prompt too — and it is the one a user actually
-       * meets here, since `geodata` is granted outright while
-       * `external_directory` is not. Reading a file outside the workspace with
-       * QGIS unconfigured would otherwise ask the user to hand over a directory
-       * for a call that cannot read anything at all.
-       */
+      // Above the boundary guard, not merely above `ctx.ask`: the guard is a prompt too, and the only one a user
+      // meets here, since `geodata` is granted outright while `external_directory` is not (docs/TOOLS.md §3).
       const deadEnd = yield* GeoTool.qgisLocalDeadEnd(status)
       if (deadEnd) {
         return {
@@ -177,8 +151,7 @@ export const GeoReadTool = Tool.define<
         kind: stat?.type === "Directory" ? "directory" : "file",
       })
 
-      // Ask before revealing anything about the file — including whether it
-      // exists (read's ordering, kept for the same information-leak reason).
+      // Ask before revealing anything about the file, including whether it exists — read's ordering, kept.
       yield* ctx.ask({
         permission: "geodata",
         patterns: [title],
@@ -192,9 +165,6 @@ export const GeoReadTool = Tool.define<
       }
 
       const ext = path.extname(filepath).toLowerCase().slice(1)
-      // The same judgement `read` redirects on (geo-handoff.ts). One function,
-      // both sides: what this tool accepts and what that tool hands over cannot
-      // disagree, because there is nothing to keep in agreement.
       const kind = geoKind(filepath)
       if (!kind) {
         return yield* Effect.fail(
@@ -208,21 +178,15 @@ export const GeoReadTool = Tool.define<
         return yield* Effect.fail(new Error("Preview mode is only supported for raster formats."))
       }
 
-      // Snapshotted before the gate so a refusal still carries the environment
-      // line, and taken again after it (§11.2 环境头快照). Without the entry
-      // snapshot this tool answered a shut gate bare while RunQgisAlgorithm
-      // answered the same event with a header — one event, two shapes.
+      // Snapshotted before the gate so a refusal still carries the environment line, and taken again after it
+      // (§11 环境头快照).
       const entryHeader = yield* GeoTool.qgisHeader(status)
 
       const gate = yield* GeoTool.settledQgisGate(qgis, ctx.abort)
       if (!gate.ok) {
-        // Environment-not-ready is a diagnostic outcome for the model to relay,
-        // not a defect (CONVENTIONS §6): the error bit and the status name ride
-        // in metadata; the guidance rides in the output and is authored by the
-        // kernel, one voice for the whole QGIS group (GEOKERNEL §8.6).
-        // The empty-string fallback covers one sub-millisecond shape: a whole
-        // probe round completing between the gate's two reads can hand back a
-        // fully-ready status with ok:false, for which render has nothing.
+        // The fallback covers the one shape the gate refuses without a complaint to render: a new round that has
+        // completed between the gate's two status reads leaves it returning `ok: false` beside a
+        // fully-ready one, and `QgisGuidance.render` answers those with "".
         return {
           title,
           output: [
@@ -242,16 +206,9 @@ export const GeoReadTool = Tool.define<
       }
       const header = yield* GeoTool.qgisHeader(status)
 
-      /**
-       * A cancelled read is not a failed read.
-       *
-       * Upstream does not interrupt a tool when the signal fires — it takes
-       * whatever the tool returns and completes the call with it
-       * (session/tools.ts) — so grading a cancellation as a failure files the
-       * user's own Esc under "the read broke", and the Agent reads that as
-       * something to retry. Same banner the QGIS group's other tools use, so
-       * one event does not arrive as two different stories.
-       */
+      /** The only one of the five terminations this tool renders: the reader collapses every other ending into a
+       * `detail` string, so the rest become `error_code` (GEOKERNEL §11). Cancelling is not failing — upstream
+       * completes the call with whatever a cancelled tool returned (session/tools.ts). */
       const cancelled = () => ({
         title,
         output: [header, GeoTool.terminationBanner("abort")].filter(Boolean).join("\n"),
@@ -264,17 +221,9 @@ export const GeoReadTool = Tool.define<
         },
       })
 
-      /**
-       * A raster with no georeferencing is not this tool's to open.
-       *
-       * The five places are named rather than summarized. "Not geographic data"
-       * on its own reads like a guess about the file and invites a second
-       * attempt at it; a list of what was looked for and not found does not.
-       *
-       * Both modes reach it from the same five facts through the same
-       * function, so they cannot come back with two accounts of one file
-       * (GEOKERNEL §7.9).
-       */
+      /** Both modes reach this through `Georeference.of`, so one file cannot get two accounts (GEOKERNEL §7.9).
+       * The five places are named rather than summarized: "not geographic data" alone reads like a guess about
+       * the file and invites a second attempt at it. */
       const notGeographic = () => ({
         title,
         output: [
@@ -304,16 +253,14 @@ export const GeoReadTool = Tool.define<
           return {
             title,
             output: [header, `Preview failed: ${outcome.detail}`].filter(Boolean).join("\n"),
-            // A data failure, not an environment one. `error: true` is reserved
-            // for the shut gate, where it travels with geoStatus; reusing it
-            // here would have a failed render render as an environment card.
+            // `error: true` is reserved for the shut gate, where it travels with `geoStatus`; reusing it for a
+            // data failure would have a failed render show up as an environment card.
             metadata: { mode: params.mode, truncated: false, error_code: "PreviewFailed", failed: true },
           }
         }
         const meta = outcome.meta
-        // After the render rather than before it, because the facts arrive with
-        // it. The wasted encode falls exactly on the files being refused, and
-        // those are pictures — the scenes worth minutes all pass.
+        // Judged after the render because the facts arrive with it; the wasted encode falls only on the files
+        // being refused, which are ordinary pictures.
         if (Georeference.of(Georeference.reported(meta.georeferencing)) === "none") return notGeographic()
         const size =
           meta.original_width !== undefined && meta.original_height !== undefined
@@ -350,9 +297,9 @@ export const GeoReadTool = Tool.define<
               file: filepath,
               offset,
               maxFeatures: requested,
-              // Any multi-layer driver, not just GeoPackage: the reader emits an
-              // overview whenever layer_count > 1, so gating selection on .gpkg
-              // showed a .gpx's five layers and gave no way to reach past the first.
+              // Passed through for any driver, not just GeoPackage: vector_read.py emits the overview whenever
+              // layer_count > 1, so gating selection on `.gpkg` would list a .gpx's layers with no way past the
+              // first.
               ...(params.layerIndex !== undefined ? { layerIndex: params.layerIndex } : {}),
               abort: ctx.abort,
             })
@@ -369,17 +316,14 @@ export const GeoReadTool = Tool.define<
 
       const payload = outcome.payload
       if (payload.georeferencing !== undefined) {
-        // The same judgement the preview path makes, from the same five facts.
-        // The block is then REPLACED by its verdict: the Agent is owed the
-        // conclusion — `rpc` says an extent it is about to read is still pixel
-        // indices — and not five raw fields it would have to combine itself.
+        // The reported block is replaced by its verdict rather than shipped beside it: the Agent is owed the
+        // conclusion, not five raw fields it would have to combine itself.
         const verdict = Georeference.of(Georeference.reported(payload.georeferencing))
         if (verdict === "none") return notGeographic()
         payload.georeferencing = verdict
       }
-      // The vector payload nests the layer detail under `layer` ({ driver,
-      // layer_index, overview?, layer }); raster facts sit at the top level.
-      // The layer object is where feature_count and the CRS facts live.
+      // vector_read.py nests the layer facts under `layer`, keeping only driver, layer_index and overview at the
+      // top; raster_read.py puts everything at the top. `feature_count` and the CRS facts are on the inner one.
       const detail = (payload.layer ?? payload) as Record<string, unknown>
       const metadata: Metadata = { mode: params.mode, truncated: false, data_type: isRaster ? "raster" : "vector" }
       if (payload.driver !== undefined) metadata.driver = payload.driver
@@ -388,23 +332,17 @@ export const GeoReadTool = Tool.define<
       if (detail.size !== undefined) metadata.size = detail.size
       if (detail.band_count !== undefined) metadata.band_count = detail.band_count
       if (payload.georeferencing !== undefined) metadata.georeference = payload.georeferencing
-      // Defect warnings ride at metadata top level so the Agent sees them
-      // without parsing the payload (kept from the old tool: missing CRS and
-      // identity-geotransform are the two classic silent data defects).
+      // Lifted to the metadata's top level so a reader sees them without parsing the payload: a missing CRS and
+      // an identity geotransform are the two data defects that are otherwise silent.
       if (detail.crs_warning) metadata.crs_warning = detail.crs_warning
       if (detail.geotransform_warning) metadata.geotransform_warning = detail.geotransform_warning
 
-      // Size is OUR gate, never upstream's (docs/TOOLS.md §5): over budget we
-      // drop sampled features and say so — `truncated: true` here carries
-      // read's meaning, "more exists, continue with offset", not "text was cut".
-      // The payload ships COMPACT: the budget measures the very string sent,
-      // and pretty-printing coordinate arrays would spend 3× the context on
-      // whitespace.
-      // A layer holding more than one geometry type is sampled BY TYPE, across
-      // the whole layer, and ignores offset entirely (vector_read.py's mixed
-      // branch) — `geometry_types` on the payload is how it says so. Telling
-      // the caller to continue with offset there would send it back for the
-      // same features it already has.
+      // `truncated: true` here carries read's meaning — more exists, continue with offset — not "text was cut",
+      // so it arrives without an `outputPath` (docs/TOOLS.md §5.2).
+      //
+      // Except on a mixed layer: vector_read.py samples those by geometry type across the whole layer and ignores
+      // offset entirely, and `geometry_types` on the payload is how it says so. Continuing with offset there
+      // would ask for the features the caller already has.
       const paged = detail.geometry_types === undefined
       const fit = fitVectorPayload(payload, OUTPUT_BUDGET)
       let notice: string | undefined
