@@ -19,42 +19,18 @@ export { GeoQgis } from "./qgis"
 export { GeoRuntime } from "./runtime"
 export { GeoStatus } from "./status"
 
-/* --- GeoCode: GeoKernel, the geographic execution kernel (docs/GEOKERNEL.md).
- *
- * A pure service layer carrying the product's geographic execution capability,
- * exposed through three faces: tools, status and data. Everything under this
- * directory is new code — the kernel above it is modified only at the injection
- * points listed in §10.1, each with a tripwire test.
- *
- * Mounted as ONE node so the service-graph injection stays a single line, which
- * is what keeps it cheap to carry across upstream merges (§2.4 principle 6).
- *
- * Infrastructure layer. The four are mutually independent — each depends only
- * on the host kernel — which is what lets them be built in any order:
- *   config   `machine.json`: load, watch, dispatch per block            §3.1
- *   runtime  subprocess execution: spawn, deliver, clock, terminate     §3.2
- *   status   slot storage, generation-guarded commit, publication       §3.4
- *   net      network reachability: resolve, probe, monitor              §3.3
- *
- * Capability layer, on top of those:
- *   qgis     lifecycle, resolution, catalog, executor, data reading      §4
- *   gee      lifecycle, chain, authorization, execution, runtime library  §5
- *   osm      client reliability, queries, extents, conversion, output    §6
- *   gdal     toolchain discovery, and the vector and raster pipelines     §7 --- */
+/* --- GeoCode: GeoKernel, the geographic execution kernel — four infrastructure modules and the four capability
+ * modules above them (docs/GEOKERNEL.md §2.2), mounted as one node so the host's service graph gains a single
+ * line (§10.1 #4). --- */
 export const node = LayerNode.group([
   MachineConfig.node,
   GeoRuntime.node,
   GeoNet.node,
   GeoStatus.node,
   GeoQgis.node,
-  // The catalog is one of the two consumers §4.11 names — algorithm retrieval
-  // is the tool layer's, and qgis/index.ts already lists it on the module's
-  // face. It has to be a GROUP MEMBER to be reachable: compile() provides a
-  // node's deps (hidden) and provideMerges group members (exposed), so as a
-  // dep of GeoQgis.node alone the service exists but nothing outside can ask
-  // for it. Same node object, so the memo map hands out one instance — the
-  // lifecycle's catalog and the tool layer's are the same catalog, which is
-  // the whole point (a second one would answer from an empty registry).
+  // A group member as well as GeoQgis.node's dependency, because both consumers §4.11 names sit in the tool layer:
+  // compile() provides a node's deps to that node alone and merges group members outward, so as a dependency only
+  // the catalog would exist with nothing outside able to ask for it. Same node object, so both routes get one of it.
   GeoQgis.QgisCatalog.node,
   GeeService.node,
   GeoOsm.node,

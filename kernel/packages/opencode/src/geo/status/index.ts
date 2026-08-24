@@ -7,15 +7,9 @@ import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { EventV2 } from "@opencode-ai/core/event"
 import { GeoEvent } from "@opencode-ai/schema/geo-event"
 
-/* --- GeoCode: the Status module of GeoKernel's infrastructure layer
- * (docs/GEOKERNEL.md §3.4). Storage, concurrency-safe commit, publication and
- * snapshot aggregation for the capability modules' environment status.
- *
- * It deliberately understands nothing about geography. It does not know what
- * "ready" means, when to re-probe, or how a state should be rendered — those
- * are the capability modules' judgments (§2.4 principle 2). What it owns is the
- * one mechanism all three of them would otherwise each re-implement: a stale
- * result must never overwrite a fresh one. --- */
+/* --- GeoCode: the Status module of GeoKernel's infrastructure layer (docs/GEOKERNEL.md §3.4) — slot storage,
+ * generation-guarded commit, publication and snapshot, so that no capability module implements "a stale result must
+ * never overwrite a fresh one" itself. --- */
 
 export type SlotName = "qgis" | "gee" | "gdal"
 
@@ -34,47 +28,30 @@ const DEFINITIONS = {
   gdal: GeoEvent.GdalChanged,
 } as const
 
-/**
- * Identifies one round of resolution. Opaque to callers: they take one when a
- * round begins and hand it back when the round produces something.
- */
+/** Identifies one round of resolution; callers take one and hand it back, never reading it. */
 export interface Token {
   readonly slot: SlotName
   readonly generation: number
 }
 
-/**
- * A slot's sole writer. Handed out once per slot at registration, which makes
- * the single-writer rule structural rather than a check that can be forgotten
- * (§3.4).
- */
+/** A slot's sole writer, handed out once per slot at registration, which makes the single-writer rule structural. */
 export interface Writer<Name extends SlotName> {
   /**
-   * Begin a round and take its token.
-   *
-   * The token covers the ENTIRE round, not one phase: a resolution made of
-   * environment validation followed by catalog construction uses one token
-   * throughout, so when a new round starts the previous round's later phases
-   * are invalidated without each module having to reason about it (§3.4, §4.8).
+   * One token for the whole round rather than one per phase, so that a new round invalidates the phases the previous
+   * one has still to finish without any module tracking that itself (§4.8).
    */
   readonly claim: () => Effect.Effect<Token>
   /**
-   * Publish a value for this round. Returns false when the token is stale — the
-   * value is discarded, including intermediate states, so a superseded round
-   * cannot even flash its progress onto the user's screen.
+   * False when the token is not this slot's current round, and the value is then dropped — intermediate states too,
+   * so a superseded round cannot flash its progress onto the screen. A value equal to the current one returns true
+   * and publishes nothing.
    */
   readonly commit: (token: Token, value: SlotValues[Name]) => Effect.Effect<boolean>
 }
 
 /**
- * Every slot's current value.
- *
- * Each is OPTIONAL, and that is the honest shape rather than a convenience: a
- * slot exists only once its owning capability module has registered it, so a
- * snapshot taken while the process is still coming up is genuinely missing
- * entries. The data face declares the same thing (httpapi/groups/geo.ts) and a
- * tripwire pins it ("reports a slot that has not registered as absent"), so
- * required fields here would have been the one place claiming otherwise.
+ * Optional per slot because a slot exists only from its module's registration, so a snapshot taken while the process
+ * is still coming up is genuinely missing entries — the data face declares the same (httpapi/groups/geo.ts).
  */
 export type Snapshot = { readonly [Name in SlotName]?: SlotValues[Name] }
 
@@ -105,18 +82,12 @@ const layer = Layer.effect(
     const generations = new Map<SlotName, number>()
     const registered = new Set<SlotName>()
 
-    // Uninterruptible as a unit. A round is interrupted the moment a new
-    // configuration arrives, and an interruption landing between the two
-    // publishes leaves the stored value updated while the wire never heard —
-    // after which the next round's identical first state is discarded as a
-    // duplicate and subscribers sit on a stale frame until something else
-    // changes. The three steps are one state transition; they end together.
+    // Uninterruptible as a unit — a new configuration interrupts a round mid-flight, and stopping after the store
+    // strands subscribers on a stale frame, the next round's identical value being discarded as a duplicate.
     const publish = (slot: SlotName, value: SlotValues[SlotName]) =>
       Effect.gen(function* () {
         values.set(slot, value)
         yield* PubSub.publish(pubsub, { slot, value })
-        // The wire payload is the whole state object: consumers replace the
-        // slot rather than merging into it (§3.4).
         yield* events.publish(DEFINITIONS[slot], { status: value } as never)
       }).pipe(Effect.uninterruptible)
 
@@ -140,8 +111,7 @@ const layer = Layer.effect(
           Effect.gen(function* () {
             if (token.slot !== slot) return false
             if (token.generation !== generations.get(slot)) return false
-            // Compared against the current value so a periodic probe that keeps
-            // reaching the same conclusion produces no event noise (§3.4).
+            // A periodic probe reaching the same conclusion again is a success with nothing to publish (§3.4).
             if (isDeepStrictEqual(values.get(slot), value)) return true
             yield* publish(slot, value)
             return true
@@ -153,18 +123,13 @@ const layer = Layer.effect(
     const current = <Name extends SlotName>(slot: Name) =>
       Effect.sync(() => values.get(slot) as SlotValues[Name] | undefined)
 
-    // The cast survives only because `Object.fromEntries` cannot keep a Map's
-    // key-to-value correlation — not because anything here is being asserted
-    // about which slots are present. `Snapshot` says "any of them may be
-    // missing", which is exactly what this map is.
+    // The cast recovers the key-to-value correlation `Object.fromEntries` drops; it asserts nothing about presence.
     const snapshot = () => Effect.sync(() => Object.fromEntries(values) as Snapshot)
 
     const watch = <Name extends SlotName>(slot: Name): Stream.Stream<SlotValues[Name]> =>
       Stream.unwrap(
         Effect.gen(function* () {
-          // Subscribe first, read second — the ordering contract of §9.2. The
-          // reverse leaves a window in which a change is lost by both paths and
-          // the consumer sits on a stale value with no way to notice.
+          // Subscribe first, read second (§9.2): the reverse loses a change landing between the two to both paths.
           const subscription = yield* PubSub.subscribe(pubsub)
           const seed = values.get(slot) as SlotValues[Name] | undefined
           let last = seed
@@ -172,8 +137,7 @@ const layer = Layer.effect(
             Stream.filter((change) => change.slot === slot),
             Stream.map((change) => change.value as SlotValues[Name]),
             Stream.filter((value) => {
-              // A change landing inside the subscribe/read window would arrive
-              // twice; drop the repeat.
+              // A change landing inside the subscribe/read window arrives twice; drop the repeat.
               if (last !== undefined && isDeepStrictEqual(last, value)) return false
               last = value
               return true

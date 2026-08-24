@@ -11,63 +11,35 @@ import type { Environment } from "./types"
 
 /* --- GeoCode: GEE script execution (docs/GEOKERNEL.md §5.9).
  *
- * Takes a VERIFIED environment from the gate and never looks a status up for
- * itself (§9.1), and returns the script's own output alongside the facts
- * about the run — assembled text is the tool layer's business, not ours
- * (§9.1 第二条硬性形态). --- */
+ * Takes a verified environment from the gate rather than looking a status up (§9.1), and returns structured facts:
+ * the script's own output went to `onChunk` as it arrived, and the agent-facing text is the tool layer's to
+ * compose (§9.1 第二条硬性形态). --- */
 
 /**
- * The idle-clock floor and default, in seconds.
- *
- * An IDLE clock, not a total one, and that choice is half of a contract: a
- * GEE script legitimately spends hours inside one remote call, so no total
- * budget could be both generous enough to be safe and small enough to be
- * useful. The other half lives in the runtime library — long operations wrap
- * themselves in a heartbeat, which is what turns "still working" into output
- * this clock can see. A script that does not heartbeat WILL be stopped; that
- * is not a bug to work around but the premise the library is built on, and it
- * has to reach the agent through the tool description (§5.9 心跳契约).
+ * Idle rather than total (§8.4): one remote call legitimately runs for hours, so silence is the only signal left —
+ * which works only because the script must wrap long operations in the library's heartbeat (§5.9 心跳契约).
  */
 export const IDLE_FLOOR_SECONDS = 60
 export const IDLE_DEFAULT_SECONDS = 60
 
-/**
- * The library's default heartbeat interval, in seconds.
- *
- * The floor above is twice this, and the relationship is the point: a script
- * heartbeating exactly as documented emits every HEARTBEAT_INTERVAL_SECONDS,
- * so an idle limit at or near that number kills scripts that are doing
- * precisely what the contract asks. These two numbers move together — raising
- * the library's interval without raising the floor reintroduces the race.
- */
+/** `geocode.py`'s `heartbeat(interval=30)`; the floor has to stay above it or a compliant script is stopped. */
 export const HEARTBEAT_INTERVAL_SECONDS = 30
 
 export interface Options {
-  /** Inline source, for a one-off query. Exactly one of this and `scriptPath`. */
+  /** Inline source. Exactly one of this and `scriptPath` — the tool layer refuses both, and `scriptPath` wins here. */
   readonly script?: string
-  /** A file to run, for work worth keeping. Exactly one of this and `script`. */
   readonly scriptPath?: string
   readonly onChunk: (chunk: string) => Effect.Effect<void>
-  /** Idle limit in seconds — the §8.4 caller-given tier. Clamped to the floor. */
+  /** Idle limit in seconds, clamped up to the floor. §8.4 fixes this tier, so no tool exposes it. */
   readonly idleSeconds?: number
   readonly abort?: AbortSignal
   readonly cwd?: string
 }
 
-/**
- * What a run produced.
- *
- * Deliberately not a rendered string: the streaming callback already carried
- * the script's own output to the frontend, and the agent-facing text — the
- * environment header, the termination banner, the elapsed footer — is
- * composed by the tool layer from these facts. Merging them here would force
- * the frontend to take the header back out by string match (§9.1).
- */
 export interface Outcome {
   readonly result: GeoRuntime.Result
   /** The environment the run actually used, for the caller's header. */
   readonly environment: Environment
-  /** Which form ran, since the two are surfaced differently. */
   readonly mode: "inline" | "file"
 }
 
@@ -76,10 +48,8 @@ export function ensureLibrary(
   directory: string = path.join(Global.Path.cache, "geo", "gee-runtime"),
   content: string = GEOCODE_PY,
 ): string {
-  // Content-hashed DIRECTORY rather than file: the module has to be importable
-  // as `geocode`, so its filename is fixed and the hash has to live one level
-  // up. A library change lands in a new directory, and an existing one is by
-  // construction the right content.
+  // The DIRECTORY carries the hash: the module has to import as `geocode`, so its filename is fixed and the hash
+  // lives one level up. A library change lands in a new directory; an existing one already holds this content.
   const hash = createHash("sha256").update(content).digest("hex").slice(0, 8)
   const home = path.join(directory, hash)
   const module = path.join(home, "geocode.py")
@@ -90,24 +60,15 @@ export function ensureLibrary(
     try {
       renameSync(staging, module)
     } catch (error) {
-      // Same Windows rename contention as the QGIS reader: the target is
-      // content-addressed, so if it exists now someone else wrote exactly this.
+      // Windows refuses a rename onto a path another process just created; the path is content-addressed, so a
+      // target that exists now holds exactly these bytes.
       if (!existsSync(module)) throw error
     }
   }
   return home
 }
 
-/**
- * The environment a script runs in (§5.9 注入内容).
- *
- * Six things, and each is here because a script that had to arrange it for
- * itself would get it wrong: the route so remote traffic follows what Net
- * resolved, the project so no script hardcodes it, the library path so the
- * import works, the fault handler because we cannot insert a line into a
- * script an agent wrote, and the encoding pair so non-English output is not
- * mojibake on the way out.
- */
+/** The injection (§5.9 注入内容): route, project, library path, fault handler, encoding — none of it a script's job. */
 export function environmentFor(environment: Environment, libraryHome: string): Record<string, string> {
   const separator = process.platform === "win32" ? ";" : ":"
   const inherited = process.env.PYTHONPATH
@@ -115,16 +76,13 @@ export function environmentFor(environment: Environment, libraryHome: string): R
     ...environment.env,
     GEE_PROJECT: environment.project,
     PYTHONPATH: inherited ? `${libraryHome}${separator}${inherited}` : libraryHome,
-    // The env-var form of enabling the fault handler, which is the only form
-    // available to us: the script is the agent's to write, so a native crash
-    // inside a C extension would otherwise produce no stack at all.
+    // The env-var form, because the script is the agent's to write: a native crash would otherwise leave no stack.
     PYTHONFAULTHANDLER: "1",
     PYTHONUTF8: "1",
     PYTHONIOENCODING: "UTF-8",
   }
 }
 
-/** Run a script in a verified environment. */
 export function run(
   runtime: GeoRuntime.Interface,
   environment: Environment,

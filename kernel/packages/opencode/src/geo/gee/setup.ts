@@ -9,44 +9,13 @@ import type { GeoRuntime } from "../runtime"
 import { GeoOutput } from "../runtime/output"
 import { GeeDeps } from "./deps"
 
-/* --- GeoCode: the local dependency chain (docs/GEOKERNEL.md §5.3).
- *
- * Four checks in dependency order, short-circuited at the first gap, so the
- * guidance can say "step N of 4" instead of handing the user a list of
- * problems to sort out themselves (§5.11). Where the chain stops is where the
- * guidance starts — the two are the same structure seen from two ends.
- *
- * Two of the four never start a subprocess: the interpreter is a file
- * existence question, and the project identifier is a config read. Only the
- * middle two — packages and credentials — need Python, and they share one
- * spawn.
- *
- * EVERYTHING HERE IS OFFLINE. No network route is injected, no project
- * identifier is passed. The conclusion "this machine is set up" must not
- * change because a cable was unplugged; mixing the two would put network
- * weather into a local fact and send the user to fix the wrong thing. --- */
+/* --- GeoCode: the local dependency chain — four checks in dependency order, short-circuited at the first gap, so
+ * where the chain stops is where the guidance starts (docs/GEOKERNEL.md §5.3, §5.11). --- */
 
 /** One marker line, same protocol as every other script in the kernel (§4.3 principle 7). */
 export const MARKER = "__GEOCODE_GEE_SETUP_JSON__"
 
-/**
- * The probe.
- *
- * Three properties are load-bearing:
- *
- * - **The manifest arrives as DATA**, parsed by the script, never spliced into
- *   it as import statements. A package name is a string from a list we edit;
- *   pasting strings into source is how a list edit becomes a syntax error.
- * - **Credentials are judged by the file's existence**, not by asking the
- *   client library. Its quiet authentication path does not raise, may simply
- *   do nothing, and reports success either way — which turns "no credentials"
- *   into "ready" and moves the failure to the middle of the user's first
- *   script. Whether the credentials still WORK is a remote fact and belongs to
- *   §5.5, not here.
- * - **The fault handler is enabled before any third-party import.** These
- *   packages carry native extensions; a broken one segfaults during load,
- *   where no except block will ever see it.
- */
+/** faulthandler first: these packages carry native extensions, and a segfault during import reaches no `except`. */
 export const SCRIPT = `
 import faulthandler, sys
 faulthandler.enable(file=sys.stderr)
@@ -91,48 +60,28 @@ sys.stdout.flush()
 os._exit(0)
 `
 
-/**
- * Fixed total clock (§8.4, kernel-known tier).
- *
- * Measured at 1.4–1.7s warm on a real conda environment with all four
- * packages; the budget is for the cold case, where these imports pull tens of
- * megabytes of native extensions off a slow disk on first use.
- */
+/** Fixed total (§8.4): warm runs measure 1.4–1.7s; the rest is for the cold import of native extensions. */
 const TOTAL = "30 seconds"
 
 /** Every proxy spelling, blanked. Net owns the list of spellings (§3.3). */
 const offline: Record<string, string> = Object.fromEntries(NetRoute.PROXY_KEYS.map((key) => [key, ""]))
 
-/** What the probe found. */
 export type Report = {
   readonly missing: readonly string[]
   readonly credentials: boolean
   readonly version?: string
   /** Set when the credential check itself broke — which is not the same as no credentials. */
   readonly credentials_error?: string
-  /**
-   * Set when a package IS installed and still would not import.
-   *
-   * Separate from `missing` because the two have opposite fixes: one is
-   * installed, the other is repaired or reinstalled, and `pip install` on the
-   * first does nothing at all.
-   */
+  /** Installed and still unimportable — apart from `missing` because `pip install` does nothing for it. */
   readonly broken?: { readonly pkg: string; readonly error: string }
 }
 
-/**
- * Run the four checks and return the state to publish.
- *
- * The whole chain lives in one function because the order IS the design: each
- * step is only meaningful once the previous one passed, and splitting them
- * across call sites would let a caller ask them out of order.
- */
 export function probe(
   runtime: GeoRuntime.Interface,
   block: MachineSchema.Gee | undefined,
 ): Effect.Effect<GeoEvent.GeeSetup> {
   return Effect.gen(function* () {
-    // 1. The interpreter. No subprocess: there is nothing to run yet.
+    // 1. The interpreter — a file check; there is nothing to run a probe with yet.
     const python = block?.python?.trim()
     if (!python) return { status: "unconfigured" as const }
     if (!existsSync(python)) return { status: "python-missing" as const, python }
@@ -142,17 +91,8 @@ export function probe(
       .run({
         command: python,
         args: ["-c", SCRIPT, JSON.stringify(GeeDeps.DEPS.map((dep) => ({ pkg: dep.pkg, module: dep.module })))],
-        // Offline, and made offline EXPLICITLY (§5.3). The subprocess
-        // inherits our environment, so a proxy the user's shell exported
-        // would reach it — and while this probe dials nothing itself, an
-        // import that does would then hang on a dead proxy until the clock
-        // kills it, and the user would be told their local environment is
-        // broken when only the network is. Blanked rather than left unset,
-        // because unset does not survive inheritance (§3.3 直连需显式清除);
-        // unconditionally, because "this probe has no proxy" should not
-        // depend on what our own process happened to be started with. No
-        // project either — that is checked here, from config, and the probe
-        // has no business knowing it.
+        // Blanked rather than left unset, because the subprocess inherits our environment (§3.3 直连需显式清除): an
+        // ambient proxy plus one import that dials out is a probe timeout, reported as a broken local environment.
         env: { ...offline, PYTHONUTF8: "1", PYTHONIOENCODING: "UTF-8" },
         delivery: { mode: "collect" },
         clocks: { total: TOTAL },
@@ -160,8 +100,8 @@ export function probe(
       })
       .pipe(
         Effect.catch((error) =>
-          // A spawn that fails outright — the path names a directory, or a
-          // file that is not executable. Normal user input, not a defect.
+          // A spawn that never starts — the path names a directory, or a file that is not executable. Normal input,
+          // so it is graded rather than raised.
           Effect.succeed<GeoRuntime.Result>({
             code: null,
             reason: "crash",
@@ -188,11 +128,8 @@ export function probe(
     if (!Array.isArray(report.missing)) {
       return { status: "probe-failed" as const, error: `the setup report was not the expected shape\n${tail(result)}` }
     }
-    // An installed package that will not import is not a missing one, and the
-    // difference decides what the user is told to do: `pip install` cannot fix
-    // an ABI mismatch, so calling it "missing" starts a loop — install, still
-    // reported missing, install again. Nor is it a failed probe: this probe
-    // answered, and said which package.
+    // Not `packages-missing`, whose fix is an install that would do nothing here, and not `probe-failed` — this
+    // probe answered, and named the package.
     if (report.broken) {
       return {
         status: "packages-broken" as const,
@@ -204,10 +141,8 @@ export function probe(
     if (report.missing.length > 0) {
       return { status: "packages-missing" as const, python, missing: report.missing.map(String) }
     }
-    // A broken check is not a missing credential. The client library imported
-    // fine a moment ago, so failing to reach its credential path means the
-    // installation is wrong — and answering "credentials-missing" would send
-    // the user to run an authentication command that cannot fix it.
+    // The client library imported a moment ago, so a credential path we cannot reach is a broken install, not a
+    // missing credential — and `credentials-missing` sends the user to an authentication command that cannot fix it.
     if (typeof report.credentials_error === "string") {
       return {
         status: "probe-failed" as const,
@@ -216,14 +151,11 @@ export function probe(
     }
     if (report.credentials !== true) return { status: "credentials-missing" as const, python }
 
-    // 4. The project identifier — a config read, and last in the chain
-    // because only an authorized run needs it (§5.2).
+    // 4. The project — a config read, last because it decides authorization rather than whether Python runs (§5.2).
     const project = block?.project?.trim()
     if (!project) return { status: "project-missing" as const }
 
-    // Ready carries the facts, because after this point nothing else holds
-    // them: the guidance names the project, the environment header names all
-    // three, and neither can look them up.
+    // `ready` carries the three facts the environment header and the guidance render; neither can look them up.
     return {
       status: "ready" as const,
       python,

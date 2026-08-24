@@ -22,40 +22,18 @@ export type { Environment } from "./types"
 
 /* --- GeoCode: the GEE lifecycle (docs/GEOKERNEL.md §5.1, §5.7).
  *
- * Owns the status slot and is its only writer. Three facts arrive from three
- * places that know nothing of each other — a local probe, Net's verdict, and
- * (from 3c) the remote authorization check — and each is published the moment
- * it settles rather than waiting for the others.
- *
- * The layer order is not an implementation detail: local before network before
- * remote is what keeps the user facing one problem at a time, and it lives in
- * `compose` as a pure function so it stays that way. --- */
+ * Sole writer of the status slot. The three facts come from sources that know nothing of each other — a local
+ * probe, Net's verdict, the remote authorization check — and each is published the moment it settles rather than
+ * waiting for the others; their priority lives in `compose` as a pure function. --- */
 
-/**
- * The endpoint whose reachability decides whether Earth Engine is usable.
- *
- * ONE target, not a group. A group exists to rank interchangeable endpoints
- * against each other; these are not interchangeable — every request goes to
- * this host, and any other address would only ever be a stand-in for probing.
- */
+/** The endpoint whose reachability decides whether Earth Engine is usable. */
 export const TARGET: NetTypes.Target = {
   id: "gee",
   host: "earthengine.googleapis.com",
   port: 443,
 }
 
-/**
- * The setup states a retry is allowed to re-probe (§5.8).
- *
- * What they have in common: the user can fix them WITHOUT touching the config
- * file — install a package, run the authentication command — and none of those
- * actions is something the file watcher can see. A tool retry is the only
- * signal that the world may have changed, so it is treated as one.
- *
- * `unconfigured` and `project-missing` are deliberately absent: both are fixed
- * by editing the config, and that path is already watched. Re-probing on them
- * would be a second trigger for an event we already receive.
- */
+/** Setup states a tool retry re-probes: each can be fixed without touching the config, which is watched (§5.8). */
 const SELF_HEALING: ReadonlySet<GeoEvent.GeeSetup["status"]> = new Set([
   "python-missing",
   "packages-missing",
@@ -64,68 +42,29 @@ const SELF_HEALING: ReadonlySet<GeoEvent.GeeSetup["status"]> = new Set([
   "probe-failed",
 ])
 
-/**
- * How close together two forced re-probes may be.
- *
- * Leading edge: the first retry probes immediately — someone who just finished
- * installing a package should not wait — while a burst behind it collapses
- * into that one probe instead of a subprocess per retry.
- */
+/** Leading edge: the first retry probes at once, and a burst behind it collapses into that one probe. */
 const RECHECK_DEBOUNCE_MS = 3_000
 
 /**
- * How long a rejected conclusion is reused before the remote is asked again
- * (§5.5 退避).
- *
- * Bounds the cost of a caller that keeps trying: without it, an agent
- * retrying a script five times would spend five credentialed calls to be told
- * the same thing. Short enough that a user who has just enabled the interface
- * or re-authenticated is not left waiting on a stale verdict — and the two
- * fixes that change configuration do not wait at all, since a config change
- * drops the cache outright.
+ * How long a rejected conclusion is reused before the remote is asked again (§5.5 退避). Short because a tool
+ * retry does not clear it while setup is ready — a user who has just enabled the interface waits it out.
  */
 const FAILURE_BACKOFF_MS = 30_000
 
 export interface Interface {
-  /**
-   * Re-probe the local chain if the current state is one a retry can fix.
-   *
-   * Answers whether a probe was actually started, so a caller can tell "I
-   * looked again" from "there was nothing to look at".
-   */
+  /** Re-probe the local chain if the state is one a retry can fix; answers whether a probe actually started. */
   readonly recheck: () => Effect.Effect<boolean>
-  /**
-   * The remote conclusion, computed only if it is not already known (§5.5).
-   *
-   * Lazy on purpose: this is the one call that carries credentials and enters
-   * the remote's quota visibility, so it happens when an answer is needed and
-   * at no other time. A cached conclusion reached over the route still in use
-   * is returned without any call at all.
-   */
+  /** The remote conclusion, computed only if not already cached — a credentialed call costing seconds (§5.5). */
   readonly validate: () => Effect.Effect<GeoEvent.GeeRuntime>
   /**
-   * Report that a real run was refused, and let that close the loop (§5.5).
-   *
-   * The cache can sit on "valid" indefinitely — credentials get revoked
-   * without the route changing — and no amount of polling would be worth what
-   * it costs. Instead the user's own call is the check: it is the same
-   * operation against the same remote. Answers whether the message was an
-   * authorization rejection at all; anything else leaves the conclusion alone.
+   * Report that a real run was refused (§5.5). Nothing polls a conclusion sitting on "valid", so the user's own
+   * call is what corrects it. Answers whether the message was an authorization rejection at all.
    */
   readonly reject: (message: string) => Effect.Effect<boolean>
-  /**
-   * The single readiness question, answered with a verified environment
-   * (§9.1, §5.6).
-   *
-   * Where the lazy check actually fires on the execution path: passing the
-   * gate is precisely the moment an authorization answer is needed. A refusal
-   * carries the composed status, so the caller shows the one layer that is in
-   * the way rather than three separate stories about it.
-   */
+  /** The readiness question, answered with a verified environment; a refusal carries the status (§9.1, §5.6). */
   readonly gate: () => Effect.Effect<Gate>
 }
 
-/** What the gate answers. */
 export type Gate =
   | { readonly ok: true; readonly environment: GeeTypes.Environment }
   | { readonly ok: false; readonly status: GeoEvent.GeeStatus }
@@ -146,63 +85,31 @@ const layer = Layer.effect(
     const initial = {
       setup: { status: "unconfigured" } as GeoEvent.GeeSetup,
       network: { status: "idle" } as GeoEvent.GeeNetwork,
-      // Honestly unknown until someone needs an answer: nothing has asked the
-      // remote anything, and §5.5 says nothing should until a conclusion is
-      // actually required.
       runtime: { status: "unknown" } as GeoEvent.GeeRuntime,
     }
     const facts = yield* Ref.make(initial)
     const writer = yield* status.register("gee", GeeCompose.compose(initial.setup, initial.network, initial.runtime))
 
     /**
-     * The token of the round currently in charge.
-     *
-     * A token identifies a ROUND, and claiming one supersedes whatever came
-     * before — which is exactly right for the round body and for the network
-     * watch it started, since both stop being current when the configuration
-     * is re-read. The remote check is NOT a round: it answers a question
-     * inside the round that is already running. If it claimed a token of its
-     * own it would silently supersede the live network watch, and every
-     * subsequent reachability change would be dropped on the floor.
+     * The token of the round currently in charge. The remote check reuses it instead of claiming one of its own:
+     * a claim supersedes the running network watch's token, and every later reachability change would then fail
+     * to commit.
      */
     let currentToken = yield* writer.claim()
 
-    /**
-     * Publish under a token.
-     *
-     * Every write goes through here so the composition is applied exactly
-     * once, in one place — a caller that assembled its own status object could
-     * disagree with `facing` and nobody would notice.
-     */
     const publish = (token: GeoStatus.Token) =>
       Effect.gen(function* () {
         const current = yield* Ref.get(facts)
         return yield* writer.commit(token, GeeCompose.compose(current.setup, current.network, current.runtime))
       })
 
-    /**
-     * The remote conclusion, and the route it was reached over (§5.5).
-     *
-     * A single entry, not a table: the rule is "re-ask when the identity is
-     * different", and one entry answers that. Two exits alternating would
-     * re-ask on each switch, which is the correct answer to a genuinely
-     * changed path, not a cache miss worth engineering around.
-     *
-     * Dropped whenever a round starts, because the conclusion is about THIS
-     * configuration — the project identifier is half of what it verified.
-     */
+    /** The remote conclusion with the route it was reached over — over another route it no longer applies (§5.5). */
     let cached: { readonly route: string | undefined; readonly conclusion: GeoEvent.GeeRuntime } | undefined
     /** When a failed conclusion stops being reused (§5.5 退避). */
     let backoffUntil = 0
     /**
-     * Counts refusals reported from real runs.
-     *
-     * §5.5 ranks the evidence: a refusal the user actually experienced is more
-     * direct than anything we probed, because it IS the operation, against the
-     * same remote, with the same credentials. The check takes seconds, so a
-     * refusal can arrive while one is in flight — and without this counter the
-     * probe's older "valid" would land on top of it, inverting exactly the
-     * ordering §5.5 sets out.
+     * Counts refusals reported from real runs. The check takes seconds, so a refusal can arrive while one is in
+     * flight, and without this a probe's older "valid" would land on top of it — §5.5 ranks it the other way.
      */
     let refusals = 0
 
@@ -211,9 +118,7 @@ const layer = Layer.effect(
 
     const stopWatching = Effect.gen(function* () {
       if (!watching) return
-      // Interrupting drops our subscription, and Net stops probing a target
-      // nobody is asking about (§3.3 按需驱动). That is the whole mechanism
-      // behind "idle": not a flag we set, but monitoring that is not running.
+      // Interrupting drops the subscription, and Net stops probing a target nobody asks about (§3.3 按需驱动).
       yield* Fiber.interrupt(watching)
       watching = undefined
     })
@@ -234,36 +139,22 @@ const layer = Layer.effect(
       })
 
     /**
-     * What a network verdict does to the remote conclusion (§5.7).
-     *
-     * Reachability changing is NOT evidence about authorization: credentials
-     * do not expire because a link flapped, and a project does not come
-     * unbound. So this never triggers a check — it only decides whether the
-     * conclusion we already have still applies.
-     *
-     * The rule here reads "the identity is DIFFERENT" — not "anything changed".
-     * Leaving and returning to the same exit means the same conclusion still
-     * holds, and re-asking would spend a credentialed call to learn what we
-     * already knew. A conclusion about latency would not survive that round
-     * trip; a conclusion about whether these credentials work does.
+     * What a network verdict does to the remote conclusion (§5.7). Reachability is no evidence about
+     * authorization, so this never triggers a check; it only asks whether the conclusion we have still applies,
+     * and returning to the same route — after an outage included — means it does.
      */
     function onNetwork(network: GeoEvent.GeeNetwork): GeoEvent.GeeRuntime {
       if (network.status !== "reachable") return { status: "unknown" }
-      // Back on the route the conclusion was reached over — including after an
-      // outage — so it stands, at no cost.
       if (cached && cached.route === network.route) return cached.conclusion
       return { status: "unknown" }
     }
 
     const body = (state: MachineConfig.BlockState<"gee">, token: GeoStatus.Token) =>
       Effect.gen(function* () {
-        // A new round means the previous conclusion about the local chain is
-        // being redone, and everything downstream of it stops being current:
-        // the network watch belongs to a setup that was ready, and the remote
-        // conclusion belonged to that same environment (§5.7 setup 离开 ready).
+        // Everything downstream of the local chain stops being current (§5.7 setup 离开 ready): the watch belongs
+        // to a setup that was ready, and the cached conclusion verified a project and credentials about to be
+        // re-read.
         yield* stopWatching
-        // The cached conclusion goes with it: it verified a project identifier
-        // and a set of credentials that this round is about to re-read.
         cached = undefined
         backoffUntil = 0
         yield* Ref.update(facts, (current) => ({
@@ -274,12 +165,6 @@ const layer = Layer.effect(
         }))
         yield* publish(token)
 
-        // A syntax error is not "unconfigured": the file says something, we
-        // just cannot read it, and showing an empty configuration would
-        // contradict what the user is looking at (§3.1, §8.1). Its own state
-        // rather than a probe failure — the interface has to tell "go fix this
-        // line" apart from "your Python environment is broken", and a location
-        // buried in a message string is not something it can act on.
         const setup: GeoEvent.GeeSetup = state.ok
           ? yield* GeeSetup.probe(runtime, state.value)
           : { status: "config-error", file: state.failure.file, message: state.failure.message }
@@ -287,9 +172,7 @@ const layer = Layer.effect(
         yield* Ref.update(facts, (current) => ({ ...current, setup }))
         yield* publish(token)
 
-        // Ready is what opens the subscription — and only ready. Watching
-        // while the local chain is broken would spend probes on a fact nobody
-        // can act on yet (§5.4).
+        // Only ready opens the subscription — probing while the local chain is broken helps nobody (§5.4).
         if (setup.status === "ready") yield* startWatching(token)
       })
 
@@ -298,9 +181,8 @@ const layer = Layer.effect(
         const token = yield* writer.claim()
         currentToken = token
         yield* body(state, token).pipe(
-          // A defect must not strand the slot mid-probe with nobody reporting
-          // anything. Interruption is not a defect and passes through — a
-          // superseded round simply stops.
+          // A defect must not strand the slot mid-probe with nobody reporting anything; interruption is not a
+          // defect and passes through, so a superseded round simply stops.
           Effect.catchDefect((defect) =>
             Effect.gen(function* () {
               yield* Ref.update(facts, (current) => ({
@@ -313,16 +195,10 @@ const layer = Layer.effect(
         )
       })
 
-    // One round at a time. Interrupting awaits the previous round's exit, so a
-    // superseded round cannot write after the new one has started; the
-    // generation token is the second line of defence (§3.4).
-    //
-    // Serialized because there are TWO ways in — the config stream and a tool
-    // retry — and the handover reads and writes `running` across an await. Two
-    // interleaved entries can leave a round nobody holds a handle to: it keeps
-    // probing, and the network watch it opened is never the one the next round
-    // stops, so that subscription outlives every round and keeps Net working
-    // on a target with no reader.
+    // One round at a time: interrupting awaits the previous round's exit, so a superseded round cannot write after
+    // the new one started, and the generation token is the second line of defence (§3.4). Serialized because two
+    // callers enter here — the config stream and a tool retry — and the handover reads and writes `running` across
+    // an await, so interleaved entries leave a forked round nobody holds a handle to interrupt.
     const turn = Semaphore.makeUnsafe(1)
     let running: Fiber.Fiber<void, never> | undefined
     const start = (state: MachineConfig.BlockState<"gee">) =>
@@ -349,21 +225,13 @@ const layer = Layer.effect(
         return true
       })
 
-    /**
-     * Serialized so a burst of callers produces at most one remote call. This
-     * layer exists to keep credentialed calls rare; letting two arrive
-     * together would undo that in the one place it matters most.
-     */
+    /** Serialized so a burst of callers produces at most one remote call. */
     const asking = Semaphore.makeUnsafe(1)
 
     /**
-     * The environment the check runs in.
-     *
-     * Opposite of the setup probe, which is deliberately offline: this one
-     * makes a real remote call, so it takes Net's route in the subprocess form
-     * Net defines (§5.9, §3.3). The project travels as an environment variable
-     * rather than inside the script, which is also how the runtime library
-     * picks it up later.
+     * The environment the check runs in. Unlike the setup probe, which is deliberately offline, this one makes a
+     * real remote call, so it carries Net's route in subprocess form (§5.9, §3.3). The project travels as an
+     * environment variable, which is where the runtime library reads it too.
      */
     const remoteEnv = (state: { readonly setup: GeoEvent.GeeSetup }) =>
       Effect.gen(function* () {
@@ -381,24 +249,17 @@ const layer = Layer.effect(
       asking.withPermits(1)(
         Effect.gen(function* () {
           const current = yield* Ref.get(facts)
-          // Nothing to ask about, and nothing to ask over. Both are answered
-          // by the layers below, and asking anyway would put a credentialed
-          // call behind a question the user cannot act on (§5.7).
+          // Nothing to ask about, and nothing to ask over: both are answered by the layers below (§5.7).
           if (current.setup.status !== "ready") return current.runtime
           if (current.network.status !== "reachable") return current.runtime
 
-          // The round this answer will belong to. The remote call takes
-          // seconds, and a configuration edit inside that window starts a new
-          // round which clears the cache — without this, the answer about the
-          // project the user just replaced would be written back on top,
-          // leaving the status describing a configuration that no longer
-          // exists.
+          // The round this answer belongs to: the call takes seconds, and a configuration edit inside that window
+          // starts a new round, whose status must not be overwritten with an answer about the project it replaced.
           const token = currentToken
           const witnessed = refusals
           const route = current.network.route
           if (cached && cached.route === route) {
-            // A failed conclusion is reused until its backoff expires, so a
-            // caller retrying in a loop does not become a remote call per try.
+            // A failed conclusion is reused until its backoff expires, so a retry loop is not a call per try.
             const now = yield* Clock.currentTimeMillis
             if (cached.conclusion.status !== "failed" || now < backoffUntil) return cached.conclusion
           }
@@ -408,14 +269,11 @@ const layer = Layer.effect(
 
           const conclusion = yield* GeeValidate.run(runtime, current.setup.python, yield* remoteEnv(current), route)
 
-          // Superseded while we were asking. The caller still gets the answer
-          // it waited for — it is a true answer about what it asked — but it
-          // describes a configuration the system has moved on from, so it goes
-          // neither into the cache nor onto the wire.
+          // Superseded while we were asking: the caller still gets its answer, but the answer describes a
+          // configuration the system has moved on from, so it goes neither into the cache nor onto the wire.
           if (token !== currentToken) return conclusion
-          // Overtaken by a real refusal. Same reasoning, different evidence:
-          // what the user's own run met is more direct than what we asked, so
-          // this answer is returned but not recorded (§5.5 真实使用兜底).
+          // Overtaken by a real refusal, which outranks anything we probed — returned, not recorded
+          // (§5.5 真实使用兜底).
           if (refusals !== witnessed) return conclusion
 
           cached = { route, conclusion }
@@ -430,9 +288,8 @@ const layer = Layer.effect(
 
     const reject = (message: string) =>
       Effect.gen(function* () {
-        // Only what we can attribute. A script that failed on its own logic
-        // must not invalidate a perfectly good authorization — the loop is
-        // "every real use is an answer", not "every failure is a verdict".
+        // Only what we can attribute: a script that failed on its own logic must not invalidate a good
+        // authorization — every real use is an answer, but not every failure is a verdict.
         if (!GeeValidate.isRemoteRefusal(message)) return false
 
         const current = yield* Ref.get(facts)
@@ -442,9 +299,8 @@ const layer = Layer.effect(
           reason: GeeValidate.classify(message),
           message,
         }
-        // Evidence from the user's own call outranks anything we probed: it is
-        // the same operation, against the same remote, with the same
-        // credentials (§5.5 真实使用兜底).
+        // The user's own call is the same operation against the same remote, so it outranks a probe in flight
+        // (§5.5 真实使用兜底).
         refusals += 1
         cached = { route, conclusion }
         backoffUntil = (yield* Clock.currentTimeMillis) + FAILURE_BACKOFF_MS
@@ -466,15 +322,13 @@ const layer = Layer.effect(
         const before = yield* Ref.get(facts)
         if (before.setup.status !== "ready" || before.network.status !== "reachable") return yield* refuse
 
-        // The lazy check's other trigger (§5.5): needing to run IS needing an
-        // answer. A cached conclusion over the route in use costs nothing.
+        // The lazy check's other trigger (§5.5): needing to run is needing an answer, and a cached conclusion
+        // over the route in use costs nothing.
         const conclusion = yield* validate()
         if (conclusion.status !== "valid") return yield* refuse
 
-        // Re-read: the check took seconds, and a configuration edit inside
-        // that window would have started a new round. Handing out an
-        // environment assembled from what we read BEFORE the wait is exactly
-        // the window §4.9 exists to close.
+        // Re-read: the check took seconds, and handing out an environment assembled from what we read before the
+        // wait is the window §4.9 exists to close.
         const after = yield* Ref.get(facts)
         if (after.setup.status !== "ready" || after.network.status !== "reachable") return yield* refuse
         if (after.runtime.status !== "valid") return yield* refuse
@@ -496,25 +350,15 @@ const layer = Layer.effect(
 )
 
 /**
- * Net's verdict, in this module's vocabulary. Read, never computed (§8.3).
- *
- * Exhaustive on purpose — no default. A state added to Net's vocabulary should
- * stop the build here and be answered deliberately, not fall silently into
- * "idle", which happens to be the one state that means "nothing is watching".
- *
- * Exported for the same reason `Snapshot.stageable` is: this is the last hop
- * before the published schema, and a field dropped here is invisible from both
- * ends — Net still carries it, the interface simply never sees it, and nothing
- * fails.
+ * Net's verdict in this module's vocabulary, read and never computed (§8.3). No default: a state added to Net
+ * should stop the build here rather than fall into `idle`, the one state meaning nothing is watching.
  */
 export function toNetwork(reachability: NetTypes.Reachability): GeoEvent.GeeNetwork {
   switch (reachability.state) {
     case "reachable":
       return { status: "reachable", route: reachability.route }
     case "unreachable":
-      // Forwarded, not re-derived. `detail` is the one field that stays behind:
-      // it is the raw error, and §3.3 keeps that as diagnostics rather than
-      // something a reader is handed.
+      // `detail` is the one field that stays behind: it is the raw error, kept as diagnostics (§3.3).
       return {
         status: "unreachable",
         ...(reachability.tried ? { tried: reachability.tried } : {}),

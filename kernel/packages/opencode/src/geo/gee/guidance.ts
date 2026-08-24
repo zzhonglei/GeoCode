@@ -4,46 +4,21 @@ import { Global } from "@opencode-ai/core/global"
 import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { GeeDeps } from "./deps"
 
-/* --- GeoCode: the guidance shown when Earth Engine is not ready
- * (docs/GEOKERNEL.md §5.11; the GEE sibling of qgis/guidance.ts).
+/* --- GeoCode: the guidance shown when Earth Engine is not ready (docs/GEOKERNEL.md §5.11).
  *
- * Entered through `facing`, which has already short-circuited the three facts
- * (§5.6). Deciding the priority again here would implement that rule twice, in
- * two places free to disagree — and the whole point of the short-circuit is
- * that the user faces exactly one problem at a time.
- *
- * Setup is a CHAIN of four steps, which is what makes this file long: the user
- * is walked from "no Python at all" to "authorized" one rung at a time, and
- * every rung has to say WHO performs it (§5.11 行动归属三分):
- *
- *   Agent alone           unconfigured, python-missing, packages-missing
- *   Agent guides,
- *     the user performs   credentials-missing — a browser sign-in
- *   The user alone        project-missing — only they know their project
- *
- * Ported from the old build's six formatters. Its `gee.python` / `gee.project`
- * field names survive verbatim; only the FILE moved, from `geocode.json` to
- * `machine.json`. So unlike the QGIS port — where a five-shape location hint
- * replaced an interpreter path and the copy had to be rewritten — this one is
- * a move, and the sentences are the old ones (docs/PATHS.md §5). --- */
+ * `facing` has already chosen the layer (§5.6); choosing it again here would put one rule in two places free to
+ * disagree, and the point of the short-circuit is that the user faces exactly one problem at a time. --- */
 
 const machineJson = () => path.join(Global.Path.config, "machine.json")
 
-/** Quote a path for the local shell — single quotes on Unix, double on Windows. */
 function quote(target: string): string {
   return process.platform === "win32" ? `"${target}"` : `'${target}'`
 }
 
 /**
- * Whether the configured interpreter belongs to a conda environment.
- *
- * Decided by the presence of `conda-meta/`, which conda creates in every
- * environment it makes. A structural signal, and deliberately NOT a substring
- * match on names like "miniconda" or "miniforge": those are directory names,
- * and a directory can be renamed.
- *
- *   macOS/Linux: <env>/bin/python  — the environment root is two levels up
- *   Windows:     <env>/python.exe  — one level up
+ * `conda-meta/`, which every conda environment has, rather than a substring match on "miniconda" or "miniforge" —
+ * those are directory names and a directory can be renamed. The environment root is two levels above a Unix
+ * interpreter (`<env>/bin/python`) and one above a Windows one (`<env>/python.exe`).
  */
 function isConda(python: string): boolean {
   const root = process.platform === "win32" ? path.dirname(python) : path.dirname(path.dirname(python))
@@ -51,40 +26,20 @@ function isConda(python: string): boolean {
 }
 
 /**
- * Where the authentication command lives, derived from the interpreter
- * (§5.11 认证命令的定位).
- *
- * It ships with the client library, so its location is whatever the
- * environment's layout puts it at — never a fixed path, and never something to
- * assume is on PATH: the interpreter the user configured may well belong to an
- * environment that is not the active one.
- *
- *   macOS/Linux venv or conda:  <env>/bin/python3        → <env>/bin/earthengine
- *   Windows venv:               <env>/Scripts/python.exe → <env>/Scripts/earthengine.exe
- *   Windows conda:              <env>/python.exe         → <env>/Scripts/earthengine.exe
- *
- * The filesystem is probed on Windows because its two layouts disagree about
- * where the command sits relative to the interpreter, and a path that is
- * merely plausible is not copy-pasteable.
+ * Derived from the interpreter, never assumed to be on PATH: the configured environment may not be the active one
+ * (§5.11 认证命令的定位). Windows is probed because its two layouts disagree — a venv interpreter already sits in
+ * `Scripts/` beside the command, a conda one sits a directory above it.
  */
 function authCommand(python: string): string {
   const directory = path.dirname(python)
   if (process.platform !== "win32") return quote(path.join(directory, "earthengine"))
   const beside = path.join(directory, "earthengine.exe")
   if (existsSync(beside)) return quote(beside)
-  // Neither layout has it yet. Guess conda's, because that is the one whose
-  // interpreter sits at the environment root while its commands live a
-  // directory below — the arrangement someone reading a path would get wrong.
+  // Not beside the interpreter, so guess conda's layout, whose commands sit a directory below it.
   return quote(path.join(directory, "Scripts", "earthengine.exe"))
 }
 
-/**
- * The four steps, in the order the probe checks them (§5.3).
- *
- * The probe short-circuits, so where it stopped IS which step the user is on —
- * the ladder here and the chain there are the same chain, and adding a check
- * without adding a rung would leave someone stranded on a step nobody names.
- */
+/** In the probe's order: where §5.3's short-circuit stopped is the step the user is on. */
 const STEPS = [
   "Configure a Python interpreter",
   "Install the required Python packages",
@@ -92,17 +47,7 @@ const STEPS = [
   "Configure your Google Cloud project ID",
 ] as const
 
-/**
- * Where the user stands on the chain (§5.11 分步推进模型).
- *
- * Rendered from one list so the four states cannot drift apart. The old build
- * wrote this passage by hand in each formatter, and the wording of what
- * remained had already begun to differ between them.
- *
- * The whole ladder is shown rather than just the current rung: someone landing
- * on step 1 should see how far it is to the end before deciding to start, and
- * someone on step 3 should see that they are nearly done.
- */
+/** The whole ladder, not just the current rung, so a reader sees how far the chain runs (§5.11 分步推进模型). */
 function progress(current: 1 | 2 | 3 | 4): string[] {
   return [
     `Step ${current} of ${STEPS.length}: ${STEPS[current - 1]}.`,
@@ -115,36 +60,21 @@ function progress(current: 1 | 2 | 3 | 4): string[] {
   ]
 }
 
-/**
- * The smoke test that advances the chain, quoted the same way everywhere.
- *
- * Indent is a parameter because one caller is a numbered list whose other
- * entries sit seven columns in; at the default it renders level with the
- * number and reads as prose that escaped the step.
- */
+/** Indent is a parameter because one caller renders this inside a numbered list, seven columns in. */
 const smokeTest = (indent = "  ") => [
   `${indent}from geocode import init_gee`,
   `${indent}init_gee()`,
   `${indent}print('GEE ready')`,
 ]
 
-/** Saving the file re-probes; no restart. The loop-closing fact (§3.1). */
+/**
+ * The loop-closing fact (§3.1), and only where the fix is a changed `gee` value: Config drops an unchanged block.
+ * (`config/index.ts`), so this holds where the fix is a changed `gee` value; the probe states pair it with the
+ * tool retry, which re-probes them.
+ */
 const WATCHED = "GeoCode watches machine.json and re-probes the moment it is saved — no restart."
 
-/**
- * The rule that outranks every install instruction in this file.
- *
- * Every step of this chain that the agent can perform alone works by changing
- * the user's Python environment, and those changes are not ours to make
- * silently: an environment is something a geographer has usually built for
- * their own work, with other projects depending on it. A package replaced
- * without asking can break something that has nothing to do with us, and the
- * person who has to fix it will not know what changed.
- *
- * Stated once and repeated into each state that installs anything, rather than
- * left implicit in the response templates — those show what asking looks like,
- * which is not the same as saying it is required.
- */
+/** Repeated into every state that installs anything: the response templates only demonstrate asking. */
 const PERMISSION = [
   "ALWAYS get the user's agreement before changing their Python environment —",
   "creating one, installing into one, replacing a package. Ask, and wait for",
@@ -155,8 +85,7 @@ const PERMISSION = [
 
 function unconfigured(): string {
   const windows = process.platform === "win32"
-  // A JSON string, so Windows separators are doubled here as the user must
-  // type them. The probe commands further down are shell, and are not.
+  // Rendered inside a JSON string below, so Windows separators are doubled here exactly as the user must type them.
   const example = windows
     ? "C:\\\\Users\\\\<you>\\\\miniforge3\\\\envs\\\\geo\\\\python.exe"
     : "/Users/<you>/miniforge3/envs/geo/bin/python3"
@@ -191,11 +120,6 @@ function unconfigured(): string {
     "     pick one automatically, especially when there are several — the user",
     "     knows which environment is theirs to change.",
     "",
-    // conda, because that is what this audience actually runs: geopandas and
-    // the GDAL stack under it install cleanly from conda-forge and routinely
-    // need compiling under a bare venv. The guardrail is separate from the
-    // choice of tool — using conda is fine, INSTALLING it is not ours to do
-    // (the same rule the QGIS branch carries about installers).
     "  2. If there is none, create one:",
     "       conda create -n <name> python=3.12 -y",
     "     Do NOT install conda or miniforge yourself. If the user has neither,",
@@ -260,8 +184,8 @@ function pythonMissing(python: string): string {
 // Step 2 — the packages. Agent's to complete. -----------------------------------
 
 function packagesMissing(python: string, missing: readonly string[]): string {
-  // An empty list means the probe reported nothing specific; the whole
-  // manifest is the honest answer rather than an empty install command.
+  // The schema allows an empty list though the probe never sends one (`setup.ts` guards on length); an empty
+  // install command would read as "nothing to do" in a state that blocks everything.
   const packages = missing.length > 0 ? missing : GeeDeps.PACKAGES
   const roles = packages.map((pkg) => {
     const dep = GeeDeps.byPackage(pkg)
@@ -269,12 +193,8 @@ function packagesMissing(python: string, missing: readonly string[]): string {
   })
   const commands = packages.map((pkg) => `  ${quote(python)} -m pip install ${pkg}`)
 
-  /* The conda-forge alternative, offered only when BOTH signals hold: the
-   * interpreter belongs to a conda environment AND geopandas is among what is
-   * missing. geopandas is the one dependency here that pulls GDAL-bound C
-   * extensions (fiona, pyogrio), which is where pip wheels can ABI-mismatch
-   * what conda already installed. Showing conda commands to a venv user is
-   * noise; showing them for pure-Python packages is caution with no cause. */
+  // Both signals or neither: conda commands are noise to a venv user, and geopandas is the entry whose install
+  // binds to GDAL (through pyogrio), where a pip wheel can mismatch what conda already installed.
   const condaForge =
     isConda(python) && packages.includes("geopandas")
       ? [
@@ -282,13 +202,7 @@ function packagesMissing(python: string, missing: readonly string[]): string {
           "If you would rather use conda-forge — worth it in a conda environment,",
           "because geopandas pulls in fiona and pyogrio, which bind to GDAL and",
           "can ABI-mismatch pip wheels against what conda already installed:",
-          // ONE command, unlike the pip lines above. The reason those are split
-          // is pip's: it installs what it is told, one at a time, so separate
-          // commands are visible progress. conda solves the whole environment
-          // per invocation — asking four times can downgrade what the previous
-          // call just placed, and is markedly slower than one solve. The
-          // discipline is "do not leave the user staring at silence", not "one
-          // package per command"; here they point opposite ways.
+          // One command, unlike the pip lines above: conda solves the whole environment per invocation.
           `  conda install -c conda-forge ${packages.join(" ")}`,
           "  (this one needs `conda` on PATH; the commands above always work)",
         ]
@@ -332,22 +246,12 @@ function packagesMissing(python: string, missing: readonly string[]): string {
     "so there. Then call the GEE tool again; the next check picks up what",
     "was installed.",
     "",
-    // The old build's "Take initiative" full stop, narrowed to what it is
-    // initiative ABOUT. Beside the permission rule above, the bare version
-    // reads as licence to run the installs — the initiative is in offering.
+    // The initiative is in offering: beside the permission rule above, a bare "take initiative" reads as licence.
     "Do NOT just print the commands and leave them there. Offer to run them.",
   ].join("\n")
 }
 
-/**
- * Installed and unusable — the same step as a missing package, the opposite fix.
- *
- * The reason this is not folded into `packagesMissing` is that its advice would
- * be actively wrong there: the package IS installed, so installing it does
- * nothing and the next probe says the same thing again. What actually helps is
- * replacing the installation, and in a conda environment, replacing it from the
- * channel that built the rest of the environment.
- */
+/** Still step 2, and the opposite fix: `packagesMissing`'s advice would install what is already installed. */
 function packagesBroken(python: string, pkg: string, error: string): string {
   const dep = GeeDeps.byPackage(pkg)
   const conda = isConda(python)
@@ -398,19 +302,8 @@ function packagesBroken(python: string, pkg: string, error: string): string {
 // Step 3 — the sign-in. The agent guides; the user performs. --------------------
 
 /**
- * The one step the Agent cannot finish on its own, and the copy is written
- * around that.
- *
- * The command opens a browser and waits for a human to approve — so the Agent
- * running it before the user is ready produces a browser window nobody is
- * watching and a command that eventually gives up. Hence the two-beat wait:
- * ask first, run only on the user's word, then wait again for them to say the
- * browser part is done. The old build had exactly this shape; it is the
- * difference between guiding and barging.
- *
- * Note what this does NOT do: start an authorization flow inside the app.
- * The service process cannot drive a browser (§5.11 硬边界 1), and the command
- * below is the user's own terminal doing what it is built to do.
+ * The one step the agent cannot finish: the command waits at a browser for a person, and the service process
+ * cannot drive one (§5.11 硬边界 1) — hence the two-beat wait rather than an authorization flow inside the app.
  */
 function credentialsMissing(python: string): string {
   const command = `${authCommand(python)} authenticate`
@@ -503,15 +396,7 @@ function projectMissing(): string {
 
 // The probe itself failed — not a rung on the chain. ---------------------------
 
-/**
- * Neither "your setup is incomplete" nor "the remote said no": the local check
- * did not get to answer.
- *
- * The interpreter is not echoed here the way the QGIS sibling echoes its own,
- * because these two states do not carry it — a caller who needs it reads the
- * configuration file, which the copy names. Worth revisiting if it turns out
- * an agent cannot act without it.
- */
+/** The check did not get to answer, so no step is claimed — and neither state carries the interpreter to echo. */
 function probeBroken(symptom: string, error?: string): string {
   return [
     `${symptom} — so whether the local environment is complete is unknown.`,
@@ -536,10 +421,8 @@ function probeBroken(symptom: string, error?: string): string {
     "Do NOT rewrite the configuration on a guess, and do NOT reinstall",
     "packages before knowing which one is the problem.",
     "",
-    // Both paths out of here re-run the check, and which one applies depends on
-    // what the agent found: a wrong path is fixed in the file, a broken
-    // environment is fixed outside it — and the second would look like a dead
-    // end if only the file were named (§5.8).
+    // Two routes out, because the fix may be outside the file: a wrong path is corrected in machine.json, a broken
+    // environment is not, and naming only the file would leave the second looking like a dead end (§5.8).
     "Once the environment is fixed, calling a GEE tool again re-runs this check.",
     WATCHED,
   ].join("\n")
@@ -574,28 +457,16 @@ function setupGuidance(setup: GeoEvent.GeeSetup): string {
     case "probe-failed":
       return probeBroken("The environment check failed before reporting", setup.error)
     case "ready":
-      // Unreachable through `render`, which routes a ready setup to the layer
-      // that is actually in the way. Present so the switch stays exhaustive.
+      // `compose` never pairs a ready setup with facing "setup", so only a hand-built status reaches this arm;
+      // it is here to keep the switch exhaustive.
       return ""
   }
 }
 
 /**
- * The network layer (§5.11 硬边界 3).
- *
- * Says one thing: the network cannot reach Earth Engine right now. It
- * deliberately says nothing about HOW a route is looked for, or about proxies
- * at all — none of that is something an agent can act on. It cannot reconfigure
- * the user's proxy software, and handing it the vocabulary only invites a
- * diagnosis it is in no position to make. The connection is the user's to sort
- * out; the agent's job is to say so and to stay out of the way.
- *
- * Which leaves the prohibitions as the substance of this branch. Everything
- * local is verified by the time anyone reads this, so every repair an agent
- * might reach for is not merely useless but destructive: reinstalling packages
- * churns a working environment, re-authenticating cannot complete over a link
- * that carries nothing, and rewriting the configuration edits the one part that
- * is already correct.
+ * Nothing about routes or proxies (§5.11 硬边界 3): an agent cannot reconfigure the user's proxy software, and
+ * the vocabulary only invites a diagnosis it cannot make. The prohibitions are the substance instead: the four
+ * local steps are verified by the time anyone reads this, so each repair either breaks one or cannot complete.
  */
 function networkGuidance(python: string, project: string, checking: boolean): string {
   if (checking) {
@@ -623,30 +494,18 @@ function networkGuidance(python: string, project: string, checking: boolean): st
   ].join("\n")
 }
 
-/**
- * The remote layer.
- *
- * Everything local and every route is verified; Google itself refused. The
- * attribution travels beside its raw message because our reading of that
- * message can be wrong, and the user should see what was actually said.
- */
+/** Google's own words travel beside our attribution, because our reading of them can be wrong (§5.5 归因). */
 function runtimeGuidance(python: string, project: string, runtime: GeoEvent.GeeRuntime): string {
   if (runtime.status === "checking") {
     return "Earth Engine authorization is being verified. Try again shortly."
   }
   if (runtime.status !== "failed") {
-    // `unknown` — nothing has asked yet (§5.5). The check is lazy, and the gate
-    // is what triggers it, so this is a status reader's view rather than
-    // anything a tool call would land on. Saying "call a GEE tool" here would
-    // be circular advice for the one caller that could see it by accident.
     return "Earth Engine authorization has not been checked yet — it is verified the first time a script runs."
   }
 
   const reauth = `${authCommand(python)} authenticate --force`
 
-  /* One fix per attribution. The point of classifying the rejection at all is
-   * to open with the single thing most likely to be wrong; collapsing these
-   * into a shared paragraph would leave the attribution as decoration. */
+  // One fix per attribution: a shared paragraph would leave the classification as decoration.
   const likeliest = ((): string[] => {
     switch (runtime.reason) {
       case "api-disabled":
@@ -727,21 +586,16 @@ function runtimeGuidance(python: string, project: string, runtime: GeoEvent.GeeR
 }
 
 /**
- * One voice for every not-ready state. A fully usable Earth Engine returns "".
- *
- * `facing` decides which layer speaks, because it already computed the
- * short-circuit (§5.6). The narrowing below is that invariant, not a guess: a
- * setup short of ready always faces "setup", so the later branches genuinely
- * have the interpreter and project they render.
+ * One voice for every not-ready state; a usable Earth Engine returns "". `facing` decides which layer speaks
+ * (§5.6), and the second disjunct is not redundant with it: it keeps a contradictory status on the local story,
+ * and narrows `setup` so the branches below can read its two fields.
  */
 export function render(status: GeoEvent.GeeStatus): string {
   if (status.facing === "setup" || status.setup.status !== "ready") return setupGuidance(status.setup)
   const { python, project } = status.setup
   if (status.facing === "network") {
-    // Reachable while facing the network layer means the fact settled between
-    // the composition and this call. Nothing is wrong with the layer being
-    // pointed at, and inventing a problem to describe would be worse than the
-    // caller falling back to its own wording.
+    // `compose` ties facing to this very field, so only a hand-built status reaches here: there is no problem left
+    // to describe, and the caller has its own wording for that.
     if (status.network.status === "reachable") return ""
     return networkGuidance(python, project, status.network.status !== "unreachable")
   }

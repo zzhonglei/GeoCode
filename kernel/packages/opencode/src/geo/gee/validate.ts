@@ -5,28 +5,12 @@ import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import type { GeoRuntime } from "../runtime"
 import { GeoOutput } from "../runtime/output"
 
-/* --- GeoCode: the remote authorization check (docs/GEOKERNEL.md §5.5).
- *
- * One real initialization plus one minimal result, which answers in a single
- * round trip three things no local check can: the credentials still work, the
- * project is bound to the service, and the interface is enabled.
- *
- * This is the ONLY call in the system that carries credentials and enters the
- * remote's quota and abuse visibility, and it costs seconds — measured at 5–6
- * against a real project on a healthy link. Everything about how it is
- * scheduled (lazily, cached by route, never on a connectivity event) follows
- * from that, and lives in the lifecycle; this module only knows how to ask and
- * how to read the answer. --- */
+/* --- GeoCode: the remote authorization check — one real initialization and one minimal result
+ * (docs/GEOKERNEL.md §5.5). Scheduling and caching are the lifecycle's; here it is only asked and read. --- */
 
 export const MARKER = "__GEOCODE_GEE_RUNTIME_JSON__"
 
-/**
- * The check.
- *
- * `getInfo` after `Initialize` on purpose: initialization alone can succeed
- * locally without proving the remote accepts anything. Forcing one tiny result
- * is what makes this a verification rather than a hopeful setup call.
- */
+/** `getInfo` after `Initialize`: initialization alone can succeed locally without the remote accepting anything. */
 export const SCRIPT = `
 import faulthandler, sys
 faulthandler.enable(file=sys.stderr)
@@ -48,27 +32,12 @@ sys.stdout.flush()
 os._exit(0)
 `
 
-/**
- * Total clock (§8.4).
- *
- * Measured at 5–6 seconds against a real project; the rest of the budget is
- * for a slow or proxied link. Generous on purpose — a false timeout here would
- * report the remote as broken when it is merely far away, and that is a worse
- * answer than making the caller wait.
- */
+/** Fixed total (§8.4) against a call measured at 5–6s: a link that is merely slow must not read as a dead remote. */
 const TOTAL = "60 seconds"
 
 /**
- * Attribute a rejection from its message.
- *
- * Ported from the build that survived production, where these patterns were
- * shaped by real messages. Order matters: an interface-not-enabled rejection
- * often also mentions permissions, and answering "permission denied" would
- * send the user to the wrong page of a cloud console.
- *
- * `unknown` is a real answer, not a fallback for laziness — the raw message
- * travels beside the attribution precisely because our reading of it can be
- * wrong, and the user should see what the remote actually said.
+ * Ordered, because the patterns overlap: `permission-denied` matches the "permission" api-disabled rejections arrive
+ * with, and it would send the user to the wrong page of a cloud console.
  */
 export function classify(message: string): GeoEvent.GeeRejection {
   if (
@@ -88,44 +57,21 @@ export function classify(message: string): GeoEvent.GeeRejection {
   return "unknown"
 }
 
-/**
- * Markers that place a failure inside the Earth Engine client stack.
- *
- * Deliberately module and exception identities, never the word "earthengine"
- * on its own: that appears in ordinary file paths, and a user whose output
- * directory is `~/earthengine/` would have every local error read as a remote
- * one. A Python traceback from a real refusal always names the exception's
- * fully qualified type or the library frame it was raised in.
- */
+/** Module and exception identities, never the bare word: `~/earthengine/` in a path is not an origin. */
 const EARTH_ENGINE_ORIGIN =
   /\bEEException\b|ee\.ee_exception|googleapiclient|google\.auth\b|google\.api_core|oauth2client|[/\\]ee[/\\][a-z_]+\.py/i
 
 /**
- * Whether a FAILED RUN was refused by the remote — the guard on §5.5's loop.
- *
- * Takes the run's whole stderr, and the name says so on purpose. `classify`
- * answers a different question: given text the remote produced, what did it
- * object to. Feeding it a script's stderr instead asks it to judge text it was
- * never written for, and the words it keys on are ordinary Python words —
- * measured on real messages, five of seven common local failures came back as
- * authorization problems. `PermissionError: [Errno 13] Permission denied` on
- * an output file read as "the account lacks permission for this project";
- * `SyntaxError: invalid token` read as expired credentials and sent the user
- * to re-authenticate.
- *
- * The cost of a false positive is not a bad message: the conclusion is cached,
- * the status slot turns red, and the gate refuses the next call for the whole
- * backoff. A working setup is taken away over a typo. So the origin has to be
- * established first, and anything that cannot be placed inside the client
- * stack is left alone — which is the same principle `unknown` already encodes,
- * applied one level earlier.
+ * The guard on §5.5's loop: origin before attribution, because `classify` keys on ordinary Python words — five of
+ * the seven local tracebacks in gee-validate.test.ts come back as authorization problems, and a false positive
+ * caches a failed conclusion, which shuts the gate for the whole backoff.
  */
 export function isRemoteRefusal(stderr: string): boolean {
   if (!EARTH_ENGINE_ORIGIN.test(stderr)) return false
   return classify(stderr) !== "unknown"
 }
 
-/** Run the check in the given environment, which must already carry the route. */
+/** `env` must already carry Net's route and `GEE_PROJECT`; the script reads the project from the environment. */
 export function run(
   runtime: GeoRuntime.Interface,
   python: string,
@@ -158,9 +104,7 @@ export function run(
 
     const extracted = GeoOutput.extractMarked(result.stdout, MARKER)
     if (!extracted.ok) {
-      // No verdict came back. This is not an authorization answer and must not
-      // be dressed up as one — it is attributed `unknown` with whatever the
-      // process actually produced.
+      // No verdict is not an authorization answer, so it is `unknown` rather than classified from the output.
       const why =
         result.reason === "timeout"
           ? `the authorization check exceeded ${TOTAL}`

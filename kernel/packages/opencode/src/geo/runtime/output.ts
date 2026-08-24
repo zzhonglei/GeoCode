@@ -1,8 +1,6 @@
 export * as GeoOutput from "./output"
 
-/* --- GeoCode: output utilities shared across GeoKernel (docs/GEOKERNEL.md §3.2,
- * "输出通用件"). Three things every capability module would otherwise write its
- * own slightly different version of. --- */
+/* --- GeoCode: output utilities shared across GeoKernel (docs/GEOKERNEL.md §3.2 输出通用件). --- */
 
 export interface Truncated {
   readonly text: string
@@ -10,20 +8,13 @@ export interface Truncated {
   readonly truncated: boolean
 }
 
-/**
- * Cap a body of text, keeping the TAIL.
- *
- * The tail is what matters for subprocess output: errors, stack traces and the
- * result marker all arrive at the end. Keeping the head would reliably discard
- * the only part worth reading.
- */
+/** Keeps the TAIL: in subprocess output the errors, the traceback and the result marker all arrive at the end. */
 export function truncate(text: string, limit: number): Truncated {
   if (text.length <= limit) return { text, truncated: false }
   const kept = text.slice(text.length - limit)
   return { text: kept, truncated: true }
 }
 
-/** Human-readable elapsed time, in one form across every module. */
 export function formatDuration(milliseconds: number): string {
   if (milliseconds < 1000) return `${Math.round(milliseconds)}ms`
   const seconds = milliseconds / 1000
@@ -37,29 +28,15 @@ export function formatDuration(milliseconds: number): string {
 
 export type Extracted =
   | { readonly ok: true; readonly value: unknown }
-  /**
-   * The marker never appeared. The script did not reach its output point, which
-   * usually means it died during startup — so the raw output IS the diagnosis
-   * and must reach the user intact (§4.6 失败分级).
-   */
+  /** The script never reached its output point, so the raw output is itself the diagnosis (§4.6 失败分级). */
   | { readonly ok: false; readonly kind: "missing"; readonly raw: string }
   /** The marker appeared but its payload would not parse. */
   | { readonly ok: false; readonly kind: "invalid"; readonly raw: string; readonly error: string }
 
 /**
- * Pull a marker-tagged JSON payload out of mixed subprocess output.
+ * Pulls the result line out of the stdout QGIS and its dependencies also write to (§4.3 principle 7).
  *
- * Subprocess stdout is a noisy shared channel — QGIS and its dependencies write
- * to it during import, initialization and teardown — so parsing the output as a
- * whole is not reliable. Scripts emit their result on a single marked line
- * instead (§4.3 principle 7).
- *
- * Reads the LAST occurrence: a marker string can legitimately appear earlier in
- * echoed arguments or a dependency's own logging, and the real result is always
- * the final one written.
- *
- * "Missing" and "invalid" are kept apart because they mean different things and
- * lead to different fixes.
+ * Reads the LAST occurrence — the marker can appear earlier in echoed arguments or a dependency's own logging.
  */
 export function extractMarked(output: string, marker: string): Extracted {
   const index = output.lastIndexOf(marker)
@@ -82,16 +59,9 @@ export interface BoundedBuffer {
 }
 
 /**
- * A text buffer that keeps its tail and stays under a size bound.
- *
- * Bounded as it fills rather than only when read. Runtime accumulates stderr
- * for the whole of an execution even when stdout is being streamed away, so a
- * process that chatters on stderr indefinitely would otherwise grow this
- * without limit — the precise thing §3.2 rules out. The tail is what survives,
- * for the same reason `truncate` keeps it.
- *
- * A single chunk larger than the bound is kept whole rather than sliced here;
- * `truncate` trims that remaining case when the text is read out.
+ * Bounded as it fills, not only when read: Runtime accumulates stderr for a whole execution even when stdout is
+ * streamed away, so a process that chatters on stderr forever would otherwise grow this without limit (§3.2).
+ * A single chunk larger than `cap` is kept whole; `truncate` trims that remaining case when the text is read out.
  */
 export function boundedBuffer(cap: number): BoundedBuffer {
   const parts: string[] = []
@@ -112,12 +82,8 @@ export function boundedBuffer(cap: number): BoundedBuffer {
 }
 
 /**
- * Pull a script's own structured error out of its error stream.
- *
- * Scripts that fail deliberately emit one JSON object with an `error` field;
- * showing that sentence beats showing the surrounding traceback noise. Absent
- * or unparsable, the caller falls back to the raw stream — this only ever
- * upgrades the message, never hides it (§3.2 输出通用件).
+ * A script that fails deliberately emits one JSON object with an `error` field, and that sentence beats the
+ * traceback around it. Undefined when absent or unparsable, which is why callers fall back to the raw stream.
  */
 export function structuredError(stderr: string): string | undefined {
   const match = /\{.*"error"\s*:.*\}/s.exec(stderr)

@@ -2,19 +2,12 @@ export * as GeeCompose from "./compose"
 
 import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 
-/* --- GeoCode: the three-layer composition (docs/GEOKERNEL.md §5.6).
- *
- * Pure by design, and the design says so: three facts in, one conclusion out,
- * holding nothing of its own. A fourth kind of fact would add a parameter here
- * and leave every existing state set untouched. --- */
+/* --- GeoCode: the three-layer composition (docs/GEOKERNEL.md §5.6). Pure: three facts in, one conclusion out,
+ * holding nothing of its own, so a fourth kind of fact adds a parameter here and rearranges no state set. --- */
 
 /**
- * Which layer the user should be looking at.
- *
- * Local before network before remote, short-circuited — so the user faces
- * exactly one problem at a time, and the attribution cannot land on the wrong
- * layer. Reporting "credentials rejected" while the network is down would send
- * someone to re-authenticate over a connection that cannot carry the request.
+ * Which layer the user should be looking at — local before network before remote, short-circuited, so the
+ * attribution cannot land on a layer whose problem is downstream of one the user has to fix first.
  */
 export function facing(setup: GeoEvent.GeeSetup, network: GeoEvent.GeeNetwork): GeoEvent.GeeStatus["facing"] {
   if (setup.status !== "ready") return "setup"
