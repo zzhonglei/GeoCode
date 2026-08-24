@@ -4,8 +4,7 @@ export * as NetRedact from "./redact"
  *
  * Strips `user:password@` and keeps host and port, so a proxy failure stays diagnosable. Its own module because
  * all three planned exits — status events, diagnostics, logs — have to reach for it, and missing one is the same
- * as not doing it at all. None of the three is built, so this has no production caller today (§3.3, §11): kept
- * deliberately, and `net-resolve.test.ts` is the only thing exercising it. --- */
+ * as not doing it at all (§3.3, §11). --- */
 
 /** A list, not a pattern: `scheme:` and `username:` are the same shape, so `alice:hunter2@host` would keep `alice`. */
 const PROXY_SCHEMES = new Set(["http", "https", "socks", "socks4", "socks4a", "socks5", "socks5h"])

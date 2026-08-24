@@ -3,8 +3,7 @@ export * as QgisPaths from "./paths"
 import { existsSync, readdirSync } from "node:fs"
 import path from "node:path"
 
-/* --- GeoCode: path helpers shared by both platforms' resolution
- * (docs/GEOKERNEL.md §4.3–§4.5). --- */
+/* --- GeoCode: path helpers shared by both platforms' resolution (docs/GEOKERNEL.md §4.3–§4.5). --- */
 
 export function unique(values: readonly (string | undefined)[]): string[] {
   return [...new Set(values.filter((value): value is string => !!value))]
@@ -34,26 +33,16 @@ export function subdirectories(directory: string): string[] {
     .map((entry) => path.join(directory, entry.name))
 }
 
-/**
- * Does this directory hold the projection database?
- *
- * The check that makes §4.3 principle 4 concrete: a directory existing proves
- * nothing, and a projection directory without its database is exactly the
- * failure that surfaces much later, when a user first touches a custom
- * coordinate system.
- */
+/** §4.3 principle 4 — validate the payload, not the container: a projection directory needs its database. */
 export function hasProjectionDatabase(directory: string): boolean {
   return existsSync(path.join(directory, "proj.db"))
 }
 
 /**
- * Walk the segments of a path left to right, offering each prefix.
+ * Offer `accept` every prefix of `hint`, and answer with the first value it returns.
  *
- * A pure string scan: the number of filesystem calls is proportional to how
- * many segments MATCH, not to how deep the path is. Left to right rather than
- * from the leaf upwards, so a nested layout resolves to the outermost install
- * that qualifies rather than to a container directory that merely looks like
- * one.
+ * Left to right, so the outermost prefix `accept` takes wins: a `.app` inside an accepted one never gets a turn.
+ * The first call on an absolute path carries an empty prefix and an empty segment.
  */
 export function scanSegments(hint: string, accept: (prefix: string, segment: string) => string | undefined) {
   const normalized = path.normalize(hint)

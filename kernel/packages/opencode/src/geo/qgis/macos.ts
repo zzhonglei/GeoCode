@@ -8,58 +8,38 @@ import type { Choice } from "./types"
 
 /* --- GeoCode: resolving a QGIS environment on macOS (docs/GEOKERNEL.md §4.4).
  *
- * Two install shapes, and within the app bundle two generations of layout that
- * differ in where the interpreter lives, where its standard library lives, and
- * whether the interpreter can start at all without help. --- */
+ * Two install shapes, and within the app bundle two generations of layout differing in where the interpreter lives,
+ * where its standard library lives, and whether the interpreter can start at all without help. --- */
 
-/**
- * Does this executable directory belong to a QGIS install?
- *
- * Every application bundle has one, so without a marker any bundle at all
- * would be accepted as a QGIS prefix — a hint pointing into an unrelated
- * application would be taken at face value and fail much later, as a confusing
- * import error rather than a clean "this is not QGIS" (§4.4).
- */
+/** Every bundle has an executable directory, so without a marker an unrelated application passes as a prefix. */
 export function isQgisBundle(executableDir: string): boolean {
   return existsSync(path.join(executableDir, "qgis_process")) || existsSync(path.join(executableDir, "QGIS"))
 }
 
 export interface PrefixResolution {
   readonly prefix?: string
-  /** True when a bundle was found but carries no QGIS marker — a definite answer. */
+  /**
+   * The hint runs through a bundle carrying no QGIS marker — a definite answer, but read off the path's shape, so
+   * it is also what a bundle that is not on disk at all produces.
+   */
   readonly notQgis: boolean
   /**
-   * Where the executable directory WOULD be, kept alongside a not-qgis
-   * verdict. The escape hatch needs it: when the hint itself is a real
-   * interpreter, the marker's absence must not veto the probe (§4.3
-   * principle 10 — lenient where recovery exists), and this is the prefix
-   * that best-effort attempt runs under.
+   * Where the executable directory would be, kept alongside a not-qgis verdict: `resolve.ts` runs its escape hatch
+   * under this prefix when the hint is a real interpreter, so a missing marker cannot veto the probe (§4.3
+   * principle 10).
    */
   readonly fallbackPrefix?: string
   /**
-   * True when the prefix passed a marker check (levels 1 and 2). The
-   * non-bundle fallback never verifies anything, and the reachability precheck
-   * must not treat its guess as evidence — that is the difference between
-   * "found a QGIS install" and "derived some directory" (§4.3 可达性预检).
+   * True only after a marker check (levels 1 and 2). The reachability precheck refuses level 3's answer on this
+   * flag; without it a hint naming nothing at all would pass and come back as a probe spawn error (§4.3 可达性预检).
    */
   readonly verified: boolean
 }
 
-/**
- * Locate the installation prefix from a hint, which may be the interpreter, the
- * bundle, or anything nested inside it.
- *
- * Three levels, in order. The first two target application bundles and verify
- * the marker; the third is a best-effort for installs that are not bundles at
- * all — package managers, source builds — where there is no marker to check and
- * the probe is left to give the verdict.
- */
+/** The prefix behind a hint of any shape, in three levels; only the first two verify a marker (§4.4). */
 export function resolvePrefix(hint: string): PrefixResolution {
-  // 1. The hint runs through a bundle's executable directory. Covers the
-  //    canonical case where the hint IS the interpreter.
-  // A marker hit here is a verified answer; a miss is NOT a verdict — the
-  // design places marker verification in level 2's scan (§4.4), and level 1's
-  // job is only to find the directory. The miss is remembered, falls through.
+  // Level 1: up through a bundle's executable directory, which covers a hint that is the interpreter itself. A
+  // marker hit is a verified answer, a miss is not a verdict — the directory is remembered and level 2 gets a turn.
   let executableDir: string | undefined
   let walking = path.dirname(hint)
   while (walking && walking !== path.dirname(walking)) {
@@ -71,9 +51,7 @@ export function resolvePrefix(hint: string): PrefixResolution {
     walking = path.dirname(walking)
   }
 
-  // 2. The hint names a bundle, or something inside one that does not pass
-  //    through the executable directory — the bundle root itself, a resource,
-  //    anything nested.
+  // Level 2: the hint names a bundle, or anything inside one that does not pass through the executable directory.
   let sawBundle = false
   const fromBundle = QgisPaths.scanSegments(hint, (prefix, segment) => {
     if (!segment.endsWith(".app")) return undefined
@@ -86,25 +64,18 @@ export function resolvePrefix(hint: string): PrefixResolution {
     return { notQgis: true, verified: false, fallbackPrefix: executableDir ?? path.resolve(hint, "../..") }
   }
 
-  // 3. Not a bundle. Best effort for package-manager and source installs —
-  // and explicitly unverified: there is no marker to check outside a bundle,
-  // so the probe is the only judge (§4.4).
+  // Level 3: not a bundle. Best effort for package-manager and source installs, and unverified by construction —
+  // there is no marker outside a bundle, so the probe is the only judge (§4.4).
   return { prefix: path.resolve(hint, "../.."), notQgis: false, verified: false }
 }
 
-/**
- * Find the bundled interpreter under a prefix.
- *
- * Two generations: the older keeps it in an executable subdirectory under a
- * name with no version, the newer puts it at the prefix root with the minor
- * version in its name and no intermediate directory.
- */
+/** Two generations: `bin/python3` in the older layout, a versioned name at the prefix root in the newer (§4.4). */
 export function findInterpreter(prefix: string): Choice {
   const candidates: string[] = []
   const legacy = path.join(prefix, "bin", "python3")
   if (existsSync(legacy)) candidates.push(legacy)
   for (const entry of QgisPaths.entries(prefix)) {
-    // A versioned interpreter is a file, or a symlink to one — never a directory.
+    // Not `isFile`: readdir reports a symlink as neither file nor directory, and this interpreter can be one.
     if (entry.isDirectory()) continue
     if (/^python3\.\d+$/.test(entry.name)) candidates.push(path.join(prefix, entry.name))
   }
@@ -112,22 +83,9 @@ export function findInterpreter(prefix: string): Choice {
 }
 
 /**
- * Find the standard library root inside the resources directory.
- *
- * Identified by CONTENT, not by name and not by type. Two independent reasons,
- * both confirmed on real installs:
- *
- * - Some bundles share a standard library between application variants through
- *   a symbolic link, and a type test reports "not a directory" for a link that
- *   points at one.
- * - **The directory's name need not match the interpreter's version.** A 3.44
- *   bundle was observed shipping a `python3.12` interpreter whose standard
- *   library sits in a directory named `python3.11`. Matching on the version
- *   number would find nothing at all.
- *
- * So: any directory named like a versioned Python that contains the encodings
- * module. That module is what the interpreter reaches for first, and its
- * absence is exactly what aborts startup.
+ * By content: a versioned-Python directory holding the encodings module, which is what the interpreter reaches for
+ * first. The version in the name cannot be trusted — a 3.44 bundle ships a `python3.12` interpreter whose standard
+ * library sits in `python3.11` — and neither can the type, since some bundles share the library through a symlink.
  */
 export function findStandardLibrary(resources: string): string | undefined {
   for (const entry of QgisPaths.entries(resources)) {
@@ -139,29 +97,13 @@ export function findStandardLibrary(resources: string): string | undefined {
 }
 
 /**
- * Build the link structure the interpreter expects, and return its root.
- *
- * The newer bundle's interpreter cannot find its own standard library. The
- * binary carries a compiled-in prefix from the machine it was BUILT on — a
- * path that does not exist here — and the bundle's actual standard library sits
- * somewhere that prefix would never look. Startup aborts while initialising the
- * filesystem encoding, which is before any user code runs, so no environment
- * variable can rescue it and the fix has to be a real directory layout
- * (§4.3 principle 9).
- *
- * The structure is one link: `<home>/lib/<interpreter name>` pointing at the
- * standard library. **The name comes from the binary and the target comes from
- * content discovery, and neither assumes the other** — which is what makes it
- * work on the install where the two disagree.
- *
- * Only for versioned interpreter names: an unversioned one uses a different
- * search behaviour and does not hit this mismatch.
+ * The one link a newer bundle's interpreter needs, `<home>/lib/<interpreter name>`, and the home to point it at
+ * (§4.4 解释器根修复). That interpreter does not find its own standard library and dies initialising the filesystem
+ * encoding, before any user code runs, so the fix has to be a layout on disk (§4.3 principle 9).
  */
 export function ensurePythonHome(interpreter: string, standardLibrary: string): string | undefined {
-  // Lowercased before matching, and the link takes the lowercased name:
-  // the volume this runs on is case-insensitive by default, so a hint written
-  // `.../Python3.12` names the same real binary — and CPython looks for
-  // `lib/python3.X` in lower case regardless of how the file was spelled.
+  // Lowercased: on a case-insensitive volume a hint written `.../Python3.12` names the same binary, and the link
+  // has to take the lower-case name the interpreter looks for beneath its home.
   const name = path.basename(interpreter).toLowerCase()
   if (!/^python3\.\d+$/.test(name)) return undefined
 
@@ -172,8 +114,6 @@ export function ensurePythonHome(interpreter: string, standardLibrary: string): 
     mkdirSync(lib, { recursive: true })
     const current = statLink(link)
     if (current) {
-      // Idempotent: keep a link that already points at the right place, replace
-      // one that does not. A user who moves their install leaves no stale link.
       if (current.isSymbolicLink() && path.resolve(lib, readlinkSync(link)) === path.resolve(standardLibrary)) {
         return home
       }
@@ -182,7 +122,7 @@ export function ensurePythonHome(interpreter: string, standardLibrary: string): 
     symlinkSync(standardLibrary, link)
     return home
   } catch {
-    // Best effort. Without it the probe fails at interpreter startup and says so.
+    // Best effort: without a home the probe fails at interpreter startup and its raw output says so.
     return undefined
   }
 }
@@ -201,12 +141,8 @@ export interface Assembly {
 }
 
 /**
- * Assemble the environment for a resolved prefix.
- *
- * Resource candidates cover three layouts: the older bundle keeping them
- * directly under resources, the newer bundle nesting them one level deeper, and
- * a package-manager install using the conventional shared directory under the
- * prefix.
+ * Resources are looked for in three layouts: directly under the resources directory as the older bundle keeps
+ * them, one level deeper as the newer bundle nests them, and under the prefix as a package-manager install has them.
  */
 export function assemble(prefix: string, interpreter: string): Assembly {
   const env: Record<string, string> = { QGIS_PREFIX_PATH: prefix }
@@ -222,8 +158,7 @@ export function assemble(prefix: string, interpreter: string): Assembly {
   const projection = projectionCandidates.find(QgisPaths.hasProjectionDatabase)
   choices.projection = { selected: projection, candidates: projectionCandidates }
   if (projection) {
-    // Both spellings: the newer library reads one, older versions the other,
-    // and an install can pair a new QGIS with an older projection library.
+    // Both names for one directory: which one an install reads depends on the projection library version it bundles.
     env.PROJ_LIB = projection
     env.PROJ_DATA = projection
   }
@@ -239,8 +174,7 @@ export function assemble(prefix: string, interpreter: string): Assembly {
 
   const standardLibrary = findStandardLibrary(resources)
 
-  // A path LIST, so every existing candidate is collected rather than the first
-  // one taken — several coexisting is the normal state (§4.4).
+  // A path list, so every existing candidate is collected rather than the first taken — coexisting is normal (§4.4).
   const moduleCandidates = [
     path.join(resources, "python"),
     path.join(resources, "qgis", "python"),
@@ -250,10 +184,8 @@ export function assemble(prefix: string, interpreter: string): Assembly {
   const modulePaths: string[] = []
   for (const candidate of QgisPaths.allExisting(moduleCandidates)) {
     modulePaths.push(candidate)
-    // The plugins directory carries the processing module, and QGIS only adds
-    // it during its own initialisation — which happens AFTER the algorithm
-    // framework is initialised. Prepending it here is what lets that framework
-    // come up at all (§4.5 overlay 2, and it applies here just as much).
+    // The plugins directory carries the processing module, and QGIS adds it during its own initialisation — after
+    // the algorithm framework needs it, so it goes on the path here (§4.5 overlay 2 applies to this track too).
     const plugins = path.join(candidate, "plugins")
     if (existsSync(plugins)) modulePaths.push(plugins)
   }
@@ -272,9 +204,8 @@ export function assemble(prefix: string, interpreter: string): Assembly {
   const qtPlugins = path.join(path.resolve(prefix, ".."), "PlugIns")
   if (existsSync(qtPlugins)) env.QT_PLUGIN_PATH = qtPlugins
 
-  // Every assembly track sets these, without exception: the read scripts emit
-  // non-escaped structured text so an encoding fault corrupts the BODY, not
-  // just a diagnostic message (§4.13 constraint 2).
+  // Every assembly track sets these: the read scripts emit non-escaped structured text, so an encoding fault
+  // corrupts the body and not just a diagnostic message (§4.13 constraint 2).
   env.PYTHONUTF8 = "1"
   env.PYTHONIOENCODING = "UTF-8"
   env.GDAL_FILENAME_IS_UTF8 = "YES"

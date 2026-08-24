@@ -99,7 +99,7 @@ export async function viaProxy(target: Target, proxyUrl: string, options: Option
   })
 }
 
-/** A cheap liveness check, never evidence of a proxy on its own (§3.3). No caller yet — kept for the port sweep. */
+/** A cheap liveness check, never evidence of a proxy on its own (§3.3). */
 export function listening(host: string, port: number, timeoutMs = 1_000): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = net.connect({ host, port })

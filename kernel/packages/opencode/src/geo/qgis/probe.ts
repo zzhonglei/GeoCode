@@ -7,32 +7,15 @@ import { QgisBootstrap } from "./bootstrap"
 
 /* --- GeoCode: the environment probe (docs/GEOKERNEL.md §4.6, §4.13).
  *
- * Verifies CAPABILITY, not import (§4.3 principle 6): each step exercises the
- * thing users actually need, and each failure names one class of install
- * problem. --- */
+ * Four steps, each failing into its own class of install problem; step 2 transforms a coordinate rather than
+ * importing the projection library, which imports fine with its database missing (§4.3 principle 6). --- */
 
 export const MARKER = "__GEOCODE_PROBE_JSON__"
 
 /**
- * The probe script. Ported behaviour, with each §4.13 constraint visible:
- *
- * - The fault handler comes on BEFORE any geo import (constraint 4). A broken
- *   install segfaults during native library load, which no except-block can
- *   see; enabled first, the handler at least writes the native stack to
- *   stderr, and stderr rides the diagnostics. The old probe lacked this and a
- *   segfault produced nothing at all.
- * - The result rides ONE marked line, and the script hard-exits immediately
- *   after flushing it (constraints 1 and 3): the toolkit and its plugins
- *   write to stdout at import, init AND teardown, so whole-output parsing is
- *   unreliable and the teardown chatter is skipped outright. The hard exit is
- *   also why a successful probe always reports exit code zero.
- * - Step 1 failing emits immediately (§4.6): the later steps cannot succeed
- *   without bindings, and their stacked errors would only mislead.
- * - Step 2 exists separately from step 1 (§4.3 principle 6): bindings import
- *   fine on installs whose projection database is missing or mismatched, and
- *   without this step that surfaces weeks later on the first custom CRS. The
- *   transform must produce FINITE numbers — some failure modes return NaN
- *   rather than raising.
+ * The probe script (§4.13). Fault handler first, because a segfault during native library load is invisible to
+ * except; the result on one marked line; hard exit after flushing it, which is also why a successful probe always
+ * reports exit code zero. Step 2 checks for finite results — some broken projection setups return NaN, not an error.
  */
 export const SCRIPT = `
 import faulthandler
@@ -100,7 +83,6 @@ except Exception as e:
 _emit(info)
 `
 
-/** What the script reports, when it reports at all. */
 export interface Report {
   readonly pythonVersion: string
   readonly gdalVersion: string
@@ -122,12 +104,12 @@ export type Outcome =
       readonly failure: "gdal-missing" | "proj-broken" | "core-missing" | "probe-timeout" | "probe-failed"
       /** The step's own words, or the raw output when the script never spoke. */
       readonly detail: string
-      /** True when the marker never appeared — the interpreter died before any step. */
+      /** No marker, and no timeout: the interpreter never got that far. Keys the macOS unknown-layout retry. */
       readonly startupCrash: boolean
       readonly report?: Report
     }
 
-/** The probe is our own code with fully known behaviour: fixed total clock (§8.4). */
+/** Our own script, so a fixed total clock (§8.4). */
 const TOTAL = "30 seconds"
 
 export function run(
@@ -148,15 +130,13 @@ export function run(
       })
       .pipe(
         Effect.catch((error) =>
-          // A spawn that fails outright — interpreter path is a directory, not
-          // executable, missing — is a probe failure with the error as detail,
-          // not a defect: the hint is user input and this is a normal outcome.
+          // The interpreter path is derived, not verified: a spawn that fails outright is a normal outcome graded like
+          // any other probe failure, not a defect.
           Effect.succeed<GeoRuntime.Result>({
             code: null,
             reason: "crash",
             stdout: "",
-            // First line only: the spawner's message embeds the entire command
-            // including the probe script, and a thousand-line error helps nobody.
+            // First line only: the spawner puts the whole command in its message, probe script included.
             stderr: error.message.split("\n")[0] ?? error.message,
             durationMs: 0,
             truncated: false,
@@ -165,9 +145,7 @@ export function run(
         ),
       )
 
-    // The marker outranks the exit code: a report that made it out is a
-    // verdict regardless of how the interpreter ended, and in practice the
-    // hard exit guarantees code zero whenever the marker exists.
+    // The marker outranks the exit code: a report that made it out is the verdict, however the interpreter ended.
     const extracted = GeoOutput.extractMarked(result.stdout, MARKER)
 
     if (!extracted.ok) {
@@ -179,11 +157,8 @@ export function run(
           startupCrash: false,
         } satisfies Outcome
       }
-      // Marker present but unreadable is ITS OWN case (§4.6 failure grading):
-      // the interpreter demonstrably started and reached its emit, so calling
-      // it a startup crash both drops the parse error and — worse — trips the
-      // macOS unknown-layout retry, a spurious thirty-second stdlib search
-      // keyed precisely on startupCrash.
+      // Its own grade (§4.6 失败分级), not a startup crash: the interpreter reached its emit, and startupCrash is
+      // what would send resolution off into the macOS stdlib search.
       if (extracted.kind === "invalid") {
         return {
           ok: false,
@@ -192,11 +167,8 @@ export function run(
           startupCrash: false,
         } satisfies Outcome
       }
-      // No marker: the script never reached its emit — interpreter startup
-      // failure, segfault, kill. The RAW output is the diagnosis and must
-      // reach the reader intact (§4.6 失败分级); with the fault handler on,
-      // stderr carries the native stack for the segfault case. The process's
-      // own ending is part of that diagnosis (§4.6 row 1), so it leads.
+      // No marker: the raw output is the diagnosis (§4.6 失败分级) — for a segfault it is the native stack the fault
+      // handler wrote to stderr — and how the process ended is part of it, so it leads.
       const ending =
         result.reason !== "exit" || result.code !== 0
           ? `[process ${result.reason}${result.code !== null ? `, exit code ${result.code}` : ""}]\n`

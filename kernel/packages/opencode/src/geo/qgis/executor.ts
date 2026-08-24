@@ -8,44 +8,21 @@ import type { Environment } from "./types"
 
 /* --- GeoCode: the execution pipeline (docs/GEOKERNEL.md §4.12).
  *
- * Two call kinds, one pipeline: algorithm runs ride a standard runner script,
- * data reading rides its own scripts (2d follow-up) — both take a VERIFIED
- * environment object handed in by the gate, never a status they look up
- * themselves (§4.9, §9.1).
- *
- * Stateless on purpose: every execution is its own subprocess, and the
- * pipeline holds nothing between calls, so concurrent runs cannot see each
- * other (§4.12 并发). --- */
+ * Two call kinds, one pipeline, both taking a VERIFIED environment object handed in by the gate rather than a
+ * status they look up themselves (§4.9, §9.1). --- */
 
 /**
- * The idle-clock floor and default, in seconds.
- *
- * Algorithm execution is the third-party-controlled tier of §8.4: plenty of
- * algorithms are silent for their whole runtime, so only the CALLER — who
- * knows the data size — can pick the number. The kernel enforces a floor
- * because a tiny value turns every normally-quiet algorithm into a "timeout",
- * and supplies a default for callers with no opinion.
+ * The idle-clock floor and default, in seconds. Only the caller knows the data size, so only the caller can pick
+ * the number (§8.4 third-party tier); the floor keeps a tiny value from turning every quiet algorithm into a
+ * "timeout".
  */
 export const IDLE_FLOOR_SECONDS = 10
 export const IDLE_DEFAULT_SECONDS = 60
 
 /**
- * The runner. Ported from the build that survived production, with its
- * reasons:
- *
- * - Fault handler first, before any geo import (§4.13 constraint 4): a broken
- *   install segfaults during native library load where no except-block can
- *   see it; enabled first, at least the native stack reaches stderr.
- * - The feedback subclass prints a progress line at every ten percent. That
- *   is the progress CONTRACT of §4.12: it shows the user movement, and it is
- *   the heartbeat that lets a well-behaved algorithm run for hours under an
- *   idle clock.
- * - The in-script parameter check warns and NEVER blocks (§4.12): it reads
- *   the live registry — including the value-acceptability check only QGIS
- *   itself can answer — but QGIS's own validation at run time stays the
- *   ground truth, and our check breaking must not take the run with it.
- * - The algorithm's display name prints early so the caller can label the
- *   run while it is still going.
+ * The runner. Three things it may not stop doing: enable the fault handler before any geo import (§4.13 constraint
+ * 4 — a broken install segfaults in native library load, where no except-block can see it), print progress every
+ * ten percent (§4.12's contract, and the heartbeat the idle clock reads), and warn without ever blocking the run.
  */
 export const RUNNER_SCRIPT = `
 import sys, faulthandler
@@ -177,15 +154,9 @@ finally:
 `
 
 /**
- * A pre-flight finding. Advice with a location, never a veto.
- *
- * `defaults-applied` is a STATEMENT, not a warning, and it is separate from
- * `missing-required` for a reason worth keeping: QGIS marks a parameter
- * optional or not, but a great many non-optional ones ship a default, and on a
- * real 3.44 catalog that is 869 of the 1858 required parameters across 74% of
- * the algorithms. Reporting those as "missing" made a correct call raise up to
- * twelve alarms, which teaches a reader to skip the whole channel — and the 989
- * genuinely-required ones are the ones that then go unread.
+ * A pre-flight finding: advice, never a veto. `defaults-applied` is a statement rather than a warning, and merging
+ * it into `missing-required` is what §4.12 bans — 869 of 1858 non-optional parameters ship a default, so a correct
+ * call would raise a dozen alarms and teach the reader to skip the channel.
  */
 export interface Hint {
   readonly kind: "unknown-algorithm" | "unknown-parameter" | "missing-required" | "invalid-choice" | "defaults-applied"
@@ -193,13 +164,10 @@ export interface Hint {
 }
 
 /**
- * Millisecond-scale pre-flight against catalog metadata (§4.12).
+ * Millisecond-scale pre-flight against catalog metadata (§4.12), answering before any interpreter starts.
  *
- * Complements, never replaces, the in-script check: this one answers before
- * any interpreter starts, from the exported metadata; the in-script one reads
- * the live registry and can ask value-acceptability. Both only ADVISE — the
- * exported metadata cannot express every constraint, and blocking on it would
- * turn its gaps into "the user cannot run this" (§4.12, and §12).
+ * ADVISES only: the exported metadata cannot express every constraint, so blocking on it would turn its gaps into
+ * "the user cannot run this". The in-script check covers what needs the live registry.
  */
 export function precheck(
   requestedId: string,
@@ -223,12 +191,8 @@ export function precheck(
     }
   }
 
-  // Absent non-optional parameters split two ways, and the metadata already
-  // holds the answer: a default means QGIS has something to run with, no
-  // default means it does not. The old single branch could not tell them
-  // apart, which is why its wording hedged — "may fall back to a default, or
-  // fail" is a check saying out loud that it did not look at defaultValue,
-  // which sits in the very same record.
+  // An absent non-optional parameter splits two ways and `defaultValue` in the same record decides which: a
+  // default means QGIS has something to run with, `null` means it does not (§4.12).
   const defaulted: string[] = []
   for (const parameter of algorithm.parameters) {
     if (!(parameter.name in parameters)) {
@@ -243,13 +207,11 @@ export function precheck(
       }
       continue
     }
-    // The one value judgment the metadata CAN make: an enum given a value
-    // outside its options. Everything subtler belongs to QGIS at run time.
+    // The one value judgment the metadata CAN make: an enum given a value outside its options. Everything subtler
+    // belongs to QGIS at run time.
     const value = parameters[parameter.name]
-    // An option index counts whether it arrives as a number or as the string
-    // of one: parameters are generated JSON, where quoting a number is
-    // routine, and QGIS accepts both. Flagging "2" would be advice against
-    // something that works.
+    // An option index counts as a number or as the string of one — parameters arrive as generated JSON, where
+    // quoting a number is routine, and QGIS accepts both (checkValueIsAcceptable on 3.44 takes 1 and "1").
     const index =
       typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : undefined
     if (
@@ -265,10 +227,8 @@ export function precheck(
     }
   }
 
-  // One line, last, carrying the VALUES: what QGIS is about to run with is a
-  // fact the caller may want to override, and the catalog is the only place
-  // those values are already known — the in-script check would have to look
-  // them up again.
+  // One line, last, carrying the VALUES: what QGIS is about to run with is a fact the caller may want to override,
+  // and the catalog is the only place those values are already known.
   if (defaulted.length > 0) {
     hints.push({
       kind: "defaults-applied",
@@ -304,12 +264,8 @@ export interface ScriptOptions {
 }
 
 /**
- * Run one algorithm in a verified environment.
- *
- * Termination semantics come from Runtime and are not re-decided here: every
- * ending — normal, idle, abort, crash — returns the output gathered so far
- * with its reason attached (§4.12). Presentation of those endings is the tool
- * layer's job.
+ * Run one algorithm in a verified environment. Termination is Runtime's: every ending — exit, idle, abort, crash —
+ * comes back as a Result carrying its reason, and presenting that is the tool layer's job (§4.12).
  */
 export function runAlgorithm(
   runtime: GeoRuntime.Interface,
@@ -318,9 +274,8 @@ export function runAlgorithm(
 ): Effect.Effect<GeoRuntime.Result, Error> {
   return runScript(runtime, environment, {
     script: RUNNER_SCRIPT,
-    // Parameters travel as an argument, matching the production-tested form.
-    // The runner reads argv, so the bootstrap wrapper must preserve argv
-    // semantics — which wrapInline does by construction (§4.5).
+    // Parameters travel as an argument: the runner reads them off argv, which the bootstrap preamble leaves
+    // untouched because it only prepends lines to the script itself (§4.5).
     args: [options.algorithm, JSON.stringify(options.parameters)],
     idleSeconds: options.idleSeconds,
     onChunk: options.onChunk,

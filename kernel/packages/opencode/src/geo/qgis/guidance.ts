@@ -2,27 +2,11 @@ import * as path from "path"
 import { Global } from "@opencode-ai/core/global"
 import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 
-/* --- GeoCode: the guidance the QGIS group shows an Agent when the
- * environment is not ready (GEOKERNEL §8.6; the QGIS sibling of §5.11).
+/* --- GeoCode: the guidance shown when the QGIS environment is not ready (docs/GEOKERNEL.md §8.6).
  *
- * Lives in the kernel because the three QGIS tools (ReadGeoData / QgisDoc /
- * RunQgisAlgorithm) share ONE environment and ONE configuration step, so they
- * must speak with one voice — byte-for-byte, the old version's rule. The tool
- * layer renders what this returns; it never authors environment copy itself.
- *
- * Ported from the old kernel's two formatters with one deliberate adaptation:
- * the old copy taught `geocode.json`'s `qgis.python` field; the new kernel
- * reads `machine.json`'s `qgis` string — a single location hint in any of
- * five shapes (§4.2). Porting the copy without moving the target would send
- * the Agent to a file nobody reads (docs/PATHS.md §5, the write/read pairing
- * lesson).
- *
- * The split the old version discovered still holds and is the spine here:
- *   - fixable():  the Agent CAN complete this (find QGIS, write machine.json)
- *   - broken():   the Agent CANNOT (corrupted install) — verify, then
- *                 recommend reinstalling; never attempt repair
- * Both end on the same fact that closes the loop: machine.json is watched,
- * saving it re-probes automatically, no restart (§3.1). --- */
+ * In the kernel because the three QGIS tools share one environment and one configuration step and must say the same
+ * words; the tool layer renders what this returns and never authors environment copy of its own. The copy teaches
+ * `machine.json`'s `qgis` hint, in any of the five shapes §4.2 accepts. --- */
 
 const machineJson = () => path.join(Global.Path.config, "machine.json")
 
@@ -92,26 +76,10 @@ function fixable(opening: string): string {
 }
 
 /**
- * The Agent cannot complete this one — but what it must NOT do matters more
- * here than in `fixable()`, and that is the trap this copy is written around.
- *
- * This branch's advice ends in "reinstall QGIS", and an Agent told to
- * recommend a reinstall is one step from performing it. The prohibitions
- * therefore belong HERE, not only in the configure path: an earlier version of
- * this file carried them only in `fixable()`, which a broken install never
- * reaches, so the sentence a reader actually got was "recommend reinstalling"
- * with nothing forbidding `brew install --cask qgis`.
- *
- * The Homebrew-cask caveat is the same trap seen from the other side. The
- * state that brings a macOS user here most often is `gdal-missing`, and the
- * cask build's broken GDAL bindings are its classic cause — so the one command
- * an unguarded Agent would reach for is precisely the one that reproduces the
- * fault. Losing that sentence and losing the prohibition compound each other.
- *
- * The resolved interpreter is echoed because step 1 asks the reader to judge
- * whether the hint points at a real QGIS install, and it cannot judge a path it
- * has not been shown. In these states the environment header renders nothing
- * (the status is not `ready`), so this is the only place it can appear.
+ * The prohibitions are repeated here and not left to `fixable()`, because unlike that branch this copy
+ * ends in "reinstall QGIS", and an Agent told to recommend one is a step away from running the installer itself.
+ * The interpreter is echoed because step 1 asks the reader to judge the hint, and on the non-ready statuses that
+ * reach here `GeoTool.qgisHeader` renders nothing — it needs `ready`.
  */
 function broken(symptom: string, opts?: { error?: string; interpreter?: string }): string {
   const head = [
@@ -182,22 +150,9 @@ function broken(symptom: string, opts?: { error?: string; interpreter?: string }
     "Do not try to repair bindings or plugins by hand; that is not reliably",
     "fixable from here.",
     "",
-    // The closing route, and the one place in this file where "saving re-probes"
-    // is FALSE.
-    //
-    // Deliberately so, and the dispatch is not the thing to change: config
-    // reloads PER BLOCK and drops one whose fingerprint is unchanged
-    // (`config/index.ts`), which is what keeps an edit to `qgis` from dragging
-    // the GEE environment through a re-probe it has no reason to run. Only what
-    // actually changed wakes up. `POST /geo/reload` does not get around it
-    // either — it re-reads the file, and the same per-block filter sits
-    // downstream of the read.
-    //
-    // What follows is that NOTHING re-probes an install that changed underneath
-    // an unchanged hint, and this branch's advice ends in a reinstall — after
-    // which the hint usually has not changed at all. The earlier wording
-    // promised precisely that re-probe. An agent believing it calls the tool
-    // again and reads this same text back, having spent the user's time.
+    // The one place in this file where "saving re-probes" would be false: config dispatches per block and drops a
+    // block whose value is unchanged (`config/index.ts`), and `POST /geo/reload` re-reads the file into that same
+    // filter (.artifacts/OPEN.md D8) — so a reinstall at the same path re-probes nothing until a restart.
     `GeoCode re-probes when the "qgis" hint in machine.json CHANGES. Saving the`,
     "same value again is not a change, and nothing runs. So once the user has",
     "reinstalled:",
@@ -213,21 +168,12 @@ function broken(symptom: string, opts?: { error?: string; interpreter?: string }
 export function render(status: GeoEvent.QgisStatus): string {
   switch (status.status) {
     case "ready":
-      // The gate can refuse a READY environment: the catalog may still be
-      // building, and the two Processing failures below were in the old
-      // version's broken family from the start (ready + !processingReady,
-      // ready + registry failed) — a probe can succeed against an install
-      // whose Processing framework is missing or whose catalog dump errors.
+      // A ready environment can still fail the gate (§4.9): the probe succeeds against installs whose Processing
+      // framework is absent or whose catalog export errors, and the catalog may simply not be built yet.
       if (status.catalog === "building")
         return "QGIS is ready and its algorithm catalog is still being built — the first build after a configuration change can take a while. Try again shortly."
-      // `skipped` rides along rather than answering below. The kernel only ever
-      // commits it together with `processing: false` (`qgis/index.ts`), so a
-      // branch testing it on its own sat under this one and could not be
-      // reached — and its sentence said the same thing this one does, one
-      // remove further from the cause. Folded in instead of deleted: the tool
-      // layer keeps `catalog: "skipped"` as a state of its own
-      // (`tool/geo-tool.ts`), so if the pairing ever comes apart, what belongs
-      // here is still guidance and not silence.
+      // `skipped` is only ever committed together with `processing: false` (`qgis/index.ts`), so it rides along here
+      // rather than in a branch of its own, which would be unreachable.
       if (!status.processing || status.catalog === "skipped")
         return broken("QGIS's Processing framework is not available in this installation", {
           interpreter: status.interpreter,

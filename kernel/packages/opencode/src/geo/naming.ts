@@ -6,7 +6,7 @@ import path from "node:path"
  *
  * Neither caller may overwrite — geodata is outside the checkpoint mechanism (§10.1 #6) — so both number through
  * here. QGIS quotes paths itself, so the space in `out (1).shp` is safe: measured on a real 3.44 install including
- * the `gdal:` family, which builds a command line. Unverified on Windows, where quoting differs most. --- */
+ * the `gdal:` family, which builds a command line. --- */
 
 /** Enough that reaching it means something is wrong, not that someone was busy. */
 export const MAX_ATTEMPTS = 10_000

@@ -14,69 +14,41 @@ import type { Environment } from "./types"
 
 /* --- GeoCode: the data-reading pipeline (docs/GEOKERNEL.md §4.13).
  *
- * Same shape as the executor: pure functions over a VERIFIED environment the
- * gate handed out (§4.9, §9.1), stateless between calls. The scripts travel as
- * generated constants and run MATERIALIZED — the vector script alone consumes
- * about three quarters of the Windows command-line length limit when passed
- * inline, so inline transport has no safety margin left (§4.13 校准量). --- */
+ * Pure functions over an environment the gate verified (§4.9, §9.1), stateless between calls. The scripts travel as
+ * generated constants and run MATERIALIZED, never inline: the vector script alone is 23KB, about three quarters of
+ * the Windows command-line limit (§4.13 校准量). --- */
 
 /** One marker for the whole family; each script embeds the same string. */
 export const MARKER = "__GEOCODE_READ_JSON__"
 
 /**
- * Wall-clock bounds, carried over from the calibrated production values.
- * Total clocks, not idle: a full-table statistics scan is legitimately silent
- * for its whole runtime, so an idle clock would misread the workload (§8.4 —
- * these are the kernel-known tier).
+ * Total clocks, not idle: no script here emits progress, so a full-table
+ * statistics scan is silent for its whole runtime (§8.4 — these are the kernel-known tier).
  */
-const VECTOR_TOTAL = "120 seconds" // GeoJSON/GML drivers parse the whole file at open — GDAL-side cost no scan avoids
+const VECTOR_TOTAL = "120 seconds" // twice the raster bound: GeoJSON/GML drivers parse the whole file at open
 const RASTER_TOTAL = "60 seconds"
 const PREVIEW_TOTAL = "120 seconds"
 
-/** Metadata reads: same generous bound as the catalog export, same rationale. */
+/** Metadata reads: the same bound as the catalog export. */
 const METADATA_LIMIT = 32 * 1024 * 1024
 
 /**
- * The preview cap is sized to the preview's UPPER BOUND, explicitly: at the
- * script's MAX_SIDE of 2048 the raw RGBA plane is 16MB, a pathological PNG
- * stays near raw size, and base64 adds a third — ~22MB worst case.
- *
- * Left at 128MB anyway, which is generous by design rather than by neglect.
- * The two failures are not symmetrical: an oversized cap costs nothing, since
- * this is a ceiling and not an allocation, while an undersized one does not
- * fail loudly — it truncates the payload and masquerades as an unattributable
- * "no marker" failure (§4.13 校准量). The margin also means lowering MAX_SIDE
- * again needs no arithmetic here.
+ * Sized well above the preview's upper bound — ~22MB at the script's MAX_SIDE of 2048 — because the two failures
+ * are not symmetrical: an oversized ceiling allocates nothing, while an undersized one truncates the payload into
+ * an unattributable "no marker" failure instead of a loud one (§4.13 校准量).
  */
 const PREVIEW_LIMIT = 128 * 1024 * 1024
 
 /**
- * Reading must not write.
- *
- * The stretch needs statistics, `GetStatistics(force=True)` computes them, and
- * GDAL then saves what it computed — as a `.aux.xml` BESIDE THE USER'S DATA,
- * on a call that only asked to read it. Read-only opening does not prevent it;
- * the save happens when the dataset closes. The GDAL face has carried this
- * guard since it was built (`gdal/inspector.ts` NO_SIDECARS) and this one
- * never did, so every raster read has been leaving a file behind (§7.6).
- *
- * On the READER ONLY. An algorithm that writes a raster may legitimately need
- * PAM to persist a coordinate system its output format cannot hold, so the
- * executor keeps it — turning this off there would damage real output rather
- * than protect a directory.
- *
- * Two costs, both smaller than the one they replace. Statistics are recomputed
- * instead of read back, which is what the GDAL face already does and is
- * sampled rather than a full scan. And a coordinate system living ONLY in a
- * sidecar goes unseen — the five raster formats this tool opens all carry
- * their own, and `GDAL_PAM_PROXY_DIR` is no help here: it has no effect where
- * the user can write, which is exactly where their data is.
+ * Reading must not write: GDAL saves computed statistics as a `.aux.xml` beside the user's data when the dataset
+ * closes, and opening read-only does not stop it (§7.6, §4.13). On the READER ONLY — an algorithm that writes a
+ * raster may need PAM to persist a coordinate system its output format cannot hold.
  */
 const NO_SIDECARS = { GDAL_PAM_ENABLED: "NO" } as const
 
 export interface VectorOptions {
   readonly file: string
-  /** Features to sample. The caller owns range policy; the script defaults to 3. */
+  /** Features to sample; the script defaults to 3. */
   readonly maxFeatures?: number
   /** 1-based feature start position; the script defaults to 1. */
   readonly offset?: number
@@ -110,12 +82,8 @@ export type PreviewOutcome =
   | { readonly ok: false; readonly detail: string }
 
 /**
- * Materialize a script constant as a file in the application cache.
- *
- * Content-hash naming makes refresh automatic: a script change lands under a
- * new name, and an existing file with the right name is by construction the
- * right content — no versioning, no cleanup protocol (stale generations are a
- * few kilobytes). Returns the absolute path.
+ * Materialize a script constant as a file in the application cache, named by content hash: a changed script lands
+ * under a new name, and a file already bearing the name is by construction the right content.
  */
 export function materialize(
   name: string,
@@ -126,28 +94,22 @@ export function materialize(
   const target = path.join(directory, `${name}-${hash}.py`)
   if (!existsSync(target)) {
     mkdirSync(directory, { recursive: true })
-    // Write-then-rename: an existing file must never be a partial one, or a
-    // concurrent instance could spawn Python on half a script.
+    // Write-then-rename, so a file under the target name is never a partial one a concurrent instance could spawn.
     const staging = path.join(directory, `${name}-${hash}.${process.pid}.tmp`)
     writeFileSync(staging, content, "utf8")
     try {
       renameSync(staging, target)
     } catch (error) {
-      // On Windows a rename onto a path another process just created (or that
-      // an antivirus scanner is holding open) fails with EPERM. The target is
-      // content-addressed, so if it exists now, someone else wrote exactly
-      // this — that is success, not a race to report.
+      // Windows refuses a rename onto a path another process just created; the name is content-addressed, so a
+      // target that exists now holds exactly these bytes.
       if (!existsSync(target)) throw error
     }
   }
   return target
 }
 
-/* Windows Python stdio can interleave U+FEFF (UTF-8 BOM) when the console
- * codepage flips to UTF-8 mid-stream — and these are exactly the scripts that
- * trigger the flip, because they print non-ASCII attribute values. JSON.parse
- * rejects BOM as non-whitespace per RFC 8259 and String.trim() only handles
- * edges, so every U+FEFF is stripped up-front. No-op on macOS. */
+/* Windows Python stdio can interleave U+FEFF anywhere in the stream, including inside the marker line. JSON.parse
+ * rejects it as non-whitespace and trim() only reaches the edges, so every occurrence goes up-front. */
 const stripBom = (text: string) => text.replace(/\uFEFF/g, "")
 
 /** Read vector metadata, statistics and sampled features. */
@@ -218,8 +180,8 @@ function runRead(
   environment: Environment,
   spec: ReadSpec,
 ): Effect.Effect<GeoRuntime.Result, Error> {
-  // Effect.try, not Effect.sync: a read-only cache directory or a full disk
-  // must surface as the declared Error, not kill the fiber as a defect.
+  // Effect.try, not Effect.sync: a read-only cache directory or a full disk must surface as the declared Error
+  // rather than a defect.
   return Effect.try({
     try: () => materialize(spec.name, spec.content),
     catch: (error) =>
@@ -230,8 +192,8 @@ function runRead(
     Effect.flatMap((scriptPath) =>
       runtime.run({
         command: environment.python,
-        // wrapScript preserves direct-execution semantics under the manual
-        // Windows track's DLL bootstrap, and is the identity elsewhere (§4.5).
+        // wrapScript preserves direct-execution semantics under the manual Windows track's DLL bootstrap, and is
+        // the identity where there is nothing to register (§4.5).
         args: QgisBootstrap.wrapScript(scriptPath, spec.args, environment.dllDirectories),
         env: { ...environment.env, ...NO_SIDECARS },
         delivery: { mode: "collect", limit: spec.limit },
@@ -267,9 +229,8 @@ function parseMetadata(result: GeoRuntime.Result): MetadataOutcome {
 function parsePreview(result: GeoRuntime.Result): PreviewOutcome {
   const stdout = stripBom(result.stdout)
   const lines = stdout.split("\n")
-  // Last occurrence, same rule as extractMarked — and CONTAINS, not
-  // starts-with: unterminated C-level chatter (a GDAL warning without its
-  // newline) can end up glued to the front of the marker's own line.
+  // Last occurrence, same rule as extractMarked — and CONTAINS, not starts-with: unterminated C-level chatter can
+  // end up glued to the front of the marker's own line.
   let markerLine = -1
   for (let i = lines.length - 1; i >= 0; i--) {
     if (lines[i]!.includes(MARKER)) {
@@ -304,12 +265,9 @@ function parsePreview(result: GeoRuntime.Result): PreviewOutcome {
     return failed(result, "preview produced metadata but no image payload followed the marker line")
   }
 
-  // The image gets the completeness check the metadata got for free from
-  // JSON.parse. The metadata line flushes ahead of the image, so a clock
-  // expiring — or the output cap tripping — mid-transfer leaves a valid
-  // marker line above a half-written payload. The script reports the byte
-  // count it encoded; base64 length follows from it exactly. Without this,
-  // a truncated image is delivered as a successful one.
+  // The image gets the completeness check JSON.parse gave the metadata for free. The script writes the marker line
+  // before the image, so a clock expiring — or the output cap tripping — mid-transfer leaves a valid marker line
+  // above a half-written payload; base64 length follows exactly from the byte count the script reports.
   if (typeof record.bytes === "number") {
     const expected = 4 * Math.ceil(record.bytes / 3)
     if (base64.length !== expected) {

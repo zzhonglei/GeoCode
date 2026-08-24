@@ -7,21 +7,13 @@ import type { Choice } from "./types"
 
 /* --- GeoCode: resolving a QGIS environment on Windows (docs/GEOKERNEL.md §4.5).
  *
- * This file is a transcription of behaviour that took repeated real-machine
- * failures to get right. Where a rule looks arbitrary, its incident is in the
- * comment; none of them are guesses. The Windows machine work is deferred, not
- * the coding (P7) — so every porting decision here errs toward the old code.
- *
- * All string work goes through `path.win32`, never the platform module: at
- * runtime on Windows the two are the same, and everywhere else it keeps the
- * pure logic — segment scanning, ranking — testable. Hints may arrive with
- * forward slashes (JSON configs often do); win32 normalize folds them. --- */
+ * All string work goes through `path.win32`, never the platform module: on Windows the two are the same, and
+ * everywhere else it keeps the segment scanning and the ranking testable. Hints may arrive with forward slashes;
+ * win32 normalize folds them. Rules here that look arbitrary transcribe incidents. --- */
 
 const win = nodePath.win32
 
-/** QGIS parses its prefix variable expecting forward slashes — the official
- * launcher does the same rewrite. ONLY that variable: everything else stays on
- * native backslashes so command interpreters and Windows APIs behave. */
+/** The QGIS prefix variable is the one path QGIS parses expecting forward slashes; the rest stay native (§4.5). */
 export function toQgisPath(value: string): string {
   return value.replace(/\\/g, "/")
 }
@@ -31,9 +23,8 @@ export function toNativeSep(value: string): string {
 }
 
 /**
- * The official launcher scripts, most stable variant first: long-term support,
- * then current, then development. Present on nearly every install; a minimal
- * install without them falls to the manual track.
+ * The official launchers, long-term support first, then current, then development; an install carrying none of
+ * them falls to the manual track (§4.5).
  */
 export const LAUNCHER_NAMES = ["python-qgis-ltr.bat", "python-qgis.bat", "python-qgis-dev.bat"] as const
 
@@ -42,14 +33,10 @@ export function findLauncher(root: string): string | undefined {
 }
 
 /**
- * Mid-layer correction: the hint names a directory INSIDE the install that
- * carries both a module directory and an executable directory — the shape of
- * `<root>\apps\qgis-ltr` — so the real root is two levels up.
- *
- * Shared by both tracks so they cannot disagree on what "root" means. Its
- * coverage does not overlap the segment scan: a layout whose outer directories
- * carry no launcher (the install IS the sub-prefix's grandparent, nothing
- * above it qualifies) is reachable only through this correction.
+ * The hint names a mid-layer directory of the install — the `<root>\apps\qgis-ltr` shape, carrying both a module
+ * and an executable directory — so the root is two levels up. Shared by both tracks so they cannot disagree on
+ * what "root" means, and it is what covers an install none of whose ancestors carries a launcher, which the
+ * segment scan demands.
  */
 export function correctMidLayer(hint: string): string | undefined {
   if (existsSync(win.join(hint, "python")) && existsSync(win.join(hint, "bin"))) {
@@ -59,23 +46,9 @@ export function correctMidLayer(hint: string): string | undefined {
 }
 
 /**
- * Find the install root from a hint that may point anywhere inside it.
- *
- * Scans path SEGMENTS left to right and accepts any segment whose name
- * contains "qgis" or "osgeo" — substring only, no version format, no separator
- * convention — requiring the prefix ending there to carry an official
- * launcher. Trying every matching segment (not just the first) handles nested
- * layouts where an outer container also matches but only the inner install
- * carries the launcher.
- *
- * A pure string scan: filesystem calls proportional to MATCHING segments, not
- * path depth. That is also a free defence — a stray launcher-named wrapper
- * script under some unrelated directory cannot pose as a root, because no
- * ancestor of it matches the substring.
- *
- * The documented trade-off stands: an install renamed to carry neither
- * substring is reachable only by pointing the hint at the interpreter itself,
- * which the manual track accepts without this lookup.
+ * The install root behind a hint pointing anywhere inside it: any segment containing "qgis" or "osgeo" — substring
+ * only, no version format — whose prefix carries an official launcher. Every matching segment is tried and not
+ * only the first, so a nested install is still found when the container above it matches but holds no launcher.
  */
 export function findRootFromHint(hint: string): string | undefined {
   const normalized = win.normalize(hint)
@@ -93,12 +66,8 @@ export function findRootFromHint(hint: string): string | undefined {
 }
 
 /**
- * Derive a root from an interpreter-shaped hint: both installer families put
- * the bundled interpreter at `<root>\apps\Python<NNN>\python.exe`.
- *
- * This is the escape hatch the segment scan's trade-off leaves open — a
- * renamed install found neither by substring nor by mid-layer shape resolves
- * here, provided the hint is the interpreter itself.
+ * Both installer families put the bundled interpreter at `<root>\apps\Python<NNN>\python.exe`, so a hint that is
+ * the interpreter yields the root even when no directory name carries a substring the segment scan looks for.
  */
 export function rootFromInterpreter(hint: string): string | undefined {
   const appsDir = win.resolve(hint, "../..")
@@ -107,18 +76,10 @@ export function rootFromInterpreter(hint: string): string | undefined {
 }
 
 /**
- * Walk up from the hint looking for what an install root actually contains.
- *
- * The last line of defence, for the shape every name-based strategy misses: an
- * install whose directory was renamed to something without "qgis" or "osgeo"
- * in it, pointed at through the root-level `bin\python3.exe` shim rather than
- * `apps\Python3xx\python.exe`. Substring matching finds nothing, the
- * interpreter's shape says nothing, and without this the fallback would settle
- * on `<root>\bin` and assemble an environment out of an empty tree.
- *
- * Identified by CONTENT, not by name (§4.3 principle 4): a directory holding
- * an `apps` subdirectory, or a launcher next to the shim, is an install root
- * whatever it is called.
+ * By content, not by name (§4.3 principle 4): an ancestor holding an `apps` directory, or a launcher beside the
+ * shim, is a root whatever it is called. It reaches the install renamed out of every substring and pointed at
+ * through the root-level `bin\python3.exe` shim, where the remaining fallback would settle on `<root>\bin` and
+ * assemble an environment out of an empty tree.
  */
 export function findRootByContent(hint: string): string | undefined {
   let walking = win.resolve(hint)
@@ -132,7 +93,7 @@ export function findRootByContent(hint: string): string | undefined {
   return undefined
 }
 
-/** Find the bundled interpreter under a root, whatever Python version it ships. */
+/** The bundled interpreter under a root, whatever Python version it ships. */
 export function findInterpreterUnderRoot(root: string): string | undefined {
   const appsDir = win.join(root, "apps")
   if (!existsSync(appsDir)) return undefined
@@ -144,8 +105,7 @@ export function findInterpreterUnderRoot(root: string): string | undefined {
       if (existsSync(candidate)) return candidate
     }
   } catch {
-    // Unreadable mid-scan; the caller falls back to the hint and the probe
-    // shows that hint verbatim in its diagnostics.
+    // Unreadable mid-scan: the caller falls back to the hint, which the diagnostics then show verbatim.
   }
   return undefined
 }
@@ -162,12 +122,8 @@ export function subPrefixRank(prefix: string): number {
 }
 
 /**
- * Enumerate QGIS sub-prefix candidates and pick by fixed order.
- *
- * A candidate must carry BOTH the module directory and the executable
- * directory (§4.3 principle 4) — a bare `qgis*` directory name proves nothing.
- * Taking "first found" instead of ranking would let the choice drift with
- * directory enumeration order between runs on the same machine.
+ * A candidate must carry both the module and the executable directory (§4.3 principle 4) — a `qgis*` name proves
+ * nothing — and the fixed order is what keeps the choice from drifting with directory enumeration order.
  */
 export function resolveSubPrefix(root: string, interpreter: string, hint?: string): Choice {
   const candidates: (string | undefined)[] = []
@@ -178,14 +134,10 @@ export function resolveSubPrefix(root: string, interpreter: string, hint?: strin
   candidates.push(...qgisNamedSubdirectories(win.join(root, "apps")))
   candidates.push(win.join(root, "apps", "qgis-ltr"), win.join(root, "apps", "qgis"))
 
-  // A hint that IS a complete sub-prefix outranks the fixed order. The order
-  // exists to break ties the user did not express an opinion about; when they
-  // pointed at `apps\qgis-dev` themselves, handing back the LTR install beside
-  // it answers a question they did not ask (§4.2 允许中间层目录形态).
-  //
-  // Admitted only when it carries both required directories — an interpreter
-  // path is a hint too, and listing it among the sub-prefix candidates would
-  // put a file where the diagnostics promise directories.
+  // A hint that is itself a complete sub-prefix outranks the fixed order, which is only there to break ties the
+  // user expressed no opinion about: pointing at `apps\qgis-dev` and getting the LTR install beside it answers a
+  // question nobody asked (§4.5 子前缀选择尊重显式意图). Both directories are required of it too — the hint can be
+  // the interpreter, and `candidates` travels to the user's diagnostics as a list of sub-prefixes.
   const resolvedHint = hint ? win.resolve(hint) : undefined
   const preferred =
     resolvedHint && existsSync(win.join(resolvedHint, "python")) && existsSync(win.join(resolvedHint, "bin"))
@@ -214,11 +166,9 @@ function qgisNamedSubdirectories(appsDir: string): string[] {
 }
 
 /**
- * The Qt component root. Newer Qt FIRST, both case spellings of each — and the
- * order is a necessity, not a preference: newer QGIS links only the newer Qt,
- * and searching the old one alone leaves the Qt directory unregistered, which
- * surfaces as a core-module import failure with no mention of Qt at all
- * (§4.5).
+ * Newer Qt first, both case spellings of each, and the order is a necessity: newer QGIS links only the newer Qt,
+ * so searching the old one alone leaves the Qt directory unregistered — which surfaces as a core-module import
+ * failure that never mentions Qt (§4.5).
  */
 export function findQtRoot(root: string): string | undefined {
   return QgisPaths.firstExisting([
@@ -230,16 +180,10 @@ export function findQtRoot(root: string): string | undefined {
 }
 
 /**
- * Every component's executable directory under `<root>\apps`.
- *
- * The WIDTH of this set is load-bearing (§4.3 principle 5): once any directory
- * is registered for dynamic-library search, the interpreter switches to a
- * restricted mode where cascade loads — the core library pulling in its own
- * dependencies — resolve ONLY against registered directories. The narrow set
- * (root, Qt, sub-prefix) worked on one QGIS generation and broke on the next,
- * where the core library grew cross-component dependencies: launcher-started
- * interpreters imported fine while our spawn failed at the native core import.
- * Every component directory goes in, existing-or-not filtered by the caller.
+ * Every component's executable directory under `<root>\apps`, and the width is load-bearing (§4.3 principle 5):
+ * registering any directory for dynamic-library search puts the interpreter in a restricted mode where cascade
+ * loads resolve only against registered directories, and the core library's dependencies are spread across
+ * components. Existence is filtered by the caller.
  */
 export function componentBinDirs(root: string): string[] {
   const appsDir = win.join(root, "apps")
@@ -253,7 +197,7 @@ export function componentBinDirs(root: string): string[] {
   }
 }
 
-/** The conventional projection-data locations, most specific first. */
+/** The conventional projection-data locations; this order is also their rank, which `projectionRank` reads off. */
 export function projectionCandidates(root: string, subPrefix: string): string[] {
   return QgisPaths.unique([
     win.join(root, "share", "proj"),
@@ -265,7 +209,6 @@ export function projectionCandidates(root: string, subPrefix: string): string[] 
   ])
 }
 
-/** Rank a projection directory: known candidates by position, then by location pattern. */
 export function projectionRank(dir: string, root: string, subPrefix: string): number {
   const normalized = win.normalize(dir).toLowerCase()
   const exact = projectionCandidates(root, subPrefix)
@@ -282,11 +225,8 @@ export function projectionRank(dir: string, root: string, subPrefix: string): nu
 }
 
 /**
- * Bounded search for projection data when no conventional candidate holds the
- * database. Depth-limited, skips cache and third-party package directories,
- * never follows directory symlinks. Results ranked by location pattern, ties
- * broken by path length then lexically — the same run on the same machine
- * always picks the same directory (§4.3 principle 3).
+ * Bounded search for projection data when no conventional candidate holds the database. Ties break on path length
+ * and then lexically, so the same tree always yields the same directory (§4.3 principle 3).
  */
 export function searchProjectionDirs(root: string, subPrefix: string): string[] {
   const found: string[] = []
@@ -319,8 +259,8 @@ export function searchProjectionDirs(root: string, subPrefix: string): string[] 
 
 export function findProjectionDir(root: string, subPrefix: string): Choice {
   const candidates = projectionCandidates(root, subPrefix)
-  // Payload validation, not container existence (§4.3 principle 4): a proj
-  // directory without its database fails much later, on the first custom CRS.
+  // Payload, not container (§4.3 principle 4): a proj directory without its database fails much later, on the
+  // first custom coordinate system.
   const conventional = candidates.find(QgisPaths.hasProjectionDatabase)
   if (conventional) return { selected: conventional, candidates }
   const searched = searchProjectionDirs(root, subPrefix)
@@ -334,10 +274,7 @@ export interface ManualAssembly {
   readonly choices: Record<string, Choice>
 }
 
-/**
- * The manual track: replicate everything the official launcher sets up,
- * because we spawn the interpreter directly without it (§4.5 track two).
- */
+/** The manual track: replicate what the official launcher sets up, since we spawn the interpreter without it (§4.5). */
 export function assembleManual(interpreter: string, root: string, hint?: string): ManualAssembly {
   const choices: Record<string, Choice> = {}
 
@@ -352,18 +289,8 @@ export function assembleManual(interpreter: string, root: string, hint?: string)
   }
 
   const env: Record<string, string> = {
-    // Forward slashes for THIS variable only — QGIS's own parsing prefers
-    // them and the official launcher performs the same rewrite.
     QGIS_PREFIX_PATH: toQgisPath(subPrefix),
-    // The canonical anchor variable both official setup scripts export.
-    // Several QGIS internals and plugin helpers read it directly to locate
-    // bundled tools; setting it defensively keeps them from key-erroring
-    // under our spawn even when nothing in our own probe touches that code.
     OSGEO4W_ROOT: root,
-    // The official launcher does not set an interpreter home, but bundled
-    // runtimes observed in the wild do. Anchoring it at the interpreter's own
-    // directory gives startup a deterministic home and avoids filesystem-
-    // encoding init failures on some machines.
     PYTHONHOME: win.dirname(interpreter),
     GDAL_FILENAME_IS_UTF8: "YES",
     PYTHONUTF8: "1",
@@ -372,9 +299,8 @@ export function assembleManual(interpreter: string, root: string, hint?: string)
     VSI_CACHE_SIZE: "1000000",
   }
 
-  // Both names, same directory: the projection library renamed its data
-  // variable, and which one an install reads depends on the library version it
-  // bundles. Writing one of them is the version-specific bet §4.5 forbids.
+  // Both names for one directory: the projection library renamed its data variable, and which one an install reads
+  // depends on the version it bundles (§4.5).
   const projection = findProjectionDir(root, subPrefix)
   choices.projection = projection
   if (projection.selected) {
@@ -411,8 +337,7 @@ export function assembleManual(interpreter: string, root: string, hint?: string)
   ])
   env.PATH = process.env.PATH ? [...pathEntries, process.env.PATH].join(";") : pathEntries.join(";")
 
-  // The wide set — every component's bin — not the narrow one. See
-  // componentBinDirs for the incident that made this width mandatory.
+  // The wide set, every component's bin — see componentBinDirs for why the narrow one is not enough.
   const dllDirectories = QgisPaths.allExisting([
     win.join(root, "bin"),
     ...componentBinDirs(root),
@@ -427,13 +352,9 @@ export function assembleManual(interpreter: string, root: string, hint?: string)
 export const ENV_DUMP_MARKER = "__GEOCODE_ENV_JSON__"
 
 /**
- * The one-liner the launcher runs to dump its assembled environment.
- *
- * Single line and pure ASCII, both mandatory: the command interpreter's
- * handling of multi-line and non-ASCII payloads varies with the system
- * language (observed corrupting on a Chinese-codepage machine), and a mangled
- * script here silently forces the manual fallback. The dict() copy is required
- * because the environ mapping is not directly serialisable on some builds.
+ * One line and pure ASCII, both mandatory: the command interpreter's handling of multi-line and non-ASCII payloads
+ * varies with the system language, and a mangled script here silently forces the manual fallback (§4.5). The
+ * `dict()` is not decoration — `json.dumps` refuses `os.environ`, which is a mapping and not a dict.
  */
 export const ENV_DUMP_SCRIPT = `import os,json,sys; sys.stdout.write('${ENV_DUMP_MARKER}'+json.dumps(dict(os.environ)))`
 
@@ -444,36 +365,23 @@ export interface BridgeAdoption {
 }
 
 /**
- * Adopt a launcher's dumped environment (§4.5 track one).
- *
- * Sanity-checks the three keys a real launcher always exports before adopting.
- * The executable search path is the one that must not be waved through: this
- * track registers NO dynamic-library directories and relies entirely on that
- * path for cascade resolution, so with it empty the probe would pass while
- * real execution failed.
- *
- * Adopted COMPLETE, not filtered (§4.3 principle 8): we know our own sensitive
- * variables and exclude them at the display exit, but cannot enumerate which
- * variables QGIS needs. The old build filtered here with a keep-list and got
- * away with it only because the host environment was re-inherited underneath —
- * any launcher modification to an unlisted variable was silently lost.
+ * Adopt a launcher's dumped environment whole (§4.5 track one, §4.3 principle 8): we know our own sensitive
+ * variables but not the ones QGIS needs, so nothing is filtered before the display exit. `PATH` is checked because
+ * this track registers no dynamic-library directories and rides entirely on it for cascade resolution, so an empty
+ * one would pass the probe and fail in real execution.
  */
 export function adoptBridgeDump(dumped: Record<string, string>, fallbackRoot: string): BridgeAdoption | undefined {
   if (!dumped.QGIS_PREFIX_PATH || !dumped.PYTHONHOME || !dumped.PATH) return undefined
 
-  // The launcher is the authority on which interpreter ships with the install
-  // (§4.5): the hint located the install, and stops mattering here.
+  // The launcher is the authority on which interpreter ships with the install; the hint stops mattering here (§4.5).
   const interpreter = win.join(toNativeSep(dumped.PYTHONHOME), "python.exe")
   const prefix = dumped.QGIS_PREFIX_PATH ? toNativeSep(dumped.QGIS_PREFIX_PATH) : fallbackRoot
 
   const env = { ...dumped }
 
-  // Overlay 2 of §4.5: the launcher's module path carries only the module
-  // directory, with the plugins directory appended by QGIS during its OWN
-  // initialisation — which runs after the algorithm framework would need it.
-  // Observed as the framework failing to come up under the bridge on one QGIS
-  // series while the manual track (which always prepended) worked. Prepend,
-  // deduplicated case-insensitively because Windows paths compare that way.
+  // Overlay 2 of §4.5: the launcher exports only the module directory, and QGIS appends the plugins directory
+  // during its own initialisation — after the algorithm framework needs it. Deduplicated case-insensitively,
+  // because that is how Windows paths compare.
   const plugins = win.join(prefix, "python", "plugins")
   if (existsSync(plugins)) {
     const existing = env.PYTHONPATH ?? ""
@@ -485,11 +393,9 @@ export function adoptBridgeDump(dumped: Record<string, string>, fallbackRoot: st
     if (!already) env.PYTHONPATH = existing ? `${plugins};${existing}` : plugins
   }
 
-  // Overlay 1 of §4.5: the launcher serves interactive use and cannot know a
-  // program will parse this interpreter's output. Without these, output on a
-  // non-English system encodes in the system codepage while we decode UTF-8 —
-  // and the read scripts emit non-escaped structured text, so that corrupts
-  // the body, not just messages (§4.13).
+  // Overlay 1 of §4.5: the launcher serves interactive use and cannot know a program parses this output. Without
+  // these, a non-English system encodes it in the system codepage while we decode UTF-8, and the read scripts emit
+  // non-escaped structured text — so that corrupts the body, not just messages (§4.13 constraint 2).
   env.PYTHONUTF8 = "1"
   env.PYTHONIOENCODING = "UTF-8"
   env.GDAL_FILENAME_IS_UTF8 = "YES"

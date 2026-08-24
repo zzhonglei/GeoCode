@@ -11,10 +11,8 @@ import { QgisCatalog } from "./catalog"
 import { QgisResolve } from "./resolve"
 import type { Diagnostics, Environment } from "./types"
 
-/* The module's face, and everything the tool layer is meant to reach through
- * it (§9.1): the gate below, algorithm search, and the two execution entries.
- * Anything importing `qgis/executor` or `qgis/reader` directly has gone around
- * the front — which is how one module ends up with two calling conventions. */
+/* These and the gate below are the module's face (§9.1); importing a submodule directly is how one module ends up
+ * with two calling conventions. */
 export { QgisCatalog } from "./catalog"
 export { QgisDestination } from "./destination"
 export { QgisExecutor } from "./executor"
@@ -24,17 +22,10 @@ export type { Environment } from "./types"
 
 /* --- GeoCode: the QGIS module's lifecycle (docs/GEOKERNEL.md §4.8–§4.10).
  *
- * Owns the status slot as its only writer, answers the two triggers — startup
- * and a change to the machine.json qgis block — and chains the two stages:
- * environment verification, then catalog construction. Each stage commits as
- * it lands rather than waiting for the next (§4.10), which is why users see
- * resolving → probing → ready(building) → ready instead of one long silence.
- *
- * There is deliberately NO self-healing re-probe here, unlike GEE (§4.8, and
- * the tradeoff record in §12): a re-probe in this module is a compound action
- * — it voids and rebuilds the catalog, stalling all three capabilities — and
- * nearly every fix a user can make goes through the config file, which is
- * already watched. --- */
+ * Sole writer of the status slot; one round per `machine.json` qgis block value, `config.watch` emitting the
+ * current one at startup. Environment verification and catalog construction each commit as they land (§4.10). No
+ * self-healing re-probe, unlike GEE: re-probing here voids and rebuilds the catalog, stalling all three
+ * capabilities (§4.8 迁移纪律 1). --- */
 
 /** What the unified gate answers (§4.9). */
 export type Gate =
@@ -43,10 +34,8 @@ export type Gate =
 
 export interface Interface {
   /**
-   * The single readiness verdict all three capabilities share (§4.9): one
-   * environment, one conclusion. Ready hands back the verified environment
-   * object itself — execution entry points receive it rather than re-checking
-   * (§9.1), closing the window between verdict and spawn.
+   * The single readiness verdict all three capabilities share (§4.9). Ready hands back the verified environment
+   * object itself, which execution entry points take rather than re-checking (§9.1).
    */
   readonly gate: () => Effect.Effect<Gate>
 }
@@ -90,9 +79,8 @@ const layer = Layer.effect(
     const writer = yield* status.register("qgis", { status: "unconfigured" })
 
     /**
-     * The environment behind the current `ready`, if any. Cleared at the start
-     * of every round so the gate can never hand out an environment the round
-     * in progress is re-verifying.
+     * The environment behind the current `ready`. Cleared at the start of every round, so the gate can never hand
+     * out one that the round in progress is re-verifying.
      */
     const held = yield* Ref.make<Environment | undefined>(undefined)
 
@@ -102,10 +90,8 @@ const layer = Layer.effect(
         const commit = (value: GeoEvent.QgisStatus) => writer.commit(token, value)
 
         yield* body(state, commit).pipe(
-          // A defect in a round must not strand the slot on an intermediate
-          // state with nobody reporting anything: whatever blew up becomes a
-          // probe failure the user can see. Interruption is not a defect and
-          // passes through — a superseded round just stops.
+          // A defect must not strand the slot mid-round with nobody reporting anything, so whatever blew up
+          // becomes a probe failure the user can see. Interruption is not a defect and passes through.
           Effect.catchDefect((defect) =>
             Effect.asVoid(
               commit({
@@ -122,15 +108,12 @@ const layer = Layer.effect(
       commit: (value: GeoEvent.QgisStatus) => Effect.Effect<boolean>,
     ) =>
       Effect.gen(function* () {
-        // Ordering rule for every path below: the slot's new state lands
-        // BEFORE the held environment or catalog is dropped. The gate reads
-        // status first, so the inverse order has a moment where a still-ready
-        // status pairs with no environment — an answer that contradicts
-        // itself. This way the stale extras sit unreachable behind a
-        // no-longer-ready status until the next line clears them.
+        // Ordering rule for every path below: the new status lands BEFORE the held environment or the catalog is
+        // dropped. The gate reads status first, so the inverse order leaves a moment where a still-ready status
+        // pairs with no environment.
 
-        // A syntax error fails every block; showing it as "unconfigured" would
-        // contradict the file the user is looking at (§3.1).
+        // An unparsable file arrives as every block failing; showing that as "unconfigured" would contradict the
+        // file the user is looking at (§3.1).
         if (!state.ok) {
           yield* commit({ status: "config-error", file: state.failure.file, message: state.failure.message })
           yield* Ref.set(held, undefined)
@@ -147,8 +130,7 @@ const layer = Layer.effect(
         }
 
         yield* commit({ status: "resolving" })
-        // The catalog belongs to the verification that produced it; a new
-        // round means that verification is being redone (§4.8 阶段依附).
+        // The catalog belongs to the verification that produced it, and this round is redoing it (§4.8 阶段依附).
         yield* Ref.set(held, undefined)
         yield* catalog.invalidate()
         const resolution = yield* QgisResolve.resolve(hint, runtime, {
@@ -172,22 +154,18 @@ const layer = Layer.effect(
 
         const environment = resolution.environment
         yield* Ref.set(held, environment)
-        // (Here the inverse order is the safe one: the environment must exist
-        // before any ready status is visible, or the gate could see ready and
-        // find nothing to hand out.)
+        // (Here the inverse order is the safe one: the environment must exist before any ready status is visible,
+        // or the gate could see ready and find nothing to hand out.)
 
-        // Every ready frame carries the facts a status surface shows on the
-        // happy path — interpreter, versions, track. The verified environment
-        // object itself never leaves the kernel (§9.1), so if these are not on
-        // the wire they are nowhere.
+        // The environment object itself never leaves the kernel (§9.1), so facts a status surface needs are
+        // nowhere unless they ride every ready frame.
         const facts = {
           interpreter: environment.python,
           track: environment.track,
           versions: environment.versions,
         }
 
-        // Stage one lands NOW; the catalog stage reports its own progress
-        // under the same token (§4.10 提交时机, §3.4 令牌覆盖整轮).
+        // Stage one lands NOW; the catalog stage reports its own progress under the same token (§4.10 提交时机).
         if (!environment.processing) {
           yield* commit({ status: "ready", processing: false, catalog: "skipped", ...facts })
           return
@@ -202,9 +180,8 @@ const layer = Layer.effect(
         }
       })
 
-    // One round at a time: a new block value interrupts whatever the previous
-    // one was still doing — including a catalog build in flight — and the
-    // generation token makes any of its stragglers uncommittable (§4.8).
+    // One round at a time: a new block value interrupts whatever the previous one was still doing, including a
+    // catalog build in flight, and the round's token makes any straggler commit a no-op (§4.8, §3.4).
     let running: Fiber.Fiber<void, never> | undefined
     yield* Effect.forkIn(
       Stream.runForEach(config.watch("qgis"), (state) =>
@@ -228,14 +205,10 @@ const layer = Layer.effect(
         ) {
           return { ok: true, environment }
         }
-        // Not ready is ONE verdict for all three capabilities: the environment
-        // is one fact, and three different stories about it would read as
-        // three different problems (§4.9). Guidance wording is the tool
-        // layer's job (§8.6); the status carries the facts.
+        // Not ready carries the status only; wording the guidance is the tool layer's job (§4.9, §8.6).
         //
-        // Re-read when the environment is what is missing: a new round can
-        // land between the two reads above, and reporting the ready status it
-        // just replaced would hand the reader "not ready: ready".
+        // Re-read when the environment is what is missing: a new round can land between the two reads above, and
+        // reporting the ready status it just replaced would hand the reader "not ready: ready".
         const status_ =
           environment === undefined && current?.status === "ready" ? yield* status.current("qgis") : current
         return { ok: false, status: status_ ?? { status: "unconfigured" } }

@@ -1,42 +1,24 @@
 export * as QgisTypes from "./types"
 
-/* --- GeoCode: the vocabulary of QGIS environment resolution
- * (docs/GEOKERNEL.md §4.3–§4.6, §4.9, §4.10).
- *
- * Environment resolution is where this module's complexity lives. A user's
- * QGIS varies along four axes at once — platform, how it was installed, which
- * version, and what shape of path they gave us — and all three capabilities
- * rest on getting past "import qgis" (§4.1). --- */
+/* --- GeoCode: the vocabulary of QGIS environment resolution (docs/GEOKERNEL.md §4.3–§4.6, §4.9, §4.10). --- */
 
-/** Which assembly track produced an environment. Windows only; macOS has one path. */
+/** Which assembly track produced an environment. Windows only — macOS resolution leaves it undefined. */
 export type Track = "bridge" | "manual"
 
 /**
- * A verified QGIS environment.
- *
- * Handed to execution entry points directly rather than having them re-read a
- * status: that closes the window between deciding an environment is usable and
- * actually starting a process in it (§4.9, §9.1).
+ * A verified QGIS environment, handed to execution entry points directly rather than looked up again, which closes
+ * the window between the gate's verdict and the spawn (§4.9, §9.1).
  */
 export interface Environment {
-  /** The interpreter to spawn. Derived from the install, not taken from the hint (§4.3 principle 1). */
+  /** The interpreter to spawn — from the install, unless the hint names an existing one (§4.3 principle 1). */
   readonly python: string
   readonly prefix: string
-  /**
-   * The environment to hand a subprocess. COMPLETE — never the filtered copy.
-   *
-   * Execution needs completeness and display needs safety, and the two pull in
-   * opposite directions, so they are different values rather than one value
-   * used twice (§4.3 principle 8).
-   */
+  /** COMPLETE — never the filtered copy, which exists for display only (§4.3 principle 8). */
   readonly env: Record<string, string>
   /**
-   * Directories to register for dynamic library search, Windows only.
-   *
-   * **Empty on the bridge track, and that is load-bearing** — registering any
-   * directory switches the interpreter into a restricted search mode in which
-   * the cascade the launcher set up through the executable search path stops
-   * working (§4.3 principle 5, §4.5).
+   * Directories to register for dynamic library search, Windows manual track only. Empty on the bridge track and
+   * that is load-bearing: registering any directory switches the interpreter into a restricted search mode in which
+   * the launcher's executable-search-path cascade stops working (§4.3 principle 5, §4.5).
    */
   readonly dllDirectories: readonly string[]
   readonly track?: Track
@@ -56,13 +38,8 @@ export interface Choice {
 }
 
 /**
- * Everything needed to locate a failure without opening a log file (§4.10).
- *
- * `candidates` is here for one specific problem: **the choice itself may be the
- * wrong one**. On a machine carrying two QGIS installs, or two copies of a
- * resource, showing only what was picked cannot explain the failure — showing
- * what else was available lets a user or an agent see that another candidate
- * should have been taken.
+ * Everything needed to locate a failure without opening a log file (§4.10). `candidates` is here because the choice
+ * itself may be the wrong one: with two installs on the machine, what was picked cannot explain the failure alone.
  */
 export interface Diagnostics {
   readonly python: string
@@ -81,16 +58,11 @@ export interface Diagnostics {
   readonly attempted?: readonly Track[]
 }
 
-/**
- * Why resolution failed.
- *
- * These are the failure members of §4.7's state set, named identically so the
- * lifecycle can carry one straight into the status slot without translating.
- */
+/** Named identically to §4.7's failure states, so the lifecycle commits one into the status slot untranslated. */
 export type Failure =
   /** The hint points nowhere, or is relative (§4.2). */
   | "path-missing"
-  /** The path exists but carries no QGIS marker. */
+  /** macOS only: the hint names an application bundle carrying no QGIS marker. */
   | "not-qgis"
   /** Probe step 1: the interpreter has no GDAL bindings. */
   | "gdal-missing"
