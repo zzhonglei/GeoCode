@@ -46,7 +46,12 @@ describe("a point against a boundary", () => {
     expect(OsmIntersect.contains(holed, [2, 2])).toBe(true)
   })
 
-  test("a vertex lying exactly on the ray is counted once, not twice", () => {
+  test("a ray through a vertex counts one crossing, which makes the boundary half-open", () => {
+    // Both bottom corners sit at y = 0, so the ray from a point on that edge runs through (10, 0). The half-open
+    // `>` counts that once; `>=` on both ends counts it zero times and swaps the first two answers below.
+    expect(OsmIntersect.contains(idx, [5, 0])).toBe(true)
+    expect(OsmIntersect.contains(idx, [5, 10])).toBe(false)
+    // A hair inside the excluded edge is still inside.
     expect(OsmIntersect.contains(idx, [5, 10 - 1e-9])).toBe(true)
   })
 })
