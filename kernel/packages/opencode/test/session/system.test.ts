@@ -84,21 +84,15 @@ const it = testEffect(
 )
 
 describe("session.system", () => {
-  /* --- GeoCode: upstream picks one of nine prompts by model family; GeoCode
-   * returns its own single base for every model (docs/KERNEL.md §5.2), so the
-   * cases this replaces could not pass and sat red in every vendored run —
-   * indistinguishable, to anyone reading that run, from a patch the merge had
-   * just undone.
+  /* --- GeoCode: upstream picks one of nine prompts by model family; GeoCode returns its own single base for
+   * every model (docs/KERNEL.md §5.2), so the cases this replaces could not pass and sat red in every vendored
+   * run — indistinguishable from a patch the merge had just undone.
    *
-   * Generalized rather than deleted. `geocode-brand.test.ts` asserts the SOURCE
-   * of `session/system.ts`, which is a different question from what the
-   * function returns; CONVENTIONS.md §7 is explicit that compiling is not
-   * passing. This is the runtime half of that patch, and the only one.
+   * Generalized rather than deleted: `geocode-brand.test.ts` asserts the SOURCE of `session/system.ts`, which
+   * is a different question from what the function returns. This is the runtime half of that patch.
    *
-   * Upstream original, as of v1.18.18 — one case at v1.18.4, three now, and the
-   * growth is the point: this is an area upstream actively works, so expect the
-   * next merge to conflict here again. Each asserts that the prompt VARIES by
-   * family, which a single base makes impossible by construction:
+   * Upstream original, as of v1.18.18 — one case at v1.18.4, three now, and the growth is the point: this is
+   * an area upstream actively works, so expect the next merge to conflict here again.
    *   test("selects the Meta prompt for Muse Spark model IDs", …)      // + {{MODEL_NAME}} substitution
    *   test("selects the Meta prompt for Muse Glimmer model IDs", …)    // added in v1.18.18
    *   test("selects the Kimi prompt for official provider model IDs", …) // added in v1.18.18

@@ -24,16 +24,10 @@ export type FileDiff = typeof FileDiff.Type
 
 /* --- GeoCode: geodata never enters the checkpoint repository (docs/GEOKERNEL.md §10.1 #6).
  *
- * One scene is hundreds of megabytes and a project holds many; without this a
- * checkpoint costs more than the work it protects, and the object store grows
- * until the disk is gone.
- *
- * The extensions come from the shared taxonomy so this cannot drift away from
- * the watcher's ignore list. **What it may use is constrained**: this becomes an
- * unconditional `*.ext` rule, so it blankets only unambiguous geo extensions —
- * `SNAPSHOT_BLANKET_SIDECARS` has already dropped the generics (`.dat`, `.hdr`,
- * `.qml`, …) that a parent-gated consumer can use safely and this one cannot,
- * because here they would also swallow a user's ordinary files (§10.1 #5). --- */
+ * One scene is hundreds of megabytes and a project holds many, so without this a checkpoint costs more than the
+ * work it protects. The extensions come from the shared taxonomy so this cannot drift from the watcher's ignore
+ * list, and only the unambiguous ones: this becomes an unconditional `*.ext` rule, so the generics
+ * `SNAPSHOT_BLANKET_SIDECARS` has dropped (`.dat`, `.hdr`, `.qml`) would swallow a user's own files. --- */
 const geoSection = (header: string, extensions: string[]) => [
   `# GeoCode: ${header}`,
   ...extensions.map((extension) => `*.${extension}`),
@@ -48,29 +42,13 @@ const GEO_EXCLUDE = [
   ...geoSection("Container-dataset folders", GeoExtensions.CONTAINER_DIRS),
   ...geoSection("Dataset sidecars", GeoExtensions.SNAPSHOT_BLANKET_SIDECARS),
   ...geoSection("Transient churn (SQLite WAL / QGIS locks)", GeoExtensions.TRANSIENT_SUFFIXES),
-  /* Snapshot-only, and too aggressive for any other consumer: a checkpoint has
-   * no use for these, while a file tree that hid them would be hiding the
-   * metadata a GIS user reads.
+  /* Snapshot-only, and too aggressive for any other consumer: a checkpoint has no use for these, while a file
+   * tree that hid them would be hiding the metadata a GIS user reads.
    *
-   * Qualified by what they sit beside, NOT a bare `*.xml`. Every other rule in
-   * this block names a geo extension, so it can only ever match geodata; a bare
-   * `*.xml` was the one that could not, and it swallowed `pom.xml`, `.csproj`,
-   * `web.xml` and every other ordinary config alongside the metadata. The cost
-   * was invisible rather than loud: those files simply never entered a
-   * checkpoint, so an agent's edit to one SURVIVED a revert while the rest of
-   * the turn rolled back, and nothing anywhere said so.
-   *
-   * `.aux.xml` is GDAL's PAM sidecar — rewritten whenever a read computes
-   * statistics, and load-bearing besides: formats that cannot store a CRS
-   * themselves keep it there (§4.13). `.shp.xml` is ArcGIS metadata for a
-   * dataset this block already excludes, so keeping it alone would checkpoint a
-   * description of something that is not there.
-   *
-   * ArcGIS can write `<name>.<ext>.xml` beside other formats too, and those now
-   * ride into checkpoints. Deliberate: they are small and are not rewritten on
-   * open, so the churn this rule exists for is served by `.aux.xml` alone —
-   * deriving `*.<ext>.xml` over the whole taxonomy would add forty rules to
-   * catch a file that costs nothing to keep. */
+   * Qualified by what they sit beside, NOT a bare `*.xml`, which matches ordinary config at any depth.
+   * `.aux.xml` is GDAL's PAM sidecar — rewritten whenever a read computes statistics, and load-bearing besides,
+   * since formats that cannot store a CRS themselves keep it there (§4.13). Not derived over the whole taxonomy
+   * on purpose: ArcGIS's `<name>.<ext>.xml` beside other formats is small and not rewritten on open. */
   "# GeoCode: GIS metadata",
   "*.aux.xml",
   "*.shp.xml",
@@ -93,22 +71,14 @@ interface GitResult {
 
 type State = Omit<Interface, "init">
 
-/* --- GeoCode: which candidates may be staged, as a named rule rather than an
- * inline filter (docs/GEOKERNEL.md §10.1 #6).
+/* --- GeoCode: which candidates may be staged, as a named rule rather than an inline filter
+ * (docs/GEOKERNEL.md §10.1 #6).
  *
- * Two exclusions, answering to different rule sets: `ignored` is the SOURCE
- * repo's, `geoIgnored` is the snapshot repo's own `info/exclude`, where
- * GEO_EXCLUDE lives.
- *
- * Dropping the second does NOT let geodata into the store — `git add` refuses a
- * path its exclude file covers, on its own. What it does is make git exit
- * non-zero, which `stage()` reports as "failed to add snapshot files" although
- * every other file went in. On a geographic project that warning is then
- * permanent, and the one that means something looks exactly like it.
- *
- * Extracted because that consequence is invisible from outside: the patch, the
- * store and the files on disk all come out identical either way, so nothing
- * observable could be asserted against this while it sat inline. --- */
+ * Two exclusions answering to different rule sets: `ignored` is the SOURCE repo's, `geoIgnored` is the snapshot
+ * repo's own `info/exclude`, where GEO_EXCLUDE lives. Dropping the second does NOT let geodata into the store —
+ * `git add` refuses a path its exclude file covers — but it makes git exit non-zero, which `stage()` reports as
+ * "failed to add snapshot files" although every other file went in, permanently, on every geographic project.
+ * Extracted because that is invisible from outside: patch, store and disk come out identical either way. --- */
 export function stageable(
   all: readonly string[],
   ignored: ReadonlySet<string>,
@@ -361,20 +331,13 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           /* --- GeoCode: geodata ALREADY TRACKED in the snapshot index has to go too
            * (docs/GEOKERNEL.md §10.1 #6).
            *
-           * The source-repo check below never sees GEO_EXCLUDE — that lives in
-           * the snapshot repo's own `info/exclude` — and a gitignore rule has no
-           * effect on a file that is already tracked anyway. So a `.tif` or
-           * `.gpkg` committed in the user's repo, seeded into the snapshot index
-           * along with everything else, would be re-hashed into the object store
-           * on every single checkpoint: gigabytes of I/O, an object store that
-           * only grows, and eventually a full disk.
+           * The source-repo check below never sees GEO_EXCLUDE — that lives in the snapshot repo's own `info/exclude`
+           * — and a gitignore rule has no effect on an already-tracked file anyway, so a `.tif` committed in the
+           * user's repo would be re-hashed into the object store on every single checkpoint.
            *
-           * **Before the early return, and this is the whole subtlety.** Seeded
-           * geodata is unchanged at the moment it is tracked, so it appears in
-           * no candidate list — it is reachable only through `ls-files`, and a
-           * first checkpoint on an untouched project has no candidates at all.
-           * Placed after the return it would ride into the first tree and then
-           * be removed by the next call, showing up as a phantom deletion. --- */
+           * Before the early return, and that is the whole subtlety: seeded geodata is unchanged when it is tracked,
+           * so it appears in no candidate list and is reachable only through `ls-files`. Placed after the return it
+           * would ride into the first tree and be removed by the next call, as a phantom deletion. --- */
           const geoIgnored = yield* ignore(Array.from(new Set([...all, ...(yield* lsFiles())])), state.gitdir)
           if (geoIgnored.size > 0) {
             yield* Effect.logInfo("removing geodata from snapshot", { count: geoIgnored.size })

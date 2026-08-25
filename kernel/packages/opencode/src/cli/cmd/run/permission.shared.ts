@@ -55,13 +55,9 @@ function text(v: unknown): string {
   return typeof v === "string" ? v : ""
 }
 
-/* --- GeoCode: one parameter value as one line of a dialog.
- *
- * The cut is at a terminal line rather than at the 256 `geo-qgis-run.ts` uses
- * for the same values, and the two numbers are not a drift: that one keeps a
- * PATTERN from exploding and is sized so no real path ever reaches it, this one
- * keeps a DIALOG readable. A path longer than this is already unreadable in a
- * prompt, and the full value stays in the tool's metadata either way. --- */
+/* --- GeoCode: one parameter value as one line of a dialog. The cut is at a terminal line, not the 256
+ * `geo-qgis-run.ts` uses for the same values — that one keeps a PATTERN from exploding, this one keeps a DIALOG
+ * readable — and the full value stays in the tool's metadata either way. --- */
 function render(value: unknown): string {
   const raw =
     typeof value === "string"
@@ -135,45 +131,18 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
 
   /* --- GeoCode: the four geographic permission keys (docs/TOOLS.md §4).
    *
-   * Here rather than in tool.ts's TOOL_RULES for the same reason
-   * `external_directory` and `doom_loop` are here: that table is keyed by TOOL
-   * NAME and demands a `view` and a `run`, while these are PERMISSION KEYS —
-   * `qgis` covers two tools, `osm` covers four, and no tool is named after any
-   * of them. Registering them there would mean inventing a rendering for a tool
-   * that does not exist.
+   * Here rather than in tool.ts's TOOL_RULES for the same reason `external_directory` and `doom_loop` are here:
+   * that table is keyed by TOOL NAME and demands a `view` and a `run`, while these are PERMISSION KEYS — `qgis`
+   * covers two tools, `osm` covers four, and no tool is named after any of them.
    *
-   * Without this the fallback at the bottom renders `Call tool qgis` over
-   * `Tool: qgis`, which is a dialog containing none of what the user is being
-   * asked to judge — and for `qgis` that judgement is the ONLY guard left
-   * (TOOLS.md §4.3: the destination check cannot see 56 of 422 algorithms, and
-   * no list of exceptions survives the user's own QGIS version).
-   *
-   * Two shapes, on purpose. An algorithm call can be read and judged, so it is
-   * spelled out; a GEE script cannot — it is arbitrary Python, and unfolding it
-   * into a dialog would teach the user to confirm without reading. What that
-   * one is asked about is the CAPABILITY, the way upstream's `task` prompt asks
-   * about a subagent without pretending to know what it will do. --- */
+   * Without this the fallback at the bottom renders `Call tool qgis` over `Tool: qgis`, containing none of what
+   * the user is being asked to judge — and for `qgis` that judgement is the ONLY guard left (TOOLS.md §4.3: the
+   * destination check cannot see 56 of 422 algorithms). --- */
   if (request.permission === "qgis") {
     const algorithm = text(input.algorithm)
-    /* Two tools share this key, and they get two different dialogs.
-     *
-     * The shipped agents allow `doc:*` outright, so this branch is reached only
-     * when a user narrows the key by hand — writing `"qgis": "ask"` on an agent
-     * of their own, which is the natural thing to write and costs them one
-     * extra prompt. That is a fair trade rather than a defect: an agent works
-     * in two passes, reading documentation repeatedly and only then running
-     * something, so the two grants land on a boundary the work already has.
-     * `QgisDoc`'s `always` is `["doc:*"]`, so approving the reading pass never
-     * quietly approves the running one.
-     *
-     * The title carries all of it, and there is no second line on purpose.
-     * WHICH algorithm's documentation is being read changes nothing a user
-     * would decide on — the operation is read-only either way — so spelling it
-     * out spends attention that the algorithm dialog below actually needs.
-     * Showing the raw pattern would be worse still: `doc:read:native:buffer` is
-     * a string built for rule matching, and putting it in front of a user asks
-     * them to parse our internal syntax.
-     */
+    /* Two tools share this key. No second line on purpose: which algorithm's documentation is being read changes
+     * nothing a user would decide on, and the raw `doc:read:native:buffer` pattern is rule-matching syntax rather
+     * than something to put in front of them. */
     if (!algorithm) {
       return { icon: "#", title: "Look up QGIS documentation", lines: [] }
     }
@@ -182,45 +151,24 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
     return {
       icon: "#",
       title: `Run QGIS algorithm ${algorithm}`,
-      // One parameter per line rather than the single-line form carried in
-      // `patterns`: an atlas export takes seventeen of them, and the one that
-      // matters — a path outside the working directory — is the one that would
-      // wrap off the end of a terminal line.
+      // One parameter per line rather than `patterns`' single-line form: an atlas export takes seventeen, and the one
+      // that matters — a path outside the working directory — is the one that would wrap off the end of a terminal.
       lines: Object.entries(parameters).map(([key, value]) => `${key.padEnd(width)} = ${render(value)}`),
     }
   }
 
   if (request.permission === "gee") {
-    /* The title, and nothing else — not the body, and not the script's path
-     * either.
-     *
-     * The body is out because a script is arbitrary Python that nobody would
-     * read in a dialog, and a prompt that is never read is worse than none: it
-     * manufactures the impression of review. The PATH is out for a subtler
-     * reason — showing it suggests the user is judging THIS script, when what
-     * they can actually judge is only whether Earth Engine may run at all,
-     * against their credentials and quota. A detail that invites a judgement
-     * the user cannot make is worse than no detail.
-     */
+    /* The title and nothing else — not the body, and not the script's path. A script is arbitrary Python nobody
+     * would read in a dialog, and naming the path suggests the user is judging THIS script when all they can judge
+     * is whether Earth Engine may run at all, against their credentials and quota. */
     return { icon: "#", title: "Run an Earth Engine script", lines: [] }
   }
 
   if (request.permission === "geodata") {
-    /* `permRead`'s shape, deliberately down to the details.
-     *
-     * `ReadGeoData` already matches upstream's `read` on the input side —
-     * `patterns: [path.relative(instance.worktree, filepath)]` and
-     * `always: ["*"]`, the same two lines — so the dialog has the same data to
-     * work with and no reason to look different. `toolPath` is what upstream
-     * runs the pattern through, and it is the reason a file outside the
-     * workspace reads as `~/thesis/data/scene.tif` rather than as a run of
-     * `../`.
-     *
-     * Unlike the documentation dialog above, this one keeps the detail: WHICH
-     * file is being read is the only thing the user is judging here. The rule
-     * is not "read-only means no detail", it is "no detail the user cannot act
-     * on".
-     */
+    /* `permRead`'s shape: `ReadGeoData` already matches upstream's `read` on the input side, so the dialog has the
+     * same data to work with. `toolPath` is what upstream runs the pattern through, and it is why a file outside
+     * the workspace reads as `~/thesis/data/scene.tif` rather than as a run of `../`. Unlike the documentation
+     * dialog above this one keeps the detail: WHICH file is read is the only thing the user is judging. */
     const file = pats[0] || ""
     return {
       icon: "→",

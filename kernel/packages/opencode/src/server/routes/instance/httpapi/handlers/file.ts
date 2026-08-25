@@ -16,12 +16,10 @@ import { InstanceHttpApi } from "../api"
 
 /* --- GeoCode: the two ceilings on the generic content endpoint (§10.1 #8).
  *
- * The raster threshold is where "show me the file" stops being the right
- * answer and "draw it on the map" starts — above it the interface is pointed at
- * the preview endpoint, which reprojects and downscales instead.
- *
- * 50 MiB deliberately clears legitimate session artifacts (a 12 MiB PNG map
- * export viewed inline) while stopping the pathological cases. --- */
+ * The raster threshold is where "show me the file" stops being the right answer and "draw it on the map"
+ * starts, above which the interface is pointed at the preview endpoint instead. 50 MiB deliberately clears
+ * legitimate session artifacts — a 12 MiB PNG map export viewed inline — while stopping the pathological
+ * cases. --- */
 const MAX_INLINE_IMAGE = 8 * 1024 * 1024
 const MAX_INLINE_FILE = 50 * 1024 * 1024
 
@@ -115,20 +113,13 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
 
       /* --- GeoCode: size-gate the generic content endpoint (docs/GEOKERNEL.md §10.1 #8).
        *
-       * Upstream has no limit anywhere on this path, so a restored editor tab
-       * or a session review sweep can pull a multi-hundred-megabyte file into
-       * the renderer as one string. Observed 2026-07-11: a 359 MiB CSV fetched
-       * twice ≈ 1.8 GiB of V8 heap (UTF-16), then a renderer OOM.
+       * Upstream has no limit anywhere on this path, so a restored editor tab can pull a multi-hundred-megabyte
+       * file into the renderer as one string. Observed 2026-07-11: a 359 MiB CSV fetched twice ≈ 1.8 GiB of V8
+       * heap (UTF-16), then a renderer OOM.
        *
-       * Two tiers off a single stat. A large raster is not an error — the geo
-       * workspace draws it properly through `/geo/raster/image` — so it is
-       * pointed there rather than refused. Anything else past the ceiling is
-       * refused outright.
-       *
-       * A stat failure falls through as size 0 on purpose: the read below will
-       * surface the real error, and a file that cannot be statted is
-       * overwhelmingly one that cannot be read either. Agents are unaffected —
-       * their file tools read windowed slices and never come through here. --- */
+       * Two tiers off a single stat. A large raster is not an error — the geo workspace draws it through
+       * `/geo/raster/image` — so it is pointed there rather than refused. A stat failure falls through as size 0
+       * on purpose: the read below surfaces the real error, and agents never come through here. --- */
       const size = yield* Effect.promise(() =>
         fsp
           .stat(file)

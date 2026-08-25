@@ -444,18 +444,12 @@ const layer = Layer.effect(
             }
           }
 
-          /* --- GeoCode: upstream installs `@opencode-ai/plugin` into every
-           * config directory (project ones included) and writes a `.gitignore`
-           * for the resulting `node_modules`. Both exist only so a user's own
-           * plugin or tool file can import the SDK, and GeoCode loads neither
-           * — so nothing is installed and nothing is written into the user's
-           * project (docs/PATHS.md §7). `deps` stays empty; the join in
-           * `waitForDependencies` simply has nothing to wait for.
-           *
-           * Upstream's block is commented out WITHOUT being touched, rather
-           * than deleted. Deleting it conflicts the moment upstream edits
-           * anything inside; left byte-identical it merges straight in, and
-           * what changed stays visible here (docs/CONVENTIONS.md §5). --- */
+          /* --- GeoCode: upstream installs `@opencode-ai/plugin` into every config directory (project ones too) and
+           * writes a `.gitignore` for the resulting `node_modules`. Both exist only so a user's own plugin or tool file
+           * can import the SDK, and GeoCode loads neither, so nothing is installed and nothing is written into the
+           * user's project (docs/PATHS.md §7). `deps` stays empty and `waitForDependencies` has nothing to wait for.
+           * Upstream's block is commented out rather than deleted, byte-identical, so it merges straight in
+           * (docs/CONVENTIONS.md §5). --- */
           /*
           yield* ensureGitignore(dir).pipe(Effect.orDie)
 

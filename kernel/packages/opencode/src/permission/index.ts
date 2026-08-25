@@ -201,22 +201,16 @@ export function merge(...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule[] 
   return rulesets.flat()
 }
 
-/* --- GeoCode: the third of this function's tool-id-to-permission maps
- * (docs/TOOLS.md §4.1, §9).
+/* --- GeoCode: the third of this function's tool-id-to-permission maps (docs/TOOLS.md §4.1, §9).
  *
- * Visibility is decided by TOOL ID, execution by the key a tool declares in
- * `ctx.ask`. Upstream's own tools mostly spell those the same, and where they
- * do not it keeps a table — `edits` and `reads` below. GeoCode's do not: the
- * ids are the names the model reads (`ReadGeoData`), the keys are the groups a
- * user reasons about (`geodata`). Without an entry here a rule written against
- * a group would govern execution and silently miss visibility: the rule is
- * written, it is simply never consulted.
+ * Visibility is decided by TOOL ID, execution by the key a tool declares in `ctx.ask`. Upstream's own tools
+ * mostly spell those the same, and where they do not it keeps a table — `edits` and `reads` below. GeoCode's
+ * do not: the ids are the names the model reads (`ReadGeoData`), the keys are the groups a user reasons about
+ * (`geodata`). Without an entry here a rule written against a group would govern execution and silently miss
+ * visibility: the rule is written, it is simply never consulted.
  *
- * Four groups, matching the readiness conditions a user actually has: reading
- * geographic data, the QGIS processing engine, the public OSM services, Earth
- * Engine. A missing row shows up on a user-defined agent, which is the one
- * ruleset that reaches this table — geocode-geo-permissions.test.ts pins it
- * there, the way upstream pins `edits` in test/permission/next.test.ts. --- */
+ * A missing row shows up only on a user-defined agent, the one ruleset that reaches this table, and
+ * geocode-geo-permissions.test.ts pins it there. --- */
 const GEO = {
   ReadGeoData: "geodata",
   QgisDoc: "qgis",

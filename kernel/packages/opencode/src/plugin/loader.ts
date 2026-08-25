@@ -12,16 +12,14 @@ import { ConfigPlugin } from "@/config/plugin"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
-/* --- GeoCode: GeoCode does not load external plugins. Users extend it through
- * MCP, which runs out of process and is authorized per server; a plugin runs
- * inside the kernel with its credentials and file access. `loadExternal` is the
- * single gate both callers pass through, and cutting there rather than in the
- * config layer leaves `plugin` parsing exactly as upstream documents it — the
- * setting is simply inert (docs/PATHS.md §7).
+/* --- GeoCode: GeoCode does not load external plugins. Users extend it through MCP, which runs out of process
+ * and is authorized per server; a plugin runs inside the kernel with its credentials and file access.
+ * `loadExternal` is the single gate both callers pass through, and cutting there rather than in the config
+ * layer leaves `plugin` parsing exactly as upstream documents it — the setting is simply inert
+ * (docs/PATHS.md §7).
  *
- * Annotated `boolean` on purpose: as a `false` literal the typechecker would
- * treat the rest of `loadExternal` as unreachable and stop narrowing inside it.
- * --- */
+ * Annotated `boolean` on purpose: as a `false` literal the typechecker would treat the rest of `loadExternal`
+ * as unreachable and stop narrowing inside it. --- */
 const EXTERNAL_PLUGINS_ENABLED: boolean = false
 
 export namespace PluginLoader {

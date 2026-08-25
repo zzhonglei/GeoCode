@@ -13,18 +13,14 @@ const enabledByExperimental = (name: string) =>
     Config.map((flags) => Option.getOrElse(flags.enabled, () => flags.experimental)),
   )
 
-/* --- GeoCode: Claude Code's instruction file and skill library belong to
- * another product, and a coding assistant's conventions are not GeoAgent's, so
- * both isolation flags default to ON here where upstream defaults them OFF.
- * This covers CLAUDE.md (project and ~/.claude) and .claude/skills; the wider
- * cross-product read surface is docs/PATHS.md §7 and still open.
+/* --- GeoCode: Claude Code's instruction file and skill library belong to another product, and a coding
+ * assistant's conventions are not GeoAgent's, so both isolation flags default to ON here where upstream
+ * defaults them OFF. This covers CLAUDE.md (project and ~/.claude) and .claude/skills (docs/PATHS.md §7).
  *
- * The default lives here rather than in an env var exported by whatever
- * launches the kernel: an env that some launch path forgets to set fails
- * silently, and fails open. Both env vars keep their upstream names and still
- * work, so the scanning can be turned back on; the specific flag wins over the
- * broad one, mirroring `enabledByExperimental` above, so either path can be
- * re-enabled on its own. --- */
+ * The default lives here rather than in an env var exported by whatever launches the kernel: an env that some
+ * launch path forgets to set fails silently, and fails open. Both env vars keep their upstream names, and the
+ * specific flag wins over the broad one — mirroring `enabledByExperimental` above — so either can be turned
+ * back on its own. --- */
 const isolatedFromClaudeCode = (direct: string) =>
   Config.all({
     broad: Config.boolean("OPENCODE_DISABLE_CLAUDE_CODE").pipe(Config.option),

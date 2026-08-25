@@ -192,11 +192,9 @@ const layer = Layer.effect(
           }
         }
 
-        /* --- GeoCode: upstream scans `{tool,tools}/*.{js,ts}` under every
-         * config directory and imports what it finds, so opening a folder can
-         * register and run its code. GeoCode's own tools are built in, and a
-         * user's custom tool belongs on MCP — out of process and separately
-         * authorized. Leaving the list empty keeps the loop below upstream's
+        /* --- GeoCode: upstream scans `{tool,tools}/*.{js,ts}` under every config directory and imports what it finds,
+         * so opening a folder can register and run its code. GeoCode's own tools are built in and a user's
+         * custom tool belongs on MCP, so leaving the list empty keeps the loop below upstream's
          * (docs/PATHS.md §7). --- */
         const matches: string[] = []
         for (const match of matches) {
@@ -265,13 +263,10 @@ const layer = Layer.effect(
             tool.search,
             tool.skill,
             tool.patch,
-            // GeoCode: the geographic toolset, built in beside the native tools
-            // (docs/TOOLS.md §3; GEOKERNEL §10.1 #9). Registered for every
-            // agent; WHICH of them an agent can see is settled afterwards by
-            // the GEO map in permission/index.ts, and whether a call goes
-            // through by the key each tool names in `ctx.ask` — `geodata`,
-            // `qgis`, `osm` or `gee`. Four keys, and deliberately no common
-            // prefix: they are names a user reads (docs/TOOLS.md §4.1).
+            // GeoCode: the geographic toolset, built in beside the native tools (docs/TOOLS.md §3; GEOKERNEL §10.1
+            // #9). Registered for every agent; WHICH of them an agent sees is settled afterwards by the GEO map
+            // in permission/index.ts, and whether a call goes through by the key each tool names in `ctx.ask`.
+            // Four keys with deliberately no common prefix: they are names a user reads (docs/TOOLS.md §4.1).
             tool.georead,
             tool.qgisdoc,
             tool.qgisrun,
@@ -486,10 +481,9 @@ export const node = LayerNode.make({
     MCP.node,
     Database.node,
     Ripgrep.node,
-    // GeoCode: geo tools yield geo-kernel services at init, so their node
-    // joins the registry's dependencies. The server graph mounts the same
-    // node; the shared memo map makes this the same instance, not a second
-    // kernel (docs/TOOLS.md §7).
+    // GeoCode: geo tools yield geo-kernel services at init, so their node joins the registry's dependencies. The
+    // server graph mounts the same node; the shared memo map makes this the same instance, not a second kernel
+    // (docs/TOOLS.md §7).
     GeoKernel.node,
   ],
 })

@@ -41,21 +41,14 @@ process.env["OPENCODE_EXPERIMENTAL_WORKSPACES"] = "true"
 
 /* --- GeoCode: give the vendored suite back the agents it was written against.
  *
- * GeoCode ships GeoAgent as the only primary and turns the code-oriented
- * subagents off, which upstream's tests know nothing about — around a hundred
- * of them prompt `build` or spawn `general`, get "agent not found", and then
- * fail somewhere far away: a session that never becomes busy, a shell that
- * never starts, a task tool that times out. The failures look unrelated and are
- * not, which is what made the suite unreadable.
+ * GeoCode ships GeoAgent as the only primary and turns the code-oriented subagents off, which upstream's tests
+ * know nothing about — around a hundred of them prompt `build` or spawn `general`, get "agent not found", and
+ * then fail somewhere far away: a session that never becomes busy, a shell that never starts, a task tool that
+ * times out.
  *
- * Here rather than in each test, and as CONFIG rather than a code change: the
- * disables come from the assembly layer, which merges beneath user config, so a
- * global config file simply outranks them. Nothing in `src/` moves, and this
- * restores upstream's own baseline for upstream's own tests — GeoCode's line-up
- * is asserted separately, by the tripwires in core.
- *
- * Imported dynamically: env has to be set before anything reads it, and this
- * runs after the block above. --- */
+ * Here rather than in each test, and as CONFIG rather than a code change: the disables come from the assembly
+ * layer, which merges beneath user config, so a global config file outranks them and nothing in `src/` moves.
+ * Imported dynamically because env has to be set before anything reads it. --- */
 const { Brand } = await import("@opencode-ai/core/brand")
 await fs.mkdir(path.join(dir, "config", Brand.dirName), { recursive: true })
 await fs.writeFile(

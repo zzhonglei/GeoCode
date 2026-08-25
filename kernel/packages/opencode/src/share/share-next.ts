@@ -20,14 +20,11 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { EventV2 } from "@opencode-ai/core/event"
 
-/* --- GeoCode: sharing uploads a whole session — messages, tool calls, file
- * paths — to a service GeoCode neither runs nor can vouch for, and a GeoCode
- * session can carry unpublished research data. Off by default here, where
- * upstream is on: every entry point in this module is already gated on this
- * one constant, so nothing downstream needs to know (docs/PATHS.md §7).
+/* --- GeoCode: sharing uploads a whole session — messages, tool calls, file paths — to a service GeoCode neither
+ * runs nor can vouch for, and a GeoCode session can carry unpublished research data. Off by default here, where
+ * upstream is on: every entry point in this module is already gated on this one constant (docs/PATHS.md §7).
  *
- * The env var keeps its upstream name and still works in reverse: set it to
- * `false` or `0` to get upstream's behaviour back. --- */
+ * The env var keeps its upstream name and works in reverse: `false` or `0` restores upstream's behaviour. --- */
 const disabled = !["false", "0"].includes(process.env["OPENCODE_DISABLE_SHARE"] ?? "")
 
 export type Api = {
@@ -318,22 +315,13 @@ const layer = Layer.effect(
     const create = Effect.fn("ShareNext.create")(function* (sessionID: SessionID) {
       /* --- GeoCode: refuse, rather than hand back a share that is not one.
        *
-       * Upstream's line below returns an empty record, which its own caller
-       * then writes onto the session as `share: { url: "" }` — a session that
-       * reports itself shared, at nothing. Upstream only reaches that with the
-       * env var deliberately set; GeoCode reaches it by default, so it is the
-       * normal path here rather than an opted-into one.
+       * Upstream's line below returns an empty record, which its own caller writes onto the session as
+       * `share: { url: "" }` — a session that reports itself shared, at nothing. Upstream only reaches that with
+       * the env var deliberately set; GeoCode reaches it by default.
        *
-       * `config/geocode.ts` ships `share: "disabled"` so the caller refuses
-       * first with a message about configuration — but that is a factory
-       * default a user may change, and changing it re-exposes exactly the empty
-       * record that default was added to hide. This gate is the one at the
-       * network boundary, so it answers for itself instead of relying on the
-       * layer above to keep the question from arriving.
-       *
-       * The message names the env var because it is the only thing that opens
-       * this gate: the `share` config option is read by the caller and never
-       * reaches here (docs/PATHS.md §7). --- */
+       * `config/geocode.ts` ships `share: "disabled"` so the caller refuses first, but that is a factory default a
+       * user may change, and changing it re-exposes exactly the empty record it was added to hide. The message names
+       * the env var because the `share` option is read by the caller and never reaches here (docs/PATHS.md §7). --- */
       if (disabled)
         return yield* Effect.fail(
           new Error(
