@@ -5,25 +5,18 @@ import path from "node:path"
 
 /* Geographic processes go down with the server (docs/GEOKERNEL.md §10.1 #8b).
  *
- * A real server, a real signal, a real child. Nothing smaller would do: the
- * fact under test is that Node's DEFAULT handling of SIGTERM terminates without
- * running any `exit` listener, so the Runtime module's own last line of defence
- * never fires. That is invisible to a typecheck and to every in-process test —
- * it only shows up as a QGIS algorithm still burning a core after the user has
- * quit, with no window left to stop it from (§3.2, process drift).
- *
- * Confirmed to discriminate: with the handler removed, the child below survives
- * its parent. */
+ * Out of process because the fact under test is Node's default handling of
+ * SIGTERM: it terminates without running the `exit` listener that is the
+ * Runtime module's own last line of defence. */
 
 const TOOLS = ["gdalinfo", "gdalwarp", "gdal_translate", "gdaldem", "ogrinfo", "ogr2ogr"]
 const ROOT = path.join(import.meta.dir, "..", "..")
 
 const it = process.platform === "win32" ? test.skip : test
 
-/** Derived from this process, so a parallel suite cannot collide on it. */
+/** Derived from this pid, so a parallel suite is unlikely to pick the same port. */
 const PORT = 20000 + (process.pid % 10000)
 
-/** A toolchain of scripts that record their pid and then never finish. */
 function toolchain(directory: string, pidFile: string) {
   fs.mkdirSync(directory, { recursive: true })
   for (const tool of TOOLS) {
@@ -74,17 +67,13 @@ describe("geo shutdown sweep", () => {
         XDG_CONFIG_HOME: path.join(home, "config"),
         XDG_CACHE_HOME: path.join(home, "cache"),
       },
-      // Not piped: nothing here reads them, and a full pipe buffer would block
-      // the server mid-boot.
+      // Not piped: nothing reads them, and a full pipe buffer would stall the server mid-boot.
       stdout: "ignore",
       stderr: "ignore",
     })
 
-    // Every wait here is bounded, including the request itself: `fetch` has no
-    // timeout of its own, so a server that accepts the connection and then
-    // stalls would hang this call forever — the loop below would never reach
-    // its own deadline check, and the test would die by timeout without saying
-    // which step never happened.
+    // `fetch` has no timeout of its own, so a server that accepts the connection and then stalls
+    // would hang this call and the loop below would never reach its deadline check.
     const reachable = async () => {
       try {
         await fetch(`http://127.0.0.1:${PORT}/geo/status`, { signal: AbortSignal.timeout(2_000) })
@@ -99,12 +88,8 @@ describe("geo shutdown sweep", () => {
       while (Date.now() < deadline && !(await reachable())) await Bun.sleep(250)
       expect(await reachable()).toBe(true)
 
-      // Ask for a preview; the fake toolchain hangs, so the child stays up
-      // while we signal its parent.
-      // Bounded for the same reason: this one is MEANT to hang — the fake
-      // toolchain never returns — and it is awaited at the end, so without a
-      // limit a server that fails to drop the socket on SIGTERM would keep the
-      // test alive past its timeout.
+      // Meant to hang — the fake toolchain never returns — and awaited at the end, so it needs
+      // a bound of its own.
       const ask = fetch(`http://127.0.0.1:${PORT}/geo/raster/meta?path=scene.tif&directory=${project}`, {
         signal: AbortSignal.timeout(60_000),
       }).catch(() => undefined)
@@ -116,8 +101,6 @@ describe("geo shutdown sweep", () => {
 
       server.kill("SIGTERM")
       await waitFor(() => !alive(child), 15_000)
-      // Without the handler this is still running, with nothing left to stop
-      // it — the user quit and the CPU is still busy.
       expect(alive(child)).toBe(false)
       await ask
     } finally {
@@ -126,10 +109,7 @@ describe("geo shutdown sweep", () => {
       if (recorded && alive(recorded)) process.kill(recorded, "SIGKILL")
       fs.rmSync(home, { recursive: true, force: true })
     }
-    // The three waits above budget 60 + 30 + 15 = 105s. At the original 90s
-    // timeout that budget was overcommitted: under parallel load the boot wait
-    // alone could eat enough of it that bun killed the test before any wait
-    // could expire, so a real failure reported "timed out" instead of naming
-    // which step never happened. The limit has to exceed the budget.
+    // The three waits above budget 60 + 30 + 15 = 105s, which this limit has to exceed: under it,
+    // a real failure reports "timed out" instead of naming the step that never happened.
   }, 150_000)
 })

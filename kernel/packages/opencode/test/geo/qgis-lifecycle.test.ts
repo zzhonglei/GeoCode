@@ -14,26 +14,19 @@ import { GeoRuntime } from "@/geo/runtime"
 import { GeoStatus } from "@/geo/status"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-/* The QGIS lifecycle (docs/GEOKERNEL.md §4.8–§4.10).
- *
- * This is where the spine closes into a loop: a machine.json edit travels
- * Config → lifecycle → resolution → Status → typed event, which is the M3.1
- * acceptance the infrastructure milestone deliberately left open at its
- * middle link. */
+/* The QGIS lifecycle (docs/GEOKERNEL.md §4.8–§4.10): a machine.json edit travelling Config → lifecycle →
+ * resolution → Status → typed event, and what a new round does to the one still in flight. */
 
 const FILE = path.join(Global.Path.config, "machine.json")
 const write = (value: object) => Effect.promise(() => fs.promises.writeFile(FILE, JSON.stringify(value), "utf-8"))
 const writeRaw = (text: string) => Effect.promise(() => fs.promises.writeFile(FILE, text, "utf-8"))
 
-/** A minimal bundle that passes location and assembly; the probe is scripted. */
 const bundles = fs.mkdtempSync(path.join(os.tmpdir(), "geo-qgis-lc-"))
-// The sandbox config root is shared by every file in this test process, and
-// the geo kernel is a process-global singleton: a machine.json left behind
-// here would poison any later test that assumes an unconfigured kernel.
 afterAll(() => {
   fs.rmSync(bundles, { recursive: true, force: true })
   fs.rmSync(FILE, { force: true })
 })
+/** A minimal bundle that passes location and assembly; the probe behind it is scripted. */
 function makeBundle(name: string): string {
   const bundle = path.join(bundles, name)
   const macos = path.join(bundle, "Contents", "MacOS")
@@ -66,7 +59,6 @@ const runtimeMock = Layer.mock(GeoRuntime.Service)({
   killAllSync: () => {},
 })
 
-/** A catalog whose outcomes are scripted per call, and which counts calls. */
 function scriptedCatalog(outcomes: (QgisCatalog.BuildOutcome | "hang")[]) {
   const calls = Ref.makeUnsafe(0)
   const layer = Layer.succeed(
@@ -81,8 +73,7 @@ function scriptedCatalog(outcomes: (QgisCatalog.BuildOutcome | "hang")[]) {
           return outcome
         }),
       invalidate: () => Effect.void,
-      // The lifecycle only drives build/invalidate; queries are 2c's concern
-      // and answer empty here.
+      // Only build and invalidate are on the lifecycle's path; the query side answers empty because nothing calls it.
       groups: () => Effect.succeed([]),
       inGroup: () => Effect.succeed([]),
       get: () => Effect.succeed(undefined),
@@ -131,8 +122,7 @@ describe("qgis lifecycle", () => {
           yield* config.reload()
 
           yield* waitForStatus((s) => s.status === "path-missing", `never settled; events: ${seen.join(" -> ")}`)
-          // The intermediate state is a member of the flow, not an absence:
-          // users watch resolution happen (§2.4 principle 4).
+          // Catches a lifecycle that publishes only terminal states: `resolving` is first-class (§2.4 principle 4).
           expect(seen).toContain("resolving")
           expect(seen).toContain("path-missing")
         }),
@@ -148,12 +138,8 @@ describe("qgis lifecycle", () => {
           yield* config.reload()
 
           const status = yield* waitForStatus((s) => s.status === "config-error", "config-error never arrived")
-          // Calling this "unconfigured" would contradict the file the user has
-          // open in front of them (§3.1).
           if (status.status === "config-error") {
             expect(status.file).toBe(FILE)
-            // A position, not merely a non-empty string — see the same
-            // assertion in gdal-lifecycle.test.ts for what `length > 0` let by.
             expect(status.message).toMatch(/line \d+, column \d+/)
           }
         }),
@@ -199,7 +185,6 @@ describe("qgis lifecycle", () => {
             ),
           )
 
-          // Before anything: the gate is shut and says why.
           const before = yield* qgis.gate()
           expect(before.ok).toBe(false)
 
@@ -210,8 +195,7 @@ describe("qgis lifecycle", () => {
             (s) => s.status === "ready" && s.catalog === "ready",
             `never became ready; stages: ${stages.join(" -> ")}`,
           )
-          // Each stage commits as it lands (§4.10): the building state is
-          // visible, not swallowed by the round's final result.
+          // Each stage commits as it lands (§4.10): catches the building state being swallowed by the final result.
           expect(stages).toContain("ready:building")
           expect(stages).toContain("ready:ready")
 
@@ -220,8 +204,6 @@ describe("qgis lifecycle", () => {
           if (gate.ok) {
             expect(gate.environment.versions.qgis).toBe("3.44.9")
             expect(gate.environment.processing).toBe(true)
-            // The verified environment is handed over directly — execution
-            // receives THIS object, it does not re-check (§4.9, §9.1).
             expect(gate.environment.python.endsWith("python3.12")).toBe(true)
           }
         }),
@@ -230,7 +212,7 @@ describe("qgis lifecycle", () => {
   }
 
   {
-    // Default stub catalog: honest failure until the real exporter lands.
+    // No catalog replacement: the real one runs and fails, the scripted stdout carrying no registry marker.
     const it = testEffect(
       LayerNode.compile(LayerNode.group([GeoQgis.node, EventV2.node, MachineConfig.node, GeoStatus.node]), [
         [GeoRuntime.node, runtimeMock],
@@ -252,8 +234,6 @@ describe("qgis lifecycle", () => {
           )
           if (status.status === "ready") expect(status.catalogError).toBeTruthy()
 
-          // §4.9, and the §12 tradeoff accepted with it: data reading also
-          // waits on the catalog, because one environment gets one verdict.
           const gate = yield* qgis.gate()
           expect(gate.ok).toBe(false)
         }),
@@ -278,20 +258,15 @@ describe("qgis lifecycle", () => {
           yield* write({ qgis: makeBundle("QGIS-C.app") })
           yield* config.reload()
 
-          // Round one is now stuck inside its catalog build, forever.
           yield* waitForStatus((s) => s.status === "ready" && s.catalog === "building", "round one never got stuck")
 
           yield* write({ qgis: makeBundle("QGIS-D.app") })
           yield* config.reload()
 
-          // Round two runs to completion: the catalog belongs to the
-          // verification that produced it, so round one's build was voided,
-          // not awaited (§4.8 阶段依附).
           yield* waitForStatus((s) => s.status === "ready" && s.catalog === "ready", "round two never completed")
           expect(yield* Ref.get(catalog.calls)).toBe(2)
 
-          // And nothing from round one lands afterwards: its token died with
-          // it (§4.8 代际守卫). Give any straggler a moment to try.
+          // Long enough for a straggler from round one to try: its token died with the round (§4.8 代际守卫).
           yield* Effect.sleep("300 millis")
           const status = yield* GeoStatus.Service
           const final = yield* status.current("qgis")

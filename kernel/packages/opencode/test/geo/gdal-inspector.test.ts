@@ -2,14 +2,10 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { GdalInspector } from "@/geo/gdal/inspector"
 
-/* Reading what a file is (docs/GEOKERNEL.md §7.4, §7.5).
- *
- * The fixtures below carry values taken from real `gdalinfo` / `ogrinfo` output
- * on real data — a 1 km China DEM and a UTM shapefile — because the shapes that
- * matter here are the ones the tools actually emit, including the awkward ones
- * a hand-written fixture would never think to include. */
+/* Reading what a file is (docs/GEOKERNEL.md §7.4, §7.5). The fixtures are real `gdalinfo -json` and
+ * `ogrinfo -json -so` output, awkward parts included. */
 
-/** China DEM, 1 km: one band, its own overviews, and NO authority code. */
+/** China DEM, 1 km: one band, its own overviews, and no authority code in its coordinate system. */
 const DEM = JSON.stringify({
   size: [6857, 5537],
   geoTransform: [73.4911734, 0.008983153, 0, 53.5665404, 0, -0.008983153],
@@ -59,43 +55,32 @@ describe("gdal raster metadata", () => {
     expect(info.height).toBe(5537)
     expect(info.bandCount).toBe(1)
     expect(info.singleBand).toBe(true)
-    // Its own overviews. Free speed for the reprojection, and never something
-    // this module builds (§7.5).
     expect(info.hasOverview).toBe(true)
     expect(info.bands[0]!.mean).toBeCloseTo(1762.131, 3)
     expect(info.georeference).toBe("transform")
   })
 
   test("a coordinate system with no authority code still yields a name", () => {
-    // Real output: this file's `projjson.id` is null. Falling back to the WKT
-    // name is the difference between telling the user "WGS 84" and telling
-    // them nothing.
     expect(GdalInspector.parseRaster(DEM).projection).toBe("WGS 84")
     expect(GdalInspector.projectionOf({ projjson: { id: { authority: "EPSG", code: 3857 } } })).toBe("EPSG:3857")
     expect(GdalInspector.projectionOf({})).toBeUndefined()
   })
 
   test("an image that merely happens to be a TIFF is not geographic data", () => {
-    // Nothing in any of the five places. Into the pipeline it would become a
-    // reprojection of nothing onto nowhere.
     const plain = GdalInspector.parseRaster(raster({ bands: [{ colorInterpretation: "Red" }] }))
     expect(plain.georeference).toBe("none")
 
-    // GDAL hands back the identity for a file with no transform, so a file
-    // carrying it literally must read the same as one carrying nothing.
+    // GDAL hands the identity transform back for a file that has none, so a file carrying it literally has to read
+    // the same as one carrying nothing.
     const identity = GdalInspector.parseRaster(raster({ geoTransform: [0, 1, 0, 0, 0, 1] }))
     expect(identity.georeference).toBe("none")
 
-    // Placed at the origin, which is a legitimate place to be: the corner
-    // coordinates alone were never the test.
+    // Zero is a legitimate origin; it is the identity as a whole that reads as no placement.
     const atOrigin = GdalInspector.parseRaster(raster({ geoTransform: [0, 0.01, 0, 1, 0, -0.01] }))
     expect(atOrigin.georeference).toBe("transform")
   })
 
   test("a scene with no transform is still data when it says where it is another way", () => {
-    // Every one of these is real remote-sensing output, and every one would be
-    // thrown away by a rule that only looked at the transform — which is the
-    // expensive direction to be wrong in (§6.4, and georeference.ts).
     const gcps = GdalInspector.parseRaster(raster({ gcps: { gcpList: [{ id: "1" }, { id: "2" }, { id: "3" }] } }))
     expect(gcps.georeference).toBe("gcp")
 
@@ -105,21 +90,17 @@ describe("gdal raster metadata", () => {
     const swath = GdalInspector.parseRaster(raster({ metadata: { GEOLOCATION: { X_BAND: "1" } } }))
     expect(swath.georeference).toBe("geolocation")
 
-    // A projection with nothing placed in it: named space, no position.
     const named = GdalInspector.parseRaster(
       raster({ coordinateSystem: { projjson: { id: { authority: "EPSG", code: 4326 } } } }),
     )
     expect(named.georeference).toBe("crs-only")
 
-    // An empty domain is a key gdalinfo prints for some drivers, not evidence.
+    // Present but empty is not evidence.
     const empty = GdalInspector.parseRaster(raster({ metadata: { RPC: {}, GEOLOCATION: {} }, gcps: { gcpList: [] } }))
     expect(empty.georeference).toBe("none")
   })
 
   test("the answer is the most directly usable one present, not the first one found", () => {
-    // Orthorectified products routinely keep the RPC block they were made
-    // from, and a warp leaves control points behind. Reporting either over the
-    // transform would tell the interface a placed raster is not placed.
     const orthorectified = GdalInspector.parseRaster(
       raster({ geoTransform: [300000, 30, 0, 3530730, 0, -30], metadata: { RPC: { LINE_OFF: "5000" } } }),
     )
@@ -132,8 +113,6 @@ describe("gdal raster metadata", () => {
   })
 
   test("a transform that cannot be inverted is not a placement", () => {
-    // Zero pixel size: a damaged write, not a position. Reported as no
-    // placement so the extent is never computed from it.
     expect(GdalInspector.parseRaster(raster({ geoTransform: [100, 0, 0, 200, 0, 0] })).georeference).toBe("none")
   })
 
@@ -143,7 +122,6 @@ describe("gdal raster metadata", () => {
     const greyAlpha = GdalInspector.parseRaster(
       withCrs([{ colorInterpretation: "Gray" }, { colorInterpretation: "Alpha" }]),
     )
-    // The second band is transparency, not a channel.
     expect(greyAlpha.singleBand).toBe(true)
 
     const rgb = GdalInspector.parseRaster(
@@ -163,29 +141,20 @@ describe("gdal raster metadata", () => {
 describe("gdal vector metadata", () => {
   test("a real shapefile layer", () => {
     const info = GdalInspector.parseVector(SHAPEFILE)
-    // Needed verbatim to query the layer later; the filename is right often
-    // enough to look correct and wrong often enough to matter.
     expect(info.name).toBe("wuchang_utm49n")
     expect(info.featureCount).toBe(1)
-    // The interface picks a renderer from this; a wrong answer picks the wrong
-    // one (§7.4).
     expect(info.geometryTypes).toEqual(["Polygon"])
     expect(info.properties).toEqual(["name", "adcode", "gb", "level"])
     expect(info.projection).toBe("EPSG:32649")
   })
 
   test("a file with no layer says so rather than reporting an empty one", () => {
-    // Zero features and no layer at all are different facts, and the second is
-    // not something to report as the first.
     expect(() => GdalInspector.parseVector(JSON.stringify({ layers: [] }))).toThrow(/no vector layer/)
   })
 })
 
 describe("gdal metadata failures reach the caller", () => {
   test("unreadable output is a failure, not a defect", async () => {
-    // A throw left inside an Effect becomes a defect: outside the declared
-    // error type, uncatchable by every caller, fatal to a request whose honest
-    // answer was "this file is not readable".
     const outcome = await Effect.runPromise(
       Effect.succeed("<html>not json</html>").pipe(
         Effect.flatMap((stdout) => Effect.try({ try: () => GdalInspector.parseRaster(stdout), catch: (e) => e })),
@@ -199,14 +168,10 @@ describe("gdal metadata failures reach the caller", () => {
 
 describe("gdal version capability", () => {
   test("band selection is read off the binary, not guessed from a version", () => {
-    // Older builds cannot select bands, and the pipeline has to insert a
-    // separate step for them. Version-to-feature mapping would be a second
-    // thing to get wrong, and users install whatever their platform ships.
-    // Real GDAL 3.13 usage: the flag is spelled -srcband here, and a bare -b
-    // does not appear at all.
+    // One line of real `gdalwarp --help` from GDAL 3.13.3, which spells the flag `-srcband` and prints no bare `-b`.
     expect(GdalInspector.warpSelectsBands("[-if <format>]... [-srcband <band>]... [-dstband <band>]...")).toBe(true)
-    // Bracketed, which is how other builds format the same capability. A
-    // substring check tuned to one spelling answers "no" for the other.
+    // The same flag under its other spelling (3.13.3's long usage lists `-b, -srcband`); a check tuned to one
+    // spelling answers "no" for the other.
     expect(GdalInspector.warpSelectsBands("Usage: gdalwarp [-b <band>] src dst")).toBe(true)
     expect(GdalInspector.warpSelectsBands("gdalwarp [-r <method>] [-of <format>] src dst")).toBe(false)
   })

@@ -4,24 +4,11 @@ import { GdalInspector } from "@/geo/gdal/inspector"
 import { GdalRaster } from "@/geo/gdal/raster"
 import { RASTER_PREVIEW_PY } from "@/geo/qgis/scripts.generated"
 
-/* The two faces of a raster preview, answering one list (§7.9 dual engines).
- *
- * Band selection and stretch exist TWICE — in TypeScript for the interface, in
- * Python for ReadGeoData — because the two pipelines run in different
- * languages and neither can call the other. Nothing was holding them level:
- * §7.9 claimed shared test cases and there were none. A user watching a scene
- * on the map while the Agent describes a differently-coloured one is the
- * failure, and it is silent.
- *
- * No production code moved to make this possible. The Python half is lifted
- * out of `raster_preview.py` at run time by fixtures/raster-rule-answer.py and
- * run with a faked GDAL, so what answers here is the shipping code rather than
- * a copy of it. Where there is no python3 that half SKIPS and says so.
- *
- * NOT covered, and not pretended to be: alpha and nodata handling, the third
- * rule §7.9 names. It is numpy arrays on one side and VRT XML on the other —
- * one intention in two expressions, with no shared input and output to
- * compare. That one still rests on review. */
+/* One list of cases answered by both faces of the raster preview (§7.9 dual engines): band selection and stretch
+ * exist twice, in TypeScript for the interface and in Python for ReadGeoData, and nothing else holds them level.
+ * fixtures/raster-rule-answer.py lifts the two rule functions out of the shipping `raster_preview.py` and runs
+ * them against a faked GDAL, so what answers below is that code and not a copy of it; with no Python on the
+ * machine that half skips. */
 
 /** A band is `colour` or `colour:description`; a raster is bands, space-separated. */
 const BANDS = [
@@ -36,7 +23,7 @@ const BANDS = [
     alpha: null,
   },
   {
-    // The case that proves the names are read at all: by position this is 4,3,2.
+    // By position these four would be 4,3,2.
     case: "names beat position when a stack is not in band order",
     raster: "Undefined:B4 Undefined:B3 Undefined:B2 Undefined:B1",
     rgb: [1, 2, 3],
@@ -68,14 +55,7 @@ const BANDS = [
   },
   { case: "a two-band pair reads its second as transparency", raster: "Undefined Undefined", rgb: [1, 1, 1], alpha: 2 },
   {
-    // A netCDF, HDF or GRIB file of several variables opens with no bands at
-    // all. Neither preview draws one — the Python half refuses it by name
-    // before selection (qgis-reader.test.ts), and the TypeScript half is
-    // refused by GDAL itself at translate time — so neither answer here is ever
-    // used in anger. What this case holds level is that ASKING the question
-    // does not kill one of the two faces. It did: the Python half indexed band
-    // zero of an empty list and died with "list index out of range", where the
-    // TypeScript half reads `bands[0]?.color`.
+    // The Python half needs an explicit length guard here where the TypeScript half reads `bands[0]?.color`.
     case: "a container has no bands to choose between, and does not crash either face",
     raster: "",
     rgb: [1, 1, 1],
@@ -95,10 +75,7 @@ const STRETCH = [
 /** Pinned values are compared to six places; the two faces, exactly. */
 const rounded = (values: readonly number[]) => values.map((value) => Number(value.toFixed(6)))
 
-/**
- * `BAND_4` in the spec is `BAND 4` in the file — the separator is the spec's, not GDAL's.
- * The empty string is a raster with no bands at all: a container.
- */
+/** `_` stands for a space, so `BAND_4` above is `BAND 4` in the file; the empty string is a raster with no bands. */
 const describedAs = (raster: string) =>
   raster
     .split(" ")
@@ -110,8 +87,7 @@ const describedAs = (raster: string) =>
 
 const fromTypeScript = () => ({
   bands: BANDS.map((item) => {
-    // Through the real parser rather than a hand-built RasterInfo: the
-    // single-band derivation is part of the rule here, and it lives there.
+    // Through the real parser rather than a hand-built RasterInfo: the single-band derivation lives there.
     const info = GdalInspector.parseRaster(
       JSON.stringify({
         size: [100, 80],
@@ -139,13 +115,8 @@ describe("the raster preview rules, in TypeScript", () => {
 })
 
 test("the two faces cap a preview at DIFFERENT sizes, and are meant to", () => {
-  // The one rule above that is not shared. A map preview is zoomed into, so it
-  // is drawn at 4096; a model attachment is read once and charged for, so it is
-  // drawn at 2048 — a quarter of the pixels, a quarter of the payload.
-  //
-  // This is here because the difference LOOKS like drift. Two constants that
-  // ought to match and do not is exactly the shape someone reaches out to fix,
-  // and the fix would silently delete the smaller cap.
+  // A map preview is zoomed into, so it is drawn at 4096; a model attachment is read once and charged for, so it
+  // is drawn at 2048 (raster_preview.py).
   expect(GdalRaster.previewSize(10_000, 10_000).width).toBe(4096)
   expect(RASTER_PREVIEW_PY).toContain("MAX_SIDE = 2048")
 })
@@ -174,9 +145,8 @@ describe.skipIf(!python)("the raster preview rules, lifted out of the shipping s
     const theirs = JSON.parse(run.stdout.toString()) as { bands: unknown[]; stretch: number[][] }
     const ours = fromTypeScript()
 
-    // Against the pinned list AND against the other face. The first alone
-    // would let a deliberate change to both sides pass unread; the second
-    // alone would let the two drift together.
+    // Both faces against the pinned list, and against each other: the pinned stretch comparison rounds to six
+    // places, so only the face-to-face check catches a difference below that.
     BANDS.forEach((item, index) => {
       expect(theirs.bands[index], item.case).toEqual({ rgb: item.rgb, alpha: item.alpha })
       expect(theirs.bands[index], item.case).toEqual(ours.bands[index])

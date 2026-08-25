@@ -1,9 +1,6 @@
-/* --- GeoCode: behavioural tripwires for the project-scope rename
- * (docs/PATHS.md §5). The literal scan in core/test/geocode-brand.test.ts
- * proves the patches are still in the source; these prove the live read and
- * write paths actually land on the branded names — the failure that motivated
- * them was a write path left on the old name while every reader had moved,
- * which typechecks and passes a literal scan but silently loses the file. --- */
+/* --- GeoCode: the project-scope rename, checked through the loader rather than by reading the source
+ * (docs/PATHS.md §5). The scan in core/test/geocode-brand.test.ts sees that the patches are still in the source,
+ * not that a read actually lands on the branded names. --- */
 import { describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
@@ -72,7 +69,6 @@ describe("GeoCode project config scope", () => {
       const globalDir = yield* tmpdirScoped()
       const project = path.join(root, "project")
 
-      // Both laid down side by side. Only the branded one may take effect.
       yield* write(
         path.join(project, Brand.projectDir, Brand.configJson),
         JSON.stringify({ username: "from-geocode-dir" }),
@@ -120,10 +116,7 @@ describe("GeoCode project config scope", () => {
       const project = path.join(root, "project")
       yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
 
-      // The name `mcp add --global` writes must be a name the loader reads.
-      // These drifted apart once already: the writer stayed on opencode.json
-      // while the loader moved to the branded names, so the server was written
-      // and never seen.
+      // The file `mcp add --global` writes (cli/cmd/mcp.ts) has to be the file the loader reads.
       yield* write(
         path.join(globalDir, Brand.configJson),
         JSON.stringify({ mcp: { probe: { type: "local", command: ["true"] } } }),
@@ -140,11 +133,9 @@ describe("GeoCode project config scope", () => {
   )
 })
 
-/* --- GeoCode: opening a folder must not run its code. Upstream imports both
- * `{plugin,plugins}/*.ts` and `{tool,tools}/*.ts` from every config directory,
- * through two independent paths; these witness modules write a file if anything
- * imports them, so the assertions below are evidence rather than inference
- * (docs/PATHS.md §7). --- */
+/* --- GeoCode: opening a folder must not run its code (docs/PATHS.md §7). Upstream imports `{plugin,plugins}/*.ts`
+ * from every config directory through two independent paths, and `{tool,tools}/*.ts` through the tool registry, so
+ * the witness modules make the assertions below evidence rather than inference. --- */
 describe("GeoCode does not run code from a project directory", () => {
   it.live("ignores declared plugins, discovered plugins and file tools", () =>
     Effect.gen(function* () {
@@ -175,12 +166,9 @@ describe("GeoCode does not run code from a project directory", () => {
         LayerNode.group([Config.node, ToolRegistry.node, Plugin.node]),
       )
 
-      // Nothing imported any of the three, by either path. Asserted first:
-      // this is the claim, and tool registration is only one of its symptoms.
       expect(yield* Effect.promise(() => fs.readdir(evidence))).toEqual([])
       expect(ids).not.toContain("witness_marker")
 
-      // And nothing was installed into the user's project to support them.
       const left = yield* Effect.promise(() => fs.readdir(dot))
       for (const unwanted of ["node_modules", "package.json", "package-lock.json", ".gitignore"]) {
         expect(left).not.toContain(unwanted)
@@ -205,8 +193,6 @@ describe("GeoCode session sharing", () => {
         }),
       )
 
-      // The assembly layer is a factory default, not a lock: the config surface
-      // is the user's to set, and setting it takes effect.
       yield* write(path.join(globalDir, Brand.configJson), JSON.stringify({ share: "manual" }))
       yield* withInstance(
         project,
@@ -219,19 +205,8 @@ describe("GeoCode session sharing", () => {
   )
 
   it.live("and the gate at the network boundary answers for itself", () =>
-    /* Sharing is off in two places, and only one of them reads config. This
-     * pins the other.
-     *
-     * The config default above exists so an attempt to share reports
-     * "disabled in configuration" rather than the empty record upstream hands
-     * back — but a user may set `share` to anything, and doing so removes that
-     * message without moving this gate. Left as upstream wrote it, that path
-     * ends in `share: { url: "" }` written onto the session: shared, at
-     * nothing, with no error anywhere.
-     *
-     * Asserted on the message too, not just the failure. This gate opens only
-     * for the env var, so a refusal that does not say which one leaves the user
-     * with a working config option and no working share. */
+    /* Sharing is off in two places and only one reads config, so a user setting `share` re-exposes upstream's
+     * empty `{ id, url, secret }` unless this gate refuses on its own. */
     Effect.gen(function* () {
       const result = yield* Effect.exit(ShareNext.use.create(SessionID.make("ses_gate_probe")))
       expect(Exit.isFailure(result)).toBe(true)
@@ -252,9 +227,7 @@ describe("GeoCode plan file scope", () => {
 
       expect(written.startsWith(path.join(worktree, Brand.projectDir, "plans") + path.sep)).toBe(true)
 
-      // The invariant Brand.plansSegments exists to protect: the writer's path
-      // and the permission glob are spread from the same array, so this holds
-      // by construction — and goes red the moment either side takes a literal.
+      // The glob shape the plan agent's edit permission is built from (agent.ts), spread from the same array.
       const pattern = path.join(...Brand.plansSegments, "*.md")
       expect(Wildcard.match(path.relative(worktree, written), pattern)).toBe(true)
     }),

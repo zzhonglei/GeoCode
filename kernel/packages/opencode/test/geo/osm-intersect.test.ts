@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { OsmIntersect } from "@/geo/osm/intersect"
 
-/* Every coordinate here is checkable on paper. The unit under test is a claim
- * about geometry, and a fixture nobody can verify by hand only proves the code
- * agrees with itself. */
+/* Replaying the boundary test Overpass could not run (docs/GEOKERNEL.md §6.4), on coordinates simple enough to
+ * check by hand. */
 
 type Point = OsmIntersect.Point
 
@@ -42,16 +41,12 @@ describe("a point against a boundary", () => {
   test("outside", () => expect(OsmIntersect.contains(idx, [15, 5])).toBe(false))
 
   test("a hole is not inside, however far inside the outer ring it sits", () => {
-    // The reason `extent.ts` carries holes at all: an enclave excluded from the
-    // study area must not come back with its features.
     const holed = OsmIntersect.index([HOLED])
     expect(OsmIntersect.contains(holed, [5, 5])).toBe(false)
     expect(OsmIntersect.contains(holed, [2, 2])).toBe(true)
   })
 
   test("a vertex lying exactly on the ray is counted once, not twice", () => {
-    // (0,10) and (10,10) are both on y=10. A naive ray test flips twice here
-    // and reports a point inside the square as outside.
     expect(OsmIntersect.contains(idx, [5, 10 - 1e-9])).toBe(true)
   })
 })
@@ -64,8 +59,6 @@ describe("two segments", () => {
   test("touching at an endpoint", () => expect(cross([0, 0], [5, 5], [5, 5], [9, 1])).toBe(true))
 
   test("collinear and overlapping", () => {
-    // Administrative boundaries are routinely drawn along a road, so a way
-    // lying ON the boundary is ordinary. The sign test alone misses it.
     expect(cross([0, 0], [10, 0], [2, 0], [8, 0])).toBe(true)
   })
 
@@ -82,9 +75,6 @@ describe("a feature against a boundary", () => {
   })
 
   test("a road crossing the boundary with BOTH ends outside it", () => {
-    // The case the vertex test alone cannot see, and the reason segment
-    // intersection is in here at all. A trunk road passing through a small
-    // study area often has no vertex inside it.
     expect(
       hits(
         geo("LineString", [
@@ -107,9 +97,6 @@ describe("a feature against a boundary", () => {
   })
 
   test("a road with one end inside is kept WHOLE — nothing is cut", () => {
-    // The equivalence with Overpass rests on this: the server answers with
-    // entire features, so a clip here would make the two paths disagree and
-    // would leave the way's osm_id describing a geometry that is not it.
     const road = geo("LineString", [
       [5, 5],
       [50, 5],
@@ -122,7 +109,6 @@ describe("a feature against a boundary", () => {
   })
 
   test("a polygon that CONTAINS the whole study area", () => {
-    // No vertex inside, no edge crossing — and still an answer to the query.
     expect(
       hits(
         geo("Polygon", [
@@ -162,8 +148,7 @@ describe("a feature against a boundary", () => {
 describe("what it does when it cannot tell", () => {
   const idx = OsmIntersect.index([SQUARE])
 
-  // §6.4's asymmetry, in the only form it can take here. Keeping one feature
-  // too many costs a row; dropping one costs a fact nobody can see is absent.
+  // Keeping one feature too many costs a row; dropping one costs a fact nobody can see is absent (§6.4).
   test("an unreadable geometry is KEPT", () => {
     expect(OsmIntersect.intersects({ type: "Sphere", coordinates: [0, 0] }, idx)).toBe(true)
     expect(OsmIntersect.intersects(undefined, idx)).toBe(true)
@@ -173,8 +158,7 @@ describe("what it does when it cannot tell", () => {
 })
 
 describe("the grid is an optimisation, never an answer", () => {
-  // A boundary big enough that the index actually buckets, checked against the
-  // definition it is supposed to be a faster route to.
+  // Big enough that the index actually buckets, checked against the exhaustive loop it is a faster route to.
   const ring: Point[] = []
   for (let i = 0; i < 400; i++) {
     const t = (i / 400) * Math.PI * 2
@@ -206,10 +190,8 @@ describe("the grid is an optimisation, never an answer", () => {
 })
 
 describe("the equivalence the whole design rests on", () => {
-  // A boundary too detailed to send is queried by its convex hull and filtered
-  // here. The result must equal what a server filtering by the real boundary
-  // would have returned — otherwise the two code paths answer differently and
-  // the caller has to know which one ran.
+  // A boundary too detailed to send is queried by its hull and narrowed back here; the answer has to match what a
+  // server filtering by the real boundary would have returned.
   const star: Point[] = []
   for (let i = 0; i < 24; i++) {
     const t = (i / 24) * Math.PI * 2
@@ -229,7 +211,7 @@ describe("the equivalence the whole design rests on", () => {
         if (truth) insideCount++
       }
     }
-    // The fixture has to actually exercise both answers to mean anything.
+    // Both answers have to occur, or a constant `intersects` would pass the loop above.
     expect(insideCount).toBeGreaterThan(50)
     expect(insideCount).toBeLessThan(34 * 34)
   })

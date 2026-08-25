@@ -7,14 +7,8 @@ import { OsmHttp } from "@/geo/osm/http"
 import type { NetTypes } from "@/geo/net/types"
 import { testEffect } from "../lib/effect"
 
-/* The reliability layer (docs/GEOKERNEL.md §6.3).
- *
- * Everything here is scripted. Running these against the live services would
- * measure the internet on one machine on one day — which is exactly the
- * evidence this module must NOT be tuned to, since its whole job is to behave
- * for users whose networks look nothing like the author's. What is pinned
- * instead is the decision structure: who gets asked first, what counts as a
- * failure, and what a proxy changes. */
+/* The reliability layer (docs/GEOKERNEL.md §6.3), over a scripted HTTP layer: who gets asked first, what counts as
+ * a failure, and what a proxy changes. */
 
 const OFFICIAL = "overpass-api.de"
 const BACKUP_ONE = "lz4.overpass-api.de"
@@ -39,9 +33,8 @@ function scriptedHttp(byHost: Record<string, Scripted | Scripted[]>) {
           const host = new URL(input.url).hostname
           yield* Ref.update(asked, (all) => [...all, host])
           yield* Ref.update(routes, (all) => [...all, input.route.kind])
-          // A host the script does not name is unreachable. Answering it with a
-          // bland success would let the rest of the pool quietly satisfy tests
-          // whose premise is that something failed.
+          // A host the script does not name is unreachable, so a stray success cannot satisfy a test whose
+          // premise is that something failed.
           const entry: Scripted | Scripted[] = byHost[host] ?? {
             error: new OsmHttp.OsmHttpError("not in this test's script", undefined, input.url),
           }
@@ -57,13 +50,7 @@ function scriptedHttp(byHost: Record<string, Scripted | Scripted[]>) {
   return { layer, asked, routes }
 }
 
-/**
- * A Net that knows one thing: whether this machine has a proxy.
- *
- * That is the entire interface this module uses. Nothing here ranks endpoints
- * or measures paths — the pool order is the module's own decision, so a test of
- * it must not be able to depend on Net at all.
- */
+/** A Net answering the one question the client asks it — has this machine got a proxy — and counting the asks. */
 function scriptedNet(proxyUrl?: string) {
   const asks = Ref.makeUnsafe(0)
   const layer = Layer.succeed(
@@ -101,10 +88,6 @@ describe("osm endpoint pool", () => {
 
     it.effect("the official instance leads, mirrors follow", () =>
       Effect.sync(() => {
-        // The tiers rest on what these services ARE. The reference deployment
-        // is the one the project stands behind; a mirror is donated hardware
-        // that may lag or serve a regional extract, and when it is wrong the
-        // caller cannot tell. So mirrors are a fallback and are ordered like one.
         const hosts = OsmClient.OVERPASS_ENDPOINTS.map((endpoint) => new URL(endpoint).hostname)
         expect(hosts.slice(0, 3)).toEqual([OFFICIAL, BACKUP_ONE, BACKUP_TWO])
         expect(hosts.slice(3).length).toBeGreaterThan(2)
@@ -113,9 +96,8 @@ describe("osm endpoint pool", () => {
 
     it.effect("holds only full-planet instances", () =>
       Effect.sync(() => {
-        // A region-limited instance answers successfully with data that
-        // silently excludes everything outside its region — worse than an
-        // error, because nothing about the response says so (§6.3).
+        // A region-limited instance answers about anywhere else with success and no data, and nothing in the
+        // response says so (§6.3).
         const regional = ["overpass.osm.ch", "overpass.osm.rambler.ru", "overpass.nchc.org.tw"]
         for (const endpoint of OsmClient.OVERPASS_ENDPOINTS) {
           expect(regional).not.toContain(new URL(endpoint).hostname)
@@ -149,8 +131,6 @@ describe("osm failover", () => {
       Effect.gen(function* () {
         const osm = yield* OsmClient.Service
         const result = yield* osm.overpass("out count;")
-        // A busy instance answers 200 with HTML, so parseability is a failover
-        // criterion in its own right — a status check alone calls this success.
         expect(new URL(result.endpoint).hostname).toBe(BACKUP_ONE)
       }),
     )
@@ -165,8 +145,6 @@ describe("osm failover", () => {
       Effect.gen(function* () {
         const osm = yield* OsmClient.Service
         const result = yield* osm.overpass("out count;")
-        // The data that did arrive is usable, so the endpoint keeps its place.
-        // What must not happen is calling it a clean success (§6.3 第四种失败).
         expect(new URL(result.endpoint).hostname).toBe(OFFICIAL)
         expect(result.remark).toContain("timed out")
         expect(yield* Ref.get(http.asked)).toEqual([OFFICIAL])
@@ -185,8 +163,6 @@ describe("osm failover", () => {
         const outcome = yield* Effect.result(osm.overpass("out geom;"))
         expect(outcome._tag).toBe("Failure")
         if (outcome._tag === "Failure") expect(outcome.failure.kind).toBe("oversized")
-        // Another endpoint would produce the same enormous answer; only the
-        // caller asking for less can fix it.
         expect(yield* Ref.get(http.asked)).toEqual([OFFICIAL])
       }),
     )
@@ -201,14 +177,12 @@ describe("osm failover", () => {
         const osm = yield* OsmClient.Service
         const outcome = yield* Effect.result(osm.overpass("out count;"))
         expect(outcome._tag).toBe("Failure")
-        // Cancellation says nothing about the endpoint's health.
         expect(yield* Ref.get(http.asked)).toEqual([OFFICIAL])
       }),
     )
   }
 
   {
-    // Tier one is entirely down; the mirrors are what is left.
     const http = scriptedHttp({
       [OFFICIAL]: { status: 503, body: "" },
       [BACKUP_ONE]: { status: 503, body: "" },
@@ -241,8 +215,6 @@ describe("osm failover", () => {
           expect(outcome._tag).toBe("Failure")
           if (outcome._tag === "Failure") {
             expect(outcome.failure.kind).toBe("exhausted")
-            // Not "everything failed" — which host, over which route, with
-            // what answer. That is what makes a bad round diagnosable.
             expect(outcome.failure.attempts[0]).toContain(OFFICIAL)
             expect(outcome.failure.attempts[0]).toContain("HTTP 500")
             expect(outcome.failure.attempts.length).toBe(OsmClient.OVERPASS_ENDPOINTS.length * 2)
@@ -254,8 +226,7 @@ describe("osm failover", () => {
   }
 
   {
-    // The geocoder is a single endpoint with two attempts, so it reaches the
-    // same "everything failed" state far more cheaply than the pool does.
+    // Two attempts on one endpoint reach total failure, where the pool costs sixteen.
     const http = scriptedHttp({})
     const net = scriptedNet()
     const it = graph(http.layer, net.layer)
@@ -268,9 +239,6 @@ describe("osm failover", () => {
           yield* Effect.result(osm.nominatim("武汉大学"))
           expect(yield* Ref.get(net.asks)).toBe(1)
 
-          // Total failure is the one moment the proxy answer might have gone
-          // stale — one started, stopped, or moved while the session ran. Any
-          // other time, re-asking would be loopback connections for nothing.
           yield* Effect.result(osm.nominatim("武汉大学"))
           expect(yield* Ref.get(net.asks)).toBe(2)
         }),
@@ -290,9 +258,6 @@ describe("osm endpoint stickiness", () => {
         const osm = yield* OsmClient.Service
         yield* osm.overpass("out count;")
         yield* osm.overpass("out count;")
-        // The official instance leads a fresh process, but once it has been
-        // shown to be down, paying its timeout on every subsequent call is
-        // waste the caller can feel (§6.3 粘性端点).
         expect(yield* Ref.get(http.asked)).toEqual([OFFICIAL, BACKUP_ONE, BACKUP_ONE])
       }),
     SLOW_TEST,
@@ -311,8 +276,8 @@ describe("osm routing", () => {
         yield* osm.overpass("out count;")
         yield* osm.overpass("out count;")
         expect(yield* Ref.get(http.routes)).toEqual(["direct", "direct"])
-        // A machine's proxy situation does not change between two requests a
-        // second apart, and asking costs loopback connections each time.
+        // Asking sweeps the loopback ports (geo/net/discovery.ts), and a machine's proxy does not change between
+        // two requests a second apart.
         expect(yield* Ref.get(net.asks)).toBe(1)
       }),
     )
@@ -326,8 +291,6 @@ describe("osm routing", () => {
     it.live("two services starting at once still ask about the proxy once", () =>
       Effect.gen(function* () {
         const osm = yield* OsmClient.Service
-        // The shape a search takes: both engines are asked in parallel, and on
-        // the first one of a session neither has an answer to reuse yet.
         yield* Effect.all([osm.overpass("out count;"), osm.nominatim("武汉大学")], { concurrency: 2 })
         expect(yield* Ref.get(net.asks)).toBe(1)
       }),
@@ -347,8 +310,6 @@ describe("osm routing", () => {
         const osm = yield* OsmClient.Service
         yield* osm.overpass("out count;")
         yield* osm.nominatim("武汉大学")
-        // One decision for all of OSM: these are ordinary public hosts, and a
-        // network that needs a proxy to reach one needs it to reach the rest.
         expect(yield* Ref.get(http.routes)).toEqual(["proxy", "proxy", "proxy"])
       }),
     )

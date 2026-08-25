@@ -9,11 +9,6 @@ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 /* The generic content endpoint's size gate (docs/GEOKERNEL.md §10.1 #8).
  *
- * The endpoint reads a whole file into one string and hands it to the renderer.
- * Upstream caps it nowhere, and a restored editor tab plus a review sweep can
- * each ask for the same file — observed once as 1.8 GiB of heap from a single
- * 359 MiB CSV, and a dead renderer.
- *
  * The fixtures below are sparse files: the gate reads a size, never bytes, so
  * a test for it does not need to write hundreds of megabytes. */
 
@@ -25,7 +20,6 @@ function content(directory: string, file: string) {
   return HttpApiApp.webHandler().handler(new Request(url, { headers: { "x-opencode-directory": directory } }), context)
 }
 
-/** A file that claims a size without occupying one. */
 const sparse = (file: string, bytes: number) => {
   const handle = fs.openSync(file, "w")
   fs.ftruncateSync(handle, bytes)
@@ -45,10 +39,7 @@ describe("content endpoint size gate", () => {
     const response = await content(tmp.path, "huge.csv")
     const body = (await response.json()) as { notice?: string; size?: number; content: string }
     expect(body.notice).toBe("oversized")
-    // The size travels too, so the interface can say how big rather than just
-    // "too big".
     expect(body.size).toBe(60 * 1024 * 1024)
-    // Still a readable sentence: a bare API consumer gets an explanation.
     expect(body.content).toContain("too large")
   })
 
@@ -57,16 +48,12 @@ describe("content endpoint size gate", () => {
     sparse(path.join(tmp.path, "scene.tif"), 12 * 1024 * 1024)
 
     const body = (await (await content(tmp.path, "scene.tif")).json()) as { notice?: string }
-    // Different fact, different answer: the preview endpoint reprojects and
-    // downscales this file perfectly well, so the interface switches view
-    // instead of reporting a fault (§7.5).
     expect(body.notice).toBe("oversized-raster")
   })
 
   test("the raster ceiling is lower than the general one", async () => {
     await using tmp = await tmpdir({ git: true })
-    // 12 MiB: over the raster threshold, well under the general one. A CSV of
-    // the same size is delivered; the raster is not.
+    // 12 MiB: over the raster ceiling, well under the general one.
     sparse(path.join(tmp.path, "table.csv"), 12 * 1024 * 1024)
 
     const body = (await (await content(tmp.path, "table.csv")).json()) as { notice?: string }

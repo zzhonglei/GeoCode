@@ -2,19 +2,15 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import path from "node:path"
 
-/* The gate has to actually run the tripwires (docs/CONVENTIONS.md).
+/* The gate has to actually run the tripwires (docs/CONVENTIONS.md §7).
  *
- * `scripts/test-gate.sh` names its files explicitly — it must, because the
- * vendored suite around them fails by design and cannot be run wholesale. The
- * cost of that choice is a silent one: a new tripwire file sits in the tree,
- * passes when run by hand, and is never run again. It reads as coverage and is
- * not, which is worse than having no test at all.
- *
- * Everything under test/geo/ is picked up by directory, so this only guards
- * the ones named one by one.
+ * `scripts/test-gate.sh` names its files one by one — it must, because the
+ * vendored suite around them fails by design and cannot be run wholesale — so
+ * a new tripwire file can sit in the tree, pass when run by hand, and never be
+ * run again.
  */
 
-/** test/, whose `geocode-*.test.ts` files the gate has to name one by one. */
+/** The parent test/ directory, not this one: its `geocode-*.test.ts` files are the ones named. */
 const HERE = path.dirname(import.meta.dirname)
 /** test → opencode → packages → kernel → the repository root. */
 const GATE = path.resolve(HERE, "..", "..", "..", "..", "scripts", "test-gate.sh")
@@ -27,8 +23,7 @@ describe("the test gate", () => {
       .filter((entry) => entry.startsWith("geocode-") && entry.endsWith(".test.ts"))
       .sort()
 
-    // A sanity floor: if the glob ever matches nothing, the loop below would
-    // pass by doing nothing at all.
+    // A floor: if the filter ever matched nothing, the loop below would pass by doing nothing.
     expect(own.length).toBeGreaterThan(4)
     for (const file of own) expect(script).toContain(`test/${file}`)
   })
@@ -38,16 +33,9 @@ describe("the test gate", () => {
   })
 
   test("and every upstream test file holding a GeoCode-named case is in it too", () => {
-    // The check above only sees one naming convention in one directory, and the
-    // tripwires for the shielded Claude Code flags fit neither: they had to be
-    // written inside upstream's own suites, where those defaults are read. So
-    // they sat unrun — reverting the defaults turned fourteen assertions red
-    // across them while the gate reported green.
-    //
-    // What makes them findable is the other convention: a GeoCode case inside
-    // an upstream file is named `GeoCode: …`, which is also how the gate selects
-    // one out of a file it cannot run whole. That is what this asserts against,
-    // so the next tripwire written that way cannot go quiet the same way.
+    // The check above sees only test/'s own naming convention, so a tripwire written as a
+    // `GeoCode: …` case inside an upstream file — the only place some of them can live — would
+    // otherwise sit unrun while the gate reported green.
     const script = fs.readFileSync(GATE, "utf8")
     const holders: string[] = []
     const walk = (dir: string) => {
@@ -66,7 +54,6 @@ describe("the test gate", () => {
     }
     walk(HERE)
 
-    // The same sanity floor as above: an empty list would pass by doing nothing.
     expect(holders.length).toBeGreaterThan(0)
     for (const file of holders) expect(script).toContain(file)
   })

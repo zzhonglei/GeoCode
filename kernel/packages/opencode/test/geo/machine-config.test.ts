@@ -7,11 +7,8 @@ import { Global } from "@opencode-ai/core/global"
 import { MachineConfig } from "@/geo/config"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-/* Exercises the Config module of GeoKernel (docs/GEOKERNEL.md §3.1).
- *
- * The assertions here are not about JSON parsing — they are about the one
- * decision the module exists to make correctly: a re-probe fires when the user
- * changed a value, and never merely because they saved the file. */
+/* The Config module of GeoKernel (docs/GEOKERNEL.md §3.1): a re-probe fires when a value changed, and never merely
+ * because the file was saved. */
 
 const it = testEffect(LayerNode.compile(LayerNode.group([MachineConfig.node])))
 
@@ -24,7 +21,6 @@ const clear = Effect.promise(async () => {
   await fs.rm(JSONC, { force: true })
 })
 
-/** Saves the way editors actually save: write a temp file, rename over target. */
 const renameReplace = (text: string) =>
   Effect.promise(async () => {
     const temp = `${FILE}.tmp`
@@ -45,8 +41,7 @@ describe("machine.json config", () => {
       const after = yield* config.snapshot()
 
       expect(after.blocks.qgis.fingerprint).not.toBe(before.blocks.qgis.fingerprint)
-      // The point of per-block dispatch: GEE and GDAL must not be disturbed,
-      // or every edit would restart every environment probe on the machine.
+      // Per-block dispatch: otherwise one edit restarts every environment probe on the machine.
       expect(after.blocks.gee.fingerprint).toBe(before.blocks.gee.fingerprint)
       expect(after.blocks.gdal.fingerprint).toBe(before.blocks.gdal.fingerprint)
     }),
@@ -60,8 +55,7 @@ describe("machine.json config", () => {
       yield* config.reload()
       const before = yield* config.snapshot()
 
-      // Same values, different key order, different whitespace, plus comments —
-      // exactly what an editor with format-on-save produces.
+      // What format-on-save produces: same values, reordered keys, new whitespace, an editor comment.
       yield* write(`{
   // reordered and commented by the editor
   "qgis": "/Applications/QGIS-LTR.app",
@@ -96,21 +90,12 @@ describe("machine.json config", () => {
         expect(state.ok).toBe(false)
         if (state.ok) continue
         expect(state.failure.file).toBe(FILE)
-        // What the name of this test has promised all along. It asserted
-        // `length > 0`, which the literal class name "ConfigJsonError"
-        // satisfies — and §3.1 puts all four geographic capabilities behind
-        // this one sentence, so fifteen characters of nothing is what a user
-        // got at the moment everything went dark.
+        // Not merely non-empty: the thrown error's own `message` is the bare class name `ConfigJsonError`.
         expect(state.failure.message).toMatch(/line \d+, column \d+/)
-        // And no more than that. The parser's readable report opens with a
-        // `--- JSONC Input ---` dump of the entire file, and this field is
-        // carried by `config-error` into the event stream and onto the
-        // interface. §3.1 has this file IGNORE unknown keys, so what a user
-        // keeps in it is not bounded by the schema; the path below stands in
-        // for whatever that turns out to be.
+        // And no more than that: the parser's full report dumps the whole file, and this message is quoted
+        // back in tool output by the `config-error` guidance.
         expect(state.failure.message).not.toContain("/Applications/QGIS-LTR.app")
         expect(state.failure.message).not.toContain("JSONC Input")
-        // Distinguished fingerprint, block-scoped so two blocks never collide.
         expect(state.fingerprint).toBe(`${block}:unparsable`)
       }
     }),
@@ -128,9 +113,8 @@ describe("machine.json config", () => {
       yield* write(`{ "qgis": ,, }`)
       yield* config.reload()
 
-      // Same bytes as before the break. An incremental diff would conclude
-      // "nothing changed" and leave every module stuck in its error state, so
-      // recovery has to be unconditional.
+      // The same bytes as before the break: a diff would say "nothing changed" and leave every block stuck in
+      // the error state it was driven into.
       yield* write(good)
       yield* config.reload()
       const recovered = yield* config.snapshot()
@@ -176,8 +160,7 @@ describe("machine.json config", () => {
     }),
   )
 
-  // `live` rather than `effect`: this one depends on the real clock, since the
-  // watcher's debounce and the filesystem notification are both wall-clock.
+  // `live` rather than `effect`: the watcher's debounce and the filesystem notification are both wall-clock.
   it.live(
     "a rename-replace save is picked up by the directory watch",
     () =>
@@ -188,9 +171,8 @@ describe("machine.json config", () => {
         yield* config.reload()
         const before = yield* config.snapshot()
 
-        // This is the case a file-scoped watch would miss forever: the original
-        // inode is replaced rather than modified, which is how essentially every
-        // editor saves.
+        // The case a file-scoped watch misses forever: the inode is replaced rather than modified, which is how
+        // editors save.
         yield* renameReplace(JSON.stringify({ qgis: "/Applications/QGIS.app" }))
 
         const seen = yield* pollWithTimeout(
@@ -216,16 +198,8 @@ describe("machine.json config", () => {
       yield* write(JSON.stringify({ qgis: "/old.app" }))
       yield* config.reload()
 
-      // Two reloads in flight over a file that changes between them — the
-      // shape produced by a settings surface pulling (§3.1 escape hatch) while
-      // the watcher fires, or by two saves past the debounce.
-      //
-      // Honest about what this proves: it guards the INVARIANT (whatever the
-      // interleaving, the record ends up agreeing with the file), not the
-      // interleaving itself. The losing order needs the first read to finish
-      // after the second, which nothing here can force — verified by removing
-      // the serialization and watching this test still pass. It is a
-      // regression guard, not a counterproof.
+      // Two reloads in flight over a file that changed between them. This pins the invariant — the record ends
+      // up agreeing with the file whichever way they interleave — not the ordering, which nothing here can force.
       const first = yield* Effect.forkScoped(config.reload())
       yield* write(JSON.stringify({ qgis: "/new.app" }))
       const second = yield* Effect.forkScoped(config.reload())
@@ -236,8 +210,6 @@ describe("machine.json config", () => {
       expect(settled.blocks.qgis.ok).toBe(true)
       if (settled.blocks.qgis.ok) expect(settled.blocks.qgis.value).toBe("/new.app")
 
-      // And the record agrees with the file, so the next edit is diffed
-      // against the truth rather than against a value that was overwritten.
       yield* config.reload()
       const again = yield* config.snapshot()
       expect(again.blocks.qgis.fingerprint).toBe(settled.blocks.qgis.fingerprint)

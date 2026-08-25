@@ -1,16 +1,13 @@
 import { expect, describe, test } from "bun:test"
 import { GeoOutput } from "@/geo/runtime/output"
 
-/* The shared output utilities (docs/GEOKERNEL.md §3.2 输出通用件). Small, but
- * each one encodes a decision that is easy to reverse by accident. */
+/* The shared output utilities (docs/GEOKERNEL.md §3.2 输出通用件). */
 
 describe("geo output utilities", () => {
   test("truncation keeps the tail", () => {
     const text = "head".padEnd(500, "-") + "TAIL"
     const result = GeoOutput.truncate(text, 20)
     expect(result.truncated).toBe(true)
-    // Errors, stack traces and the result marker all arrive last. Keeping the
-    // head would reliably throw away the only part worth reading.
     expect(result.text.endsWith("TAIL")).toBe(true)
     expect(result.text.length).toBe(20)
   })
@@ -21,8 +18,6 @@ describe("geo output utilities", () => {
   })
 
   test("a marked payload is read from its last occurrence", () => {
-    // The marker legitimately appears earlier — echoed in an argument here, but
-    // just as easily in a dependency's own logging. The real result is the last.
     const output = [
       "Running with --marker GEO_RESULT: (echoed by the launcher)",
       "some library warning",
@@ -36,9 +31,6 @@ describe("geo output utilities", () => {
   })
 
   test("a missing marker is reported apart from an unparsable one", () => {
-    // Different meanings, different fixes: no marker means the script never
-    // reached its output point — it died on startup — so the raw output is the
-    // diagnosis and has to survive intact (§4.6).
     const missing = GeoOutput.extractMarked("Traceback ...\nImportError: no module named qgis", "GEO_RESULT: ")
     expect(missing.ok).toBe(false)
     if (!missing.ok) {
@@ -66,9 +58,6 @@ describe("geo output utilities", () => {
     expect(buffer.text()).toBe("1234567890")
     expect(buffer.dropped()).toBe(false)
 
-    // Over the bound: the oldest goes, the newest stays. Runtime accumulates
-    // stderr for a whole execution, so a process that chatters forever must not
-    // be able to grow this without limit (§3.2).
     buffer.push("abcde")
     expect(buffer.text()).toBe("67890abcde")
     expect(buffer.dropped()).toBe(true)
@@ -77,7 +66,6 @@ describe("geo output utilities", () => {
   test("a bounded buffer keeps a single oversized chunk for truncate to trim", () => {
     const buffer = GeoOutput.boundedBuffer(4)
     buffer.push("0123456789")
-    // Dropping it would leave nothing at all; the caller trims on read instead.
     expect(buffer.text()).toBe("0123456789")
     expect(GeoOutput.truncate(buffer.text(), 4).text).toBe("6789")
   })

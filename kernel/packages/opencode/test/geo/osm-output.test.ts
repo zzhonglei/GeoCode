@@ -5,20 +5,8 @@ import path from "node:path"
 import { OsmConvert } from "@/geo/osm/convert"
 import { OsmOutput } from "@/geo/osm/output"
 
-/* Writing results to disk (docs/GEOKERNEL.md §6.7).
- *
- * The rule this file exists for: **nothing here ever overwrites**. A download
- * costs minutes of the user's time and a public service's, and the same output
- * path is asked for again all the time — to refresh, to recover a dropped
- * field, to retry what came back short. When the name is taken the run numbers
- * itself, the way a browser does.
- *
- * That replaced a conditional protection ("do not write an empty result over a
- * good one when something failed") which had to be right about every way a run
- * could end, and was not: a cancelled run left no failure behind, so it wrote
- * an empty collection over a finished download. The tests below pin the
- * property that made the condition unnecessary.
- */
+/* Writing results to disk (docs/GEOKERNEL.md §6.7). The rule the file exists for: nothing here ever overwrites —
+ * the same output path is asked for again all the time, and a name that is taken is numbered instead. */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-osm-out-"))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
@@ -68,8 +56,6 @@ describe("numbering, because a download is not disposable", () => {
 
     const second = OsmOutput.write(asked, [POINT])
     expect(second.outputs.map((entry) => entry.path)).toEqual([path.join(where, "wuhan (1).geojson")])
-    // Byte for byte: the point of the whole scheme is that the earlier run
-    // survives a later one, whatever the later one turned out to be.
     expect(fs.readFileSync(asked, "utf-8")).toBe(before)
     expect(JSON.parse(fs.readFileSync(path.join(where, "wuhan (1).geojson"), "utf-8")).features).toHaveLength(1)
   })
@@ -92,16 +78,12 @@ describe("numbering, because a download is not disposable", () => {
       path.join(where, "mixed (1)-points.geojson"),
       path.join(where, "mixed (1)-polygons.geojson"),
     ])
-    // Never one mixed-geometry file, numbered or not (§6.7).
     expect(second.outputs.map((entry) => entry.family).sort()).toEqual(["points", "polygons"])
   })
 
   test("a name is taken when only its siblings exist", () => {
     const where = dir()
     const asked = path.join(where, "campus.geojson")
-    // A split run leaves no file at the base at all, so asking "does the base
-    // exist" would call the name free and let the next split run write on top
-    // of this one's siblings.
     OsmOutput.write(asked, [POINT, AREA])
     expect(fs.existsSync(asked)).toBe(false)
     expect(fs.existsSync(path.join(where, "campus-points.geojson"))).toBe(true)
@@ -111,9 +93,6 @@ describe("numbering, because a download is not disposable", () => {
   })
 
   test("a split run beside a split run, which is the case the other three miss", () => {
-    // The four combinations of split and unsplit each take a different route
-    // through `write`, and this is the one where both runs go down the sibling
-    // branch. Covered here rather than assumed from the unsplit cases.
     const where = dir()
     const asked = path.join(where, "keep.geojson")
     OsmOutput.write(asked, [POINT, AREA])
@@ -129,8 +108,6 @@ describe("numbering, because a download is not disposable", () => {
 
   test("a path that does not say GeoJSON is told to", () => {
     const where = dir()
-    // Not cosmetic: sibling names insert the family before the extension, and a
-    // base without one would produce a sibling identical to the base.
     const result = OsmOutput.write(path.join(where, "wuhan"), [AREA])
     expect(result.outputs[0]!.path).toBe(path.join(where, "wuhan.geojson"))
   })

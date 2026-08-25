@@ -9,13 +9,8 @@ import { QgisExecutor } from "@/geo/qgis/executor"
 import type { Environment } from "@/geo/qgis/types"
 import { testEffect } from "../lib/effect"
 
-/* The execution pipeline (docs/GEOKERNEL.md §4.12).
- *
- * The pipeline also ran against real QGIS 3.44.9 — native:buffer over a small
- * GeoJSON, progress lines and all. These tests freeze the pieces that carry
- * design decisions: the pre-flight that advises and never vetoes, and the
- * idle clock whose floor the kernel enforces because a tiny value turns every
- * quiet algorithm into a timeout. */
+/* The execution pipeline (docs/GEOKERNEL.md §4.12): the pre-flight that advises and never vetoes, and the idle
+ * clock whose floor the kernel enforces, a tiny value otherwise turning every quiet algorithm into a timeout. */
 
 const BUFFER: Algorithm = {
   id: "native:buffer",
@@ -54,39 +49,25 @@ describe("qgis executor precheck", () => {
   test("unknown and missing parameters are separate findings", () => {
     const hints = QgisExecutor.precheck("native:buffer", BUFFER, { INPUTT: "/a.geojson" })
     const kinds = hints.map((hint) => hint.kind)
-    // INPUTT unknown; INPUT missing with nothing to fall back on; DISTANCE
-    // absent but defaulted, which is a statement rather than a complaint. None
-    // of them stops anything: the metadata cannot express every constraint, so
-    // blocking on it would turn its gaps into "cannot run" (§4.12, §12).
     expect(kinds).toEqual(["unknown-parameter", "missing-required", "defaults-applied"])
   })
 
   test("an absent parameter that has a default is stated once, with its value", () => {
-    // This is the difference between a channel worth reading and one worth
-    // skipping. QGIS marks 869 of 1858 required parameters as non-optional
-    // while shipping a default for them — 74% of the catalog — so treating
-    // absence alone as "missing" made a CORRECT call raise up to twelve alarms.
     const hints = QgisExecutor.precheck("native:buffer", BUFFER, { INPUT: "/a.geojson" })
     expect(hints).toHaveLength(1)
     expect(hints[0]!.kind).toBe("defaults-applied")
-    // With the values, because they are what the run will actually use and the
-    // caller may want to override them — and the catalog is where they live.
     expect(hints[0]!.message).toContain("DISTANCE=10")
-    // One line for all of them, never one line each.
     expect(hints.filter((hint) => hint.kind === "defaults-applied")).toHaveLength(1)
 
-    // A genuine omission still speaks for itself, and says why it is fatal.
     const missing = QgisExecutor.precheck("native:buffer", BUFFER, { DISTANCE: 5 })
     expect(missing.map((hint) => hint.kind)).toEqual(["missing-required"])
     expect(missing[0]!.message).toContain("has no default")
-    // The old wording hedged because the check had not looked at defaultValue.
+    // Catches the message hedging again about a fallback `defaultValue` has already ruled out.
     expect(missing[0]!.message).not.toContain("may fall back")
   })
 
   test("the in-script check no longer repeats what the catalog already stated", () => {
-    // A text-level pin, not a behavioural one: this half runs inside QGIS and
-    // cannot be exercised without an install. Verified by hand against 3.44.9;
-    // what this catches is the guard being dropped in an edit.
+    // A text pin: this half runs inside QGIS, so what it catches is the guard being dropped in an edit.
     expect(QgisExecutor.RUNNER_SCRIPT).toContain("p.defaultValue() is None")
     expect(QgisExecutor.RUNNER_SCRIPT).not.toContain("QGIS may use defaults if available")
   })
@@ -153,7 +134,7 @@ describe("qgis executor pipeline", () => {
         yield* QgisExecutor.runAlgorithm(runtime, environment, {
           algorithm: "native:buffer",
           parameters: { INPUT: "/a" },
-          idleSeconds: 1, // below the floor: would kill every quiet algorithm
+          idleSeconds: 1, // below the floor
           onChunk: () => Effect.void,
         })
         yield* QgisExecutor.runAlgorithm(runtime, environment, {
@@ -171,14 +152,9 @@ describe("qgis executor pipeline", () => {
         const idles = captured.map((options) => Duration.toMillis(options.clocks.idle!))
         expect(idles).toEqual([10_000, 60_000, 300_000])
 
-        // The verified environment rides the spawn whole, and the parameters
-        // travel as the argument the runner reads.
+        // An algorithm must not inherit the reader's PAM guard (reader.ts NO_SIDECARS): some output formats keep
+        // their coordinate system in the sidecar it suppresses (§7.6).
         expect(captured[0]!.env).toBe(environment.env)
-        // Whole means whole: the reader turns PAM off so that reading cannot
-        // write a sidecar into the user's directory (reader.ts NO_SIDECARS),
-        // and an algorithm must NOT inherit that. Some output formats cannot
-        // hold a coordinate system themselves and rely on the sidecar to keep
-        // it, so the same guard here would damage what it wrote (§7.6).
         expect(captured[0]!.env).not.toHaveProperty("GDAL_PAM_ENABLED")
         expect(captured[0]!.command).toBe(environment.python)
         expect(captured[0]!.args[1]).toContain("ProgressFeedback")

@@ -5,9 +5,8 @@
  *
  * The product ships as a single file with no script assets on disk, and
  * TypeScript cannot import .py — so the scripts become constants here. The
- * generated module is kept in version control (a bare checkout runs with no
- * extra step) and refreshed automatically before every build; the sync test in
- * test/geo/qgis-reader.test.ts makes a stale generation loud. --- */
+ * generated modules are kept in version control, so a bare checkout runs with
+ * no extra step. --- */
 
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -33,16 +32,13 @@ export const GEO_SCRIPTS = [
     file: "raster_preview.py",
     name: "RASTER_PREVIEW_PY",
   },
-  // The GEE runtime library is not a script we run but a module we put on the
-  // interpreter's path (§5.10); it rides the same chain because it has the
-  // same problem — a .py that TypeScript cannot import and a product that
-  // ships without files on disk.
+  // Not a script we run but a module we put on the interpreter's path (§5.10); it rides the same
+  // chain because it has the same problem.
   { dir: ["src", "geo", "gee", "pylib"], out: ["src", "geo", "gee"], file: "geocode.py", name: "GEOCODE_PY" },
 ] as const
 
 export async function generateGeoScripts() {
-  // Grouped by destination: each capability keeps its own generated module, so
-  // a QGIS script change never rewrites the GEE one.
+  // Grouped by destination, so a QGIS script change never rewrites the GEE module.
   const byDestination = new Map<string, string[]>()
   for (const item of GEO_SCRIPTS) {
     const text = await Bun.file(path.join(packageRoot, ...item.dir, item.file)).text()
@@ -62,8 +58,7 @@ export async function generateGeoScripts() {
       "",
     ].join("\n")
 
-    // Emit prettier-stable output so regeneration is idempotent: a build must
-    // never dirty the working tree when the scripts have not changed.
+    // Prettier-stable output, so regenerating before a build cannot dirty the working tree.
     const config = await prettier.resolveConfig(destination)
     await Bun.write(destination, await prettier.format(raw, { ...config, filepath: destination }))
   }

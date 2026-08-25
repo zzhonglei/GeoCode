@@ -3,7 +3,6 @@ import { GeoExtensions } from "../src/filesystem/geo-extensions"
 
 describe("GeoExtensions taxonomy", () => {
   test("snapshot blanket sidecars never include gated-only generic extensions", () => {
-    // These would drop a user's non-GIS files of the same extension under an unconditional *.ext.
     for (const generic of ["dat", "map", "id", "ind", "mid", "hdr", "sta", "enp", "stx", "clr", "qml"]) {
       expect(GeoExtensions.SNAPSHOT_BLANKET_SIDECARS.includes(generic)).toBe(false)
     }
@@ -13,13 +12,13 @@ describe("GeoExtensions taxonomy", () => {
     for (const geo of ["shx", "qpj", "qix", "atx", "gfs", "tfw", "ovr", "qmd", "lax"]) {
       expect(GeoExtensions.SNAPSHOT_BLANKET_SIDECARS.includes(geo)).toBe(true)
     }
-    // .dbf is intentionally blanketed (snapshot has always done so) even though it is generic.
+    // .dbf is a dBase table, not only a shapefile companion, and is blanketed regardless.
     expect(GeoExtensions.SNAPSHOT_BLANKET_SIDECARS.includes("dbf")).toBe(true)
   })
 
   test("taxonomy still covers every extension the legacy snapshot exclude listed (no silent removal)", () => {
-    // The exact set the hand-maintained GEO_EXCLUDE excluded, minus the snapshot-only literals
-    // (*.xml, *.osm.pbf, .DS_Store) which stay local to snapshot/index.ts on purpose.
+    // Snapshot's own literals (*.aux.xml, *.shp.xml, *.osm.pbf, .DS_Store) are absent: they live in
+    // snapshot/index.ts rather than in the taxonomy.
     const legacy = [
       "shp",
       "geojson",

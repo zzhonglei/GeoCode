@@ -10,12 +10,6 @@ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 /* The preview endpoints, through the real route tree (docs/GEOKERNEL.md §7.7, §7.8).
  *
- * What is worth proving here is the WIRING, since everything else already has
- * its own tests: that the five paths are mounted where §7.7 says, that location
- * routing reaches them so they know which project they answer for, and that a
- * refusal arrives as a structured body with a status code the interface can act
- * on rather than as a five-hundred.
- *
  * The toolchain is deliberately absent — the test data directory is isolated,
  * so no `machine.json` names a GDAL — which is what makes the ordering visible:
  * a request that never should have been allowed must be refused BEFORE the
@@ -43,9 +37,7 @@ describe("geo preview endpoints", () => {
     fs.symlinkSync(path.join(outside, "secrets.tif"), path.join(tmp.path, "linked.tif"))
 
     const response = await request(GeoPaths.rasterMeta, tmp.path, { path: "linked.tif" })
-    // Not 503. No GDAL is configured here, so if the gate ran first this would
-    // be an environment error — and the caller would learn something about the
-    // machine from a request that was never allowed to name that file (§7.8).
+    // Not 503: with no GDAL configured, that is what a gate running first would answer.
     expect(response.status).toBe(403)
     expect((await response.json()) as { _tag: string }).toMatchObject({ _tag: "GeoAccessError" })
 
@@ -55,8 +47,6 @@ describe("geo preview endpoints", () => {
   test("a file that is not there says so, and says it differently", async () => {
     await using tmp = await tmpdir({ git: true })
     const response = await request(GeoPaths.vectorMeta, tmp.path, { path: "absent.geojson" })
-    // Missing and out-of-bounds are different facts. Reporting one as the other
-    // sends the caller looking for a typo that is not there.
     expect(response.status).toBe(404)
     expect((await response.json()) as { _tag: string }).toMatchObject({ _tag: "GeoNotFoundError" })
   })
@@ -67,9 +57,6 @@ describe("geo preview endpoints", () => {
 
     const response = await request(GeoPaths.vectorMeta, tmp.path, { path: "layer.geojson" })
     expect(response.status).toBe(503)
-    // The interface reacts differently to "not configured yet", which is a
-    // setup prompt, than to an incomplete install, which is a repair
-    // instruction. A rendered message would have lost that (§7.7).
     expect((await response.json()) as object).toMatchObject({
       _tag: "GeoEnvironmentError",
       status: { status: "unconfigured" },
@@ -82,17 +69,14 @@ describe("geo preview endpoints", () => {
 
     const answers = await Promise.all(paths.map((route) => request(route, tmp.path, { path: "absent.tif" })))
     for (const answer of answers) {
-      // A route that was never mounted also answers 404 — the body is what
-      // tells the two apart, and this is exactly the kind of mistake that
-      // survives a green typecheck.
+      // A route that was never mounted answers 404 too; only the body tells the two apart.
       expect((await answer.json()) as { _tag: string }).toMatchObject({ _tag: "GeoNotFoundError" })
     }
   })
 
   test("the page window is validated at the edge", async () => {
     await using tmp = await tmpdir({ git: true })
-    // Refused by the query schema, so a nonsensical window never reaches the
-    // engine as an SQL clause.
+    // 9999 is past the ceiling the query schema allows.
     const response = await request(GeoPaths.vectorPage, tmp.path, { path: "a.geojson", limit: "9999" })
     expect(response.status).toBe(400)
   })

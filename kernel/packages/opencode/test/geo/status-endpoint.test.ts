@@ -21,11 +21,8 @@ import { authorizationLayer } from "@/server/routes/instance/httpapi/middleware/
 import { schemaErrorLayer } from "@/server/routes/instance/httpapi/middleware/schema-error"
 import { testEffect } from "../lib/effect"
 
-/* The data face of GeoKernel, end to end (docs/GEOKERNEL.md §9.3, §10.1 #2-3).
- *
- * Uses the real Status service rather than a mock: the point is to prove the
- * route is mounted on the root api and reads the live slots, not that a stub
- * can return an object. */
+/* The data face of GeoKernel, end to end (docs/GEOKERNEL.md §9.3, §10.1 #2-3): the real Status service behind the
+ * route, so that passing means the route is mounted on the root api and reads the live slots. */
 
 const geoLayer = LayerNode.compile(LayerNode.group([GeoStatus.node, MachineConfig.node]))
 
@@ -55,17 +52,12 @@ describe("geo status endpoint", () => {
     Effect.gen(function* () {
       const response = yield* HttpClient.get(GeoPaths.status)
       expect(response.status).toBe(200)
-      // Honesty over optimism: a module that has not started has no status, and
-      // the snapshot says so rather than inventing "unconfigured" on its behalf.
       expect(yield* response.json).toEqual({})
     }),
   )
 
   it.live("reload re-reads the file on demand", () =>
     Effect.gen(function* () {
-      // The pull escape hatch behind the watcher: a settings surface that just
-      // wrote machine.json calls this for a deterministic apply, and a machine
-      // whose watch quietly died has a remedy short of restarting.
       const response = yield* HttpClient.post(GeoPaths.reload)
       expect(response.status).toBe(200)
       expect(yield* response.json).toEqual({ reloaded: true })
