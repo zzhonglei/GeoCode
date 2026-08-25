@@ -200,7 +200,7 @@ describe("OsmSearch, reading the answer", () => {
 })
 
 describe("OsmSearch, the description", () => {
-  test("it warns about the wait, which is the one thing §11.2 found missing", () => {
+  test("it warns about the wait, which is the one thing §11 found missing", () => {
     expect(SEARCH_DESCRIPTION).toContain("TIMING")
     expect(SEARCH_DESCRIPTION).toMatch(/do not abandon the call and retry/i)
   })

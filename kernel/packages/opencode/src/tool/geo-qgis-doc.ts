@@ -178,7 +178,7 @@ export const QgisDocTool = Tool.define<
         metadata: { action: params.action, ...(target === undefined ? {} : { target }) },
       })
 
-      // Taken before the gate so a refusal still carries the environment line, and again after it (§11.2 环境头快照).
+      // Taken before the gate so a refusal still carries the environment line, and again after it (§11 环境头快照).
       const entryHeader = yield* GeoTool.qgisHeader(status)
 
       const gate = yield* GeoTool.settledQgisGate(qgis, ctx.abort)

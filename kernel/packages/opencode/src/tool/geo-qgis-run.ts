@@ -6,13 +6,13 @@ import { GeoTool } from "./geo-tool"
 import { InstanceState } from "@/effect/instance-state"
 import DESCRIPTION from "./geo-qgis-run.txt"
 
-/* --- GeoCode: RunQgisAlgorithm, the acting face of the QGIS group (docs/TOOLS.md §3, GEOKERNEL §4.12, §11.2).
+/* --- GeoCode: RunQgisAlgorithm, the acting face of the QGIS group (docs/TOOLS.md §3, GEOKERNEL §4.12, §11).
  *
  * Running the subprocess is the kernel's job; what this layer owns is attribution. A bare "Invalid parameters" reads
  * as "QGIS rejected me", so every pre-spawn refusal says QGIS was never invoked, whose fault it is and what to
  * change. --- */
 
-/** Characters of live output the metadata channel carries while the algorithm runs (§11.2). */
+/** Characters of live output the metadata channel carries while the algorithm runs (§11). */
 const STREAM_BUDGET = 30_000
 
 /**
@@ -58,7 +58,7 @@ export const Parameters = Schema.Struct({
     description:
       'JSON string of algorithm parameters. Example: \'{"Parameter 0": "/path/to/input.shp", "Parameter 1": 100, "Parameter 2": "/path/to/output.shp"}\'',
   }),
-  // Presented as a total duration but enforced as an IDLE clock (§8.4, §11.2): an algorithm that keeps reporting
+  // Presented as a total duration but enforced as an IDLE clock (§8.4, §11): an algorithm that keeps reporting
   // progress may run far longer than this, which is what makes long jobs possible at all. The floor and the default
   // are the executor's own `IDLE_FLOOR_SECONDS` and `IDLE_DEFAULT_SECONDS`.
   timeout: Schema.Int.check(Schema.isGreaterThanOrEqualTo(10))
@@ -99,7 +99,7 @@ export const RunQgisAlgorithmTool = Tool.define<
       const instance = yield* InstanceState.context
 
       // Snapshotted at entry so the refusals below still carry the environment line, and taken again after the gate
-      // because a round can land while ctx.ask is waiting on the user (§11.2 环境头快照).
+      // because a round can land while ctx.ask is waiting on the user (§11 环境头快照).
       const entryHeader = yield* GeoTool.qgisHeader(status)
 
       /** A refusal from before any subprocess existed: never an elapsed footer. */
@@ -221,7 +221,7 @@ export const RunQgisAlgorithmTool = Tool.define<
 
       const nearest = known ? [] : yield* catalog.suggest(params.algorithm, "algorithm")
       const hints = GeoQgis.QgisExecutor.precheck(params.algorithm, known, parsed as Record<string, unknown>, nearest)
-      // The runner script names no tools itself (§11.2), so the pointer comes from this layer: search when the
+      // The runner script names no tools itself (§11), so the pointer comes from this layer: search when the
       // algorithm is unknown, the schema when the algorithm is known but its parameters are not.
       const parameterTrouble = hints.some(
         (hint) =>

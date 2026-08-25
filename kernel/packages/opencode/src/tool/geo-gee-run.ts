@@ -15,7 +15,7 @@ import DESCRIPTION from "./geo-gee-run.txt"
  *
  * The kernel decides whether Earth Engine can be used and runs the interpreter; refusing before anything spawns,
  * live visibility, the ending banner and the `reject` call below belong here. Nothing else in the tree calls
- * `reject`, so §5.5's lazy-authorization loop is closed at that line or nowhere (§11.2 接线). --- */
+ * `reject`, so §5.5's lazy-authorization loop is closed at that line or nowhere (§11 接线). --- */
 
 /** Cap on the live `ctx.metadata` payload; the returned text is capped separately below. */
 const STREAM_BUDGET = 30_000
@@ -82,7 +82,7 @@ export const RunGeeScriptTool = Tool.define<
       const instance = yield* InstanceState.context
 
       // Taken at entry so the parameter refusals carry the environment line too, and again after the gate because
-      // a probe can land while ctx.ask waits on the user (§11.2 环境头快照).
+      // a probe can land while ctx.ask waits on the user (§11 环境头快照).
       const entryHeader = yield* GeoTool.geeHeader(status)
 
       const refuse = (heading: string, lines: readonly string[], metadata: Metadata) => ({
