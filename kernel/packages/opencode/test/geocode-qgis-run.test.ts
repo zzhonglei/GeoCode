@@ -1027,9 +1027,9 @@ describe("the string the user is asked to approve", () => {
   })
 
   test("non-string values survive, because they are what makes a call dangerous", () => {
-    // `BURN=99` is the difference between overwriting an existing raster and leaving it alone, and rendering
-    // only the paths would show a call that looks like every other one.
-    const shown = describeCall("gdal:rasterize_over", { INPUT_RASTER: "/data/dem.tif", BURN: 99, ADD: false })
-    expect(shown).toBe("gdal:rasterize_over(INPUT_RASTER=/data/dem.tif, BURN=99, ADD=false)")
+    // `gdal:rasterize_over_fixed_value` burns BURN into an existing raster, and rendering only the paths would
+    // show a call that looks like every other one.
+    const shown = describeCall("gdal:rasterize_over_fixed_value", { INPUT_RASTER: "/data/dem.tif", BURN: 99, ADD: false })
+    expect(shown).toBe("gdal:rasterize_over_fixed_value(INPUT_RASTER=/data/dem.tif, BURN=99, ADD=false)")
   })
 })
