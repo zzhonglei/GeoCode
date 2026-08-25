@@ -11,11 +11,7 @@ import { NetResolver } from "@/geo/net/resolver"
 import { NetRoute } from "@/geo/net/route"
 import type { Target } from "@/geo/net/types"
 
-/* Path resolution and the two route forms (docs/GEOKERNEL.md §3.3).
- *
- * The headline behaviour is an ordering claim — direct first, proxy only after
- * direct has failed — so the tests are built to be able to tell the two apart
- * rather than merely to see one of them work. */
+/* Path resolution, the two route forms and credential redaction (docs/GEOKERNEL.md §3.3). */
 
 const material = (() => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "geo-net-resolve-"))
@@ -97,9 +93,7 @@ async function closedPort(): Promise<number> {
 describe("net path resolution", () => {
   test.skipIf(!certificate)("a working direct connection ends the search there", async () => {
     const target = await tlsTarget()
-    // A perfectly good proxy is listed as a candidate. It must never be reached:
-    // when direct works, proxy discovery does not start at all, which is what
-    // keeps the whole mechanism invisible to users who do not need it (§3.3).
+    // A working proxy is offered as a candidate and never reached: `resolve` returns on a successful direct probe.
     const proxyPort = await proxyTo(target.port)
 
     const resolution = await NetResolver.resolve(target, {
@@ -117,8 +111,7 @@ describe("net path resolution", () => {
 
   test.skipIf(!certificate)("a failing direct connection falls back to a verified proxy", async () => {
     const real = await tlsTarget()
-    // Same host so the certificate still matches, but a port nothing answers on:
-    // direct fails, while the proxy tunnels to where the service really is.
+    // Same host so the certificate still matches, but a port nothing answers on: direct fails where the proxy works.
     const target: Target = { id: "test", host: "localhost", port: await closedPort() }
     const proxyPort = await proxyTo(real.port)
 
@@ -139,9 +132,6 @@ describe("net path resolution", () => {
     const target: Target = { id: "test", host: "localhost", port: await closedPort() }
     const dead = await closedPort()
 
-    // An environment variable states intent, not fact: it can name a proxy that
-    // stopped running months ago. Adopting it unverified would turn a clean
-    // "cannot reach this" into a confusing failure much further downstream.
     const resolution = await NetResolver.resolve(target, {
       env: { HTTPS_PROXY: `http://127.0.0.1:${dead}` },
       ports: [],
@@ -154,68 +144,36 @@ describe("net path resolution", () => {
   })
 
   test("a SOCKS-only declaration is skipped rather than adopted", () => {
-    // Consuming runtimes need an extra optional dependency to speak SOCKS and
-    // raise without it — adopting one would break users whose direct connection
-    // works today (§12).
     expect(NetDiscovery.declared({ ALL_PROXY: "socks5://127.0.0.1:1080" })).toBeUndefined()
     expect(NetDiscovery.declared({ HTTPS_PROXY: "127.0.0.1:7890" })).toBe("http://127.0.0.1:7890")
   })
 
   test("and skipping it is now said out loud, named the way a route is named", () => {
-    /* Skipping is the right call; doing it in silence was not.
-     *
-     * A user whose network only works through that proxy was told "cannot be
-     * reached" forever — the same three words a user with no network at all
-     * gets — while the one fact explaining it was known here and dropped. §12
-     * recorded the skip as a tradeoff and left this half open.
-     */
     expect(NetDiscovery.skipped({ ALL_PROXY: "socks5://127.0.0.1:1080" })).toEqual(["socks5:127.0.0.1:1080"])
-    // Nothing to say when nothing was skipped: a field that is always present
-    // is one an interface has to render around forever.
     expect(NetDiscovery.skipped({ HTTPS_PROXY: "http://127.0.0.1:7890" })).toEqual([])
     expect(NetDiscovery.skipped({})).toEqual([])
 
-    // The scheme is kept because it is the REASON — "we refused this because it
-    // is SOCKS" — and the host and port because a user has to recognise their
-    // own configuration in it.
+    // The scheme lowercased and kept, since it is the reason the declaration was refused.
     expect(NetDiscovery.skipped({ ALL_PROXY: "SOCKS5H://proxy.example.com:1080" })).toEqual([
       "socks5h:proxy.example.com:1080",
     ])
-    // A port nobody wrote is not invented. 1080 is a convention, not a fact
-    // about this user's declaration.
+    // A port nobody wrote is not invented: 1080 is a convention, not part of this declaration.
     expect(NetDiscovery.skipped({ ALL_PROXY: "socks5://127.0.0.1" })).toEqual(["socks5:127.0.0.1"])
     expect(NetDiscovery.skipped({ ALL_PROXY: "socks5://[::1]:1080" })).toEqual(["socks5:[::1]:1080"])
 
-    // No credentials at all, and still no host to name: without the `//` the
-    // parser puts the whole thing in the path and reports an empty host. The
-    // check for that is separate from the credential one — this is the only
-    // case that reaches it, and without it the answer would be a bare
-    // `socks5:` that says nothing and looks like it does.
+    // Both parse with an empty host — no `//` in the first, nothing after it in the second — leaving nothing to name.
     expect(NetDiscovery.skipped({ ALL_PROXY: "socks5:127.0.0.1:1080" })).toEqual(["socks5:unparseable"])
     expect(NetDiscovery.skipped({ ALL_PROXY: "socks5://" })).toEqual(["socks5:unparseable"])
   })
 
   test("no credential can be present, because none is ever taken", () => {
-    /* THE assertion of this fix, and the one the first attempt failed.
-     *
-     * That attempt published the declaration itself and leaned on `redact.url`
-     * to wipe it — which FAILS OPEN, returning the value untouched, for exactly
-     * the inputs a URL parser chokes on. The tripwire then used the password
-     * `hunter2`, the one shape that happens to survive parsing, so it passed.
-     *
-     * The value published now is ASSEMBLED from parsed fields, so there is no
-     * cleaning step to get wrong: a hostname and a port cannot carry a
-     * `user:password@` even in principle. These four are the shapes that broke
-     * the old one, plus the ordinary one it handled.
-     */
     const secrets = [
       ["socks5://alice:hunter2@10.0.0.9:1080", "socks5:10.0.0.9:1080"],
-      // A `/` in the password: `new URL` throws outright.
+      // A `/` in the password: `new URL` throws.
       ["socks5://alice:pa/ss@10.0.0.9:1080", "socks5:unparseable"],
-      // …and in the username.
+      // A `/` in the username parses instead, to the host `al`, so the @-without-a-user check is what catches it.
       ["socks5://al/ice:secret@10.0.0.9:1080", "socks5:unparseable"],
-      // No `//` at all. This one does NOT throw — it parses with an EMPTY host,
-      // so a bare try/catch would let `socks5::` through and call it safe.
+      // No `//` at all parses too, with an empty host and no username, so a try/catch alone would return `socks5:`.
       ["socks5:alice:hunter2@10.0.0.9:1080", "socks5:unparseable"],
       ["socks5://alice:p@ssw0rd@10.0.0.9:1080", "socks5:10.0.0.9:1080"],
     ] as const
@@ -223,7 +181,6 @@ describe("net path resolution", () => {
     for (const [declared, expected] of secrets) {
       const published = NetDiscovery.skipped({ ALL_PROXY: declared })
       expect(published).toEqual([expected])
-      // Belt and braces: whatever the shape, nothing secret survives.
       for (const item of published) {
         for (const secret of ["hunter2", "secret", "pa/ss", "p@ssw0rd", "alice", "al/ice"]) {
           expect(item).not.toContain(secret)
@@ -233,8 +190,7 @@ describe("net path resolution", () => {
   })
 
   test("the same value is never reported twice, however many variables carry it", () => {
-    // Declaring a proxy usually means exporting it under three names. Three
-    // identical lines in a status panel reads as three problems.
+    // A proxy is usually exported under three names, and three identical lines read as three problems.
     expect(
       NetDiscovery.skipped({ ALL_PROXY: "socks5://127.0.0.1:1080", all_proxy: "socks5://127.0.0.1:1080" }),
     ).toEqual(["socks5:127.0.0.1:1080"])
@@ -247,15 +203,11 @@ describe("net route forms", () => {
     expect(env.HTTP_PROXY).toBe("http://127.0.0.1:7890")
     expect(env.https_proxy).toBe("http://127.0.0.1:7890")
     expect(env.all_proxy).toBe("http://127.0.0.1:7890")
-    // Loopback stays off the proxy, or a script's local callback never arrives.
     expect(env.NO_PROXY).toContain("127.0.0.1")
   })
 
   test("the direct form blanks inherited variables instead of ignoring them", () => {
     const env = NetRoute.subprocessEnv({ kind: "direct" }, { HTTPS_PROXY: "http://inherited:7890" })
-    // Not injecting is not enough: an inherited value would keep sending the
-    // subprocess through a proxy the resolver just decided against, so "direct"
-    // would not be true (§3.3).
     expect(env.HTTPS_PROXY).toBe("")
   })
 
@@ -278,8 +230,6 @@ describe("net redaction", () => {
   })
 
   test("an unparseable value still loses its credentials", () => {
-    // Failing open here would leak exactly in the case most likely to be
-    // malformed in the first place.
     expect(NetRedact.url("not a url //bob:secret@host:1/")).not.toContain("secret")
   })
 
@@ -289,19 +239,6 @@ describe("net redaction", () => {
   })
 
   test("the four shapes that used to come back with the password still in them", () => {
-    /* Every one of these was measured returning its own input.
-     *
-     * The first two PARSE — a `/` anywhere in the username or password puts it
-     * outside userinfo, so `new URL` finds nothing to clear and reports success
-     * — and the parser's success was being taken as proof the value was clean.
-     * The last two carry no `//`, which the textual fallback required before it
-     * would match anything at all.
-     *
-     * Together they are most of the ways a person actually writes ALL_PROXY,
-     * and each of the three tests above passes on all four regardless: the one
-     * form that survived redaction, `alice:hunter2@`, is exactly the form the
-     * samples were written with.
-     */
     const leaking = [
       "socks5://alice:pa/ss@10.0.0.9:1080",
       "socks5://al/ice:secret@10.0.0.9:1080",
@@ -313,26 +250,17 @@ describe("net redaction", () => {
       for (const secret of ["hunter2", "pa/ss", "secret", "alice"]) {
         expect(redacted).not.toContain(secret)
       }
-      // Host and port survive, or the value stops being diagnosable and users
-      // who need a proxy lose the only line that tells them which one was read.
       expect(redacted).toContain("10.0.0.9:1080")
     }
 
-    /* ★ The last of the four is why `alice` is in that secret list.
-     *
-     * `alice:` is a syntactically perfect URL scheme, so a rule that preserves
-     * "the scheme" preserves the USERNAME on a declaration written without one
-     * — the first version of this fix returned `alice:10.0.0.9:1080` and this
-     * assertion is what caught it. A real scheme is kept, and that is a
-     * separate question from whether the prefix looks like one. */
+    // Why `alice` is in that list: `alice:` is a syntactically perfect scheme, so a rule that keeps "the scheme"
+    // keeps the username of a declaration written without one.
     expect(NetRedact.url("alice:hunter2@10.0.0.9:1080")).toBe("10.0.0.9:1080")
     expect(NetRedact.url("socks5:alice:hunter2@10.0.0.9:1080")).toBe("socks5:10.0.0.9:1080")
   })
 
   test("nothing with an @ still in it is ever handed back", () => {
-    // The rule that replaced "trust the parser": an `@` surviving redaction
-    // means something in front of it was not understood, and everything this
-    // module exists to remove sits in front of an `@`.
+    // An `@` surviving redaction means something in front of it — which is where credentials sit — was not understood.
     for (const value of [
       "socks5://alice:hunter2@10.0.0.9:1080",
       "socks5://alice:pa/ss@10.0.0.9:1080",
@@ -345,8 +273,6 @@ describe("net redaction", () => {
   })
 
   test("environment values go through the same filter, one by one", () => {
-    // `env` is the diagnostics exit's half of the job, and it inherits whatever
-    // `url` does — including, until now, the failing-open.
     const cleaned = NetRedact.env({
       ALL_PROXY: "socks5://alice:pa/ss@10.0.0.9:1080",
       GDAL_DATA: "/opt/gdal",

@@ -19,20 +19,14 @@ import { GeoRuntime } from "@/geo/runtime"
 import { GeoStatus } from "@/geo/status"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-/* GEE execution and the runtime library (docs/GEOKERNEL.md §5.9, §5.10).
- *
- * The library is a faithful port of the one that survived production; the
- * whole point is that it is unchanged, so the test that matters is that the
- * generated constant still equals the source. The rest holds down the
- * injection: six things a script must not have to arrange for itself, an idle
- * clock rather than a total one, and a return shape that keeps the streamed
- * output separate from the agent-facing facts. */
+/* GEE execution and the runtime library (docs/GEOKERNEL.md §5.9, §5.10): the generated constant still equalling its
+ * source, the six things a script must not arrange for itself, an idle clock rather than a total one, and a return
+ * that keeps the streamed output apart from the agent-facing facts. */
 
 const FILE = path.join(Global.Path.config, "machine.json")
 const write = (value: object) => Effect.promise(() => fs.promises.writeFile(FILE, JSON.stringify(value), "utf-8"))
 const clear = Effect.promise(() => fs.promises.rm(FILE, { force: true }))
-// The config directory is shared across test files; leaving a configuration
-// behind would decide another file's starting state.
+// The config directory is shared across test files; a configuration left behind decides another file's start state.
 afterAll(() => fs.rmSync(FILE, { force: true }))
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "geo-gee-x-"))
@@ -59,18 +53,15 @@ describe("gee runtime library", () => {
   })
 
   test("the ported surface is intact", () => {
-    // The library is a port, not a rewrite (§5.10). These are the entry points
-    // scripts are told to use, plus the three heartbeat forms the idle clock
-    // depends on — if any went missing in the port, scripts written against
-    // the documented surface would fail at import time.
+    // The names `geo-gee-run.txt` tells scripts to import — one dropped in the port and `from geocode import …`
+    // fails before the script starts — then the three heartbeat forms the idle clock rests on.
     for (const name of ["init_gee", "load_region", "export_image", "check_coverage", "download_image", "heartbeat"]) {
       expect(GEOCODE_PY).toContain(`def ${name}(`)
     }
     for (const form of ["_Heartbeat", "_FileHeartbeat", "_GeedimProgressHeartbeat"]) {
       expect(GEOCODE_PY).toContain(`class ${form}`)
     }
-    // The behaviours the design calls out by name, each one a decision rather
-    // than an implementation detail (§5.10).
+    // The behaviours §5.10 names, each a decision rather than an implementation detail.
     expect(GEOCODE_PY).toContain("load_region expects exactly one feature")
     expect(GEOCODE_PY).toContain("ee.Image.constant(1)")
     expect(GEOCODE_PY).toContain("shutil.move")
@@ -78,23 +69,9 @@ describe("gee runtime library", () => {
     // And no reference to a config file that no longer exists.
     expect(GEOCODE_PY).not.toContain("geocode.json")
 
-    // The three missing-package hints name the tool to call again.
-    //
-    // They are read by the AGENT at the one moment they fire: a script just
-    // died on an absent import, the agent installs the package, and the hint's
-    // closing promise — usable immediately, no restart — is only actionable if
-    // it says WHAT to call. The port had generalised these to "retry the
-    // script", which names nothing: the agent may be holding an inline string
-    // or a path, and "the script" points at neither tool nor file.
-    //
-    // Worth pinning because the rule that produced the generalisation is real
-    // but belongs elsewhere: §11.2 took tool names OUT of the QGIS runner,
-    // which the kernel generates and the tool layer can annotate afterwards.
-    // This library is imported BY the user's script and raises inside Python,
-    // where no layer above can add anything — so here the name has to be in
-    // the string itself.
-    // Counted, not merely present: there are three such hints (geopandas,
-    // geemap, geedim) and the port had generalised all three at once.
+    // The three missing-package hints (geopandas, geemap, geedim) name the tool in the string itself, because they
+    // raise inside the user's own script where no layer above can annotate them, and an agent holding an inline
+    // source has no file name to fall back on either.
     expect(GEOCODE_PY.match(/retry the RunGeeScript call/g)).toHaveLength(3)
   })
 })
@@ -105,17 +82,9 @@ const systemPython = ["python3", "python"].find(
 
 describe.skipIf(!systemPython)("gee export, at each terminal state", () => {
   test("only COMPLETED returns — every other ending raises", () => {
-    // The runtime library had no execution coverage at all; everything about it
-    // was asserted as strings, and "does it raise" is not a question a string
-    // can answer. It is also the only question the tool layer asks:
-    // `geo-gee-run.ts` decides success from the exit code, so an export that
-    // ended FAILED and returned normally reached the Agent as a completed run
-    // — no error_code, nothing marked failed, a file reported that is not on
-    // anyone's Drive.
-    //
-    // The shipping module is executed rather than a copy of it: `import ee`
-    // happens inside the function, so a fake in sys.modules runs the real thing
-    // on any python3, with no Earth Engine account and no network.
+    // `geo-gee-run.ts` reads success off the exit code alone, so an export that ended FAILED and returned normally
+    // reaches the agent as a completed run — no error_code, and a file reported that is on nobody's Drive. The
+    // shipping module runs, not a copy: `import ee` happens inside the function, so a fake in sys.modules is enough.
     const run = Bun.spawnSync(
       [
         systemPython!,
@@ -132,13 +101,10 @@ describe.skipIf(!systemPython)("gee export, at each terminal state", () => {
     >
 
     expect(answers.COMPLETED!.outcome).toBe("returned")
-    // CANCELLED among them: someone stopping the task from the Code Editor is
-    // not an error, but it is not an export either, and the one thing the Agent
-    // must not do is report a file that is not there.
+    // CANCELLED included: stopping the task from the Code Editor is not an error, but it is not an export either.
     for (const state of ["FAILED", "CANCELLED", "UNKNOWN"]) expect(answers[state]!.outcome, state).toBe("raised")
 
-    // With the reason, and with the id that outlives the script — the export
-    // itself keeps running service-side, and that id is how a user reaches it.
+    // Carrying the id, because the export keeps running service-side and that is how a user reaches it afterwards.
     expect(answers.FAILED!.message).toContain("quota exhausted")
     for (const state of ["FAILED", "CANCELLED", "UNKNOWN"]) expect(answers[state]!.message, state).toContain("T-fake")
   })
@@ -149,8 +115,6 @@ describe("gee library materialization", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "geo-gee-lib-"))
     try {
       const first = GeeExecutor.ensureLibrary(dir, "X = 1\n")
-      // The file name is fixed — `from geocode import …` requires it — so the
-      // hash has to live one level up.
       expect(path.basename(first)).toMatch(/^[0-9a-f]{8}$/)
       expect(fs.readFileSync(path.join(first, "geocode.py"), "utf8")).toBe("X = 1\n")
 
@@ -194,22 +158,20 @@ describe("gee execution", () => {
 
       const options = captured.at(-1)!
       const env = options.env!
-      // 1. the resolved route, so remote traffic follows what Net decided
+      // 1. the route Net resolved
       expect(env.HTTPS_PROXY).toBe("http://127.0.0.1:7890")
       // 2. the project, so no script hardcodes it
       expect(env.GEE_PROJECT).toBe("demo-project")
       // 3. the library path, so `from geocode import …` resolves
       expect(env.PYTHONPATH!.split(path.delimiter)[0]).toMatch(/gee-runtime/)
-      // 4. the fault handler, which we cannot insert into a script we did not write
+      // 4. the fault handler, which cannot be inserted into a script we did not write
       expect(env.PYTHONFAULTHANDLER).toBe("1")
       // 5. and 6. the encoding pair, so non-English output survives the pipe
       expect(env.PYTHONUTF8).toBe("1")
       expect(env.PYTHONIOENCODING).toBe("UTF-8")
       expect(options.cwd).toBe("/work")
 
-      // The streamed output and the facts stay apart: the outcome hands back
-      // the raw result plus the environment, and never a rendered string
-      // (§9.1 第二条硬性形态).
+      // Raw result and environment, never a rendered string — composing it is the tool layer's (§9.1 第二条硬性形态).
       expect(outcome.mode).toBe("inline")
       expect(outcome.environment).toBe(environment)
       expect(Object.keys(outcome)).toEqual(["result", "environment", "mode"])
@@ -224,14 +186,8 @@ describe("gee execution", () => {
         yield* GeeExecutor.run(runtime, environment, { script: "x", onChunk: () => Effect.void, idleSeconds })
         idles.push(Duration.toMillis(captured.at(-1)!.clocks.idle!))
       }
-      // Default, floored, honoured. A total clock could not work here: a
-      // single remote call legitimately runs for hours, and the heartbeat in
-      // the runtime library is what makes an idle clock safe (§5.9 心跳契约).
-      //
-      // The floor is twice the library's heartbeat interval, and that is what
-      // it is FOR: a caller asking for 5 seconds — or for 30, which is the
-      // interval itself — would kill scripts that are heartbeating exactly as
-      // documented, which is the one thing the contract promises works.
+      // Default, floored, honoured. The floor is what keeps a caller's 5 seconds — or 30, the interval itself —
+      // from killing a script that is heartbeating exactly as the contract promises works (§5.9 心跳契约).
       expect(GeeExecutor.IDLE_FLOOR_SECONDS).toBeGreaterThan(GeeExecutor.HEARTBEAT_INTERVAL_SECONDS)
       expect(idles).toEqual([60_000, 60_000, 900_000])
       expect(captured.at(-1)!.clocks.total).toBeUndefined()
@@ -325,8 +281,7 @@ describe("gee gate", () => {
           const gate = yield* gee.gate()
           expect(gate.ok).toBe(true)
           if (gate.ok) {
-            // Everything the executor needs, as one object handed over — so
-            // nothing can change between "cleared" and "started" (§9.1, §4.9).
+            // One object handed over, so nothing can change between "cleared" and "started" (§9.1, §4.9).
             expect(gate.environment.python).toBe(python)
             expect(gate.environment.project).toBe("demo-project")
             expect(gate.environment.version).toBe("1.7.24")

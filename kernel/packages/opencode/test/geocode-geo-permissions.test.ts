@@ -14,23 +14,10 @@ import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
 import { GEE_READY, QGIS_READY, statusHolding } from "./lib/geocode-status"
 
-/* The geographic permission model, both layers (docs/TOOLS.md §4).
- *
- * The engine decides two different things with two different names:
- *
- *   visibility — by TOOL ID, in Permission.disabled
- *   execution  — by the key the tool declares in ctx.ask, in Permission.evaluate
- *
- * GeoCode's ids and keys diverge on purpose: `ReadGeoData` is what the model
- * reads, `geodata` is what a user reasons about. A table in permission/index.ts
- * bridges them, and a missing entry there does not raise anything — the rule is
- * written, it is simply never consulted. So both layers are asserted here rather
- * than one being inferred from the other, and the table joining them is pinned
- * on its own, below.
- *
- * Read as a matrix: for every agent, which geographic tools it can SEE and
- * which it can USE.
- */
+/* The geographic permission model, both layers (docs/TOOLS.md §4): visibility by TOOL ID in Permission.disabled,
+ * execution by the key the tool declares in `ctx.ask` in Permission.evaluate. GeoCode's ids and keys diverge, a
+ * table in permission/index.ts joins them, and a missing row there raises nothing — so neither layer is inferred
+ * from the other here, and the table is pinned on its own below. */
 
 const GEO_TOOLS = [
   "ReadGeoData",
@@ -71,45 +58,31 @@ afterEach(async () => {
 describe("what each agent can see", () => {
   it.instance("GeoAgent sees everything except the OSM group", () =>
     Effect.gen(function* () {
-      // Downloading from public services goes through the osmfetch subagent —
-      // capability isolation, and it only holds if the tools are ABSENT rather
-      // than present-and-refused. A model that can see a tool will try it, and
-      // "denied" is a poor way to learn a boundary (docs/TOOLS.md §4.3).
+      // Routing downloads through the osmfetch subagent only isolates anything if the OSM tools are ABSENT
+      // rather than present-and-refused: a model that can see a tool will try it (docs/TOOLS.md §4.3).
       expect(yield* visible("GeoAgent")).toEqual(["ReadGeoData", "QgisDoc", "RunQgisAlgorithm", "RunGeeScript"])
     }),
   )
 
   it.instance("plan sees the same four, because a planner must know what it will be able to do", () =>
     Effect.gen(function* () {
-      // Upstream's plan keeps its edit tools in view — a tool vanishes only
-      // when the last rule matching it is a wildcard deny, and plan's edit
-      // rules end in a narrow allow. The same shape gives plan `qgis` and
-      // `gee` as `ask`: present, and gated at the moment of use.
+      // A tool vanishes only when the last rule matching it is a wildcard deny, so plan's `qgis` and `gee` asks
+      // leave the tools present and gated at the moment of use, the shape that keeps its edit tools in view too.
       expect(yield* visible("plan")).toEqual(["ReadGeoData", "QgisDoc", "RunQgisAlgorithm", "RunGeeScript"])
     }),
   )
 
   it.instance("an agent that denies everything sees none of them", () =>
     Effect.gen(function* () {
-      // `summary` carries its own `"*": "deny"` — the same shape the osmfetch
-      // subagent uses.
-      //
-      // Worth being exact about what this does NOT prove. A wildcard deny
-      // matches any tool id directly, so it hides these eight whether or not
-      // the id-to-key table has an entry for them. The table is what a
-      // GROUP-level rule needs, and no agent in the line-up writes one that
-      // reaches here — so it is pinned separately, below.
+      // `summary` carries its own `"*": "deny"`, which matches a tool id directly and so hides these eight
+      // whether or not the id-to-key table has a row for them — the table is pinned separately, below.
       expect(yield* visible("summary")).toEqual([])
     }),
   )
 })
 
-/* The keys below can only be observed from an ask, and every geographic tool
- * checks its environment BEFORE it raises one (docs/TOOLS.md §4.3) — so a
- * machine with nothing installed reaches no ask at all. Both environments are
- * handed over ready; what is under test here is the permission model, not the
- * kernel's readiness logic.
- */
+/* Both environments are handed over ready because every geographic tool checks its own before it raises an ask
+ * (docs/TOOLS.md §4.3), so on a machine with nothing installed there is no key to observe. */
 describe("the keys the tools actually ask with", () => {
   const it = testEffect(
     LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
@@ -118,18 +91,9 @@ describe("the keys the tools actually ask with", () => {
     ]),
   )
 
-  /* The half a config file cannot state.
-   *
-   * Every rule above is written against a key. Which key a tool ASKS with is
-   * decided in its own source, and if the two drift there is no error: the
-   * unmatched key falls through to the engine's default `"*": "allow"` and the
-   * tool is quietly permitted for everyone — the rule is written, the rule is
-   * correct, the rule is never consulted.
-   *
-   * So the keys are read off the live calls. The ask is made to fail the
-   * instant it is recorded, which is also what keeps this test off the network
-   * and off the disk: nothing runs past the permission check.
-   */
+  /* Which key a tool ASKS with is decided in its own source, and a drift from the rules above raises nothing:
+   * the unmatched key falls through to the engine's `"*": "allow"` and the tool is quietly permitted for
+   * everyone. So the keys are read off live calls, and the ask fails the instant one is recorded. */
   const GROUPS: Record<(typeof GEO_TOOLS)[number], { key: string; params: Record<string, unknown> }> = {
     ReadGeoData: { key: "geodata", params: { filePath: "/tmp/nothing.tif" } },
     QgisDoc: { key: "qgis", params: { action: "list_groups" } },
@@ -151,10 +115,8 @@ describe("the keys the tools actually ask with", () => {
         const def = (yield* registry.all()).find((item) => item.id === tool)
         expect(def).toBeDefined()
 
-        // Every key the call asks for, in order. A path outside the working
-        // directory draws an `external_directory` ask first — upstream's, not
-        // ours — so that one is waved through and the geographic ask is the one
-        // that stops execution.
+        // Every key the call asks for, in order. A path outside the working directory draws upstream's
+        // `external_directory` ask first, so that one is waved through and the geographic ask is what stops it.
         const asked: string[] = []
         yield* def!
           .execute(GROUPS[tool].params, {
@@ -177,26 +139,12 @@ describe("the keys the tools actually ask with", () => {
   }
 })
 
-/* The table that joins the two halves above, pinned on its own.
- *
- * Everything before this asserts an AGENT, and no agent in the line-up reaches
- * the table: the ones holding geographic grants end in an allow or an ask, and
- * the ones holding none carry `"*": "deny"`, which matches a tool id directly
- * whether or not the table has an entry for it. Delete a row from GEO and every
- * assertion above still passes.
- *
- * The ruleset below is where a row actually matters, and it is not a synthetic
- * shape: it is what a user-defined agent gets. agent.ts builds one from
- * `merge(defaults, user)` — the engine's `"*": "allow"`, then the geographic
- * denies, which arrive through the user layer because the assembly layer merges
- * first. Such an agent is closed to the geographic tools only if the table
- * carries the rule from the group name to the ids.
- *
- * Upstream pins its own `edits` table exactly this way — a default allow plus
- * one group-level deny, asserted per tool id (test/permission/next.test.ts,
- * "disabled - disables edit/write/apply_patch when edit denied"). This is the
- * same test for the third table.
- */
+/* Delete a row from permission/index.ts's GEO table and every assertion above still passes: no agent in the
+ * line-up reaches it, since the ones holding geographic grants end in an allow or an ask and the ones holding
+ * none carry `"*": "deny"`, which matches a tool id directly. The ruleset below is what a user-defined agent
+ * gets — `merge(defaults, user)`, the engine's `"*": "allow"` plus the geographic denies arriving through the
+ * user layer — and it closes only if the table carries the group name onto the ids, the way upstream pins
+ * `edits` in test/permission/next.test.ts. */
 describe("a rule written against a group reaches every tool in it", () => {
   const MEMBERS: Record<string, readonly string[]> = {
     geodata: ["ReadGeoData"],
@@ -214,9 +162,8 @@ describe("a rule written against a group reaches every tool in it", () => {
           { permission: group, pattern: "*", action: "deny" },
         ],
       )
-      // Compared as a whole set rather than membership by membership: with
-      // eight ids mapped onto four groups, asking only "are my four hidden"
-      // would pass a row filed under the wrong group.
+      // Compared as a whole set: with eight ids over four groups, asking only "are my four hidden" would pass a
+      // row filed under the wrong group.
       expect([...hidden].sort()).toEqual([...members].sort())
     })
   }
@@ -228,41 +175,24 @@ describe("what each agent can do", () => {
       expect(yield* verdict("GeoAgent", "geodata")).toBe("allow")
       expect(yield* verdict("GeoAgent", "osm")).toBe("deny")
 
-      /* Both executing groups ask, for reasons that do not transfer between
-       * them — which is why the prompts they raise are shaped differently
-       * (cli/cmd/run/permission.shared.ts).
-       *
-       * `qgis` is asked because the call can be READ and judged. `gee` is asked
-       * because it CANNOT: a script is arbitrary Python and its output path
-       * lives inside a string literal, so what the user grants is the
-       * capability — credentials, quota, and imagery landing somewhere on their
-       * disk — rather than any particular operation. */
+      // Both executing groups ask, but for reasons that do not transfer: a `qgis` call can be read and judged, a
+      // GEE script cannot, so what `gee` grants is the capability rather than any particular operation.
       expect(yield* verdict("GeoAgent", "gee")).toBe("ask")
 
-      /* `qgis` is the one group GeoCode asks about, and the only place it is
-       * stricter than upstream is with its own tools.
-       *
-       * Not a leftover from plan mode: running an algorithm is the one thing
-       * this product does that undo cannot reach (geographic data is outside
-       * the checkpoint mechanism), and numbering only protects the outputs
-       * `QgisDestination.reserve` can see — 56 of 422 algorithms in a real 3.44
-       * registry declare no destination parameter at all. Flipping this back to
-       * a plain "allow" removes the last thing standing between the model and
-       * an in-place overwrite of the user's data. */
+      // Running an algorithm is the one thing this product does that undo cannot reach, and numbering only
+      // protects the outputs `QgisDestination.reserve` can recognise, so a plain allow here would leave nothing
+      // between the model and an in-place overwrite of the user's data.
       expect(yield* verdict("GeoAgent", "qgis", "native:buffer(INPUT=/data/a.shp, OUTPUT=/data/b.shp)")).toBe("ask")
-      // And looking something up never interrupts, at any time. A prompt for
-      // reading documentation is a prompt that teaches the user to dismiss
-      // prompts, which costs exactly the one above.
+      // And looking something up never interrupts: a prompt for reading documentation teaches the user to
+      // dismiss prompts, which costs exactly the one above.
       expect(yield* verdict("GeoAgent", "qgis", "doc:search:buffer")).toBe("allow")
     }),
   )
 
   it.instance("plan reads freely, looks things up freely, and is asked before it acts", () =>
     Effect.gen(function* () {
-      // Reading data and reading documentation are how a plan gets written;
-      // neither may interrupt. Running an algorithm or a script changes the
-      // world, and plan mode's whole premise is that the user does not want
-      // that yet — so it is asked, not silently refused and not silently done.
+      // The executing groups stay askable so plan keeps seeing them (config/geocode.ts); `osm` is the one
+      // denied outright.
       expect(yield* verdict("plan", "geodata")).toBe("allow")
       expect(yield* verdict("plan", "qgis", "doc:list_groups")).toBe("allow")
       expect(yield* verdict("plan", "qgis", "native:buffer")).toBe("ask")
@@ -273,10 +203,8 @@ describe("what each agent can do", () => {
 
   it.instance("the `doc:` namespace is what separates looking up from running", () =>
     Effect.gen(function* () {
-      // QgisDoc and RunQgisAlgorithm share one key, so the pattern is the only
-      // thing telling them apart. If QgisDoc stopped prefixing its patterns,
-      // `doc:*` would match nothing and consulting documentation would start
-      // prompting the user mid-plan.
+      // QgisDoc and RunQgisAlgorithm share one key, so the pattern is all that tells them apart: stop prefixing
+      // and `doc:*` matches nothing, at which point consulting documentation starts prompting mid-plan.
       for (const action of ["doc:list_groups", "doc:search:buffer", "doc:read:native:buffer"]) {
         expect(yield* verdict("plan", "qgis", action)).toBe("allow")
       }
@@ -289,16 +217,9 @@ describe("what each agent can do", () => {
 
   it.instance("the four denies are what close the engine's default allow", () =>
     Effect.gen(function* () {
-      // Every agent starts from `"*": "allow"`, so a geographic key with no
-      // rule of its own is not "unset" — it is GRANTED. The denies in the
-      // assembly layer are the only thing standing between that default and a
-      // capability nobody asked to hand out.
-      //
-      // Asserted against a synthetic default-allow ruleset rather than through
-      // an existing agent, because every agent that holds no geographic grant
-      // today (`summary`, `title`) also carries its own `"*": "deny"` — they
-      // would answer "deny" whether our rules were there or not, and prove
-      // nothing about them.
+      // Every agent starts from `"*": "allow"`, so a geographic key with no rule of its own is GRANTED rather
+      // than unset. Asserted against a synthetic default-allow ruleset because every agent holding no
+      // geographic grant today also carries its own `"*": "deny"` and would answer "deny" without ours.
       const closed = Permission.merge(
         Permission.fromConfig({ "*": "allow" }),
         Permission.fromConfig((GeoCodeConfig.base().permission ?? {}) as Record<string, "deny">),
@@ -313,15 +234,8 @@ describe("what each agent can do", () => {
 describe("the user still owns their own machine", () => {
   it.instance("the geographic denies are defaults, not a layer the user cannot reach", () =>
     Effect.gen(function* () {
-      // Upstream places the user's own rules LAST for every agent, so findLast
-      // lets them override anything — including plan's edit lock. GeoCode's
-      // geographic denies are merged FIRST, which gives them the same standing
-      // as upstream's own defaults rather than inventing an enforced layer
-      // upstream has no equivalent of (docs/KERNEL.md §5).
-      //
-      // Asserted through the engine rather than by reading the config: what
-      // matters is that a later rule wins, which is the property a user's
-      // config relies on.
+      // The geographic denies are merged FIRST, so `findLast` still lets a later rule win — the same standing as
+      // upstream's own defaults, rather than an enforced layer upstream has no equivalent of (docs/KERNEL.md §5).
       const agent = yield* Agent.Service.use((svc) => svc.get("GeoAgent"))
       const overridden = Permission.merge(agent!.permission, Permission.fromConfig({ osm: "allow" }))
       expect(Permission.evaluate("osm", "*", overridden).action).toBe("allow")
@@ -330,18 +244,10 @@ describe("the user still owns their own machine", () => {
 })
 
 describe("what the prompt actually says", () => {
-  /* The other half of a permission decision, and the half that has no engine
-   * behind it: a verdict of `ask` is only worth what the dialog shows.
-   *
-   * Kept in this file rather than beside the CLI's own tests because the two
-   * halves fail together. Flip `gee` back to `allow` and the rendering below is
-   * dead code; delete the rendering and the `ask` verdicts above become dialogs
-   * reading "Call tool gee" with nothing in them. Neither shows up in the other
-   * file.
-   *
-   * `permissionInfo` is a pure function, so no instance is needed — hence plain
-   * `test` here rather than the `it.instance` used above.
-   */
+  /* The half of a permission decision with no engine behind it: an `ask` verdict is worth what the dialog shows.
+   * Kept beside the verdicts because the two fail together — flip `gee` back to `allow` and the rendering below
+   * is dead code, delete the rendering and the `ask` verdicts above become dialogs reading "Call tool gee".
+   * `permissionInfo` is pure, hence plain `test` rather than the `it.instance` above. */
   const request = (permission: string, extra: Partial<PermissionRequest> = {}): PermissionRequest => ({
     id: "perm-geo",
     sessionID: "ses-geo",
@@ -353,12 +259,9 @@ describe("what the prompt actually says", () => {
   })
 
   test("none of the four keys falls through to the generic dialog", () => {
-    /* The tripwire that matters most, because the fallback is SILENT: a key
-     * that is not recognised still renders, still offers Allow/Reject, and
-     * still looks like a working prompt — it just contains nothing to judge.
-     * Upstream's table (`tool.ts`'s TOOL_RULES) is keyed by tool NAME, so none
-     * of these four can ever be registered there, and any refactor that routes
-     * them back through it lands exactly here. */
+    /* The fallback is SILENT: an unrecognised key still renders, still offers Allow/Reject and still looks like
+     * a working prompt, with nothing in it to judge. `tool.ts`'s TOOL_RULES is keyed by tool NAME, so none of
+     * these four can be registered there, and a refactor routing them back through it lands here. */
     for (const key of ["geodata", "qgis", "osm", "gee"]) {
       const info = permissionInfo(request(key, { patterns: ["x"], metadata: { algorithm: "native:buffer" } }))
       expect(info.title).not.toBe(`Call tool ${key}`)
@@ -367,8 +270,7 @@ describe("what the prompt actually says", () => {
   })
 
   test("an algorithm call is spelled out, parameter by parameter", () => {
-    // What the user is asked to judge is whether a path sits outside their
-    // work — so the path has to survive into the dialog, absolute and whole.
+    // What the user judges is whether a path sits outside their work, so it has to reach the dialog whole.
     const info = permissionInfo(
       request("qgis", {
         patterns: ["native:buffer(INPUT=/data/a.shp, OUTPUT=/tmp/out.shp)"],
@@ -381,14 +283,9 @@ describe("what the prompt actually says", () => {
   })
 
   test("the two tools sharing the qgis key get two different dialogs", () => {
-    /* One key, two tools — and a user who narrows it by hand (`"qgis": "ask"`
-     * on an agent of their own) gets asked by both. If the dialogs were
-     * interchangeable, the user would be approving "qgis" without knowing
-     * whether this one reads documentation or runs something that writes.
-     *
-     * The reading dialog also must not leak the pattern syntax: `doc:` is a
-     * namespace we invented for rule matching, and showing it asks the user to
-     * parse our internals. */
+    /* A user who narrows the key by hand (`"qgis": "ask"` on an agent of their own) gets asked by both tools, so
+     * interchangeable dialogs would have them approving "qgis" without knowing whether this one reads
+     * documentation or runs something that writes. */
     const doc = permissionInfo(
       request("qgis", { patterns: ["doc:read:native:buffer"], metadata: { action: "read", target: "native:buffer" } }),
     )
@@ -397,9 +294,8 @@ describe("what the prompt actually says", () => {
     )
     expect(doc.title).not.toBe(run.title)
     expect(doc.title).toMatch(/documentation/i)
-    // The reading dialog stays at the title. WHICH algorithm is being looked up
-    // changes nothing a user decides — it is read-only either way — so spending
-    // a line on it spends attention the dialog below actually needs.
+    // The reading dialog stays at the title: which algorithm is looked up changes nothing a user decides, so a
+    // line spent on it is attention the running dialog needs.
     expect(doc.lines.join("\n")).not.toContain("native:buffer")
     // And never the raw pattern, which is a rule-matching string, not English.
     expect(doc.lines.join("\n")).not.toContain("doc:")
@@ -408,44 +304,25 @@ describe("what the prompt actually says", () => {
   })
 
   test("reading geographic data looks like upstream reading a file", () => {
-    /* `ReadGeoData` aligns with upstream's `read`, and the alignment is already
-     * exact on the input side — both ask with
-     * `path.relative(instance.worktree, filepath)` and `always: ["*"]`. Since
-     * the two dialogs are handed the same shape of data, a user who has learned
-     * one should not have to learn the other.
-     *
-     * The part worth pinning is `toolPath`: without it a file outside the
-     * workspace renders as a run of `../`, which is a path the user has to do
-     * arithmetic on. Asserted by comparing against the upstream dialog for the
-     * same pattern rather than against a hardcoded string, so this keeps
-     * holding if upstream changes how it abbreviates.
-     */
+    /* `ReadGeoData` asks with the same shape upstream's `read` does — `path.relative(worktree, filepath)` and
+     * `always: ["*"]` — so the two dialogs are handed the same data and have no reason to differ. What is
+     * really pinned is `toolPath`: without it a file outside the workspace renders as a run of `../`. Compared
+     * against the upstream dialog rather than a hardcoded string, so it survives a change to how it abbreviates. */
     for (const pattern of ["data/scene.tif", "../../elsewhere/scene.tif"]) {
       const ours = permissionInfo(request("geodata", { patterns: [pattern] }))
       const theirs = permissionInfo(request("read", { patterns: [pattern] }))
       expect(ours.icon).toBe(theirs.icon)
       expect(ours.lines).toEqual(theirs.lines)
-      // The abbreviated form upstream shows has to appear in ours too — and for
-      // an outside path that is NOT the raw pattern.
+      // The abbreviated form upstream shows has to appear in ours, and for an outside path it is not the pattern.
       const shownByUpstream = theirs.lines.join("\n").replace("Path: ", "")
       expect(ours.title).toContain(shownByUpstream)
     }
   })
 
   test("a GEE script is NOT spelled out, and that is the design", () => {
-    /* Deliberately asserting an absence. A script is arbitrary Python; folding
-     * it into a dialog would produce something nobody reads, and a prompt that
-     * is never read is worse than none — it manufactures the impression of
-     * review. What is granted is the capability, so that is all the dialog
-     * claims. A well-meaning change that starts printing the body lands here.
-     */
-    /* ⚠️ The body has to be PRESENT in the metadata for this to mean anything.
-     * Written first with `metadata: { script: "" }`, it asserted that something
-     * never supplied did not appear — green forever, and green for the wrong
-     * reason (LESSONS §二①). The tool does not put the body there today, but a
-     * dialog that would print it if it were there is exactly the regression
-     * worth catching, and the observability fix that adds it must not silently
-     * turn this prompt into a wall of Python. */
+    /* An absence, so the body has to be PRESENT in the metadata for the assertion to mean anything — against a
+     * fixture that never supplied one it would be green forever and green for the wrong reason. geo-gee-run.ts
+     * sends only `{ script: <path> }` today; what is caught is a dialog that would print a body if one arrived. */
     const body = "import ee\ndownload_image(image, '/data/scene.tif', roi)"
     const info = permissionInfo(
       request("gee", {
@@ -457,10 +334,8 @@ describe("what the prompt actually says", () => {
     expect(info.title).toMatch(/earth engine/i)
     // Not the body — nobody reads Python in a dialog.
     expect(shown).not.toContain("download_image")
-    // And not the path either. Showing it suggests the user is judging THIS
-    // script, when all they can actually judge is whether Earth Engine may run
-    // at all. A detail that invites a judgement the user cannot make is worse
-    // than no detail.
+    // And not the path either: showing it suggests the user is judging THIS script, when all they can judge is
+    // whether Earth Engine may run at all.
     expect(shown).not.toContain("secret-pipeline")
   })
 })

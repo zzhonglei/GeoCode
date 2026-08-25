@@ -13,15 +13,9 @@ import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
 
-/* Tripwires for OsmGetObjects (docs/TOOLS.md §3; GEOKERNEL §6.7, §6.8).
- *
- * The first tool that leaves a file behind, so the report stops being a
- * description of an answer and becomes the only record of what the file does
- * not contain. Three things are guarded because nothing downstream can
- * recover them: the paths actually written (which need not be the path asked
- * for), the identity of every object that went missing, and the difference
- * between "nothing was written" and "nothing was found".
- */
+/* Tripwires for OsmGetObjects (docs/TOOLS.md §3; GEOKERNEL §6.7, §6.8). The report is the only record of what the
+ * file it leaves behind does not hold, so three things nothing downstream can recover are guarded: the paths
+ * actually written, every missing object named by id, and "nothing was written" apart from "nothing was found". */
 
 const DOWNLOAD = (over: Partial<GeoOsm.DownloadResult> = {}): GeoOsm.DownloadResult => ({
   outputs: [{ path: "/data/wuhan.geojson", count: 2, family: "polygons" }],
@@ -80,7 +74,7 @@ const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, ag
     .pipe(Effect.timeout(10_000), Effect.exit)
 })
 
-/** Runs the tool with the capability boundary lifted — see the first test. */
+/** Runs the tool with every ask granted; the boundary that denies these calls for real is pinned below. */
 const succeed = Effect.fnUntraced(function* (params: Record<string, unknown>) {
   const registry = yield* ToolRegistry.Service
   const tool = (yield* registry.all()).find((item) => item.id === "OsmGetObjects")
@@ -143,18 +137,9 @@ afterEach(async () => {
 })
 
 describe("OsmGetObjects, what it asks permission for", () => {
-  /* Two properties, both invisible from the tool's output.
-   *
-   * The pattern has to be worktree-relative because that is the form every
-   * path rule in this product is written against — `"osm": { "data/*.geojson":
-   * "allow" }`, the same shape upstream's `read` and `write` accept (§4.3). An
-   * absolute path here matches no such rule, and nothing reports the miss.
-   *
-   * And a download landing outside the working directory has to reach
-   * `external_directory`. osmfetch's ruleset carries `external_directory:
-   * "ask"` for exactly this case (config/geocode.ts) — a rule that, before this
-   * guard existed, was written and never consulted.
-   */
+  /* Both invisible from the tool's output: an absolute pattern matches none of the worktree-relative path rules a
+   * user writes (§4.3) and nothing reports the miss, and a download landing outside the working directory has to
+   * reach the `external_directory: "ask"` osmfetch's ruleset carries for exactly that case (config/geocode.ts). */
   harness(osmService({})).instance("the pattern is worktree-relative, and an outside path asks for the directory", () =>
     Effect.gen(function* () {
       const instance = yield* InstanceState.context
@@ -164,16 +149,13 @@ describe("OsmGetObjects, what it asks permission for", () => {
         output: path.join(instance.directory, "data", "wuhan.geojson"),
       })
       const pattern = inside.find((item) => item.permission === "osm")?.patterns[0]
-      // The property, not the exact string: an absolute path is what no path
-      // rule can match. Asserting the relative spelling would only restate the
-      // implementation's own expression.
       expect(pattern).toBeDefined()
       expect(path.isAbsolute(pattern!)).toBe(false)
       expect(pattern).toContain("wuhan.geojson")
       expect(inside.map((item) => item.permission)).not.toContain("external_directory")
 
-      // Absolute, and outside the instance directory under any layout — the
-      // test project's worktree is "/" (no git), which containsPath skips.
+      // Outside the instance directory under any layout: the test project has no git, so its worktree is "/", which
+      // `containsPath` skips rather than matching every absolute path.
       const outside = yield* asksOf({ ids: ["R10717504"], output: "/geocode-outside-test.geojson" })
       expect(outside.map((item) => item.permission)).toContain("external_directory")
     }),
@@ -216,8 +198,7 @@ describe("OsmGetObjects, the capability boundary", () => {
 describe("OsmGetObjects, where the file actually is", () => {
   harness(
     osmService({
-      // The kernel appends the extension, because the sibling names for a split
-      // are derived from the base and a base without one collides with them.
+      // The kernel appends the extension, since a split's sibling names are derived from the base.
       downloadObjects: () =>
         Effect.succeed(DOWNLOAD({ outputs: [{ path: "/data/wuhan.geojson", count: 2, family: "polygons" }] })),
     }),
@@ -225,8 +206,7 @@ describe("OsmGetObjects, where the file actually is", () => {
     "the path reported is the one written, not the one requested",
     () =>
       Effect.gen(function* () {
-        // Echoing the request would be a lie in exactly the case where it
-        // matters: the caller opens a path that was never created.
+        // Echoing the request instead sends the caller to open a path that was never created.
         const result = yield* succeed({ ids: ["R1", "R2"], output: "/data/wuhan" })
         expect(result.output).toContain("/data/wuhan.geojson")
         expect(result.output).not.toMatch(/to \/data\/wuhan \(/)
@@ -254,9 +234,7 @@ describe("OsmGetObjects, where the file actually is", () => {
     "a split names every sibling, because a caller cannot guess them",
     () =>
       Effect.gen(function* () {
-        // Never one mixed-geometry file (§6.7): GIS tools work a family at a
-        // time and format conversion refuses the mix outright. The split is
-        // silent unless the report lists what it produced.
+        // A mixed-geometry file is never written (§6.7), and the split is silent unless the report lists it.
         const result = yield* succeed({ ids: ["R1", "R2", "R3", "W4"], output: "/data/campus.geojson" })
         expect(result.output).toContain("/data/campus-polygons.geojson")
         expect(result.output).toContain("/data/campus-points.geojson")
@@ -274,10 +252,7 @@ describe("OsmGetObjects, what did not make it", () => {
       downloadObjects: () =>
         Effect.succeed(
           DOWNLOAD({
-            // Four asked for: one written, one refused, two that matched and
-            // would not assemble. The fixture adds up on purpose — a fixture
-            // that does not is read as documentation of a state that cannot
-            // happen.
+            // Four asked for: one written, one refused, two that would not assemble. The fixture adds up on purpose.
             features: 1,
             extentsDone: 1,
             extentsAsked: 4,
@@ -298,12 +273,9 @@ describe("OsmGetObjects, what did not make it", () => {
       Effect.gen(function* () {
         const result = yield* succeed({ ids: ["R3076268", "N999", "W888", "R2"], output: "/data/b.geojson" })
 
-        // The guard that made this a failure instead of a silent half-boundary
-        // was found live on a real city relation. Its wording carries the
-        // evidence — a partial boundary looks exactly like a boundary.
+        // A half-stitched boundary looks exactly like a boundary, so the reason has to carry the count.
         expect(result.output).toContain("only 182 of about 4613 vertices were stitched")
-        // By identity, not by count: the fix for a dropped object is to ask for
-        // it alone, which needs to know which one it was.
+        // By identity, not by count: the fix for a dropped object is to ask for that one alone.
         expect(result.output).toContain("N999, W888")
         expect(result.output).toContain("1 of 4 object(s)")
         expect(result.metadata.unassembled).toEqual(["N999", "W888"])
@@ -337,10 +309,8 @@ describe("OsmGetObjects, what did not make it", () => {
     "a run that wrote nothing says so, and says how much was asked for",
     () =>
       Effect.gen(function* () {
-        // An empty run creates no file — nothing here overwrites, so there is
-        // nothing to protect and nothing to write either. What the caller must
-        // not do is read the silence as success, which is why the sentence
-        // states the size of the request rather than only the outcome.
+        // An empty run leaves no file at all, and the size of the request is what stops the silence reading as
+        // success.
         const result = yield* succeed({ ids: ["R1", "R2"], output: "/data/b.geojson" })
         expect(result.output).toContain("None of the 2 requested object(s) could be obtained")
         expect(result.output).not.toContain("Wrote")
@@ -350,15 +320,9 @@ describe("OsmGetObjects, what did not make it", () => {
     { timeout: 20_000 },
   )
 
-  /* The batched fetch reports trouble through two channels that the kernel
-   * never uses at once — a remark means it answered, a note means it did not.
-   * They are asserted separately because a fixture carrying both would
-   * document a state that cannot occur.
-   *
-   * Either way the caller has to hear it: a batch cut short drops objects into
-   * the per-object route, which is the unreliable one, and read without this
-   * its troubles look like "these objects are a problem" rather than "the fast
-   * path was cut short". */
+  /* A remark means the batch answered and a note means it did not, so the kernel never sets both. Either way the
+   * caller has to hear it: a batch cut short drops the rest into the per-object route, whose troubles then read as
+   * "these objects are a problem" rather than "the fast path was cut short". */
   harness(
     osmService({
       downloadObjects: () =>
@@ -403,8 +367,7 @@ describe("OsmGetObjects, the field contract", () => {
       Effect.gen(function* () {
         const result = yield* succeed({ ids: ["R1", "R2"], output: "/data/wuhan.geojson" })
         expect(result.output).toContain("osm_id, osm_type, name, category, admin_level")
-        // Which keys, and how many carried them — enough to decide whether a
-        // second call is worth it, and the route to make one.
+        // Which keys and how many objects carried them, plus the route to ask again for the ones worth a second call.
         expect(result.output).toContain("wikidata(2)")
         expect(result.output).toContain("fields:[...]")
         expect(result.output).toContain('fields:["*"]')
@@ -418,28 +381,21 @@ describe("OsmGetObjects, the field contract", () => {
 
 describe("OsmGetObjects, the description", () => {
   test("it states the limit the kernel actually enforces", () => {
-    // The old build's copy said "keep the set under about 10" while the code
-    // refused at 25 — a number nobody could act on, in either direction.
-    //
-    // Read off the constant rather than written out again: a test that spells
-    // the number itself asserts what someone typed, not what the kernel does,
-    // and goes on passing after the kernel changes its mind.
+    // Read off the constant: a number spelled out here would assert what someone typed and keep passing after the
+    // kernel changed the limit it refuses at.
     expect(OBJECTS_DESCRIPTION).toContain(String(GeoOsm.MAX_IDS))
     expect(OBJECTS_DESCRIPTION).not.toMatch(/under about 10/)
   })
 
   test("it never points the model at metadata, which the model cannot see", () => {
-    // GEOKERNEL §9.1: only `state.output` reaches a model message. The old
-    // build taught metadata.missing and metadata.outputs — a channel the model
-    // has never been able to read.
+    // Only `state.output` reaches a model message (GEOKERNEL §9.1), so a description naming a metadata field sends
+    // the model to a channel it cannot read.
     expect(OBJECTS_DESCRIPTION).not.toMatch(/metadata/i)
   })
 
   test("it leaves the verification discipline to the subagent that holds the permission", () => {
-    // osmfetch is granted `geo_qgis_read` and nothing else from the QGIS group,
-    // precisely so it can check its own downloads (TOOLS.md §4.3). A standing
-    // working rule belongs in that agent's prompt, not repeated in the copy of
-    // every tool it may call — and repeated copies drift.
+    // osmfetch's own prompt already requires verifying every file the report names, and it holds `geodata` for that
+    // (config/geocode.ts); a standing rule copied into every tool it may call is a copy that drifts.
     expect(OBJECTS_DESCRIPTION).not.toMatch(/ReadGeoData/)
   })
 
@@ -449,23 +405,17 @@ describe("OsmGetObjects, the description", () => {
 })
 
 describe("OsmGetObjects, saying so while it runs", () => {
-  /* The description already warns the reader this one is slow ("TIMING"); until
-   * now that warning was all they got. The batched query settles most objects
-   * in a single step and cannot be ticked through, but the per-object fallback
-   * behind it runs one request at a time — and that is precisely the path taken
-   * when the batch fell short, which is when there is most left to wait for
-   * (docs/GEOKERNEL.md §6.8).
-   */
+  /* The batched query settles most objects in one step and cannot be ticked through; the per-object fallback behind
+   * it runs one request at a time, and it is taken exactly when the batch fell short — when there is most left to
+   * wait for and a "TIMING" warning in the description is all the caller otherwise gets (§6.8). */
   harness(
     osmService({
       downloadObjects: (input) =>
         Effect.gen(function* () {
-          // Typed here rather than left to the `any` the mock helper takes:
-          // yielding an untyped effect widens this generator's error channel to
-          // `unknown`, and the mock no longer satisfies the service.
+          // Typed rather than left to the `any` the mock helper takes: yielding an untyped effect widens this
+          // generator's error channel to `unknown` and the mock stops satisfying the service.
           const report = input.onProgress as GeoOsm.OnProgress
-          // What the kernel reports: the batch settled two of four, then the
-          // fallback works through the rest.
+          // What the kernel reports: the batch settled two of four, then the fallback works through the rest.
           yield* report(2, 4)
           yield* report(3, 4)
           yield* report(4, 4)
@@ -476,12 +426,11 @@ describe("OsmGetObjects, saying so while it runs", () => {
     Effect.gen(function* () {
       const pushed = yield* pushesOf({ ids: ["W2", "N1", "R7", "W9"], output: "/data/objects.geojson" })
 
-      // The wiring, which neither side can see alone: a kernel counting into a
-      // callback the tool never passed looks correct from both ends.
+      // The wiring, which neither side can see alone: a kernel counting into a callback the tool never passed looks
+      // correct from both ends.
       expect(pushed.map((entry) => entry.objects_settled)).toEqual([2, 3, 4])
       for (const entry of pushed) expect(entry.objects_asked).toBe(4)
-      // Same word as OsmGetFeatures uses, worded for objects: two capabilities
-      // reporting progress two different ways is a cost paid by every reader.
+      // On every push, as OsmGetFeatures does: setting it at all is what skips upstream's truncation (tool.ts).
       for (const entry of pushed) expect(entry.truncated).toBe(false)
     }),
   )

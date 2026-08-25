@@ -4,11 +4,8 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { GeoRuntime } from "@/geo/runtime"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-/* Exercises the Runtime module of GeoKernel (docs/GEOKERNEL.md §3.2).
- *
- * The tests target the four things Runtime fixes rather than the things callers
- * choose — those are the ones that have no second reasonable answer, and so the
- * ones a future change could quietly get wrong. */
+/* Runtime, the subprocess primitive of GeoKernel (docs/GEOKERNEL.md §3.2): what it fixes rather than what callers
+ * choose — the clocks, the two deliveries, and how an execution is made to end. */
 
 const it = testEffect(LayerNode.compile(LayerNode.group([GeoRuntime.node])))
 
@@ -54,8 +51,7 @@ describe("geo runtime", () => {
 
       expect(result.reason).toBe("exit")
       expect(result.code).toBe(0)
-      // Draining runs on the normal-exit path too, so the final line is present
-      // rather than lost with whatever was still in flight.
+      // Draining runs on the normal-exit path too, or the last line goes with whatever was still in flight.
       expect(result.stdout).toContain("first")
       expect(result.stdout).toContain("last")
       expect(result.stderr).toContain("problem")
@@ -77,7 +73,6 @@ describe("geo runtime", () => {
       expect(result.reason).toBe("exit")
       expect(seen.join("")).toContain("chunk0")
       expect(seen.join("")).toContain("chunk2")
-      // Runtime holds none of it: how much is kept is the caller's business.
       expect(result.stdout).toBe("")
     }),
   )
@@ -89,15 +84,8 @@ describe("geo runtime", () => {
         const runtime = yield* GeoRuntime.Service
         const seen = yield* Ref.make(0)
 
-        // Output arrives every 300ms; handling each chunk takes 700ms. The idle
-        // limit sits between the two. A task producing output every 300ms is
-        // healthy by definition, so it must survive — even though OUR handling
-        // of it falls steadily further behind.
-        //
-        // This is the test that fails if the reader and the consumer ever get
-        // recoupled: these streams are pull-based, so a single read-and-handle
-        // loop would only read a chunk once the previous one was handled, and
-        // the gaps the clock sees would become the consumer's 700ms.
+        // Output every 300ms, 700ms to handle each of them, and the idle limit between the two: this goes red if
+        // the reader is ever recoupled to the consumer, since the gaps the clock sees would become the 700ms ones.
         const result = yield* runtime.run({
           ...ticker(5, 300),
           delivery: {
@@ -118,9 +106,8 @@ describe("geo runtime", () => {
     () =>
       Effect.gen(function* () {
         const runtime = yield* GeoRuntime.Service
-        // Never exits, and never goes quiet — so the idle clock alone would wait
-        // forever. This is the combination that covers a task stuck in a loop
-        // that logs every pass (§3.2).
+        // Never exits and never goes quiet, the shape a task stuck in a logging loop takes, and the one the idle
+        // clock alone would wait out forever (§3.2).
         const result = yield* runtime.run({
           ...script(`setInterval(() => console.log("still here"), 50)`),
           delivery: { mode: "incremental", onChunk: () => Effect.void },
@@ -165,8 +152,6 @@ describe("geo runtime", () => {
         })
 
         expect(result.reason).toBe("abort")
-        // The interrupt path is exactly where the caller most needs to know how
-        // far the task got, so the output survives the kill.
         expect(result.stdout).toContain("before interrupt")
       }),
     { timeout: 30000 },
@@ -201,8 +186,6 @@ describe("geo runtime", () => {
         env: { GEO_TEST_MARKER: "overlaid" },
       })
 
-      // Replacing the environment instead of extending it is how a subprocess
-      // ends up unable to start at all (§4.3 principle 8).
       expect(result.stdout).toContain("overlaid|inherited")
     }),
   )
@@ -221,8 +204,6 @@ describe("geo runtime", () => {
               label: "qgis:buffer",
             })
 
-            // The output is readable while it is still running — an owner does
-            // not have to wait for the end to see how far something got.
             yield* pollWithTimeout(
               Effect.gen(function* () {
                 const so_far = yield* handle.partial()
@@ -234,10 +215,9 @@ describe("geo runtime", () => {
             const running = yield* runtime.list()
             expect(running.map((item) => item.label)).toContain("qgis:buffer")
 
-            // This is the user clicking stop on a QGIS run.
+            // The user clicking stop on a QGIS run.
             yield* handle.terminate()
-            // Calling it twice must be harmless — a stop button can be pressed
-            // twice, and a teardown can race a user action.
+            // Twice, because a stop button can be pressed twice and a teardown can race a user action.
             yield* handle.terminate()
             return yield* handle.result
           }),
@@ -268,13 +248,11 @@ describe("geo runtime", () => {
             })
             expect((yield* runtime.list()).length).toBe(2)
 
-            // Session teardown / application shutdown.
             yield* runtime.terminateAll()
             expect((yield* first.result).reason).toBe("abort")
             expect((yield* second.result).reason).toBe("abort")
           }),
         )
-        // Deregistration rides on the scope, so nothing is left behind.
         expect((yield* runtime.list()).length).toBe(0)
       }),
     { timeout: 30000 },
@@ -287,9 +265,7 @@ describe("geo runtime", () => {
         const runtime = yield* GeoRuntime.Service
         const pids = yield* Ref.make<{ child?: number; grandchild?: number }>({})
 
-        // A QGIS run is never one process: the interpreter spawns tools of its
-        // own. Killing only the direct child leaves those orphaned and holding
-        // the output handles open.
+        // A QGIS run is never one process, and killing only the direct child leaves the rest holding the streams.
         const fiber = yield* Effect.forkScoped(
           Effect.scoped(
             Effect.gen(function* () {
@@ -324,9 +300,7 @@ describe("geo runtime", () => {
           "the child never reported its grandchild",
         )
 
-        // Not an abort signal and not a terminate call — the owning fiber is
-        // simply interrupted, which is what happens when a session is torn down
-        // mid-execution.
+        // Neither the signal nor terminate: the owning fiber is interrupted, as when a session is torn down mid-run.
         yield* Fiber.interrupt(fiber)
 
         yield* waitUntilGone(found.child!, "the child survived interruption")
@@ -347,10 +321,7 @@ describe("geo runtime", () => {
           })
           expect((yield* handle.result).reason).toBe("exit")
 
-          // A scope can outlive many executions. A finished entry left behind is
-          // not merely untidy: killAllSync would signal a pid the operating
-          // system has since handed to something else, and process-group signals
-          // do not ask who is in the group.
+          // A scope can outlive many executions, and killAllSync over a finished entry would signal a reused pid.
           yield* pollWithTimeout(
             Effect.gen(function* () {
               const running = yield* runtime.list()
@@ -373,11 +344,6 @@ describe("geo runtime", () => {
         clocks: { idle: "10 seconds" },
       })
 
-      // stdout is the caller's to stream; stderr is failure diagnosis and is not
-      // part of what they asked to receive, so Runtime holds it instead. That
-      // holding is bounded — see the boundedBuffer unit tests, which is where
-      // the bound can be checked without depending on a child process's flush
-      // behaviour on exit.
       expect(streamed.join("")).toContain("progress")
       expect(result.stderr).toContain("a warning")
     }),
@@ -419,8 +385,7 @@ describe("geo runtime", () => {
               "the child never reported its grandchild",
             )
 
-            // The host's shutdown path: nothing asynchronous is going to get a
-            // chance to finish, so the graceful sequence is skipped entirely.
+            // The host's shutdown path, where nothing asynchronous gets a chance to finish.
             yield* Effect.sync(() => runtime.killAllSync())
 
             yield* waitUntilGone(found.child!, "the child survived the shutdown sweep")
@@ -435,12 +400,8 @@ describe("geo runtime", () => {
     "a dead process with held-open streams is called a crash, quickly",
     () =>
       Effect.gen(function* () {
-        // The scenario the liveness check exists for: the child dies, but a
-        // grandchild inherited its stdio and keeps the streams open, so the
-        // close event — and everything wired to it — never fires. Liveness
-        // must come from asking the operating system about the pid, not from
-        // the handle; wired to the handle, this run would sit out the whole
-        // idle budget and end under the wrong reason.
+        // The child dies while a grandchild it gave its stdio to keeps the streams open, so the close event never
+        // fires: liveness read off the handle instead of off the pid would sit out the whole idle budget here.
         if (process.platform !== "darwin") return
         const runtime = yield* GeoRuntime.Service
         const pids = yield* Ref.make<number | undefined>(undefined)
@@ -466,10 +427,8 @@ describe("geo runtime", () => {
         expect(result.reason).toBe("crash")
         // Well under the idle budget: the point is not waiting it out.
         expect(result.durationMs).toBeLessThan(15_000)
-        // No drain flag asserted: the crash verdict leads to a process-GROUP
-        // kill, which takes the stream-holding grandchild with it — so the
-        // streams close and the drain completes. That is the cleanup working,
-        // not the settlement bound firing.
+        // No drain flag asserted: the kill takes the stream-holding grandchild with it, as the wait below checks,
+        // so the streams close and the drain completes.
 
         const grandchild = yield* Ref.get(pids)
         if (grandchild) yield* waitUntilGone(grandchild, "the stream-holding grandchild was left behind")
@@ -483,8 +442,7 @@ describe("geo runtime", () => {
       const controller = new AbortController()
       controller.abort()
 
-      // The window between deciding to run something and actually running it is
-      // real, and a cancellation can land inside it.
+      // The window between deciding to run something and running it is real, and a cancellation can land inside it.
       const result = yield* runtime.run({
         ...script(`setInterval(() => {}, 1000)`),
         delivery: { mode: "collect" },
@@ -508,9 +466,7 @@ describe("geo runtime", () => {
         }),
       )
 
-      // A misconfigured toolchain path is the single most likely thing to be
-      // wrong on a user's machine, so it has to surface as a failure rather than
-      // as a call that sits there until the clock runs out.
+      // A misconfigured toolchain path is the likeliest thing to be wrong on a user's machine.
       expect(exit._tag).toBe("Failure")
     }),
   )
@@ -525,7 +481,6 @@ describe("geo runtime", () => {
       })
 
       // What the process did and what our handling of it did are separate facts.
-      // The process finished; that stays true.
       expect(result.reason).toBe("exit")
       expect(result.code).toBe(0)
     }),

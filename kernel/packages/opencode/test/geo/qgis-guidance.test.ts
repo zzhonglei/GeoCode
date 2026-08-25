@@ -4,27 +4,15 @@ import { Global } from "@opencode-ai/core/global"
 import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { QgisGuidance } from "../../src/geo/qgis/guidance"
 
-/* The QGIS group's one voice (GEOKERNEL §8.6). What these guard:
- *
- * - The guidance teaches machine.json's `qgis` hint — the file the kernel
- *   actually reads. The old copy taught geocode.json's `qgis.python`; porting
- *   it without moving the target would send the Agent to a file nobody reads,
- *   so the target is pinned here.
- * - The fixable/broken split survives: locate-and-configure states carry the
- *   agent's step list, broken-install states say reinstall and never suggest
- *   hand-repair.
- */
+/* Tripwires for the QGIS group's one voice (GEOKERNEL §8.6): that the guidance keeps teaching machine.json's
+ * `qgis` hint, and that the fixable/broken split survives. */
 
 const DIAG: GeoEvent.QgisDiagnostics = {
   hint: "/somewhere/qgis",
   candidates: {},
   selected: {},
-  // The path the guidance asks the agent to judge. It travels on every broken
-  // state and is the only place it can surface — the environment header is
-  // silent whenever the status is not `ready`.
-  // Deliberately unlike any path the static copy names as an example: with
-  // /opt/homebrew/bin/python3 here the assertion below matched the prose's own
-  // "system pythons look like this" line and passed with the echo removed.
+  // Deliberately unlike any path the copy itself names as an example: /opt/homebrew/bin/python3 here would let the
+  // echo assertion below match the prose's own "system pythons" line and pass with the echo removed.
   interpreter: "/Users/someone/miniconda3/envs/gis/bin/python3.11",
   error: "ImportError: no module named osgeo",
 } as GeoEvent.QgisDiagnostics
@@ -37,10 +25,10 @@ describe("QgisGuidance", () => {
     expect(text).toContain(MACHINE)
     expect(text).toContain('"qgis"')
     expect(text).toContain("https://qgis.org/download/")
-    // The three prohibitions that keep an agent from "helping" destructively.
     expect(text).toContain("DO NOT install QGIS yourself")
     expect(text).toContain("no restart needed")
-    // The old target must never come back.
+    // geocode.json is a real file that still holds agent config, so naming it here sends the agent to edit
+    // something the QGIS resolver never reads (docs/PATHS.md).
     expect(text).not.toContain("geocode.json")
     expect(text).not.toContain("qgis.python")
   })
@@ -73,24 +61,18 @@ describe("QgisGuidance", () => {
       expect(text).toContain(MACHINE)
       openings.add(text.split("\n")[0])
     }
-    // Five states, five distinct diagnoses — a shared body must not blur them.
+    // The shared `broken()` body must not blur the five symptoms into one.
     expect(openings.size).toBe(states.length)
   })
 
   test("a broken install forbids the agent from installing anything itself", () => {
-    // The guardrail belongs in THIS branch, not only in the configure one. This
-    // branch's advice ends in "reinstall QGIS", and an agent told to recommend a
-    // reinstall is one step from performing it; the configure branch, where the
-    // prohibition used to live alone, is a path a broken install never reaches.
-    //
-    // The user's standing constraint is that installing or reinstalling QGIS is
-    // never the agent's to do — it is the one repair that needs a human.
+    // `broken()` ends in "reinstall QGIS" and is a branch `fixable()` — where the prohibition also lives — never
+    // reaches, so leaving it to that one would tell an agent to recommend a reinstall with nothing forbidding it
+    // from running the installer itself.
     for (const status of ["gdal-missing", "proj-broken", "core-missing"] as const) {
       const text = QgisGuidance.render({ status, diagnostics: DIAG })
       expect(text).toContain("DO NOT run any install")
       expect(text).toMatch(/ask the USER to reinstall/)
-      // And the fix must stay out of the agent's hands in the other direction
-      // too: hand-repairing bindings, and wrapper scripts.
       expect(text).toContain("DO NOT write a wrapper")
       expect(text).toContain("repair bindings or plugins by hand")
     }
@@ -98,11 +80,8 @@ describe("QgisGuidance", () => {
 
   test("the macOS caveat that names the command an agent would reach for", () => {
     if (process.platform === "win32") return
-    // gdal-missing is the state a macOS user arrives in most often, and the
-    // Homebrew cask build's broken GDAL bindings are its classic cause — so
-    // `brew install --cask qgis` is precisely the command that reproduces the
-    // fault the agent is standing in. Losing this sentence and losing the
-    // install prohibition compound each other, which is how they were lost.
+    // Without it, the reinstall advice above is compatible with the cask build whose GDAL bindings are the classic
+    // cause of gdal-missing on macOS, so the agent could recommend re-creating the fault it is standing in.
     const text = QgisGuidance.render({ status: "gdal-missing", diagnostics: DIAG })
     expect(text).toContain("Homebrew cask")
     expect(text).toContain("official .dmg")
@@ -110,19 +89,16 @@ describe("QgisGuidance", () => {
   })
 
   test("a broken install shows the path it is asking the agent to judge", () => {
-    // Step 1 asks whether the hint points at a real QGIS install. A reader
-    // cannot judge a path it has not been shown, and in these states the
-    // environment header renders nothing — so this is the only place it can
-    // appear.
+    // `GeoTool.qgisHeader` renders only on `ready`, so on a broken install this is the sole place the path step 1
+    // asks the agent to judge can appear at all.
     const text = QgisGuidance.render({ status: "gdal-missing", diagnostics: DIAG })
     expect(text).toContain(DIAG.interpreter!)
   })
 
   test("a ready environment the gate still refuses gets an answer, not silence", () => {
-    // The gate needs ready AND processing AND catalog "ready" (§4.9); render
-    // must cover the three ready-but-refused shapes or the tool returns an
-    // empty output. The Processing pair was in the old version's broken
-    // family from the start.
+    // The gate needs ready AND processing AND catalog "ready" (§4.9), so `render` owes all three refused shapes an
+    // answer — one it misses falls out of its ready branch as "", and the tool prints its generic "settled
+    // while this call was checking it" fallback instead.
     const building = QgisGuidance.render({ status: "ready", processing: true, catalog: "building" } as never)
     expect(building).toContain("Try again shortly")
     const noProcessing = QgisGuidance.render({ status: "ready", processing: false, catalog: "skipped" } as never)
@@ -139,46 +115,35 @@ describe("QgisGuidance", () => {
   })
 
   test("a broken install is not promised a re-probe that does not exist", () => {
-    // `config/index.ts` drops a block whose fingerprint is unchanged, so saving
-    // machine.json without editing it runs nothing — and after a reinstall the
-    // hint usually IS unchanged. The earlier wording promised a re-probe "after
-    // the install changes underneath it"; nothing watches the install. An agent
-    // believing it tells the user to reinstall, calls the tool again, and reads
-    // back the identical failure, having spent the user's time for nothing.
+    // `config/index.ts` drops a block whose fingerprint is unchanged and nothing watches the install itself, so an
+    // agent promised a re-probe recommends a reinstall, calls the tool again and reads back the same failure.
     const text = QgisGuidance.render({ status: "gdal-missing", diagnostics: DIAG })
     expect(text).not.toMatch(/install changes underneath/i)
-    // Both routes, because either alone strands a reader: a reinstall that moves
-    // the path needs an edit, one that does not needs a restart.
+    // Both routes, because either alone strands a reader: a reinstall that moves the path needs an edit, one that
+    // lands on the same path needs a restart.
     expect(text).toMatch(/restarted/i)
     expect(text).toMatch(/different path/i)
 
-    // The contrast IS the finding. Saving does re-probe in the configure branch,
-    // because there the agent is writing a value that differs — one sentence,
-    // true in one branch and false in the other, is how it survived.
+    // And the contrast holds: in the configure branch the agent is writing a value that differs, so saving does
+    // re-probe there — one sentence true in one branch and false in the other is how this survived.
     expect(QgisGuidance.render({ status: "unconfigured" })).toContain("re-probes automatically after save")
   })
 
   test("a skipped catalog answers even if it ever arrives without its cause", () => {
-    // The kernel only commits `catalog: "skipped"` alongside `processing: false`
-    // (qgis/index.ts), which is why the branch that tested it alone sat below
-    // the Processing check and could never run. That pairing is a convention,
-    // not a type, and the tool layer keeps the two apart (tool/geo-tool.ts) — so
-    // the orphan shape is built here on purpose. Silence is the one answer this
-    // state must never get.
+    // The kernel only ever commits `catalog: "skipped"` alongside `processing: false` (qgis/index.ts), but that
+    // pairing is a convention rather than a type, and `gateStatus` already reads the two apart — so the orphan
+    // shape is built by hand here.
     const orphan = QgisGuidance.render({ status: "ready", processing: true, catalog: "skipped" } as never)
     expect(orphan).not.toBe("")
     expect(orphan).toContain("Processing framework is not available")
   })
 
   test("the Windows locate step does not stop at the system drive", () => {
-    // A second drive is ordinary on Windows, and `where qgis` only finds an
-    // install the installer put on PATH. An agent handed C:-only probes
-    // concludes "not installed" and sends the user to download software they
-    // already have.
+    // An agent handed C:-only probes concludes "not installed" and sends the user to download software they
+    // already have, since `where qgis` finds only an install that landed on PATH.
     //
-    // The platform is swapped rather than the test skipped off Windows: this
-    // branch has never run on real hardware (GEOKERNEL §11.1), so a guard here
-    // would mean nothing checks it at all, on any machine anyone owns.
+    // `process.platform` is swapped rather than the test skipped off Windows, or nothing would check this branch
+    // on the machines that run this suite.
     const real = Object.getOwnPropertyDescriptor(process, "platform")!
     try {
       Object.defineProperty(process, "platform", { value: "win32", configurable: true })

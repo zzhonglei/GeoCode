@@ -15,14 +15,9 @@ import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
 
-/* The `read` → ReadGeoData handoff (GEOKERNEL §10.1 #10; docs/TOOLS.md §7).
- *
- * This is a source patch on an upstream tool, so it needs a tripwire that
- * survives a merge undoing it. The behavioural half runs `read` for real on
- * files of each kind, because the failure this prevents is not an exception —
- * it is a plausible-looking answer: a .geojson read as plain text, capped
- * mid-coordinate, with an invitation to page through the rest of it.
- */
+/* Tripwires for the `read` → ReadGeoData handoff (GEOKERNEL §10.1 #10; docs/TOOLS.md §7), a source patch on an
+ * upstream tool that a merge can quietly undo. The behavioural tests call `read` for real, because what the patch
+ * prevents is not an exception but a plausible-looking answer. */
 
 const it = testEffect(
   LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node]), [
@@ -60,10 +55,8 @@ const readFile = Effect.fnUntraced(function* (filepath: string) {
 describe("read hands geographic data to ReadGeoData", () => {
   it.instance("a text geo format is redirected instead of paged through", () =>
     Effect.gen(function* () {
-      // The dangerous half. GeoJSON is text, so it passes every check `read`
-      // makes and comes back as a truncated fragment of a coordinate array
-      // ending in "Use offset=N to continue" — an answer that looks like data
-      // and invites the model to keep asking for more of it.
+      // The dangerous half: GeoJSON passes every check `read` makes, so without the handoff it comes back as a
+      // fragment of a coordinate array inviting the model to page on for the rest.
       const ctx = yield* InstanceState.context
       const target = path.join(ctx.directory, "scene.geojson")
       fs.writeFileSync(
@@ -89,8 +82,7 @@ describe("read hands geographic data to ReadGeoData", () => {
 
   it.instance("a binary geo format is redirected instead of dead-ending", () =>
     Effect.gen(function* () {
-      // The other half: without the handoff this is "Cannot read binary file",
-      // which is true and names no way forward.
+      // The other half: without the handoff this is "Cannot read binary file", true and naming no way forward.
       const ctx = yield* InstanceState.context
       const target = path.join(ctx.directory, "layer.shp")
       fs.writeFileSync(target, Buffer.from([0x00, 0x00, 0x27, 0x0a, 0x00, 0x00, 0x00, 0x00]))
@@ -103,9 +95,8 @@ describe("read hands geographic data to ReadGeoData", () => {
 
   it.instance("a sidecar is still read, and so is an ordinary file", () =>
     Effect.gen(function* () {
-      // Sidecars are small text files worth reading directly, and ReadGeoData
-      // refuses them as input — redirecting would send the caller somewhere
-      // that turns them away. This is the old build's boundary, kept.
+      // ReadGeoData refuses a .prj as unsupported, so redirecting one would send the caller to a tool that turns
+      // it away.
       const ctx = yield* InstanceState.context
       const prj = path.join(ctx.directory, "layer.prj")
       fs.writeFileSync(prj, 'GEOGCS["WGS 84",DATUM["WGS_1984"]]')
@@ -122,10 +113,8 @@ describe("read hands geographic data to ReadGeoData", () => {
   )
 
   test("the redirect and the acceptance are one judgement", () => {
-    // Not two predicates kept in agreement — one function, called from both
-    // sides of the handoff. ReadGeoData branches vector/raster on this same
-    // answer, so a file `read` redirects is by construction a file the reader
-    // opens, and it opens it as the kind named here.
+    // `read` redirects on `geoHandoff` and ReadGeoData picks its reader with `geoKind`, so what the last loop
+    // pins is that the two cannot come apart into predicates kept in agreement by hand.
     expect(geoKind("/tmp/a.geojson")).toBe("vector")
     expect(geoKind("/tmp/a.SHP")).toBe("vector")
     expect(geoKind("/tmp/a.tif")).toBe("raster")
@@ -134,19 +123,14 @@ describe("read hands geographic data to ReadGeoData", () => {
     expect(geoKind("/tmp/a.nc")).toBeUndefined()
     for (const ext of VECTOR_SUPPORTED) expect(geoKind(`/tmp/a.${ext}`)).toBe("vector")
     for (const ext of RASTER_SUPPORTED) expect(geoKind(`/tmp/a.${ext}`)).toBe("raster")
-    // The redirect fires on exactly the set that has a kind.
     for (const ext of [...VECTOR_SUPPORTED, ...RASTER_SUPPORTED, "prj", "nc", "md"]) {
       expect(Boolean(geoHandoff(`/tmp/a.${ext}`))).toBe(geoKind(`/tmp/a.${ext}`) !== undefined)
     }
   })
 
   test("the redirect covers exactly what ReadGeoData accepts", () => {
-    // Spelled out rather than derived from the arrays under test: deriving the
-    // expectation from the same list makes the assertion true by construction,
-    // and widening the list would then never turn it red. Changing this literal
-    // is the deliberate act — and the thing to check when changing it is that
-    // ReadGeoData really opens the new format, because the rule is to redirect
-    // only to a tool that will do the job.
+    // A literal rather than a derivation, so widening the arrays has to edit this line — and what to check when
+    // editing it is that vector_read.py or raster_read.py really opens the new format.
     expect([...VECTOR_SUPPORTED, ...RASTER_SUPPORTED].sort()).toEqual([
       "asc",
       "dem",
@@ -167,25 +151,17 @@ describe("read hands geographic data to ReadGeoData", () => {
       expect(geoHandoff(`/tmp/FILE.${ext.toUpperCase()}`)).toContain("ReadGeoData")
     }
 
-    // Two things the redirect must NOT say, both of which it once did.
-    //
-    // A claim about the file: this function has an extension and nothing else,
-    // while whether the thing IS geographic data is decided by ReadGeoData
-    // from the file itself — and comes back `none` often enough to matter,
-    // because a scan saved as `.tif` is exactly what started this.
-    //
-    // And a promise about a mode: `preview` is raster-only, so offering it for
-    // every format sends a caller that believes it to a refusal it earned by
-    // doing as it was told.
+    // Two things the redirect must not say. Calling the file geographic data is a claim only ReadGeoData can make,
+    // from the file itself — a scan saved as .tif comes back `NotGeographic`. Offering `preview` promises a mode
+    // that exists for rasters only, so a caller doing as it was told earns a refusal.
     const message = geoHandoff("/tmp/file.shp")!
     expect(message).not.toContain("geographic data")
     expect(message.toLowerCase()).not.toContain("preview")
-    // The same sentence whatever the format: nothing here can tell them apart.
+    // One sentence for every format, since an extension is all this function has to tell them apart by.
     expect(geoHandoff("/tmp/file.tif")).toBe(message)
 
-    // Narrower than the taxonomy on purpose: a format the taxonomy calls
-    // geographic but ReadGeoData cannot open would be refused here AND turned
-    // away there — a dead end with no reader at all.
+    // A format the taxonomy calls geographic but no reader script opens must stay out: `read` would hand it off
+    // and ReadGeoData would refuse it as unsupported, leaving the file with no reader at all.
     for (const ext of ["nc", "jp2", "tab", "mif", "osm", "kmz", "las", "dxf"]) {
       expect([...VECTOR_MAIN, ...RASTER_MAIN, "las", "dxf"]).toContain(ext)
       expect(geoHandoff(`/tmp/file.${ext}`)).toBeUndefined()
@@ -198,19 +174,9 @@ describe("read hands geographic data to ReadGeoData", () => {
   })
 
   test("the list the model reads is the list the code uses", () => {
-    /* The one copy the shared array does not cover.
-     *
-     * `read.ts` and `geo-read.ts` were deliberately made to share one array so
-     * the two sides of the handoff cannot disagree — the old build kept a
-     * hand-copy in `read.ts` and relied on someone editing both. But there is a
-     * third side: `geo-read.txt` spells the formats out for the model, and that
-     * spelling is a hand-copy again. Widening the array without touching the
-     * description leaves the model refusing a file the tool would open, and the
-     * refusal names the shorter list as if it were the whole truth.
-     *
-     * Asserted against the description text, not derived from it, because a
-     * derivation would be true by construction.
-     */
+    /* The third side, which sharing one array does not cover: geo-read.txt spells the formats out for the model,
+     * so widening the array alone leaves the model refusing a file the tool would open, naming the shorter list
+     * as if it were the whole truth. */
     const listed = (label: string) =>
       READ_DESCRIPTION.split("\n")
         .find((line) => line.startsWith(`- ${label}:`))!

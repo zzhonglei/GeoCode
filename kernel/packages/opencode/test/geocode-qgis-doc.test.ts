@@ -18,15 +18,8 @@ import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
 import { QGIS_READY, statusHolding } from "./lib/geocode-status"
 
-/* Tripwires for QgisDoc (docs/TOOLS.md §3; GEOKERNEL §4.11).
- *
- * The two pure tests are the important ones, and they are pure on purpose: the
- * doc-link rule and the verbatim-help rule were both calibrated against the
- * real world after the old version got them wrong, and both are the kind of
- * thing a later rewrite "tidies up" without noticing. Being pure, they run on
- * a machine with no QGIS installed — which is most machines a merge is
- * verified on.
- */
+/* Tripwires for QgisDoc (docs/TOOLS.md §3; GEOKERNEL §4.11). The doc-link and verbatim-help rules are pure on
+ * purpose, so they still run on a machine with no QGIS installed — which is most machines a merge is verified on. */
 
 const it = testEffect(
   LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
@@ -39,18 +32,9 @@ afterEach(async () => {
 })
 
 /**
- * Put the (process-global) kernel into `unconfigured` and wait for it.
- *
- * Every action of this tool goes through the readiness gate, so on a machine
- * that HAS QGIS the gate legitimately spends a cold start probing and building
- * the catalog — which would make these tests measure the local install rather
- * than what they are about. Forcing the environment out of the picture leaves
- * the ruleset as the only difference between two callers.
- *
- * The precondition is enforced, not assumed: other files in this process drive
- * the kernel with real machine.json hints, so relying on bun's file ordering
- * would make this hostage to a traversal detail. Idempotent — already
- * unconfigured means the loop never runs.
+ * Put the process-global kernel into `unconfigured` and wait for it, so the ruleset is the only difference between
+ * two callers rather than whether the machine running the merge has QGIS. Enforced rather than assumed, because
+ * other files in this process drive the same kernel with real machine.json hints.
  */
 const forceUnconfigured = Effect.fnUntraced(function* () {
   fs.rmSync(path.join(Global.Path.config, "machine.json"), { force: true })
@@ -103,32 +87,21 @@ describe("QgisDoc", () => {
       Effect.gen(function* () {
         yield* forceUnconfigured()
 
-        // GeoAgent holds `qgis`, which is the key this tool asks with. Only a
-        // behavioural test tells "the grant matched" from "the grant was written
-        // and silently missed" — the old build's exact accident (KERNEL.md §4.1).
+        // Through the real `execute` and the real ruleset, because reading the config cannot tell a grant that
+        // matched from one that was written and silently missed (KERNEL.md §4.1).
         const allowed = yield* executeAs("GeoAgent", { action: "list_groups" })
         expect(Exit.isSuccess(allowed)).toBe(true)
 
-        // plan holds `qgis: { "*": "ask", "doc:*": "allow" }`, and this tool
-        // namespaces its patterns under `doc:`. Success here is the proof that
-        // the namespace works: had the pattern not matched, the call would have
-        // fallen to the `ask` and hung waiting for a user who is not there.
-        // Consulting documentation is how a plan gets written; it must not
-        // require permission.
+        // plan holds `qgis: { "*": "ask", "doc:*": "allow" }` and this tool namespaces its patterns under `doc:`;
+        // a pattern that stopped matching would fall to the `ask` and hang on a user who is not there.
         const planned = yield* executeAs("plan", { action: "list_groups" })
         expect(Exit.isSuccess(planned)).toBe(true)
       }),
     { timeout: 30_000 },
   )
 
-  /* Needs a READY environment, which is the opposite of what it used to need.
-   *
-   * The tool checks the environment before it raises a prompt (docs/TOOLS.md
-   * §4.3), so an unconfigured install — which this test used to force, because
-   * it was the cheapest way to reach the ask and stop — now returns guidance
-   * without asking anything at all. The ask is only observable once the
-   * environment is out of the way.
-   */
+  /* A READY environment, because the tool checks the environment before it raises a prompt (docs/TOOLS.md §3):
+   * against an unconfigured install it answers with guidance and never asks, so the ask is not observable. */
   const itReady = testEffect(
     LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
       [RuntimeFlags.node, RuntimeFlags.layer()],
@@ -160,12 +133,9 @@ describe("QgisDoc", () => {
         expect(seen).toHaveLength(1)
         // The namespace, so a rule can tell this apart from running something.
         expect(seen[0]!.patterns).toEqual(["doc:read:native:buffer"])
-        // And the half that decides what "always allow" hands over. Approving
-        // writes a rule using EXACTLY these patterns (permission/index.ts), and
-        // this tool shares the `qgis` key with RunQgisAlgorithm — so `["*"]`
-        // here would turn one approved lookup into a standing grant to execute
-        // algorithms. The user would have agreed to one thing and given away
-        // another, which is the failure shape this project exists to avoid.
+        // And the half that decides what "always allow" hands over: approving writes a rule out of exactly these
+        // patterns (permission/index.ts), and the `qgis` key is shared with RunQgisAlgorithm, so `["*"]` would
+        // turn one approved lookup into a standing grant to run algorithms.
         expect(seen[0]!.always).toEqual(["doc:*"])
         expect(seen[0]!.always).not.toContain("*")
       }),
@@ -176,8 +146,8 @@ describe("QgisDoc", () => {
     "an unconfigured environment answers with the kernel's guidance",
     () =>
       Effect.gen(function* () {
-        // Without the gate this tool would answer an empty catalog as "no
-        // algorithms" — a wrong answer rather than a visible failure.
+        // Without the gate the call reaches the empty-catalog branch, which tells the model to try again rather
+        // than telling the user which file to write.
         yield* forceUnconfigured()
 
         const result = yield* executeAs("GeoAgent", { action: "list_groups" })
@@ -192,14 +162,12 @@ describe("QgisDoc", () => {
   )
 
   test("the doc anchor comes from the display name, not the algorithm id", () => {
-    // The calibrated rule (GEOKERNEL §4.11): page name deletes non-alphanumerics
-    // (no dashes), anchor collapses them to single dashes.
+    // Two different rules: the page slug deletes non-alphanumerics, the anchor collapses them to single dashes.
     const url = docsUrl({ id: "native:reclassifybytable", name: "Reclassify by table", group: "Raster analysis" })
     expect(url).toBe(
       "https://docs.qgis.org/latest/en/docs/user_manual/processing_algs/qgis/rasteranalysis.html#reclassify-by-table",
     )
-    // The old bug, stated as an assertion: an id-derived anchor has no dashes
-    // and is a broken link for every multi-word name.
+    // An id-derived anchor has no dashes, and is a broken link for every multi-word name.
     expect(url).not.toContain("#reclassifybytable")
 
     // Ampersands are dropped outright, not turned into a dash run.
@@ -210,15 +178,12 @@ describe("QgisDoc", () => {
     )
     expect(docsUrl({ id: "native:x", name: "Split & merge", group: "Vector general" })).toContain("#split-merge")
 
-    // An algorithm with no group has no documentation page: link the index
-    // rather than ".../qgis/.html#name", which is a 404 wearing a citation's
-    // clothes.
+    // No group, no page: the alternative is ".../qgis/.html#name", a 404 in a citation's clothes.
     expect(docsUrl({ id: "native:orphan", name: "Orphan", group: "" })).toBe(
       "https://docs.qgis.org/latest/en/docs/user_manual/processing_algs/index.html",
     )
 
-    // Provider routing, including the fallback for anything not shipped by
-    // the three official providers.
+    // Provider routing, and the index fallback for anything outside the providers the manual documents.
     expect(docsUrl({ id: "qgis:buffer", name: "Buffer", group: "Vector geometry" })).toContain("/qgis/")
     expect(docsUrl({ id: "gdal:buffer", name: "Buffer", group: "Vector geometry" })).toContain("/gdal/")
     expect(docsUrl({ id: "grass7:v.buffer", name: "Buffer", group: "Vector" })).toBe(
@@ -235,8 +200,8 @@ describe("QgisDoc", () => {
       options: [] as string[],
       optional: false,
     }
-    // Deliberately awkward: blank lines, indentation, a trailing space, and
-    // wording a "tidy-up" would normalise. Every byte must survive.
+    // Deliberately awkward — blank lines, indentation, a trailing space — because a tidy-up normalises exactly
+    // these and the authoritative text is the one QGIS exported.
     const helpText = [
       "<b>Buffer</b>  distance",
       "",
@@ -259,8 +224,7 @@ describe("QgisDoc", () => {
     // The two facts the help text cannot carry ride above it...
     expect(withHelp).toContain("Required: DISTANCE")
     expect(withHelp).toContain("  DISTANCE: 10")
-    // ...and our own rendering of what the help ALREADY says does not, or the
-    // Agent reads every parameter twice (the old version's regression).
+    // ...and our own rendering of what the help already says does not, or the model reads every parameter twice.
     expect(withHelp).not.toContain("Parameters from QGIS API:")
     expect(withHelp).not.toContain("Outputs from QGIS API:")
     expect(withHelp).not.toContain("A description the raw help already covers.")
@@ -280,15 +244,13 @@ describe("QgisDoc", () => {
     expect(withoutHelp).toContain("Outputs from QGIS API:")
     expect(withoutHelp).toContain("What the plugin does.")
 
-    // Both paths end with the escape hatch to the official page.
     for (const rendered of [withHelp, withoutHelp]) {
       expect(rendered).toContain("**External verification:**")
       expect(rendered).toContain("Algorithm ID: ")
     }
 
-    // A groupless algorithm is printed under the name groups() lists it by, so
-    // the group the model reads here is one list_algorithms answers to. The
-    // raw empty string would put an unusable value in front of it.
+    // Printed under the name `groups()` lists it by, so the group the model reads here is one list_algorithms
+    // answers to; the raw empty string is not.
     const orphan = formatAlgorithm({
       id: "native:orphan",
       name: "Orphan",
@@ -303,31 +265,22 @@ describe("QgisDoc", () => {
   })
 
   test("the QGIS group speaks with one voice about its environment", () => {
-    // Both tools sit behind the same gate and hand back the same kernel-authored
-    // guidance, so both descriptions have to prepare the Agent for it in the
-    // same words. Pinned across the two files because the failure mode is
-    // silent: one file gets edited, the other keeps the old promise, and the
-    // Agent's behaviour depends on which tool it happened to call first.
+    // Both sit behind the same gate and hand back the same kernel-authored guidance, and the drift is silent: one
+    // file is edited, the other keeps the old promise, and the model's behaviour turns on which it called first.
     const shared =
       "This tool needs the user's QGIS environment. When that environment is not ready, the output says exactly what is missing and who can fix it — relay that to the user instead of retrying."
     expect(READ_DESCRIPTION).toContain(shared)
     expect(DOC_DESCRIPTION).toContain(shared)
 
-    // The description must not promise an exactness the catalog no longer
-    // demands, or the model will avoid a call that would have worked.
+    // Lookup folds case and separators now, and a description still demanding an exact group name talks the model
+    // out of a call that would have worked.
     expect(DOC_DESCRIPTION).not.toContain("exact group name")
     expect(DOC_DESCRIPTION).toContain("Prefer the full algorithm ID")
   })
 })
 
-/* The tool's own body, with the gate and the catalog stood in for.
- *
- * Everything above either avoids the gate or asserts what happens when it is
- * shut; this block is the other half — what the four actions actually render
- * once it opens. Standing in for both services is what makes that reachable on
- * a machine with no QGIS, which is most machines a merge is verified on, and
- * it is the same harness RunQgisAlgorithm's ten return paths will need.
- */
+/* What the four actions render once the gate opens, which everything above either avoids or asserts the shut case
+ * of. Standing in for the gate and the catalog is what makes it reachable on a machine with no QGIS. */
 describe("QgisDoc, gate open", () => {
   const algorithm = (id: string, name: string, group: string, description = ""): QgisCatalog.Algorithm => ({
     id,
@@ -364,8 +317,7 @@ describe("QgisDoc, gate open", () => {
     }),
   )
 
-  /** The real tiering is the catalog's own tripwire; here it only has to be
-   * able to produce all three outcomes so the tool's branches are reachable. */
+  /** The real tiering is the catalog's own tripwire; this only has to reach all three outcomes. */
   const resolveStub = (id: string): QgisCatalog.Resolution => {
     if (id === "Slope") return { kind: "ambiguous", candidates: ["gdal:slope", "native:slope"] }
     const found = ALGORITHMS.find((item) => item.id === id)
@@ -424,9 +376,8 @@ describe("QgisDoc, gate open", () => {
 
   it.instance("a resolved group is reported by the name the catalog holds", () =>
     Effect.gen(function* () {
-      // Lookup tolerates case and separators (GEOKERNEL §4.11), so echoing the
-      // caller's spelling would put "VECTOR GEOMETRY" in front of a user as if
-      // that were the group's name. Title and metadata carry the catalog's.
+      // `inGroup` matches folded (§4.11), so echoing the caller's spelling would put "VECTOR GEOMETRY" in front of
+      // a user as if that were the group's name.
       const listed = yield* run({ action: "list_algorithms", group: "VECTOR GEOMETRY" })
       expect(listed.metadata.group).toBe("Vector geometry")
       expect(listed.title).toContain("Vector geometry")
@@ -440,16 +391,14 @@ describe("QgisDoc, gate open", () => {
 
   it.instance("a bounded search says so in both channels", () =>
     Effect.gen(function* () {
-      // The prose tells the model to narrow; the metadata has to agree, or a
-      // frontend reading only fields renders "10 results" for a query with
-      // more (the double-channel contract, GEOKERNEL §9.1).
+      // The prose tells the model to narrow and the metadata has to agree, or a frontend reading only the fields
+      // renders "10 results" for a query with more (GEOKERNEL §9.1).
       const many = yield* run({ action: "search", query: "many" })
       expect(many.metadata.count).toBe(10)
       expect(many.metadata.more).toBe(true)
       expect(many.output).toContain("Narrow the query")
 
-      // ...and stays silent when there is nothing to warn about: `more` is a
-      // flag, present only when true, never `more: false`.
+      // ...and `more` is a flag, present only when true, never `more: false`.
       const few = yield* run({ action: "search", query: "buffer" })
       expect("more" in few.metadata).toBe(false)
       expect(few.output).not.toContain("Narrow the query")
@@ -458,15 +407,14 @@ describe("QgisDoc, gate open", () => {
 
   it.instance("a miss answers with candidates instead of an error", () =>
     Effect.gen(function* () {
-      // Every failure here is a documentation answer the model can act on, not
-      // a tool error it can only report (docs/TOOLS.md §3).
+      // Every miss below is a documentation answer the model can act on, not a tool error it can only report
+      // (docs/TOOLS.md §3) — which is why `run` asserts success on all four.
       const missed = yield* run({ action: "read", algorithm: "native:nosuchthing" })
       expect(missed.output).toContain("Did you mean: native:buffer, gdal:warpreproject?")
       expect(missed.metadata.truncated).toBe(false)
 
-      // Ambiguity is NOT absence: the advice is "choose", not "search", and
-      // the candidates are the set the lookup declined to pick between rather
-      // than fuzzy neighbours re-guessed after the fact.
+      // Ambiguity is not absence: "not found" sends the model searching for a name the catalog holds twice, and
+      // the candidates are the set the lookup declined to choose between, not neighbours re-guessed afterwards.
       const many = yield* run({ action: "read", algorithm: "Slope" })
       expect(many.output).toContain("names 2 algorithms")
       expect(many.output).toContain("gdal:slope, native:slope")

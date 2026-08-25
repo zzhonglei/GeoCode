@@ -11,15 +11,9 @@ import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
 
-/* Tripwires for OsmSearch (docs/TOOLS.md §3; GEOKERNEL §6.2, §6.8).
- *
- * The OSM group has no environment, so there is no gate to test and no
- * guidance to render. What replaces those as the thing worth guarding is the
- * capability boundary — this group is reachable only through the osmfetch
- * subagent, never from GeoAgent directly — and one presentation rule: an
- * answer assembled from one engine instead of two must not read like a
- * complete one.
- */
+/* Tripwires for OsmSearch (docs/TOOLS.md §3; GEOKERNEL §6.2, §6.8). With no environment there is no gate and no
+ * guidance, leaving the capability boundary and one presentation rule: an answer assembled from one engine instead
+ * of two must not read like a complete one. */
 
 const CANDIDATE = (over: Partial<GeoOsm.OsmSearch.Candidate> = {}): GeoOsm.OsmSearch.Candidate => ({
   type: "relation",
@@ -77,14 +71,7 @@ const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, ag
     .pipe(Effect.timeout(10_000), Effect.exit)
 })
 
-/**
- * Runs the tool with the boundary lifted.
- *
- * The OSM group is denied to every agent that exists today — that IS the
- * design (§4.3), and the test above pins it. Everything below is about what
- * the tool prints, which would otherwise be untestable until the subagent that
- * may call it lands.
- */
+/** Runs the tool with the capability boundary lifted, since everything below is about what it prints. */
 const succeed = Effect.fnUntraced(function* (
   params: Record<string, unknown>,
   abort: AbortSignal = AbortSignal.any([]),
@@ -117,21 +104,15 @@ describe("OsmSearch, the capability boundary", () => {
         const registry = yield* ToolRegistry.Service
         expect(yield* registry.ids()).toContain("OsmSearch")
 
-        // GeoAgent deliberately does NOT carry `geo_osm_*`: downloading from
-        // public services goes through the osmfetch subagent, whose network exit
-        // is locked. This is capability isolation, not an oversight — and until
-        // that subagent lands, "denied" is the correct answer for everyone
-        // (docs/TOOLS.md §4.3, KERNEL.md §5).
+        // Neither ruleset carries `osm`: reaching the public services is osmfetch's alone, and the wildcard deny
+        // above it keeps the four OSM tools out of these two agents' tool lists (docs/TOOLS.md §4.2 ①, §4.3).
         for (const agent of ["GeoAgent", "plan"]) {
           const denied = yield* execute({ query: "武汉大学" }, agent)
           expect(Exit.isFailure(denied)).toBe(true)
           if (Exit.isFailure(denied)) expect(Cause.pretty(denied.cause)).toContain("rule which prevents")
         }
       }),
-    // Explicit budget: bun's per-test default is 5s, and building the registry
-    // for a fresh instance crosses it on a loaded machine — the whole gate runs
-    // in one process. A flaky red is worse than a slow green; it teaches people
-    // to re-run instead of to read.
+    // bun's 5s default is not enough to build a registry for a fresh instance on a machine running the whole gate.
     { timeout: 20_000 },
   )
 })
@@ -160,19 +141,14 @@ describe("OsmSearch, reading the answer", () => {
     () =>
       Effect.gen(function* () {
         const result = yield* succeed({ query: "武汉大学" })
-        // The id in the form the next tool takes it: R/W/N + number, which is
-        // what OsmGetObjects wants and what "area:R<id>" is built from.
+        // The id in the form the next tool takes it: OsmGetObjects wants "R10717504", and "area:R<id>" is built
+        // from the same prefix.
         expect(result.output).toContain("R10717504")
         expect(result.output).toContain("W42")
         expect(result.output).toContain("amenity=university")
-        // Every source, not a "both" flag. The old build's description promised
-        // "[both]" while its code printed the engine names — the code had it
-        // right: with one source the name is a diagnosis, with two the count is
-        // the confidence.
         expect(result.output).toContain("[geocoder+features]")
         expect(result.output).toContain("[features]")
-        // Transit entries are usually noise in a place search and usually
-        // outnumber the target; they are kept but marked (§6.8).
+        // Transit hits are downweighted noise in a place search, kept but marked (§6.8).
         expect(result.output).toContain("(transit)")
         expect(result.output).toContain("imp=0.531")
         expect(result.output).toContain("center=30.5395,114.3672")
@@ -195,15 +171,12 @@ describe("OsmSearch, reading the answer", () => {
     "half an answer says so, and still hands back what it has",
     () =>
       Effect.gen(function* () {
-        // The two engines' recall sets differ a lot, so one of them silent is a
-        // materially smaller answer — correct as far as it goes, and incomplete
-        // in a way nothing about the candidate list would reveal.
+        // One engine silent is a materially smaller answer, and nothing about the candidate list would reveal it.
         const result = yield* succeed({ query: "武汉大学" })
         expect(result.output).toContain("NOTE: the feature service did not answer")
         expect(result.output).toContain("R10717504")
         expect(result.metadata.degraded).toBe(true)
-        // Notes come first: they describe the whole answer, and a reader who
-        // meets them after the list has already read the list as complete.
+        // And before the list, which a reader who meets the note afterwards has already taken as complete.
         expect(result.output.indexOf("NOTE:")).toBeLessThan(result.output.indexOf("R10717504"))
       }),
     { timeout: 20_000 },
@@ -215,8 +188,7 @@ describe("OsmSearch, reading the answer", () => {
       Effect.gen(function* () {
         const result = yield* succeed({ query: "asdfghjkl" })
         expect(result.output).toContain("No matches")
-        // Every route onward the old build settled on, because "not found" with
-        // no next move is where a model starts inventing ids.
+        // "Not found" with no next move is where a model starts inventing ids.
         expect(result.output).toContain("abbreviations")
         expect(result.output).toContain("context")
         expect(result.output).toContain("name:en")
@@ -229,22 +201,13 @@ describe("OsmSearch, reading the answer", () => {
 
 describe("OsmSearch, the description", () => {
   test("it warns about the wait, which is the one thing §11.2 found missing", () => {
-    // The old build's copy said nothing about timing, and a model that reads a
-    // normal failover as a hang will abandon the call and retry — paying the
-    // same cost again, from the start.
     expect(SEARCH_DESCRIPTION).toContain("TIMING")
     expect(SEARCH_DESCRIPTION).toMatch(/do not abandon the call and retry/i)
   })
 
   test("it never teaches a bracket marker the code does not print", () => {
-    // Where the old build drifted: the description taught `[both]`, which the
-    // renderer never emitted.
-    //
-    // The markers are no longer enumerated. Choosing between candidates needs
-    // "more sources, more confidence" — which lookup produced which name is a
-    // fact about this tool's insides, and the model has no decision to make
-    // with it. So the assertion is inverted: naming none is fine, naming one
-    // the code does not print is not.
+    // Inverted on purpose: the description need name no marker at all, but a marker it names has to be one
+    // `formatCandidate` can print.
     const EMITTED = ["geocoder", "features", "site", "canonical"]
     for (const [, marker] of SEARCH_DESCRIPTION.matchAll(/\[([a-z]+)\]/g)) {
       expect(EMITTED).toContain(marker)
@@ -260,11 +223,7 @@ describe("OsmSearch, the two things it never said", () => {
     "an empty query is refused rather than sent",
     () =>
       Effect.gen(function* () {
-        // The other three tools all guard their own empty input. This one let a
-        // blank string through to become an unanchored name regex against
-        // public services — the most expensive query it can send, for an answer
-        // that means nothing. Refused before the ask, because there is nothing
-        // for a user to authorize about a call that cannot work.
+        // A blank query is not a no-op but `rel["name"~""]`, which matches every named element on the planet.
         for (const query of ["", "   "]) {
           const result = yield* succeed({ query })
           expect(result.metadata.error_code).toBe("InvalidParameters")
@@ -279,10 +238,8 @@ describe("OsmSearch, the two things it never said", () => {
     "a cancelled search says so, and still hands over what it found",
     () =>
       Effect.gen(function* () {
-        // Cancelled is PARTIAL, not failed — the reading the other three tools
-        // give it. Without this line the candidate list looks like the whole
-        // answer, and the engine notes cannot say it: they describe an engine
-        // that answered badly, not a run that stopped.
+        // Cancelled is partial, not failed, and the engine notes cannot carry it: they describe an engine that
+        // answered badly, not a run that stopped.
         const stopped = new AbortController()
         stopped.abort()
         const result = yield* succeed({ query: "武汉大学" }, stopped.signal)

@@ -10,14 +10,8 @@ import { QgisProbe } from "@/geo/qgis/probe"
 import { QgisResolve } from "@/geo/qgis/resolve"
 import { QgisWindows } from "@/geo/qgis/windows"
 
-/* QGIS environment resolution (docs/GEOKERNEL.md §4.3–§4.6, §4.10).
- *
- * The macOS half also ran end to end against a real install — QGIS 3.44.9,
- * the generation with the compiled-in build prefix, the extra resources
- * level, AND the version-mismatched standard library directory. These tests
- * freeze what that run proved, on a synthetic bundle that reproduces each of
- * those traps. The Windows half exercises the pure logic through `path.win32`;
- * what needs a real filesystem waits for the real machine (P7). */
+/* QGIS environment resolution (docs/GEOKERNEL.md §4.3–§4.6, §4.10), on a synthetic bundle carrying the traps of a
+ * real 3.44 install and on `path.win32` for the Windows logic, which is pure. */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-qgis-"))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
@@ -32,8 +26,7 @@ function makeBundle(name = "QGIS.app"): string {
   fs.writeFileSync(path.join(macos, "qgis_process"), "")
   // Newer layout: versioned interpreter at the prefix root, no bin/.
   fs.writeFileSync(path.join(macos, "python3.12"), "")
-  // The trap seen on the real install: the standard library directory's name
-  // does NOT match the interpreter's version.
+  // The first trap: the standard library directory's name does not match the interpreter's version.
   const stdlib = path.join(resources, "python3.11")
   fs.mkdirSync(path.join(stdlib, "encodings"), { recursive: true })
   fs.writeFileSync(path.join(stdlib, "encodings", "__init__.py"), "")
@@ -52,7 +45,6 @@ describe("qgis macos resolution", () => {
   const prefix = path.join(bundle, "Contents", "MacOS")
 
   test("every hint shape converges on the same prefix", () => {
-    // §4.2: all shapes derive the same result; no shape is the "correct" one.
     for (const hint of [
       bundle,
       prefix,
@@ -75,18 +67,14 @@ describe("qgis macos resolution", () => {
   })
 
   test("the non-bundle fallback is explicitly unverified", () => {
-    // The reachability precheck leans on this flag: a derived guess must not
-    // count as evidence that anything exists (§4.3 principle 10). The leak
-    // this catches was found on the real machine — a nonexistent hint sailed
-    // past the precheck and came back as a spawn error wearing the probe
-    // script.
+    // The reachability precheck refuses a level 3 answer on this flag, so setting it here lets a nonexistent hint
+    // through to come back as a spawn error wearing the probe script (§4.3 principle 10).
     const resolved = QgisMacOS.resolvePrefix("/nonexistent/place/python3")
     expect(resolved.verified).toBe(false)
   })
 
   test("the standard library is found by content, not by version match", () => {
     const resources = path.join(bundle, "Contents", "Resources")
-    // Interpreter says 3.12; the directory says 3.11. Real install, real trap.
     expect(QgisMacOS.findStandardLibrary(resources)).toBe(path.join(resources, "python3.11"))
   })
 
@@ -98,12 +86,10 @@ describe("qgis macos resolution", () => {
     expect(env.PROJ_LIB).toBe(path.join(resources, "qgis", "proj"))
     expect(env.PROJ_DATA).toBe(env.PROJ_LIB)
     expect(env.GDAL_DATA).toBe(path.join(resources, "qgis", "gdal"))
-    // The module path collects ALL candidates — plugins included, because the
-    // algorithm framework initialises before QGIS would append them itself.
+    // Plugins included, because the algorithm framework initialises before QGIS would append that directory.
     expect(env.PYTHONPATH).toContain(path.join(resources, "qgis", "python"))
     expect(env.PYTHONPATH).toContain(path.join(resources, "qgis", "python", "plugins"))
     expect(env.PYTHONPATH).toContain(path.join(resources, "python3.11", "site-packages"))
-    // The link farm bridges the version mismatch.
     expect(env.PYTHONHOME).toBeTruthy()
     const link = path.join(env.PYTHONHOME!, "lib", "python3.12")
     expect(fs.readlinkSync(link)).toBe(path.join(resources, "python3.11"))
@@ -169,17 +155,15 @@ describe("qgis windows pure logic", () => {
   })
 
   test("the launcher dump script is one line of pure ASCII", () => {
-    // Both properties are mandatory: the command interpreter's handling of
-    // multi-line and non-ASCII payloads varies with the system language, and a
-    // mangled script silently forces the manual fallback (§4.5).
+    // Either property lost mangles the script in a system language the command interpreter handles differently,
+    // which silently forces the manual fallback (§4.5).
     expect(QgisWindows.ENV_DUMP_SCRIPT).not.toContain("\n")
     expect([...QgisWindows.ENV_DUMP_SCRIPT].every((ch) => ch.charCodeAt(0) < 128)).toBe(true)
   })
 
   test("a dump missing any critical key is rejected whole", () => {
-    // PATH is the one that must not be waved through: the bridge registers no
-    // library directories and rides entirely on the adopted search path, so an
-    // empty one would pass the probe and fail on first real use (§4.5).
+    // PATH is the one that must not be waved through: this track registers no library directories and rides
+    // entirely on the adopted search path, so an empty one passes the probe and fails on first real use (§4.5).
     const base = {
       QGIS_PREFIX_PATH: "C:/OSGeo4W/apps/qgis-ltr",
       PYTHONHOME: "C:\\OSGeo4W\\apps\\Python312",
@@ -282,18 +266,15 @@ describe("qgis probe grading", () => {
     if (!outcome.ok) {
       expect(outcome.failure).toBe("probe-failed")
       expect(outcome.startupCrash).toBe(true)
-      // §4.6: the script never reached its emit, so what it printed must reach
-      // the reader intact — it is the only evidence there is.
+      // §4.6: the script never reached its emit, so what the interpreter printed is the only evidence there is.
       expect(outcome.detail).toContain("platform independent libraries")
       expect(outcome.detail).toContain("init_fs_encoding")
     }
   })
 
   test("a marker that will not parse is not called a startup crash", async () => {
-    // The interpreter demonstrably started and reached its emit. Grading this
-    // as a startup crash both drops the parse error and trips the macOS
-    // unknown-layout retry — a spurious thirty-second search keyed on exactly
-    // that flag (§4.6 keeps 无标记 and 标记内容非法 as separate grades).
+    // Grading this as a startup crash drops the parse error and trips resolve.ts's unknown-layout retry, which is
+    // keyed on exactly that flag (§4.6 keeps 无标记 and 标记内容非法 apart).
     const runtime = stubRuntime([{ stdout: `${QgisProbe.MARKER}{definitely not json` }])
     const outcome = await Effect.runPromise(QgisProbe.run(runtime, "python", {}, []))
     expect(outcome.ok).toBe(false)
@@ -351,11 +332,8 @@ describe("qgis resolve orchestration", () => {
   test.skipIf(process.platform === "win32")(
     "an unknown layout is rescued by the deep search and one retry",
     async () => {
-      // A bundle whose standard library hides where layout detection cannot
-      // see it: not at Resources/python3.NN but deeper, the shape of a FUTURE
-      // layout change. Assembly therefore sets no interpreter home, the first
-      // probe dies at startup, and the §4.6 fallback — search by content,
-      // build the link structure, retry once — is the only road to success.
+      // The standard library sits deeper than Resources/python3.NN, so layout detection misses it, assembly sets
+      // no PYTHONHOME and the first probe dies at startup — the only road left is the §4.6 fallback.
       const bundle = path.join(root, "QGIS-Unknown.app")
       const macos = path.join(bundle, "Contents", "MacOS")
       fs.mkdirSync(macos, { recursive: true })
@@ -378,7 +356,6 @@ describe("qgis resolve orchestration", () => {
       expect(seen).toHaveLength(2)
       // The first attempt ran without a home — that is what made it crash.
       expect(seen[0]!.PYTHONHOME).toBeUndefined()
-      // The retry carried the constructed one, pointing at the hidden library.
       expect(seen[1]!.PYTHONHOME).toBeTruthy()
       const link = path.join(seen[1]!.PYTHONHOME!, "lib", "python3.12")
       expect(fs.readlinkSync(link)).toBe(hidden)
@@ -387,10 +364,8 @@ describe("qgis resolve orchestration", () => {
   )
 
   test.skipIf(process.platform === "win32")("a real interpreter outranks a missing marker", async () => {
-    // A QGIS-derived bundle with no recognizable marker, but the hint names an
-    // interpreter that exists. The marker's absence must not veto the probe:
-    // for pruned and renamed builds the probe is the only honest judge (§4.3
-    // principle 10). Everything short of this still gets the clean not-qgis.
+    // A missing `qgis_process` must not veto a hint that names an interpreter, since for a pruned or renamed
+    // build the probe is the only honest judge (§4.3 principle 10).
     const bundle = path.join(root, "Derived.app")
     const macos = path.join(bundle, "Contents", "MacOS")
     fs.mkdirSync(macos, { recursive: true })
@@ -422,8 +397,7 @@ describe("qgis resolve orchestration", () => {
     expect(resolution.ok).toBe(false)
     if (!resolution.ok) {
       expect(resolution.failure).toBe("probe-failed")
-      // §4.6: the script never spoke, so what the interpreter printed IS the
-      // diagnosis and must arrive intact.
+      // §4.6: the script never spoke, so `diagnostics.output` carries the interpreter's own complaint intact.
       expect(resolution.diagnostics.output).toContain("init_fs_encoding")
     }
   })
@@ -477,16 +451,14 @@ describe("qgis diagnostics", () => {
 
       const checks = QgisDiagnostics.pathChecks({
         prefix: "/nowhere",
-        // The real shape: module directory, plugins directory, and whatever
-        // the user's own PYTHONPATH contributed.
+        // The real shape: module directory, plugins directory, and whatever the user's own PYTHONPATH added.
         env: { PYTHONPATH: [good, plugins, inherited].join(":") },
         dllDirectories: [],
         platform: "darwin",
       })
 
-      // Found once, reported once. The plugins and inherited entries are not
-      // supposed to carry the package, and marking them red would put two
-      // guaranteed crosses on a healthy install.
+      // One entry per module path would put two guaranteed crosses on a healthy install, since neither the
+      // plugins nor the inherited directory is supposed to carry the package.
       expect(checks[path.join(good, "qgis", "__init__.py")]).toBe(true)
       expect(checks[path.join(plugins, "qgis", "__init__.py")]).toBeUndefined()
       expect(checks[path.join(inherited, "qgis", "__init__.py")]).toBeUndefined()

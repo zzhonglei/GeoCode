@@ -8,12 +8,8 @@ import { Snapshot } from "../../src/snapshot"
 import { disposeAllInstances, provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-/* Geodata never enters the checkpoint repository (docs/GEOKERNEL.md §10.1 #6).
- *
- * One scene is hundreds of megabytes and a project holds many, so without this
- * a checkpoint costs more than the work it protects. The failure is quiet — a
- * working feature, a disk filling up over weeks — which is why it is pinned
- * here rather than left to review. */
+/* Geodata never enters the checkpoint repository (docs/GEOKERNEL.md §10.1 #6), a rule whose failure is silent: a
+ * working feature and a disk filling up over weeks. */
 
 const it = testEffect(
   Layer.mergeAll(LayerNode.compile(LayerNode.group([Snapshot.node, FSUtil.node])), testInstanceStoreLayer),
@@ -34,16 +30,8 @@ afterEach(async () => {
 })
 
 test("what may be staged answers to the snapshot's own ignores, not only the source repo's", () => {
-  // `stage()` reports any non-zero exit as "failed to add snapshot files", and
-  // `git add` exits non-zero when handed a path its exclude file covers — while
-  // still adding everything else. Drop the geodata half of this rule and a
-  // geographic project collects that warning on every single checkpoint, at
-  // which point the one that means something looks exactly like it.
-  //
-  // Asserted on the rule rather than through a checkpoint because the two
-  // outcomes are indistinguishable from outside: same patch, same store, same
-  // files on disk. That is what kept this expression untested while it was
-  // inline, and why it is a named function now.
+  // Drop the geodata half and `git add` still keeps the raster out, but exits non-zero over it, which `stage()`
+  // reports as "failed to add snapshot files" on every checkpoint a geographic project ever takes.
   const all = ["notes.md", "build/out.js", "scene.tif"]
   const sourceIgnored = new Set(["build/out.js"]) // the user's own .gitignore
   const geoIgnored = new Set(["scene.tif"]) // the snapshot repo's info/exclude
@@ -68,9 +56,8 @@ it.live(
       yield* write(`${dir}/layer.shx`, "index")
       yield* write(`${dir}/city.gpkg-wal`, "write ahead log")
       yield* write(`${dir}/notes.md`, "an ordinary file")
-      // `.dat` is a MapInfo companion AND an ordinary extension. It is in the
-      // taxonomy but NOT in the snapshot's blanket list, precisely so this rule
-      // cannot swallow a user's own file (§10.1 #5).
+      // A MapInfo companion that geo-extensions.ts holds back from the blanket list, so it stays a user's own
+      // file here (§10.1 #5).
       yield* write(`${dir}/measurements.dat`, "not a GIS file")
 
       const patch = yield* snapshot.patch(before!)
@@ -86,15 +73,8 @@ it.live(
 it.live(
   "the metadata rule is qualified by what it sits beside, and spares ordinary XML",
   Effect.gen(function* () {
-    /* Every other rule in GEO_EXCLUDE names a geo extension, so it can only
-     * ever match geodata. `*.xml` was the one that could not: it took
-     * `pom.xml`, `.csproj`, `web.xml` and every other ordinary config with it.
-     *
-     * Pinned through a checkpoint rather than by reading the rule, because what
-     * went wrong was not visible in the rule — it was visible one step later,
-     * in a revert. A file outside the checkpoint is not restored AND not
-     * deleted, so an agent's edit to `pom.xml` simply outlived the rollback
-     * that was supposed to undo it, silently, while every other file returned. */
+    /* A bare `*.xml` — the shape this rule replaced — takes `pom.xml` and `web.xml` out of the checkpoint with
+     * the metadata, and an edit to a file outside the checkpoint outlives the rollback meant to undo it. */
     const dir = yield* gitTmpdir()
     yield* write(`${dir}/readme.md`, "start")
     yield* exec(dir, ["git", "add", "."])
@@ -105,12 +85,10 @@ it.live(
       const before = yield* snapshot.track()
       expect(before).toBeTruthy()
 
-      // GDAL's PAM sidecar and ArcGIS metadata: companions to data this block
-      // already excludes, so they go with it.
+      // GDAL's PAM sidecar and ArcGIS metadata, companions to data this block already excludes.
       yield* write(`${dir}/scene.tif.aux.xml`, "<PAMDataset/>")
       yield* write(`${dir}/roads.shp.xml`, "<metadata/>")
-      // Ordinary project files, at the root and nested — a bare `*.xml` matches
-      // at any depth, so both were at risk and both have to come back.
+      // Ordinary project files, root and nested, since a bare `*.xml` matches at any depth.
       yield* write(`${dir}/pom.xml`, "<project/>")
       yield* write(`${dir}/config/web.xml`, "<web-app/>")
 
@@ -128,11 +106,8 @@ it.live(
 it.live(
   "geodata already committed in the user's repo is dropped too",
   Effect.gen(function* () {
-    // THE case that costs real money. The source repo's check-ignore never sees
-    // the snapshot's exclude, and a gitignore rule has no effect on an
-    // already-tracked file — so a committed scene, seeded into the snapshot
-    // index along with everything else, would be re-hashed into the object
-    // store on every checkpoint until the disk is gone.
+    // An ignore rule has no effect on an already-tracked file, so without the `ls-files` sweep a committed scene
+    // is re-hashed into the object store on every checkpoint.
     const dir = yield* gitTmpdir()
     yield* write(`${dir}/readme.md`, "start")
     yield* write(`${dir}/committed.tif`, "raster bytes")
@@ -158,23 +133,8 @@ it.live(
 it.live(
   "a rollback leaves geodata where it found it — it cannot restore one, and must not delete one",
   Effect.gen(function* () {
-    /* Geodata is outside the checkpoint mechanism by design: a scene is too
-     * large to store every turn, so there is nothing to roll back TO. What that
-     * costs is stated above. What it must not cost is the scene itself.
-     *
-     * `revert` restores a file with `git checkout <hash> -- <file>` against the
-     * snapshot, and when that fails on a path the snapshot tree does not hold,
-     * it DELETES the file instead — the branch upstream's suite exercises with
-     * `nonexistent.txt`. Geodata is absent from that tree by construction, so
-     * the only thing between a rollback and a user's raster is `patch.files` not
-     * naming it, which holds because `drop()` runs before the `diff --cached`
-     * that builds the list.
-     *
-     * Three links, and none of them was pinned against a rollback: the two cases
-     * above assert `patch.files` and never revert; the upstream suite reverts
-     * and has no geodata. The failure this guards is not a disk filling up over
-     * weeks — it is the scene gone in one turn, with no checkpoint of it to go
-     * back to, because we deliberately never made one. */
+    /* `revert` DELETES any path the snapshot tree does not hold, and geodata is absent from that tree by
+     * construction, so all that stands between a rollback and a user's raster is `patch.files` not naming it. */
     const dir = yield* gitTmpdir()
     yield* write(`${dir}/readme.md`, "start")
     yield* write(`${dir}/committed.tif`, "the original raster")
@@ -196,9 +156,7 @@ it.live(
       const readme = yield* Effect.promise(() => Bun.file(`${dir}/readme.md`).text())
       expect(readme).toBe("start")
 
-      // And the scene is untouched. NOT "was not restored" — restoring and
-      // deleting are different branches of `revert`, and it is the deleting one
-      // that takes the user's data with it.
+      // Untouched, which for geodata means the agent's bytes rather than the original.
       const survived = yield* Effect.promise(() => Bun.file(`${dir}/committed.tif`).exists())
       expect(survived).toBe(true)
       const scene = yield* Effect.promise(() => Bun.file(`${dir}/committed.tif`).text())

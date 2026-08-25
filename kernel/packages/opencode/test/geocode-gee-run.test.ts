@@ -18,15 +18,9 @@ import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
 import { statusHolding } from "./lib/geocode-status"
 
-/* Tripwires for RunGeeScript (docs/TOOLS.md §3; GEOKERNEL §5.9, §5.5, §11.2).
- *
- * Every return path is reachable without credentials, a project, or a network:
- * the executor is a free function over GeoRuntime.Interface, and the gate is a
- * service that can be handed over open or shut. What that buys is the one
- * thing this tool cannot be trusted on otherwise — the authorization loop,
- * whose whole point is that it fires on a REAL refusal, which no machine with
- * a healthy setup would ever produce on demand.
- */
+/* Tripwires for RunGeeScript (docs/TOOLS.md §3; GEOKERNEL §5.9, §5.5, §11). The executor takes a
+ * GeoRuntime.Interface and the gate is a service, so every return path is reachable without credentials or a
+ * network — including the §5.5 loop, which only fires on a real refusal no healthy machine produces on demand. */
 
 const ENVIRONMENT: GeeService.Environment = {
   python: "/fake/envs/geo/bin/python3",
@@ -50,16 +44,11 @@ const SHUT: GeoEvent.GeeStatus = {
   runtime: { status: "unknown" },
 }
 
-/** What the gate was asked, and what a run reported back to it. */
+/** Every stderr handed to `reject`, and how many times `recheck` was called. */
 const seen: { rejected: string[]; rechecks: number } = { rejected: [], rechecks: 0 }
 
-/**
- * A GEE service under the test's control.
- *
- * `reject` answers the way the real one does — only an authorization refusal
- * counts — because the tool's behaviour differs on that answer and a stub that
- * always said yes would hide the difference.
- */
+/** A GEE service under the test's control; `reject` judges like the real one, or `auth_rejected` would be set on
+ * every failing script. */
 function geeService(gate: GeeService.Gate, options: { recheck?: boolean } = {}) {
   return Layer.succeed(
     GeeService.Service,
@@ -113,16 +102,9 @@ const harness = (runtime: Layer.Layer<GeoRuntime.Service>, gee: Layer.Layer<GeeS
   )
 
 /**
- * A user who has already granted the capability, standing in.
- *
- * `gee` is `ask` for GeoAgent — that is the design, and the verdict itself is
- * asserted in geocode-geo-permissions.test.ts, which can read it without anyone
- * having to answer. Every test reached through `execute` is about what the tool
- * DOES once it is allowed to run, and without this each one parks at an
- * unanswered prompt until its timeout.
- *
- * Appended last, which is the shape a real approval takes: `evaluate` returns
- * the last matching rule, and answering "always" pushes onto the same ruleset.
+ * A user who has already granted the capability, standing in: `gee` is `ask` for GeoAgent, so without this every
+ * test reached through `execute` would park at an unanswered prompt until its timeout. Appended after the agent's
+ * rules, where `evaluate` reads an "always" answer from too.
  */
 const GRANTED = { permission: "gee", pattern: "*", action: "allow" } as const
 
@@ -171,12 +153,8 @@ describe("RunGeeScript, registration and the boundary", () => {
       const registry = yield* ToolRegistry.Service
       expect(yield* registry.ids()).toContain("RunGeeScript")
 
-      // GeoAgent holds `gee`, which is the key this tool asks under. Only a
-      // behavioural check tells "the grant matched" from "it silently missed",
-      // and a miss falls through to the global deny (docs/TOOLS.md §4.1, §4.2).
-      //
-      // plan's side — asked rather than refused — is a ruleset fact, pinned in
-      // geocode-geo-permissions.test.ts where no user has to answer a prompt.
+      // Run, not just listed: an id in the registry says nothing about whether the call gets past the `gee`
+      // prompt, and only running it distinguishes a rule that matched from one nothing consults (§4.2).
       const allowed = yield* execute({ script: "print(1)" })
       expect(Exit.isSuccess(allowed)).toBe(true)
     }),
@@ -188,9 +166,7 @@ describe("RunGeeScript, pre-spawn refusals", () => {
 
   it.instance("a malformed call is blamed on the call, and never on Earth Engine", () =>
     Effect.gen(function* () {
-      // The old build's lesson, carried over from the QGIS runner: a bare
-      // "Invalid parameters" reads as "GEE rejected me" and sends the model
-      // hunting for a bug that is not there.
+      // A bare "Invalid parameters" reads as "GEE rejected me" and sends the model hunting a bug that is not there.
       const neither = yield* succeed({})
       expect(neither.output).toContain("Python was NOT invoked")
       expect(neither.output).toContain("on your end (the agent)")
@@ -217,19 +193,10 @@ describe("RunGeeScript, pre-spawn refusals", () => {
 
   it.instance("a script path is resolved against the instance and asked for in worktree form", () =>
     Effect.gen(function* () {
-      /* Two faults in one place, both of which were live until 2026-08-20.
-       *
-       * `script_path` used to travel raw through all eleven of its uses. A
-       * RELATIVE one therefore resolved against `process.cwd()`, so the
-       * existence check could answer about a different file than the one that
-       * would run — and the permission pattern changed shape depending on how
-       * the model happened to spell the argument, which makes a rule like
-       * `"gee": { "scripts/*.py": "allow" }` impossible to write reliably.
-       *
-       * The instance directory is a temp dir and the process cwd is the package
-       * root, so a relative path that resolves is proof it resolved against the
-       * right one.
-       */
+      /* Passed through raw, a relative `script_path` resolves against `process.cwd()`, so the existence check can
+       * answer about a different file than the one that runs, and the permission pattern changes shape with how
+       * the model spelled the argument. The instance directory is a temp dir while the process cwd is the package
+       * root, so a relative path that resolves at all proves which one it went to. */
       const instance = yield* InstanceState.context
       const registry = yield* ToolRegistry.Service
       const tool = (yield* registry.all()).find((item) => item.id === "RunGeeScript")!
@@ -249,29 +216,22 @@ describe("RunGeeScript, pre-spawn refusals", () => {
           } as any)
           .pipe(Effect.timeout(5_000), Effect.exit)
 
-      /* Asserted as properties, not as a literal string. The test instance is
-       * not a git repository, so its worktree is `/` and the relative form is a
-       * long absolute-looking path — pinning the literal would pin the fixture
-       * rather than the behaviour. (OSM's tripwire learned this the same way.)
-       */
-      // Relative: only reaches the prompt at all if it resolved against the
-      // instance — otherwise the existence check refuses before asking.
+      /* Asserted as properties rather than a literal: the pattern is `path.relative(instance.worktree, …)` over a
+       * temp directory, so a literal would pin the fixture instead of the behaviour. */
+      // Relative: reaches the prompt only if it resolved against the instance, since the existence check above
+      // `ctx.ask` refuses first otherwise.
       yield* record({ script_path: "pipeline.py" })
       const fromRelative = asked.at(-1)!
       expect(fromRelative).toHaveLength(1)
 
-      // Absolute: the SAME pattern, because one file must not produce two
-      // patterns depending on how the model spelled the argument — that is what
-      // makes `"gee": { "scripts/*.py": "allow" }` writable at all.
+      // Absolute: the same pattern, or one file would need two rules to cover it.
       yield* record({ script_path: path.join(instance.directory, "pipeline.py") })
       expect(asked.at(-1)).toEqual(fromRelative)
 
-      // And normalised rather than passed through: worktree-relative, the form
-      // `read` and OSM's writer both use.
+      // Worktree-relative rather than passed through, the form `read` asks with.
       expect(path.isAbsolute(fromRelative[0]!)).toBe(false)
 
-      // Inline keeps an identifier rather than `title`'s prose, because this
-      // string is what a rule is written against.
+      // An identifier rather than `title`'s prose, because a rule is written against this string.
       yield* record({ script: "print(1)" })
       expect(asked.at(-1)).toEqual(["inline_script"])
     }),
@@ -279,8 +239,7 @@ describe("RunGeeScript, pre-spawn refusals", () => {
 
   it.instance("no refusal claims a duration for a run that never happened", () =>
     Effect.gen(function* () {
-      // A synthetic footer here would tell the Agent the script ran and
-      // finished instantly, which is worse than saying nothing (§11.2).
+      // A footer here would tell the Agent the script ran and finished instantly (§11).
       for (const params of [{}, { script: "x", script_path: "/tmp/y.py" }, { script_path: "/nope/z.py" }]) {
         const result = yield* succeed(params)
         expect(result.output).not.toContain("Elapsed:")
@@ -291,14 +250,9 @@ describe("RunGeeScript, pre-spawn refusals", () => {
 })
 
 describe("RunGeeScript, a local dead end costs the user nothing", () => {
-  /* The prompt is worth what it costs. Asking before the gate is deliberate —
-   * passing that gate is a real credentialed call (§5.5) and must not happen
-   * for a user who has not agreed — but that argument only covers layers that
-   * need the REMOTE. When the LOCAL chain has already stopped, the answer is
-   * known before anyone is asked, and asking anyway spends attention on a
-   * decision with one outcome. Do that a few times and the prompt reads as a
-   * formality, which is what makes it worthless on the day it matters.
-   */
+  /* The prompt stays above the remote gate because passing that gate is a real credentialed call (§5.5), but a
+   * settled local failure is already in the status plane — asking about it spends the user's attention on a
+   * decision with one outcome, which is how a prompt becomes a formality. */
   const withStatus = (gee: GeoEvent.GeeStatus | undefined) =>
     testEffect(
       LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
@@ -324,18 +278,14 @@ describe("RunGeeScript, a local dead end costs the user nothing", () => {
         metadata: () => Effect.void,
         ask: (req: any) => Effect.sync(() => void asked.push(req.permission)),
       } as any)
-      // 10s to match `execute` above rather than a tighter number of its own:
-      // each case compiles the whole layer graph, and a machine busy with
-      // something else should not turn a correctness test red (test-gate.sh).
+      // 10s, matching `execute` above: each case compiles the whole layer graph, and a busy machine must not turn
+      // a correctness test red.
       .pipe(Effect.timeout(10_000), Effect.exit)
     return { asked, result }
   })
 
-  /* A world the user can change from outside, which is what installing a
-   * package looks like from here: `recheck` only reports that it looked, and
-   * whether anything changed is decided by `installed` — not by the act of
-   * looking. Wiring the flip into `recheck` itself would make the first call
-   * recover on its own and prove nothing. */
+  /* `installed` is flipped by the test body, not by `recheck`: wiring the change into the act of looking would
+   * let the first call recover on its own and prove nothing. */
   let installed = false
   const it_recovers = testEffect(
     LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
@@ -384,26 +334,15 @@ describe("RunGeeScript, a local dead end costs the user nothing", () => {
       expect(asked).toEqual([])
       expect(Exit.isSuccess(result)).toBe(true)
       if (!Exit.isSuccess(result)) throw new Error("refused")
-      // And it still says the same thing the gate would have said — the user
-      // loses the prompt, not the guidance.
+      // Still the guidance the shut gate would have rendered: the user loses the prompt, not the answer.
       expect(result.value.metadata.error).toBe(true)
       expect(result.value.output).not.toBe("")
     }),
   )
 
-  /* Every state the user passes through while setting Earth Engine up, not
-   * just the one that happened to be handy.
-   *
-   * The requirement is about the WHOLE journey: an agent walking a user through
-   * the four steps calls this tool repeatedly to read the next instruction, and
-   * none of those calls is a decision anyone needs to approve — the tool is
-   * being used as documentation, not as a capability. The prompt belongs on the
-   * first call that can actually do something.
-   *
-   * Pinned state by state rather than as "credentials-missing does not ask",
-   * because the guarantee is the set, and a new setup state added to the schema
-   * without a thought here would slip through a single-case test.
-   */
+  /* Every failing setup state the schema has — everything but `checking` and `ready` — because an agent walking a
+   * user through the four steps calls this tool repeatedly to read the next instruction, and none of those calls
+   * is a decision anyone needs to approve. The guarantee is the whole set, so one case would not carry it. */
   const SETUP_FAILURES: GeoEvent.GeeStatus["setup"][] = [
     { status: "unconfigured" },
     { status: "config-error", file: "/x/machine.json", message: "bad" },
@@ -428,8 +367,7 @@ describe("RunGeeScript, a local dead end costs the user nothing", () => {
         expect(asked).toEqual([])
         expect(Exit.isSuccess(result)).toBe(true)
         if (!Exit.isSuccess(result)) throw new Error("refused")
-        // Guidance, not an empty refusal: the call is how the agent reads the
-        // next step, so an answer with nothing in it strands the user.
+        // Guidance rather than an empty refusal: this call is how the agent reads the next step.
         expect(result.value.output.length).toBeGreaterThan(40)
       }),
     )
@@ -444,11 +382,8 @@ describe("RunGeeScript, a local dead end costs the user nothing", () => {
 
   withStatus(CHECKING).instance("a probe still in flight is NOT short-circuited", () =>
     Effect.gen(function* () {
-      /* The one setup state still in motion. `settledGeeGate` exists to wait it
-       * out, so refusing here would turn a slow probe into a failure — and the
-       * short-circuit above is exactly the kind of check that grows to swallow
-       * cases it was never meant to.
-       */
+      // `checking` is the state `settledGeeGate` exists to wait out, so a dead-end check that swallowed it would
+      // turn a slow probe into a failure.
       const { asked } = yield* askedFor({ script: "print(1)" })
       expect(asked).toContain("gee")
     }),
@@ -456,26 +391,14 @@ describe("RunGeeScript, a local dead end costs the user nothing", () => {
 
   it_recovers.instance("a user who just did what they were told is not told it again", () =>
     Effect.gen(function* () {
-      /* ★ The regression this whole helper exists to prevent, and the one that
-       * would be invisible from the outside: the user would simply be stuck.
-       *
-       * Two of the four setup steps — installing packages, running the
-       * authentication command — never touch machine.json, so the config
-       * watcher does not fire and the stored verdict stays "missing" no matter
-       * how long anyone waits. The ONLY signal that the world changed is the
-       * model retrying the tool. A short-circuit that reads the stored status
-       * and returns before `settledGeeGate` skips the re-probe entirely, and
-       * the user who has done exactly what the guidance asked is told the same
-       * thing forever.
-       *
-       * So: first call refuses, `recheck` fires, the world has moved on, and
-       * the second call gets through.
-       */
+      /* The five states in `SELF_HEALING` (gee/index.ts) are fixed by commands that never touch machine.json, so
+       * the config watcher never fires and the stored verdict stays stale however long anyone waits — the model
+       * retrying the tool is the only signal there is. `geeLocalDeadEnd` returns before `settledGeeGate` is
+       * reached, so without its own `recheck` a user who did exactly what the guidance asked is told it forever. */
       installed = false
       const first = yield* askedFor({ script: "print(1)" })
       expect(first.asked).toEqual([])
-      // ★ The re-probe happened. Without this line the test would still pass
-      // with the short-circuit reading a stale verdict and never looking again.
+      // Without this the test still passes against a dead-end check that reads a stale verdict and never looks.
       expect(seen.rechecks).toBeGreaterThan(0)
 
       installed = true // the user installs the package the guidance named
@@ -486,7 +409,7 @@ describe("RunGeeScript, a local dead end costs the user nothing", () => {
 
   withStatus(undefined).instance("an unknown status is not treated as a failure", () =>
     Effect.gen(function* () {
-      // Nothing has probed yet. Absence of an answer is not a negative answer.
+      // Nothing has probed yet, and the absence of an answer is not a negative one.
       const { asked } = yield* askedFor({ script: "print(1)" })
       expect(asked).toContain("gee")
     }),
@@ -498,16 +421,14 @@ describe("RunGeeScript, a shut gate", () => {
 
   it.instance("a refusal carries the kernel's guidance, not a sentence of its own", () =>
     Effect.gen(function* () {
-      // The whole GEE group speaks with one voice, authored in the kernel
-      // (§8.6). A tool writing its own environment copy is how two callers
-      // start telling a user different things about one problem.
+      // The copy is authored once in the kernel (§8.6); a tool writing its own is how two callers end up telling
+      // a user different things about one problem.
       const result = yield* succeed({ script: "print(1)" })
       expect(result.output).toContain("Step 3 of 4")
       expect(result.output).toContain("earthengine")
       expect(result.metadata.error).toBe(true)
-      // Both halves: which layer, AND its own state. "setup" alone covers both
-      // "no interpreter configured" and "not signed in", and a surface that
-      // cannot tell those apart has the same button for both.
+      // Both halves: `setup` alone covers "no interpreter configured" and "not signed in", which need different
+      // things from the user.
       expect(result.metadata.geoStatus).toBe("setup:credentials-missing")
       expect(result.output).not.toContain("Elapsed:")
     }),
@@ -523,10 +444,8 @@ describe("RunGeeScript, the endings", () => {
     () =>
       Effect.gen(function* () {
         const result = yield* succeed({ script: "print('working')" })
-        // The fix for this ending is not a bigger timeout — this tool has no
-        // timeout parameter — it is heartbeat(). Saying "no output for too
-        // long" without naming it leaves the Agent reaching for a knob that
-        // does not exist (§5.9 心跳契约).
+        // `Parameters` exposes no timeout, so a banner that says "no output for too long" without naming
+        // heartbeat() leaves the Agent reaching for a knob that does not exist (§5.9 心跳契约).
         expect(result.output).toContain("heartbeat()")
         expect(result.output).toContain(`${GeeService.GeeExecutor.IDLE_FLOOR_SECONDS}s`)
         expect(result.metadata.error_code).toBe("IdleTimeout")
@@ -539,9 +458,8 @@ describe("RunGeeScript, the endings", () => {
 
   ending({ reason: "abort", code: null }, ["partial\n"]).instance("a cancelled run says the user cancelled it", () =>
     Effect.gen(function* () {
-      // Upstream does not interrupt a tool on cancellation — it takes what
-      // the tool returns and completes the call with it. Silence here files
-      // the user's own cancellation under "it failed".
+      // Upstream completes the call with whatever the tool returned, so silence files the user's own Esc under
+      // "it failed".
       const result = yield* succeed({ script: "print('partial')" })
       expect(result.output).toContain("User cancelled execution")
       expect(result.output).toContain("partial")
@@ -556,8 +474,7 @@ describe("RunGeeScript, the endings", () => {
         const result = yield* succeed({ script: "import ee" })
         expect(result.output).toContain("SIGSEGV")
         expect(result.output).toContain("segfault inside a native library")
-        // The banner is shared with the QGIS runner, so it must not name one
-        // capability's interpreter — GEE runs its own Python.
+        // `terminationBanner` is shared with the QGIS runner, and GEE runs its own Python.
         expect(result.output).not.toContain("QGIS")
         expect(result.metadata.error_code).toBe("Crashed")
       }),
@@ -585,25 +502,22 @@ describe("RunGeeScript, the endings", () => {
     "a launch that never happened is not reported as a crash",
     () =>
       Effect.gen(function* () {
-        // Filing this as `crash` told the agent a native library segfaulted below
-        // the Python level and could not be caught — for an interpreter that was
-        // simply not there. Both real causes are fixable configuration.
+        // Filed as `crash`, this tells the agent an uncatchable native segfault happened, for an interpreter that
+        // was simply not there — while both real causes are fixable configuration.
         const result = yield* succeed({ script: "print(1)" })
         expect(result.output).toContain("never ran")
         expect(result.output).toContain("ENOENT")
         expect(result.output).toContain("gee.python")
         expect(result.output).not.toContain("segfault")
         expect(result.output).not.toContain("unexpectedly quit")
-        // Nothing ran, so nothing took any time. A footer here would say the
-        // script ran and finished instantly.
+        // No process ran, so a footer would say the script ran and finished instantly.
         expect(result.output).not.toContain("Elapsed:")
         expect(result.metadata.elapsed_ms).toBeUndefined()
         expect(result.metadata.error_code).toBe("LaunchFailed")
-        // The same flag the shut gate sets, because it is the same kind of
-        // fact: the environment is in the way, not the script. One spelling.
+        // The shut gate's flag, because it is the same fact in one spelling: the environment is in the way.
         expect(result.metadata.error).toBe(true)
         expect(result.metadata.env_error).toBeUndefined()
-        // And it is not filed under the endings that mean "it ran and stopped".
+        // And not filed under the endings that mean it ran and stopped.
         expect(result.metadata.partial).toBeUndefined()
         expect(result.metadata.failed).toBeUndefined()
       }),
@@ -620,41 +534,23 @@ describe("RunGeeScript, the endings", () => {
     ["loading region\n"],
   ).instance("a failed run carries the environment it ran in, beside what Python said", () =>
     Effect.gen(function* () {
-      /* The two halves that make an import failure repairable — and the reason
-       * this tool adds almost nothing to them.
-       *
-       * The setup probe only covers the four packages the runtime library needs
-       * (§5.3), so a script importing scikit-learn passes the gate and fails
-       * here, correctly. Python's traceback already names the module. The one
-       * thing it cannot say is WHICH interpreter is missing it, and the
-       * environment header says exactly that on every post-spawn path.
-       *
-       * Registering the slot is what makes the header renderable at all: the
-       * status service is real here while the GEE service is a stub, so nothing
-       * else publishes a status — and without this, every assertion below about
-       * the header would have passed against no header at all.
-       */
+      /* Registering the slot is what makes a header renderable at all: the status service is real here while the
+       * GEE service is a stub, so nothing else publishes one. */
       const status = yield* GeoStatus.Service
       yield* status.register("gee", READY)
 
       const result = yield* succeed({ script: "import sklearn" })
 
-      // Half one: the environment, with the interpreter in it.
+      // Which interpreter is missing it, the one thing a traceback cannot say.
       expect(result.output).toContain("<geo_env>")
       expect(result.output).toContain(ENVIRONMENT.python)
-      // Half two: Python's own words, verbatim.
+      // And Python's own words, verbatim.
       expect(result.output).toContain("ModuleNotFoundError: No module named 'sklearn'")
-      // The header comes FIRST, so the environment frames everything after it.
+      // Header first, so the environment frames everything after it.
       expect(result.output.indexOf("<geo_env>")).toBeLessThan(result.output.indexOf("ModuleNotFoundError"))
 
-      /* And NOTHING else. The agent reasons from those two facts; it does not
-       * need to be handed the command, told which packages the probe covers,
-       * or reminded that an import name can differ from a package name.
-       *
-       * Pinned as an absence because this is where the drift goes: three
-       * separate attempts to add exactly this advice were written and removed
-       * before the assertion below existed. Instructions crowd out reasoning,
-       * and the tool's job is to report. */
+      // And nothing else: install advice on top of those two facts is instruction crowding out reasoning, and
+      // this return is where it keeps being added.
       expect(result.output).not.toMatch(/pip install/i)
       expect(result.output).not.toMatch(/install it|you should|make sure to/i)
       expect(result.output).not.toMatch(/scikit-learn|opencv/i)
@@ -663,9 +559,7 @@ describe("RunGeeScript, the endings", () => {
       expect(result.metadata.missing_module).toBe("sklearn")
       expect(result.metadata.error_code).toBe("ScriptFailed")
       expect(result.output).toContain("loading region")
-      // The stderr still goes to the kernel — it owns the judgement of what
-      // counts as a refusal — and the answer is no. An import error is not
-      // Google saying anything.
+      // The stderr still reaches the kernel, which owns the judgement; an import error is not the remote refusing.
       expect(seen.rejected).toHaveLength(1)
       expect(result.metadata.auth_rejected).toBeUndefined()
     }),
@@ -684,18 +578,10 @@ describe("RunGeeScript, the endings", () => {
 
   ending({}, ["ok\n"]).instance("the environment header never mentions the proxy", () =>
     Effect.gen(function* () {
-      /* An absence, pinned because it was there once.
-       *
-       * The header used to carry `route proxy:127.0.0.1:7890`. No credential is
-       * in a RouteId by construction, so it was never a leak — but the copy rule
-       * for anything the model reads is that we do not mention proxies at all,
-       * so that a network failure does not send it reasoning that way. A fact
-       * repeated in every single return is precisely what gets reasoned from.
-       *
-       * The route is REACHABLE and non-direct here on purpose: with the fixture's
-       * usual `direct` the header would be clean whether or not the line exists,
-       * and this test would pass against the very code it is meant to forbid.
-       */
+      /* A RouteId carries no credential, so a route line was never a leak — but a fact repeated in every return
+       * is what gets reasoned from, and the model must not answer a network failure by reaching for the proxy.
+       * The route is reachable and non-direct on purpose: with the fixture's usual `direct` the header would be
+       * clean either way and this would pass against the code it forbids. */
       const status = yield* GeoStatus.Service
       yield* status.register("gee", {
         ...READY,
@@ -704,7 +590,7 @@ describe("RunGeeScript, the endings", () => {
 
       const result = yield* succeed({ script: "print('ok')" })
 
-      // The header is really there — otherwise the absences below prove nothing.
+      // The header is really there, or the absences below prove nothing.
       expect(result.output).toContain("<geo_env>")
       expect(result.output).toContain(ENVIRONMENT.python)
 
@@ -726,9 +612,8 @@ describe("RunGeeScript, the authorization loop", () => {
   ).instance("a refusal from the remote updates the stored conclusion", () =>
     Effect.gen(function* () {
       const result = yield* succeed({ script: "init_gee()" })
-      // §5.5's other half. The stored conclusion can sit on "valid"
-      // indefinitely — credentials get revoked without the route changing —
-      // and the only affordable check is the user's own call.
+      // Nothing polls a conclusion sitting on "valid" — credentials are revoked without the route changing — so
+      // the user's own call is what corrects it (§5.5).
       expect(seen.rejected).toHaveLength(1)
       expect(seen.rejected[0]).toContain("Permission denied")
       expect(result.metadata.auth_rejected).toBe(true)
@@ -740,9 +625,7 @@ describe("RunGeeScript, the authorization loop", () => {
     () =>
       Effect.gen(function* () {
         const result = yield* succeed({ script: "1/0" })
-        // The message still goes to the kernel — it owns the judgement of what
-        // counts — but nothing about a division by zero says the credentials
-        // stopped working, and marking it would invalidate a perfectly good
+        // The message still goes to the kernel, which owns the judgement; marking this would invalidate a working
         // authorization on every buggy script.
         expect(seen.rejected).toHaveLength(1)
         expect(result.metadata.auth_rejected).toBeUndefined()
@@ -764,11 +647,8 @@ describe("RunGeeScript, the authorization loop", () => {
     open,
   ).instance("a killed run is not evidence about authorization", () =>
     Effect.gen(function* () {
-      // A cancelled process leaves whatever it had printed in stderr, and that
-      // text was never the remote's answer to anything. Reading it as one would
-      // revoke a working authorization on the strength of a log line that
-      // happened to mention permissions — and the user would then be walked
-      // through signing in again to fix a problem they created by pressing Esc.
+      // A killed process leaves whatever it had printed in stderr, which was never the remote's answer — reading
+      // it as one walks the user through signing in again to fix a problem they created by pressing Esc.
       const result = yield* succeed({ script: "print('long job')" })
       expect(seen.rejected).toHaveLength(0)
       expect(result.metadata.auth_rejected).toBeUndefined()
@@ -778,9 +658,8 @@ describe("RunGeeScript, the authorization loop", () => {
 })
 
 describe("RunGeeScript, output that does not fit", () => {
-  // The one geographic tool where this is real: an algorithm's output is a
-  // property of the algorithm, but this one is whatever a script the Agent
-  // WROTE decides to print.
+  // The one geographic tool with no bound on its output: an algorithm's log is a property of the algorithm, and
+  // this is whatever a script the Agent wrote decides to print.
   const flood = Array.from({ length: 4_000 }, (_, i) => `line ${i} ${"x".repeat(60)}`).join("\n")
 
   harness(runtimeEnding({}, [flood, "\nFINAL ANSWER: 0.42\n"]), open).instance(
@@ -789,17 +668,15 @@ describe("RunGeeScript, output that does not fit", () => {
       Effect.gen(function* () {
         const result = yield* succeed({ script: "print(lots)" })
         expect(result.metadata.truncated).toBe(true)
-        // The TAIL survives — where a script says its result and where the
-        // banner and footer are appended. Upstream's own truncation keeps the
-        // head, which is why declaring `truncated` matters here.
+        // The tail survives, where a script prints its result and where the banner and footer are appended;
+        // upstream's own truncation keeps the head instead.
         expect(result.output).toContain("FINAL ANSWER: 0.42")
         expect(result.output).toContain("Elapsed:")
         expect(result.output).toContain("earlier output trimmed")
         expect(result.output).not.toContain("line 0 ")
 
-        // Declaring `truncated` skips upstream's truncation, and that is also
-        // what would have saved the full text. Trimming without doing this
-        // means the cut part is gone for good (docs/TOOLS.md §5.2).
+        // Declaring `truncated` skips the upstream path that would have saved the full text, so a tool that trims
+        // has to write the rest somewhere itself or the cut part is gone (docs/TOOLS.md §5.2).
         const saved = result.metadata.outputPath as string
         expect(saved).toBeTruthy()
         expect(result.output).toContain(saved)
@@ -818,8 +695,8 @@ describe("RunGeeScript, output that does not fit", () => {
   )
 })
 
-/* The pieces below are free functions, tested directly — the behaviour they
- * carry is invisible from the tool's return value. */
+/* The pieces below are free functions, called directly: the not-ready silence and the length of the wait are the
+ * parts no tool return value shows. */
 
 const statusReading = (value: GeoEvent.GeeStatus | undefined): GeoStatus.Interface =>
   ({
@@ -836,10 +713,8 @@ describe("the GEE environment header", () => {
     expect(ready).toContain(ENVIRONMENT.python)
     expect(ready).toContain("1.7.24")
 
-    // Every not-ready shape renders nothing, because the guidance for those
-    // states already prints the interpreter, the project and the reason — a
-    // header above it would be the duplication the old build's first tier
-    // existed to avoid.
+    // Every not-ready shape renders nothing: the guidance for those states already prints the interpreter, the
+    // project and the reason, so a header above it would be a second copy.
     for (const status of [
       SHUT,
       { ...READY, facing: "network", network: { status: "unreachable" } } as GeoEvent.GeeStatus,
@@ -876,10 +751,8 @@ describe("the gate's wait", () => {
   }
 
   test("a retry asks the kernel to look again (§5.8)", async () => {
-    // Three of the states a user lands in are fixed OUTSIDE machine.json — they
-    // install a package, they run the authentication command — and neither
-    // action touches the file the watcher watches. Without this, someone who
-    // has just done exactly what they were told is told the same thing again.
+    // The five states in `SELF_HEALING` (gee/index.ts) are fixed by commands that never touch the file the config
+    // watcher watches, so without this a user who just did what they were told is told it again.
     seen.rechecks = 0
     const gate = await Effect.runPromise(GeoTool.settledGeeGate(service([SHUT], false)))
     expect(seen.rechecks).toBe(1)
@@ -894,8 +767,8 @@ describe("the gate's wait", () => {
       runtime: { status: "unknown" },
     }
     seen.rechecks = 0
-    // Checking, checking, then ready: a cold start, which without the wait
-    // turns every first call into "Earth Engine is not ready".
+    // Checking, checking, then ready: a cold start, which without the wait makes every first call answer "Earth
+    // Engine is not ready".
     const gate = await Effect.runPromise(GeoTool.settledGeeGate(service([probing, probing, READY], false)))
     expect(gate.ok).toBe(true)
   })
@@ -905,25 +778,23 @@ describe("the gate's wait", () => {
     const started = Date.now()
     const gate = await Effect.runPromise(GeoTool.settledGeeGate(service([SHUT, SHUT, SHUT], false)))
     expect(gate.ok).toBe(false)
-    // credentials-missing is an answer. Polling it to the deadline would hang
-    // the tool for a minute to learn what it already knew.
+    // credentials-missing is an answer, and polling it to `SETTLE_LIMIT_MS` would hang the tool for a minute to
+    // learn what it already knew.
     expect(Date.now() - started).toBeLessThan(2_000)
   })
 })
 
 describe("the description and the code agree", () => {
   test("the idle limit the description teaches is the one enforced", () => {
-    // The description tells the model a number, and the model plans around it:
-    // heartbeat() calls are placed to beat that clock. If the enforced limit
-    // moved and this sentence did not, the advice would be actively wrong.
+    // The model places heartbeat() calls to beat this clock, so a limit that moved without the sentence would be
+    // advice that gets scripts killed.
     expect(RUN_DESCRIPTION).toContain(`${GeeService.GeeExecutor.IDLE_FLOOR_SECONDS}s idle timeout`)
     expect(RUN_DESCRIPTION).toContain("FORCE-KILL")
   })
 
   test("the description names only helpers the library actually exports", () => {
-    // The import line it teaches is copy-pasted verbatim into scripts. A name
-    // that drifted out of the library would fail at import, before the script
-    // did anything at all.
+    // These names are copy-pasted into scripts verbatim, so one that drifted out of gee/pylib/geocode.py fails at
+    // import, before the script does anything.
     for (const helper of ["init_gee", "load_region", "check_coverage", "heartbeat", "download_image", "export_image"]) {
       expect(RUN_DESCRIPTION).toContain(helper)
     }

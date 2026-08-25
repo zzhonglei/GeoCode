@@ -12,13 +12,9 @@ import { RASTER_PREVIEW_PY, RASTER_READ_PY, VECTOR_READ_PY } from "@/geo/qgis/sc
 import type { Environment } from "@/geo/qgis/types"
 import { testEffect } from "../lib/effect"
 
-/* The data-reading pipeline (docs/GEOKERNEL.md §4.13).
- *
- * The scripts themselves ran against real QGIS 3.44.9 (vector with Chinese
- * attribute values, raster, preview). These tests freeze the protocol: the
- * generated constants stay in sync with the .py sources, every script keeps
- * the four §4.13 constraints, and the reader's parsing survives the noise and
- * BOM interleaving the protocol exists for. */
+/* The data-reading pipeline (docs/GEOKERNEL.md §4.13): the generated constants stay in step with the .py sources,
+ * every script keeps the four protocol constraints, and the reader's parsing survives the noise and the BOM
+ * interleaving the protocol exists for. */
 
 const SCRIPTS = [
   { file: "vector_read.py", constant: VECTOR_READ_PY },
@@ -28,9 +24,8 @@ const SCRIPTS = [
 
 describe("qgis reader script assets", () => {
   test("the generated constants match the .py sources", () => {
-    // The build chain regenerates before every build, but a checkout edited
-    // without rebuilding would ship stale scripts silently — this makes it
-    // loud at test time instead (§4.13 构建链).
+    // The build chain regenerates before every build, so nothing else makes an edited-but-unrebuilt checkout
+    // loud — it would simply ship the stale constant (§4.13 构建链).
     for (const script of SCRIPTS) {
       const source = fs.readFileSync(
         path.join(import.meta.dir, "..", "..", "src", "geo", "qgis", "scripts", script.file),
@@ -50,28 +45,20 @@ describe("qgis reader script assets", () => {
       expect(script.constant).toContain(QgisReader.MARKER)
       // 3. Immediate exit after output, skipping interpreter teardown.
       expect(script.constant).toContain("os._exit(")
-      // 4. Fault handler enabled BEFORE any osgeo import: order in the file
-      // is order of execution.
+      // 4. Fault handler enabled BEFORE any osgeo import — order in the file is order of execution.
       const handler = script.constant.indexOf("faulthandler.enable")
       const osgeo = script.constant.indexOf("from osgeo")
       expect(handler).toBeGreaterThan(-1)
       expect(osgeo).toBeGreaterThan(handler)
-      // 2. UTF-8 comes from the subprocess environment; the script keeps
-      // non-ASCII values raw rather than escaping them away.
+      // 2. UTF-8 comes from the subprocess environment, so the script keeps non-ASCII values raw.
       expect(script.constant).toContain("ensure_ascii=False")
     }
   })
 
   test("both raster scripts gather the five facts with the very same function", () => {
-    // Neither script judges: the rule is one function in TypeScript
-    // (geo/georeference.ts, §7.9). What they owe is the EVIDENCE, and they must
-    // owe the same of it — omit a place in one and metadata mode opens a scene
-    // that preview mode refuses.
-    //
-    // Compared rather than described. Python cannot share a function across two
-    // materialized scripts without a module to import, and that module cost
-    // more than it bought; what it can do is carry the same one twice and have
-    // this notice the day they stop being the same.
+    // Neither script judges — one TypeScript function does (geo/georeference.ts, §7.9) — so what they owe is the
+    // same evidence, and a fact dropped from one opens in metadata mode a scene preview mode refuses. Compared
+    // rather than described, since a materialized script has no module to import the function from.
     const gathering = (script: string) => /^def georeferencing_facts[\s\S]*?\n    \}$/m.exec(script)?.[0]
     const fromRead = gathering(RASTER_READ_PY)
     expect(fromRead).toBeDefined()
@@ -94,69 +81,39 @@ describe("qgis reader script assets", () => {
   })
 
   test("the no-transform warning keeps both halves", () => {
-    // The fact AND the consequence, because the fact alone is not enough: the
-    // payload still carries a set of `extent` numbers that look usable, and a
-    // caller not told otherwise will hand them to a reprojection or an upload.
-    // Everything else in that sentence was trimmed; these two are the reason
-    // it exists.
+    // The fact alone is not enough: the payload still carries `extent` numbers that look usable, so the
+    // consequence has to travel with them.
     expect(RASTER_READ_PY).toContain("pixel indices, not ground")
     expect(RASTER_READ_PY).toContain("anything spatial computed from them will be wrong")
   })
 
   test("the raster extent comes back the way its field names promise", () => {
-    // A transform may step negatively in x, and the identity GDAL hands back
-    // for "no transform" steps POSITIVELY in y — either way the corner
-    // computed as the minimum can land above the one computed as the maximum.
-    // The GDAL face normalizes (its own test, gdal-inspector.test.ts); this
-    // one has to as well, or one file has its extent one way round for the
-    // Agent and the other for the map.
-    //
-    // Textual, like the §4.13 constraints above, and for the same reason: the
-    // script needs a GDAL to run. This is the line that would go quiet if
-    // someone tidied it back into two subtractions.
+    // A transform may step negatively in x, and GDAL's identity steps positively in y, so a corner computed as
+    // the minimum can land above the maximum — and the GDAL face normalizes (gdal-inspector.test.ts), so without
+    // this a file has its extent one way round for the agent and the other for the map. Textual, like the
+    // constraints above, because running the script needs a GDAL.
     expect(RASTER_READ_PY).toContain("xmin, xmax = min(x0, x1), max(x0, x1)")
     expect(RASTER_READ_PY).toContain("ymin, ymax = min(y0, y1), max(y0, y1)")
   })
 
   test("the preview refuses a container before it asks which bands to draw", () => {
-    // A netCDF, HDF4 or HDF5 file of several variables opens with RasterCount 0
-    // and a placeholder size, and the variable names are the only actionable
-    // thing about it — MODIS, Sentinel and ERA5 all arrive this way, so this is
-    // an ordinary file for this audience rather than an edge case.
-    //
-    // The ORDER is the assertion, not just the guard. Selection now survives an
-    // empty band list to stay level with the TypeScript face (the shared case
-    // in raster-rules.test.ts), so a refusal moved below it stops nothing: the
-    // run reaches `GetRasterBand(1)` on a bandless dataset, gets None back, and
-    // reports an AttributeError about NoneType — less to go on than the "list
-    // index out of range" this replaced.
-    //
-    // Textual, like the §4.13 constraints above, and for the same reason: the
-    // script needs a real GDAL and a real container to run.
+    // The ORDER is the assertion, not the guard: `select_bands` now survives an empty band list to stay level
+    // with the TypeScript face, so a refusal moved below it stops nothing — the run walks on to
+    // `GetRasterBand(1)` on a bandless dataset and reports an AttributeError about NoneType instead. Textual,
+    // like the constraints above, because running this needs a real GDAL and a real container.
     expect(RASTER_PREVIEW_PY).toContain('GetMetadata("SUBDATASETS")')
     const refusal = RASTER_PREVIEW_PY.indexOf("subdatasets = container_subdatasets(ds)")
     const selection = RASTER_PREVIEW_PY.indexOf("rgb_indices, alpha_idx = select_bands(ds)")
     expect(refusal).toBeGreaterThan(-1)
     expect(selection).toBeGreaterThan(refusal)
-    // And it hands the names over. "This is a container" without them is the
-    // same dead end in politer words.
+    // And it hands the names over; without them the refusal is the same dead end in politer words.
     expect(RASTER_PREVIEW_PY).toContain("Open one of them instead:")
   })
 
   test("GRIB is not named as a container, because it is not one", () => {
-    /* Measured on GDAL 3.12: a GRIB2 file of three messages answers with
-     * RasterCount 3 and zero SUBDATASETS, while a four-variable netCDF answers
-     * with RasterCount 0 and six. The GRIB driver exposes each message as a
-     * BAND, so `container_subdatasets` returns an empty list for it — correctly,
-     * and forever.
-     *
-     * It is listed beside netCDF and HDF almost everywhere the three appear
-     * together, which is how it got into this docstring in the first place, and
-     * why the name is pinned out rather than left to the next reader's
-     * recollection. A format named in a branch it can never take sends whoever
-     * debugs a GRIB file to the one function that will never have an opinion
-     * about it.
-     */
+    /* GRIB is listed beside netCDF and HDF almost everywhere the three appear together, and naming it in a
+     * branch it can never take sends whoever debugs a GRIB file to the one function with no opinion about it —
+     * the driver exposes each message as a band, so `container_subdatasets` returns an empty list for it. */
     const container = RASTER_PREVIEW_PY.slice(
       RASTER_PREVIEW_PY.indexOf("def container_subdatasets"),
       RASTER_PREVIEW_PY.indexOf("def", RASTER_PREVIEW_PY.indexOf("def container_subdatasets") + 4),
@@ -248,20 +205,17 @@ describe("qgis reader pipeline", () => {
         const outcome = yield* QgisReader.readVector(runtime, environment, { file: "/data/街道.geojson" })
         expect(outcome.ok).toBe(true)
         if (outcome.ok) {
-          // Chinese attribute values survive the wire raw — that is what
-          // ensure_ascii=False plus forced-UTF-8 streams exist for.
+          // Chinese attribute values survive the wire raw, which is what ensure_ascii=False and forced-UTF-8
+          // streams exist for.
           expect((outcome.payload.layer as Record<string, unknown>).name).toBe("街道")
         }
 
-        // The spawn carries the verified environment whole, the script runs
-        // MATERIALIZED (a .py path, not -c), and defaults fill the argv.
+        // The verified environment travels whole, and the script runs MATERIALIZED — a .py path, never -c.
         const options = calls[0]!.options
         expect(options.command).toBe(environment.python)
         expect(options.env).toMatchObject(environment.env)
-        // And one thing the verified environment does not carry: reading a
-        // raster computes statistics, and GDAL saves what it computed as a
-        // `.aux.xml` beside the user's data unless told not to (§7.6). The
-        // GDAL face has guarded this from the start; this one did not.
+        // And one thing the verified environment does not carry: without it, reading a raster leaves the
+        // statistics it computed as a `.aux.xml` beside the user's data (§7.6).
         expect(options.env!.GDAL_PAM_ENABLED).toBe("NO")
         expect(options.args[0]!.endsWith(".py")).toBe(true)
         expect(options.args.slice(1)).toEqual(["/data/街道.geojson", "3", "1"])
@@ -293,9 +247,8 @@ describe("qgis reader pipeline", () => {
         const outcome = yield* QgisReader.readRaster(runtime, dllEnvironment, { file: "C:\\data\\dem.tif" })
         expect(outcome.ok).toBe(false)
 
-        // The manual Windows track rewrites the invocation: DLL registration
-        // first, then the materialized script re-run with argv preserved
-        // (§4.5) — the file argument must survive into the rewritten argv.
+        // The manual Windows track rewrites the invocation — DLL registration first, then the materialized
+        // script through runpy (§4.5) — and the file argument has to survive that rewrite.
         const args = calls[0]!.options.args
         expect(args[0]).toBe("-c")
         expect(args[1]).toContain("add_dll_directory")
@@ -336,8 +289,7 @@ describe("qgis reader pipeline", () => {
           const outcome = yield* QgisReader.readRaster(runtime, environment, { file: "/dem.tif" })
           expect(outcome.ok).toBe(false)
           if (!outcome.ok) {
-            // No marker: the raw output IS the diagnosis, led by the process
-            // ending (§4.6 失败分级).
+            // No marker, so the raw output IS the diagnosis, led by how the process ended (§4.6 失败分级).
             expect(outcome.detail).toContain("never reached its output marker")
             expect(outcome.detail).toContain("[process crash]")
             expect(outcome.detail).toContain("Segmentation fault")
@@ -349,9 +301,8 @@ describe("qgis reader pipeline", () => {
   }
 
   {
-    // The Windows lesson, frozen: the console codepage flip interleaves
-    // U+FEFF into stdout — including inside the marker line — and JSON.parse
-    // rejects BOM as non-whitespace per RFC 8259.
+    // Windows stdio interleaves U+FEFF anywhere, the marker line included, and JSON.parse rejects it as
+    // non-whitespace — so trimming the edges is not enough.
     const bom = "\uFEFF"
     const { it, body } = run(
       [
@@ -370,8 +321,7 @@ describe("qgis reader pipeline", () => {
   }
 
   {
-    // 9 bytes encode to exactly 12 base64 characters — the fixture has to be
-    // self-consistent now that the payload is checked against the count.
+    // 9 bytes encode to exactly 12 base64 characters, and the reader checks the payload against that count.
     const meta = `${QgisReader.MARKER}{"width":64,"height":64,"original_width":128,"original_height":128,"bands":[1,2,3],"bytes":9}`
     const { it, body } = run([{ stdout: `gdal chatter\n${meta}\nMTIzNDU2Nzg5\n` }], (runtime, calls) =>
       Effect.gen(function* () {
@@ -392,8 +342,8 @@ describe("qgis reader pipeline", () => {
   {
     const glued = `${QgisReader.MARKER}{"width":32,"height":32}`
     const { it: itGlued, body: bodyGlued } = run(
-      // Unterminated C-level chatter glued to the front of the marker line —
-      // the reason the scan is contains, not starts-with.
+      // Unterminated C-level chatter glued to the front of the marker line, which is why the scan is contains
+      // rather than starts-with.
       [{ stdout: `Warning 1: no newline here${glued}\nQmFzZTY0\n` }],
       (runtime) =>
         Effect.gen(function* () {
@@ -413,8 +363,7 @@ describe("qgis reader pipeline", () => {
       Effect.gen(function* () {
         const outcome = yield* QgisReader.renderPreview(runtime, environment, { file: "/dem.tif" })
         expect(outcome.ok).toBe(false)
-        // The undersized-cap signature gets its own message: metadata
-        // arrived, the image did not (§4.13 校准量).
+        // The undersized-cap signature gets its own message — metadata arrived, the image did not (§4.13 校准量).
         if (!outcome.ok) expect(outcome.detail).toContain("no image payload")
       }),
     )
@@ -422,10 +371,9 @@ describe("qgis reader pipeline", () => {
   }
 
   {
-    // The metadata line flushes ahead of the image, so a clock expiring
-    // mid-transfer leaves a perfectly valid marker line above half a payload.
-    // JSON.parse gives the metadata a completeness check for free; the image
-    // needs this one, or a corrupt PNG ships as a success.
+    // The metadata line flushes ahead of the image, so a clock expiring mid-transfer leaves a valid marker line
+    // above half a payload — JSON.parse catches that for the metadata, nothing but the byte count does for the
+    // image, and a corrupt PNG would ship as a success.
     const meta = `${QgisReader.MARKER}{"width":64,"height":64,"bytes":9}`
     const { it, body } = run([{ stdout: `${meta}\nMTIz`, reason: "timeout", code: null }], (runtime) =>
       Effect.gen(function* () {

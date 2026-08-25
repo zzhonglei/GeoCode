@@ -13,15 +13,9 @@ import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
 
-/* Tripwires for OsmGetFeatures (docs/TOOLS.md §3; GEOKERNEL §6.4, §6.7, §6.8).
- *
- * The hardest answer in the set to check: a file of features nobody asked for
- * individually, where the wrong ones look exactly like the right ones. Two of
- * the lines guarded here are data contracts rather than commentary — the
- * superset that must be clipped, and the centroid count that shows what a
- * point-only query would have missed — and two are the ways a request can be
- * malformed in a way the kernel would answer with a confident zero.
- */
+/* Tripwires for OsmGetFeatures (docs/TOOLS.md §3; GEOKERNEL §6.4, §6.7, §6.8). A file of the wrong features looks
+ * exactly like a file of the right ones, so two report lines are data contracts — the superset a widened boundary
+ * leaves behind, and the centroid count — and two more are the malformed calls the kernel answers with a zero. */
 
 const DOWNLOAD = (over: Partial<GeoOsm.DownloadResult> = {}): GeoOsm.DownloadResult => ({
   outputs: [{ path: "/data/roads.geojson", count: 1204, family: "lines" }],
@@ -81,7 +75,7 @@ const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, ag
     .pipe(Effect.timeout(10_000), Effect.exit)
 })
 
-/** Runs the tool with the capability boundary lifted — see the first test. */
+/** Runs the tool with the capability boundary the test below pins lifted, so its printing can be reached. */
 const succeed = Effect.fnUntraced(function* (params: Record<string, unknown>) {
   const registry = yield* ToolRegistry.Service
   const tool = (yield* registry.all()).find((item) => item.id === "OsmGetFeatures")
@@ -144,13 +138,8 @@ afterEach(async () => {
 })
 
 describe("OsmGetFeatures, what it asks permission for", () => {
-  /* Same two properties OsmGetObjects guards, and for the same reasons — the
-   * reasoning is written out there. Repeated here because the two tools carry
-   * separate copies of this code, so one can drift without the other.
-   *
-   * The ordering is also pinned: a malformed call must not raise a permission
-   * prompt at all, which is why the parameter refusals sit ahead of both asks.
-   */
+  /* The two properties OsmGetObjects's tests reason out, repeated because the two tools carry separate copies of
+   * this code, plus the ordering: the parameter refusals sit ahead of both asks. */
   harness(osmService({})).instance("the pattern is worktree-relative, and an outside path asks for the directory", () =>
     Effect.gen(function* () {
       const instance = yield* InstanceState.context
@@ -208,9 +197,8 @@ describe("OsmGetFeatures, what it refuses to answer", () => {
     "an empty extent list is refused, not answered with zero features",
     () =>
       Effect.gen(function* () {
-        // The kernel only checks an UPPER bound on extents. With none, the loop
-        // runs zero times and comes back with zero features — which is exactly
-        // what an area holding none of this category looks like.
+        // The kernel bounds the extent count from above only, and its zero-features answer to an empty list is what
+        // an area holding none of this category answers with too.
         const result = yield* succeed({ ...ARGS, extents: [] })
         expect(result.metadata.error_code).toBe("InvalidParameters")
         expect(result.output).toContain("empty")
@@ -223,8 +211,7 @@ describe("OsmGetFeatures, what it refuses to answer", () => {
     "an empty tag list is refused for the same reason",
     () =>
       Effect.gen(function* () {
-        // `tags.forEach(tagClause)` over an empty list raises nothing, so the
-        // kernel would build a query with no clauses at all.
+        // `tags.forEach(OsmQuery.tagClause)` raises nothing on an empty list, so the query goes out with no clauses.
         const result = yield* succeed({ ...ARGS, tags: [] })
         expect(result.metadata.error_code).toBe("InvalidParameters")
         expect(result.output).toContain("tag filter")
@@ -263,27 +250,17 @@ describe("OsmGetFeatures, the superset contract", () => {
     "a widened boundary is named, stated before the figures, and never something to clip",
     () =>
       Effect.gen(function* () {
-        // The extents are mixed on purpose: that is the ONLY shape that still
-        // reaches this line. A call made entirely of boundary files narrows
-        // itself back before anything is counted (§6.4) and comes out exact.
+        // Mixed extents on purpose, the only shape that still reaches this line: a call made only of boundary files
+        // narrows itself back before anything is counted (§6.4).
         const result = yield* succeed({ ...ARGS, extents: ["file:/data/study.geojson", "area:R123"] })
 
-        // Over-downloading can be corrected afterwards; under-downloading
-        // cannot even be noticed (§6.4). The widening is deliberate — and
-        // useless unless the caller is told the file holds more than asked.
+        // The widening is deliberate, and useless unless the caller is told the file holds more than was asked for.
         expect(result.output).toMatch(/covers more ground/)
-        // WHICH boundary, because "a boundary file" is unanswerable when the
-        // call carried several — and the way out is to ask for that one on its
-        // own. `extent.ts` had always worded these; nothing read the field.
+        // Which boundary, since the way out is to ask for that one on its own and a call can carry several.
         expect(result.output).toContain("boundary file study.geojson (3 polygons, reduced to convex hulls)")
-        // ★ Never a clip. In this one surviving shape the other extents
-        // legitimately hold features outside the boundary file, so cutting to
-        // that file would delete exactly those — which is what the previous
-        // wording, written before the automatic narrowing existed, advised.
+        // Never a clip: the other extents legitimately hold features outside the boundary file, and cutting to it
+        // would delete exactly those.
         expect(result.output).not.toMatch(/clip/i)
-        // A way out this caller can take, stated as a fact rather than an
-        // instruction — and without a "this one" that says nothing when two
-        // boundary files were widened.
         expect(result.output).toMatch(/only of boundary files comes back exact/)
         expect(result.output.indexOf("NOTE:")).toBeLessThan(result.output.indexOf("Wrote"))
         expect(result.metadata.exact).toBe(false)
@@ -295,9 +272,8 @@ describe("OsmGetFeatures, the superset contract", () => {
     "and an exact result says nothing at all about clipping",
     () =>
       Effect.gen(function* () {
-        // Silence is the signal. A warning that appears every time is one the
-        // reader stops seeing, and the common extents — an area id, a bounding
-        // box, a radius — are always exact.
+        // Silence is the signal: an area id, a bounding box and a radius are exact, and a warning printed over all
+        // three is one the reader stops seeing.
         const result = yield* succeed(ARGS)
         expect(result.output).not.toMatch(/widened/)
         expect(result.output).not.toMatch(/clip/i)
@@ -332,18 +308,14 @@ describe("OsmGetFeatures, reading the result", () => {
       Effect.gen(function* () {
         const result = yield* succeed({ ...ARGS, geometry: "centroid" })
 
-        // Never one mixed-geometry file, and the sibling names cannot be
-        // guessed — a run may also have been numbered (§6.7).
+        // Never one mixed-geometry file, and the sibling paths cannot be guessed from the one asked for (§6.7).
         expect(result.output).toContain("/data/poi-points.geojson")
         expect(result.output).toContain("/data/poi-polygons.geojson")
         expect(result.output).toContain("816 feature(s)")
-        // Overlapping sub-areas are safe to pass together, which is only true
-        // because the merge deduplicates — and worth saying, because the count
-        // is otherwise unexplained.
+        // Overlapping sub-areas are safe to pass together only because the merge deduplicates.
         expect(result.output).toContain("Extents: 3 of 3 completed")
         expect(result.output).toContain("17 cross-extent duplicate(s) removed")
-        // The number that shows what asking for point ELEMENTS would have
-        // missed: here 503 of 816 were mapped as areas or lines (§6.8).
+        // What asking for point elements would have missed: 503 of the 816 are mapped as areas or lines (§6.8).
         expect(result.output).toContain("503 area or line feature(s)")
         expect(result.output).toContain("original_geometry")
         expect(result.metadata.centroid_converted).toBe(503)
@@ -357,9 +329,8 @@ describe("OsmGetFeatures, reading the result", () => {
       downloadFeatures: () =>
         Effect.succeed(
           DOWNLOAD({
-            // Three asked for: one answered (incompletely), two never did. The
-            // fixture adds up on purpose — one that does not is read as
-            // documentation of a state that cannot happen.
+            // Three asked for: one answered incompletely, two never did — a fixture that did not add up would
+            // document a state that cannot happen.
             features: 402,
             extentsDone: 1,
             extentsAsked: 3,
@@ -378,9 +349,7 @@ describe("OsmGetFeatures, reading the result", () => {
       Effect.gen(function* () {
         const result = yield* succeed(ARGS)
 
-        // A typo, a server that gave up, and elements that would not assemble
-        // ask for three different responses. Collapsing them into "partial"
-        // would leave the caller guessing which one happened.
+        // A typo, a server that gave up and elements that would not assemble ask for three different responses.
         expect(result.output).toContain("is not an extent")
         expect(result.output).toContain("runtime error: Query timed out after 120 seconds.")
         expect(result.output).toContain("W4411, R902")
@@ -413,10 +382,7 @@ describe("OsmGetFeatures, reading the result", () => {
     "nothing matched is told apart from nothing answered",
     () =>
       Effect.gen(function* () {
-        // Both extents answered; the category simply is not tagged that way
-        // here. That is the one place a caller should suspect the tag union
-        // rather than the network — and the sentence has to say which of the
-        // two happened, because the responses are opposite.
+        // Both extents answered, so the tag union is what to suspect and not the network.
         const result = yield* succeed(ARGS)
         expect(result.output).toContain("All 2 extent(s) answered, and nothing in them matched these tags")
         expect(result.output).not.toContain("Wrote")
@@ -450,8 +416,7 @@ describe("OsmGetFeatures, reading the result", () => {
     "and nothing answered says that instead",
     () =>
       Effect.gen(function* () {
-        // Same empty file, opposite cause. Reading this one as "the tags are
-        // wrong" sends the caller to rewrite a query that was fine.
+        // Same empty file, opposite cause: read as "the tags are wrong" it sends the caller to rewrite a fine query.
         const result = yield* succeed(ARGS)
         expect(result.output).toContain("0 of 2 extent(s) answered at all")
         expect(result.output).not.toMatch(/matched these tags/)
@@ -462,26 +427,20 @@ describe("OsmGetFeatures, reading the result", () => {
 
 describe("OsmGetFeatures, the description", () => {
   test("it keeps the rule that stops a POI dataset losing most of itself", () => {
-    // Most facilities are mapped as areas, so asking for point ELEMENTS
-    // silently returns the minority and looks complete (§6.8).
+    // Most facilities are mapped as areas, so asking for point elements returns the minority and looks whole (§6.8).
     expect(FEATURES_DESCRIPTION).toMatch(/do NOT use "node"/i)
     expect(FEATURES_DESCRIPTION).toContain("centroid")
   })
 
   test("it names no clipping algorithm", () => {
-    // osmfetch holds `geo_osm_*` and `geo_qgis_read`; it cannot run an
-    // algorithm (TOOLS.md §4.3). And the old build's `native:clip` was never
-    // checked against the catalog — the same shape as the tool-name drift that
-    // §8 records.
+    // osmfetch, the one agent that reads this, is denied `qgis` and so cannot run an algorithm (docs/TOOLS.md §4.3).
     expect(FEATURES_DESCRIPTION).not.toMatch(/native:/)
     expect(FEATURES_DESCRIPTION).not.toMatch(/RunQgisAlgorithm/)
   })
 
   test("and no clip at all, the same way the report names none", () => {
-    // The report retracted this when the automatic narrowing landed (§6.4) and
-    // is asserted on twice above; the description kept it, because nothing here
-    // was watching the prose — `/clipped:/` below is about the metadata field of
-    // that name, and a colon is what makes it miss a sentence.
+    // The `/clipped:/` check below is colon-anchored on purpose, so it catches a field-style promise and misses
+    // a sentence about clipping.
     expect(FEATURES_DESCRIPTION).not.toMatch(/clip/i)
   })
 
@@ -513,11 +472,8 @@ describe("OsmGetFeatures, a shortfall that does not look like one", () => {
     "a service that answered early makes the run partial in metadata, not only in prose",
     () =>
       Effect.gen(function* () {
-        // §6.3 calls this the most dangerous failure there is: the answer is
-        // real and short, and nothing about it looks wrong. It was narrated and
-        // then left out of `partial` — an extent that stopped early is in
-        // neither `done < asked` nor `failed` — so anything reading the
-        // metadata channel saw a whole run.
+        // An extent that stopped early sits in neither `done < asked` nor `failed`, so `partial` is the only place
+        // a real, short answer is distinguishable from a whole one (§6.3).
         const result = yield* succeed(ARGS)
         expect(result.output).toContain("came back incomplete")
         expect(result.metadata.partial).toBe(true)
@@ -528,14 +484,8 @@ describe("OsmGetFeatures, a shortfall that does not look like one", () => {
 })
 
 describe("OsmGetFeatures, saying so while it runs", () => {
-  /* The slowest thing the OSM group does, and until now the quietest.
-   *
-   * A dense city can spend minutes on a single extent, and this tool said
-   * nothing at all until the whole download was over — the one call whose
-   * caller most needs to know it is still alive. RunQgisAlgorithm solved the
-   * same problem the same way (`onChunk`), which is why the shape here is not a
-   * new invention (docs/GEOKERNEL.md §6.8).
-   */
+  /* The slowest thing the OSM group does — a dense city can spend minutes on a single extent — so the count
+   * reaches the caller while it runs, the way RunQgisAlgorithm's `onChunk` does (docs/GEOKERNEL.md §6.8). */
 
   it_progress()
   function it_progress() {
@@ -543,12 +493,10 @@ describe("OsmGetFeatures, saying so while it runs", () => {
     const reporting = osmService({
       downloadFeatures: (input) =>
         Effect.gen(function* () {
-          // Typed here rather than left to the `any` the mock helper takes:
-          // yielding an untyped effect widens this generator's error channel to
-          // `unknown`, and the mock no longer satisfies the service.
+          // Typed rather than left to the `any` the mock helper takes: yielding an untyped effect widens this
+          // generator's error channel to `unknown`, and the mock stops satisfying the service.
           const report = input.onProgress as GeoOsm.OnProgress
-          // Exactly what the kernel does: an opening tick so a one-extent
-          // download is not silent, then one per extent as it settles.
+          // What the kernel does: an opening tick, then one per extent as it settles.
           yield* report(0, 5)
           for (let settled = 1; settled <= 5; settled++) yield* report(settled, 5)
           return DOWNLOAD({ extentsDone: 4, extentsAsked: 5, failed: [{ extent: "bbox:3", reason: "timeout" }] })
@@ -559,35 +507,28 @@ describe("OsmGetFeatures, saying so while it runs", () => {
       Effect.gen(function* () {
         const { pushed } = yield* pushesOf({ ...ARGS, extents: ["a", "b", "c", "d", "e"] })
 
-        // THE assertion: the callback exists, is handed over, and what it
-        // carries arrives on the live channel. A kernel counting into a
-        // callback nobody passed is the failure this cannot see from either
-        // side alone.
+        // A kernel counting into a callback nobody passed is what neither side of this can see alone.
         expect(pushed.map((entry) => entry.extents_settled)).toEqual([0, 1, 2, 3, 4, 5])
         for (const entry of pushed) expect(entry.extents_asked).toBe(5)
 
-        // Opening tick included: a one-extent download is the common shape, and
-        // without it that download reports nothing until it is over.
+        // The opening tick included, or the common one-extent download reports nothing until it is over.
         expect(pushed[0]!.extents_settled).toBe(0)
 
-        // Never the generic head-truncation, which keeps the head and drops the
-        // tail — where a download's ending lives (docs/TOOLS.md §5).
+        // Never the generic head-truncation, which keeps the head and drops the tail, where a download's ending
+        // lives (docs/TOOLS.md §5).
         for (const entry of pushed) expect(entry.truncated).toBe(false)
       }),
     )
 
     harness(reporting).instance("progress counts what is settled, and the result still says what happened", () =>
       Effect.gen(function* () {
-        // The two vocabularies stay apart on purpose. `extents_settled` answers
-        // "how much longer" and counts the failed extent; `extents_done`
-        // answers "what did I get" and does not. One word doing both is how a
-        // channel stops being read.
+        // `extents_settled` answers "how much longer" and counts the failed extent; `extents_done` answers "what
+        // did I get" and does not.
         const { pushed, result } = yield* pushesOf({ ...ARGS, extents: ["a", "b", "c", "d", "e"] })
         expect(pushed.at(-1)!.extents_settled).toBe(5)
         expect(result.metadata.extents_done).toBe(4)
         expect(result.metadata.extents_failed).toBe(1)
-        // And the live pushes never claim the outcome fields, which would let a
-        // reader take a mid-run number for a final one.
+        // And the live pushes claim no outcome field, which a reader could take a mid-run number from.
         for (const entry of pushed) expect(entry.extents_done).toBeUndefined()
       }),
     )

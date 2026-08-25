@@ -7,29 +7,13 @@ import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { GeeDeps } from "@/geo/gee/deps"
 import { GeeGuidance } from "@/geo/gee/guidance"
 
-/* The GEE group's one voice (docs/GEOKERNEL.md §5.11).
- *
- * What these guard is not phrasing but the handful of sentences that were
- * learned by getting burned, and the structure that keeps them findable:
- *
- * - the chain is walked ONE step at a time, and every state says which step
- * - each step says WHO performs it, which is the difference between an agent
- *   that helps and one that installs into the wrong environment, invents a
- *   project id, or opens a sign-in nobody is watching
- * - the network layer FORBIDS the local repairs an agent would otherwise
- *   reach for — every one of them damages something already correct
- * - the file taught is machine.json, the one the kernel reads
- */
+/* The GEE group's one voice (docs/GEOKERNEL.md §5.11): every not-ready state answers, on the step the probe
+ * stopped at, naming who performs it and the file the kernel actually reads. */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-gee-guidance-"))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
 
-/**
- * A plain interpreter, deliberately unlike the paths the static copy names as
- * examples: with something miniforge-shaped here, an assertion that the
- * configured path was echoed would match the example prose instead and pass
- * with the echo removed. (The QGIS sibling learned this the hard way.)
- */
+/** Deliberately unlike the miniforge paths the copy names as examples, which an echo assertion would match instead. */
 const PYTHON = path.join(root, "envs", "demo", "bin", "python3")
 fs.mkdirSync(path.dirname(PYTHON), { recursive: true })
 fs.writeFileSync(PYTHON, "")
@@ -66,7 +50,7 @@ const remote = (state: GeoEvent.GeeRuntime): GeoEvent.GeeStatus => ({
   runtime: state,
 })
 
-/** Every setup state the probe can publish, so no branch goes unwritten. */
+/** Every setup state but `ready`, which is to say every one that owes the user an answer. */
 const ALL_SETUP: GeoEvent.GeeSetup[] = [
   { status: "unconfigured" },
   { status: "config-error", file: "/cfg/machine.json", message: "unexpected token" },
@@ -82,11 +66,8 @@ const ALL_SETUP: GeoEvent.GeeSetup[] = [
 
 describe("GeeGuidance", () => {
   test("no state is left without an answer", () => {
-    // Spelled out rather than derived from ALL_SETUP: a new setup state stops
-    // `setupGuidance`'s switch from compiling, so the copy always gets written
-    // — but nothing would force it into the list below, and the coverage check
-    // would keep passing while never rendering it. Changing this literal is
-    // the deliberate act.
+    // Spelled out rather than derived: an added setup state breaks `setupGuidance`'s switch, but nothing would put
+    // it in ALL_SETUP, and the loop below would keep passing without ever rendering it.
     expect(ALL_SETUP.map((state) => state.status).sort()).toEqual([
       "checking",
       "config-error",
@@ -100,8 +81,7 @@ describe("GeeGuidance", () => {
       "unconfigured",
     ])
 
-    // An empty string here is a tool that returns a blank refusal — the state
-    // is real, the user gets nothing.
+    // An empty string is a tool answering a real problem with nothing.
     for (const state of ALL_SETUP) expect(GeeGuidance.render(setup(state)).length).toBeGreaterThan(0)
     for (const state of [{ status: "unreachable" } as const, { status: "checking" } as const])
       expect(GeeGuidance.render(network(state)).length).toBeGreaterThan(0)
@@ -114,8 +94,7 @@ describe("GeeGuidance", () => {
   })
 
   test("the four steps are walked one at a time, in the probe's order", () => {
-    // Which step a state belongs to is the whole of §5.11's step-by-step
-    // model, and it has to match where §5.3's short-circuit actually stops.
+    // The step a state belongs to has to match where §5.3's short-circuit actually stops.
     const steps: [GeoEvent.GeeSetup, number][] = [
       [{ status: "unconfigured" }, 1],
       [{ status: "python-missing", python: PYTHON }, 1],
@@ -126,23 +105,16 @@ describe("GeeGuidance", () => {
     for (const [state, step] of steps) {
       const text = GeeGuidance.render(setup(state))
       expect(text).toContain(`Step ${step} of 4`)
-      // The whole ladder is shown, and everything before the current rung is
-      // marked done — someone on step 3 should see how far they have come, and
-      // someone on step 1 how far it goes.
       expect(text.match(/^ {2}done {2}\d\./gm) ?? []).toHaveLength(step - 1)
       expect(text.match(/^ {2}→ {5}\d\./gm) ?? []).toHaveLength(1)
     }
   })
 
   test("the file taught is the one the kernel reads", () => {
-    // The old build's copy taught geocode.json. Porting the sentences without
-    // moving the target sends the agent to a file nobody reads (PATHS §5).
+    // geocode.json holds the kernel and agent settings; a gee block there is read by nothing (docs/PATHS.md §3.2).
     for (const state of ALL_SETUP) {
       expect(GeeGuidance.render(setup(state))).not.toContain("geocode.json")
     }
-    // Named, not indexed: an index silently points at a different state the
-    // moment the list above gains an entry, and the assertion keeps passing
-    // while testing something else.
     for (const name of ["unconfigured", "python-missing", "project-missing"] as const) {
       const state = ALL_SETUP.find((entry) => entry.status === name)!
       expect(GeeGuidance.render(setup(state))).toContain(MACHINE)
@@ -152,45 +124,30 @@ describe("GeeGuidance", () => {
   // Step 2 — the install --------------------------------------------------------
 
   test("packages install one at a time, through the configured interpreter", () => {
-    // Both disciplines of §5.11 in one place. One command per package, because
-    // each takes minutes and a merged command is indistinguishable from a
-    // hang; and through THIS interpreter, because a package manager found on
-    // PATH may belong to a different environment, in which case the install
-    // succeeds and the state does not change.
     const missing = ["earthengine-api", "geemap", "geedim"]
     const text = GeeGuidance.render(setup({ status: "packages-missing", python: PYTHON, missing }))
 
-    // One command per package: as many install lines as there are gaps.
     const commands = text.match(/-m pip install \S+/g) ?? []
     expect(commands).toHaveLength(missing.length)
     for (const pkg of missing) {
-      // And each one goes THROUGH the configured interpreter — the quoted path
-      // immediately before `-m pip install` is what makes this assertion able
-      // to fail on a bare `pip install` or a `python -m pip` off PATH.
+      // The quoted interpreter immediately before `-m pip install` is what makes a bare `pip install`, or one off
+      // PATH, fail this.
       expect(text).toMatch(
         new RegExp(`["']${PYTHON.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'] -m pip install ${pkg}(\\s|$)`),
       )
-      // The role line, so the user learns what they are installing and why.
       expect(text).toContain(GeeDeps.byPackage(pkg)!.role)
     }
-    // Initiative in OFFERING, which is what the old build's bare "Take
-    // initiative" meant and no longer reads as beside the permission rule.
     expect(text).toMatch(/Offer to run them/)
     expect(text).not.toMatch(/Take initiative/)
   })
 
   test("an empty missing list still names something to install", () => {
-    // The probe can report a gap without naming it. An empty command is worse
-    // than an over-broad one: it reads as "nothing to do" in a blocked state.
+    // The schema allows the empty list the probe never sends, and an empty install command reads as "nothing to do".
     const text = GeeGuidance.render(setup({ status: "packages-missing", python: PYTHON, missing: [] }))
     for (const pkg of GeeDeps.PACKAGES) expect(text).toContain(`-m pip install ${pkg}`)
   })
 
   test("conda-forge is offered only when both signals hold", () => {
-    // geopandas is the one dependency here pulling GDAL-bound extensions
-    // (fiona, pyogrio), where a pip wheel can ABI-mismatch what conda already
-    // installed. Offering conda to a venv user is noise; offering it for
-    // pure-Python packages is caution with no cause. Both signals, or neither.
     const both = GeeGuidance.render(setup({ status: "packages-missing", python: CONDA_PYTHON, missing: ["geopandas"] }))
     expect(both).toContain("conda install -c conda-forge geopandas")
     expect(both).toContain("ABI-mismatch")
@@ -204,15 +161,10 @@ describe("GeeGuidance", () => {
     // geopandas missing, but this is not a conda environment.
     const noConda = GeeGuidance.render(setup({ status: "packages-missing", python: PYTHON, missing: ["geopandas"] }))
     expect(noConda).not.toContain("conda-forge")
-    // And the always-runnable command is still there in every case.
     expect(noConda).toContain("-m pip install geopandas")
   })
 
   test("an installed-but-broken package is never called missing", () => {
-    // The whole reason this state exists. Its guidance must not send anyone to
-    // install what is already installed — that is the loop it was split off to
-    // break — and it has to carry the exception text, which is the only thing
-    // that explains the real fault.
     const text = GeeGuidance.render(
       setup({
         status: "packages-broken",
@@ -224,13 +176,10 @@ describe("GeeGuidance", () => {
     expect(text).toContain("DLL load failed while importing _fiona")
     expect(text).toMatch(/Installing it again will not fix this/)
     expect(text).toMatch(/Do NOT tell the user the package is missing/)
-    // The fix is a replacement, not an addition.
     expect(text).toContain("--force-reinstall")
     // Still step 2: the chain stopped in the same place, for a different reason.
     expect(text).toContain("Step 2 of 4")
 
-    // conda gets the extra paragraph, because a pip wheel beside conda's own
-    // native libraries is the likeliest cause there. A venv does not.
     const inConda = GeeGuidance.render(
       setup({ status: "packages-broken", python: CONDA_PYTHON, pkg: "geopandas", error: "boom" }),
     )
@@ -239,29 +188,18 @@ describe("GeeGuidance", () => {
   })
 
   test("the conda alternative is one solve, not one command per package", () => {
-    // The pip lines are split because pip installs what it is told, one at a
-    // time, so separate commands are visible progress. conda solves the whole
-    // environment per invocation: four calls can each downgrade what the last
-    // one placed, and are markedly slower than one solve. Splitting these was
-    // this build's own mistake — the discipline is "do not leave the user
-    // staring at silence", and here that reasoning points the other way.
+    // conda solves the whole environment per invocation, so the split that the pip lines beside it need is wrong here.
     const text = GeeGuidance.render(
       setup({ status: "packages-missing", python: CONDA_PYTHON, missing: ["geopandas", "geemap"] }),
     )
     expect(text).toContain("conda install -c conda-forge geopandas geemap")
     expect(text.match(/conda install/g) ?? []).toHaveLength(1)
-    // The pip commands beside it stay one per package.
     expect(text.match(/-m pip install \S+/g) ?? []).toHaveLength(2)
   })
 
   test("a rejected project is looked up in both places it can exist", () => {
-    // A project created in the Google Cloud console and never opened in the
-    // Earth Engine editor will not be "the one shown at the top of the editor".
-    // Naming only that place sends the user to look somewhere it is not.
-    //
-    // Scoped to the attributed fix, not the whole text: the closing paragraph
-    // mentions the Cloud console for an unrelated reason, so a whole-text match
-    // stays green with this paragraph's half deleted. It did, until this line.
+    // A project created in the Cloud console and never opened in the editor is not shown at the top of the editor.
+    // Scoped to the attributed fix, since the closing paragraph names the Cloud console too and would answer for it.
     const text = GeeGuidance.render(remote({ status: "failed", reason: "project-invalid", message: "no such project" }))
     const fix = text.split("Most likely fix:")[1]?.split("\n\n")[0] ?? ""
     expect(fix).toMatch(/Earth Engine editor/)
@@ -269,9 +207,7 @@ describe("GeeGuidance", () => {
   })
 
   test("the remote refusal names the file it tells the agent to edit", () => {
-    // It asks for gee.project to be corrected in machine.json. Every setup
-    // state prints the absolute path; this one was the only state that did not,
-    // leaving an agent to guess where a file under the config directory lives.
+    // It tells the agent to correct gee.project in machine.json, and a bare filename leaves it guessing where.
     const text = GeeGuidance.render(remote({ status: "failed", reason: "project-invalid", message: "no such project" }))
     expect(text).toContain(MACHINE)
   })
@@ -279,37 +215,28 @@ describe("GeeGuidance", () => {
   // Step 3 — the sign-in --------------------------------------------------------
 
   test("the authentication command is located from the interpreter", () => {
-    // It ships with the client library, so it lives wherever that environment
-    // puts it — never a fixed path, and never assumed to be on PATH: the
-    // configured interpreter may belong to an environment that is not active.
     const text = GeeGuidance.render(setup({ status: "credentials-missing", python: PYTHON }))
     expect(text).toContain(path.join(path.dirname(PYTHON), "earthengine"))
 
-    // A different environment must produce a different command — otherwise the
-    // path is written down somewhere rather than derived.
+    // A second environment, since a path written down somewhere would satisfy the assertion above just as well.
     const other = GeeGuidance.render(setup({ status: "credentials-missing", python: CONDA_PYTHON }))
     expect(other).toContain(path.join(path.dirname(CONDA_PYTHON), "earthengine"))
     expect(other).not.toContain(path.dirname(PYTHON))
   })
 
   test("the sign-in waits for the user twice", () => {
-    // The one step the agent cannot finish: the command opens a browser and
-    // waits for a person. Run before the user is ready it is a window nobody
-    // is watching and a command that times out. Ask, wait, run, wait again.
+    // Ask, wait, run, wait again — the command opens a browser and waits for a person.
     const text = GeeGuidance.render(setup({ status: "credentials-missing", python: PYTHON }))
     expect(text).toMatch(/Do NOT run the command until/)
     expect(text).toContain("have their Google account ready")
     expect(text).toContain("tell me it's done")
-    // And it never claims the app itself can do the sign-in (§5.11 硬边界 1).
+    // And never a claim that the app itself opens that browser (§5.11 硬边界 1).
     expect(text).not.toMatch(/open (a|the) browser for you/i)
   })
 
   // Step 4 — the project --------------------------------------------------------
 
   test("the project is the user's to give, and never invented", () => {
-    // A real resource under their account. A guessed value is rejected by
-    // Google with a message that reads like a permissions problem, which sends
-    // the next diagnosis in exactly the wrong direction.
     const text = GeeGuidance.render(setup({ status: "project-missing" }))
     expect(text).toContain("NEVER invent one")
     expect(text).toContain("https://code.earthengine.google.com")
@@ -320,75 +247,44 @@ describe("GeeGuidance", () => {
   // The probe itself ------------------------------------------------------------
 
   test("a failed probe is diagnosed before anything is changed", () => {
-    // Not a rung on the chain: the check did not get to answer. The trap is an
-    // agent that "fixes" it by rewriting configuration or reinstalling
-    // packages, neither of which it has evidence for.
     const failed = GeeGuidance.render(setup({ status: "probe-failed", error: "Segmentation fault" }))
     expect(failed).toContain("Segmentation fault")
     expect(failed).toContain("Do NOT rewrite the configuration on a guess")
     expect(failed).toContain("starts no network connection")
     const timeout = GeeGuidance.render(setup({ status: "probe-timeout" }))
     expect(timeout).toContain("time limit")
-    // Two states, two distinct diagnoses — a shared body must not blur them.
+    // Two states through one shared body, which must not blur them into one symptom.
     expect(failed.split("\n")[0]).not.toBe(timeout.split("\n")[0])
   })
 
   // The network layer -----------------------------------------------------------
 
   test("a network failure forbids every local repair", () => {
-    // §5.11 硬边界 3, and the substance of this branch. Everything local is
-    // verified by the time anyone reads it, so each repair an agent would
-    // reach for damages something already correct: reinstalling churns a
-    // working environment, re-authenticating cannot complete over a dead link,
-    // and editing the configuration edits the part that is right.
+    // All four local steps passed to get here, so every repair an agent would reach for damages a working part.
     const text = GeeGuidance.render(network({ status: "unreachable" }))
     expect(text).toContain("do NOT reinstall Python packages")
     expect(text).toContain("do NOT edit")
     expect(text).toContain("do NOT ask the user to sign in again")
     expect(text).toContain("All four steps")
-    // No repair command may appear here at all — the prohibition and a
-    // copy-pasteable install line in the same text is worse than neither.
+    // And no repair command at all: a prohibition beside a copy-pasteable install line is worse than neither.
     expect(text).not.toContain("pip install")
     expect(text).not.toContain("authenticate")
-    // It still names the environment being blocked, so the reader knows the
-    // setup it is talking about.
     expect(text).toContain(PYTHON)
     expect(text).toContain("ee-demo")
   })
 
   test("the network branch says the network is the problem, and nothing about proxies", () => {
-    /* A product decision, pinned here because it is the kind that drifts back.
-     *
-     * The old build's copy described the route search — which sources were
-     * tried, and that switching a proxy to HTTP or mixed mode is often the fix.
-     * This build says none of it, on purpose: an agent cannot reconfigure the
-     * user's proxy software, so the vocabulary buys nothing and invites a
-     * diagnosis it is in no position to make. The connection is the user's.
-     *
-     * (The sentence that started this was worse than useless — it claimed the
-     * system proxy had been searched, which this build does not do. Copy for
-     * the model is allowed to be thin. It is not allowed to be wrong.)
-     */
+    // An agent cannot reconfigure the user's proxy software, so the vocabulary only invites a diagnosis it cannot
+    // make (§5.11 硬边界 3).
     const text = GeeGuidance.render(network({ status: "unreachable" }))
     expect(text).not.toMatch(/proxy|VPN|SOCKS|tunnel/i)
-    // What it does say: the network is at fault, and the local setup is not.
     expect(text).toMatch(/network connection is what cannot currently\s+reach Earth Engine/)
     expect(text).toContain("All four steps")
     expect(text).toMatch(/leave the connection itself to them/)
   })
 
   test("every state that installs anything asks permission first", () => {
-    /* The rule that outranks every install instruction here.
-     *
-     * An environment is usually something the user built for their own work,
-     * with other projects depending on it. A package replaced without asking
-     * can break something unrelated to us, and the person left fixing it will
-     * not know what changed.
-     *
-     * Asserted on all three states that change an environment, because the
-     * response templates already demonstrate asking — and a demonstration is
-     * not a requirement. The one that gets skipped is the one nobody stated.
-     */
+    // On all three states that change an environment, since the response templates only demonstrate asking.
     const installers: GeoEvent.GeeSetup[] = [
       { status: "unconfigured" },
       { status: "packages-missing", python: PYTHON, missing: ["geemap"] },
@@ -402,11 +298,7 @@ describe("GeeGuidance", () => {
   })
 
   test("using conda is fine; installing it is not ours to do", () => {
-    // The example is conda because that is what this audience runs — geopandas
-    // and the GDAL stack under it install cleanly from conda-forge and
-    // routinely need compiling under a bare venv. The guardrail is a separate
-    // question from the choice of tool, and it is the same one the QGIS branch
-    // carries: putting software on the user's machine is not the agent's to do.
+    // The copy offers a conda command; putting conda itself on the user's machine is not the agent's to do.
     const text = GeeGuidance.render(setup({ status: "unconfigured" }))
     expect(text).toContain("conda create -n <name> python=3.12 -y")
     expect(text).toMatch(/Do NOT install conda or miniforge yourself/)
@@ -414,10 +306,8 @@ describe("GeeGuidance", () => {
   })
 
   test("writing the configuration names the tool that edits in place", () => {
-    // machine.json holds the qgis, gee and gdal blocks together. "Write
-    // gee.python to the file" invites a heredoc or a redirect that replaces the
-    // whole file, taking the user's QGIS configuration with it. The old build
-    // named the Edit tool at all three of these points for that reason.
+    // machine.json holds the qgis and gdal blocks too, and "write gee.python to the file" invites a whole-file
+    // redirect that takes them with it.
     const writers: GeoEvent.GeeSetup[] = [
       { status: "unconfigured" },
       { status: "python-missing", python: PYTHON },
@@ -428,16 +318,13 @@ describe("GeeGuidance", () => {
       expect(text).toMatch(/Edit tool/)
       expect(text).toMatch(/in place/)
     }
-    // And the reason travels with the instruction on the two that add a field
-    // to a file that already has other blocks in it.
     expect(GeeGuidance.render(setup({ status: "unconfigured" }))).toMatch(/QGIS and GDAL/)
   })
 
   // The remote layer ------------------------------------------------------------
 
   test("each attribution leads somewhere different", () => {
-    // The attribution exists to pick ONE fix. Five reasons collapsing onto one
-    // paragraph would make it decoration.
+    // Five reasons collapsing onto one paragraph would leave the attribution as decoration.
     const reasons: GeoEvent.GeeRejection[] = [
       "api-disabled",
       "permission-denied",
@@ -449,8 +336,7 @@ describe("GeeGuidance", () => {
     for (const reason of reasons) {
       const text = GeeGuidance.render(remote({ status: "failed", reason, message: "Google said no" }))
       expect(text).toContain(reason)
-      // Google's own words travel verbatim beside our reading of them, because
-      // our reading can be wrong (§5.5 归因).
+      // Google's own words beside our reading of them, which can be wrong (§5.5 归因).
       expect(text).toContain("Google said no")
       const fix = text.split("Most likely fix:")[1]?.split("\n\n")[0] ?? ""
       expect(fix.length).toBeGreaterThan(0)
@@ -460,8 +346,7 @@ describe("GeeGuidance", () => {
   })
 
   test("the agent is told to diagnose, not to recite", () => {
-    // Four causes with a keyword map, and an instruction to pick one. Dumping
-    // all four at a user is the failure this sentence was written against.
+    // The keyword map is what turns four listed causes into one chosen one.
     const text = GeeGuidance.render(remote({ status: "failed", reason: "unknown", message: "?" }))
     expect(text).toContain("SINGLE most likely")
     expect(text).toContain("Do not list all four")
@@ -473,10 +358,8 @@ describe("GeeGuidance", () => {
   // The routing itself ----------------------------------------------------------
 
   test("facing decides which layer speaks", () => {
-    // The short-circuit is computed once, in compose (§5.6). Re-deciding it
-    // here would implement the rule twice in two places free to disagree — and
-    // a network story told over a broken local setup is the exact
-    // misattribution the priority exists to prevent.
+    // A hand-built contradiction, since `compose` cannot produce one: a network story told over a broken local
+    // setup is the misattribution the priority exists to prevent (§5.6).
     const contradiction: GeoEvent.GeeStatus = {
       facing: "network",
       setup: { status: "packages-missing", python: PYTHON, missing: ["geemap"] },

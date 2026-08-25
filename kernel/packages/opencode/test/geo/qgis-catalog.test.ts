@@ -14,15 +14,10 @@ import { GeoRuntime } from "@/geo/runtime"
 import { GeoStatus } from "@/geo/status"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-/* The algorithm catalog (docs/GEOKERNEL.md §4.11).
- *
- * The export itself ran against real QGIS 3.44.9: 422 algorithms from exactly
- * the three official providers, help text captured verbatim, 658ms. These
- * tests freeze the query semantics and the failure paths on a synthetic
- * registry, plus the one wiring fact no unit test can show: with the real
- * catalog layer in place of the stub, the unified gate actually opens. */
+/* The algorithm catalog (docs/GEOKERNEL.md §4.11). Query semantics and failure paths over a synthetic registry,
+ * plus the one fact no unit test can show: with the real catalog layer in place of a stub, the gate opens. */
 
-/** Two providers sharing a group name, to catch cross-provider dedup. */
+/** Shaped for the queries below: `Vector geometry` sits in two providers, and `slope` names two algorithms. */
 const REGISTRY: QgisCatalog.Registry = {
   qgisVersion: "3.44.9-Test",
   providers: [
@@ -35,7 +30,7 @@ const REGISTRY: QgisCatalog.Registry = {
           name: "Buffer",
           group: "Vector geometry",
           description: "Computes a buffer.",
-          // Deliberately odd spacing: verbatim means VERBATIM (§4.11).
+          // Odd spacing on purpose: the help text is passed through untouched (§4.11).
           helpText: "Buffer\n\n  keeps   its    whitespace\n\tand its tabs",
           parameters: [
             {
@@ -82,8 +77,7 @@ const REGISTRY: QgisCatalog.Registry = {
           parameters: [],
           outputs: [],
         },
-        // No group at all: groups() lists these under UNGROUPED, so that name
-        // has to be a name inGroup() answers to (§4.11).
+        // No group at all, which groups() lists under UNGROUPED and inGroup() therefore owes an answer for.
         {
           id: "gdal:orphan",
           name: "Orphan",
@@ -99,9 +93,8 @@ const REGISTRY: QgisCatalog.Registry = {
       id: "extra",
       name: "Extra",
       algorithms: [
-        // A display name that folds differently from its id — the only shape
-        // that exercises name lookup rather than id lookup. Real: QGIS ships
-        // `native:zonalstatisticsfb` named "Zonal statistics".
+        // A display name folding to nothing the id folds to, the only shape the name tier can answer for. QGIS
+        // ships `native:zonalstatisticsfb` named "Zonal statistics".
         {
           id: "extra:zonalstatisticsfb",
           name: "Zonal statistics",
@@ -111,8 +104,7 @@ const REGISTRY: QgisCatalog.Registry = {
           parameters: [],
           outputs: [],
         },
-        // One short id, two providers. Real: gdal:slope and native:slope, and
-        // ten more pairs on a 3.44 install.
+        // One short id, two providers, as `gdal:slope` and `native:slope` are on a real install.
         {
           id: "extra:slope",
           name: "Slope one",
@@ -131,9 +123,7 @@ const REGISTRY: QgisCatalog.Registry = {
           parameters: [],
           outputs: [],
         },
-        // One display name, two algorithms, and it folds to nothing any id
-        // folds to — the only shape where the name lookup itself has to choose.
-        // Real: "Raster calculator" names four algorithms on a 3.44 install.
+        // One display name over two algorithms, the shape where the name tier itself would have to guess.
         {
           id: "extra:splitlinesbylength",
           name: "Split lines",
@@ -201,8 +191,7 @@ describe("qgis catalog queries", () => {
       expect((yield* catalog.build(ENVIRONMENT)).ok).toBe(true)
 
       const groups = yield* catalog.groups()
-      // Cross-provider dedup: "Vector geometry" appears in both providers and
-      // must be one group counting both members.
+      // One group counting both providers' members, not one entry per provider.
       expect(groups.find((group) => group.name === "Vector geometry")?.count).toBe(2)
       expect(groups.map((group) => group.name)).toEqual([...groups.map((group) => group.name)].sort())
 
@@ -216,8 +205,6 @@ describe("qgis catalog queries", () => {
       const catalog = yield* QgisCatalog.Service
       yield* catalog.build(ENVIRONMENT)
       const buffer = yield* catalog.get("native:buffer")
-      // The QGIS-maintained authority is preserved byte for byte: a trimmed-
-      // but-subtly-wrong document is worse than a longer faithful one (§4.11).
       expect(buffer?.helpText).toBe("Buffer\n\n  keeps   its    whitespace\n\tand its tabs")
     }),
   )
@@ -237,29 +224,23 @@ describe("qgis catalog queries", () => {
       const catalog = yield* QgisCatalog.Service
       yield* catalog.build(ENVIRONMENT)
 
-      // The consumer is a language model: it does not mistype, it re-spells.
-      // Every form below is a re-spelling of something this catalog printed.
+      // The consumer is a model re-spelling what the catalog printed, not a user mistyping it.
       expect((yield* catalog.get("Native:Buffer"))?.id).toBe("native:buffer") // case
       expect((yield* catalog.get("gdal:CLIPRASTERBYEXTENT"))?.id).toBe("gdal:cliprasterbyextent")
       expect((yield* catalog.get("clip_raster_by_extent"))?.id).toBe("gdal:cliprasterbyextent") // snake
       expect((yield* catalog.get("clip-raster-by-extent"))?.id).toBe("gdal:cliprasterbyextent") // kebab
       expect((yield* catalog.get("Clip raster by extent"))?.id).toBe("gdal:cliprasterbyextent") // spaces
-      // A display name that shares no folded form with its id — the case that
-      // only the name lookup can answer.
       expect((yield* catalog.get("Zonal statistics"))?.id).toBe("extra:zonalstatisticsfb")
       expect((yield* catalog.get("zonal statistics"))?.id).toBe("extra:zonalstatisticsfb")
 
-      // Ambiguity is a miss, at every tolerance and by the same rule: two
-      // algorithms sharing a short id, and two sharing a display name, both
-      // answer nothing rather than whichever came first. Running an algorithm
-      // the caller never asked for is the one failure it cannot detect.
+      // Ambiguity answers nothing rather than whichever came first: running an algorithm the caller never asked
+      // for is the one failure it cannot detect.
       expect(yield* catalog.get("slope")).toBeUndefined()
       expect(yield* catalog.get("SLOPE")).toBeUndefined()
       expect(yield* catalog.get("Split lines")).toBeUndefined()
       expect(yield* catalog.get("split_lines")).toBeUndefined()
 
-      // The full id always answers — it is the only key that cannot be
-      // ambiguous, which is why it is the one the catalog prints first.
+      // The full id still answers, so the tolerance costs nothing to a caller that spells one out.
       expect((yield* catalog.get("extra:slope"))?.description).toBe("Slope, one way.")
       expect((yield* catalog.get("other:slope"))?.description).toBe("Slope, another way.")
       expect((yield* catalog.get("extra:splitlinesbylength"))?.description).toBe("Split by length.")
@@ -274,8 +255,7 @@ describe("qgis catalog queries", () => {
       const catalog = yield* QgisCatalog.Service
       yield* catalog.build(ENVIRONMENT)
 
-      // The whole reason this exists: `get` collapses two outcomes that need
-      // opposite advice, and throws away a set it had already computed.
+      // `get` collapses two outcomes that need opposite advice, and drops the candidate set it just computed.
       const shortId = yield* catalog.resolve("slope")
       expect(shortId.kind).toBe("ambiguous")
       if (shortId.kind === "ambiguous") expect([...shortId.candidates].sort()).toEqual(["extra:slope", "other:slope"])
@@ -291,8 +271,7 @@ describe("qgis catalog queries", () => {
       expect((yield* catalog.resolve("native:nosuchthing")).kind).toBe("missing")
       expect((yield* catalog.resolve("///")).kind).toBe("missing")
 
-      // get stays the thin wrapper it claims to be: ambiguity reads as absence
-      // for callers that only act on a hit.
+      // And `get` stays the thin wrapper, so the two cannot disagree about one key.
       expect(yield* catalog.get("slope")).toBeUndefined()
     }),
   )
@@ -309,9 +288,7 @@ describe("qgis catalog queries", () => {
         ])
       }
 
-      // groups() counts the groupless under UNGROUPED, so inGroup owes an
-      // answer under that same name — the two used to disagree, which made a
-      // listed group unreachable.
+      // A group `groups()` lists and `inGroup` does not answer for is a listing that points at nothing.
       const groups = yield* catalog.groups()
       expect(groups.find((group) => group.name === QgisCatalog.UNGROUPED)?.count).toBe(1)
       expect((yield* catalog.inGroup(QgisCatalog.UNGROUPED)).map((algorithm) => algorithm.id)).toEqual(["gdal:orphan"])
@@ -327,12 +304,8 @@ describe("qgis catalog queries", () => {
       yield* catalog.build(ENVIRONMENT)
       const found = yield* catalog.search("clip")
       expect(found.length).toBeGreaterThanOrEqual(2)
-      // Subsequence semantics, same as the old build: dropped characters and
-      // truncations still match ("bufer" → "buffer"), EXTRA ones never do
-      // ("bufffer" → nothing), because the query has to be findable inside the
-      // target. That limit is acceptable precisely because the re-spellings a
-      // model actually produces — case, spaces, separators, display names —
-      // are now resolved by get/inGroup before anything reaches this path.
+      // Subsequence matching, so a dropped character still finds its target; the re-spellings a model produces
+      // are settled by get/inGroup before anything reaches here.
       const suggested = yield* catalog.suggest("native:bufer", "algorithm")
       expect(suggested[0]).toBe("native:buffer")
       const groups = yield* catalog.suggest("Vector geomtry", "group")
@@ -345,8 +318,8 @@ describe("qgis catalog queries", () => {
       const catalog = yield* QgisCatalog.Service
       yield* catalog.build(ENVIRONMENT)
       yield* catalog.invalidate()
-      // Queries answer from what is held and never rebuild on their own: WHEN
-      // to build is the lifecycle's decision alone (§4.8).
+      // A query that rebuilt on its own would spawn a QGIS startup wherever it was called; when to build is the
+      // lifecycle's alone (§4.8).
       expect(yield* catalog.groups()).toEqual([])
       expect(yield* catalog.get("native:buffer")).toBeUndefined()
     }),
@@ -393,8 +366,7 @@ describe("qgis catalog build failures", () => {
 
 describe("qgis catalog wired into the lifecycle", () => {
   const bundles = fs.mkdtempSync(path.join(os.tmpdir(), "geo-catalog-"))
-  // Shared sandbox + process-global geo kernel: leave no machine.json behind
-  // for a later test that assumes an unconfigured kernel.
+  // A dozen other test files read this same path, so a machine.json left behind decides their starting state.
   afterAll(() => {
     fs.rmSync(bundles, { recursive: true, force: true })
     fs.rmSync(path.join(Global.Path.config, "machine.json"), { force: true })
@@ -461,16 +433,14 @@ describe("qgis catalog wired into the lifecycle", () => {
           "15 seconds",
         )
 
-        // The ready frame carries what a status surface shows on the happy
-        // path. The verified environment never leaves the kernel, so these
-        // facts exist on the wire or nowhere.
+        // The verified environment never leaves the kernel, so a status surface has these from the ready frame or
+        // not at all (§9.1).
         if (ready.status === "ready") {
           expect(ready.versions?.qgis).toBe("3.44.9")
           expect(ready.interpreter?.endsWith("python3.12")).toBe(true)
         }
 
-        // This is 2c's whole point: the stub that honestly failed is gone, and
-        // the same seam now opens the gate (§4.9).
+        // The gate wants a built catalog too, so the stage above has to have completed for this to open (§4.9).
         const gate = yield* qgis.gate()
         expect(gate.ok).toBe(true)
 

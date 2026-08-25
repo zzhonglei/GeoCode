@@ -7,14 +7,8 @@ import { OsmConvert } from "@/geo/osm/convert"
 import { OsmOutput } from "@/geo/osm/output"
 import { OsmQuery } from "@/geo/osm/query"
 
-/* Conversion, normalization and output (docs/GEOKERNEL.md §6.6–§6.8).
- *
- * The assembly itself ran against Wuhan's real boundary — 78 members and 4972
- * coordinates into a MultiPolygon of three parts with three holes, each hole
- * confirmed against OSM as another prefecture's territory. What is pinned here
- * is everything around that: which feature is the one asked for, what the
- * field set is, and the checks that keep a partial assembly from passing as a
- * whole one. */
+/* Conversion, normalization and output (docs/GEOKERNEL.md §6.6–§6.8): which feature is the one that was asked for,
+ * what the field set is, and the checks that keep a partial assembly from passing as a whole one. */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-osm-"))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
@@ -35,9 +29,7 @@ const square = (id: number, tags: Record<string, string>, x = 0, y = 0) => ({
 
 describe("osm conversion isolation", () => {
   test("a relation cannot swallow a member that was matched in its own right", () => {
-    // The member way is tagged and would match a query on its own. Converted
-    // as one batch, the relation consumes it and it never reaches the output —
-    // silently, because nothing reports a feature that was never built.
+    // Silently, in the batch form: nothing reports a feature that was never built.
     const member = square(11, { building: "yes", name: "block" })
     const relation = {
       type: "relation",
@@ -51,7 +43,6 @@ describe("osm conversion isolation", () => {
     const batch = OsmConvert.convertBatch(raw, policy)
     const isolated = OsmConvert.convertElements(raw, policy)
 
-    // Both elements survive isolation; the batch loses one of them.
     expect(isolated.features.map((f) => f.properties.osm_id).sort()).toEqual([11, 22])
     expect(batch.features.length).toBeLessThan(isolated.features.length)
     expect(OsmConvert.pick(isolated.features, { type: "way", id: 11 })).toBeDefined()
@@ -66,8 +57,7 @@ describe("osm conversion isolation", () => {
   })
 
   test("untagged elements are not features", () => {
-    // Untagged ways are the vertices of something else, not objects in
-    // themselves; emitting them would bury the real matches.
+    // An untagged way is the vertices of something else; emitting it as a feature buries the real matches.
     const converted = OsmConvert.convertElements(
       { elements: [square(1, {}), square(2, { amenity: "school" }, 5)] },
       OsmConvert.fieldPolicy([]),
@@ -91,8 +81,6 @@ describe("osm field contract", () => {
     expect(properties.osm_id).toBe(7)
     expect(properties.osm_type).toBe("way")
     expect(properties.name).toBe("第一医院")
-    // A "key=value" string rather than two columns: a bare `type` column would
-    // collide with GeoJSON's own, and the pair is only read together (§6.6).
     expect(properties.category).toBe("amenity=hospital")
     for (const field of OsmConvert.CORE_FIELDS) expect(field in properties).toBe(true)
   })
@@ -101,8 +89,7 @@ describe("osm field contract", () => {
     const policy = OsmConvert.fieldPolicy(["amenity=hospital", "emergency"])
     const { properties, dropped } = OsmConvert.buildProperties("way", 7, tags, policy)
     expect(properties.emergency).toBe("yes")
-    // Dropping is not losing: the caller sees which keys went and can ask
-    // again naming exactly those (§6.6 丢弃但按键计数上报).
+    // By key, so the caller can ask again naming exactly what it lost (§6.6 丢弃但按键计数上报).
     expect(dropped.sort()).toEqual(["addr:street", "name:en", "operator"])
     expect(properties["addr:street"]).toBeUndefined()
   })
@@ -117,8 +104,8 @@ describe("osm field contract", () => {
   })
 
   test("the library's own metadata never becomes a field", () => {
-    // `id` and `bounds` come from the element and the query, not the map.
-    // Letting them in would present them as tags that could be filtered on.
+    // The conversion library mixes its own `id` and `bounds` into properties; kept, they read as tags a caller
+    // could filter on.
     const converted = OsmConvert.convertElements(
       { elements: [square(3, { amenity: "cafe" })] },
       OsmConvert.fieldPolicy([], ["*"]),
@@ -147,18 +134,12 @@ describe("osm assembly verification", () => {
   })
 
   test("a boundary assembled from a fraction of its nodes is refused", () => {
-    // The failure this exists for: a large relation stitches together from a
-    // small part of what it was given and comes back as an ordinary-looking
-    // polygon. Nothing downstream can tell — a partial boundary IS a boundary,
-    // just the wrong one, and every area and clip taken from it is wrong too.
+    // A partial boundary is still a boundary, so every area and clip taken from it is wrong and nothing says so.
     expect(OsmConvert.assemblyLooksComplete(ring(182), 4613)).toBe(false)
     expect(OsmConvert.assemblyLooksComplete(ring(4600), 4613)).toBe(true)
   })
 
   test("small objects are exempt, because ring closure skews the ratio", () => {
-    // A handful of nodes closing into rings can legitimately count either way;
-    // the check is aimed at shortfalls big enough to mean whole segments went
-    // missing, not at arithmetic noise.
     expect(OsmConvert.assemblyLooksComplete(ring(4), 10)).toBe(true)
   })
 })
@@ -205,13 +186,8 @@ describe("osm representative points", () => {
   })
 
   test("a small ring far from the origin still resolves inside itself", () => {
-    // A real 40 m car park in Wuhan, and the case that broke the previous
-    // arithmetic: computed on raw coordinates, the cross products are
-    // differences of products around 3500 that differ by about 0.01, five
-    // significant digits cancel per term, and the answer landed 2 m OUTSIDE
-    // the ring's own bounding box — which a centroid cannot do. The failure is
-    // worst exactly where this is used most: small features, far from the
-    // origin, which is what a city is made of.
+    // A real 40 m car park in Wuhan: small and far from the origin, where cross products taken on raw coordinates
+    // cancel enough significant digits to put the answer outside the ring's own bounding box.
     const ring: [number, number][] = [
       [114.3604117, 30.5337849],
       [114.3603763, 30.5336521],
@@ -230,8 +206,7 @@ describe("osm representative points", () => {
   })
 
   test("a line collapses to its midpoint by distance, not by vertex", () => {
-    // Vertices bunch up around detail; halfway through the list is not
-    // halfway along the line.
+    // Three of the four vertices bunched at one end, so halfway through the list is nowhere near halfway along.
     const point = OsmCentroid.lineMidpoint([
       [0, 0],
       [0.1, 0],
@@ -271,7 +246,7 @@ describe("osm representative points", () => {
         },
       },
     ])
-    // Otherwise a country's point lands on an offshore island.
+    // The larger part is the second one; taking the first would be a country's point on an offshore island.
     expect(features[0]!.geometry.coordinates[0]).toBeCloseTo(12)
   })
 
@@ -299,10 +274,8 @@ describe("osm representative points", () => {
     }
     const { features, dropped } = OsmCentroid.normalize([original, area])
     expect(dropped).toEqual([])
-    // A point that was already a point is the same object, unchanged.
+    // `toBe`: an already-point feature is the same object, so `original_geometry` marks exactly the converted ones.
     expect(features[0]).toBe(original)
-    // A point that was a campus is a different fact, and says so — which is
-    // what makes the normalization traceable rather than lossy (§6.8).
     expect(features[1]!.properties.original_geometry).toBe("Polygon")
     expect(features[1]!.properties.name).toBe("campus")
     expect(features[1]!.geometry.type).toBe("Point")
@@ -313,22 +286,16 @@ describe("osm representative points", () => {
       { type: "Feature", properties: { osm_type: "way", osm_id: 9 }, geometry: null },
     ])
     expect(features).toEqual([])
-    // Named rather than counted because the caller is being told to fetch it on
-    // its own — so the name has to be one `OsmGetObjects` accepts. This list
-    // read `way/9` until now, which `parseRef` throws on: `unassembled` is
-    // filled from two places, and only the one in convert.ts was usable.
+    // Named rather than counted because the caller is told to fetch it on its own, so the name has to be one
+    // `OsmGetObjects` accepts — which the literal alone cannot say, since it cannot tell an accepted spelling
+    // from one `parseRef` throws on.
     expect(dropped).toEqual(["W9"])
-    // Against the real consumer, not against the string: a format that parses is
-    // the property that matters, and asserting the literal alone is what let the
-    // unusable one sit here.
     expect(OsmQuery.parseRef(dropped[0]!)).toEqual({ type: "way", id: 9 })
   })
 
   test("a ring with no vertices is a loss, not a pair of nulls", () => {
-    // `ringCentroid` divides by zero on an empty ring and answers [NaN, NaN],
-    // which is an array and therefore truthy — so it passed as a success, and
-    // left as `[null, null]` the moment JSON.stringify saw it: invalid GeoJSON
-    // in the user's file, with nothing in the loss list to say so.
+    // An empty ring answers `[NaN, NaN]`, which is an array and therefore truthy, and `JSON.stringify` writes it
+    // as `[null, null]`: invalid GeoJSON on the user's disk with nothing in the loss list to say so.
     const { features, dropped } = OsmCentroid.normalize([
       {
         type: "Feature",
@@ -367,8 +334,6 @@ describe("osm output files", () => {
   test("several families are split, and the mixed file is never written", () => {
     const base = path.join(root, "mixed", "out.geojson")
     const { outputs } = OsmOutput.write(base, [feature(1, "Point"), feature(2, "LineString")])
-    // A mixed-geometry file is a hazard downstream: tools work a family at a
-    // time and format conversion refuses it outright (§6.7).
     expect(outputs.map((o) => o.family).sort()).toEqual(["lines", "points"])
     expect(fs.existsSync(base)).toBe(false)
     expect(fs.existsSync(base.replace(".geojson", "-points.geojson"))).toBe(true)
@@ -379,16 +344,11 @@ describe("osm output files", () => {
     const points = base.replace(".geojson", "-points.geojson")
     const lines = base.replace(".geojson", "-lines.geojson")
 
-    // This used to assert the opposite: a re-run deleted the siblings it had
-    // not produced, so a directory held exactly one run's files. That rule was
-    // replaced by numbering (§6.7) — a download costs minutes and the same path
-    // is asked for again all the time, so the earlier run stays and the later
-    // one takes the next name.
     OsmOutput.write(base, [feature(1, "Point"), feature(2, "LineString")])
     expect(fs.existsSync(points) && fs.existsSync(lines)).toBe(true)
 
-    // …then a run that produces only points. It lands on a numbered base, and
-    // the previous run's two files are none of its business.
+    // …then a run producing only points, which still takes the next number: `taken` counts the siblings, so a
+    // base with nothing at it is occupied all the same, and one split run cannot land on another's names.
     const second = OsmOutput.write(base, [feature(1, "Point")])
     expect(second.outputs[0]!.path).toBe(path.join(root, "rerun", "out (1).geojson"))
     expect(fs.existsSync(points) && fs.existsSync(lines)).toBe(true)
@@ -403,9 +363,8 @@ describe("osm output files", () => {
   })
 
   test("an empty list still produces a file rather than throwing", () => {
-    // The service never calls it this way — `writeIfAny` stops at zero features
-    // because an empty file is not worth creating. The tolerance stays so that
-    // a direct call cannot fall off the end of an empty family map.
+    // Unreachable through the service, which stops at zero features in `writeIfAny`; the tolerance is what keeps
+    // a direct call from falling off the end of an empty family map.
     const base = path.join(root, "empty", "out.geojson")
     const { outputs } = OsmOutput.write(base, [])
     expect(outputs[0]!.family).toBe("empty")
@@ -413,11 +372,8 @@ describe("osm output files", () => {
   })
 
   test("a base that is not named .geojson still gets three distinct files", () => {
-    // The sibling name is built by inserting the family before the extension.
-    // Deriving it by rewriting a ".geojson" suffix meant any other extension
-    // produced a sibling equal to the base itself: three families overwriting
-    // one file, then the stale-sibling sweep deleting the survivor — a download
-    // that reported three outputs and left nothing on disk.
+    // The family goes in before the extension, whatever the extension is: a sibling name derived by rewriting a
+    // ".geojson" suffix comes back equal to the base, and every family then overwrites the same file.
     const base = path.join(root, "ext", "out.json")
     const { outputs } = OsmOutput.write(base, [feature(1, "Point"), feature(2, "LineString")])
     expect(new Set(outputs.map((o) => o.path)).size).toBe(2)
