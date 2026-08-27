@@ -32,7 +32,7 @@ GeoCode 的会话循环、模型接入、OAuth 登录、权限系统与工具调
 
 ### 2.1 入口
 
-生产入口是 `build-node` 构建:把 `src/node.ts` 打成 Node ESM bundle(内嵌 Web UI 被桩空,产物不含任何上游前端),供壳以 utilityProcess 运行。开发入口是 TUI(`opencode` 命令的终端形态)。⚠️ 它不能用来验证装配(§4.2)。
+生产入口是 `build-node` 构建:把 `src/node.ts` 打成 Node ESM bundle(内嵌 Web UI 被桩空,产物不含任何上游前端),供壳以 utilityProcess 运行;它在完整 Desktop 进程图中的位置见 `DESKTOP.md` §2。开发入口是 TUI(`opencode` 命令的终端形态)。⚠️ 它不能用来验证装配(§4.2)。
 
 ### 2.2 三条不可破坏的技术约束
 

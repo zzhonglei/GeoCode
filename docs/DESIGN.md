@@ -22,25 +22,30 @@ GeoCode 只有一种形态:桌面应用,macOS(arm64)与 Windows(x64)。不做 CL
 
 ## 3. 系统构成
 
-GeoCode 由三个部分组成,运行时是两类进程:
+GeoCode 由桌面应用层、Agent 内核与地理内核三部分组成。桌面应用层迁自 OpenChamber,
+Agent 内核迁自 OpenCode;两者都以可继续合并上游的薄 fork 维护。完整的桌面封装、进程与
+迁移设计见 `DESKTOP.md`。
 
 ```
 ┌───────────────────────────────────────────────────────────┐
-│ 桌面壳(Electron main + preload)                          │
-│   窗口与菜单 · 进程生命周期 · 凭据分发 · 更新通知 · 深链   │
-│                                                            │
-│   └── fork → Agent 内核(OpenCode 引擎,见 KERNEL.md)      │
-│                  └─ 地理内核(进程内服务层,见 GEOKERNEL.md)│
-│                                                            │
-│   界面(SolidJS,oc:// 协议加载)                           │
-│     └─ HTTP/SSE → Agent 内核                              │
-│          会话、消息、事件 · 地理预览、环境状态、技能商店   │
+│ GeoCode Desktop(来自 OpenChamber)                        │
+│   Electron main + preload                                 │
+│   ├─ Shell Runtime(同进程、本机内部服务)                  │
+│   ├─ utilityProcess → Agent 内核(OpenCode,见 KERNEL.md)  │
+│   │                    └─ 地理内核(见 GEOKERNEL.md)       │
+│   └─ React renderer                                       │
+│       └─ HTTP/SSE → Shell Runtime → Agent 内核            │
 └───────────────────────────────────────────────────────────┘
 ```
 
-**桌面壳**是唯一的进程管理者:启动时拉起 Agent 内核,把服务地址与随机口令经 preload 交给界面;退出时**杀进程树而非只杀内核本身**,否则正在运行的地理子进程会被孤儿化。壳还负责内置 Playwright MCP 的装配(把打包内的 MCP 运行时以环境变量交给内核注册)。
+**Electron main**是唯一的进程管理者:它以 OpenCode Desktop 已验证的 `utilityProcess` 形态
+拉起 Agent 内核,同时在本进程内启动 Shell Runtime。Shell Runtime 承接 OpenChamber React UI
+所需的文件、终端、设置与通知等内部 API,并将 Agent API 代理到内核。renderer 只获得访问
+Shell Runtime 所需的连接信息,Kernel 口令留在 main / Shell Runtime 内存中。退出时壳必须
+杀进程树而非只杀内核本身,否则正在运行的地理子进程会被孤儿化。
 
-**Agent 内核**承载会话循环、模型路由、OAuth 登录、权限裁决与工具调度,对界面接近黑盒——界面经 SDK 与其 HTTP API 对话。
+**Agent 内核**承载会话循环、模型路由、OAuth 登录、权限裁决与工具调度,对界面接近黑盒——
+界面使用与内核同源的 SDK,经 Shell Runtime 代理其 HTTP API。
 
 **地理内核**是这个进程内的一层服务,不是独立进程。它向上提供三个出口面:
 
@@ -58,18 +63,34 @@ GDAL、QGIS、GEE 是用户机器上的外部软件,地理内核只探测、诊�
 
 技能商店是一个受管理的技能目录:安装即落盘到地理内核掌管的目录,该目录注册进引擎的技能扫描路径;启用与禁用表现为技能是否出现在目录中,引擎侧零感知。更新分双层:元信息随远程目录随时刷新;技能正文严格按语义化版本提示更新——只有真正影响 agent 行为的变更才值得用户点一次"更新"。
 
-**界面**是纯 HTTP 客户端,不 import 任何内核代码,自身零特权。geo 预览基于 OpenLayers:栅格贴 WebP,矢量分页渲染地图与属性表,大数据集有尺寸闸门防渲染进程内存溢出。附件遵循三分法:数据文件给路径、文本代码内联、图片走视觉——地理数据从不以文本塞进模型上下文。保留 diff 视图与终端(agent 会替用户改脚本、跑命令,地理用户同样需要看见改动和一条命令行逃生通道);不显示 git 状态、工程向斜杠命令、多服务器入口。语言支持英文与简繁中文。
+**界面**迁自 OpenChamber shared React UI,是纯 HTTP 客户端,不 import 任何内核代码,
+自身零特权。geo 预览基于 OpenLayers:栅格贴 WebP,矢量分页渲染地图与属性表,大数据集有尺寸
+闸门防渲染进程内存溢出。附件遵循三分法:数据文件给路径、文本代码内联、图片走视觉——
+地理数据从不以文本塞进模型上下文。保留 diff 视图与终端(agent 会替用户改脚本、跑命令,
+地理用户同样需要看见改动和一条命令行逃生通道);不显示 git 状态、工程向斜杠命令、多服务器
+入口。语言支持英文与简繁中文。
 
 ## 4. 安全与生命周期
 
-所有本地服务只监听 127.0.0.1,每次启动生成随机口令,HTTP Basic 校验;渲染进程 contextIsolation、零 Node 权限,凭据经 preload 下发。权限裁决发生在 Agent 内核层,界面过滤只是体验不是安全。进程回收双保险:正常退出逐个终止;每次 spawn 登记 pid 与端口,崩溃后的下次启动扫描并清理孤儿。GeoCode 与用户自装的 OpenCode 完全隔离:经环境变量把内核数据根定向到自己的目录,数据、配置、登录态互不可见。
+所有本地服务只监听 127.0.0.1,每次启动生成随机凭据,Agent Kernel 使用 HTTP Basic 校验;
+渲染进程 contextIsolation、零 Node 权限,只经 preload 获得 Shell Runtime 连接信息。权限裁决发生
+在 Agent 内核层,界面过滤只是体验不是安全。进程回收双保险:正常退出逐个终止;每次 spawn
+登记 pid 与端口,崩溃后的下次启动扫描并清理孤儿。GeoCode 与用户自装的 OpenCode 完全隔离:
+经环境变量把内核数据根定向到自己的目录,数据、配置、登录态互不可见。
 
 ## 5. 分发与更新
 
-单一安装包(dmg / exe),内含壳、界面静态资源、Agent 内核 bundle(地理内核在其中),及资源目录中的 Playwright MCP 运行时。两个平台各自在对应系统构建,禁止交叉打包。不签名,首启引导用户通过系统警告。更新是通知式的:检查 GitHub Release,有新版仅提示并引导下载页,从不自动安装;检查失败(含 404)按"无更新"静默处理。
+单一安装包(dmg / exe),内含 Electron 壳、React 静态资源、Shell Runtime、Agent 内核 bundle
+(地理内核在其中),及产品所需资源。用户不另装 OpenCode、OpenChamber、CLI 或 Server。
+两个平台各自在对应系统构建,禁止交叉打包。不签名,首启引导用户通过系统警告。更新是通知式的:
+检查 GitHub Release,有新版仅提示并引导下载页,从不自动安装;检查失败(含 404)按"无更新"
+静默处理。
 
 ## 6. 路线
 
-依次推进,每步独立可验证,旧版 GeoCode(v0.9.6)全程保持可发布:内核瘦身(以上游 TUI 为测试台)→ 地理内核 → 工具层与权限 → 界面迁入(只迁不裁)→ 壳与打包 → 与旧版逐功能对照验收并处理存量数据迁移。
+依次推进,每步独立可验证,旧版 GeoCode(v0.9.6)全程保持可发布:内核瘦身(以上游 TUI
+为测试台)→ 地理内核 → 工具层与权限 → OpenChamber 契约实验 → Shell vendor 与 Desktop
+profile → Kernel Host / SDK / 代理 → 最小桌面闭环 → 地理界面 → 双平台打包 → 与旧版逐功能
+对照验收并处理存量数据迁移。详细阶段与验收门见 `DESKTOP.md` §10–§11。
 
 推进顺序与设想有过一次偏离,值得记下:**数据面先于工具面完成**,因为数据面能脱离 Agent 独立验证。各部分的实现现状见 `OVERVIEW.md` §7;内核交给工具层的职责清单见 `GEOKERNEL.md` §11。

@@ -40,9 +40,10 @@
 
 ### 3.1 进程形态
 
-目标形态由桌面壳、Agent 内核与界面三部分构成,运行时为两类进程(详见 `DESIGN.md` §3)。
-桌面壳以子进程方式拉起 Agent 内核,并将服务地址与一次性口令交给界面;传递经由 preload
-脚本完成——这是 Electron 中唯一允许向零权限的渲染进程注入数据的通道。
+目标形态由 Electron 桌面壳、Shell Runtime、React 界面与 Agent 内核构成(详见
+`DESKTOP.md` §2)。Shell Runtime 迁自 OpenChamber Web Server,但只作为 Electron main 内的
+本地服务存在,不构成 GeoCode Web 产品。桌面壳以 `utilityProcess` 拉起 Agent 内核;
+界面只连接 Shell Runtime,由后者代理 Agent API,Kernel 口令不进入 renderer。
 
 当前代码树中,桌面壳与界面尚未迁入(见 §7)。开发期的装配验证对着内核的 HTTP 端点做,
 **不对着终端形态**——上游 TUI 读的是另一张 agent 表(详见 `KERNEL.md` §4.2)。
@@ -286,8 +287,8 @@ GeoCode 不直接调用 QGIS 的 API。QGIS 携带独立的 Python 解释器、�
 | 工具层:四组权限装配 | 已完成 | `config/geocode.ts` |
 | 两个子代理:osmfetch 与 explore | 已完成 | `config/geocode.ts` 中的定义、出口锁与地理读取权 |
 | 凭据脱敏的三处出口:状态事件 / 诊断包 / 日志 | 未开始 | `NetRedact` 全仓无生产调用方 |
-| 界面 | 未开始 | 仓库根不存在界面包目录 |
-| 桌面壳 | 未开始 | 仓库根不存在壳包目录 |
+| React 界面(OpenChamber) | 未开始 | 仓库根不存在 `desktop/` |
+| 桌面壳与 Shell Runtime(OpenChamber) | 未开始 | 仓库根不存在 `desktop/` |
 | 技能商店 | 未开始 | 地理内核中无对应模块 |
 
 表中的"已完成"指实现完整,**不指已经验证**。两者的差距是当前的主要风险:
@@ -307,7 +308,7 @@ GeoCode 不直接调用 QGIS 的 API。QGIS 携带独立的 Python 解释器、�
 数据面端点已实现但无消费方——界面为其唯一预期消费方,尚未迁入。因此结果的呈现
 目前仅通过模型在会话中的文本描述完成。
 
-界面迁入后,本节与 §3.1 需同步修订。
+界面迁入后,本节的实现状态需同步修订。
 
 ---
 
@@ -316,6 +317,7 @@ GeoCode 不直接调用 QGIS 的 API。QGIS 携带独立的 Python 解释器、�
 | 文档 | 内容 |
 |---|---|
 | `DESIGN.md` | 产品定位、设计原则、系统构成、分发与路线 |
+| `DESKTOP.md` | 唯一 Desktop 形态、OpenChamber 迁移、进程封装与双上游维护 |
 | `KERNEL.md` | Agent 内核的薄 fork 维护、定制阶梯、装配形态、屏蔽清单 |
 | `GEOKERNEL.md` | 地理内核各模块的完整设计与横切契约 |
 | `TOOLS.md` | 工具层的权限模型、输出契约与注入点 |

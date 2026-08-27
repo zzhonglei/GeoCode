@@ -125,7 +125,9 @@ GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统�
 $TMPDIR/GeoCode/                 临时根:进程内的短命文件
 
 <appData>/ai.geocode.desktop/    Electron 壳自己的数据(与上面四根分离,是上游的设计)
-└── logs/                        壳侧日志
+├── logs/                        壳侧日志
+└── desktop/
+    └── settings.json            窗口、主题、布局等桌面偏好
 
 <用户项目>/                       GeoCode 在用户项目里的全部接触面
 ├── .git/geocode              ★ 项目 id 标记(一行文本,见下),始终写入
@@ -140,6 +142,11 @@ $TMPDIR/GeoCode/                 临时根:进程内的短命文件
 - **地理数据从不进快照仓库**。用户项目里的 `.tif`、`.gpkg`、`.shp` 及其附属文件被检查点排除,否则一景遥感影像就能让 `snapshot/` 比项目本身还大(GEOKERNEL.md §10.1 #6);
 - **`cache/geo/` 可以随时整个删掉**。四个成员都是可重建的:预览产物本来就每次启动清空,脚本与运行时库按需物化,链接农场重建即可;
 - **写进用户项目的只有 `.git/geocode`**。`.geocode/` 是用户自己建的,GeoCode 不主动创建它;写进去的只有计划文件,而且要实验性计划模式启用才会发生。上游会往每个配置目录(**含项目里的那个**)装 `@opencode-ai/plugin` 并写一份 `.gitignore`,那是为了让用户自写的插件能 import SDK——GeoCode 不加载插件,这两件事一并去掉了(KERNEL.md 屏蔽清单)。项目目录里因此不会出现 `node_modules/`。
+
+OpenChamber 迁入后同样不得产生 `~/.config/openchamber`、`~/.config/opencode` 或
+`~/.local/share/opencode`:Shell 偏好归 Electron userData,Agent 配置与认证归上表中的 GeoCode
+XDG 根。完整所有权见 `DESKTOP.md` §8;路径重构的批次与零访问验收、OpenChamber 配置页面的
+逐项处置与 Kernel API 边界,分别在 `DESKTOP.md` §10 的阶段 6 与阶段 2 落成专文。
 
 #### `.git/geocode`:项目身份
 
