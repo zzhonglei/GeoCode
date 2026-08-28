@@ -37,3 +37,9 @@ Thumbs.db
 # upstream file we do not widen for this.
 __pycache__/
 *.pyc
+
+# The staged Agent Kernel: bundle, wasm and its two external dependencies, built from
+# kernel/ by packages/electron/scripts/prepare-geocode-kernel.mjs. It belongs beside the
+# electron package's own upstream .gitignore entries, but that file is upstream's and we
+# do not widen it — same rule as the bytecode entry above.
+desktop/packages/electron/resources/kernel/

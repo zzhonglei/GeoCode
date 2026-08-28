@@ -14,6 +14,10 @@ import { ElectronSshManager } from './ssh-manager.mjs';
 import { replaceFileWithRetry } from './windows-file-replace.mjs';
 import { createTrayController } from './tray.mjs';
 import { resolveManagedOpenCodeCwd } from './opencode-cwd.mjs';
+// GeoCode: a second import of 'electron' rather than widening the one above, so the
+// upstream line stays byte-identical across merges (docs/DESKTOP.md §9.3).
+import { utilityProcess } from 'electron';
+import { startEmbeddedKernel } from './geocode/kernel-boot.mjs';
 import { resolveStartupUrlProbePlan, shouldIgnoreLoopbackConnectionLimit } from './startup-url-selection.mjs';
 import { sanitizeRuntimeRequestHeaders } from './runtime-request-headers.mjs';
 import { assertUpdaterCapability } from './updater-capability.mjs';
@@ -244,6 +248,8 @@ const { autoUpdater } = updaterPkg;
 
 const state = {
   serverHandle: null,
+  // GeoCode: Electron main is the sole owner of the embedded Agent Kernel.
+  kernelHandle: null,
   sidecarUrl: null,
   localOrigin: null,
   apiBaseUrl: null,
@@ -355,6 +361,10 @@ const shutdownBackgroundServices = () => {
   setDesktopKeepAwakeActive(false);
   if (state.installingUpdate) return;
   killSidecar();
+  // GeoCode: synchronous by necessity — app.exit(0) follows in this same tick, so the
+  // kernel is signalled rather than asked, and sweeps its own children on exit.
+  state.kernelHandle?.terminate();
+  state.kernelHandle = null;
   setImmediate(() => {
     void shutdownSshSessions();
   });
@@ -1570,6 +1580,19 @@ const spawnLocalServer = async () => {
   process.env.OPENCHAMBER_SKIP_API_COMPRESSION = process.env.OPENCHAMBER_SKIP_API_COMPRESSION || 'true';
   process.env.NO_PROXY = process.env.NO_PROXY || 'localhost,127.0.0.1';
   process.env.no_proxy = process.env.no_proxy || 'localhost,127.0.0.1';
+
+  // GeoCode: the kernel comes up before the shell is imported, because the shell reads its
+  // OpenCode connection at import time (geocode/kernel-boot.mjs). A kernel that fails to
+  // start throws here, so no shell is left running against an address nothing answers.
+  state.kernelHandle = await startEmbeddedKernel({
+    isDev,
+    moduleDirectory: __dirname,
+    resourcesPath: process.resourcesPath,
+    fork: (modulePath, forkArgs, options) => utilityProcess.fork(modulePath, forkArgs, options),
+    cwd: process.env.OPENCHAMBER_OPENCODE_CWD,
+    environment: process.env,
+    logger: log,
+  });
 
   const { startWebUiServer } = await import('@openchamber/web/server/index.js');
 
