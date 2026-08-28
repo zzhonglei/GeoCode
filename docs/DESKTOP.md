@@ -414,6 +414,20 @@ workspace。
 ⚠️ 直接 `git fetch` 上游来建这条分支是行得通的,而且**一切看起来都正常**——直到某次改用 merge
 升级,或有人对着 2519 个上游提交找 merge-base。这条分支的价值全在「快照序列」这个形态上。
 
+**首次导入与后续升级用的不是同一条命令。** 孤儿分支与 main 没有共同祖先,`-X subtree=desktop`
+的路径偏移是**猜**出来的;猜不出时它不报错,只是把整棵上游树铺到仓库根——`packages/`、`docs/`、
+`scripts/` 直接盖在我们自己的目录上,而冲突只有 `.gitignore`、`LICENSE`、`.gitattributes` 三处
+add/add。**手一快把那三处解掉再提交,得到的是一棵内容全错、外表正常的树。** 首次导入因此走两步:
+
+```bash
+git merge -s ours --no-commit --allow-unrelated-histories chamber-upstream   # 只记父子关系,不动树
+git read-tree --prefix=desktop/ -u chamber-upstream                          # 内容读进子目录
+git commit
+```
+
+此后目录映射已经建立,升级就是普通的 `git merge -X subtree=desktop chamber-upstream`。验收门
+两次都一样:`git diff chamber-upstream main:desktop` 必须为空。
+
 **清单即闭包。** 改它一行就是改「下次合并把什么读成上游的增删」:少一行读作「上游删了这些
 文件」并把它们从 main 上移除,多一行读作「上游加了」。两个方向都不产生冲突,都是静默的。
 清单落成文件之前,这份选择只存在于做过它的那次会话里,没有任何东西能事后复核它。
@@ -521,6 +535,13 @@ Shell 迁入时建立 `docs/SHELL.md` 或本文的扩展注入表,逐项记录:
 - 保留上游许可证与版权;
 - 建立独立 bun 安装根;
 - 先证明原味 Shell 可以构建,再叠加 GeoCode 改动。
+
+⚠️ **「可以构建」在这一阶段只到「树是活的、类型是通的」**:`bun install` 装得上、
+`bun run build` 与 `bun run type-check` 退出码为 0。它**不等于桌面应用能打出安装包**——
+`packages/electron` 的 `build` 脚本是 `bun -e "process.exit(0)"`,真正的打包链在同包的
+`package` 脚本里(`build:web-assets → prepare:opencode-cli → bundle:main → rebuild:native →
+package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌 Kernel 的外部 CLI。
+打包属于阶段 8,在此之前跑它只会下载一个产品里不存在的组件。
 
 ### 阶段 2:建立产品 profile
 
