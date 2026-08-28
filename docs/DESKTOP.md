@@ -473,6 +473,13 @@ grep -rlE '// GeoCode:|--- GeoCode|"GeoCode: ' desktop/ | wc -l
 `bun.lock` 是例外:`chamber-upstream` 上取上游原味,main 上则是 `bun install` over 闭包的产物,
 两者差着数千行。冲突时删掉重新生成,永远不要手工解。
 
+**重新生成之后要清掉 `node_modules` 再装,不能增量。** `bun install` 会按新锁文件补齐缺的包,
+但**不清掉不再被引用的旧版本**——同一个包的两个版本从此并存,而 TypeScript 把它们当成两个
+不同的类型。症状是几十条 `TS2322` / `TS2345`,报的是 `node_modules/.bun/<包>@<旧版>` 与
+`@<新版>` 之间不兼容,**读起来像是代码坏了**。v1.18.4 → v1.21.0 那次实测过:增量安装后
+`@codemirror/language` 留下 6.12.2 与 6.12.4 两份,`bun run build` 退出码 2;
+`rm -rf node_modules packages/*/node_modules` 后重装,全绿。
+
 ### 9.3 Shell 定制阶梯
 
 OpenChamber 采用与 Kernel 相同的原则:
