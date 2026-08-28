@@ -82,12 +82,20 @@ GeoCode 与 OpenCode Desktop 的区别是中间多一层 Shell Runtime。它不�
 
 ### 2.4 已验证的 OpenChamber 接缝
 
-对 OpenCode Desktop 与 OpenChamber v1.18.4 的源码对照确认了两条事实:
+对 OpenCode Desktop 与 OpenChamber 的源码对照确认了三条事实(2026-08-28 在 OpenChamber
+v1.21.0 上复核):
 
 - OpenCode Desktop 的稳定路径是 `build-node` → Node ESM bundle → `utilityProcess.fork` →
   `Server.listen`,main 持有随机端口与随机口令;
+- **OpenChamber 自己不是这么做的**:`utilityProcess` 在它整个 `packages/electron` 里一处都
+  没有,启动 OpenCode 的是 Shell Runtime——`server/lib/opencode/lifecycle.js` 用 `spawn` 拉起
+  一个外部 CLI 二进制,而那个二进制由 `scripts/prepare-opencode-cli.mjs` 按 root `package.json`
+  里钉死的 `@opencode-ai/sdk` 版本号下载、经 `extraResources` 打进安装包。**所以 utility
+  process 那条路径是 GeoCode 要新增的,不是接管上游已有的**;
 - OpenChamber React UI 只访问 Shell Runtime。Shell Runtime 已有「外部 OpenCode + skip-start」
-  模式,能代理 HTTP / SSE / WebSocket 并在服务端附加 Basic 认证。
+  模式(`server/index.js` 的 `ENV_SKIP_OPENCODE_START`),能代理 HTTP / SSE / WebSocket 并在
+  服务端附加 Basic 认证——**这正是注入点:上游为「连接任意外部 OpenCode」写的能力,恰好是我们
+  需要的那个接缝**,`lifecycle.js` 那 1308 行因此一行都不用改。
 
 GeoCode 因此不改 React 的数据入口,也不让 Shell Runtime 获得进程所有权。Electron main 先启动
 Kernel,再在动态导入 Shell Runtime 前写入以下**内部进程 ABI**:
