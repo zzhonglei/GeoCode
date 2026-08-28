@@ -399,6 +399,9 @@ GeoCode/
 两个 vendor 根各自是独立安装与测试单元。仓库根只编排构建,不把二者揉成一个依赖方向混乱的
 workspace。
 
+**当前基线不记在本文里。** 它每次升级都变,写下就会漂(`CONVENTIONS.md` §10 第二条)。查法是
+各自 pristine 分支的最新快照:`git log -1 --format=%s chamber-upstream`。
+
 ### 9.2 闭包与对账
 
 `chamber-upstream` 只接受「上游版本的原样文件圈选」,圈选清单即 `scripts/chamber-manifest.txt`,
@@ -670,14 +673,16 @@ macOS arm64 与 Windows x64 分别完成:
 
 以下不改变总体架构,在对应迁移阶段以实验决定:
 
-1. OpenChamber 的具体基线 commit;
-2. 同源 SDK 以 workspace 依赖还是构建产物交付给 `desktop/`;
-3. 新版 OpenChamber 要求的 SDK 版本与 Kernel 版本不一致时如何处置——§9.5「一次只升级一个
-   上游」与 §4.3「Kernel 与 SDK 同源」在此相交,待首次实测两侧指纹后定稿;
-4. Shell 补丁的注入表放 `docs/SHELL.md` 还是本文的扩展章节(§9.4),待补丁实际分布可见后定;
-5. Shell Runtime 凭据的具体 token 形状与过期策略;
-6. utility process 异常退出后的自动重启次数与退避;
-7. GeoCode 应用更新通知的检查间隔和发布清单格式。
+1. 同源 SDK 以 workspace 依赖还是构建产物交付给 `desktop/`;
+2. 新版 OpenChamber 要求的 SDK 版本与 Kernel 版本不一致时如何处置——§9.5「一次只升级一个
+   上游」与 §4.3「Kernel 与 SDK 同源」在此相交。首次实测(OpenChamber v1.21.0 钉
+   `@opencode-ai/sdk` 1.18.23,Kernel 侧 1.18.18)显示两者 API 表面零差异,差的三行是版本号、
+   一句注释,以及一个我们不装配的 `app.upgrade` 参数——**所以这一条的结论是「版本号不能用来
+   判断」,而不是「已经对齐」**;
+3. Shell 补丁的注入表放 `docs/SHELL.md` 还是本文的扩展章节(§9.4),待补丁实际分布可见后定;
+4. Shell Runtime 凭据的具体 token 形状与过期策略;
+5. utility process 异常退出后的自动重启次数与退避;
+6. GeoCode 应用更新通知的检查间隔和发布清单格式。
 
 这些细节必须有一个明确所有者和运行时测试,但不应重新打开「是否只有 Desktop」「是否内置
 Kernel」「是否保留 Shell Runtime」「是否由 main 管理 Kernel」四项已定决策。

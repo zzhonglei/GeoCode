@@ -46,7 +46,7 @@ else return 2
 - **地理内核零依赖 Electron 与界面。** 它住在 `kernel/packages/opencode/src/geo/` 而不是独立包,边界因此靠依赖方向维持、不靠目录维持:它只经包的公开入口(`@opencode-ai/core/*`、`@opencode-ai/schema/*`)取用引擎能力,不触碰引擎内部模块。这是"地理内核可脱离桌面环境单独测试"的落地保障。
 - **引擎对地理内核的引用只出现在注入点上**:服务图、路由挂载、数据面处理器、进程回收、工具注册。清单在 GEOKERNEL.md §10.1,每一处配一个绊线测试;不在清单上的引用即欠账。
 
-界面与桌面壳尚未迁入,它们的约束先记在此:React UI 只依赖同源 SDK、RuntimeAPIs、
+界面与桌面壳的依赖方向:React UI 只依赖同源 SDK、RuntimeAPIs、
 HTTP 与 preload 类型契约,绝不 import 内核或地理内核的任何模块;Shell Runtime 只经 HTTP
 代理内核;桌面壳可依赖二者的构建产物,反向禁止。完整边界见 `DESKTOP.md` §3。
 

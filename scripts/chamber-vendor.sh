@@ -15,7 +15,7 @@
 # So the selection lives in scripts/chamber-manifest.txt and this script applies
 # it. It stops at `git add` — the commit is the maintainer's (docs/CONVENTIONS.md §4).
 #
-# Usage:  git checkout chamber-upstream && ./scripts/chamber-vendor.sh v1.18.4
+# Usage:  git checkout chamber-upstream && ./scripts/chamber-vendor.sh v1.21.0
 #
 # To avoid switching the main working tree, run it from a scratch one instead:
 #   git worktree add ../geocode-chamber chamber-upstream
@@ -23,7 +23,7 @@ set -e
 
 TAG="$1"
 if [ -z "$TAG" ]; then
-  echo "usage: $(basename "$0") <upstream-tag>   e.g. $(basename "$0") v1.18.4" >&2
+  echo "usage: $(basename "$0") <upstream-tag>   e.g. $(basename "$0") v1.21.0" >&2
   exit 1
 fi
 
@@ -107,8 +107,9 @@ echo "== selecting per manifest =="
 : > "$tmp/expected"
 while IFS= read -r item; do
   if [ -d "$tmp/src/$item" ]; then
-    # -type l as well as -type f: upstream force-tracks symlinks (CLAUDE.md and
-    # the six under .claude/skills at v1.18.4). Those are excluded, but a
+    # -type l as well as -type f: upstream force-tracks symlinks — CLAUDE.md and
+    # the six under .claude/skills, unchanged across every version vendored so
+    # far (`git ls-tree -r <tag> | awk '$1=="120000"'`). Those are excluded, but a
     # symlink appearing inside a selected directory would otherwise be staged
     # and not expected, failing the reconciliation for no real reason.
     (cd "$tmp/src" && find "$item" \( -type f -o -type l \)) >> "$tmp/expected"
@@ -136,8 +137,9 @@ while IFS= read -r item; do
 done < "$tmp/manifest"
 
 # --force is the whole point of this line. The closure carries upstream's own
-# .gitignore, and upstream force-tracks files that .gitignore matches (.env and
-# the .claude/skills symlinks at v1.18.4). Without --force such a file lands on
+# .gitignore, and upstream force-tracks files that .gitignore matches — .env and
+# the .claude/skills symlinks, at every version vendored so far. Without --force
+# such a file lands on
 # disk and never reaches the commit — precisely how opencode's build-node.ts was
 # lost on the kernel's first import and only found later.
 git add --force -A .
