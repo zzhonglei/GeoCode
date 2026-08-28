@@ -103,9 +103,9 @@ if ! diff -q "$tmp/expected" "$tmp/actual" >/dev/null 2>&1; then
   echo >&2
   echo "RECONCILE FAILED — do not commit this." >&2
   echo "-- selected but not staged (swallowed, most likely by .gitignore):" >&2
-  comm -23 "$tmp/expected" "$tmp/actual" >&2
+  LC_ALL=C comm -23 "$tmp/expected" "$tmp/actual" >&2
   echo "-- staged but not selected (stray):" >&2
-  comm -13 "$tmp/expected" "$tmp/actual" >&2
+  LC_ALL=C comm -13 "$tmp/expected" "$tmp/actual" >&2
   exit 1
 fi
 

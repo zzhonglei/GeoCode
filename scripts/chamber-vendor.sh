@@ -71,7 +71,7 @@ grep -v '^!' "$tmp/all" > "$tmp/manifest"
 # the closure disagree, and whichever the code happens to read first would win.
 LC_ALL=C sort "$tmp/manifest" > "$tmp/sel.sorted"
 LC_ALL=C sort "$tmp/excluded" > "$tmp/exc.sorted"
-overlap=$(comm -12 "$tmp/sel.sorted" "$tmp/exc.sorted")
+overlap=$(LC_ALL=C comm -12 "$tmp/sel.sorted" "$tmp/exc.sorted")
 if [ -n "$overlap" ]; then
   echo "refuse: manifest both selects and excludes:" >&2
   echo "$overlap" >&2
@@ -122,7 +122,12 @@ done < "$tmp/manifest"
 LC_ALL=C sort -o "$tmp/expected" "$tmp/expected"
 
 echo "== replacing tracked tree =="
+# clean as well as rm: `git status --porcelain` above does not see files the
+# .gitignore matches, but `git add --force` below does add them. A .DS_Store
+# the Finder left in the worktree would otherwise be staged and fail the
+# reconciliation as a stray.
 git rm -rq --ignore-unmatch . >/dev/null
+git clean -qfdx
 while IFS= read -r item; do
   rm -rf "$item"
   parent=$(dirname "$item")
@@ -144,9 +149,9 @@ if ! diff -q "$tmp/expected" "$tmp/actual" >/dev/null 2>&1; then
   echo >&2
   echo "RECONCILE FAILED — do not commit this." >&2
   echo "-- selected but not staged (swallowed, most likely by .gitignore):" >&2
-  comm -23 "$tmp/expected" "$tmp/actual" >&2
+  LC_ALL=C comm -23 "$tmp/expected" "$tmp/actual" >&2
   echo "-- staged but not selected (stray):" >&2
-  comm -13 "$tmp/expected" "$tmp/actual" >&2
+  LC_ALL=C comm -13 "$tmp/expected" "$tmp/actual" >&2
   exit 1
 fi
 
