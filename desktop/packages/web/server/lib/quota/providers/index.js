@@ -151,6 +151,12 @@ const registry = {
   }
 };
 
+// --- GeoCode: Claude is removed rather than left to report "not configured", because `isConfigured`
+// answers by loading the credential — it shells out to `security find-generic-password -w` for Claude
+// Code's login Keychain entry. Keyed off the module's own id so a rename takes this with it. ---
+delete registry[claude.providerId];
+// --- /GeoCode ---
+
 const pendingFetches = new Map();
 
 
@@ -207,7 +213,12 @@ export const fetchQuotaForProvider = (providerId) => {
   return pending;
 };
 
+// --- GeoCode: through the registry rather than the provider, which would be a second Keychain path. ---
+/*
 export const fetchClaudeQuota = claude.fetchQuota;
+*/
+export const fetchClaudeQuota = () => fetchQuotaForProvider(claude.providerId);
+// --- /GeoCode ---
 export const fetchOpenaiQuota = openai.fetchQuota;
 export const fetchGoogleQuota = google.fetchGoogleQuota;
 export const fetchCodexQuota = codex.fetchQuota;

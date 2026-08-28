@@ -6,7 +6,12 @@ export interface QuotaProviderMeta {
 }
 
 export const QUOTA_PROVIDERS: QuotaProviderMeta[] = [
+  // --- GeoCode: the tray fetches every id listed here on launch, and Claude's provider answers by
+  // reading Claude Code's OAuth tokens out of the macOS login Keychain. ---
+  /*
   { id: 'claude', name: 'Claude' },
+  */
+  // --- /GeoCode ---
   { id: 'codex', name: 'Codex' },
   { id: 'cursor', name: 'Cursor' },
   { id: 'github-copilot', name: 'GitHub Copilot' },
