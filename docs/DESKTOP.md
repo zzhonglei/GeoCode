@@ -409,18 +409,23 @@ workspace。
 文件」并把它们从 main 上移除,多一行读作「上游加了」。两个方向都不产生冲突,都是静默的。
 清单落成文件之前,这份选择只存在于做过它的那次会话里,没有任何东西能事后复核它。
 
+**收窄闭包是这套机制唯一没有自动防护的操作。** 少圈一个文件,git 读作「上游删了它」并把它
+从 main 上移除,不产生任何冲突;多圈一个文件只是多带了字节。因此默认全取,只排除验证过的项。
+
 **Desktop 的闭包边界与 Kernel 不同。** Kernel 圈的是 15 个包的最小闭包;Desktop **包层面全取**
-(§12 已否决为证明「只做 Desktop」而删源码),排除的只是上游的开发设施——它们不参与构建,却
-会在我们的仓库里产生真实行为:
+(§12 已否决为证明「只做 Desktop」而删源码)。排除的只有上游的开发设施,分两类——前两项**必须**
+排除,它们会被我们自己的系统读进去;其余是无用载荷:
 
 | 排除项 | 为什么不能一起落盘 |
 |---|---|
-| `.github/` 的 CI 工作流 | 仓库开源到 GitHub 后,上游的工作流会被真的执行 |
-| `CLAUDE.md`、`.claude/`、`.agents/`、`.opencode/` | 会被在本仓工作的 AI 助手读到,把上游的指令当成我们的 |
+| `.agents/` 与 `AGENTS.md` | **会被 Kernel 读进去**:`.agents/skills` 下的 `SKILL.md` 经 `fsys.up`(从 cwd 向上找到 worktree)进入技能列表;`AGENTS.md` 经 `findUp` 进入系统提示,而它收集**所有**祖先匹配、不是最近的一个。两者都不受 Claude Code 屏蔽开关保护——KERNEL.md §6 第 3 项管的是另外两个来源 |
+| `.claude/` 与 `CLAUDE.md` | 上面两项的符号链接(`CLAUDE.md → AGENTS.md`,`.claude/skills/* → ../../.agents/skills/*`),本体排除后必须一起走。Kernel 侧已屏蔽,但在本仓工作的 AI 助手仍会读 |
+| `.github/` | 无用载荷。GitHub Actions 只认仓库根的 `.github/workflows/`,vendor 目录下的不生效 |
+| `.opencode/` | Kernel 的项目配置根是 `Brand.projectDir`(`.geocode`),读不到它 |
 | `.env` | 未经决策的环境默认值 |
 
 Kernel 的清单为同一类问题留了先例:它只圈进 `.github/TEAM_MEMBERS`(`packages/script` 在 import
-期读它),其余 CI 全部排除,理由直接写在清单注释里。**排除项的理由写进清单,不写进本文**——
+期读它),其余 CI 排除的理由写作「CI we do not run」。**排除项的理由写进清单,不写进本文**——
 清单是可执行的,文档会漂。
 
 ⚠️ **`chamber-upstream` 必须推到远端。** merge-base 就在那条分支上,它只存在于本机时,任何新

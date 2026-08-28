@@ -1,0 +1,105 @@
+# The desktop closure: what gets vendored from the openchamber upstream.
+#
+# One path per line, relative to the upstream repository root. A directory is
+# taken whole, a file is taken alone, and `#` starts a comment.
+#
+# THIS FILE IS THE CLOSURE. Editing a line is a structural change, not a
+# preference: the next merge reads a removed line as "upstream deleted these
+# files" and an added one as "upstream added them", and neither produces a
+# conflict. Both are silent. See docs/DESKTOP.md §9.2.
+#
+# Unlike the kernel closure, this one takes every package whole. GeoCode ships
+# only a desktop app, but proving that by deleting the mobile/vscode/web sources
+# was rejected (docs/DESKTOP.md §12), and narrowing is the one operation here
+# that has no automatic guard. What is left out is upstream's development
+# apparatus — nothing that installs, builds, or runs.
+
+# --- What is deliberately NOT here ---
+#
+# .agents/ and AGENTS.md — read by our own kernel, not merely by a human's
+#   editor. The 14 SKILL.md files under .agents/skills reach the skill list via
+#   fsys.up(start: cwd, stop: worktree) in opencode/src/skill/index.ts, and
+#   AGENTS.md reaches the system prompt via findUp in session/instruction.ts —
+#   which collects every ancestor match, not the nearest one. Neither is covered
+#   by the Claude Code shielding flag; that one guards two other roots
+#   (docs/KERNEL.md §6 item 3).
+#
+# .claude/ and CLAUDE.md — symlinks onto the two above (CLAUDE.md -> AGENTS.md,
+#   .claude/skills/* -> ../../.agents/skills/*). They follow their targets out.
+#
+# .github/ and renovate.json — repository governance we do not run. Actions and
+#   Renovate read only the repository root, so a copy under desktop/ does
+#   nothing; CODEOWNERS names upstream's team, which would misdirect anyone
+#   reading it here.
+#
+# .opencode/ — six agent definitions and three commands for upstream's own use.
+#   Our project config root is Brand.projectDir (.geocode), so nothing reads it.
+#
+# .env — NODE_ENV=development, an environment default we have not decided on.
+#
+# Both .env and the six .claude/skills symlinks are matched by upstream's own
+# .gitignore yet force-tracked, which is why chamber-vendor.sh needs
+# `git add --force`. These are excluded, but the next file upstream force-tracks
+# may not be.
+#
+# The same exclusions, as data. A whitelist's failure mode is silence: upstream
+# adds a top-level entry, no line here names it, and it is dropped with nothing
+# said. chamber-vendor.sh therefore reports any top-level entry that is neither
+# selected below nor declared here — which makes these eight lines the
+# difference between "we decided against it" and "nobody has looked at it yet".
+!.agents
+!.claude
+!.env
+!.github
+!.opencode
+!AGENTS.md
+!CLAUDE.md
+!renovate.json
+
+# --- Root infrastructure. Nothing installs or builds without these; the
+# postinstall chain alone needs package.json, fix-deprecation.js, patches and
+# packages/electron/scripts. ---
+package.json
+bun.lock
+tsconfig.json
+vite.config.ts
+vite-theme-plugin.ts
+postcss.config.js
+eslint.config.js
+components.json
+knip.json
+fix-deprecation.js
+.gitignore
+.gitattributes
+.nvmrc
+patches
+bun-patches
+scripts
+
+# --- Project files. LICENSE is a legal requirement (docs/DESKTOP.md §10
+# stage 1); `docs` here is upstream's root docs/ directory, eleven files, not
+# the packages/docs site. ---
+LICENSE
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+SECURITY.md
+docs
+
+# --- Deployment configs. Not GeoCode product capabilities, kept only because
+# excluding four files is not worth the risk that a script references one
+# (scripts/docker-entrypoint.sh is in the closure). ---
+.dockerignore
+Dockerfile
+docker-compose.yml
+Caddyfile
+
+# --- Packages: all six, whole. electron depends on web, vscode on ui; docs and
+# mobile stand alone. All of ui, web and vscode pin @opencode-ai/sdk to an exact
+# 1.18.18 — the seam docs/DESKTOP.md §4.3 governs. ---
+packages/docs
+packages/electron
+packages/mobile
+packages/ui
+packages/vscode
+packages/web
