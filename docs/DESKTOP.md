@@ -114,6 +114,12 @@ Shell Runtime 到 Kernel 的这一段使用固定到本次应用进程的连接�
 restart 当前只会重新探测健康,不会重启 Kernel;将配置 Apply/Restart 委托回 Electron main
 并完成事件流重绑,仍是阶段 3 完成前必须补齐的生命周期接缝。
 
+代理**剥掉 `/api` 前缀**再转发,这条之所以成立,是因为 Kernel 同时挂着裸路径(v1 wire)与
+`/api` 前缀(v2)两套。SDK v2 发出的请求自带 `/api`,叠加客户端 baseUrl 后剥一层正好命中 v2;
+直写 `/api/…` 的调用剥掉后命中 v1。代价是:`build-node` 存根掉 OpenCode 自带 web UI 之后,
+上游原本由 SPA fallback 兜住的裸路径不再回 HTML 而是 404 —— 已知只影响 `debug.ts` 的诊断
+字段,而那里原本拿到的也不是健康数据。
+
 ---
 
 ## 3. 组件所有权
@@ -191,6 +197,16 @@ Agent Kernel 继续保持接近黑盒的边界:
 不包含独立可安装的 GeoCode CLI,也不暴露「选择 OpenCode 路径」设置。包内 Kernel 是产品内部
 组件,不是用户面对的第二个程序。
 
+Kernel 由 `packages/electron/scripts/prepare-geocode-kernel.mjs` 从 `kernel/` 暂存进包,替代上游
+按 SDK 版本号从网络下载二进制的 `prepare-opencode-cli.mjs`。两条布局约束由 bundle 的构建方式
+决定,不是偏好:
+
+- 四个 `.wasm` 按 `import.meta.url` 解析,**必须与 bundle 同级**;文件名是内容哈希,Kernel 一
+  重建就全变,由打包验收测试从 bundle 里逐一反查;
+- 两个 external 依赖放在 `deps/` 而**不是 `node_modules`** —— electron-builder 会无条件把后者
+  从 `extraResources` 剔除,`filter` 也压不住,而它们是静态 ESM import,缺一个就加载即死。
+  bundle 里的裸说明符因此由暂存脚本改写成相对路径,**改写次数为零即构建失败**。
+
 ### 4.2 只构建桌面闭包
 
 `desktop/` 可以完整保留 OpenChamber monorepo,但发布任务只构建桌面闭包:
@@ -231,6 +247,20 @@ Shell 使用的 `@opencode-ai/sdk` 必须由**同一份 GeoCode Kernel OpenAPI**
 - Windows x64 安装包在 Windows x64 上构建;
 - 禁止用一个平台交叉产出另一个平台的正式包;
 - 打包前验证 Electron、Kernel 与全部 `.node` 原生模块的目标架构一致。
+
+### 4.5 开发形态不等于产品形态
+
+上游 `resolveInitialUrl` 在开发模式下先探 HMR API 端口,探通就不再调用 `spawnLocalServer()` ——
+而内嵌 Kernel 正是在那里启动的:
+
+| 命令 | Kernel |
+|---|---|
+| `bun run dev` | 不启动,Shell Runtime 去找系统 opencode |
+| `OPENCHAMBER_ELECTRON_USE_BUNDLED_UI=1 bun run dev` | 启动 |
+| 打包版 | 启动 |
+
+第二行走的是上游既有的 `packagedUi` 分支,零改动。删掉那条 HMR 分支能让两者统一,但那是重排
+上游控制流,为一个开发便利付这个代价不划算。
 
 ---
 
