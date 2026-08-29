@@ -91,6 +91,33 @@ describe('kernel roots', () => {
     expect(fs.existsSync(path.join(root, 'auth.json.openchamber.backup'))).toBe(true);
   });
 
+  it('writes config where the kernel reads it', async () => {
+    // The layer this guards is the one that read the user's real provider keys, and whose
+    // `writeConfig` copied the file it was overwriting to `<name>.openchamber.backup` first.
+    const shared = await import('../lib/opencode/shared.js');
+    shared.writeConfig({ model: 'geocode/round-trip' });
+
+    expect(fs.existsSync(path.join(configHome, brand().dirName, 'config.json'))).toBe(true);
+    expect(shared.readConfigLayers().mergedConfig.model).toBe('geocode/round-trip');
+  });
+
+  it('adds a project MCP server to the file the config loader reads back', async () => {
+    // The accident PATHS.md §5 records by name: `mcp add` wrote one file name while the loader
+    // read another, so the command reported success and the server never appeared. `mcp.js`
+    // builds its project path itself instead of taking it from the layers, so renaming the
+    // reader alone recreates it — measured, while reviewing this very batch.
+    const mcp = await import('../lib/opencode/mcp.js');
+    const shared = await import('../lib/opencode/shared.js');
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-mcp-round-trip-'));
+
+    try {
+      mcp.createMcpConfig('probe', { type: 'local', command: ['true'] }, project, 'project');
+      expect(shared.readConfigLayers(project).mergedConfig.mcp).toHaveProperty('probe');
+    } finally {
+      fs.rmSync(project, { recursive: true, force: true });
+    }
+  });
+
   it('leaves no call site computing an OpenCode path', () => {
     // Guards the merge that restores one of the three literals. They are separate files with
     // no shared symbol upstream, so nothing but this notices when one comes back.

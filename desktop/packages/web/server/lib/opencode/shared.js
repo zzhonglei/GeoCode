@@ -1,12 +1,24 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import {
+  kernelConfigRoot,
+  KERNEL_CONFIG_JSON,
+  KERNEL_CONFIG_JSONC,
+  KERNEL_PROJECT_DIR,
+} from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 import yaml from 'yaml';
 import { parse as parseJsonc, printParseErrorCode } from 'jsonc-parser';
 
 // ============== PATH CONSTANTS ==============
 
-const OPENCODE_CONFIG_DIR = path.join(os.homedir(), '.config', 'opencode');
+// --- GeoCode: the kernel's own config root, not the user's OpenCode installation
+// (geocode/kernel-roots.js). Everything in this file hangs off it — the three global config
+// layers, the agent/command/skill directories, and `writeConfig`, which copies the file it is
+// about to overwrite to `<name>.openchamber.backup` first. Pointed at OpenCode's directory
+// that read the user's real provider keys and left a copy of them behind. ---
+const OPENCODE_CONFIG_DIR = kernelConfigRoot();
+// --- /GeoCode ---
 const AGENT_DIR = path.join(OPENCODE_CONFIG_DIR, 'agents');
 const COMMAND_DIR = path.join(OPENCODE_CONFIG_DIR, 'commands');
 const SKILL_DIR = path.join(OPENCODE_CONFIG_DIR, 'skills');
@@ -122,10 +134,14 @@ function writeMdFile(filePath, frontmatter, body) {
 function getProjectConfigCandidates(workingDirectory) {
   if (!workingDirectory) return [];
   return [
-    path.join(workingDirectory, 'opencode.json'),
-    path.join(workingDirectory, 'opencode.jsonc'),
-    path.join(workingDirectory, '.opencode', 'opencode.json'),
-    path.join(workingDirectory, '.opencode', 'opencode.jsonc'),
+    // --- GeoCode: the names the kernel actually loads (geocode/kernel-roots.js). It walks up
+    // for a directory named `.geocode` and reads the two branded files in it, so a config
+    // written under the old names is one the kernel never sees. ---
+    path.join(workingDirectory, KERNEL_CONFIG_JSON),
+    path.join(workingDirectory, KERNEL_CONFIG_JSONC),
+    path.join(workingDirectory, KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSON),
+    path.join(workingDirectory, KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSONC),
+    // --- /GeoCode ---
   ];
 }
 
@@ -146,9 +162,12 @@ function getProjectConfigPath(workingDirectory) {
 function getConfigPaths(workingDirectory) {
   return {
     userPaths: [
+      // --- GeoCode: same three layers the kernel merges, in the same order
+      // (`config/config.ts` loadGlobal). `config.json` keeps its unbranded name there too. ---
       path.join(OPENCODE_CONFIG_DIR, 'config.json'),
-      path.join(OPENCODE_CONFIG_DIR, 'opencode.json'),
-      path.join(OPENCODE_CONFIG_DIR, 'opencode.jsonc'),
+      path.join(OPENCODE_CONFIG_DIR, KERNEL_CONFIG_JSON),
+      path.join(OPENCODE_CONFIG_DIR, KERNEL_CONFIG_JSONC),
+      // --- /GeoCode ---
     ],
     projectPath: getProjectConfigPath(workingDirectory),
     // Resolve at call time so OPENCODE_CONFIG changes (and tests) take effect.

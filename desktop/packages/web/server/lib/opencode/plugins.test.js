@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: fixtures must carry the names the code now discovers
 
 let rootDir;
 let projectDir;
@@ -83,7 +84,7 @@ describe('opencode plugins data layer', () => {
     plugins.createPluginEntry({ spec: 'project-plugin', scope: 'project' }, projectDir);
 
     expect(readJson(userConfigPath).plugin).toEqual(['user-plugin']);
-    expect(readJson(path.join(projectDir, '.opencode', 'opencode.json')).plugin).toEqual(['project-plugin']);
+    expect(readJson(path.join(projectDir, KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSON)).plugin).toEqual(['project-plugin']);
   });
 
   test('re-resolves custom config env between calls', () => {
@@ -130,7 +131,7 @@ describe('opencode plugins data layer', () => {
       '',
     ].join('\n');
     writeJson(userConfigPath, { plugin: ['user-plugin'] });
-    const projectFile = path.join(projectDir, '.opencode', 'opencode.jsonc');
+    const projectFile = path.join(projectDir, KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSONC);
     fs.mkdirSync(path.dirname(projectFile), { recursive: true });
     fs.writeFileSync(projectFile, partialProject, 'utf8');
 
@@ -141,14 +142,14 @@ describe('opencode plugins data layer', () => {
 
   test('lists entries from user and project layers with scopes and parsed kinds', () => {
     writeJson(userConfigPath, { plugin: ['npm-plugin', '/abs/plugin.js', '@scope/pkg@1.0.0'] });
-    writeJson(path.join(projectDir, '.opencode', 'opencode.json'), { plugin: ['./local-plugin.js'] });
+    writeJson(path.join(projectDir, KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSON), { plugin: ['./local-plugin.js'] });
 
     const entries = plugins.listPluginEntries(projectDir);
     expect(entries).toEqual([
       expect.objectContaining({ spec: 'npm-plugin', scope: 'user', kind: 'config', parsedKind: 'npm', sourcePath: userConfigPath }),
       expect.objectContaining({ spec: '/abs/plugin.js', scope: 'user', kind: 'config', parsedKind: 'path', sourcePath: userConfigPath }),
       expect.objectContaining({ spec: '@scope/pkg@1.0.0', scope: 'user', kind: 'config', parsedKind: 'npm', sourcePath: userConfigPath }),
-      expect.objectContaining({ spec: './local-plugin.js', scope: 'project', kind: 'config', parsedKind: 'path', sourcePath: path.join(projectDir, '.opencode', 'opencode.json') }),
+      expect.objectContaining({ spec: './local-plugin.js', scope: 'project', kind: 'config', parsedKind: 'path', sourcePath: path.join(projectDir, KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSON) }),
     ]);
     fs.rmSync(userConfigPath, { force: true });
     expect(plugins.listPluginEntries(projectDir)).toEqual([
@@ -178,11 +179,11 @@ describe('opencode plugins data layer', () => {
     expect(thrownBy(() => plugins.writePluginDirFile({ fileName: 'dup.js', content: 'two', scope: 'project' }, projectDir))).toHaveProperty('code', 'FILE_EXISTS');
 
     plugins.writePluginDirFile({ fileName: 'dup.js', content: 'two', scope: 'project' }, projectDir, { overwrite: true });
-    expect(fs.readFileSync(path.join(projectDir, '.opencode', 'plugins', 'dup.js'), 'utf8')).toBe('two');
+    expect(fs.readFileSync(path.join(projectDir, KERNEL_PROJECT_DIR, 'plugins', 'dup.js'), 'utf8')).toBe('two');
   });
 
   test('lists only valid plugin dir files', () => {
-    const dir = path.join(projectDir, '.opencode', 'plugins');
+    const dir = path.join(projectDir, KERNEL_PROJECT_DIR, 'plugins');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'valid.mjs'), '', 'utf8');
     fs.writeFileSync(path.join(dir, 'README.md'), '', 'utf8');

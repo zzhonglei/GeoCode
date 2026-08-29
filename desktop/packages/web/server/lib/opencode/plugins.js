@@ -1,6 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { kernelConfigRoot, KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 import {
   AGENT_SCOPE,
   readConfigFile,
@@ -71,7 +72,8 @@ function getActiveOpencodeConfigDir() {
   if (customConfigPath) {
     return path.dirname(path.resolve(customConfigPath));
   }
-  return path.join(os.homedir(), '.config', 'opencode');
+  // GeoCode: the kernel's config root, paired with shared.js (geocode/kernel-roots.js)
+  return kernelConfigRoot();
 }
 
 function getActiveUserConfigPaths() {
@@ -100,10 +102,13 @@ function getPrimaryUserConfigPath() {
 function getProjectConfigPath(workingDirectory) {
   if (!workingDirectory) return null;
   const candidates = [
-    path.join(workingDirectory, 'opencode.json'),
-    path.join(workingDirectory, 'opencode.jsonc'),
-    path.join(workingDirectory, '.opencode', 'opencode.json'),
-    path.join(workingDirectory, '.opencode', 'opencode.jsonc'),
+    // --- GeoCode: this file carries its own copy of shared.js's candidate list, so it has to
+    // be renamed in step — otherwise a plugin toggle writes a file the config loader skips. ---
+    path.join(workingDirectory, KERNEL_CONFIG_JSON),
+    path.join(workingDirectory, KERNEL_CONFIG_JSONC),
+    path.join(workingDirectory, KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSON),
+    path.join(workingDirectory, KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSONC),
+    // --- /GeoCode ---
   ];
   return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0];
 }
@@ -146,9 +151,10 @@ function ensureProjectConfigPath(workingDirectory) {
   if (!workingDirectory) {
     throw codedError('Project scope requires working directory', 'INVALID_SCOPE');
   }
-  const configDir = path.join(workingDirectory, '.opencode');
+  // GeoCode: paired with getProjectConfigPath above
+  const configDir = path.join(workingDirectory, KERNEL_PROJECT_DIR);
   fs.mkdirSync(configDir, { recursive: true });
-  return path.join(configDir, 'opencode.json');
+  return path.join(configDir, KERNEL_CONFIG_JSON);
 }
 
 function configSources(layers) {
@@ -198,7 +204,7 @@ function pluginDirForScope(scope, workingDirectory) {
     if (!workingDirectory) {
       throw codedError('Project scope requires working directory', 'INVALID_SCOPE');
     }
-    return path.join(workingDirectory, '.opencode', 'plugins');
+    return path.join(workingDirectory, KERNEL_PROJECT_DIR, 'plugins'); // GeoCode
   }
   return path.join(getActiveOpencodeConfigDir(), 'plugins');
 }

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { kernelConfigRoot, KERNEL_CONFIG_JSON } from '../../geocode/kernel-roots.js'; // GeoCode: fixtures must carry the names the code now discovers
 
 import {
   upsertProviderConfig,
@@ -136,7 +137,7 @@ describe('custom provider config persistence', () => {
   });
 
   test('upsertProviderConfig updates existing entry and clears disabled_providers', () => {
-    const configPath = path.join(projectDir, 'opencode.json');
+    const configPath = path.join(projectDir, KERNEL_CONFIG_JSON);
     writeJson(configPath, {
       provider: {
         'campus-llm': {
@@ -176,7 +177,7 @@ describe('custom provider config persistence', () => {
   });
 
   test('failed validation does not write config', () => {
-    const configPath = path.join(projectDir, 'opencode.json');
+    const configPath = path.join(projectDir, KERNEL_CONFIG_JSON);
     expect(() => upsertProviderConfig('ok', {
       name: 'X',
       options: { baseURL: 'not-a-url' },
@@ -199,7 +200,7 @@ describe('custom provider config persistence', () => {
 
   test('project-scope edit updates project layer without creating a user entry', () => {
     const providerId = `proj-scope-${Date.now()}`;
-    const configPath = path.join(projectDir, 'opencode.json');
+    const configPath = path.join(projectDir, KERNEL_CONFIG_JSON);
 
     upsertProviderConfig(providerId, {
       name: 'Project Scoped',
@@ -230,8 +231,8 @@ describe('custom provider config persistence', () => {
     expect(sources.sources.custom.exists).toBe(false);
 
     for (const userPath of [
-      path.join(os.homedir(), '.config', 'opencode', 'opencode.json'),
-      path.join(os.homedir(), '.config', 'opencode', 'config.json'),
+      path.join(kernelConfigRoot(), KERNEL_CONFIG_JSON),
+      path.join(kernelConfigRoot(), 'config.json'),
     ]) {
       if (!fs.existsSync(userPath)) continue;
       const userConfig = readJson(userPath);
@@ -269,8 +270,8 @@ describe('custom provider config persistence', () => {
       expect(sources.sources.project.exists).toBe(false);
 
       for (const userPath of [
-        path.join(os.homedir(), '.config', 'opencode', 'opencode.json'),
-        path.join(os.homedir(), '.config', 'opencode', 'config.json'),
+        path.join(kernelConfigRoot(), KERNEL_CONFIG_JSON),
+        path.join(kernelConfigRoot(), 'config.json'),
       ]) {
         if (!fs.existsSync(userPath)) continue;
         const userConfig = readJson(userPath);

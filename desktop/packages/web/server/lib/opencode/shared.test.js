@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: fixtures must carry the names the code now discovers
 
 import { parseMdFile, writeMdFile, readConfigFile, readConfigLayers, writeConfig } from './shared.js';
 import { updateAgent } from './agents.js';
@@ -356,7 +357,7 @@ describe('readConfigFile / writeConfig JSONC safety (issue #2923)', () => {
   it('keeps a valid custom layer readable when a project layer is unparseable', () => {
     const custom = writeFixture('custom.jsonc', VALID_CONFIG);
     const projectDir = path.join(FIXTURE_DIR, 'project');
-    const projectFile = writeFixture(path.join('project', '.opencode', 'opencode.jsonc'), PARTIAL_PARSE_CONFIG);
+    const projectFile = writeFixture(path.join('project', KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSONC), PARTIAL_PARSE_CONFIG);
     const previousOpenCodeConfig = process.env.OPENCODE_CONFIG;
 
     try {

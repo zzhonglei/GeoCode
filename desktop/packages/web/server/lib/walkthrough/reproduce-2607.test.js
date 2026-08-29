@@ -2,6 +2,7 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { KERNEL_CONFIG_JSON } from '../../geocode/kernel-roots.js'; // GeoCode: fixtures must carry the names the code now discovers
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -71,7 +72,7 @@ describe('issue 2607 — walkthrough blocks unauthenticated providers', () => {
   beforeAll(async () => {
     setupGitRepo();
     fs.writeFileSync(
-      path.join(REPO_DIR, 'opencode.json'),
+      path.join(REPO_DIR, KERNEL_CONFIG_JSON),
       JSON.stringify({ small_model: 'deepseek/deepseek-v4-flash' }, null, 2),
       'utf8',
     );

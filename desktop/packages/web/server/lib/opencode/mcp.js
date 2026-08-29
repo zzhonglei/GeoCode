@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { KERNEL_CONFIG_JSON, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 import {
   CONFIG_FILE,
   AGENT_SCOPE,
@@ -33,11 +34,16 @@ function resolveMcpScopeFromPath(layers, sourcePath) {
 }
 
 function ensureProjectMcpConfigPath(workingDirectory) {
-  const configDir = path.join(workingDirectory, '.opencode');
+  // --- GeoCode: the file `shared.js` reads back (geocode/kernel-roots.js). This is the one
+  // path in the tree that PATHS.md §5 records an actual accident for: `mcp add` wrote one name
+  // while the loader read another, so the command reported success and the server never
+  // appeared. Renaming the reader without this would recreate it exactly. ---
+  const configDir = path.join(workingDirectory, KERNEL_PROJECT_DIR);
   if (!fs.existsSync(configDir)) {
     fs.mkdirSync(configDir, { recursive: true });
   }
-  return path.join(configDir, 'opencode.json');
+  return path.join(configDir, KERNEL_CONFIG_JSON);
+  // --- /GeoCode ---
 }
 
 function listMcpConfigs(workingDirectory) {

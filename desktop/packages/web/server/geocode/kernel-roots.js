@@ -34,6 +34,16 @@ const NAME = 'geocode';
 /** Mirrors `Brand.projectMarker`, the file the kernel writes inside a repo's `.git`. */
 export const KERNEL_PROJECT_MARKER = NAME;
 
+/**
+ * Mirrors `Brand.configJson` / `Brand.configJsonc` / `Brand.projectDir`. The kernel loads its
+ * global config from `config.json` (unbranded, kept from upstream) plus these two, and finds
+ * project config by walking up for a directory named `KERNEL_PROJECT_DIR` — so the shell has
+ * to name all three the same way or it reads and writes a config the kernel never loads.
+ */
+export const KERNEL_CONFIG_JSON = `${NAME}.json`;
+export const KERNEL_CONFIG_JSONC = `${NAME}.jsonc`;
+export const KERNEL_PROJECT_DIR = `.${NAME}`;
+
 const xdgRoot = (variable, ...fallbackSegments) =>
   process.env[variable] || path.join(os.homedir(), ...fallbackSegments);
 
