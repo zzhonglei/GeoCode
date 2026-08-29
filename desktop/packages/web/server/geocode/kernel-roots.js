@@ -50,3 +50,5 @@ const xdgRoot = (variable, ...fallbackSegments) =>
 export const kernelDataRoot = () => path.join(xdgRoot('XDG_DATA_HOME', '.local', 'share'), DIR_NAME);
 
 export const kernelConfigRoot = () => path.join(xdgRoot('XDG_CONFIG_HOME', '.config'), DIR_NAME);
+
+export const kernelCacheRoot = () => path.join(xdgRoot('XDG_CACHE_HOME', '.cache'), DIR_NAME);

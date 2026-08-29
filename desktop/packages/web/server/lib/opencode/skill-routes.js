@@ -1,5 +1,6 @@
 import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 import { buildDeferredRestartResponse } from './config-mutation-response.js';
+import { kernelConfigRoot, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 
 /**
  * Matches how OpenCode reads its own boolean env flags: any value other than
@@ -98,7 +99,11 @@ export const registerSkillRoutes = (app, dependencies) => {
     const projectAncestors = getSkillProjectAncestors(workingDirectory);
     const isProjectScoped = projectAncestors.some((ancestor) => {
       const candidates = [
-        path.join(ancestor, '.opencode'),
+        // --- GeoCode: the kernel's project directory. Without it a skill under `.geocode`
+        // matches neither list here and falls through to the USER default below, so a project
+        // skill the user just created would be reported as a global one. ---
+        path.join(ancestor, KERNEL_PROJECT_DIR),
+        // --- /GeoCode ---
         path.join(ancestor, '.claude', 'skills'),
         path.join(ancestor, '.agents', 'skills'),
       ];
@@ -110,7 +115,7 @@ export const registerSkillRoutes = (app, dependencies) => {
     }
 
     const userRoots = [
-      path.join(home, '.config', 'opencode'),
+      kernelConfigRoot(), // GeoCode: paired with the project directory above
       path.join(home, '.opencode'),
       path.join(home, '.claude', 'skills'),
       path.join(home, '.agents', 'skills'),

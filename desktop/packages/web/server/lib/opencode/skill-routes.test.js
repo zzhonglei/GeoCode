@@ -3,6 +3,7 @@ import express from 'express';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { kernelCacheRoot, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: fixtures must carry the names the code now discovers
 import { registerSkillRoutes } from './skill-routes.js';
 import {
   createSkill,
@@ -158,7 +159,7 @@ describe('skill-routes directory soft fallback', () => {
 
   it('marks managed-root skills renamable and cache skills not renamable', async () => {
     projectRoot = createTempProject();
-    const managedDir = path.join(projectRoot, '.opencode', 'skills', 'managed-list-skill');
+    const managedDir = path.join(projectRoot, KERNEL_PROJECT_DIR, 'skills', 'managed-list-skill');
     fs.mkdirSync(managedDir, { recursive: true });
     fs.writeFileSync(
       path.join(managedDir, 'SKILL.md'),
@@ -175,7 +176,7 @@ describe('skill-routes directory soft fallback', () => {
     );
 
     const cacheStamp = `oc-skill-routes-${Date.now()}`;
-    const cacheDir = path.join(os.homedir(), '.cache', 'opencode', 'skills', cacheStamp, 'cache-list-skill');
+    const cacheDir = path.join(kernelCacheRoot(), 'skills', cacheStamp, 'cache-list-skill');
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(
       path.join(cacheDir, 'SKILL.md'),
@@ -207,7 +208,7 @@ describe('skill-routes directory soft fallback', () => {
       expect(cached).toBeTruthy();
       expect(cached.renamable).toBe(false);
     } finally {
-      fs.rmSync(path.join(os.homedir(), '.cache', 'opencode', 'skills', cacheStamp), {
+      fs.rmSync(path.join(kernelCacheRoot(), 'skills', cacheStamp), {
         recursive: true,
         force: true,
       });

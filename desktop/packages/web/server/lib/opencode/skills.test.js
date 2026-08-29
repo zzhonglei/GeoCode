@@ -3,6 +3,7 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { kernelCacheRoot, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: fixtures must carry the names the code now discovers
 import { discoverSkills, getSkillSources, mergeDiscoveredSkills, renameSkill } from './skills.js';
 
 describe('skills', () => {
@@ -152,7 +153,7 @@ describe('skills', () => {
   it('renames a skill directory while preserving SKILL.md body and supporting files', async () => {
     const tempRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'oc-skills-rename-'));
     const projectRoot = path.join(tempRoot, 'project');
-    const skillDir = path.join(projectRoot, '.opencode', 'skills', 'original-skill');
+    const skillDir = path.join(projectRoot, KERNEL_PROJECT_DIR, 'skills', 'original-skill');
     const skillPath = path.join(skillDir, 'SKILL.md');
     const supportPath = path.join(skillDir, 'notes.md');
     const body = [
@@ -186,7 +187,7 @@ describe('skills', () => {
 
       renameSkill('original-skill', 'renamed-skill', projectRoot);
 
-      const renamedDir = path.join(projectRoot, '.opencode', 'skills', 'renamed-skill');
+      const renamedDir = path.join(projectRoot, KERNEL_PROJECT_DIR, 'skills', 'renamed-skill');
       const renamedPath = path.join(renamedDir, 'SKILL.md');
       const renamedSupportPath = path.join(renamedDir, 'notes.md');
 
@@ -219,7 +220,7 @@ describe('skills', () => {
   it('rolls back the directory rename when frontmatter write fails', async () => {
     const tempRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'oc-skills-rename-rollback-'));
     const projectRoot = path.join(tempRoot, 'project');
-    const skillDir = path.join(projectRoot, '.opencode', 'skills', 'rollback-skill');
+    const skillDir = path.join(projectRoot, KERNEL_PROJECT_DIR, 'skills', 'rollback-skill');
     const skillPath = path.join(skillDir, 'SKILL.md');
     const body = '# Rollback body\n\nMust remain in the original directory.';
 
@@ -243,7 +244,7 @@ describe('skills', () => {
       expect(() => renameSkill('rollback-skill', 'rollback-skill-renamed', projectRoot)).toThrow();
 
       expect(fs.existsSync(skillDir)).toBe(true);
-      expect(fs.existsSync(path.join(projectRoot, '.opencode', 'skills', 'rollback-skill-renamed'))).toBe(false);
+      expect(fs.existsSync(path.join(projectRoot, KERNEL_PROJECT_DIR, 'skills', 'rollback-skill-renamed'))).toBe(false);
       expect(await fsPromises.readFile(skillPath, 'utf8')).toContain(body);
     } finally {
       try {
@@ -258,11 +259,11 @@ describe('skills', () => {
   it('rejects invalid names, missing skills, conflicts, unmanaged paths, and frontmatter mismatches', async () => {
     const tempRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'oc-skills-rename-reject-'));
     const projectRoot = path.join(tempRoot, 'project');
-    const managedDir = path.join(projectRoot, '.opencode', 'skills', 'managed-skill');
-    const conflictDir = path.join(projectRoot, '.opencode', 'skills', 'taken-name');
-    const mismatchDir = path.join(projectRoot, '.opencode', 'skills', 'folder-name');
+    const managedDir = path.join(projectRoot, KERNEL_PROJECT_DIR, 'skills', 'managed-skill');
+    const conflictDir = path.join(projectRoot, KERNEL_PROJECT_DIR, 'skills', 'taken-name');
+    const mismatchDir = path.join(projectRoot, KERNEL_PROJECT_DIR, 'skills', 'folder-name');
     const cacheStamp = `oc-rename-${Date.now()}`;
-    const cacheDir = path.join(os.homedir(), '.cache', 'opencode', 'skills', cacheStamp, 'cache-skill');
+    const cacheDir = path.join(kernelCacheRoot(), 'skills', cacheStamp, 'cache-skill');
 
     try {
       await fsPromises.mkdir(managedDir, { recursive: true });
@@ -333,10 +334,10 @@ describe('skills', () => {
 
       expect(fs.existsSync(managedDir)).toBe(true);
       expect(fs.existsSync(cacheDir)).toBe(true);
-      expect(fs.existsSync(path.join(projectRoot, '.opencode', 'skills', 'renamed-mismatch'))).toBe(false);
+      expect(fs.existsSync(path.join(projectRoot, KERNEL_PROJECT_DIR, 'skills', 'renamed-mismatch'))).toBe(false);
     } finally {
       await fsPromises.rm(tempRoot, { recursive: true, force: true });
-      await fsPromises.rm(path.join(os.homedir(), '.cache', 'opencode', 'skills', cacheStamp), {
+      await fsPromises.rm(path.join(kernelCacheRoot(), 'skills', cacheStamp), {
         recursive: true,
         force: true,
       });

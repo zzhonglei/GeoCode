@@ -561,11 +561,16 @@ function resolveSkillSearchDirectories(workingDirectory) {
   if (workingDirectory) {
     const worktreeRoot = findWorktreeRoot(workingDirectory) || path.resolve(workingDirectory);
     const projectDirs = getAncestors(workingDirectory, worktreeRoot)
-      .map((dir) => path.join(dir, '.opencode'));
+      .map((dir) => path.join(dir, KERNEL_PROJECT_DIR)); // GeoCode: the kernel's project dir
     projectDirs.forEach(pushDir);
   }
 
-  pushDir(path.join(os.homedir(), '.opencode'));
+  // --- GeoCode: `~/.opencode` is a second global root upstream kept from before the XDG
+  // move, and the kernel deletes that scan rather than renaming it — GeoCode has exactly one
+  // global root, so there is no `~/.geocode` to look in (KERNEL.md §6 item 4). Shielded, not
+  // deleted, so an upstream change to the line still merges. ---
+  /* pushDir(path.join(os.homedir(), '.opencode')); */
+  // --- /GeoCode ---
 
   const customConfigDir = process.env.OPENCODE_CONFIG_DIR
     ? path.resolve(process.env.OPENCODE_CONFIG_DIR)

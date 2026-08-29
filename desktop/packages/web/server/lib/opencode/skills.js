@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { kernelCacheRoot, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 import {
   SKILL_DIR,
   OPENCODE_CONFIG_DIR,
@@ -24,11 +25,13 @@ import {
 const BUILT_IN_SKILL_LOCATION = '<built-in>';
 
 function ensureProjectSkillDir(workingDirectory) {
-  const projectSkillDir = path.join(workingDirectory, '.opencode', 'skills');
+  // GeoCode: the kernel's project directory — creating a skill under the old name would put it
+  // where nothing else in this file looks any more (geocode/kernel-roots.js).
+  const projectSkillDir = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skills');
   if (!fs.existsSync(projectSkillDir)) {
     fs.mkdirSync(projectSkillDir, { recursive: true });
   }
-  const legacyProjectSkillDir = path.join(workingDirectory, '.opencode', 'skill');
+  const legacyProjectSkillDir = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skill');
   if (!fs.existsSync(legacyProjectSkillDir)) {
     fs.mkdirSync(legacyProjectSkillDir, { recursive: true });
   }
@@ -36,15 +39,17 @@ function ensureProjectSkillDir(workingDirectory) {
 }
 
 function getProjectSkillDir(workingDirectory, skillName) {
-  const pluralPath = path.join(workingDirectory, '.opencode', 'skills', skillName);
-  const legacyPath = path.join(workingDirectory, '.opencode', 'skill', skillName);
+  // GeoCode: the kernel's project directory (geocode/kernel-roots.js)
+  const pluralPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skills', skillName);
+  const legacyPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skill', skillName);
   if (fs.existsSync(legacyPath) && !fs.existsSync(pluralPath)) return legacyPath;
   return pluralPath;
 }
 
 function getProjectSkillPath(workingDirectory, skillName) {
-  const pluralPath = path.join(workingDirectory, '.opencode', 'skills', skillName, 'SKILL.md');
-  const legacyPath = path.join(workingDirectory, '.opencode', 'skill', skillName, 'SKILL.md');
+  // GeoCode: paired with getProjectSkillDir above
+  const pluralPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skills', skillName, 'SKILL.md');
+  const legacyPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skill', skillName, 'SKILL.md');
   if (fs.existsSync(legacyPath) && !fs.existsSync(pluralPath)) return legacyPath;
   return pluralPath;
 }
@@ -217,11 +222,20 @@ function discoverSkills(workingDirectory) {
   }
 
   const cacheCandidates = [];
+  // --- GeoCode: one staging root, the kernel's (geocode/kernel-roots.js). The three below are
+  // wrapped rather than edited, so an upstream change to them still merges. Two of them collapse
+  // into `kernelCacheRoot()`, which already prefers `XDG_CACHE_HOME`; the third is unreachable
+  // for us either way — `xdg-basedir` does not branch on platform, so the kernel's cache root on
+  // macOS is `~/.cache/GeoCode` and never `~/Library/Caches` (docs/PATHS.md §3.1). ---
+  cacheCandidates.push(path.join(kernelCacheRoot(), 'skills'));
+  /*
   if (process.env.XDG_CACHE_HOME) {
     cacheCandidates.push(path.join(process.env.XDG_CACHE_HOME, 'opencode', 'skills'));
   }
   cacheCandidates.push(path.join(os.homedir(), '.cache', 'opencode', 'skills'));
   cacheCandidates.push(path.join(os.homedir(), 'Library', 'Caches', 'opencode', 'skills'));
+  */
+  // --- /GeoCode ---
 
   for (const cacheRoot of cacheCandidates) {
     if (!fs.existsSync(cacheRoot)) continue;
@@ -622,8 +636,20 @@ function getManagedSkillRoots(workingDirectory) {
 
   pushRoot(SKILL_DIR);
   pushRoot(path.join(OPENCODE_CONFIG_DIR, 'skill'));
+  // --- GeoCode: `~/.opencode` is the second global root the kernel deletes rather than renames
+  // — there is no `~/.geocode` to manage (KERNEL.md §6 item 4). Wrapped, not deleted, so an
+  // upstream edit to the two lines still merges.
+  //
+  // `.claude` and `.agents` below stay, deliberately, even though the kernel refuses to LOAD
+  // them (item 6): `createSkill` can still target `.agents` and the UI still offers it, so
+  // dropping them here alone would let a skill be created and then refuse to rename it.
+  // Closing that properly spans createSkill, the list route and the UI picker — one batch, not
+  // a corner of this one. ---
+  /*
   pushRoot(path.join(os.homedir(), '.opencode', 'skills'));
   pushRoot(path.join(os.homedir(), '.opencode', 'skill'));
+  */
+  // --- /GeoCode ---
   pushRoot(path.join(os.homedir(), '.claude', 'skills'));
   pushRoot(path.join(os.homedir(), '.agents', 'skills'));
 
@@ -638,8 +664,11 @@ function getManagedSkillRoots(workingDirectory) {
   if (workingDirectory) {
     const worktreeRoot = findWorktreeRoot(workingDirectory) || path.resolve(workingDirectory);
     for (const ancestor of getAncestors(workingDirectory, worktreeRoot)) {
-      pushRoot(path.join(ancestor, '.opencode', 'skills'));
-      pushRoot(path.join(ancestor, '.opencode', 'skill'));
+      // --- GeoCode: the kernel's project directory (geocode/kernel-roots.js). The two
+      // external libraries below are left alone for the reason given above. ---
+      pushRoot(path.join(ancestor, KERNEL_PROJECT_DIR, 'skills'));
+      pushRoot(path.join(ancestor, KERNEL_PROJECT_DIR, 'skill'));
+      // --- /GeoCode ---
       pushRoot(path.join(ancestor, '.claude', 'skills'));
       pushRoot(path.join(ancestor, '.agents', 'skills'));
     }
