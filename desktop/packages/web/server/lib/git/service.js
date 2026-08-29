@@ -1309,11 +1309,15 @@ export async function computeIntegratePlan(input = {}) {
 }
 
 const createIntegrateTempWorktree = async (repoRoot, targetBranch) => {
-  // GeoCode: honour the shell data root (docs/PATHS.md §3.3)
+  // --- GeoCode: read the shell data root, which Electron main injects (docs/PATHS.md §3.3).
+  // The fallback is GeoCode's own — nothing here may write into an OpenChamber directory. It
+  // carries the `desktop/` segment because `.config/GeoCode` alone is the kernel's config root,
+  // and on a case-insensitive filesystem `geocode` would land in it too. ---
   const dataRoot = process.env.OPENCHAMBER_DATA_DIR
     ? path.resolve(process.env.OPENCHAMBER_DATA_DIR)
-    : path.join(os.homedir(), '.config', 'openchamber');
+    : path.join(os.homedir(), '.config', 'GeoCode', 'desktop');
   const tmpParent = path.join(dataRoot, 'tmp');
+  // --- /GeoCode ---
   await fsp.mkdir(tmpParent, { recursive: true });
   const tmpDir = await fsp.mkdtemp(path.join(tmpParent, 'oc-integrate-'));
   try {

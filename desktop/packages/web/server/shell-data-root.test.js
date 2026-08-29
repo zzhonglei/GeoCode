@@ -13,6 +13,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const serverRoot = path.dirname(fileURLToPath(import.meta.url));
+const PATCHED = [
+  'index.js',
+  'lib/git/identity-storage.js',
+  'lib/git/service.js',
+  'lib/opencode/proxy.js',
+  'lib/package-manager.js',
+];
 let dataRoot;
 let fakeHome;
 let realHome;
@@ -50,17 +57,24 @@ describe('shell data root', () => {
     expect(fs.existsSync(path.join(dataRoot, 'git-identities.json'))).toBe(true);
   });
 
+  it('never falls back into an OpenChamber directory', () => {
+    // The fallback is unreachable in the product — main.mjs always injects — but it is the
+    // last thing standing between a missed injection and writing into another product's
+    // directory. It carries the `desktop/` segment on purpose: `.config/GeoCode` alone is the
+    // kernel's config root, and a case-insensitive filesystem would merge `geocode` into it.
+    for (const file of PATCHED) {
+      const src = fs.readFileSync(path.join(serverRoot, file), 'utf8');
+      const marked = src.slice(src.indexOf('--- GeoCode:'), src.indexOf('--- /GeoCode ---'));
+      expect(marked).not.toContain("'openchamber'");
+      expect(marked).toContain("'GeoCode', 'desktop'");
+    }
+  });
+
   it('leaves no path computation reading the home directory unconditionally', () => {
     // Guards the merge that restores a hardcoded path in any one of them. The two files left
     // out resolve their own variable instead: package-manager returns early on the data root,
     // and managed-process-registry reads OPENCHAMBER_MANAGED_PROCESS_REGISTRY.
-    for (const file of [
-      'index.js',
-      'lib/git/identity-storage.js',
-      'lib/git/service.js',
-      'lib/opencode/proxy.js',
-      'lib/package-manager.js',
-    ]) {
+    for (const file of PATCHED) {
       expect(fs.readFileSync(path.join(serverRoot, file), 'utf8')).toContain('process.env.OPENCHAMBER_DATA_DIR');
     }
   });

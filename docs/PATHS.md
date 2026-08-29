@@ -279,6 +279,16 @@ mDNS 主机与服务名、macOS 托管配置域、项目 id 标记文件、技�
 放到导入 Shell Runtime 之前那一步已经太晚,那对 Shell Runtime 够用,对 `main.mjs` 自己不够。
 两种取值方式在同一文件里并存,**不能靠看一眼判断,读取方要逐个查**。
 
+被改过的那几处,fallback 指向 `~/.config/GeoCode/desktop`,不是上游的 `~/.config/openchamber`。
+产品路径本来就走不到 fallback——Electron main 一定注入,那条注入配了绊线,并且连「注入排在第一个
+读取者之前」一起断言。但**只要那个字面量还在,就仍有代码路径能写进别人的目录**:实测过,跑一次
+web 包全量测试就会落一个目录出来。带 `desktop/` 这一段是必须的:`.config/GeoCode` 本身是内核的
+配置根,而 macOS 文件系统大小写不敏感,写 `geocode` 会落进同一个目录,把壳的 settings 与 chats
+混进 Agent 配置里。
+
+`package-manager.js` 用**早退**而不是改写:它的平台分支与末尾的 fallback 逐字节留着,只是永不
+到达——上游改动那几行仍能自动合入(`CONVENTIONS.md` §5)。
+
 这样做的收益不在少写几行,而在审计:上游将来新增一处硬编码 `opencode` 字面量时,typecheck 不会报错,但只要对照这个模块做一次 grep 就能发现遗漏。路径层的正确性无法靠类型系统保证,只能靠可审计性保证。
 
 路径补丁之外还有一处成对的摘除。内核内置的 GitLab Duo 与 Poe 登录插件(`opencode-gitlab-auth` / `opencode-poe-auth`)以 npm 发布包的形式随内核加载,其打包产物**内嵌了一份发布版 core 的路径代码**——插件一加载就在用户磁盘上创建 `opencode` 命名的空目录,而这份副本是编译产物,源码补丁永远够不到。GeoCode 不提供这两种登录方式,已在 `plugin/index.ts` 的内置插件清单中摘除;Anthropic、OpenAI、Copilot 等其余登录链路不受影响,对应绊线测试防上游合并悄然复活。**给界面阶段的提醒:对接 UI 时,登录/供应商界面中 GitLab Duo 与 Poe 的入口元素必须一并移除**——内核侧已经没有这两个认证方法,留下入口就是点了没反应的死按钮。

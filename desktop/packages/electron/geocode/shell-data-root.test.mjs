@@ -3,6 +3,9 @@ import path from 'node:path';
 
 import { applyShellDataRoot, resolveShellDataRoot } from './shell-data-root.mjs';
 
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 const USER_DATA = path.join('/tmp', 'Application Support', 'GeoCode');
 
 describe('shell data root', () => {
@@ -25,6 +28,19 @@ describe('shell data root', () => {
 
   it('keeps shell data out of the directory Chromium writes into', () => {
     expect(resolveShellDataRoot(USER_DATA)).toBe(path.join(USER_DATA, 'desktop'));
+  });
+
+  it('stays wired into main.mjs ahead of the first reader of a settings path', () => {
+    // The fallbacks now land in GeoCode's own directory, so a missed injection no longer
+    // writes into OpenChamber's — but it would still put shell data somewhere the product
+    // never reads. And `sshManager` resolves a settings path at module top level and keeps
+    // the string, so being wired in is not enough: it has to come first.
+    const main = fs.readFileSync(
+      new URL('../main.mjs', import.meta.url).pathname, 'utf8');
+    const injectedAt = main.indexOf('applyShellDataRoot({');
+    const firstReaderAt = main.indexOf('new ElectronSshManager(');
+    expect(injectedAt).toBeGreaterThan(-1);
+    expect(firstReaderAt).toBeGreaterThan(injectedAt);
   });
 
   it('refuses to guess when userData is missing', () => {

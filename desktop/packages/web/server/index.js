@@ -263,10 +263,14 @@ const sanitizeModelRefs = (...args) => settingsNormalizationRuntime.sanitizeMode
 const sanitizeSkillCatalogs = (...args) => settingsNormalizationRuntime.sanitizeSkillCatalogs(...args);
 const sanitizeProjects = (...args) => settingsNormalizationRuntime.sanitizeProjects(...args);
 
-// GeoCode: honour the shell data root (docs/PATHS.md §3.3)
+// --- GeoCode: read the shell data root, which Electron main injects (docs/PATHS.md §3.3).
+// The fallback is GeoCode's own — nothing here may write into an OpenChamber directory. It
+// carries the `desktop/` segment because `.config/GeoCode` alone is the kernel's config root,
+// and on a case-insensitive filesystem `geocode` would land in it too. ---
 const OPENCHAMBER_USER_CONFIG_ROOT = process.env.OPENCHAMBER_DATA_DIR
   ? path.resolve(process.env.OPENCHAMBER_DATA_DIR)
-  : path.join(os.homedir(), '.config', 'openchamber');
+  : path.join(os.homedir(), '.config', 'GeoCode', 'desktop');
+// --- /GeoCode ---
 const OPENCHAMBER_USER_THEMES_DIR = path.join(OPENCHAMBER_USER_CONFIG_ROOT, 'themes');
 const OPENCHAMBER_PROJECTS_CONFIG_DIR = path.join(OPENCHAMBER_USER_CONFIG_ROOT, 'projects');
 
@@ -299,9 +303,12 @@ const maybeCacheSessionInfoFromEvent = (...args) => notificationTemplateRuntime.
 const buildTemplateVariables = (...args) => notificationTemplateRuntime.buildTemplateVariables(...args);
 const getCachedZenModels = (...args) => notificationTemplateRuntime.getCachedZenModels(...args);
 
+// --- GeoCode: same root as OPENCHAMBER_USER_CONFIG_ROOT above; the two must move
+// together or settings and chats end up in different directories. ---
 const OPENCHAMBER_DATA_DIR = process.env.OPENCHAMBER_DATA_DIR
   ? path.resolve(process.env.OPENCHAMBER_DATA_DIR)
-  : path.join(os.homedir(), '.config', 'openchamber');
+  : path.join(os.homedir(), '.config', 'GeoCode', 'desktop');
+// --- /GeoCode ---
 const SETTINGS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'settings.json');
 const PUSH_SUBSCRIPTIONS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'push-subscriptions.json');
 const APNS_TOKENS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'apns-tokens.json');
