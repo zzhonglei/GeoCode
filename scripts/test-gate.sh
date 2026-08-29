@@ -102,4 +102,22 @@ echo "== geo kernel (core) =="
   test/geocode-compaction-template.test.ts)
 
 echo
+echo "== desktop shell (electron) =="
+# Everything under geocode/ is ours: the Electron identity, the kernel host and its
+# environment boundary, the kernel paths, and the shell data root. `bun test` rather than
+# `node --test` — they import from `bun:test`, which node's ESM loader rejects outright.
+(cd "$ROOT/desktop/packages/electron" && bun test geocode/)
+
+echo
+echo "== desktop shell (web server) =="
+# Named file by file rather than running the package's suite, for the same reason the
+# kernel's suite is not a gate: it is upstream's, and a merge is expected to turn parts of
+# it red. Worth knowing anyway — as of this batch it is green whole (156 files), and it was
+# the thing that caught a patch of ours breaking one of upstream's own assertions.
+(cd "$ROOT/desktop/packages/web" && bun run vitest run \
+  server/geocode/ \
+  server/shell-data-root.test.js \
+  server/lib/quota/providers/claude-disabled.test.js)
+
+echo
 echo "gate green"
