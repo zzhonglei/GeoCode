@@ -1,8 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { kernelDataRoot } from '../../geocode/kernel-roots.js'; // GeoCode: see the block below
 
-const OPENCODE_DATA_DIR = path.join(os.homedir(), '.local', 'share', 'opencode');
+// --- GeoCode: the kernel's own data root, not the user's OpenCode installation
+// (geocode/kernel-roots.js). Every quota provider and the small-model client reach auth.json
+// through this module, so this one line is the whole fix: the app stops reading real OpenCode
+// credentials, and `writeAuthFile` below stops leaving a `.openchamber.backup` copy of them. ---
+const OPENCODE_DATA_DIR = kernelDataRoot();
+// --- /GeoCode ---
 const AUTH_FILE = path.join(OPENCODE_DATA_DIR, 'auth.json');
 
 function readAuthFile() {

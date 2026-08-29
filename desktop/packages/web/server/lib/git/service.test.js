@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import simpleGit from 'simple-git';
+import { kernelDataRoot } from '../../geocode/kernel-roots.js'; // GeoCode: see the candidate path below
 
 import {
   checkoutCommit,
@@ -797,7 +798,11 @@ describe('createWorktree', () => {
         returnAfterDirectoryCreated: true,
       })).rejects.toThrow(`Branch is already checked out in ${canonicalWorktree}`);
 
-      const candidateDirectory = path.join(dataHome, 'opencode', 'worktree', projectID, 'feature-in-use');
+      // --- GeoCode: derived rather than spelled out, because the assertion below is that the
+      // directory does NOT exist — naming the pre-rename path would keep passing while checking
+      // a location the code can no longer produce (geocode/kernel-roots.js). ---
+      const candidateDirectory = path.join(kernelDataRoot(), 'worktree', projectID, 'feature-in-use');
+      // --- /GeoCode ---
       expect(fs.existsSync(candidateDirectory)).toBe(false);
     } finally {
       if (previousXdgDataHome === undefined) {

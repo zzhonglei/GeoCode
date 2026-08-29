@@ -5,6 +5,7 @@ import os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { createRequire } from 'module';
+import { kernelDataRoot, KERNEL_PROJECT_MARKER } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 
 const fsp = fs.promises;
 const require = createRequire(import.meta.url);
@@ -626,8 +627,11 @@ const OPENCODE_NOUNS = [
 const OPENCODE_WORKTREE_ATTEMPTS = 26;
 
 const getOpenCodeDataPath = () => {
-  const xdgDataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
-  return path.join(xdgDataHome, 'opencode');
+  // --- GeoCode: the kernel's own data root, not the user's OpenCode installation
+  // (geocode/kernel-roots.js). It feeds `worktreeRoot` below, which has to name the same
+  // directory the kernel creates worktrees in — `Global.Path.data` + `worktree/<projectID>`. ---
+  return kernelDataRoot();
+  // --- /GeoCode ---
 };
 
 const pickRandom = (values) => values[Math.floor(Math.random() * values.length)];
@@ -1535,7 +1539,13 @@ export async function continueIntegrate(stateInput = {}) {
 
 const ensureOpenCodeProjectId = async (primaryWorktree) => {
   const gitDir = path.join(primaryWorktree, '.git');
-  const idFile = path.join(gitDir, 'opencode');
+  // --- GeoCode: the marker file the kernel writes, not OpenCode's
+  // (geocode/kernel-roots.js). Sharing one file with the kernel is safe in both directions:
+  // the kernel resolves `remote ?? previous ?? root`, so a value written here can never
+  // displace the remote hash it prefers, and where a repo has no remote both sides derive the
+  // same root commit. Writing OpenCode's name instead put our id in another product's file. ---
+  const idFile = path.join(gitDir, KERNEL_PROJECT_MARKER);
+  // --- /GeoCode ---
   const existing = await fsp.readFile(idFile, 'utf8').then((value) => value.trim()).catch(() => '');
   if (existing) {
     return existing;

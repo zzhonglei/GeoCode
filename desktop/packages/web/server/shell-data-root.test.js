@@ -24,6 +24,19 @@ let dataRoot;
 let fakeHome;
 let realHome;
 
+const markedRegions = (source) => {
+  const regions = [];
+  for (let from = 0; ; ) {
+    const start = source.indexOf('--- GeoCode:', from);
+    if (start === -1) return regions;
+    const end = source.indexOf('--- /GeoCode ---', start);
+    // An unclosed region would otherwise slice to -1 and silently check nothing.
+    if (end === -1) throw new Error(`Unclosed GeoCode region at ${start}`);
+    regions.push(source.slice(start, end));
+    from = end + 1;
+  }
+};
+
 beforeAll(() => {
   dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-shell-root-'));
   fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-shell-home-'));
@@ -62,11 +75,15 @@ describe('shell data root', () => {
     // last thing standing between a missed injection and writing into another product's
     // directory. It carries the `desktop/` segment on purpose: `.config/GeoCode` alone is the
     // kernel's config root, and a case-insensitive filesystem would merge `geocode` into it.
+    //
+    // Every region, not the first one: three of these files carry more than one patch now, and
+    // reading only as far as the first closing marker checked a shrinking part of the file
+    // while still passing.
     for (const file of PATCHED) {
-      const src = fs.readFileSync(path.join(serverRoot, file), 'utf8');
-      const marked = src.slice(src.indexOf('--- GeoCode:'), src.indexOf('--- /GeoCode ---'));
-      expect(marked).not.toContain("'openchamber'");
-      expect(marked).toContain("'GeoCode', 'desktop'");
+      const regions = markedRegions(fs.readFileSync(path.join(serverRoot, file), 'utf8'));
+      expect(regions.length).toBeGreaterThan(0);
+      for (const region of regions) expect(region).not.toContain("'openchamber'");
+      expect(regions.some((region) => region.includes("'GeoCode', 'desktop'"))).toBe(true);
     }
   });
 
