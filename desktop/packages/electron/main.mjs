@@ -18,6 +18,7 @@ import { resolveManagedOpenCodeCwd } from './opencode-cwd.mjs';
 // upstream line stays byte-identical across merges (docs/DESKTOP.md §9.3).
 import { utilityProcess } from 'electron';
 import { startEmbeddedKernel } from './geocode/kernel-boot.mjs';
+import { DesktopIdentity } from './geocode/desktop-identity.mjs';
 import { resolveStartupUrlProbePlan, shouldIgnoreLoopbackConnectionLimit } from './startup-url-selection.mjs';
 import { sanitizeRuntimeRequestHeaders } from './runtime-request-headers.mjs';
 import { assertUpdaterCapability } from './updater-capability.mjs';
@@ -46,10 +47,10 @@ const __dirname = path.dirname(__filename);
 const isDev = process.env.OPENCHAMBER_ELECTRON_DEV === '1' || !app.isPackaged;
 const electronStartupStartedAt = performance.now();
 
-const DEEP_LINK_PROTOCOL = 'openchamber';
-const UI_PROTOCOL = 'openchamber-ui';
-const PACKAGED_APP_USER_MODEL_ID = 'dev.openchamber.desktop';
-const DEV_APP_USER_MODEL_ID = 'dev.openchamber.desktop.dev';
+const DEEP_LINK_PROTOCOL = DesktopIdentity.deepLinkProtocol;
+const UI_PROTOCOL = DesktopIdentity.uiProtocol;
+const PACKAGED_APP_USER_MODEL_ID = DesktopIdentity.appId;
+const DEV_APP_USER_MODEL_ID = DesktopIdentity.devAppId;
 const APP_USER_MODEL_ID = app.isPackaged ? PACKAGED_APP_USER_MODEL_ID : DEV_APP_USER_MODEL_ID;
 const BACKGROUND_START_ARG = '--background';
 
@@ -85,13 +86,13 @@ const shouldStartInBackground = (loginItemSettings = readLoginItemSettings()) =>
 };
 
 // Set the product name early so electron-log derives its log directory as
-// ~/Library/Logs/OpenChamber/ (not ~/Library/Logs/@openchamber/electron/).
-app.setName('OpenChamber');
+// ~/Library/Logs/GeoCode/ (not ~/Library/Logs/@openchamber/electron/).
+app.setName(DesktopIdentity.productName);
 if (process.platform === 'linux') {
-  app.setDesktopName('openchamber.desktop');
+  app.setDesktopName(DesktopIdentity.desktopEntryName);
 }
 if (isDev) {
-  app.setPath('userData', path.join(app.getPath('appData'), 'OpenChamber Dev'));
+  app.setPath('userData', path.join(app.getPath('appData'), DesktopIdentity.devUserDataDirectory));
 }
 app.setAppUserModelId(APP_USER_MODEL_ID);
 app.commandLine.appendSwitch('proxy-bypass-list', '<-loopback>');
@@ -1156,7 +1157,7 @@ const injectRuntimeConfigIntoHtml = (html) => {
  * lets a dev-server login persist between sessions without touching the app's
  * own storage.
  */
-const BROWSER_PANEL_PARTITION = 'persist:openchamber-browser';
+const BROWSER_PANEL_PARTITION = DesktopIdentity.browserPanelPartition;
 
 /**
  * Denies device and location access to pages shown in the browser panel.

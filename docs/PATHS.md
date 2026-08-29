@@ -164,6 +164,16 @@ Windows(`CONVENTIONS.md` §8),但壳的 `main.mjs` 与打包配置里的 Linux �
 因为 electron-log 取 `app.getPath('logs')`,而这个值本身分平台),内核的在上表的 `log/`。壳日志记
 窗口与进程生命周期,内核日志记会话与工具执行,不合并。
 
+⚠️ **`app.setName()` 单独不改 `userData`,也不改 `logs`**(实测:调用后即使等到 `whenReady`,两者
+仍是默认名派生的)。真正让它们落对位置的是两条不同的路:**打包版**靠 electron-builder 把
+`productName` 写进 bundle,进程启动时默认名就已经是 `GeoCode`;**开发版**靠显式
+`setPath('userData', …)`,而 `logs` 是 `setName` 与那次 `setPath` 的**组合副作用**——只改名不生效,
+只设路径也不生效,两者都做才会重算。这条组合依赖很脆:上游哪天去掉开发版的 `setPath`,开发日志
+会无声地掉回 `~/Library/Logs/Electron/`。
+
+开发版与打包版的**壳日志目录相同**(都是 `~/Library/Logs/GeoCode/`),只有 userData 分开。这与
+§7 记的内核数据未隔离是同一类问题,一并处理。
+
 #### `.git/geocode`:项目身份
 
 内容是一行 id。会话、检查点仓库、工作树全部以它作键(`data/snapshot/<项目id>/…`),所以这个
@@ -188,7 +198,7 @@ id 按三档推导:**远端 URL 的哈希** → **本文件记的值** → **首
 | 产品名 | `OpenCode` | `GeoCode` | 显示名 |
 | Windows 安装目录 | 由 package.json `name` 推导 | 经 `extraMetadata` 改写为 `GeoCode` | **必须显式改写**,否则与上游同目录 |
 | Electron userData | `<appData>/<appId>` | `<appData>/GeoCode` | 壳自己的数据;取显示名而非 appId,`app.setName` 一句带出,用户在 Finder 里看到的与应用名一致 |
-| 应用日志 | `<userData>/logs` | 随平台惯例:macOS `~/Library/Logs/GeoCode`,Windows `<userData>/logs` | electron-log 取 `app.getPath('logs')`,`setName` 一句即带出,不覆写 |
+| 应用日志 | `<userData>/logs` | 随平台惯例:macOS `~/Library/Logs/GeoCode`,Windows `<userData>/logs` | electron-log 取 `app.getPath('logs')`,不覆写;打包版由 `productName` 写进 bundle 带出,开发版见下 |
 | mDNS 服务名 | `opencode-<port>` | `geocode-<port>` | 局域网发现 |
 | mDNS 默认域名 | `opencode.local` | `geocode.local` | 用户可在配置中覆盖 |
 | macOS MDM plist 域 | `ai.opencode.managed` | `ai.geocode.managed` | `/Library/Managed Preferences/` 下的策略文件名 |

@@ -2,8 +2,8 @@
   "name": "@openchamber/electron",
   "version": "1.21.0",
   "private": true,
-  "description": "Electron desktop runtime for OpenChamber",
-  "author": "OpenChamber",
+  "description": "Electron desktop runtime for GeoCode",
+  "author": "GeoCode",
   "type": "module",
   "main": "./dist-bundle/main.mjs",
   "dependencies": {
@@ -53,8 +53,11 @@
     "lint": "node -e \"process.exit(0)\""
   },
   "build": {
-    "appId": "dev.openchamber.desktop",
-    "productName": "OpenChamber",
+    "appId": "ai.geocode.desktop",
+    "productName": "GeoCode",
+    "extraMetadata": {
+      "name": "GeoCode"
+    },
     "files": [
       "dist-bundle/main.mjs",
       "preload.mjs"
@@ -123,14 +126,14 @@
       ],
       "category": "Development",
       "icon": "resources/icons/icon.png",
-      "executableName": "openchamber",
+      "executableName": "geocode",
       "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
       "desktop": {
         "entry": {
-          "Name": "OpenChamber",
-          "Comment": "Desktop runtime for OpenChamber",
-          "Icon": "openchamber",
-          "StartupWMClass": "openchamber"
+          "Name": "GeoCode",
+          "Comment": "Desktop runtime for GeoCode",
+          "Icon": "geocode",
+          "StartupWMClass": "geocode"
         }
       }
     },
