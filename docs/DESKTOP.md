@@ -394,7 +394,7 @@ Agent Kernel。GeoCode 产品配置中被排除的能力也不能只靠隐藏按
 
 | 所有者 | 内容 | 位置原则 |
 |---|---|---|
-| Electron / Shell | 窗口、主题、布局、桌面偏好、壳日志 | `<appData>/ai.geocode.desktop/` |
+| Electron / Shell | 窗口、主题、布局、桌面偏好 | `<appData>/GeoCode/desktop/`;壳日志见 `PATHS.md` §3.3 |
 | Agent Kernel / GeoKernel | 会话、账号、配置、缓存、快照、地理环境 | `PATHS.md` 定义的 GeoCode XDG 根 |
 
 Shell Runtime 不得沿用 OpenChamber 的 `~/.config/openchamber`,也不得直接读写
@@ -402,8 +402,9 @@ Shell Runtime 不得沿用 OpenChamber 的 `~/.config/openchamber`,也不得直�
 
 保留功能优先通过 Agent Kernel API 操作配置与认证。确实没有 API 的壳侧偏好留在 Electron
 userData;不能为了复用 OpenChamber 一段读文件代码而重新引入第二套 Agent 配置事实。
-OpenChamber Settings 的逐页调查、Kernel API 缺口、目标请求流与实施门,在阶段 2 开工时
-落成 `DESKTOP-CONFIG-MIGRATION.md`(§10)。
+OpenChamber Settings 的逐页调查、Kernel API 缺口、目标请求流与实施门,在阶段 2 开工时对着当时的
+代码做,结论落在本节与 `KERNEL.md`(`CONVENTIONS.md` §10「新知识先找主题文档」)。真撑不下再另起
+专文,而不是先承诺一篇。
 
 ### 8.2 环境变量边界
 
@@ -437,7 +438,7 @@ GeoCode/
 两个 vendor 根各自是独立安装与测试单元。仓库根只编排构建,不把二者揉成一个依赖方向混乱的
 workspace。
 
-**当前基线不记在本文里。** 它每次升级都变,写下就会漂(`CONVENTIONS.md` §10 第二条)。查法是
+**当前基线不记在本文里。** 它每次升级都变,写下就会漂(`CONVENTIONS.md` §10「只有人兜底的数字」)。查法是
 各自 pristine 分支的最新快照:`git log -1 --format=%s chamber-upstream`。
 
 ### 9.2 闭包与对账
@@ -593,8 +594,10 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
 
 ### 阶段 2:建立产品 profile
 
-- 先落成 `DESKTOP-CONFIG-MIGRATION.md`——对着已落地的 vendor 代码调查 Settings 各页的所有权
-  与 Kernel API 缺口,再定实施批次;
+- 对着已落地的 vendor 代码调查 Settings 各页的所有权与 Kernel API 缺口,再定实施批次;结论并入
+  §8.1 与 `KERNEL.md`,与阶段 6 的路径批次同样处理,不预先承诺专文。⚠️ codex 有一份底稿
+  (`git show codex/desktop-init:docs/DESKTOP-CONFIG-MIGRATION.md`),基线是 **v1.18.4**,与当前树
+  隔着 345 个提交、772 个文件,路由名与模块名不可直接采信,只能当"要覆盖哪些面"的提纲;
 - 集中定义 GeoCode 品牌、appId、协议、平台和 capability;
 - 发布命令只选择 Desktop 闭包;
 - 禁止 Web / Mobile / VS Code / CLI 入口;
@@ -629,12 +632,28 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
 
 ### 阶段 6:身份与磁盘审计
 
-- 先落成 `DESKTOP-PATH-MIGRATION.md`,再按它分批实施并执行零访问验收;
-- 完成 GeoCode 品牌与系统注册项;
-- 将 Shell 偏好迁到 Electron userData;
-- 消除生产运行产生的 OpenChamber / OpenCode 用户目录;
+目标状态与壳/内核两套根的关系见 `PATHS.md` §3.3,注入时机见 §5,零访问验收见 §6。顺序 1 → 2。
+
+- **批 1 · Electron 身份**:照 `core/src/brand.ts` 的形态建自有模块由基串派生,消费点引用它而非
+  平铺字面量,都在 `packages/electron` 的 `main.mjs` 与 `package.json` 里。日志不覆写。
+  ⚠️ Windows 的 `extraMetadata` 不能漏——NSIS 的安装目录取自 `name` 而非 `productName`,
+  `PATHS.md` §2 记着这条造成过真实事故,且错误会在注册表的 `InstallLocation` 里固化;
+- **批 2 · Shell 数据根**:注入 `OPENCHAMBER_DATA_DIR` 与 `OPENCHAMBER_MANAGED_PROCESS_REGISTRY`
+  (后者是防御性的:skip-start 后不再注册托管进程,但孤儿回收仍在启动路径上)。上游把同一个三元
+  表达式复制进了十几个文件、每份都认前者,那批零改动;不认的少数几处靠下面的命令列出,其中
+  `proxy.js` 是 `settings.json` 的读取方而写入方认变量,**必须配往返测试**;
+- **批 3 · 跨产品凭据**:已完成。Claude 的 quota provider 由 `isConfigured` 反查登录钥匙串,
+  仅仅枚举 provider 就会触发,前端清单与服务端注册表两条路径都已屏蔽并各配绊线。Cursor 只在用户
+  主动点导入时才读 `state.vscdb`,不动;`quota/utils/auth.js` 与 `.claude/skills` 扫描归配置面收口;
 - 验证环境变量翻译;
 - 验证与用户自装 OpenCode 并存互不读写。
+
+```bash
+# 不认 OPENCHAMBER_DATA_DIR 的路径计算。中间那个过滤不能省：三元的 else 分支跨行，
+# 按行排除变量名会把十几处认变量的也误报成硬编码。
+grep -rn "'\.config', 'openchamber'" desktop/packages/web/server \
+  | grep -v ":[[:space:]]*: " | grep -v '\.test\.'
+```
 
 ### 阶段 7:桌面功能与地理界面
 

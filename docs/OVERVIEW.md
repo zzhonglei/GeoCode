@@ -325,4 +325,4 @@ GeoCode 不直接调用 QGIS 的 API。QGIS 携带独立的 Python 解释器、�
 | `GEOKERNEL.md` | 地理内核各模块的完整设计与横切契约 |
 | `TOOLS.md` | 工具层的权限模型、输出契约与注入点 |
 | `PATHS.md` | 文件路径、系统身份与命名空间隔离 |
-| `CONVENTIONS.md` | 开发规范、内核目录专用规则、测试纪律 |
+| `CONVENTIONS.md` | 开发规范、vendored 上游专用规则、测试纪律 |

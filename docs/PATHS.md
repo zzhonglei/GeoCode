@@ -124,10 +124,12 @@ GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统�
 
 $TMPDIR/GeoCode/                 临时根:进程内的短命文件
 
-<appData>/ai.geocode.desktop/    Electron 壳自己的数据(与上面四根分离,是上游的设计)
-├── logs/                        壳侧日志
+<appData>/GeoCode/               Electron 壳自己的数据(与上面四根分离,是上游的设计)
 └── desktop/
     └── settings.json            窗口、主题、布局等桌面偏好
+
+~/Library/Logs/GeoCode/          壳侧日志:macOS 惯例位置,Windows 上落在 <appData>/GeoCode/logs
+└── main.log                     滚动,上限 5 MB
 
 <用户项目>/                       GeoCode 在用户项目里的全部接触面
 ├── .git/geocode              ★ 项目 id 标记(一行文本,见下),始终写入
@@ -145,8 +147,22 @@ $TMPDIR/GeoCode/                 临时根:进程内的短命文件
 
 OpenChamber 迁入后同样不得产生 `~/.config/openchamber`、`~/.config/opencode` 或
 `~/.local/share/opencode`:Shell 偏好归 Electron userData,Agent 配置与认证归上表中的 GeoCode
-XDG 根。完整所有权见 `DESKTOP.md` §8;路径重构的批次与零访问验收、OpenChamber 配置页面的
-逐项处置与 Kernel API 边界,分别在 `DESKTOP.md` §10 的阶段 6 与阶段 2 落成专文。
+XDG 根。完整所有权见 `DESKTOP.md` §8,迁移批次与零访问验收见 §10 阶段 6;OpenChamber 配置页面的
+逐项处置与 Kernel API 边界归 §8.1 与阶段 2。
+
+**壳与内核是两套根,在支持的两个平台上都不相交。** 内核走上表的 XDG 布局,壳走 Electron 的
+userData(macOS `~/Library/Application Support/GeoCode`,Windows `%APPDATA%\GeoCode`)。Windows 上
+也不撞,是因为 `xdg-basedir` **不区分平台**——没有 `XDG_*` 时它一律回落到 `~/.config`、
+`~/.local/share` 这样的 unix 形态,与 `%APPDATA%` 分处 `%USERPROFILE%` 下的不同子树。
+
+⚠️ **Linux 会撞,而代码里保留着 Linux 分支。** Electron 的 `appData` 在 Linux 上**就是**
+`~/.config`,userData 因此等于 `~/.config/GeoCode`——正是内核的配置根。我们只支持 macOS 与
+Windows(`CONVENTIONS.md` §8),但壳的 `main.mjs` 与打包配置里的 Linux 分支还在,谁将来打开它,
+必须先处理这处重叠。
+
+日志同样是两套,排障时要一起取:壳的在 `~/Library/Logs/GeoCode/`(Windows 落在 `<userData>/logs`,
+因为 electron-log 取 `app.getPath('logs')`,而这个值本身分平台),内核的在上表的 `log/`。壳日志记
+窗口与进程生命周期,内核日志记会话与工具执行,不合并。
 
 #### `.git/geocode`:项目身份
 
@@ -171,8 +187,8 @@ id 按三档推导:**远端 URL 的哈希** → **本文件记的值** → **首
 | URL 协议 | `opencode://` | `geocode://` | 深链;注册在系统 |
 | 产品名 | `OpenCode` | `GeoCode` | 显示名 |
 | Windows 安装目录 | 由 package.json `name` 推导 | 经 `extraMetadata` 改写为 `GeoCode` | **必须显式改写**,否则与上游同目录 |
-| Electron userData | `<appData>/<appId>` | 同构 | 壳自己的数据 |
-| 应用日志 | `<userData>/logs` | 同构 | 需显式 `setAppLogsPath`,否则回落到包名派生的共享目录 |
+| Electron userData | `<appData>/<appId>` | `<appData>/GeoCode` | 壳自己的数据;取显示名而非 appId,`app.setName` 一句带出,用户在 Finder 里看到的与应用名一致 |
+| 应用日志 | `<userData>/logs` | 随平台惯例:macOS `~/Library/Logs/GeoCode`,Windows `<userData>/logs` | electron-log 取 `app.getPath('logs')`,`setName` 一句即带出,不覆写 |
 | mDNS 服务名 | `opencode-<port>` | `geocode-<port>` | 局域网发现 |
 | mDNS 默认域名 | `opencode.local` | `geocode.local` | 用户可在配置中覆盖 |
 | macOS MDM plist 域 | `ai.opencode.managed` | `ai.geocode.managed` | `/Library/Managed Preferences/` 下的策略文件名 |
@@ -246,6 +262,12 @@ mDNS 主机与服务名、macOS 托管配置域、项目 id 标记文件、技�
 
 这类"写入方与读取方必须成对"的要求不是理论:全局 `mcp add` 曾经写 `opencode.json`、而加载器早已改读 `geocode.json`,于是命令报告成功、服务器永不出现。现在每一处改名都配一个往返测试。
 
+同一条规律在壳侧还有第二个形状,变量换成了**读取时机**:`main.mjs` 的 `sshManager` 在模块顶层就把
+`settingsFilePath()` 求值成字符串、此后不再重算,而同一文件里的 `buildInstalledAppsCachePath()` 是
+惰性的、每次调用都跟随。所以注入 `OPENCHAMBER_DATA_DIR` 必须**紧跟身份设置**——userData 一确定就注入;
+放到导入 Shell Runtime 之前那一步已经太晚,那对 Shell Runtime 够用,对 `main.mjs` 自己不够。
+两种取值方式在同一文件里并存,**不能靠看一眼判断,读取方要逐个查**。
+
 这样做的收益不在少写几行,而在审计:上游将来新增一处硬编码 `opencode` 字面量时,typecheck 不会报错,但只要对照这个模块做一次 grep 就能发现遗漏。路径层的正确性无法靠类型系统保证,只能靠可审计性保证。
 
 路径补丁之外还有一处成对的摘除。内核内置的 GitLab Duo 与 Poe 登录插件(`opencode-gitlab-auth` / `opencode-poe-auth`)以 npm 发布包的形式随内核加载,其打包产物**内嵌了一份发布版 core 的路径代码**——插件一加载就在用户磁盘上创建 `opencode` 命名的空目录,而这份副本是编译产物,源码补丁永远够不到。GeoCode 不提供这两种登录方式,已在 `plugin/index.ts` 的内置插件清单中摘除;Anthropic、OpenAI、Copilot 等其余登录链路不受影响,对应绊线测试防上游合并悄然复活。**给界面阶段的提醒:对接 UI 时,登录/供应商界面中 GitLab Duo 与 Poe 的入口元素必须一并移除**——内核侧已经没有这两个认证方法,留下入口就是点了没反应的死按钮。
@@ -256,6 +278,11 @@ mDNS 主机与服务名、macOS 托管配置域、项目 id 标记文件、技�
 
 路径正确性不能靠阅读代码确认,必须实测落盘:在干净沙箱中启动内核,遍历产生的全部文件,逐一对照本文档的表格;再以打包后的应用重复一次,确认生产态与开发态一致。Windows 侧额外检查注册表三个键的实际写入值。任何一处对不上,都说明存在未被发现的硬编码。
 
+桌面侧的对账多一条约束:开发机上装着真的 OpenChamber,"运行后不存在 OpenChamber 目录"这个判据
+恒假、且不含关于本次改动的任何信息。改用**快照对比**——跑前对相关位置取一次文件清单,跑完再取一次,
+差集里只应出现 GeoCode 领域内的路径。Windows 侧的"两套根不相交"目前只是推导(依据 `xdg-basedir`
+的源码与 Electron 对 `appData` 的取值),实机确认归 `DESKTOP.md` 阶段 8。
+
 对账会话必须**真正进入项目、加载过插件**——健康检查级别的冒烟不会触发插件层,而内置插件恰恰以这种方式漏检过一次(GitLab/Poe 插件的内嵌 core 副本只在插件加载时落盘)。
 
 ## 7. 挂起项
@@ -264,6 +291,7 @@ mDNS 主机与服务名、macOS 托管配置域、项目 id 标记文件、技�
 
 - **内核自动更新检查**指向上游的 npm/brew/scoop 通道(`opencode-ai` 等),桌面形态必须关闭,归装配阶段(`OPENCODE_DISABLE_AUTOUPDATE` 或配置层)。
 - **CLI scriptName 与 OTLP serviceName** 等非磁盘品牌字符串,归界面/品牌阶段。
+- **开发版与正式版的内核数据未隔离。** 壳侧靠 `<appData>/GeoCode Dev` 分开了,内核侧没有:嵌入式 Kernel 的启动不传 `XDG_*` 覆写,两个通道共用同一套 XDG 根。上游桌面壳的做法是注入 `XDG_STATE_HOME = userData`(即 §2 末尾那个刻意保留的漂移),我们没有照搬。`DESKTOP.md` 阶段 8 要求"开发版与正式版数据隔离",届时补上注入,或明确接受共享并写下理由。
 
 原先挂在这里的两条已经处理,去向记在此处以免再被当作待办:
 
