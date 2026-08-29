@@ -289,6 +289,37 @@ web 包全量测试就会落一个目录出来。带 `desktop/` 这一段是必�
 `package-manager.js` 用**早退**而不是改写:它的平台分支与末尾的 fallback 逐字节留着,只是永不
 到达——上游改动那几行仍能自动合入(`CONVENTIONS.md` §5)。
 
+壳侧还有第二个自有模块,管的是另一件事:`packages/web/server/geocode/kernel-roots.js` 给出**内核**
+的根,供壳里四处必须读内核文件的地方引用(`auth.json`、antigravity 账号、worktree 根、`.git` 里的
+项目 id 标记)。它与上面那个不是一回事——那个是壳自己的数据放哪,这个是壳去内核的目录里取什么。
+
+它有两处不能照抄上游。**必须认 `XDG_*`**:内核的根出自 `xdg-basedir`,而上游四处里有两处直接取家
+目录,只要 `XDG_DATA_HOME` 一设(开发沙箱正是这么做的),壳读一份 `auth.json`、内核写另一份,两边
+都不报错。**两个基串是 `Brand` 的手抄件**:`web` 是 `electron` 的依赖而非反向(`CONVENTIONS.md` §3),
+内核又是另一个安装根,import 不过去;跨文件的抄件正是绊线的适用场景,所以 `kernel-roots.test.js`
+把 `brand.ts` 当文本读进来比对。
+
+`.git` 里的项目 id 标记与内核**共用同一个文件**,这是安全的:内核按 `remote ?? previous ?? root`
+取值,壳写进去的值永远盖不掉它优先的远端哈希,而没有远端时两侧推出的是同一个根提交。写成
+OpenCode 的名字反而是真问题——那把我们的 id 放进了另一个产品的文件里。
+
+同一个模块还供着**配置面**:壳的三个全局配置层与内核的加载顺序一一对应(`config.json` 不带商标、
+两侧同名;另外两个是 `geocode.json` / `geocode.jsonc`),项目级则是 `.geocode/`。这一层必须对齐的
+理由比命名整洁强得多——`shared.js` 的 `readConfigLayers()` 是**凭据入口**:实测它从用户真实的
+`~/.config/opencode/opencode.jsonc` 读回 1944 字节、含 `apiKey`,而 `small-model/call.js` 会把那个
+key 连同文件里的 `baseURL` 一起送进 `fetch`,触发者是 busy→idle 的 `session-assist`,默认开、不需要
+用户操作。**壳读错一个配置根,后果不是设置丢失,是拿别的产品的凭据去打别的端点。**
+
+改读取方时**必须同时数清写入方**,这一条在本次审查里抓到三个漏网的:`mcp.js` 自己拼项目级 MCP 配置
+路径、`plugins.js` 自带一整套配置路径、`skills-catalog/install.js` 自定安装目标。三者都不经
+`readConfigLayers` 取路径,所以改了读取方而不动它们,写进去的文件就再没人读——`mcp.js` 那处正是
+§5 开头点名的那次事故的形状,现已配往返绊线。
+
+一处**刻意没做**的,记下来免得被当成遗漏:壳的 `getManagedSkillRoots` 仍把 `~/.claude/skills` 与
+`~/.agents/skills` 当作可改名的受管根,尽管内核已拒绝加载它们。只摘这一半会更糟——`createSkill`
+仍能写进 `.agents`、UI 仍提供那个选项,于是变成建得了改不了。要关就连 `createSkill`、列表路由与
+UI 选择器一起关,那是另一批。
+
 这样做的收益不在少写几行,而在审计:上游将来新增一处硬编码 `opencode` 字面量时,typecheck 不会报错,但只要对照这个模块做一次 grep 就能发现遗漏。路径层的正确性无法靠类型系统保证,只能靠可审计性保证。
 
 路径补丁之外还有一处成对的摘除。内核内置的 GitLab Duo 与 Poe 登录插件(`opencode-gitlab-auth` / `opencode-poe-auth`)以 npm 发布包的形式随内核加载,其打包产物**内嵌了一份发布版 core 的路径代码**——插件一加载就在用户磁盘上创建 `opencode` 命名的空目录,而这份副本是编译产物,源码补丁永远够不到。GeoCode 不提供这两种登录方式,已在 `plugin/index.ts` 的内置插件清单中摘除;Anthropic、OpenAI、Copilot 等其余登录链路不受影响,对应绊线测试防上游合并悄然复活。**给界面阶段的提醒:对接 UI 时,登录/供应商界面中 GitLab Duo 与 Poe 的入口元素必须一并移除**——内核侧已经没有这两个认证方法,留下入口就是点了没反应的死按钮。

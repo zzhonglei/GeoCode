@@ -644,16 +644,54 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   `proxy.js` 是 `settings.json` 的读取方而写入方认变量,**必须配往返测试**;
 - **批 3 · 跨产品凭据**:已完成。Claude 的 quota provider 由 `isConfigured` 反查登录钥匙串,
   仅仅枚举 provider 就会触发,前端清单与服务端注册表两条路径都已屏蔽并各配绊线。Cursor 只在用户
-  主动点导入时才读 `state.vscdb`,不动;`quota/utils/auth.js` 与 `.claude/skills` 扫描归配置面收口;
+  主动点导入时才读 `state.vscdb`,不动;`.claude/skills` 扫描归内核屏蔽清单(`KERNEL.md` §6 第 6 项);
+- **批 4 · 内核文件的四个读写点**:已完成。`auth.json`、antigravity 账号、worktree 根、`.git` 里的
+  项目 id 标记,上游全部指向 `~/.local/share/opencode` 与 `~/.config/opencode`。四处改指内核自己的
+  根,派生自 `packages/web/server/geocode/kernel-roots.js`(`PATHS.md` §5)。三条非显然的:
+  **`writeAuthFile` 在覆盖前会把旧文件复制成 `.openchamber.backup`**,所以读的是别人的凭据、留下
+  的也是别人凭据的副本;**四处里有两处不认 `XDG_*` 而内核认**,不统一就会出现壳读一份 `auth.json`、
+  内核写另一份,两边都不报错;**项目 id 标记与内核共用一个文件是安全的**,因为内核按
+  `remote ?? previous ?? root` 取值,壳写进去的值盖不掉它优先的远端哈希;
+- **批 5 · 配置读取链**:已完成。`shared.js` 硬编码 `~/.config/opencode`,而它不是一个孤立常量,
+  是一整条链的源头 —— 三个配置层、`agents`/`commands`/`skills` 三个目录、以及 `writeConfig`。实测
+  `readConfigLayers()` 从用户真实的 `opencode.jsonc` 读回 1944 字节、含 `apiKey`,`call.js` 的
+  `readProviderConfig` 再把它包成 auth 条目送进 dispatch(上游注释原文:「so it can win the
+  precedence check」),最后 `fetch(baseURL)`。**触发者是 `session-assist`,busy→idle 事件驱动、
+  默认开** —— 不需要用户点任何东西。同批收口的还有:`skills.js` 的技能暂存根与项目级技能目录、
+  `getManagedSkillRoots` 里的 `~/.opencode`、以及三个**改了读取方就必须跟着改的写入方** ——
+  `mcp.js` 的项目级 MCP 路径、`plugins.js` 自带的一套配置路径、`skills-catalog/install.js` 的安装
+  目标,外加 `skill-routes.js` 按路径判作用域的那个分类器。**`mcp.js` 那处如果漏掉,就正好复现
+  `PATHS.md` §5 点名记着的那次事故**:加 MCP 报告成功、Agent 永远看不到,现已配往返绊线;
+
+  ⚠️ **`.claude`/`.agents` 这次没有从受管根里摘掉**,虽然内核已拒绝加载它们(`KERNEL.md` §6 第 6
+  项)。原因是只摘这一半会制造更坏的状态:`createSkill` 仍能写进 `.agents`、UI 仍提供那个选项
+  (`SkillsPage.tsx` 的 `draftSource`),于是变成**建得了、改不了**。完整关闭要同时动 `createSkill`、
+  列表路由与 UI 选择器,单独成批;
 - 验证环境变量翻译;
 - 验证与用户自装 OpenCode 并存互不读写。
 
+**剩余清单**(用上面第二条命令随时重数,当时 36 处):`agents.js`、`commands.js`、`snippets.js`、
+`plugins.js`、`mcp.js`、`path-utils.js`、`skill-routes.js`、`skills-catalog/install.js` 的项目级
+`.opencode/`;`routes.js:762` 的 `~/.config/opencode/AGENTS.md`;`plugins.js:74` 与
+`snippets.js:6` 的全局根;以及 `env-runtime.js`、`server-utils-runtime.js` 的外部二进制探测(归批 D,
+用早退屏蔽而非改名)。
+
 ```bash
-# 不认 OPENCHAMBER_DATA_DIR 的路径计算。中间那个过滤不能省：三元的 else 分支跨行，
-# 按行排除变量名会把十几处认变量的也误报成硬编码。
-grep -rn "'\.config', 'openchamber'" desktop/packages/web/server \
-  | grep -v ":[[:space:]]*: " | grep -v '\.test\.'
+# 硬编码到 OpenChamber 目录的 fallback（认 OPENCHAMBER_DATA_DIR 的那一半不会命中，
+# 因为那半边根本不含这两个路径段）。
+grep -rn "'\.config', 'openchamber'" desktop/packages/web/server | grep -v '\.test\.'
+
+# 硬编码到 OpenCode 根的路径计算。
+grep -rnE "'(\.config|\.local|\.cache)', '[Oo]pencode'|'\.opencode'" \
+  desktop/packages/web/server --include="*.js" | grep -v '\.test\.'
 ```
+
+⚠️ **第一条命令原先带一个 `grep -v ":[[:space:]]*: "`，那个过滤器是错的**，务必不要加回去。
+它本意是排除三元里读变量的分支，但**硬编码 fallback 恰恰也写在 else 分支上、格式一模一样**，于是
+连要找的东西一起吃掉：实测它报告 2 处，真实是 13 处。批 2 就是照着那份残缺清单做的，漏掉的 11 处
+(`ui-auth.js`、`ui-passkeys.js`、`github/auth.js`、`quota/credentials/store.js`、`walkthrough/*`、
+`session-goal/*`、`session-assist/runtime.js`、`small-model/index.js`、`skills-catalog/disk-cache.js`)
+至今仍在。**这是一条命令写错、把自己关进盲区两个批次的记录。**
 
 ### 阶段 7:桌面功能与地理界面
 
