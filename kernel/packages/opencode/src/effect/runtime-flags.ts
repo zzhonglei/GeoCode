@@ -27,12 +27,24 @@ const isolatedFromClaudeCode = (direct: string) =>
     direct: Config.boolean(direct).pipe(Config.option),
   }).pipe(Config.map((flags) => Option.getOrElse(flags.direct, () => Option.getOrElse(flags.broad, () => true))))
 
+/* --- GeoCode: `.claude/skills` and `.agents/skills` are the same kind of thing — skill libraries a user
+ * writes for whatever agent tool happens to read them, not for GeoAgent. GeoCode is a geographic assistant,
+ * not a general one, so its behaviour should not change because another tool's skills are on disk. Upstream
+ * defaults this OFF; here it is ON, which covers both directories at both scopes (home and project).
+ *
+ * Custom skills are NOT disabled by this. The config directories are scanned separately below it, so a user
+ * still adds skills under `~/.config/GeoCode/skill/` globally, `<project>/.geocode/skill/` per project, or any
+ * path named in `skills.paths`. What this closes is only the channel where a directory written for other tools
+ * injects capability into GeoAgent. `AGENTS.md` is unaffected — it is instruction, not capability, and is read
+ * through session/instruction.ts (docs/PATHS.md §7). --- */
+const disabledByDefault = (name: string) => Config.boolean(name).pipe(Config.withDefault(true))
+
 export class Service extends ConfigService.Service<Service>()("@opencode/RuntimeFlags", {
   autoShare: bool("OPENCODE_AUTO_SHARE"),
   pure: bool("OPENCODE_PURE"),
   disableDefaultPlugins: bool("OPENCODE_DISABLE_DEFAULT_PLUGINS"),
   disableEmbeddedWebUi: bool("OPENCODE_DISABLE_EMBEDDED_WEB_UI"),
-  disableExternalSkills: bool("OPENCODE_DISABLE_EXTERNAL_SKILLS"),
+  disableExternalSkills: disabledByDefault("OPENCODE_DISABLE_EXTERNAL_SKILLS"), // GeoCode: default ON
   disableLspDownload: bool("OPENCODE_DISABLE_LSP_DOWNLOAD"),
   // GeoCode: default ON, see isolatedFromClaudeCode above.
   disableClaudeCodePrompt: isolatedFromClaudeCode("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"),

@@ -17,9 +17,23 @@ import fs from "fs/promises"
 const node = LayerNode.compile(CrossSpawnSpawner.node)
 
 const it = testEffect(Layer.mergeAll(LayerNode.compile(Skill.node), node, testInstanceStoreLayer))
+/* --- GeoCode: `.agents/skills` is off by default here (docs/KERNEL.md §6 #6). The upstream cases that
+ * exercise that directory opt back in explicitly, the same way the Claude Code ones do below — the scan
+ * itself is unchanged, so their coverage is worth keeping. --- */
+const itWithExternalSkills = testEffect(
+  Layer.mergeAll(
+    LayerNode.compile(Skill.node, [[RuntimeFlags.node, RuntimeFlags.layer({ disableExternalSkills: false })]]),
+    node,
+    testInstanceStoreLayer,
+  ),
+)
+
+// GeoCode: external kept on, or the case cannot observe `.agents` surviving the Claude-specific flag.
 const itWithoutClaudeCodeSkills = testEffect(
   Layer.mergeAll(
-    LayerNode.compile(Skill.node, [[RuntimeFlags.node, RuntimeFlags.layer({ disableClaudeCodeSkills: true })]]),
+    LayerNode.compile(Skill.node, [
+      [RuntimeFlags.node, RuntimeFlags.layer({ disableClaudeCodeSkills: true, disableExternalSkills: false })],
+    ]),
     node,
     testInstanceStoreLayer,
   ),
@@ -31,13 +45,16 @@ const itWithoutExternalSkills = testEffect(
     testInstanceStoreLayer,
   ),
 )
-/* --- GeoCode: GeoCode disables Claude Code skill discovery by default
- * (src/effect/runtime-flags.ts, docs/PATHS.md §7). The scanning mechanism is
- * unchanged — only the default is — so the upstream cases that exercise it
- * opt back in explicitly here instead of losing their coverage. --- */
+/* --- GeoCode: GeoCode disables external skill libraries by default — both the Claude Code one and the
+ * shared `.agents` one (src/effect/runtime-flags.ts, docs/KERNEL.md §6 #6). The scanning mechanism is
+ * unchanged, only the defaults are, so the upstream cases that exercise it opt back in explicitly here
+ * instead of losing their coverage. Both flags are needed: the broad one gates the whole external block,
+ * and the Claude-specific one gates `.claude` inside it. --- */
 const itWithClaudeCodeSkills = testEffect(
   Layer.mergeAll(
-    LayerNode.compile(Skill.node, [[RuntimeFlags.node, RuntimeFlags.layer({ disableClaudeCodeSkills: false })]]),
+    LayerNode.compile(Skill.node, [
+      [RuntimeFlags.node, RuntimeFlags.layer({ disableClaudeCodeSkills: false, disableExternalSkills: false })],
+    ]),
     node,
     testInstanceStoreLayer,
   ),
@@ -311,6 +328,65 @@ description: A skill in the .claude/skills directory.
     ),
   )
 
+  /* --- GeoCode: same tripwire for the other external library. `.agents/skills` is a shared
+   * convention, not a GeoCode location, so it is off by the same default (docs/KERNEL.md §6 #6).
+   * No flag override here either — restore the upstream default and this goes red. --- */
+  it.live("GeoCode: skips .agents/skills by default", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".agents", "skills", "agents-skill", "SKILL.md"),
+              `---
+name: agents-skill
+description: A skill in the shared .agents/skills directory.
+---
+
+# Agents Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(list.find((x) => x.name === "agents-skill")).toBeUndefined()
+          expect(list.length).toBe(0)
+        }),
+      { git: true },
+    ),
+  )
+
+  /* --- GeoCode: the other half of the contract. Turning the external libraries off must not
+   * take the user's own skills with it — they still arrive through the config directories
+   * (`~/.config/GeoCode/{skill,skills}` globally, `.geocode/{skill,skills}` per project). Without
+   * this, a future broadening of the disable would pass every test above while silently removing
+   * the only channel a user has left. --- */
+  it.live("GeoCode: still discovers skills under the project config directory", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".geocode", "skill", "own-skill", "SKILL.md"),
+              `---
+name: own-skill
+description: A skill the user put in GeoCode's own project config directory.
+---
+
+# Own Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(list.find((x) => x.name === "own-skill")).toBeDefined()
+        }),
+      { git: true },
+    ),
+  )
+
   itWithClaudeCodeSkills.live("discovers global skills from ~/.claude/skills/ directory", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
@@ -377,7 +453,7 @@ description: A skill in the .claude/skills directory.
     }),
   )
 
-  it.live("discovers skills from .agents/skills/ directory", () =>
+  itWithExternalSkills.live("discovers skills from .agents/skills/ directory", () =>
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
@@ -405,7 +481,7 @@ description: A skill in the .agents/skills directory.
     ),
   )
 
-  it.live("discovers global skills from ~/.agents/skills/ directory", () =>
+  itWithExternalSkills.live("discovers global skills from ~/.agents/skills/ directory", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir({ git: true })),

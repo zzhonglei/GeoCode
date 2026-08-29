@@ -39,6 +39,8 @@ process.env["OPENCODE_MODELS_PATH"] = path.join(import.meta.dir, "tool", "fixtur
 process.env["OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"] = "true"
 process.env["OPENCODE_EXPERIMENTAL_WORKSPACES"] = "true"
 
+
+
 /* --- GeoCode: give the vendored suite back the agents it was written against.
  *
  * GeoCode ships GeoAgent as the only primary and turns the code-oriented subagents off, which upstream's tests

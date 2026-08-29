@@ -308,13 +308,16 @@ GeoCode 保留整套机制,只做适配。上游多处假设"主 agent 永远叫
 |---|---|---|---|
 | 1 | 外部插件(配置里声明的 + `{plugin,plugins}/` 自动发现) | 配置里**没有**"关闭插件加载"这个键。而且加载有两条独立路径,其中 `core` 侧那条(内置的 `config-plugin`)不受任何开关约束——实测在 `OPENCODE_DISABLE_PROJECT_CONFIG=1` 下仍然执行了项目里的插件 | `plugin/loader.ts` 的 `loadExternal`(两个调用点的唯一必经处)+ `core/plugin/internal.ts` 摘掉 `ConfigExternalPlugin` 的注册 |
 | 2 | 文件式工具 `{tool,tools}/*.{js,ts}` | 扫描写死在工具注册表的构建里,没有开关;它与 `plugin` 是**不同的扩展点**,关掉插件并不能关掉它 | `tool/registry.ts` 的发现处 |
-| 3 | Claude Code 的 `CLAUDE.md` 与 `.claude/skills` | 上游有 env 开关,但**默认是开的**。靠启动方设 env 会静默失败,而且失败方向是开放的——桌面壳与测试台各是一条启动路径,漏一条就恢复读取 | `effect/runtime-flags.ts` 的两个默认值(env 仍可反向打开) |
+| 3 | Claude Code 的 `CLAUDE.md` 提示词 | 上游有 env 开关,但**默认是开的**。靠启动方设 env 会静默失败,而且失败方向是开放的——桌面壳与测试台各是一条启动路径,漏一条就恢复读取 | `effect/runtime-flags.ts` 的两个默认值(env 仍可反向打开) |
 | 4 | `~/.opencode` 家目录扫描 | 上游**没有任何开关**能挡它——`OPENCODE_DISABLE_PROJECT_CONFIG` 只管项目级 | `config/paths.ts` 整段删除。我们只有一个全局根,没有 `~/.geocode` 可改名 |
 | 5 | 会话分享 | 有 env 开关但默认开;而且只翻模块常量的话 `create()` 会返回一个空 URL 而不是报错,配置面必须同时表态 | `share/share-next.ts` 的模块常量 + `geocode.ts` 的 `share: "disabled"` |
+| 6 | 外部技能库:`.claude/skills` 与 `.agents/skills`,家目录与项目各级 | 上游有 `OPENCODE_DISABLE_EXTERNAL_SKILLS` 但默认关。技能是**能力注入**——它给 GeoAgent 增加流程与指令,而这些目录里的内容是用户写给**任意** agent 工具的,不是写给 GeoAgent 的 | `effect/runtime-flags.ts` 把 `disableExternalSkills` 默认改为 ON(env 仍可反向打开) |
 
 前两项合起来是同一个事实的两半:**打开一个文件夹不应该导致其中的代码被执行**。那个文件夹可能来自同事、下载或 clone。用户要扩展工具,通道是 MCP——进程外、可按 `mcp:<server>:*` 单独授权、不写我们的路径。
 
-第三、四项的分界是**来源**而非功能:关掉的是**其他产品专有**的位置(`.claude/`、`~/.opencode/`),保留的是跨产品的**开放约定**(`AGENTS.md`、`.agents/skills`)——后者的内容是用户自己刻意放的。
+三、四、六项的分界是**归属**:关掉的是**不属于 GeoCode 体系**的位置——其他产品专有的(`.claude/`、`~/.opencode/`),以及写给任意 agent 工具的公共技能库(`.agents/skills`)。GeoCode 是地理助手而不是通用 agent,它的行为不该因为磁盘上存在别的工具的技能而改变。
+
+保留的是**信息**而非**能力**:`AGENTS.md` 照读不误(全局那份在 `~/.config/GeoCode/`,项目那份是仓库对所有 agent 工具的声明)——项目的规矩我们收,项目往 GeoAgent 里注入新技能这条通道我们不收。**用户自定义技能没有被关掉**,只是改从我们自己的位置进:`~/.config/GeoCode/{skill,skills}`、项目 `.geocode/{skill,skills}`、或配置里的 `skills.paths`——关闭后前者仍被读到,实测过。
 
 **连带去掉的**:上游会往每个配置目录(含用户项目里的那个)安装 `@opencode-ai/plugin` 并写一份 `.gitignore`,那是为了让用户自写的插件与工具能 import SDK。两者都不加载之后,这个安装失去服务对象,一并删除——用户项目里因此不会再出现 `node_modules/`(PATHS.md §3.3)。
 

@@ -317,4 +317,4 @@ web 包全量测试就会落一个目录出来。带 `desktop/` 这一段是必�
 原先挂在这里的两条已经处理,去向记在此处以免再被当作待办:
 
 - **项目目录的 `.opencode/` 与 `opencode.json`** 已改名为 `.geocode/` 与 `geocode.json`,家目录那条没有开关保护的 `~/.opencode` 扫描直接删除(我们只有一个全局根)。跨产品执行代码的那一半由屏蔽清单解决——插件与文件式工具都不再加载,见 KERNEL.md。
-- **`~/.agents` 与项目内 `.agents/skills`** 决定**保留**。它与 `AGENTS.md` 同属跨产品的开放约定,内容是用户自己刻意放的;关掉的是**其他产品专有**的位置(`.claude/`、`~/.opencode/`)。这条分界同时解释了为什么 `CLAUDE.md` 与 `.claude/skills` 默认不读。
+- **`.agents/skills`(家目录与项目各级)决定关闭**,与 `.claude/skills` 同级处理:两者都是用户写给**任意** agent 工具的技能库,不属于 GeoCode 体系,而 GeoCode 是地理助手不是通用 agent。判据因此是**归属**,不是开放与否。**`AGENTS.md` 保留**——它是信息而非能力注入,全局那份读的是 `~/.config/GeoCode/AGENTS.md`,本就在我们自己的配置根里。用户自定义技能改从 `~/.config/GeoCode/{skill,skills}`、项目 `.geocode/{skill,skills}` 或 `skills.paths` 进,关闭后仍生效(KERNEL.md §6 第 6 项)。

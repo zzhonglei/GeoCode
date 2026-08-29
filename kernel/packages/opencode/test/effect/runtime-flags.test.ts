@@ -110,7 +110,8 @@ describe("RuntimeFlags", () => {
       expect(flags.autoShare).toBe(false)
       expect(flags.disableDefaultPlugins).toBe(true)
       expect(flags.disableEmbeddedWebUi).toBe(false)
-      expect(flags.disableExternalSkills).toBe(false)
+      // GeoCode: default flipped to ON, see the block below.
+      expect(flags.disableExternalSkills).toBe(true)
       expect(flags.disableLspDownload).toBe(false)
       // GeoCode: omitted overrides fall through to the Config defaults, which
       // for the two Claude Code flags are ON.
@@ -134,11 +135,12 @@ describe("RuntimeFlags", () => {
     }),
   )
 
-  it.effect("disableExternalSkills defaults to false", () =>
+  // GeoCode: upstream defaults this OFF; GeoCode defaults it ON (docs/KERNEL.md §6 #6).
+  it.effect("disableExternalSkills defaults to true", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
 
-      expect(flags.disableExternalSkills).toBe(false)
+      expect(flags.disableExternalSkills).toBe(true)
     }),
   )
 
@@ -373,7 +375,8 @@ describe("RuntimeFlags", () => {
       expect(flags.pure).toBe(false)
       expect(flags.disableDefaultPlugins).toBe(false)
       expect(flags.disableEmbeddedWebUi).toBe(false)
-      expect(flags.disableExternalSkills).toBe(false)
+      // GeoCode: default flipped to ON, same as the two below.
+      expect(flags.disableExternalSkills).toBe(true)
       expect(flags.disableLspDownload).toBe(false)
       // GeoCode: the ignored provider carries no Claude Code keys anyway; these
       // two read the Config defaults, which are ON.

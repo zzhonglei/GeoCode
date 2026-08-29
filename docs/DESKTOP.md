@@ -483,7 +483,7 @@ git commit
 
 | 排除项 | 为什么不能一起落盘 |
 |---|---|
-| `.agents/` 与 `AGENTS.md` | **会被 Kernel 读进去**:`.agents/skills` 下的 `SKILL.md` 经 `fsys.up`(从 cwd 向上找到 worktree)进入技能列表;`AGENTS.md` 经 `findUp` 进入系统提示,而它收集**所有**祖先匹配、不是最近的一个。两者都不受 Claude Code 屏蔽开关保护——KERNEL.md §6 第 3 项管的是另外两个来源 |
+| `.agents/` 与 `AGENTS.md` | **`AGENTS.md` 会被 Kernel 读进去**:经 `findUp` 进入系统提示,而它收集**所有**祖先匹配、不是最近的一个,所以 vendor 目录里的一份会混进用户项目的上下文。`.agents/skills` 现已由 KERNEL.md §6 第 6 项屏蔽,但目录仍一并排除——它与 `AGENTS.md` 同源,且那道屏蔽可以被 env 反向打开 |
 | `.claude/` 与 `CLAUDE.md` | 上面两项的符号链接(`CLAUDE.md → AGENTS.md`,`.claude/skills/* → ../../.agents/skills/*`),本体排除后必须一起走。Kernel 侧已屏蔽,但在本仓工作的 AI 助手仍会读 |
 | `.github/` | 无用载荷。GitHub Actions 只认仓库根的 `.github/workflows/`,vendor 目录下的不生效 |
 | `.opencode/` | Kernel 的项目配置根是 `Brand.projectDir`(`.geocode`),读不到它 |
