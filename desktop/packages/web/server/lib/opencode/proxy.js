@@ -793,7 +793,11 @@ export const registerOpenCodeProxy = (app, deps) => {
           return null;
         });
 
-        const settingsPath = path.join(os.homedir(), '.config', 'openchamber', 'settings.json');
+        // GeoCode: honour the shell data root (docs/PATHS.md §3.3)
+        const settingsRoot = process.env.OPENCHAMBER_DATA_DIR
+          ? path.resolve(process.env.OPENCHAMBER_DATA_DIR)
+          : path.join(os.homedir(), '.config', 'openchamber');
+        const settingsPath = path.join(settingsRoot, 'settings.json');
         let projectDirs = [];
         try {
           const settingsRaw = fs.readFileSync(settingsPath, 'utf8');
