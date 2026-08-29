@@ -45,7 +45,7 @@
 本地服务存在,不构成 GeoCode Web 产品。桌面壳以 `utilityProcess` 拉起 Agent 内核;
 界面只连接 Shell Runtime,由后者代理 Agent API,Kernel 口令不进入 renderer。
 
-当前代码树中,OpenChamber 已原味迁入 `desktop/`,一行 GeoCode 补丁都还没有(见 §7)。开发期的装配验证对着内核的 HTTP 端点做,
+OpenChamber 迁入 `desktop/` 后只叠了很薄的一层补丁,状态见 §7。开发期的装配验证对着内核的 HTTP 端点做,
 **不对着终端形态**——上游 TUI 读的是另一张 agent 表(详见 `KERNEL.md` §4.2)。
 
 ### 3.2 地理内核的服务组成
@@ -287,16 +287,18 @@ GeoCode 不直接调用 QGIS 的 API。QGIS 携带独立的 Python 解释器、�
 | 工具层:四组权限装配 | 已完成 | `config/geocode.ts` |
 | 两个子代理:osmfetch 与 explore | 已完成 | `config/geocode.ts` 中的定义、出口锁与地理读取权 |
 | 凭据脱敏的三处出口:状态事件 / 诊断包 / 日志 | 未开始 | `NetRedact` 全仓无生产调用方 |
-| React 界面(OpenChamber) | 原味已迁入,地理适配未开始 | `desktop/packages/ui`,补丁面为零 |
+| React 界面(OpenChamber) | 原味已迁入,地理适配未开始 | `desktop/packages/ui`,补丁面只有配额清单一处 |
 | 桌面壳:Kernel Host | 启动、健康、停止已完成;§5.2 的重启委托未做 | `desktop/packages/electron/geocode/` |
-| 桌面壳:身份隔离与配置面收口 | 未开始 | appId 仍是 `dev.openchamber.desktop` |
-| Shell Runtime(OpenChamber) | 原味已迁入,自身零改动 | `desktop/packages/web`,靠上游 skip-start 接入 |
+| 桌面壳:身份隔离与配置面收口 | 身份隔离已完成;配置面收口未开始 | appId 为 `ai.geocode.desktop`,壳数据在 `<appData>/GeoCode`;Settings 各页的所有权待查 |
+| Shell Runtime(OpenChamber) | 原味迁入,改动只在数据根 | `desktop/packages/web`,靠上游 skip-start 接入 |
 | 技能商店 | 未开始 | 地理内核中无对应模块 |
 
 表中的"已完成"指实现完整,**不指已经验证**。两者的差距是当前的主要风险:
 
 - 数据面在真实工具链与真实影像上走通了完整 HTTP 链路;关停清扫在真实服务进程上验过,
   并以"去掉接线则子进程变孤儿"反证过;
+- 桌面身份与数据根在 macOS 上端到端验过:应用启动、界面进入、会话创建,落盘对账确认
+  `~/.config/openchamber` 与 `~/.config/opencode` 零写入;
 - Kernel Host 只在 macOS arm64 上验过;暂存脚本挑选平台原生包的那段逻辑,别的平台一次都没跑过;
 - **Windows 侧一次实机运行都没有。** 布局判定与路径组装以注入平台的方式做了单测,覆盖的
   是决策逻辑;而进程启动、文件名编码、真实安装布局只能由实机回答——这类未知不是审阅能
