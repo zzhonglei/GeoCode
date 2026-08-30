@@ -2,6 +2,9 @@ import { describe, expect, test } from 'bun:test'
 import type { OpencodeClient, Session } from '@opencode-ai/sdk/v2'
 
 import { filterManagedChatsForRuntime, listGlobalSessionPages, splitGlobalSessionsByArchived } from './globalSessions'
+// GeoCode: chat fixtures must carry the root the code now composes (src/geocode/shell-data-root.ts)
+import { MANAGED_CHATS_PATH_SEGMENT } from '@/geocode/shell-data-root'
+
 
 describe('managed Chats runtime visibility', () => {
   const session = (id: string, directory: string): Session => ({
@@ -13,7 +16,7 @@ describe('managed Chats runtime visibility', () => {
     version: '1',
     time: { created: 1, updated: 1 },
   })
-  const chat = session('chat', '/home/user/.config/openchamber/chats/2026-08-21/session-a')
+  const chat = session('chat', `/home/user${MANAGED_CHATS_PATH_SEGMENT}2026-08-21/session-a`)
   const project = session('project', '/workspace/project')
 
   test('VS Code rejects managed Chats before they enter global state', () => {

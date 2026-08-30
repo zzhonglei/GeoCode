@@ -4,6 +4,9 @@ import type { Event } from '@opencode-ai/sdk/v2/client';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { deriveRecentSessions } from '../recent/activitySections';
+// GeoCode: chat fixtures must carry the root the code now composes (src/geocode/shell-data-root.ts)
+import { MANAGED_CHATS_PATH_SEGMENT } from '@/geocode/shell-data-root';
+
 import { applyGlobalSessionStatusEvent, replaceGlobalSessionStatusById } from '@/sync/global-session-status';
 import {
   buildSidebarSessionProjection,
@@ -166,7 +169,7 @@ describe('projectSidebarCollection', () => {
   });
 
   test('keeps managed Chats in a dedicated projection and out of project and Recent ownership', () => {
-    const managed = session('managed', '/home/.config/openchamber/chats/2026-08-24/session-managed');
+    const managed = session('managed', `/home${MANAGED_CHATS_PATH_SEGMENT}2026-08-24/session-managed`);
     const project = session('project', '/workspace/a');
     const projects = projectSidebarCollection({
       globalActiveSessions: [managed, project],
@@ -182,7 +185,7 @@ describe('projectSidebarCollection', () => {
   });
 
   test('keeps managed Chats out of the VS Code sidebar', () => {
-    const managed = session('managed', '/home/.config/openchamber/chats/2026-08-24/session-managed');
+    const managed = session('managed', `/home${MANAGED_CHATS_PATH_SEGMENT}2026-08-24/session-managed`);
 
     expect(partitionSidebarSessions([managed], true)).toEqual({ projectSessions: [], chatSessions: [] });
     expect(projectSidebarCollection({
@@ -195,7 +198,7 @@ describe('projectSidebarCollection', () => {
 
   test('excludes a /btw fork before project ownership and restores it when the marker is removed', () => {
     const fork = {
-      ...session('fork', '/home/.config/openchamber/chats/2026-08-24/session-fork'),
+      ...session('fork', `/home${MANAGED_CHATS_PATH_SEGMENT}2026-08-24/session-fork`),
       metadata: { openchamber: { kind: 'btw', originalSessionID: 'parent' } },
     };
     const project = session('project', '/workspace/a');
@@ -216,9 +219,9 @@ describe('projectSidebarCollection', () => {
   });
 
   test('keeps a ranked managed root and its active child in the Chats hierarchy', () => {
-    const managedRoot = { ...session('managed-root', '/home/.config/openchamber/chats/2026-08-24/session-root'), time: { created: 1, updated: 1 } };
+    const managedRoot = { ...session('managed-root', `/home${MANAGED_CHATS_PATH_SEGMENT}2026-08-24/session-root`), time: { created: 1, updated: 1 } };
     const managedChild = {
-      ...session('managed-child', '/home/.config/openchamber/chats/2026-08-24/session-root'),
+      ...session('managed-child', `/home${MANAGED_CHATS_PATH_SEGMENT}2026-08-24/session-root`),
       parentID: 'managed-root',
       time: { created: 2, updated: 2 },
     };

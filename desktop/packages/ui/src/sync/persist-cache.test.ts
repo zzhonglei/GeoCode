@@ -3,6 +3,9 @@ import type { Session } from "@opencode-ai/sdk/v2/client"
 import { switchRuntimeEndpoint } from "@/lib/runtime-switch"
 import { persistManagedChatSessions, persistSessions, readDirCache, readManagedChatSessions } from "./persist-cache"
 import { getSyncPerformanceDiagnostics, setSyncPerformanceDiagnosticsEnabled } from "./performance-diagnostics"
+// GeoCode: chat fixtures must carry the root the code now composes (src/geocode/shell-data-root.ts)
+import { MANAGED_CHATS_PATH_SEGMENT } from "@/geocode/shell-data-root"
+
 
 class TestStorage implements Storage {
   readonly values = new Map<string, string>()
@@ -82,7 +85,7 @@ afterEach(() => {
 
 describe("persisted directory sessions", () => {
   test("keeps one runtime-scoped startup snapshot for managed chats", async () => {
-    const chat = session(1, 2, "Chat", "/home/user/.config/openchamber/chats/2026-08-21/session-a")
+    const chat = session(1, 2, "Chat", `/home/user${MANAGED_CHATS_PATH_SEGMENT}2026-08-21/session-a`)
     persistManagedChatSessions([session(2, 3), chat])
     await waitForPersistence()
 

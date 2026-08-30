@@ -1,6 +1,6 @@
 /**
  * OpenChamber project-level configuration service.
- * Stores per-project settings in ~/.config/openchamber/projects/<projectId>.json.
+ * Stores per-project settings in ~/.config/GeoCode/desktop/projects/<projectId>.json.
  * Migrates from legacy <project>/.openchamber/openchamber.json.
  *
  * Notes, todos, and plan files used to live here too. They are now server-owned
@@ -15,13 +15,17 @@ import { isVSCodeRuntime } from './desktop';
 import { sanitizeStarterRefs, type DraftStarterRef } from './draftStarters';
 import { createProjectIdFromPath } from './projectId';
 import { runtimeFetch } from './runtime-fetch';
+import { PROJECTS_SEGMENTS } from '@/geocode/shell-data-root';
 
 type ProjectRef = { id: string; path: string };
 
 const CONFIG_FILENAME = 'openchamber.json';
 // LEGACY_PROJECT_CONFIG: legacy per-project config root inside repo.
 const LEGACY_CONFIG_DIR = '.openchamber';
-const USER_PROJECTS_DIR_SEGMENTS = ['.config', 'openchamber', 'projects'];
+// GeoCode: the shell data root the server also uses (src/geocode/shell-data-root.ts). The
+// server reads these same files through `project-context`, so a rename here that did not
+// move with it would hide every project's config from the half that owns half its keys.
+const USER_PROJECTS_DIR_SEGMENTS = PROJECTS_SEGMENTS;
 
 /**
  * Get the runtime Files API if available (Desktop/VSCode).
@@ -388,7 +392,7 @@ async function readOpenChamberConfig(project: ProjectRef): Promise<OpenChamberCo
   }
 
   // 2) Migrate legacy <project>/.openchamber/openchamber.json.
-  // LEGACY_PROJECT_CONFIG: migrate project-local openchamber.json -> ~/.config/openchamber/projects/<projectId>.json
+  // LEGACY_PROJECT_CONFIG: migrate project-local openchamber.json -> <projects dir>/<projectId>.json
   const legacyPath = getLegacyConfigPath(projectDirectory);
   const legacyConfig = parseConfig(await readText(legacyPath));
   if (!legacyConfig) {

@@ -2,9 +2,10 @@ import { opencodeClient } from '@/lib/opencode/client';
 import { normalizePath } from '@/lib/pathNormalization';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { getRuntimeKey } from '@/lib/runtime-switch';
+// GeoCode: the shell data root the server also uses (src/geocode/shell-data-root.ts)
+import { CHATS_SEGMENTS, MANAGED_CHATS_PATH_SEGMENT } from '@/geocode/shell-data-root';
 
 export const CHAT_DRAFT_PROJECT_ID = 'openchamber:chats';
-const MANAGED_CHATS_PATH_SEGMENT = '/.config/openchamber/chats/';
 const chatsRootByRuntime = new Map<string, Promise<string>>();
 
 const joinPath = (base: string, ...parts: string[]): string => {
@@ -17,7 +18,7 @@ export function isChatDirectoryForHome(directory: string | null | undefined, hom
   if (normalized?.includes(MANAGED_CHATS_PATH_SEGMENT)) return true;
   const normalizedHome = normalizePath(home ?? null);
   if (!normalized || !normalizedHome) return false;
-  const root = normalizePath(joinPath(normalizedHome, '.config', 'openchamber', 'chats'));
+  const root = normalizePath(joinPath(normalizedHome, ...CHATS_SEGMENTS));
   return Boolean(root && normalized.startsWith(`${root}/`));
 }
 
@@ -35,7 +36,7 @@ export function getChatsRootFromDirectory(directory: string | null | undefined):
 
 export function getChatsRootForHome(home: string | null | undefined): string | null {
   const normalizedHome = normalizePath(home ?? null);
-  return normalizedHome ? normalizePath(joinPath(normalizedHome, '.config', 'openchamber', 'chats')) : null;
+  return normalizedHome ? normalizePath(joinPath(normalizedHome, ...CHATS_SEGMENTS)) : null;
 }
 
 async function getChatsRootDirectory(): Promise<string> {
@@ -45,7 +46,7 @@ async function getChatsRootDirectory(): Promise<string> {
 
   const pending = opencodeClient.getFilesystemHome().then((home) => {
     if (!home) throw new Error('Unable to resolve the home directory');
-    return joinPath(home, '.config', 'openchamber', 'chats');
+    return joinPath(home, ...CHATS_SEGMENTS);
   }).catch((error) => {
     chatsRootByRuntime.delete(runtimeKey);
     throw error;
