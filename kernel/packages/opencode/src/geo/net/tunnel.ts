@@ -48,12 +48,16 @@ export function open(proxyUrl: string, authority: string, timeoutMs: number): Pr
       socket.destroy()
       resolve({ ok: false, stage, reason })
     }
-    const succeed = () => {
+    const succeed = (leftover: Buffer) => {
       if (settled) return
       settled = true
       clearTimeout(deadline)
       // Leftover listeners of ours would keep firing into a promise that has already settled.
       socket.removeListener("error", onError)
+      // Removing the reader does not stop the flow: bytes arriving before the caller starts TLS
+      // would be emitted to nobody.
+      socket.pause()
+      if (leftover.length > 0) socket.unshift(leftover)
       resolve({ ok: true, socket })
     }
 
@@ -69,20 +73,21 @@ export function open(proxyUrl: string, authority: string, timeoutMs: number): Pr
       }
       socket.write(lines.join("\r\n") + "\r\n\r\n")
 
-      let head = ""
+      let head = Buffer.alloc(0) // Bytes, so the terminator's offset survives back into the stream.
       const onData = (chunk: Buffer) => {
-        head += chunk.toString("latin1")
-        if (head.indexOf("\r\n\r\n") < 0) {
+        head = Buffer.concat([head, chunk])
+        const terminator = head.indexOf("\r\n\r\n")
+        if (terminator < 0) {
           if (head.length > MAX_HEAD) fail("tunnel response has no header terminator")
           return
         }
         socket.removeListener("data", onData)
-        const status = Number(/^HTTP\/\d\.\d (\d{3})/.exec(head)?.[1] ?? 0)
+        const status = Number(/^HTTP\/\d\.\d (\d{3})/.exec(head.toString("latin1", 0, terminator))?.[1] ?? 0)
         if (status < 200 || status > 299) {
           fail(status ? `tunnel refused with status ${status}` : "not a proxy: unrecognised tunnel response")
           return
         }
-        succeed()
+        succeed(head.subarray(terminator + 4))
       }
       socket.on("data", onData)
     })
