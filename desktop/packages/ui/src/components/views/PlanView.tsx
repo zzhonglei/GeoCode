@@ -46,6 +46,8 @@ import { Icon } from "@/components/icon/Icon";
 import { useMessageTTS } from '@/hooks/useMessageTTS';
 import { renderMagicPrompt } from '@/lib/magicPrompts';
 import { useI18n } from '@/lib/i18n';
+// GeoCode: the kernel's project directory, which the renderer reads plan files out of
+import { KERNEL_PLANS_SEGMENTS, KERNEL_PROJECT_DIR } from '@/geocode/kernel-roots';
 
 type PlanViewProps = {
   targetPath?: string | null;
@@ -80,13 +82,21 @@ const joinPath = (base: string, segment: string): string => {
   return `${normalizedBase}/${cleanSegment}`;
 };
 
+// --- GeoCode: the directory the kernel actually writes plans into (src/geocode/kernel-roots.ts).
+// `session.ts` composes `<worktree>/.geocode/plans` and the plan agent's edit permission spreads
+// the same segments, so naming the old directory here did not leak — it made this panel read a
+// file nobody writes, and report that the session has no plan. ---
 const buildRepoPlanPath = (directory: string, created: number, slug: string): string => {
-  return joinPath(joinPath(joinPath(directory, '.opencode'), 'plans'), `${created}-${slug}.md`);
+  const plansDir = KERNEL_PLANS_SEGMENTS.reduce((acc, segment) => joinPath(acc, segment), directory);
+  return joinPath(plansDir, `${created}-${slug}.md`);
 };
 
 const buildHomePlanPath = (created: number, slug: string): string => {
-  return `~/.opencode/plans/${created}-${slug}.md`;
+  // The kernel has no home-level plans root; this is a second location the panel probes, and it
+  // is here so that probe stays inside GeoCode's own directories.
+  return `~/${KERNEL_PROJECT_DIR}/plans/${created}-${slug}.md`;
 };
+// --- /GeoCode ---
 
 const resolveTilde = (path: string, homeDir: string | null): string => {
   const trimmed = path.trim();

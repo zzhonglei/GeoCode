@@ -101,6 +101,24 @@ describe('kernel roots', () => {
     expect(shared.readConfigLayers().mergedConfig.model).toBe('geocode/round-trip');
   });
 
+  it('saves the global behaviour prompt where the kernel loads instructions from', () => {
+    // Both ends, because only the pair is the invariant. `routes.js` wrote
+    // `~/.config/opencode/AGENTS.md` while `session/instruction.ts` read `<config root>/AGENTS.md`,
+    // so the Behavior page reported success and the agent never saw a word of it — and the PUT
+    // creates the parent directory, so saving one also created OpenCode's config root.
+    //
+    // Source rather than a round trip: the path is a constant inside `registerOpenCodeRoutes`,
+    // and standing that whole route up needs the dependency object the server assembles. What
+    // can drift is which root each side names, and that is what this reads.
+    const shell = fs.readFileSync(path.join(serverRoot, 'lib/opencode/routes.js'), 'utf8');
+    expect(shell).toContain("path.join(kernelConfigRoot(), 'AGENTS.md')");
+    expect(shell).not.toContain("'.config', 'opencode'");
+
+    const kernel = fs.readFileSync(
+      path.resolve(here, '../../../../../kernel/packages/opencode/src/session/instruction.ts'), 'utf8');
+    expect(kernel).toContain('path.join(global.config, "AGENTS.md")');
+  });
+
   it('adds a project MCP server to the file the config loader reads back', async () => {
     // The accident PATHS.md §5 records by name: `mcp add` wrote one file name while the loader
     // read another, so the command reported success and the server never appeared. `mcp.js`

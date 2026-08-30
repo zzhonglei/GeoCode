@@ -1,12 +1,12 @@
 import express from 'express';
 import { createProjectIdFromPath } from '../projects/project-id.js';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import {
   buildDeferredRestartResponse,
 } from './config-mutation-response.js';
 import { getClaudeCliAuthStatus } from './claude-cli-auth.js';
+import { kernelConfigRoot } from '../../geocode/kernel-roots.js'; // GeoCode: see AGENTS_MD_PATH below
 
 export const registerOpenCodeRoutes = (app, dependencies) => {
   const {
@@ -759,7 +759,12 @@ ${desktopReturn ? `<a class="return" href="openchamber://focus/mcp-auth">Return 
   });
 
   // Behavior / Global AGENTS.md endpoints
-  const AGENTS_MD_PATH = path.join(os.homedir(), '.config', 'opencode', 'AGENTS.md');
+  // --- GeoCode: the kernel's config root (geocode/kernel-roots.js). `session/instruction.ts`
+  // reads `<config root>/AGENTS.md`, so the old name meant the global behaviour prompt was saved
+  // to a file the agent never loads, and the PUT below creates the parent directory — saving one
+  // also created `~/.config/opencode/`. One constant feeds both ends of the route. ---
+  const AGENTS_MD_PATH = path.join(kernelConfigRoot(), 'AGENTS.md');
+  // --- /GeoCode ---
   const MAX_BEHAVIOR_PROMPT_SIZE = 1024 * 1024; // 1 MB
 
   app.get('/api/behavior/agents-md', async (_req, res) => {

@@ -20,6 +20,7 @@ import { utilityProcess } from 'electron';
 import { startEmbeddedKernel } from './geocode/kernel-boot.mjs';
 import { DesktopIdentity } from './geocode/desktop-identity.mjs';
 import { applyShellDataRoot } from './geocode/shell-data-root.mjs';
+import { geocodeDeniedSegments } from './geocode/denied-paths.mjs';
 import { resolveStartupUrlProbePlan, shouldIgnoreLoopbackConnectionLimit } from './startup-url-selection.mjs';
 import { sanitizeRuntimeRequestHeaders } from './runtime-request-headers.mjs';
 import { assertUpdaterCapability } from './updater-capability.mjs';
@@ -4124,6 +4125,11 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
         throw new Error('File is outside the allowed workspace');
       }
       const DENIED_SEGMENTS = ['.ssh', '.aws', '.gnupg', '.gpg', '.config/gh', '.config/openchamber/credentials'];
+      // --- GeoCode: upstream's list guards a path that does not exist and misses every file that
+      // actually holds a secret, ours included (geocode/denied-paths.mjs). Appended rather than
+      // rewritten so the line above stays byte-identical for merges. ---
+      DENIED_SEGMENTS.push(...geocodeDeniedSegments(home));
+      // --- /GeoCode ---
       const relFromHome = underHome ? filePath.slice(home.length + 1) : '';
       const relNormalized = relFromHome.split(path.sep).join('/');
       if (DENIED_SEGMENTS.some((segment) => relNormalized === segment || relNormalized.startsWith(`${segment}/`))) {
