@@ -120,6 +120,19 @@ grep -rnE '// GeoCode:|--- GeoCode|"GeoCode: ' kernel/packages/ desktop/
 
 `scripts/test-gate.sh` 是**门**:我们自己的代码加上绊线,必须全绿,约两分钟。提交前跑它。
 
+`scripts/foreign-writes.sh` 是**第二道门,断言的是磁盘而不是源码**。用法是 `before` 记快照、跑一遍要验的东西、`after` 报差异;它盯八个 GeoCode 绝不该碰的位置(OpenCode 的四根、`~/.opencode`、`~/.config/openchamber`、`~/.agents`、`~/.claude` 里我们够得到的几处、`$TMPDIR/opencode`),**任何变化即失败**。
+
+为什么需要第二道门:2026-08-30 的全面审计查出四类问题,**没有一类是源码层断言能发现的**——
+
+- **补丁写对了但是死代码**:`mdns.ts` 的 `?? Brand.mdnsHost` 是对的、绊线也钉住了它,而 `cli/network.ts` 的一个 yargs 默认值让它永远走不到,GeoCode 照旧广播 `opencode.local`;
+- **路径编译进了 vendor 产物**:`gitlab-ai-provider` 的 bundle 里带着 `~/.cache/opencode` 的路径代码,源码里搜不到;
+- **开发脚本的分叉**:`electron:dev` 另起一个没有内核注入的壳,于是它去磁盘上找到并拉起了用户自己安装的 OpenCode;
+- **共享的进程注册表**:孤儿回收在任何分支判断之前无条件运行,读的是与用户 OpenChamber 共用的目录。
+
+`~/.claude` 只盯 GeoCode 真能够到的几个子路径。盯整个目录没有用——Claude Code 自己在持续写会话记录,那些噪音会把真命中埋掉。
+
+⚠️ **一条只会说 clean 的门等于没有门。** 加进门的每一条都要做反证:把改动撤回、重跑,看它是否变红。本文记的这条实测过:撤回十二处 fallback 后跑 web 包测试,门立刻报出对 `~/.config/openchamber/managed-opencode` 的写入。
+
 `kernel/` 里那套 vendored 的上游测试**不是门**。我们有意改掉了两样东西——磁盘身份、以及只留 GeoAgent 一个主 agent——上游有一批测试断言的正是这两样,它们按设计就会红。**一个失败堆到看不清的套件给不出任何信号**:新增的回归混在里面看不见。
 
 上游套件用 `scripts/test-upstream.sh` 跑,它按成因分堆后**报告而不拦截**。**该关注的不是失败总数,而是"unexplained"那一堆有没有变大**——那一堆里才是真问题。每次上游合并后跑一次。

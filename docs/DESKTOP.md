@@ -667,31 +667,66 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   项)。原因是只摘这一半会制造更坏的状态:`createSkill` 仍能写进 `.agents`、UI 仍提供那个选项
   (`SkillsPage.tsx` 的 `draftSource`),于是变成**建得了、改不了**。完整关闭要同时动 `createSkill`、
   列表路由与 UI 选择器,单独成批;
+- **批 6 · 壳的存储根收口**:已完成。十三处硬编码 `~/.config/openchamber` fallback 改指 GeoCode 自己的
+  根,其中**四处存凭据**(`jwt-secret`、`ui-passkeys.json`、`github-auth.json`、quota),另加
+  `main.mjs` 的 SSH 凭据根与**托管进程注册表**——最后这条不只是路径:`reapOrphanedProcesses` 在任何
+  分支判断之前无条件运行并杀掉注册表里的 pid,与用户自装的 OpenChamber 共用目录时,他们的内核就是
+  回收候选。实测确认当时没有杀成,唯一挡住的是「owner 进程还活着」这一个条件;提交前复审又补进
+  `packages/web/bin/` 的两处——那是 `package.json` `bin` 指向的已发布 CLI,它读 `settings.json` 去找
+  正在运行的桌面端,而桌面端那侧已经改根,两边不是同一个文件了(`PATHS.md` §5「同一个盲区的第二次」);
+- **批 7 · 项目级目录与文件名**:已完成。`snippets.js`(整文件,含写路径)、`agents.js`、
+  `commands.js` 的项目级 `.opencode/` 改名,以及 `plugins.js` 全局层的两个文件名——那两个是批 5 只改了
+  目录和项目层留下的回归,当时插件开关会写 `<配置根>/opencode.json`,一个内核永不加载的文件;
+- **批 8 · 内核侧残留**:已完成。`cli/network.ts` 的 mDNS 默认值(见 `PATHS.md` §5「一次全面审计」)、
+  `tui/context/theme.tsx` 的第三处项目扫描、`plugin/install.ts` 往用户仓库写 `.opencode/opencode.json`、
+  `tui/clipboard.ts` 落在共享 `/tmp` 的 `opencode-clipboard.png`;
 - 验证环境变量翻译;
-- 验证与用户自装 OpenCode 并存互不读写。
+- 验证与用户自装 OpenCode 并存互不读写(现在由 `scripts/foreign-writes.sh` 客观给出,
+  `CONVENTIONS.md` §7)。
 
-**剩余清单**(用上面第二条命令随时重数,当时 36 处):`agents.js`、`commands.js`、`snippets.js`、
-`plugins.js`、`mcp.js`、`path-utils.js`、`skill-routes.js`、`skills-catalog/install.js` 的项目级
-`.opencode/`;`routes.js:762` 的 `~/.config/opencode/AGENTS.md`;`plugins.js:74` 与
-`snippets.js:6` 的全局根;以及 `env-runtime.js`、`server-utils-runtime.js` 的外部二进制探测(归批 D,
-用早退屏蔽而非改名)。
+**阶段 6 剩余**,按产品优先级而非严重性排列(用户定的顺序:先路径、再对接、最后特性):
+
+- **归阶段 2「配置与后端对接」**:前端 `chatDirectories.ts` 与 `openchamberConfig.ts` 自己拼
+  `~/.config/openchamber/{chats,projects}` 并真的建目录写文件。这不是机械改名——渲染进程读不到环境
+  变量,服务端也没有暴露配置根的出口,改法要先定客户端/服务端契约。而且两边现在指向不同位置
+  (服务端认 `<userData>/desktop/chats`),是功能 bug 而不只是泄漏。上游已有先例:
+  `project-context/routes.js` 正是把路径组装从前端搬到服务端的那次迁移,这两个文件是它的遗留;
+- **归阶段 3「特性修缮」**:`~/.agents/loops` 的启动期扫描与写回、壳侧 `discoverSkills` 的
+  `.claude`/`.agents` 扫描、`deleteSkill` 对 `~/.claude/skills/<同名>` 的递归删除、外部二进制发现的
+  十三处与 `electron:dev` 的分叉、`gitlab-ai-provider` 的 vendor 泄漏、内置技能
+  `customize-opencode` 的正文、以及品牌与 i18n。**另有 `packages/vscode/` 整包**:`opencodeConfig.ts`
+  是 `server/lib/opencode/` 的一份近乎逐行的副本,项目目录、配置文件名、技能根、外部二进制发现全都
+  还是上游的名字(约三十处)。它是独立交付物,不随桌面端启动,所以不拦这一批;但它与壳共用的是同一
+  份逻辑,壳侧每改一处,那边就多欠一处,单独成批而不是逐条跟着改。
 
 ```bash
-# 硬编码到 OpenChamber 目录的 fallback（认 OPENCHAMBER_DATA_DIR 的那一半不会命中，
-# 因为那半边根本不含这两个路径段）。
-grep -rn "'\.config', 'openchamber'" desktop/packages/web/server | grep -v '\.test\.'
+# 硬编码到 OpenChamber 目录的 fallback(认 OPENCHAMBER_DATA_DIR 的那一半不会命中,
+# 因为那半边根本不含这两个路径段)。
+grep -rn "'\.config', 'openchamber'" desktop/packages/web --include="*.js" --include="*.mjs" \
+  | grep -v '\.test\.' | grep -v node_modules | grep -v '/dist/'
 
 # 硬编码到 OpenCode 根的路径计算。
 grep -rnE "'(\.config|\.local|\.cache)', '[Oo]pencode'|'\.opencode'" \
-  desktop/packages/web/server --include="*.js" | grep -v '\.test\.'
+  desktop/packages/web --include="*.js" --include="*.mjs" \
+  | grep -v '\.test\.' | grep -v node_modules | grep -v '/dist/'
 ```
 
-⚠️ **第一条命令原先带一个 `grep -v ":[[:space:]]*: "`，那个过滤器是错的**，务必不要加回去。
-它本意是排除三元里读变量的分支，但**硬编码 fallback 恰恰也写在 else 分支上、格式一模一样**，于是
-连要找的东西一起吃掉：实测它报告 2 处，真实是 13 处。批 2 就是照着那份残缺清单做的，漏掉的 11 处
-(`ui-auth.js`、`ui-passkeys.js`、`github/auth.js`、`quota/credentials/store.js`、`walkthrough/*`、
-`session-goal/*`、`session-assist/runtime.js`、`small-model/index.js`、`skills-catalog/disk-cache.js`)
-至今仍在。**这是一条命令写错、把自己关进盲区两个批次的记录。**
+⚠️ **两条命令的范围是 `packages/web`,不是 `packages/web/server`。** 收窄到 `server/` 会漏掉
+`bin/`——那是已发布的 CLI,同样按 `~/.config/openchamber` 解析数据根。这是同一个盲区的第三次:
+第一次是下面那个过滤器,第二次是复审时临时写的 `path.join\([^)]*'openchamber'`(`[^)]*` 不允许中间
+出现右括号,而这类路径几乎全是 `path.join(os.homedir(), ...)`,它把最该找的形状排除了)。
+**`packages/vscode` 要单独扫**,它是另一份副本,不在这两条命令里。
+
+⚠️ **第一条命令原先还带一个 `grep -v ":[[:space:]]*: "`,那个过滤器是错的**,务必不要加回去。
+它本意是排除三元里读变量的分支,但**硬编码 fallback 恰恰也写在 else 分支上、格式一模一样**,于是
+连要找的东西一起吃掉:实测它报告 2 处,真实是 13 处,批 2 就是照着那份残缺清单做的。
+**这是一条命令写错、把自己关进盲区两个批次的记录。**
+
+**当前计数**(批 6-8 之后):第一条 **1 处**,`package-manager.js:37`,早退屏蔽、逐字节保留;
+第二条 **12 处**,全部已归位——`shared.js:572` 与 `skills.js:235` 在屏蔽注释里;
+`path-utils.js:28` 不是路径而是「PATH 里出现过哪些目录名」的启发式判据,不算泄漏;
+其余 `routes.js:762`、`skill-routes.js:119`、`skills.js:187/649/650`、`env-runtime.js`、
+`server-utils-runtime.js` 归阶段 3(外部技能与外部二进制发现)。
 
 ### 阶段 7:桌面功能与地理界面
 
