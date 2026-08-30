@@ -6,6 +6,7 @@ import os from "node:os"
 import path from "node:path"
 import tls from "node:tls"
 import { NetProbe } from "@/geo/net/probe"
+import { fakeProxy } from "./fake-proxy"
 import type { Target } from "@/geo/net/types"
 
 /* The three probe stages and certificate verification, against servers this file starts
@@ -77,25 +78,6 @@ async function plainService(): Promise<{ port: number; received: () => string }>
   return { port, received: () => received }
 }
 
-/** `tunnel: true` pipes the CONNECT to `forwardPort`; `tunnel: false` answers `status` (200 by default). */
-async function fakeProxy(options: { tunnel: boolean; forwardPort?: number; status?: number }): Promise<number> {
-  const server = net.createServer((socket) => {
-    socket.once("data", () => {
-      const status = options.status ?? 200
-      socket.write(`HTTP/1.1 ${status} ${status === 200 ? "Connection Established" : "Forbidden"}\r\n\r\n`)
-      if (status !== 200) return void socket.end()
-      if (!options.tunnel) return
-      const upstream = net.connect({ host: "127.0.0.1", port: options.forwardPort! }, () => {
-        socket.pipe(upstream)
-        upstream.pipe(socket)
-      })
-      upstream.on("error", () => socket.destroy())
-    })
-    socket.on("error", () => {})
-  })
-  return listen(server)
-}
-
 describe("net probe", () => {
   test("stage 1 fails when nothing is listening", async () => {
     // Nothing listens on port 1, so the connect is refused rather than timing out.
@@ -123,7 +105,7 @@ describe("net probe", () => {
   })
 
   test("stage 2 reports a proxy that refuses the tunnel", async () => {
-    const port = await fakeProxy({ tunnel: false, status: 403 })
+    const port = await fakeProxy({ status: 403 })
     const result = await NetProbe.viaProxy({ id: "t", host: "localhost", port: 443 }, `http://127.0.0.1:${port}`, {
       timeoutMs: 3000,
     })
@@ -135,7 +117,7 @@ describe("net probe", () => {
   })
 
   test("stage 3 is not skippable: a proxy that agrees but tunnels nowhere fails", async () => {
-    const port = await fakeProxy({ tunnel: false })
+    const port = await fakeProxy()
     const result = await NetProbe.viaProxy({ id: "t", host: "localhost", port: 443 }, `http://127.0.0.1:${port}`, {
       timeoutMs: 2000,
     })
@@ -163,7 +145,7 @@ describe("net probe", () => {
 
   test.skipIf(!certificate)("all three stages pass through a working proxy", async () => {
     const target = await tlsTarget()
-    const port = await fakeProxy({ tunnel: true, forwardPort: target.port })
+    const port = await fakeProxy({ forwardPort: target.port })
 
     const result = await NetProbe.viaProxy(target, `http://127.0.0.1:${port}`, {
       timeoutMs: 5000,
@@ -180,7 +162,7 @@ describe("net probe", () => {
   })
 
   test("an address target survives the proxy path too", async () => {
-    const port = await fakeProxy({ tunnel: false })
+    const port = await fakeProxy()
     const result = await NetProbe.viaProxy({ id: "t", host: "203.0.113.1", port: 443 }, `http://127.0.0.1:${port}`, {
       timeoutMs: 1500,
     })

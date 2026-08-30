@@ -122,7 +122,9 @@ grep -rnE '// GeoCode:|--- GeoCode|"GeoCode: ' kernel/packages/ desktop/
 
 它按包分节,每节**点名我们自己的文件**而不是跑那个包的整套——上游的套件是参考不是门。`packages/ui` 到 2026-08-30 为止**整个不在门里**,而这个缺口从门内部看不见:渲染进程自己拼两条存储路径,壳的数据根搬走时它们还留在 OpenChamber 的目录上,没有任何东西会响。它自己的套件里另有两个先于我们就红的用例(`SessionAuthGate`、`shortcuts`),这也是不整套拉进来的理由。
 
-已知抖动两条,都只在全套并发下出现、单独跑不复现:`test/geo/net-resolve.test.ts` 的代理回退用例(单独跑 6/6 绿,看着是端口竞争,**是我们自己的测试**),以及 web 包的 `plugin-routes.test.js`「GET after POST」(见过一次,随后两次全量重跑均绿,成因未查)。**记在这里是为了下次再见到时知道它不是新问题,不是为了当作可以忽略。**
+内核那条抖动已定位并修掉:代理桩用 `socket.once("data")` 读 CONNECT,而 `once` 不会让流停下——回调返回后 socket 仍在 flowing,`pipe` 挂上之前到达的字节被发给「没有人」并丢弃。客户端一看到 200 就发 ClientHello,负载高时它比上游连接更快到,握手于是等满探测超时。**这个桩有两份拷贝,两份都带同一个缺陷**,只修一份的结果是抖动换个文件继续出现;现在合并成 `test/geo/fake-proxy.ts` 一份。**同一类问题在生产的 `tunnel.ts` 里也有**(读到 `\r\n\r\n` 之后 socket 照样 flowing,且同一 chunk 里终止符之后的字节被丢),已一并修好并配绊线。
+
+web 包还剩一条**未定位**的:`project-context/routes.http.test.js` 的「accepts a plan pin patch」偶尔收到 **401**。能确证的是它**不来自被测 app**——那是个裸 express 加桩 runtime,依赖图里没有任何鉴权代码,所以请求到了别人的服务器上,是端口串号而不是逻辑错。macOS 上 ControlCenter 与若干后台进程正好占着临时端口段并对未鉴权请求回 401。**机制尚未复现,不要据此改代码;记在这里是为了下次见到时知道它不是新问题,也不是为了当作可以忽略。** 观察到的频率约六轮一次。
 
 `scripts/foreign-writes.sh` 是**第二道门,断言的是磁盘而不是源码**。用法是 `before` 记快照、跑一遍要验的东西、`after` 报差异;它盯八个 GeoCode 绝不该碰的位置(OpenCode 的四根、`~/.opencode`、`~/.config/openchamber`、`~/.agents`、`~/.claude` 里我们够得到的几处、`$TMPDIR/opencode`),**任何变化即失败**。
 

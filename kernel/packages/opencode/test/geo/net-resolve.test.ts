@@ -10,6 +10,7 @@ import { NetRedact } from "@/geo/net/redact"
 import { NetResolver } from "@/geo/net/resolver"
 import { NetRoute } from "@/geo/net/route"
 import type { Target } from "@/geo/net/types"
+import { fakeProxy } from "./fake-proxy"
 
 /* Path resolution, the two route forms and credential redaction (docs/GEOKERNEL.md §3.3). */
 
@@ -64,22 +65,6 @@ async function tlsTarget(): Promise<Target> {
   return { id: "test", host: "localhost", port: await listen(server) }
 }
 
-/** A proxy that tunnels every CONNECT to one fixed port, whatever was asked for. */
-async function proxyTo(forwardPort: number): Promise<number> {
-  const server = net.createServer((socket) => {
-    socket.once("data", () => {
-      socket.write("HTTP/1.1 200 Connection Established\r\n\r\n")
-      const upstream = net.connect({ host: "127.0.0.1", port: forwardPort }, () => {
-        socket.pipe(upstream)
-        upstream.pipe(socket)
-      })
-      upstream.on("error", () => socket.destroy())
-    })
-    socket.on("error", () => {})
-  })
-  return listen(server)
-}
-
 /** A port number nothing is listening on. */
 async function closedPort(): Promise<number> {
   const server = net.createServer()
@@ -94,7 +79,7 @@ describe("net path resolution", () => {
   test.skipIf(!certificate)("a working direct connection ends the search there", async () => {
     const target = await tlsTarget()
     // A working proxy is offered as a candidate and never reached: `resolve` returns on a successful direct probe.
-    const proxyPort = await proxyTo(target.port)
+    const proxyPort = await fakeProxy({ forwardPort: target.port })
 
     const resolution = await NetResolver.resolve(target, {
       ports: [proxyPort],
@@ -113,7 +98,7 @@ describe("net path resolution", () => {
     const real = await tlsTarget()
     // Same host so the certificate still matches, but a port nothing answers on: direct fails where the proxy works.
     const target: Target = { id: "test", host: "localhost", port: await closedPort() }
-    const proxyPort = await proxyTo(real.port)
+    const proxyPort = await fakeProxy({ forwardPort: real.port })
 
     const resolution = await NetResolver.resolve(target, {
       ports: [proxyPort],
