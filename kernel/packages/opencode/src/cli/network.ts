@@ -1,4 +1,5 @@
 import type { Argv, InferredOptionTypes } from "yargs"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: see `mdns-domain` below
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import type { Config } from "@/config/config"
 import { Effect } from "effect"
@@ -21,8 +22,12 @@ const options = {
   },
   "mdns-domain": {
     type: "string" as const,
-    describe: "custom domain name for mDNS service (default: opencode.local)",
-    default: "opencode.local",
+    // --- GeoCode: the branded host. `mdns.ts` already falls back to `Brand.mdnsHost`, but yargs
+    // supplies this default so `domain` is never undefined and that fallback is dead code — the
+    // patch there was correct and unreachable, and GeoCode advertised `opencode.local` anyway. ---
+    describe: `custom domain name for mDNS service (default: ${Brand.mdnsHost})`,
+    default: Brand.mdnsHost,
+    // --- /GeoCode ---
   },
   cors: {
     type: "string" as const,

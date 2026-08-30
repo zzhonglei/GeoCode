@@ -3,6 +3,7 @@ import { readFile, rm } from "node:fs/promises"
 import { platform, release, tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: see the clipboard temp file below
 
 const exec = promisify(execFile)
 
@@ -29,7 +30,9 @@ function writeOsc52(text: string) {
 
 export async function read() {
   if (platform() === "darwin") {
-    const file = path.join(tmpdir(), "opencode-clipboard.png")
+    // GeoCode: this is the shared OS temp dir, not our own tmp root, so the name is all that
+    // distinguishes it — an `opencode-` file appeared in /tmp on every image paste.
+    const file = path.join(tmpdir(), Brand.tempPrefix("clipboard.png"))
     try {
       await exec("osascript", [
         "-e",

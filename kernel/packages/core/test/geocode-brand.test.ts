@@ -55,6 +55,9 @@ describe("brand literal scan", () => {
     "packages/core/src/skill/discovery.ts": ['".opencode-version"'],
     "packages/opencode/src/skill/discovery.ts": ['".opencode-version"'],
     "packages/opencode/src/server/mdns.ts": ['"opencode.local"', "opencode-${"],
+    // The yargs default that fed `mdns.ts`. Its own row cannot see this file, and while this literal stood the
+    // fallback there was dead code: `domain` was never undefined, so GeoCode advertised opencode.local regardless.
+    "packages/opencode/src/cli/network.ts": ['"opencode.local"'],
     // The same host name quoted back at the user, and a row of its own because the mdns row above cannot see this
     // file: restoring the sentence here would advertise a default the server does not serve.
     "packages/core/src/v1/config/server.ts": ["opencode.local"],
@@ -79,6 +82,13 @@ describe("brand literal scan", () => {
     "packages/core/src/config.ts": ['".opencode"', '"opencode.json"'],
     "packages/opencode/src/config/tui.ts": ['endsWith(".opencode")'],
     "packages/opencode/src/plugin/tui/runtime.ts": ['".opencode"', '".opencode", "themes"', '".opencode", "tui.json"'],
+    // The third project-scope discovery. The comment above said two; this one had drifted from both.
+    "packages/tui/src/context/theme.tsx": ['".opencode"'],
+    // `plug add` wrote its config into the user's repo under the old directory and file name, where the loader
+    // then never read it back.
+    "packages/opencode/src/plugin/install.ts": ['".opencode"', 'return "opencode"'],
+    // The shared OS temp dir, where the file name is the only thing that says whose it is.
+    "packages/tui/src/clipboard.ts": ['"opencode-clipboard.png"'],
     "packages/opencode/src/cli/cmd/agent.ts": ['ctx.worktree, ".opencode"'],
     "packages/opencode/src/cli/cmd/mcp.ts": ['"opencode.json"', '"opencode.jsonc"', 'baseDir, ".opencode"'],
     // Plan files: the writer and the plan agent's edit permission both spread Brand.plansSegments, never a literal.

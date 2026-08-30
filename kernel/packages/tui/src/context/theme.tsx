@@ -25,6 +25,7 @@ import { createSimpleContext } from "./helper"
 import { useKV } from "./kv"
 import { useTuiConfig } from "../config"
 import { Global } from "@opencode-ai/core/global"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: see the theme scan below
 import { Glob } from "@opencode-ai/core/util/glob"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
@@ -38,7 +39,9 @@ const themeSource: ThemeSource = {
   async discover() {
     const directories = [Global.Path.config]
     for (let current = process.cwd(); ; current = path.dirname(current)) {
-      directories.push(path.join(current, ".opencode"))
+      // GeoCode: the kernel's project directory. The other two project-scope discoveries already
+      // derive it; this one had drifted (docs/PATHS.md §5).
+      directories.push(path.join(current, Brand.projectDir))
       if (path.dirname(current) === current) break
     }
     return discoverThemes(directories)

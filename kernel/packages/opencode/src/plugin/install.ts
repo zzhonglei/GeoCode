@@ -9,6 +9,7 @@ import {
 
 import * as ConfigPaths from "@/config/paths"
 import { Global } from "@opencode-ai/core/global"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: see `patchDir` / `patchName` below
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { isRecord } from "@/util/record"
@@ -31,7 +32,7 @@ export type PatchDeps = {
   readText: (file: string) => Promise<string>
   write: (file: string, text: string) => Promise<void>
   exists: (file: string) => Promise<boolean>
-  files: (dir: string, name: "opencode" | "tui") => string[]
+  files: (dir: string, name: string) => string[] // GeoCode: widened, the server name is derived now
 }
 
 export type PatchInput = {
@@ -334,11 +335,14 @@ function patchDir(input: PatchInput) {
   if (input.global) return input.config ?? Global.Path.config
   const git = input.vcs === "git" && input.worktree !== "/"
   const root = git ? input.worktree : input.directory
-  return path.join(root, ".opencode")
+  // GeoCode: the kernel's project directory — writing the old name put a config in the user's
+  // repo that the loader then never reads back (core/src/brand.ts).
+  return path.join(root, Brand.projectDir)
 }
 
-function patchName(kind: Kind): "opencode" | "tui" {
-  if (kind === "server") return "opencode"
+function patchName(kind: Kind): string {
+  // GeoCode: paired with patchDir above; `dep.files` turns this into `<name>.json(c)`
+  if (kind === "server") return Brand.name
   return "tui"
 }
 
