@@ -666,7 +666,7 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   ⚠️ **`.claude`/`.agents` 这次没有从受管根里摘掉**,虽然内核已拒绝加载它们(`KERNEL.md` §6 第 6
   项)。原因是只摘这一半会制造更坏的状态:`createSkill` 仍能写进 `.agents`、UI 仍提供那个选项
   (`SkillsPage.tsx` 的 `draftSource`),于是变成**建得了、改不了**。完整关闭要同时动 `createSkill`、
-  列表路由与 UI 选择器,单独成批;
+  列表路由与 UI 选择器,单独成批——**那一批见「阶段 2 · 批 2」,已完成**;
 - **批 6 · 壳的存储根收口**:已完成。十三处硬编码 `~/.config/openchamber` fallback 改指 GeoCode 自己的
   根,其中**四处存凭据**(`jwt-secret`、`ui-passkeys.json`、`github-auth.json`、quota),另加
   `main.mjs` 的 SSH 凭据根与**托管进程注册表**——最后这条不只是路径:`reapOrphanedProcesses` 在任何
@@ -706,6 +706,19 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   绊线就会红。另有界面文案一处(告诉用户 settings.json 在 openchamber 目录)与过时注释若干。
   新增两个自有模块:`ui/src/geocode/kernel-roots.ts`(渲染进程要读 agent 写的文件,得叫同一个目录)
   与 `electron/geocode/denied-paths.mjs`;
+- **阶段 2 · 批 2 · 外部技能库关闭**:已完成。`.claude/skills` 与 `.agents/skills` 是用户为别的
+  agent 工具写的技能库,内核早已拒绝加载(`runtime-flags.ts` 两个隔离开关默认 ON),而壳照旧扫描并
+  列出,**于是技能页告诉用户 GeoAgent 拥有它并不拥有的能力**。这一批把整条链一次关完,因为上一次
+  只关一半的教训还在上面那段里:发现、`createSkill`、`deleteSkill`、受管根清单、目录商店的安装目标、
+  以及 UI 的位置选择器,六处同时动。
+  **其中 `deleteSkill` 是破坏性的**:它不接受 source 参数,把它知道的每个根都删一遍,所以删掉
+  GeoCode 里叫 `foo` 的技能会连带递归删掉用户 `~/.claude/skills/foo`。绊线因此断言的是
+  「我们没建过的文件删完之后还在」。
+  上游三个断言这项能力的用例**没有删除而是反转**——它们的夹具正好搭好了要防的东西(一个请求写
+  `.agents` 的创建、一个已在磁盘上的 `.agents` 库),反转之后上游自己的测试成了我们这个决定的绊线。
+  另外:`skill-routes.js` 上报的 `externalSkills` 不再读环境变量而是常量 `true`——原先那两行错了两
+  重,默认值(我们把内核默认改成 ON 却没改镜像)和优先级(上游把广播与具体两个开关 OR,而内核是具体
+  优先)。**不再有需要与内核保持同步的手抄规则,是这个方案比「修镜像」更好的地方**;
 
 - **归阶段 3「特性修缮」**,其中**两条是破坏性的,该排在这一阶段最前面**:`deleteSkill` 对
   `~/.claude/skills/<同名>` 的递归删除;以及 `openchamberConfig.ts` 的 legacy 迁移——它读用户仓库里
