@@ -10,7 +10,7 @@ import path from 'path';
 const SETTINGS_FILE = path.join(
   process.env.OPENCHAMBER_DATA_DIR
     ? path.resolve(process.env.OPENCHAMBER_DATA_DIR)
-    : path.join(os.homedir(), '.config', 'openchamber'),
+    : path.join(os.homedir(), '.config', 'GeoCode', 'desktop'), // GeoCode: GeoCode's own shell data root (docs/PATHS.md §3.3)
   'settings.json',
 );
 

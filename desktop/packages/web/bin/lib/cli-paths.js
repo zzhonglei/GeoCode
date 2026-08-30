@@ -10,7 +10,10 @@ function getDataDir() {
   if (typeof process.env.OPENCHAMBER_DATA_DIR === 'string' && process.env.OPENCHAMBER_DATA_DIR.trim().length > 0) {
     return path.resolve(process.env.OPENCHAMBER_DATA_DIR.trim());
   }
-  return path.join(os.homedir(), '.config', 'openchamber');
+  // GeoCode: GeoCode's own shell data root, the same one Electron main falls back to. This is a
+  // pairing fix as much as an ownership one: the CLI reads `settings.json` to find the running
+  // desktop app, and the two had drifted apart (docs/PATHS.md §3.3).
+  return path.join(os.homedir(), '.config', 'GeoCode', 'desktop');
 }
 
 function getLogsDir() {

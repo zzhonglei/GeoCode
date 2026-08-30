@@ -548,7 +548,8 @@ const settingsFilePath = () => {
   if (typeof process.env.OPENCHAMBER_DATA_DIR === 'string' && process.env.OPENCHAMBER_DATA_DIR.trim()) {
     return path.join(process.env.OPENCHAMBER_DATA_DIR.trim(), 'settings.json');
   }
-  return path.join(os.homedir(), '.config', 'openchamber', 'settings.json');
+  // GeoCode: GeoCode's own shell data root; `sshManager` roots SSH credentials here (docs/PATHS.md §3.3)
+  return path.join(os.homedir(), '.config', 'GeoCode', 'desktop', 'settings.json');
 };
 
 const sshManager = new ElectronSshManager({

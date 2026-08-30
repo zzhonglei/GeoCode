@@ -43,7 +43,11 @@ import { spawnSync } from 'node:child_process';
 const resolveRegistryDir = () => {
   const override = process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY;
   if (override && override.trim()) return override.trim();
-  return path.join(os.homedir(), '.config', 'openchamber', 'managed-opencode');
+  // --- GeoCode: GeoCode's own root. This one matters more than the rest: `reapOrphanedProcesses`
+  // runs unconditionally at startup and kills the pids it finds here, so sharing the directory with
+  // a user's own OpenChamber makes their kernel a reap candidate (docs/PATHS.md §3.3). ---
+  return path.join(os.homedir(), '.config', 'GeoCode', 'desktop', 'managed-opencode');
+  // --- /GeoCode ---
 };
 
 const entryFilePath = (pid) => path.join(resolveRegistryDir(), `${pid}.json`);

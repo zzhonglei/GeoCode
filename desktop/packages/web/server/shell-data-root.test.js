@@ -19,23 +19,34 @@ const PATCHED = [
   'lib/git/service.js',
   'lib/opencode/proxy.js',
   'lib/package-manager.js',
+  'lib/ui-auth/ui-auth.js',
+  'lib/ui-auth/ui-passkeys.js',
+  'lib/skills-catalog/disk-cache.js',
+  'lib/small-model/index.js',
+  'lib/session-goal/runtime.js',
+  'lib/session-goal/objectives.js',
+  'lib/session-assist/runtime.js',
+  'lib/walkthrough/model-settings.js',
+  'lib/walkthrough/store.js',
+  'lib/github/auth.js',
+  'lib/quota/credentials/store.js',
+  'lib/opencode/managed-process-registry.js',
+  // Outside `server/`, and the reason this list is not scoped to it: the published CLI
+  // (`package.json` `bin`) resolves the same root, and it reads `settings.json` to find the
+  // running desktop app. Renaming only the server's side split the pair (docs/PATHS.md §5).
+  '../bin/lib/cli-paths.js',
+  '../bin/lib/commands-connect-url.js',
 ];
+
+/**
+ * The one file whose `openchamber` literal stays: `package-manager.js` shields the upstream
+ * resolution with an early return instead of replacing it, so those lines are unreachable and
+ * byte-identical for merges (CONVENTIONS.md §5).
+ */
+const SHIELDED = 'lib/package-manager.js';
 let dataRoot;
 let fakeHome;
 let realHome;
-
-const markedRegions = (source) => {
-  const regions = [];
-  for (let from = 0; ; ) {
-    const start = source.indexOf('--- GeoCode:', from);
-    if (start === -1) return regions;
-    const end = source.indexOf('--- /GeoCode ---', start);
-    // An unclosed region would otherwise slice to -1 and silently check nothing.
-    if (end === -1) throw new Error(`Unclosed GeoCode region at ${start}`);
-    regions.push(source.slice(start, end));
-    from = end + 1;
-  }
-};
 
 beforeAll(() => {
   dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-shell-root-'));
@@ -71,28 +82,30 @@ describe('shell data root', () => {
   });
 
   it('never falls back into an OpenChamber directory', () => {
-    // The fallback is unreachable in the product — main.mjs always injects — but it is the
-    // last thing standing between a missed injection and writing into another product's
-    // directory. It carries the `desktop/` segment on purpose: `.config/GeoCode` alone is the
-    // kernel's config root, and a case-insensitive filesystem would merge `geocode` into it.
+    // Asserted over the whole file rather than inside the patch markers. The marker form varies
+    // — a block where the change carries a trade-off, a line-end note where it is one segment —
+    // and an assertion that reads the markers tests how the patch is written instead of where
+    // the bytes land. What has to hold is the same either way: this file names GeoCode's own
+    // root, and no longer names OpenChamber's.
     //
-    // Every region, not the first one: three of these files carry more than one patch now, and
-    // reading only as far as the first closing marker checked a shrinking part of the file
-    // while still passing.
+    // The `desktop/` segment is deliberate: `.config/GeoCode` alone is the kernel's config root,
+    // and on a case-insensitive filesystem `geocode` would land inside it.
     for (const file of PATCHED) {
-      const regions = markedRegions(fs.readFileSync(path.join(serverRoot, file), 'utf8'));
-      expect(regions.length).toBeGreaterThan(0);
-      for (const region of regions) expect(region).not.toContain("'openchamber'");
-      expect(regions.some((region) => region.includes("'GeoCode', 'desktop'"))).toBe(true);
+      const source = fs.readFileSync(path.join(serverRoot, file), 'utf8');
+      expect([file, source.includes("'GeoCode', 'desktop'")]).toEqual([file, true]);
+      if (file === SHIELDED) continue;
+      expect([file, source.includes("'.config', 'openchamber'")]).toEqual([file, false]);
     }
   });
 
   it('leaves no path computation reading the home directory unconditionally', () => {
-    // Guards the merge that restores a hardcoded path in any one of them. The two files left
-    // out resolve their own variable instead: package-manager returns early on the data root,
-    // and managed-process-registry reads OPENCHAMBER_MANAGED_PROCESS_REGISTRY.
+    // Guards the merge that restores a hardcoded path. Two variables, not one: Electron main
+    // injects the data root for most of these and a separate one for the process registry,
+    // whose fallback is spelled out rather than derived from the root (shell-data-root.mjs).
+    const INJECTED = ['process.env.OPENCHAMBER_DATA_DIR', 'process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY'];
     for (const file of PATCHED) {
-      expect(fs.readFileSync(path.join(serverRoot, file), 'utf8')).toContain('process.env.OPENCHAMBER_DATA_DIR');
+      const source = fs.readFileSync(path.join(serverRoot, file), 'utf8');
+      expect([file, INJECTED.some((name) => source.includes(name))]).toEqual([file, true]);
     }
   });
 });
