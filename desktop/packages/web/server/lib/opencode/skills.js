@@ -112,10 +112,13 @@ function getSkillScope(skillName, workingDirectory) {
       return { scope: SKILL_SCOPE.PROJECT, path: projectPath, source: 'opencode' };
     }
     
+    // GeoCode: not ours to resolve into — see discoverSkills above.
+    /*
     const claudePath = getClaudeSkillPath(workingDirectory, skillName);
     if (fs.existsSync(claudePath)) {
       return { scope: SKILL_SCOPE.PROJECT, path: claudePath, source: 'claude' };
     }
+    */
   }
   
   const userPath = getUserSkillPath(skillName);
@@ -123,6 +126,8 @@ function getSkillScope(skillName, workingDirectory) {
     return { scope: SKILL_SCOPE.USER, path: userPath, source: 'opencode' };
   }
 
+  // GeoCode: the user-scope halves of the same two, closed for the same reason.
+  /*
   const userClaudePath = getUserClaudeSkillPath(skillName);
   if (fs.existsSync(userClaudePath)) {
     return { scope: SKILL_SCOPE.USER, path: userClaudePath, source: 'claude' };
@@ -132,6 +137,7 @@ function getSkillScope(skillName, workingDirectory) {
   if (fs.existsSync(userAgentsPath)) {
     return { scope: SKILL_SCOPE.USER, path: userAgentsPath, source: 'agents' };
   }
+  */
   
   return { scope: null, path: null, source: null };
 }
@@ -161,6 +167,12 @@ function getSkillWritePath(skillName, workingDirectory, requestedScope) {
 function discoverSkills(workingDirectory) {
   const skills = new Map();
 
+  // --- GeoCode: `.claude/skills` and `.agents/skills` are skill libraries a user wrote for some
+  // other agent tool. The kernel already refuses to load them (`runtime-flags.ts` defaults both
+  // isolation flags ON), so listing them here told the user about capability GeoAgent does not
+  // have. Discovery is where the whole surface starts: nothing found is nothing shown, nothing
+  // to create into, and nothing to delete out of (docs/PATHS.md §7). ---
+  /*
   for (const externalRootName of ['.claude', '.agents']) {
     const homeRoot = path.join(os.homedir(), externalRootName, 'skills');
     const source = externalRootName === '.agents' ? 'agents' : 'claude';
@@ -168,7 +180,13 @@ function discoverSkills(workingDirectory) {
       addSkillFromMdFile(skills, skillMdPath, SKILL_SCOPE.USER, source);
     }
   }
+  */
+  // --- /GeoCode ---
 
+  // GeoCode: the project scope of the same libraries. The whole block is wrapped rather than
+  // just its inner loop — walking to the worktree root and building the ancestor list is real
+  // filesystem work, done on every listing, and with nothing left inside it buys nothing.
+  /*
   if (workingDirectory) {
     const worktreeRoot = findWorktreeRoot(workingDirectory) || path.resolve(workingDirectory);
     const ancestors = getAncestors(workingDirectory, worktreeRoot);
@@ -182,6 +200,7 @@ function discoverSkills(workingDirectory) {
       }
     }
   }
+  */
 
   const configDirectories = resolveSkillSearchDirectories(workingDirectory);
   const homeOpencodeDir = path.resolve(path.join(os.homedir(), '.opencode'));
@@ -289,20 +308,37 @@ function getSkillSources(skillName, workingDirectory, discoveredSkill = null) {
   const projectExists = projectPath && fs.existsSync(projectPath);
   const projectDir = projectExists ? path.dirname(projectPath) : null;
   
+  // --- GeoCode: bound to "not found" rather than removed, because the branch chain below and
+  // the object this returns both read these names. The upstream computation is kept verbatim. ---
+  const claudePath = null;
+  const claudeExists = false;
+  const claudeDir = null;
+  const userClaudePath = null;
+  const userClaudeExists = false;
+  const userClaudeDir = null;
+  /*
   const claudePath = workingDirectory ? getClaudeSkillPath(workingDirectory, skillName) : null;
   const claudeExists = claudePath && fs.existsSync(claudePath);
   const claudeDir = claudeExists ? path.dirname(claudePath) : null;
   const userClaudePath = getUserClaudeSkillPath(skillName);
   const userClaudeExists = fs.existsSync(userClaudePath);
   const userClaudeDir = userClaudeExists ? path.dirname(userClaudePath) : null;
+  */
+  // --- /GeoCode ---
   
   const userPath = getUserSkillPath(skillName);
   const userExists = fs.existsSync(userPath);
   const userDir = userExists ? path.dirname(userPath) : null;
 
+  // GeoCode: same treatment as the `.claude` group above.
+  const userAgentsPath = null;
+  const userAgentsExists = false;
+  const userAgentsDir = null;
+  /*
   const userAgentsPath = getUserAgentsSkillPath(skillName);
   const userAgentsExists = fs.existsSync(userAgentsPath);
   const userAgentsDir = userAgentsExists ? path.dirname(userAgentsPath) : null;
+  */
 
   const matchedDiscovered = discoveredSkill && discoveredSkill.name === skillName
     ? discoveredSkill
@@ -453,7 +489,12 @@ function createSkill(skillName, config, workingDirectory, scope) {
   let targetScope;
   
   const requestedScope = scope === SKILL_SCOPE.PROJECT ? SKILL_SCOPE.PROJECT : SKILL_SCOPE.USER;
-  const requestedSource = config?.source === 'agents' ? 'agents' : 'opencode';
+  // --- GeoCode: there is one place a skill can be created, ours. The `agents` branches below
+  // stay reachable-looking but this is what decides, so the UI dropping the option and this
+  // refusing it cannot drift apart. ---
+  const requestedSource = 'opencode';
+  /* const requestedSource = config?.source === 'agents' ? 'agents' : 'opencode'; */
+  // --- /GeoCode ---
 
   if (requestedScope === SKILL_SCOPE.PROJECT && workingDirectory) {
     ensureProjectSkillDir(workingDirectory);
@@ -575,6 +616,11 @@ function deleteSkill(skillName, workingDirectory) {
       deleted = true;
     }
     
+    // --- GeoCode: this function takes no source and deletes from EVERY root it knows, so
+    // removing a GeoCode skill named `foo` also removed the user's Claude Code skill named
+    // `foo`, recursively, from their own repository and home directory. Nothing we do not own
+    // gets deleted (docs/PATHS.md §7). ---
+    /*
     const claudeDir = getClaudeSkillDir(workingDirectory, skillName);
     if (fs.existsSync(claudeDir)) {
       fs.rmSync(claudeDir, { recursive: true, force: true });
@@ -588,6 +634,8 @@ function deleteSkill(skillName, workingDirectory) {
       console.log(`Deleted project-level agents skill directory: ${projectAgentsDir}`);
       deleted = true;
     }
+    */
+    // --- /GeoCode ---
   }
 
   const userDir = getUserSkillDir(skillName);
@@ -597,6 +645,8 @@ function deleteSkill(skillName, workingDirectory) {
     deleted = true;
   }
 
+  // GeoCode: the home-directory halves of the same deletion — see the block above.
+  /*
   const userAgentsDir = getUserAgentsSkillDir(skillName);
   if (fs.existsSync(userAgentsDir)) {
     fs.rmSync(userAgentsDir, { recursive: true, force: true });
@@ -610,6 +660,7 @@ function deleteSkill(skillName, workingDirectory) {
     console.log(`Deleted user-level claude skill directory: ${userClaudeDir}`);
     deleted = true;
   }
+  */
 
   if (!deleted) {
     throw new Error(`Skill "${skillName}" not found`);
@@ -640,18 +691,17 @@ function getManagedSkillRoots(workingDirectory) {
   // — there is no `~/.geocode` to manage (KERNEL.md §6 item 4). Wrapped, not deleted, so an
   // upstream edit to the two lines still merges.
   //
-  // `.claude` and `.agents` below stay, deliberately, even though the kernel refuses to LOAD
-  // them (item 6): `createSkill` can still target `.agents` and the UI still offers it, so
-  // dropping them here alone would let a skill be created and then refuse to rename it.
-  // Closing that properly spans createSkill, the list route and the UI picker — one batch, not
-  // a corner of this one. ---
+  // `.claude` and `.agents` are closed here too. An earlier pass left them, because dropping
+  // them from this list alone would have let a skill be created into `.agents` and then refused
+  // to rename it — built but not editable, which is worse than either end state. That batch is
+  // this one: discovery, createSkill, the list route and the UI picker move together. ---
   /*
   pushRoot(path.join(os.homedir(), '.opencode', 'skills'));
   pushRoot(path.join(os.homedir(), '.opencode', 'skill'));
-  */
-  // --- /GeoCode ---
   pushRoot(path.join(os.homedir(), '.claude', 'skills'));
   pushRoot(path.join(os.homedir(), '.agents', 'skills'));
+  */
+  // --- /GeoCode ---
 
   const customConfigDir = process.env.OPENCODE_CONFIG_DIR
     ? path.resolve(process.env.OPENCODE_CONFIG_DIR)
@@ -664,13 +714,15 @@ function getManagedSkillRoots(workingDirectory) {
   if (workingDirectory) {
     const worktreeRoot = findWorktreeRoot(workingDirectory) || path.resolve(workingDirectory);
     for (const ancestor of getAncestors(workingDirectory, worktreeRoot)) {
-      // --- GeoCode: the kernel's project directory (geocode/kernel-roots.js). The two
-      // external libraries below are left alone for the reason given above. ---
+      // --- GeoCode: the kernel's project directory (geocode/kernel-roots.js), and the two
+      // external libraries closed for the reason given above. ---
       pushRoot(path.join(ancestor, KERNEL_PROJECT_DIR, 'skills'));
       pushRoot(path.join(ancestor, KERNEL_PROJECT_DIR, 'skill'));
-      // --- /GeoCode ---
+      /*
       pushRoot(path.join(ancestor, '.claude', 'skills'));
       pushRoot(path.join(ancestor, '.agents', 'skills'));
+      */
+      // --- /GeoCode ---
     }
   }
 

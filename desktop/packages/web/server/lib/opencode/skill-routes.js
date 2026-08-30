@@ -2,15 +2,20 @@ import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 import { buildDeferredRestartResponse } from './config-mutation-response.js';
 import { kernelConfigRoot, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 
+// --- GeoCode: its only caller was the `externalSkills` report below, which no longer reads the
+// environment. Wrapped rather than deleted so an upstream change to it still merges. ---
+/*
 /**
  * Matches how OpenCode reads its own boolean env flags: any value other than
  * unset, empty, "0" or "false" enables the flag.
- */
+ *\/
 const isEnvFlagEnabled = (value) => {
   if (typeof value !== 'string') return false;
   const normalized = value.trim().toLowerCase();
   return normalized.length > 0 && normalized !== '0' && normalized !== 'false';
 };
+*/
+// --- /GeoCode ---
 
 export const registerSkillRoutes = (app, dependencies) => {
   const {
@@ -272,13 +277,24 @@ export const registerSkillRoutes = (app, dependencies) => {
       // `.agents`/`.claude` skills the agent demonstrably has.
       res.json({
         skills: enrichedSkills,
+        // --- GeoCode: constants, because `discoverSkills` no longer walks `.claude` or
+        // `.agents` at all — there is nothing in `skills` above for a client to filter, and
+        // saying so keeps an older or cached client filtering too.
+        //
+        // These read the environment upstream, and that was wrong for us twice over. The
+        // default: GeoCode turns both isolation flags ON in `runtime-flags.ts` rather than by
+        // exporting an env var — that file says why, an env some launch path forgets to set
+        // fails open — so with nothing exported this reported `false` while the kernel loaded
+        // nothing, and the skills page listed capability GeoAgent did not have. The precedence:
+        // upstream ORs the broad and specific Claude flags, while the kernel gives the specific
+        // one priority, so the two disagreed whenever a user set them apart. Mirroring a rule
+        // that lives somewhere else is what produced both; not having external skills at all is
+        // what removes the mirror. ---
         externalSkills: {
-          // `OPENCODE_DISABLE_CLAUDE_CODE` is the broad switch; the specific
-          // one wins independently — OpenCode ORs them.
-          claudeDisabled: isEnvFlagEnabled(process.env.OPENCODE_DISABLE_CLAUDE_CODE)
-            || isEnvFlagEnabled(process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS),
-          allDisabled: isEnvFlagEnabled(process.env.OPENCODE_DISABLE_EXTERNAL_SKILLS),
+          claudeDisabled: true,
+          allDisabled: true,
         },
+        // --- /GeoCode ---
       });
     } catch (error) {
       console.error('Failed to list skills:', error);

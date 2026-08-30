@@ -26,7 +26,12 @@ describe('skills', () => {
     ]);
   });
 
-  it('discovers repository-local .agents skills for the project directory', async () => {
+  // --- GeoCode: inverted rather than removed. The fixture below builds exactly the thing this
+  // used to require — a `.agents/skills` entry in a repository — so flipping the assertion turns
+  // upstream's own test into the tripwire for our decision: that library belongs to another agent
+  // tool, the kernel refuses to load it, and listing it told the user about capability GeoAgent
+  // does not have (docs/PATHS.md §7). ---
+  it('does not discover repository-local .agents skills for the project directory', async () => {
     const tempRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'oc-project-agents-'));
     const skillDir = path.join(tempRoot, '.agents', 'skills', 'repo-local-skill');
     const skillPath = path.join(skillDir, 'SKILL.md');
@@ -51,13 +56,9 @@ describe('skills', () => {
       const discovered = discoverSkills(tempRoot);
       const match = discovered.find((skill) => skill.name === 'repo-local-skill');
 
-      expect(match).toEqual({
-        name: 'repo-local-skill',
-        path: skillPath,
-        scope: 'project',
-        source: 'agents',
-        description: 'Repository-local agents skill',
-      });
+      expect(match).toBeUndefined();
+      // The file itself is untouched — closed means not read, never removed.
+      expect(fs.existsSync(skillPath)).toBe(true);
     } finally {
       await fsPromises.rm(tempRoot, { recursive: true, force: true });
     }
