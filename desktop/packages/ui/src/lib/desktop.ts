@@ -208,12 +208,12 @@ export type DesktopSettings = {
   // Message limit — controls fetch, trim, and Load More chunk size (default: 200)
   messageLimit?: number;
 
-  // User-added skills catalogs (persisted to ~/.config/openchamber/settings.json)
+  // User-added skills catalogs (persisted to ~/.config/GeoCode/desktop/settings.json)
   skillCatalogs?: SkillCatalogConfig[];
   // Opt-in to send anonymous usage reports for update checks (default: true)
   reportUsage?: boolean;
 
-  // Global behavior prompt — synced to ~/.config/opencode/AGENTS.md
+  // Global behavior prompt — synced to ~/.config/GeoCode/AGENTS.md
   globalBehaviorPrompt?: string;
   responseStyleEnabled?: boolean;
   responseStylePreset?: 'concise' | 'detailed' | 'mentor' | 'pushback' | 'noFiller' | 'matchEnergy' | 'warmPeer' | 'custom';

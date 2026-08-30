@@ -30,7 +30,8 @@ import {
   SETTINGS_SELECT_SIZE,
 } from '@/components/sections/shared/SettingsSection';
 
-const AGENTS_MD_PATH = '~/.config/opencode/AGENTS.md';
+// GeoCode: shown to the user, and it has to name the file the server now writes (routes.js)
+const AGENTS_MD_PATH = '~/.config/GeoCode/AGENTS.md';
 
 const readApiError = async (response: Response, fallback: string) => {
   const data = await response.json().catch(() => null) as { error?: unknown } | null;

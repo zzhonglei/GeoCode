@@ -341,6 +341,30 @@ web 包全量测试就会落一个目录出来。带 `desktop/` 这一段是必�
 已知的命中去喂它,看它报不报。没做过这一步的清单,长度只代表它扫了多少行,不代表它找到了什么。
 `shell-data-root.test.js` 的 `PATCHED` 表因此不再限于 `server/` 目录,`bin/` 的两个文件也在里面。
 
+### 迁移「做完了没有」,以及两次点数的差别
+
+2026-08-30 又按包点了一次,起因是「基础工作是不是已经彻底完成」这个问题。答案是**壳自己的存储收口了,
+跨到内核那一侧的没有**,而漏掉的那几处有个共同形状:**它们不是泄漏,是坏掉的功能**——
+
+- `PlanView.tsx` 读 `<项目>/.opencode/plans/<id>.md`,而内核按 `Brand.plansSegments` 写
+  `<worktree>/.geocode/plans/<id>.md`。**计划面板因此永远报「没有计划」。** 讽刺的是 `plansSegments`
+  做成数组的全部理由就是「展开同一个数组,写到哪与允许改哪不可能分家」,而渲染进程根本没用它;
+- `routes.js` 把全局行为提示词存到 `~/.config/opencode/AGENTS.md`,而 `session/instruction.ts` 读
+  `<配置根>/AGENTS.md`。**行为页保存成功、agent 一个字都看不到**,而且那个 PUT 会 mkdir 出
+  OpenCode 的配置根;
+- `desktop_read_file` 的凭据拒绝表守着 `.config/openchamber/credentials`——一个从不存在的路径。
+  上游它自己的凭据也没挡到,所以这不是我们的回归;但我们把四份凭据搬到 GeoCode 的根之后,
+  守卫留在原地,而那个 handler 的注释写明它防的是**被提示注入的 agent**。
+
+**判据因此要再改一次。** §5 前面那三条问的是「写到哪」;这一轮问的是**「读的那一侧和写的那一侧是不是
+同一个路径」**——三处里有两处读写分属前后端,各自自洽,单看任何一侧都正常。绊线也因此成对写:
+`kernel-roots.test.js` 同时读 `routes.js` 与 `session/instruction.ts`,两端一起钉。
+
+还有一条这道门抓不到:`gitlab-ai-provider` 在 bundle 里读 `~/.local/share/opencode/auth.json`。
+**读不留痕,`foreign-writes.sh` 只看写**(`CONVENTIONS.md` §7)。它的触发条件很窄——用户显式配置
+gitlab provider 且 GeoCode 自己没有 token——而配置层唯一的关法是禁掉整个 provider,那是产品决定,
+归阶段 3 与 `.claude` 技能、外部二进制一起答。
+
 壳侧还有第二个自有模块,管的是另一件事:`packages/web/server/geocode/kernel-roots.js` 给出**内核**
 的根,供壳里四处必须读内核文件的地方引用(`auth.json`、antigravity 账号、worktree 根、`.git` 里的
 项目 id 标记)。它与上面那个不是一回事——那个是壳自己的数据放哪,这个是壳去内核的目录里取什么。

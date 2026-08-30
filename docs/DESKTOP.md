@@ -697,6 +697,15 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   也没有路由告诉它根,一旦搬走这两条同步判据就要全部改成异步,首帧会认错会话类型。真正的约束是
   **渲染进程算不出来的根,两半迟早各说各话**,所以两端都挂 HOME、`.config` 写死不读 `XDG_CONFIG_HOME`。
   这一批同时把 `packages/ui` 接进门——它此前整个不在门里,而缺口正好在出问题的地方;
+- **阶段 2 · 批 1 补遗**:已完成。按包重点一次之后补上的,共同形状是**坏掉的功能而不是泄漏**:
+  `PlanView.tsx` 去 `.opencode/plans/` 找计划而内核写 `.geocode/plans/`(面板永远报「没有计划」);
+  `routes.js` 把全局行为提示词存到 `~/.config/opencode/AGENTS.md` 而 `session/instruction.ts` 读
+  `<配置根>/AGENTS.md`(保存成功、agent 看不到,且 PUT 会 mkdir 出 OpenCode 的配置根);
+  `desktop_read_file` 的凭据拒绝表仍守着上游那个从不存在的路径,而我们的四份凭据早已搬走
+  ——那个 handler 防的是被提示注入的 agent,拒绝表现在从 `resolveShellDataRoot` 推导,根再搬一次
+  绊线就会红。另有界面文案一处(告诉用户 settings.json 在 openchamber 目录)与过时注释若干。
+  新增两个自有模块:`ui/src/geocode/kernel-roots.ts`(渲染进程要读 agent 写的文件,得叫同一个目录)
+  与 `electron/geocode/denied-paths.mjs`;
 
 - **归阶段 3「特性修缮」**,其中**两条是破坏性的,该排在这一阶段最前面**:`deleteSkill` 对
   `~/.claude/skills/<同名>` 的递归删除;以及 `openchamberConfig.ts` 的 legacy 迁移——它读用户仓库里

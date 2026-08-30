@@ -122,7 +122,7 @@ grep -rnE '// GeoCode:|--- GeoCode|"GeoCode: ' kernel/packages/ desktop/
 
 它按包分节,每节**点名我们自己的文件**而不是跑那个包的整套——上游的套件是参考不是门。`packages/ui` 到 2026-08-30 为止**整个不在门里**,而这个缺口从门内部看不见:渲染进程自己拼两条存储路径,壳的数据根搬走时它们还留在 OpenChamber 的目录上,没有任何东西会响。它自己的套件里另有两个先于我们就红的用例(`SessionAuthGate`、`shortcuts`),这也是不整套拉进来的理由。
 
-已知抖动一条:`test/geo/net-resolve.test.ts` 的代理回退用例在门的并发负载下偶尔红(单独跑 6/6 绿),看着是端口竞争。**它是我们自己的测试,不是上游的**,该修。
+已知抖动两条,都只在全套并发下出现、单独跑不复现:`test/geo/net-resolve.test.ts` 的代理回退用例(单独跑 6/6 绿,看着是端口竞争,**是我们自己的测试**),以及 web 包的 `plugin-routes.test.js`「GET after POST」(见过一次,随后两次全量重跑均绿,成因未查)。**记在这里是为了下次再见到时知道它不是新问题,不是为了当作可以忽略。**
 
 `scripts/foreign-writes.sh` 是**第二道门,断言的是磁盘而不是源码**。用法是 `before` 记快照、跑一遍要验的东西、`after` 报差异;它盯八个 GeoCode 绝不该碰的位置(OpenCode 的四根、`~/.opencode`、`~/.config/openchamber`、`~/.agents`、`~/.claude` 里我们够得到的几处、`$TMPDIR/opencode`),**任何变化即失败**。
 
@@ -149,6 +149,8 @@ grep -rnE '// GeoCode:|--- GeoCode|"GeoCode: ' kernel/packages/ desktop/
 用 `electron:dev:bundled` 而不是 `electron:dev`——后者分叉出一个没有内核注入的壳,会去磁盘上找并拉起用户自装的 OpenCode(阶段 3)。跑之前先确认用户自己的 OpenChamber 没在运行,否则它的写入会变成误报。
 
 2026-08-30 实测过一对:修复前那次运行往 `~/.config/openchamber/projects/` 落了三个文件,修复后同样一次运行把同样形状的文件写进 `~/.config/GeoCode/desktop/projects/`,而 `~/.config/openchamber` 下快照之后**零新增**。
+
+⚠️ **这道门只看写,不看读。** 它比对的是文件的 mtime 与大小,而读取不留痕——所以「GeoCode 读了别人的凭据」这一类它一个也抓不到。实例:打包进产品的内核里,`gitlab-ai-provider` 的 `loadApiKey()` 在没有显式 apiKey 时读 `~/.local/share/opencode/auth.json`;源码 grep 看不见(字符串在 vendor 产物里),这道门也看不见。**跨产品的读取要靠代码审查,不能指望这道门。**
 
 `kernel/` 里那套 vendored 的上游测试**不是门**。我们有意改掉了两样东西——磁盘身份、以及只留 GeoAgent 一个主 agent——上游有一批测试断言的正是这两样,它们按设计就会红。**一个失败堆到看不清的套件给不出任何信号**:新增的回归混在里面看不见。
 
