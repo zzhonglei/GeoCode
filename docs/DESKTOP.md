@@ -772,11 +772,20 @@ grep -rnE "'(\.config|\.local|\.cache)', '[Oo]pencode'|'\.opencode'" \
 连要找的东西一起吃掉:实测它报告 2 处,真实是 13 处,批 2 就是照着那份残缺清单做的。
 **这是一条命令写错、把自己关进盲区两个批次的记录。**
 
-**当前计数**(批 6-8 之后):第一条 **1 处**,`package-manager.js:37`,早退屏蔽、逐字节保留;
-第二条 **12 处**,全部已归位——`shared.js:572` 与 `skills.js:235` 在屏蔽注释里;
-`path-utils.js:28` 不是路径而是「PATH 里出现过哪些目录名」的启发式判据,不算泄漏;
-其余 `routes.js:762`、`skill-routes.js:119`、`skills.js:187/649/650`、`env-runtime.js`、
-`server-utils-runtime.js` 归阶段 3(外部技能与外部二进制发现)。
+**这两条命令报出来的东西分四类**,按类记而不按条记——条数每批都在变,类别不变:
+
+- **早退或注释屏蔽的**:`package-manager.js` 的 `getOpenChamberConfigDir`、`shared.js` 里那个
+  `~/.opencode` 第二全局根、`skills.js` 的缓存候选列表。上游行逐字节留着,永不到达;
+- **不是路径的**:`path-utils.js` 的 `pathLooksUserConfigured`,它那张表判的是「PATH 里出现过哪些
+  目录名」,不算泄漏;
+- **不可达但留着的**:`skill-routes.js` 里按路径判作用域的分类器,以及 `skills.js` 的
+  `homeOpencodeDir`——发现关掉之后没有路径会走到它们,删掉反而增加暴露面;
+- **真欠着的**:`env-runtime.js` 与 `server-utils-runtime.js` 的外部二进制探测,归阶段 3。
+
+⚠️ **不要在这份文档里写行号。** 实测过:七处 `file:line` 引用里四处在两天内就漂了,而且是被我们
+自己的注释改动推移的。行号失效时不报错,只是安静地指向另一句代码,读的人会以为文档错了或者代码被
+改过——两种猜测都不对。**符号名才是代码的身份**:改名会有编译错误、会有测试红;行号漂了什么都不会
+发生。要指位置就指函数名或常量名,要计数就给命令让人现数。
 
 ### 阶段 7:桌面功能与地理界面
 

@@ -10,9 +10,9 @@ GeoCode 的会话循环、模型接入、OAuth 登录、权限系统与工具调
 
 ## 2. 内核的构成
 
-`kernel/` 收纳上游 monorepo 中与 agent 引擎相关的最小闭包,共 15 个包,分三层。
+`kernel/` 收纳上游 monorepo 中与 agent 引擎相关的最小闭包,分三层。包数随上游增删而变,现数用 `ls kernel/packages`。
 
-**运行时(11 包)**
+**运行时**
 
 | 包 | 职责 |
 |---|---|
