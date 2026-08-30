@@ -686,13 +686,26 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
 
 **阶段 6 剩余**,按产品优先级而非严重性排列(用户定的顺序:先路径、再对接、最后特性):
 
-- **归阶段 2「配置与后端对接」**:前端 `chatDirectories.ts` 与 `openchamberConfig.ts` 自己拼
-  `~/.config/openchamber/{chats,projects}` 并真的建目录写文件。这不是机械改名——渲染进程读不到环境
-  变量,服务端也没有暴露配置根的出口,改法要先定客户端/服务端契约。而且两边现在指向不同位置
-  (服务端认 `<userData>/desktop/chats`),是功能 bug 而不只是泄漏。上游已有先例:
-  `project-context/routes.js` 正是把路径组装从前端搬到服务端的那次迁移,这两个文件是它的遗留;
-- **归阶段 3「特性修缮」**:`~/.agents/loops` 的启动期扫描与写回、壳侧 `discoverSkills` 的
-  `.claude`/`.agents` 扫描、`deleteSkill` 对 `~/.claude/skills/<同名>` 的递归删除、外部二进制发现的
+- **归阶段 2「配置与后端对接」·批 1**:已完成。前端 `chatDirectories.ts` 与 `openchamberConfig.ts`
+  自己拼 `~/.config/openchamber/{chats,projects}` 并真的建目录写文件,而服务端认的是注入来的根。
+  **根因是我们自己的回归**:上游 `index.js` 的 `OPENCHAMBER_USER_CONFIG_ROOT` 无条件挂在 HOME 下、
+  `main.mjs` 从不设置 `OPENCHAMBER_DATA_DIR`,前后端因此自洽;我们把服务端改成读注入变量,前端没跟。
+  后果不只是泄漏:`index.js` 的 `managedProjectRoots` 拿 `<根>/chats` 判断「这个 chat 会话的记忆算哪个
+  项目」,而 chats 根本不在那儿。
+  改法是把注入端搬回 HOME(`shell-data-root.mjs`),前端只换一个常量,十三个同步分类器调用点一个不动。
+  路径拼装**没有**搬到服务端:`project-context` 那次先例在这里不适用,渲染进程读不到环境变量、
+  也没有路由告诉它根,一旦搬走这两条同步判据就要全部改成异步,首帧会认错会话类型。真正的约束是
+  **渲染进程算不出来的根,两半迟早各说各话**,所以两端都挂 HOME、`.config` 写死不读 `XDG_CONFIG_HOME`。
+  这一批同时把 `packages/ui` 接进门——它此前整个不在门里,而缺口正好在出问题的地方;
+
+- **归阶段 3「特性修缮」**,其中**两条是破坏性的,该排在这一阶段最前面**:`deleteSkill` 对
+  `~/.claude/skills/<同名>` 的递归删除;以及 `openchamberConfig.ts` 的 legacy 迁移——它读用户仓库里
+  `<project>/.openchamber/openchamber.json`(那是 OpenChamber 的每项目配置),迁进 GeoCode 自己的
+  目录之后**把原件删掉**,发生在普通的打开项目流程里、无提示。**阶段 2 批 1 重新武装了它**:GeoCode
+  自己那份换了路径,对已有项目一律不存在,于是每个项目都会走一次这条回落。最小修法是只停掉删除、
+  保留读取——读是可逆的,删不是;「要不要读别人的配置」和 `.claude` 技能是同一个问题,一起在这一阶段答。
+  其余:`~/.agents/loops` 的启动期扫描与写回、壳侧 `discoverSkills` 的
+  `.claude`/`.agents` 扫描、外部二进制发现的
   十三处与 `electron:dev` 的分叉、`gitlab-ai-provider` 的 vendor 泄漏、内置技能
   `customize-opencode` 的正文、以及品牌与 i18n。**另有 `packages/vscode/` 整包**:`opencodeConfig.ts`
   是 `server/lib/opencode/` 的一份近乎逐行的副本,项目目录、配置文件名、技能根、外部二进制发现全都

@@ -279,6 +279,17 @@ mDNS 主机与服务名、macOS 托管配置域、项目 id 标记文件、技�
 放到导入 Shell Runtime 之前那一步已经太晚,那对 Shell Runtime 够用,对 `main.mjs` 自己不够。
 两种取值方式在同一文件里并存,**不能靠看一眼判断,读取方要逐个查**。
 
+**这个根挂在 HOME 下,不挂在 Electron 的 userData 下,`.config` 也是写死的而不是读
+`XDG_CONFIG_HOME`。** 两条都是被渲染进程逼出来的:它自己拼两条存储路径——chats 根与每项目配置
+目录——而它**读不到环境变量**,也没有任何路由会把根告诉它。**渲染进程算不出来的根,就是两半迟早会
+各说各话的根。** 曾经就是:一次改动把注入端搬到 userData,而 `chatDirectories.ts` 还在按 HOME 拼
+OpenChamber 的目录,于是 GeoCode 在别人的配置目录里建 chats,而服务端的 `managedProjectRoots`
+——决定一个 chat 会话的记忆算哪个项目——指着一个那些 chats 从不出现的地方。上游把这个根挂在 HOME
+下正是同一个理由。
+
+代价要说清楚:开发版与打包版因此**共用一套壳数据**(settings、chats、projects)。userData 侧靠
+`GeoCode Dev` 分开的只是 Chromium 自己的东西。上游也是这个形状。
+
 被改过的那几处,fallback 指向 `~/.config/GeoCode/desktop`,不是上游的 `~/.config/openchamber`。
 产品路径本来就走不到 fallback——Electron main 一定注入,那条注入配了绊线,并且连「注入排在第一个
 读取者之前」一起断言。但**只要那个字面量还在,就仍有代码路径能写进别人的目录**:实测过,跑一次
@@ -384,7 +395,7 @@ UI 选择器一起关,那是另一批。
 
 - **内核自动更新检查**指向上游的 npm/brew/scoop 通道(`opencode-ai` 等),桌面形态必须关闭,归装配阶段(`OPENCODE_DISABLE_AUTOUPDATE` 或配置层)。
 - **CLI scriptName 与 OTLP serviceName** 等非磁盘品牌字符串,归界面/品牌阶段。
-- **开发版与正式版的内核数据未隔离。** 壳侧靠 `<appData>/GeoCode Dev` 分开了,内核侧没有:嵌入式 Kernel 的启动不传 `XDG_*` 覆写,两个通道共用同一套 XDG 根。上游桌面壳的做法是注入 `XDG_STATE_HOME = userData`(即 §2 末尾那个刻意保留的漂移),我们没有照搬。`DESKTOP.md` 阶段 8 要求"开发版与正式版数据隔离",届时补上注入,或明确接受共享并写下理由。
+- **开发版与正式版的数据未隔离,内核与壳都是。** 内核侧:嵌入式 Kernel 的启动不传 `XDG_*` 覆写,两个通道共用同一套 XDG 根;上游桌面壳的做法是注入 `XDG_STATE_HOME = userData`(即 §2 末尾那个刻意保留的漂移),我们没有照搬。壳侧原先靠 `<appData>/GeoCode Dev` 分开,**2026-08-30 起不再**:壳数据根从 userData 搬到了 HOME,因为渲染进程算不出 userData(见 §5),`GeoCode Dev` 现在只分开 Chromium 自己的东西。上游也是这个形状。`DESKTOP.md` 阶段 8 要求"开发版与正式版数据隔离",届时两侧一起处理,或明确接受共享并写下理由——**壳侧要接受共享,得先回答渲染进程怎么知道自己在哪个通道**。
 
 原先挂在这里的两条已经处理,去向记在此处以免再被当作待办:
 

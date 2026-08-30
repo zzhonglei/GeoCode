@@ -120,4 +120,17 @@ echo "== desktop shell (web server) =="
   server/lib/quota/providers/claude-disabled.test.js)
 
 echo
+echo "== desktop shell (renderer) =="
+# `packages/ui` was absent from this gate entirely until 2026-08-30, and the gap was invisible
+# from inside it: the renderer composes two storage paths of its own, and when the shell data
+# root moved they were left naming OpenChamber's directory with nothing to notice. Its own
+# suite is upstream's and carries two failures that predate us (SessionAuthGate, shortcuts),
+# so what runs here is ours, named the way every other section names its own files.
+#
+# The ui tripwire pins the renderer's value; the cross-package assertion that the renderer and
+# the injection agree lives in the electron section above, because that package has no `tsc`
+# pass and can import a `.ts` module directly.
+(cd "$ROOT/desktop/packages/ui" && bun test src/geocode/)
+
+echo
 echo "gate green"

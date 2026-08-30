@@ -120,6 +120,10 @@ grep -rnE '// GeoCode:|--- GeoCode|"GeoCode: ' kernel/packages/ desktop/
 
 `scripts/test-gate.sh` 是**门**:我们自己的代码加上绊线,必须全绿,约两分钟。提交前跑它。
 
+它按包分节,每节**点名我们自己的文件**而不是跑那个包的整套——上游的套件是参考不是门。`packages/ui` 到 2026-08-30 为止**整个不在门里**,而这个缺口从门内部看不见:渲染进程自己拼两条存储路径,壳的数据根搬走时它们还留在 OpenChamber 的目录上,没有任何东西会响。它自己的套件里另有两个先于我们就红的用例(`SessionAuthGate`、`shortcuts`),这也是不整套拉进来的理由。
+
+已知抖动一条:`test/geo/net-resolve.test.ts` 的代理回退用例在门的并发负载下偶尔红(单独跑 6/6 绿),看着是端口竞争。**它是我们自己的测试,不是上游的**,该修。
+
 `scripts/foreign-writes.sh` 是**第二道门,断言的是磁盘而不是源码**。用法是 `before` 记快照、跑一遍要验的东西、`after` 报差异;它盯八个 GeoCode 绝不该碰的位置(OpenCode 的四根、`~/.opencode`、`~/.config/openchamber`、`~/.agents`、`~/.claude` 里我们够得到的几处、`$TMPDIR/opencode`),**任何变化即失败**。
 
 为什么需要第二道门:2026-08-30 的全面审计查出四类问题,**没有一类是源码层断言能发现的**——
@@ -132,6 +136,19 @@ grep -rnE '// GeoCode:|--- GeoCode|"GeoCode: ' kernel/packages/ desktop/
 `~/.claude` 只盯 GeoCode 真能够到的几个子路径。盯整个目录没有用——Claude Code 自己在持续写会话记录,那些噪音会把真命中埋掉。
 
 ⚠️ **一条只会说 clean 的门等于没有门。** 加进门的每一条都要做反证:把改动撤回、重跑,看它是否变红。本文记的这条实测过:撤回十二处 fallback 后跑 web 包测试,门立刻报出对 `~/.config/openchamber/managed-opencode` 的写入。
+
+**套在测试套件上还不够,要套一次真实应用会话。** 前端自己拼的存储路径没有任何测试会走到,套件跑一万遍也照不到:
+
+```sh
+./scripts/foreign-writes.sh before
+(cd desktop && bun run electron:dev:bundled)   # 起来后点几下,至少建一个 chat
+# 关掉应用
+./scripts/foreign-writes.sh after
+```
+
+用 `electron:dev:bundled` 而不是 `electron:dev`——后者分叉出一个没有内核注入的壳,会去磁盘上找并拉起用户自装的 OpenCode(阶段 3)。跑之前先确认用户自己的 OpenChamber 没在运行,否则它的写入会变成误报。
+
+2026-08-30 实测过一对:修复前那次运行往 `~/.config/openchamber/projects/` 落了三个文件,修复后同样一次运行把同样形状的文件写进 `~/.config/GeoCode/desktop/projects/`,而 `~/.config/openchamber` 下快照之后**零新增**。
 
 `kernel/` 里那套 vendored 的上游测试**不是门**。我们有意改掉了两样东西——磁盘身份、以及只留 GeoAgent 一个主 agent——上游有一批测试断言的正是这两样,它们按设计就会红。**一个失败堆到看不清的套件给不出任何信号**:新增的回归混在里面看不见。
 
