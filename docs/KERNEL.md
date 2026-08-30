@@ -246,7 +246,13 @@ git merge-tree --write-tree -X subtree=kernel main kernel-upstream
 
 两个被移除的 agent **都不是删代码删掉的**,而是在装配层声明 `disable: true`——内核收到该字段会把它们从 agent 表里真正删除(不是隐藏)。这样做的理由是合并成本:`agent.ts` 是上游改动最频繁的文件之一,在里面增删条目等于把自己放到每次升级的冲突路径上;而禁用只是我们自己文件里的一行数据,上游怎么重构都碰不到。
 
-GeoAgent 因此是"由配置创建"的 agent,内核会给它打上 `native: false` 标记。该标记只影响 agent 选择框里显示描述还是显示 "native" 字样,不影响任何能力,不必为它去改源码。
+GeoAgent 与 osmfetch 因此是"由配置创建"的 agent,而 `agent.ts` 给这条路径上的每个 agent 打 `native: false`。**这一行现在改成读装配层的 `shippedAgents`**,让这两个也拿到 `true`。
+
+⚠️ **这里原先写着「不必为它去改源码」,那个判断是错的**,记下来免得再犯:它成立的前提是这个标记只影响 TUI 的显示字样,而那是桌面壳落地之前的视野。壳里同一个标记控制**三件事** —— 侧栏分到「内置」还是「自定义」区、徽章显示 `system` 还是配置作用域、以及菜单里给的是**重置**还是**改名与删除**。也就是说不改的话,GeoCode 的主 agent 会被显示成用户自建的,还带一个可点的删除按钮,而我们只是借用的 `plan` 和 `explore` 反倒躺在内置区。对 GeoCode 用户来说,产品带来的四个 agent 就都是内置的。
+
+改动落在 `agent.ts` 的那一个字面量上(形态 ③),名单在 `config/geocode.ts` 里与 `base()` 相邻——两者必须同时改。名单是**列举而非从 `base().agent` 推导**的,因为那个对象里装着三类:`plan` 与 `explore` 是上游的、本来就 native,`build` 与 `general` 出现在那里只是为了被禁用。
+
+标记本身在内核里仍然只是展示:除了 agent 表自己,全内核只有 `cli/cmd/agent.ts` 的一次排序读它。
 
 移除 `general` 之所以安全,是因为子代理由模型通过 `subagent_type` 参数主动指定,而 task 工具的可用清单是**动态生成**的——它按 agent 的 `task` 权限逐个过滤,清单里没有的名字模型根本看不见,不存在指向空名字的悬空调用。清单当前是 `explore` 与 `osmfetch` 两个。
 

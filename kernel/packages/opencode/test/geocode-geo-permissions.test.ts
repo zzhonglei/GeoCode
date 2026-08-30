@@ -81,6 +81,23 @@ describe("what each agent can see", () => {
   )
 })
 
+/* The lineup as the desktop shell presents it, checked here because this is where the Agent service is already
+ * booted. `native` changes nothing in the kernel — one sort in `opencode agent list` reads it and nothing else —
+ * but the shell files a non-native agent under "custom", badges it with its config scope instead of "system",
+ * and offers Rename and Delete on it rather than Reset. GeoAgent and osmfetch reach the table through
+ * `cfg.agent`, whose default is `native: false`, so `config/geocode.ts` names them and nothing but this notices
+ * when that wiring goes. */
+describe("which agents the product ships", () => {
+  it.instance("marks GeoCode's own agents native, the way upstream marks its built-ins", () =>
+    Effect.gen(function* () {
+      for (const name of ["GeoAgent", "osmfetch", "plan", "explore"]) {
+        const agent = yield* Agent.Service.use((svc) => svc.get(name))
+        expect([name, agent?.native]).toEqual([name, true])
+      }
+    }),
+  )
+})
+
 /* Both environments are handed over ready because every geographic tool checks its own before it raises an ask
  * (docs/TOOLS.md §4.3), so on a machine with nothing installed there is no key to observe. */
 describe("the keys the tools actually ask with", () => {

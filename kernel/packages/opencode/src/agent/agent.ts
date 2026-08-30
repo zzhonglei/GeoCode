@@ -2,6 +2,7 @@ import { Brand } from "@opencode-ai/core/brand"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Config } from "@/config/config"
+import { GeoCodeConfig } from "@/config/geocode" // GeoCode: see `native` below
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Provider } from "@/provider/provider"
 
@@ -278,7 +279,8 @@ const layer = Layer.effect(
               mode: "all",
               permission: Permission.merge(defaults, user),
               options: {},
-              native: false,
+              // GeoCode: ours are shipped with the product, not written by the user (config/geocode.ts)
+              native: GeoCodeConfig.shippedAgents.has(key),
             }
           if (value.model) item.model = Provider.parseModel(value.model)
           item.variant = value.variant ?? item.variant

@@ -3,6 +3,19 @@ export * as GeoCodeConfig from "./geocode"
 import type { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import OSMFETCH_PROMPT from "../session/prompt/osmfetch.txt"
 
+/* --- GeoCode: the agents this product ships, as opposed to ones a user wrote. `agent.ts` marks
+ * everything it builds from `cfg.agent` as `native: false`, which is right for a user's own agent and
+ * wrong for these two — the desktop shell files a non-native agent under "custom", badges it with its
+ * config scope instead of "system", and offers Rename and Delete on it rather than Reset.
+ *
+ * Spelled out rather than derived from `base().agent` below, because that object holds three kinds and
+ * only this kind qualifies: `plan` and `explore` are upstream's own and already native, and `build` and
+ * `general` appear there only to be disabled.
+ *
+ * `native` is presentation, not behaviour: the kernel reads it in exactly one other place, to sort
+ * `opencode agent list`. --- */
+export const shippedAgents: ReadonlySet<string> = new Set(["GeoAgent", "osmfetch"])
+
 /* --- GeoCode: the agent lineup as configuration rather than as edits to upstream's agent table
  * (docs/KERNEL.md §3, §5.1). Merged FIRST in the config pipeline (config.ts), so everything here is a
  * default the user's own config still overrides. --- */
