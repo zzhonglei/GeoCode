@@ -35,13 +35,14 @@ describe('startEmbeddedKernel', () => {
     expect(environment.OPENCODE_SERVER_PASSWORD).toBe('secret');
   });
 
-  it('hands the kernel a translated environment, not the inherited one', async () => {
+  it('hands the kernel an environment with no inherited configuration in it', async () => {
     const { started, calls } = bootWith({
       environment: { PATH: '/usr/bin', OPENCODE_CONFIG: '/inherited.json', GEOCODE_CONFIG: '/ours.json' },
     });
     await started;
 
-    expect(calls[0].environment.OPENCODE_CONFIG).toBe('/ours.json');
+    expect(calls[0].environment).not.toHaveProperty('OPENCODE_CONFIG');
+    expect(calls[0].environment.GEOCODE_CONFIG).toBe('/ours.json');
     expect(calls[0].environment.PATH).toBe('/usr/bin');
   });
 

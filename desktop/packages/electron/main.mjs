@@ -20,6 +20,7 @@ import { utilityProcess } from 'electron';
 import { startEmbeddedKernel } from './geocode/kernel-boot.mjs';
 import { DesktopIdentity } from './geocode/desktop-identity.mjs';
 import { applyShellDataRoot } from './geocode/shell-data-root.mjs';
+import { stripInheritedForeignVariables } from './geocode/kernel-environment.mjs';
 import { geocodeDeniedSegments } from './geocode/denied-paths.mjs';
 import { resolveStartupUrlProbePlan, shouldIgnoreLoopbackConnectionLimit } from './startup-url-selection.mjs';
 import { sanitizeRuntimeRequestHeaders } from './runtime-request-headers.mjs';
@@ -100,6 +101,8 @@ app.setAppUserModelId(APP_USER_MODEL_ID);
 // --- GeoCode: the shell runtime's data root, placed here because `sshManager` below
 // resolves a settings path at module top level and keeps the string (docs/PATHS.md §5). ---
 applyShellDataRoot({ environment: process.env, homeDirectory: os.homedir() });
+// Before the shell runtime loads and before the kernel connection is written here.
+stripInheritedForeignVariables(process.env);
 // --- /GeoCode ---
 app.commandLine.appendSwitch('proxy-bypass-list', '<-loopback>');
 // Lift Chromium's per-host cap only for bundled UI. Applying this to Vite HMR

@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'bun:test';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import {
   applyKernelConnectionToShellEnvironment,
   buildKernelBaseUrl,
   createKernelProcessEnvironment,
+  INHERITED_PREFIXES,
+  stripInheritedForeignVariables,
 } from './kernel-environment.mjs';
 
 describe('createKernelProcessEnvironment', () => {
@@ -17,21 +21,60 @@ describe('createKernelProcessEnvironment', () => {
     expect(next).not.toHaveProperty('OPENCODE_PORT');
   });
 
-  it('maps GEOCODE_X to the OPENCODE_X the kernel reads', () => {
+  it('drops the telemetry variables too, which carry neither the OPENCODE_ prefix nor a value we set', () => {
     const next = createKernelProcessEnvironment({
-      environment: { GEOCODE_CONFIG: '/etc/geocode.json' },
+      environment: {
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'https://collector.example',
+        OTEL_EXPORTER_OTLP_HEADERS: 'authorization=secret',
+      },
       platform: 'darwin',
     });
-    expect(next.OPENCODE_CONFIG).toBe('/etc/geocode.json');
-    expect(next.GEOCODE_CONFIG).toBe('/etc/geocode.json');
+    expect(next).not.toHaveProperty('OTEL_EXPORTER_OTLP_ENDPOINT');
+    expect(next).not.toHaveProperty('OTEL_EXPORTER_OTLP_HEADERS');
   });
 
-  it('translates after stripping, so a GEOCODE_ value wins over an inherited OPENCODE_ one', () => {
+  it('does not translate a GEOCODE_ name into the OPENCODE_ one the kernel reads', () => {
     const next = createKernelProcessEnvironment({
-      environment: { OPENCODE_CONFIG: '/inherited.json', GEOCODE_CONFIG: '/ours.json' },
+      environment: { GEOCODE_CONFIG: '/ours.json' },
       platform: 'darwin',
     });
-    expect(next.OPENCODE_CONFIG).toBe('/ours.json');
+    expect(next).not.toHaveProperty('OPENCODE_CONFIG');
+    // `GEOCODE_PY` and friends are our geographic tools' own, not kernel configuration.
+    expect(next.GEOCODE_CONFIG).toBe('/ours.json');
+  });
+
+  it('covers every prefix the kernel actually reads configuration under', () => {
+    // Catches an upstream flag arriving under a prefix this list does not know, inherited in silence.
+    const kernel = new URL('../../../../kernel/packages/', import.meta.url).pathname;
+    const sources = [
+      fs.readFileSync(path.join(kernel, 'core/src/flag/flag.ts'), 'utf8'),
+      fs.readFileSync(path.join(kernel, 'opencode/src/effect/runtime-flags.ts'), 'utf8'),
+    ].join('\n');
+    const names = new Set([...sources.matchAll(/"([A-Z][A-Z0-9_]{3,})"/g)].map((match) => match[1]));
+    // Names that are not environment variables at all: service identifiers and the like.
+    const notEnvironment = new Set(['GET', 'POST', 'HEAD']);
+    const uncovered = [...names].filter((name) =>
+      !notEnvironment.has(name) && !INHERITED_PREFIXES.some((prefix) => name.startsWith(prefix)));
+    expect(uncovered).toEqual([]);
+  });
+
+  it('closes the shell process too, ahead of anything that reads or sets those names', () => {
+    // Two orderings: shell modules resolve at import, and the kernel connection is written into
+    // this same environment, so a late strip would take `OPENCODE_HOST` with it.
+    const main = fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
+    const strippedAt = main.indexOf('stripInheritedForeignVariables(process.env)');
+    const kernelStartAt = main.indexOf('startEmbeddedKernel({');
+    const shellImportAt = main.indexOf("import('@openchamber/web/server/index.js')");
+    expect(strippedAt).toBeGreaterThan(-1);
+    expect(kernelStartAt).toBeGreaterThan(strippedAt);
+    expect(shellImportAt).toBeGreaterThan(strippedAt);
+  });
+
+  it('leaves everything that is not another product alone', () => {
+    const environment = { PATH: '/usr/bin', GEOCODE_PY: '/usr/bin/python3', OPENCODE_CONFIG_DIR: '/theirs' };
+    const removed = stripInheritedForeignVariables(environment);
+    expect(removed).toEqual(['OPENCODE_CONFIG_DIR']);
+    expect(environment).toEqual({ PATH: '/usr/bin', GEOCODE_PY: '/usr/bin/python3' });
   });
 
   it('drops DEBUG everywhere and LD_PRELOAD only on linux', () => {

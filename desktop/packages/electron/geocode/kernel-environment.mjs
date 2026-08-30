@@ -1,20 +1,25 @@
-/* --- GeoCode: the environment boundary around the embedded Agent Kernel (docs/DESKTOP.md §8.2).
- *
- * The public namespace is `GEOCODE_*`; the kernel keeps its `OPENCODE_*` wire fingerprint
- * internally. Translation happens in exactly one place — here — because Electron main is
- * the only path that starts a kernel, so there is no second entry point that could forget
- * to translate.
- *
- * Stripping the inherited `OPENCODE_*` comes first and is the part that matters for
- * isolation: a user who runs their own opencode has those variables exported in the shell
- * this app inherits, and without the strip their settings would silently steer our kernel.
+/* --- GeoCode: the environment boundary around the embedded kernel and the shell runtime beside
+ * it (docs/DESKTOP.md §8.2). Neither takes configuration from the environment it inherited.
  *
  * The password is deliberately NOT placed in this environment. It travels over the utility
  * process IPC instead (kernel-protocol.mjs), so it never appears in the child's environment
  * block where any process listing would show it. --- */
 
-const GEOCODE_PREFIX = 'GEOCODE_';
-const OPENCODE_PREFIX = 'OPENCODE_';
+/** Prefixes the kernel reads configuration under. `OTEL_` is here because a rule written for
+ *  `OPENCODE_` alone cannot see the telemetry pair, which steers where traces go. */
+export const INHERITED_PREFIXES = ['OPENCODE_', 'OTEL_'];
+
+/** Mutates `process.env`, which shell modules read and several resolve once at import, so this
+ *  must run before the shell runtime loads and before main writes the kernel connection into it. */
+export const stripInheritedForeignVariables = (environment) => {
+  const removed = [];
+  for (const key of Object.keys(environment)) {
+    if (!INHERITED_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
+    delete environment[key];
+    removed.push(key);
+  }
+  return removed;
+};
 
 export const buildKernelBaseUrl = ({ hostname, port }) => {
   // env-config.js parses OPENCODE_HOST with `new URL`, which rejects a bare IPv6 literal.
@@ -31,13 +36,8 @@ export const createKernelProcessEnvironment = ({
 
   for (const [key, value] of Object.entries(environment)) {
     if (value === undefined) continue;
-    if (key.startsWith(OPENCODE_PREFIX)) continue;
+    if (INHERITED_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
     next[key] = String(value);
-  }
-
-  for (const [key, value] of Object.entries(environment)) {
-    if (value === undefined || !key.startsWith(GEOCODE_PREFIX)) continue;
-    next[`${OPENCODE_PREFIX}${key.slice(GEOCODE_PREFIX.length)}`] = String(value);
   }
 
   // Both inherited from the upstream desktop's own sidecar environment: DEBUG makes the
