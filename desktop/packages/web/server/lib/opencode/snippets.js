@@ -1,9 +1,13 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import yaml from 'yaml';
+import { kernelConfigRoot, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 
-const OPENCODE_CONFIG_DIR = path.join(os.homedir(), '.config', 'opencode');
+// --- GeoCode: the kernel's config root (geocode/kernel-roots.js). The kernel has no snippet
+// concept — they are expanded here before the prompt is sent — so this is about ownership
+// rather than pairing: a snippet the user writes belongs in GeoCode's directories. ---
+const OPENCODE_CONFIG_DIR = kernelConfigRoot();
+// --- /GeoCode ---
 const GLOBAL_SNIPPET_DIR = path.join(OPENCODE_CONFIG_DIR, 'snippet');
 const GLOBAL_SNIPPET_DIR_ALT = path.join(OPENCODE_CONFIG_DIR, 'snippets');
 const SNIPPET_EXTENSION = '.md';
@@ -14,8 +18,9 @@ const MAX_EXPANSION_COUNT = 15;
 function getProjectSnippetDirs(workingDirectory) {
   if (!workingDirectory) return [];
   return [
-    path.join(workingDirectory, '.opencode', 'snippets'),
-    path.join(workingDirectory, '.opencode', 'snippet'),
+    // GeoCode: the kernel's project directory
+    path.join(workingDirectory, KERNEL_PROJECT_DIR, 'snippets'),
+    path.join(workingDirectory, KERNEL_PROJECT_DIR, 'snippet'),
   ];
 }
 
@@ -140,8 +145,9 @@ function listUniqueSnippets(registry) {
 function getWritableSnippetDir(scope, workingDirectory) {
   if (scope === 'project') {
     if (!workingDirectory) throw new Error('Project directory is required for project snippets');
-    const preferred = path.join(workingDirectory, '.opencode', 'snippet');
-    const alternate = path.join(workingDirectory, '.opencode', 'snippets');
+    // GeoCode: the write target, paired with getProjectSnippetDirs above
+    const preferred = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'snippet');
+    const alternate = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'snippets');
     return fs.existsSync(alternate) && !fs.existsSync(preferred) ? alternate : preferred;
   }
   return fs.existsSync(GLOBAL_SNIPPET_DIR_ALT) && !fs.existsSync(GLOBAL_SNIPPET_DIR)

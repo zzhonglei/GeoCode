@@ -151,8 +151,8 @@ describe('updateAgent frontmatter preservation', () => {
     // newline). OpenCode parses it; OpenChamber previously treated the whole
     // file as the prompt body and prepended a second frontmatter block on save.
     const projectDir = path.join(FIXTURE_DIR, 'project');
-    const agentPath = path.join(projectDir, '.opencode', 'agents', 'strateg.md');
-    writeFixture(path.join('project', '.opencode', 'agents', 'strateg.md'), [
+    const agentPath = path.join(projectDir, KERNEL_PROJECT_DIR, 'agents', 'strateg.md');
+    writeFixture(path.join('project', KERNEL_PROJECT_DIR, 'agents', 'strateg.md'), [
       '---',
       'description: Strategy agent',
       'model: anthropic/claude-sonnet-4',
@@ -176,8 +176,8 @@ describe('updateAgent frontmatter preservation', () => {
 
   it('preserves unrelated frontmatter fields when saving one field', () => {
     const projectDir = path.join(FIXTURE_DIR, 'project');
-    const agentPath = path.join(projectDir, '.opencode', 'agents', 'strateg.md');
-    writeFixture(path.join('project', '.opencode', 'agents', 'strateg.md'), [
+    const agentPath = path.join(projectDir, KERNEL_PROJECT_DIR, 'agents', 'strateg.md');
+    writeFixture(path.join('project', KERNEL_PROJECT_DIR, 'agents', 'strateg.md'), [
       '---',
       'description: Strategy agent',
       'mode: primary',

@@ -1,5 +1,4 @@
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { kernelConfigRoot, KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 import {
@@ -80,8 +79,12 @@ function getActiveUserConfigPaths() {
   const configDir = getActiveOpencodeConfigDir();
   return [
     path.join(configDir, 'config.json'),
-    path.join(configDir, 'opencode.json'),
-    path.join(configDir, 'opencode.jsonc'),
+    // --- GeoCode: the global layer's file names, which the earlier pass renamed the directory
+    // and the project layer of this file but not these two — leaving plugin toggles writing
+    // `<config root>/opencode.json`, a file the kernel never loads (geocode/kernel-roots.js). ---
+    path.join(configDir, KERNEL_CONFIG_JSON),
+    path.join(configDir, KERNEL_CONFIG_JSONC),
+    // --- /GeoCode ---
   ];
 }
 

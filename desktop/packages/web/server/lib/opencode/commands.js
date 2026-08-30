@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: the kernel's project directory, which it scans for `{command,commands}/**/*.md`
 import {
   CONFIG_FILE,
   OPENCODE_CONFIG_DIR,
@@ -23,11 +24,11 @@ import {
  * Ensure project-level command directory exists
  */
 function ensureProjectCommandDir(workingDirectory) {
-  const projectCommandDir = path.join(workingDirectory, '.opencode', 'commands');
+  const projectCommandDir = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'commands');
   if (!fs.existsSync(projectCommandDir)) {
     fs.mkdirSync(projectCommandDir, { recursive: true });
   }
-  const legacyProjectCommandDir = path.join(workingDirectory, '.opencode', 'command');
+  const legacyProjectCommandDir = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'command');
   if (!fs.existsSync(legacyProjectCommandDir)) {
     fs.mkdirSync(legacyProjectCommandDir, { recursive: true });
   }
@@ -38,8 +39,8 @@ function ensureProjectCommandDir(workingDirectory) {
  * Get project-level command path
  */
 function getProjectCommandPath(workingDirectory, commandName) {
-  const pluralPath = path.join(workingDirectory, '.opencode', 'commands', `${commandName}.md`);
-  const legacyPath = path.join(workingDirectory, '.opencode', 'command', `${commandName}.md`);
+  const pluralPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'commands', `${commandName}.md`);
+  const legacyPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'command', `${commandName}.md`);
   if (fs.existsSync(legacyPath) && !fs.existsSync(pluralPath)) return legacyPath;
   return pluralPath;
 }

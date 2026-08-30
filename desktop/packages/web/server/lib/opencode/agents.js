@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: the kernel's project directory, which it scans for `{agent,agents}/**/*.md`
 import {
   CONFIG_FILE,
   AGENT_DIR,
@@ -23,11 +24,11 @@ import {
  * Ensure project-level agent directory exists
  */
 function ensureProjectAgentDir(workingDirectory) {
-  const projectAgentDir = path.join(workingDirectory, '.opencode', 'agents');
+  const projectAgentDir = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'agents');
   if (!fs.existsSync(projectAgentDir)) {
     fs.mkdirSync(projectAgentDir, { recursive: true });
   }
-  const legacyProjectAgentDir = path.join(workingDirectory, '.opencode', 'agent');
+  const legacyProjectAgentDir = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'agent');
   if (!fs.existsSync(legacyProjectAgentDir)) {
     fs.mkdirSync(legacyProjectAgentDir, { recursive: true });
   }
@@ -38,8 +39,8 @@ function ensureProjectAgentDir(workingDirectory) {
  * Get project-level agent path
  */
 function getProjectAgentPath(workingDirectory, agentName) {
-  const pluralPath = path.join(workingDirectory, '.opencode', 'agents', `${agentName}.md`);
-  const legacyPath = path.join(workingDirectory, '.opencode', 'agent', `${agentName}.md`);
+  const pluralPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'agents', `${agentName}.md`);
+  const legacyPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'agent', `${agentName}.md`);
   if (fs.existsSync(legacyPath) && !fs.existsSync(pluralPath)) return legacyPath;
   return pluralPath;
 }

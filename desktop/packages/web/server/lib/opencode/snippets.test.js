@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: fixtures must carry the names the code now discovers
 import {
   createSnippet,
   deleteSnippet,
@@ -29,7 +30,7 @@ describe('snippets', () => {
   });
 
   test('loads project snippets with aliases and description', () => {
-    writeSnippet('.opencode/snippet/review.md', '---\naliases: [rev]\ndescription: Review helper\n---\nReview carefully.');
+    writeSnippet(`${KERNEL_PROJECT_DIR}/snippet/review.md`, '---\naliases: [rev]\ndescription: Review helper\n---\nReview carefully.');
 
     expect(listSnippets(projectDir)).toContainEqual(
       expect.objectContaining({ name: 'review', aliases: ['rev'], description: 'Review helper', source: 'project' }),
@@ -38,15 +39,15 @@ describe('snippets', () => {
   });
 
   test('snippet directory wins over snippets directory', () => {
-    writeSnippet('.opencode/snippets/same.md', 'Old');
-    writeSnippet('.opencode/snippet/same.md', 'New');
+    writeSnippet(`${KERNEL_PROJECT_DIR}/snippets/same.md`, 'Old');
+    writeSnippet(`${KERNEL_PROJECT_DIR}/snippet/same.md`, 'New');
 
     expect(getSnippet('same', projectDir)?.content).toBe('New');
   });
 
   test('canonical snippet names take precedence over colliding aliases', () => {
-    writeSnippet('.opencode/snippets/review.md', 'Review by name');
-    writeSnippet('.opencode/snippet/helper.md', '---\naliases: [review, help]\n---\nReview by alias');
+    writeSnippet(`${KERNEL_PROJECT_DIR}/snippets/review.md`, 'Review by name');
+    writeSnippet(`${KERNEL_PROJECT_DIR}/snippet/helper.md`, '---\naliases: [review, help]\n---\nReview by alias');
 
     expect(getSnippet('review', projectDir)).toEqual(expect.objectContaining({ name: 'review', content: 'Review by name' }));
     expect(getSnippet('help', projectDir)).toEqual(expect.objectContaining({ name: 'helper', content: 'Review by alias' }));
@@ -54,10 +55,10 @@ describe('snippets', () => {
   });
 
   test('canonical snippet names override earlier same-directory aliases', () => {
-    writeSnippet('.opencode/snippet/alias-first.md', '---\naliases: [review, assist]\n---\nReview by alias');
-    writeSnippet('.opencode/snippet/review.md', 'Review by name');
+    writeSnippet(`${KERNEL_PROJECT_DIR}/snippet/alias-first.md`, '---\naliases: [review, assist]\n---\nReview by alias');
+    writeSnippet(`${KERNEL_PROJECT_DIR}/snippet/review.md`, 'Review by name');
 
-    const snippetDir = path.join(projectDir, '.opencode', 'snippet');
+    const snippetDir = path.join(projectDir, KERNEL_PROJECT_DIR, 'snippet');
     const originalReaddirSync = fs.readdirSync;
     fs.readdirSync = function readdirSync(dir, ...args) {
       if (dir === snippetDir) return ['alias-first.md', 'review.md'];
@@ -85,8 +86,8 @@ describe('snippets', () => {
   });
 
   test('expands snippets recursively with prepend and append blocks', () => {
-    writeSnippet('.opencode/snippet/base.md', 'Base text');
-    writeSnippet('.opencode/snippet/review.md', '<prepend>Before</prepend>Review #base<append>After</append>');
+    writeSnippet(`${KERNEL_PROJECT_DIR}/snippet/base.md`, 'Base text');
+    writeSnippet(`${KERNEL_PROJECT_DIR}/snippet/review.md`, '<prepend>Before</prepend>Review #base<append>After</append>');
 
     expect(expandSnippets('Please #review', projectDir)).toBe('Before\n\nPlease Review Base text\n\nAfter');
   });
