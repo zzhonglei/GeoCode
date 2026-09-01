@@ -1,7 +1,7 @@
 /**
  * OpenChamber project-level configuration service.
  * Stores per-project settings in ~/.config/GeoCode/desktop/projects/<projectId>.json.
- * Migrates from legacy <project>/.openchamber/openchamber.json.
+ * --- GeoCode: the legacy <project>/.openchamber fallback is shielded, not migrated ---
  *
  * Notes, todos, and plan files used to live here too. They are now server-owned
  * (`packages/web/server/lib/project-context`) and reached through
@@ -19,9 +19,13 @@ import { PROJECTS_SEGMENTS } from '@/geocode/shell-data-root';
 
 type ProjectRef = { id: string; path: string };
 
+// --- GeoCode: legacy chain, shielded whole; the why is on readOpenChamberConfig ---
+/*
 const CONFIG_FILENAME = 'openchamber.json';
 // LEGACY_PROJECT_CONFIG: legacy per-project config root inside repo.
 const LEGACY_CONFIG_DIR = '.openchamber';
+*/
+// --- /GeoCode ---
 // GeoCode: the shell data root the server also uses (src/geocode/shell-data-root.ts). The
 // server reads these same files through `project-context`, so a rename here that did not
 // move with it would hide every project's config from the half that owns half its keys.
@@ -87,9 +91,13 @@ const joinPath = (base: string, segment: string): string => {
   return `${normalizedBase}/${cleanSegment}`;
 };
 
+// --- GeoCode: legacy chain, shielded whole ---
+/*
 const getLegacyConfigPath = (projectDirectory: string): string => {
   return joinPath(joinPath(projectDirectory, LEGACY_CONFIG_DIR), CONFIG_FILENAME);
 };
+*/
+// --- /GeoCode ---
 
 const getBaseUrl = (): string => {
   const defaultBaseUrl = import.meta.env.VITE_OPENCODE_URL || '/api';
@@ -391,6 +399,11 @@ async function readOpenChamberConfig(project: ProjectRef): Promise<OpenChamberCo
     }
   }
 
+  // --- GeoCode: `<project>/.openchamber` is the user's OpenChamber config, and GeoCode has
+  // never written that path, so this fallback can only ever read, copy and then delete another
+  // product's data. The keys it carries include shell commands bound to project buttons. ---
+  return null;
+  /*
   // 2) Migrate legacy <project>/.openchamber/openchamber.json.
   // LEGACY_PROJECT_CONFIG: migrate project-local openchamber.json -> <projects dir>/<projectId>.json
   const legacyPath = getLegacyConfigPath(projectDirectory);
@@ -410,6 +423,8 @@ async function readOpenChamberConfig(project: ProjectRef): Promise<OpenChamberCo
   }
 
   return legacyConfig;
+  */
+  // --- /GeoCode ---
 }
 
 /**
@@ -558,6 +573,9 @@ export function substituteCommandVariables(
     .replace(/\$\{ROOT_WORKTREE_PATH\}/g, variables.rootWorktreePath);
 }
 
+// --- GeoCode: the declaration is shielded too, so a call site arriving with an upstream merge
+// fails to compile rather than silently deleting again ---
+/*
 async function deleteLegacyOpenChamberConfig(projectDirectory: string): Promise<void> {
   const legacyPath = getLegacyConfigPath(projectDirectory);
   const runtimeFiles = getRuntimeFilesAPI();
@@ -577,5 +595,7 @@ async function deleteLegacyOpenChamberConfig(projectDirectory: string): Promise<
     // ignored
   }
 }
+*/
+// --- /GeoCode ---
 
 export type { ProjectRef };

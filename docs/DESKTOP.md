@@ -735,14 +735,19 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   重,默认值(我们把内核默认改成 ON 却没改镜像)和优先级(上游把广播与具体两个开关 OR,而内核是具体
   优先)。**不再有需要与内核保持同步的手抄规则,是这个方案比「修镜像」更好的地方**;
 
-- **归阶段 3「特性修缮」**,其中**两条是破坏性的,该排在这一阶段最前面**:`deleteSkill` 对
-  `~/.claude/skills/<同名>` 的递归删除;以及 `openchamberConfig.ts` 的 legacy 迁移——它读用户仓库里
-  `<project>/.openchamber/openchamber.json`(那是 OpenChamber 的每项目配置),迁进 GeoCode 自己的
-  目录之后**把原件删掉**,发生在普通的打开项目流程里、无提示。**阶段 2 批 1 重新武装了它**:GeoCode
-  自己那份换了路径,对已有项目一律不存在,于是每个项目都会走一次这条回落。最小修法是只停掉删除、
-  保留读取——读是可逆的,删不是;「要不要读别人的配置」和 `.claude` 技能是同一个问题,一起在这一阶段答。
-  其余:`~/.agents/loops` 的启动期扫描与写回、壳侧 `discoverSkills` 的
-  `.claude`/`.agents` 扫描、外部二进制发现的
+- **破坏性项 · 项目级 legacy 配置**:已完成。两条破坏性项按「破坏性排最前」提到 2-D 之前做,
+  第一条 `deleteSkill` 对 `~/.claude/skills/<同名>` 的递归删除已随阶段 2 批 2 一并关掉,这里是第二条。
+  `openchamberConfig.ts` 读用户仓库里 `<project>/.openchamber/openchamber.json`(那是 OpenChamber 的
+  每项目配置),抄进 GeoCode 自己的目录之后**把原件删掉**,发生在普通的打开项目流程里、无提示。
+  **阶段 2 批 1 重新武装了它**:GeoCode 自己那份换了路径,对已有项目一律不存在,于是每个项目都会
+  走一次这条回落。答案取「完全不读」而不是「读但不删」:GeoCode 从没写过那个路径,所以它在那里找到的
+  只可能是别人的数据,与批 2 对 `.claude`/`.agents` 的答案同构;何况那份配置里的 `projectActions`
+  是绑在项目按钮上的任意 shell 命令,静默继承别的产品写的命令不合适。整条链连声明一起屏蔽——常量、
+  路径助手、删除函数——于是上游若在合并里加回一个调用点会**编译不过**,比静默返回更响。
+  绊线两个用例:一个断言那份文件既没被读也没被删,另一个把**同一份内容**放到 GeoCode 自己的
+  projects 根下,证明管路是通的——否则前一个用例对着一个什么都不答的 mock 也会通过;
+
+- **归阶段 3「特性修缮」**:`~/.agents/loops` 的启动期扫描与写回、外部二进制发现的
   十三处与 `electron:dev` 的分叉、`gitlab-ai-provider` 的 vendor 泄漏、内置技能
   `customize-opencode` 的正文、以及品牌与 i18n。**另有 `packages/vscode/` 整包**:`opencodeConfig.ts`
   是 `server/lib/opencode/` 的一份近乎逐行的副本,项目目录、配置文件名、技能根、外部二进制发现全都
