@@ -9,10 +9,11 @@
 // surface rather than lower it (docs/CONVENTIONS.md §5).
 import fs from 'node:fs'
 
-// String bodies go first, or `import os from 'os'` counts its own module specifier as a use and
-// the check reports clean on the one shape it was written for. Measured: it did.
-const countable = (source) =>
-  source.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g, "''")
+// Module specifiers go first, or `import os from 'os'` counts its own specifier as a use and the
+// check reports clean on the one shape it was written for. Measured: it did. Only the specifier,
+// not every string in the file: blanking all of them ate the code following any regex literal
+// that contained a quote, and reported the helpers after it dead. This file was one of them.
+const countable = (source) => source.replace(/^(\s*import\s[^'"]*)['"][^'"]*['"]/gm, "$1")
 
 const references = (source, name) => (source.match(new RegExp(`\\b${name}\\b`, 'g')) || []).length
 
@@ -22,6 +23,11 @@ const scan = (file) => {
   const dead = []
   for (const match of source.matchAll(/^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/gm)) {
     if (references(live, match[1]) <= 1) dead.push(`function ${match[1]}`)
+  }
+  // Arrow and function-valued consts too, or the residue this hunts stays invisible in every file
+  // that prefers them to `function`.
+  for (const match of source.matchAll(/^\s*(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*(?::[^=]*)?=\s*(?:async\s+)?(?:function\b|\(|<)/gm)) {
+    if (references(live, match[1]) <= 1) dead.push(`const ${match[1]}`)
   }
   for (const match of source.matchAll(/^import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from/gm)) {
     if (references(live, match[1]) <= 1) dead.push(`import ${match[1]}`)

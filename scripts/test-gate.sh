@@ -133,4 +133,13 @@ echo "== desktop shell (renderer) =="
 (cd "$ROOT/desktop/packages/ui" && bun test src/geocode/)
 
 echo
+echo "== settings round trip (shell writes, kernel reads) =="
+# The one thing neither package's suite can answer, because the two halves are separate install
+# roots: a setting saved through the server functions the routes call, read back by the kernel's
+# own loaders. Both halves compute their roots independently, which is what has broken before.
+# Proven to fail: pointing the shell's config root back at OpenCode turns every page red, and
+# renaming just the skill directory turns only skills red.
+"$ROOT/scripts/settings-roundtrip.sh"
+
+echo
 echo "gate green"

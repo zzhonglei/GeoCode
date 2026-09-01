@@ -747,6 +747,21 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   绊线两个用例:一个断言那份文件既没被读也没被删,另一个把**同一份内容**放到 GeoCode 自己的
   projects 根下,证明管路是通的——否则前一个用例对着一个什么都不答的 mock 也会通过;
 
+- **阶段 2 · 2-D · 设置逐页往返**:已完成,做成了门的一节(`CONVENTIONS.md` §7)。
+  原先记的「九个页面」里有两个是记错的:**snippets、themes、magic-prompts 都不面向内核**。
+  内核源码里 `snippet` 零匹配,壳却把它写进**内核的配置根**下——不是 bug,展开发生在壳侧、
+  消息发出去之前,但位置有误导性,读代码的人会以为那是内核配置。themes 与 magic-prompts
+  落在壳根,位置本来就对。
+  真正面向内核的是七类:agents、commands、skills、plugins、mcp、providers、behavior。
+  七类的写入端与读取端现在由 `scripts/settings-roundtrip.sh` 自动比对,不再靠人点。
+  顺带确认了一件之前没查过的:内核对单复数一律通吃(`{agent,agents}`、`{command,commands}`、
+  `{plugin,plugins}`、`{skill,skills}`),所以壳一直写复数不是隐患。
+  **查过但不动的一处**:内核 `globalConfigFile()` 在 `[geocode.jsonc, geocode.json, config.json]`
+  里取第一个存在的,壳 `getPrimaryUserConfigPath()` 在**相反顺序**里取第一个存在的。今天不咬人,
+  因为三者正常只会有一个存在(内核首启播下 `geocode.jsonc`,壳在空根下才建 `config.json`),
+  两边于是选中同一个;门里两种起始状态都覆盖了。这是上游的形状,`opencode.*` 那套名字下反转一模一样,
+  按既定政策不替上游修;
+
 - **归阶段 3「特性修缮」**:`~/.agents/loops` 的启动期扫描与写回、外部二进制发现的
   十三处与 `electron:dev` 的分叉、`gitlab-ai-provider` 的 vendor 泄漏、内置技能
   `customize-opencode` 的正文、以及品牌与 i18n。**另有 `packages/vscode/` 整包**:`opencodeConfig.ts`
