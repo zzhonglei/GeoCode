@@ -762,6 +762,20 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   两边于是选中同一个;门里两种起始状态都覆盖了。这是上游的形状,`opencode.*` 那套名字下反转一模一样,
   按既定政策不替上游修;
 
+- **归阶段 3 · agent 截图落点**:已完成。`browser.capture` 是控制模块里**唯一**碰磁盘的动作
+  (整个模块的写盘点只有两行,都在 `screenshots.js`),它把 agent 截的图写进用户仓库。
+  **写进仓库是上游有意的设计,保留**:图是代码变更的证据,要跟代码待在一起,才能被引用、提交、
+  附到 review 上。改的只是落点——原先是 `.openchamber`,而它**不在 `.gitignore` 里**,于是每截一次图,
+  用户的工作树和下一个提交里就多一个别的产品名字的目录。
+  现在是项目根下的 `.browser/`,两个决定各有理由:**按生产者命名而不是按产物**,以后浏览器控制存别的
+  东西(DOM 快照一类)不用再开目录;**不并进 `.geocode`**,那里放的是团队手写、有意提交的配置,
+  而这些是生成的、会累积,不该在 diff 里需要分辨。
+  顺带查明:上游那个往配置目录写 `.gitignore` 的 `ensureGitignore` **已无活的调用点**(唯一调用在
+  关掉插件安装时一并包掉了),所以 `.geocode` 与 `.browser` 都不会被自动忽略——截图可提交是这个功能的
+  本意,不是疏漏。
+  上游那两个断言旧路径的用例**反转而不是删除**,和批 2 同一手法;门里另加一条绊线,断言的是
+  **字节落在哪**而不是常量怎么拼——将来换个写法组合出同一个路径仍然算对。
+
 - **归阶段 3「特性修缮」**:`~/.agents/loops` 的启动期扫描与写回、外部二进制发现的
   十三处与 `electron:dev` 的分叉、`gitlab-ai-provider` 的 vendor 泄漏、内置技能
   `customize-opencode` 的正文、以及品牌与 i18n。**另有 `packages/vscode/` 整包**:`opencodeConfig.ts`
@@ -779,13 +793,31 @@ grep -rn "'\.config', 'openchamber'" desktop/packages/web --include="*.js" --inc
 grep -rnE "'(\.config|\.local|\.cache)', '[Oo]pencode'|'\.opencode'" \
   desktop/packages/web --include="*.js" --include="*.mjs" \
   | grep -v '\.test\.' | grep -v node_modules | grep -v '/dist/'
+
+# 相对形态:目录名不挂 HOME,而是后面才拼上项目目录。上面两条一条都不匹配它。
+grep -rnE "path\.join\(\s*['\"]\.(openchamber|opencode|claude|agents)['\"]" \
+  desktop/packages kernel/packages --include="*.ts" --include="*.js" --include="*.mjs" \
+  | grep -v '\.test\.' | grep -v node_modules | grep -v '/dist/'
+
+# 裸的目录名常量,同理。
+grep -rnE "=\s*['\"]\.(openchamber|opencode|claude|agents)['\"]\s*;?\s*$" \
+  desktop/packages kernel/packages --include="*.ts" --include="*.js" --include="*.mjs" \
+  | grep -v '\.test\.' | grep -v node_modules | grep -v '/dist/'
 ```
 
-⚠️ **两条命令的范围是 `packages/web`,不是 `packages/web/server`。** 收窄到 `server/` 会漏掉
+⚠️ **前两条命令的范围是 `packages/web`,不是 `packages/web/server`。** 收窄到 `server/` 会漏掉
 `bin/`——那是已发布的 CLI,同样按 `~/.config/openchamber` 解析数据根。这是同一个盲区的第三次:
 第一次是下面那个过滤器,第二次是复审时临时写的 `path.join\([^)]*'openchamber'`(`[^)]*` 不允许中间
 出现右括号,而这类路径几乎全是 `path.join(os.homedir(), ...)`,它把最该找的形状排除了)。
-**`packages/vscode` 要单独扫**,它是另一份副本,不在这两条命令里。
+**`packages/vscode` 要单独扫**,它是另一份副本,不在前两条里(后两条的范围是整个 `desktop/packages`
+与 `kernel/packages`,覆盖到了它)。
+
+⚠️ **第四次是形态漏了,不是范围漏了。** 前两条命令找的都是**从 HOME 拼出来的绝对根**,而
+`screenshots.js` 写的是 `path.join('.openchamber', 'screenshots')`——相对路径,项目目录后面才拼上去,
+两条都不匹配。它把 agent 的截图落进用户仓库里一个别的产品名字的目录,而 `.openchamber` 不在
+`.gitignore` 里,于是会进用户自己的提交。后加的两条命令就是补这个形态的。
+它们报出来的东西要再过一道:**屏蔽块里的行 grep 照样匹配**,而**只读的判断**(比如拿路径判断自己
+是怎么装的)不建目录也不写文件,两类都不是欠账。抹掉块注释再看一遍,剩下的才是。
 
 ⚠️ **第一条命令原先还带一个 `grep -v ":[[:space:]]*: "`,那个过滤器是错的**,务必不要加回去。
 它本意是排除三元里读变量的分支,但**硬编码 fallback 恰恰也写在 else 分支上、格式一模一样**,于是

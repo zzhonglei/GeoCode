@@ -15,7 +15,14 @@ import path from 'node:path';
 import fsPromises from 'node:fs/promises';
 
 /** Project-relative home for agent screenshots. */
-export const SCREENSHOT_DIRECTORY = path.join('.openchamber', 'screenshots');
+// --- GeoCode: named for what produces these, not for the one artifact it produces today, so a
+// later capture of a different kind has a home. Kept out of `.geocode`, which holds configuration
+// a team writes by hand and commits on purpose; these are generated and accumulate. Writing them
+// into the repository at all is upstream's design and stays — the image is evidence for a change
+// and has to survive the chat. ---
+export const SCREENSHOT_DIRECTORY = '.browser';
+/* export const SCREENSHOT_DIRECTORY = path.join('.openchamber', 'screenshots'); */
+// --- /GeoCode ---
 
 const MAX_LABEL_LENGTH = 48;
 
