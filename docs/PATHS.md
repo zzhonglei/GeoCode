@@ -447,3 +447,7 @@ key 连同文件里的 `baseURL` 一起送进 `fetch`,触发者是 busy→idle �
 
 - **项目目录的 `.opencode/` 与 `opencode.json`** 已改名为 `.geocode/` 与 `geocode.json`,家目录那条没有开关保护的 `~/.opencode` 扫描直接删除(我们只有一个全局根)。跨产品执行代码的那一半由屏蔽清单解决——插件与文件式工具都不再加载,见 KERNEL.md。
 - **`.agents/skills`(家目录与项目各级)决定关闭**,与 `.claude/skills` 同级处理:两者都是用户写给**任意** agent 工具的技能库,不属于 GeoCode 体系,而 GeoCode 是地理助手不是通用 agent。判据因此是**归属**,不是开放与否。**`AGENTS.md` 保留**——它是信息而非能力注入,全局那份读的是 `~/.config/GeoCode/AGENTS.md`,本就在我们自己的配置根里。用户自定义技能改从 `~/.config/GeoCode/{skill,skills}`、项目 `.geocode/{skill,skills}` 或 `skills.paths` 进,关闭后仍生效(KERNEL.md §6 第 6 项)。
+
+  **同一判据后来又判了 `.agents/loops`**(壳侧的循环任务,`DESKTOP.md` 阶段 6):同一个目录下的邻居,
+  归属完全一样。它当时没被一并评估,于是多挂了一批。**下一个 `.agents/<新名字>` 出现时先套这条判据,
+  不要另起讨论。**

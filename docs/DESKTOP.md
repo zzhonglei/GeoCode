@@ -776,7 +776,24 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   上游那两个断言旧路径的用例**反转而不是删除**,和批 2 同一手法;门里另加一条绊线,断言的是
   **字节落在哪**而不是常量怎么拼——将来换个写法组合出同一个路径仍然算对。
 
-- **归阶段 3「特性修缮」**:`~/.agents/loops` 的启动期扫描与写回、外部二进制发现的
+- **归阶段 3 · `.agents/loops` 循环任务**:已完成。**这一条原先在本清单里记成「`~/.agents/loops` 的
+  启动期扫描与写回」,三处都不准**:它还扫项目各级祖先;不在启动期而在 `syncProject()`(打开或同步
+  项目都走);「写回」不在 `loops.js`——那个文件整个只读——而在服务层,且是两条:删任务时
+  `fs.unlinkSync` 删掉用户的 `.md`,开关任务时 `writeMdFile` 改写它的 frontmatter。按错的那句排优先级
+  会把破坏性判轻。
+  这是 **OpenChamber 自己的功能**,内核对 `loop`/`cron`/定时任务零匹配;整个 `scheduled-tasks/`
+  与 `chamber-upstream` 零差异,我们从没动过。判据用现成的那条**归属**(`PATHS.md` 末尾):`.agents`
+  是用户写给**任意** agent 工具的地方,不属于 GeoCode 体系。循环任务比技能更该关——技能只是被列出来
+  等用户挑,循环任务**自己按 cron 跑起来**。
+  只屏蔽 `discoverLoopFiles` 一处。它是两条写路径**唯一的闸门**:`findLoopTask` 先 `syncProject()`
+  再查表,表里没有带 `loopFile` 的任务,删和开关都取不到文件。实测确认了三件事:界面上建的任务
+  (不带 `loopFile`)完好、用户的 `.md` 哈希不变、Goal 是另一个模块(`session-goal/` 只导入
+  `fs`/`os`/`path` 与自己的 `objectives.js`)完全不受影响。
+  上游七个断言这项能力的用例**反转而不是删除**,夹具一字不动;门里另加一条绊线。
+  ⚠️ 排查过程本身有一条教训:第一次实验造的任务形状不合法,被规范化直接丢掉,输出是
+  `之前: [] 之后: []`——**长得和「安全」一模一样**。是因为「之前」也空才发现它空转;
+
+- **归阶段 3「特性修缮」**:外部二进制发现的
   十三处与 `electron:dev` 的分叉、`gitlab-ai-provider` 的 vendor 泄漏、内置技能
   `customize-opencode` 的正文、以及品牌与 i18n。**另有 `packages/vscode/` 整包**:`opencodeConfig.ts`
   是 `server/lib/opencode/` 的一份近乎逐行的副本,项目目录、配置文件名、技能根、外部二进制发现全都
