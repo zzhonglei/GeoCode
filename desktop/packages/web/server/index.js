@@ -753,7 +753,13 @@ const openCodeResolutionRuntime = createOpenCodeResolutionRuntime({
 const getOpenCodeResolutionSnapshot = (...args) =>
   openCodeResolutionRuntime.getOpenCodeResolutionSnapshot(...args);
 
-applyLoginShellEnvSnapshot();
+// --- GeoCode: under Electron, main.mjs has already merged this same login shell into this same
+// process.env and then removed the other products' prefixes; a second merge here would only put
+// them back (docs/ENVIRONMENT.md §5.2). ARGV0 is cleared by that merge too. Standalone
+// `openchamber serve` still merges. ---
+if (!process.versions.electron) applyLoginShellEnvSnapshot();
+/* applyLoginShellEnvSnapshot(); */
+// --- /GeoCode ---
 
 notificationTemplateRuntime = createNotificationTemplateRuntime({
   readSettingsFromDisk,

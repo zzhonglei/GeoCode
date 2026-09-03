@@ -46,6 +46,17 @@ describe('startEmbeddedKernel', () => {
     expect(calls[0].environment.PATH).toBe('/usr/bin');
   });
 
+  it('drops a name an override sets to undefined, which is how the UI password stays out', async () => {
+    const { started, calls } = bootWith({
+      environment: { PATH: '/usr/bin', OPENCHAMBER_UI_PASSWORD: 'ui-secret' },
+      overrides: { OPENCHAMBER_UI_PASSWORD: undefined },
+    });
+    await started;
+
+    expect(calls[0].environment).not.toHaveProperty('OPENCHAMBER_UI_PASSWORD');
+    expect(calls[0].environment.PATH).toBe('/usr/bin');
+  });
+
   it('refuses to start when the runtime was never staged, naming the fix', async () => {
     await expect(bootWith({ exists: () => false }).started).rejects.toThrow(/prepare:geocode-kernel/);
   });

@@ -1,5 +1,6 @@
 /* --- GeoCode: the environment boundary around the embedded kernel and the shell runtime beside
- * it (docs/DESKTOP.md §8.2). Neither takes configuration from the environment it inherited.
+ * it (docs/ENVIRONMENT.md). Neither takes configuration from the environment it inherited:
+ * names under another product's prefix are removed, everything else is the user's and passes.
  *
  * The password is deliberately NOT placed in this environment. It travels over the utility
  * process IPC instead (kernel-protocol.mjs), so it never appears in the child's environment
@@ -9,11 +10,28 @@
  *  `OPENCODE_` alone cannot see the telemetry pair, which steers where traces go. */
 export const INHERITED_PREFIXES = ['OPENCODE_', 'OTEL_'];
 
-/** Mutates `process.env`, which shell modules read and several resolve once at import, so this
- *  must run before the shell runtime loads and before main writes the kernel connection into it. */
-export const stripInheritedForeignVariables = (environment) => {
+/** Runtime switches read by Node, Electron or the loader before any code of ours runs, so the
+ *  process boundary is the only place to handle them. Each either runs code of its own in the
+ *  child, keeps the child from starting, or writes files (docs/ENVIRONMENT.md §5.3, measured). */
+export const CHILD_DENYLIST = {
+  common: [
+    'NODE_OPTIONS', 'NODE_PATH', 'NODE_ICU_DATA', 'OPENSSL_CONF',
+    'ELECTRON_RUN_AS_NODE', 'ELECTRON_NO_ASAR',
+    'NODE_V8_COVERAGE', 'NODE_REDIRECT_WARNINGS', 'ELECTRON_LOG_FILE', 'CHROME_LOG_FILE',
+    'NODE_DEBUG', 'NODE_PENDING_DEPRECATION', 'DEBUG',
+  ],
+  darwin: ['DYLD_INSERT_LIBRARIES'],
+  linux: ['LD_PRELOAD'],
+};
+
+/** Mutates `process.env`. Runs once at module load, before shell modules resolve names at import,
+ *  and again inside main's login-shell merge, which refills whatever was undefined. `keep` is for
+ *  the caller's own launcher knobs, which share a prefix with what this removes. */
+export const stripInheritedForeignVariables = (environment, { keep = [] } = {}) => {
+  const kept = new Set(keep);
   const removed = [];
   for (const key of Object.keys(environment)) {
+    if (kept.has(key)) continue;
     if (!INHERITED_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
     delete environment[key];
     removed.push(key);
@@ -40,11 +58,7 @@ export const createKernelProcessEnvironment = ({
     next[key] = String(value);
   }
 
-  // Both inherited from the upstream desktop's own sidecar environment: DEBUG makes the
-  // kernel's dependencies write to stdout we parse, and LD_PRELOAD leaks the Electron
-  // launcher's injections into a plain Node child.
-  delete next.DEBUG;
-  if (platform === 'linux') delete next.LD_PRELOAD;
+  for (const key of [...CHILD_DENYLIST.common, ...(CHILD_DENYLIST[platform] ?? [])]) delete next[key];
 
   for (const [key, value] of Object.entries(overrides)) {
     if (value === undefined) {

@@ -1521,6 +1521,10 @@ const inheritUserShellEnv = () => {
   if ((process.platform === 'win32' || !currentPathLooksUserConfigured) && shellPath) {
     process.env.PATH = mergePathValues(shellPath, currentPath, delimiter);
   }
+
+  // GeoCode: the merge above refills every name the strip at module load removed, so it repeats
+  // here in the same body, where nothing can land between the two (docs/ENVIRONMENT.md §5.2).
+  stripInheritedForeignVariables(process.env);
 };
 
 const shouldSkipLocalServer = () => {
@@ -1602,6 +1606,9 @@ const spawnLocalServer = async () => {
     fork: (modulePath, forkArgs, options) => utilityProcess.fork(modulePath, forkArgs, options),
     cwd: process.env.OPENCHAMBER_OPENCODE_CWD,
     environment: process.env,
+    // Until OPENCHAMBER_ joins INHERITED_PREFIXES (docs/ENVIRONMENT.md §8, batch 2): the UI
+    // password otherwise reaches the child's environment block, which any process listing shows.
+    overrides: { OPENCHAMBER_UI_PASSWORD: undefined },
     logger: log,
   });
 

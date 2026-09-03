@@ -70,11 +70,101 @@ describe('createKernelProcessEnvironment', () => {
     expect(shellImportAt).toBeGreaterThan(strippedAt);
   });
 
+  it('strips again inside the login-shell merge, which refills whatever module load removed', () => {
+    // The merge fills every key that is undefined, and a stripped key is exactly that. So the
+    // strip has to sit in the same function body, after the loop, where no later call can land
+    // between them (docs/ENVIRONMENT.md §5.2 invariant 1).
+    const main = fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
+    const functionStart = main.indexOf('const inheritUserShellEnv = () => {');
+    const functionEnd = main.indexOf('\n};', functionStart);
+    const mergeLoop = main.indexOf('for (const [key, value] of Object.entries(shellEnv))', functionStart);
+    const stripInside = main.indexOf('stripInheritedForeignVariables(process.env)', mergeLoop);
+    expect(functionStart).toBeGreaterThan(-1);
+    expect(mergeLoop).toBeGreaterThan(functionStart);
+    expect(mergeLoop).toBeLessThan(functionEnd);
+    expect(stripInside).toBeGreaterThan(mergeLoop);
+    expect(stripInside).toBeLessThan(functionEnd);
+  });
+
+  it('never merges the login shell again once the kernel connection has been written', () => {
+    // Invariant 2: the strip now rides inside the merge, so a merge placed after
+    // startEmbeddedKernel would take OPENCODE_HOST and the password with it.
+    const main = fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
+    const kernelStartAt = main.indexOf('startEmbeddedKernel({');
+    const calls = [...main.matchAll(/inheritUserShellEnv\(\);/g)].map((match) => match.index);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const at of calls) expect(at).toBeLessThan(kernelStartAt);
+  });
+
+  it('keeps the UI password out of the child until OPENCHAMBER_ joins the prefix table', () => {
+    const main = fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
+    const kernelStartAt = main.indexOf('startEmbeddedKernel({');
+    const callEnd = main.indexOf('});', kernelStartAt);
+    expect(main.slice(kernelStartAt, callEnd)).toContain('OPENCHAMBER_UI_PASSWORD: undefined');
+  });
+
+  it('lets the shell runtime skip its own login-shell merge under Electron', () => {
+    // Invariant 3: one merge per process. The shell keeps its merge for standalone serve; the
+    // Electron build passes the upstream line by, byte-identical inside a comment.
+    const lines = fs
+      .readFileSync(new URL('../../web/server/index.js', import.meta.url).pathname, 'utf8')
+      .split('\n');
+    const shielded = lines.findIndex((line) => line.includes('/* applyLoginShellEnvSnapshot(); */'));
+    expect(shielded).toBeGreaterThan(0);
+    expect(lines[shielded - 1]).toContain('process.versions.electron');
+    expect(lines[shielded - 1]).toContain('applyLoginShellEnvSnapshot();');
+    const live = lines.filter((line) => /^\s*(if \(.+\) )?applyLoginShellEnvSnapshot\(\);\s*$/.test(line));
+    expect(live).toHaveLength(1);
+  });
+
   it('leaves everything that is not another product alone', () => {
     const environment = { PATH: '/usr/bin', GEOCODE_PY: '/usr/bin/python3', OPENCODE_CONFIG_DIR: '/theirs' };
     const removed = stripInheritedForeignVariables(environment);
     expect(removed).toEqual(['OPENCODE_CONFIG_DIR']);
     expect(environment).toEqual({ PATH: '/usr/bin', GEOCODE_PY: '/usr/bin/python3' });
+  });
+
+  it('keeps the names the caller asks for, which is how launcher knobs survive the strip', () => {
+    const environment = { OPENCODE_KEEP_ME: '1', OPENCODE_GONE: '2' };
+    const removed = stripInheritedForeignVariables(environment, { keep: ['OPENCODE_KEEP_ME'] });
+    expect(removed).toEqual(['OPENCODE_GONE']);
+    expect(environment).toEqual({ OPENCODE_KEEP_ME: '1' });
+  });
+
+  it('drops the runtime switches that change what code the child runs, per platform', () => {
+    // Every one of these was measured in a real utility process (docs/ENVIRONMENT.md §3 no. 4):
+    // NODE_OPTIONS --require executes a file, DYLD_INSERT_LIBRARIES loads a dylib,
+    // ELECTRON_RUN_AS_NODE keeps the child from starting, NODE_V8_COVERAGE writes to disk.
+    const poisoned = {
+      NODE_OPTIONS: '--require /tmp/x.js',
+      NODE_PATH: '/tmp/modules',
+      ELECTRON_RUN_AS_NODE: '1',
+      NODE_V8_COVERAGE: '/tmp/coverage',
+      DYLD_INSERT_LIBRARIES: '/tmp/x.dylib',
+      LD_PRELOAD: '/tmp/x.so',
+      // The user's toolchain, which the kernel's own children inherit and rely on.
+      LD_LIBRARY_PATH: '/opt/gdal/lib',
+      DYLD_LIBRARY_PATH: '/opt/gdal/lib',
+      NODE_EXTRA_CA_CERTS: '/etc/corp-ca.pem',
+      HTTPS_PROXY: 'http://proxy.corp:3128',
+      XDG_CONFIG_HOME: '/home/user/.config',
+      ANTHROPIC_API_KEY: 'sk-user',
+      GITHUB_TOKEN: 'ghp-user',
+    };
+    const onMac = createKernelProcessEnvironment({ environment: poisoned, platform: 'darwin' });
+    const onLinux = createKernelProcessEnvironment({ environment: poisoned, platform: 'linux' });
+    for (const gone of ['NODE_OPTIONS', 'NODE_PATH', 'ELECTRON_RUN_AS_NODE', 'NODE_V8_COVERAGE']) {
+      expect(onMac).not.toHaveProperty(gone);
+      expect(onLinux).not.toHaveProperty(gone);
+    }
+    expect(onMac).not.toHaveProperty('DYLD_INSERT_LIBRARIES');
+    expect(onMac.LD_PRELOAD).toBe('/tmp/x.so');
+    expect(onLinux).not.toHaveProperty('LD_PRELOAD');
+    expect(onLinux.DYLD_INSERT_LIBRARIES).toBe('/tmp/x.dylib');
+    for (const kept of ['LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'NODE_EXTRA_CA_CERTS', 'HTTPS_PROXY', 'XDG_CONFIG_HOME', 'ANTHROPIC_API_KEY', 'GITHUB_TOKEN']) {
+      expect(onMac[kept]).toBe(poisoned[kept]);
+      expect(onLinux[kept]).toBe(poisoned[kept]);
+    }
   });
 
   it('drops DEBUG everywhere and LD_PRELOAD only on linux', () => {

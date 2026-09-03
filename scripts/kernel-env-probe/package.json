@@ -1,0 +1,1 @@
+{ "name": "geocode-kernel-env-probe", "private": true, "type": "module", "main": "main.mjs" }
