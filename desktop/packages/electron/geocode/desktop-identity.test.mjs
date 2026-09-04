@@ -9,6 +9,18 @@ const electronRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const readElectronFile = (name) => fs.readFileSync(path.join(electronRoot, name), 'utf8');
 
 describe('desktop identity', () => {
+  it('is the origin the shell runtime trusts for the bundled UI', () => {
+    // A hand-copy in the web package (CONVENTIONS.md §3 forbids the import). The two drift
+    // with no conflict and no failure, except that every request from the window then gets
+    // no CORS headers and the UI reports the server unreachable.
+    const source = fs.readFileSync(
+      path.resolve(electronRoot, '../web/server/geocode/shell-identity.js'),
+      'utf8',
+    );
+    const copied = source.match(/export const PACKAGED_UI_ORIGIN = '([^']+)'/)?.[1];
+    expect(copied).toBe(`${DesktopIdentity.uiProtocol}://app`);
+  });
+
   it('derives every field from the two base strings', () => {
     // A field written flat still passes typecheck and still looks right today; it only
     // diverges the next time a base string changes, silently. Same reason `Brand` on the

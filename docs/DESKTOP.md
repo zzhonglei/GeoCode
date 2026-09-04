@@ -632,6 +632,11 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   平铺字面量,都在 `packages/electron` 的 `main.mjs` 与 `package.json` 里。日志不覆写。
   ⚠️ Windows 的 `extraMetadata` 不能漏——NSIS 的安装目录取自 `name` 而非 `productName`,
   `PATHS.md` §2 记着这条造成过真实事故,且错误会在注册表的 `InstallLocation` 里固化;
+  ⚠️ **这批漏了服务器那一侧**:web 服务器信任的打包 UI 来源名单(`index.js` 与 `request-security.js`
+  各一处)写死了上游的 `openchamber-ui://app`,协议改名后打包界面发出的每个请求都拿不到跨域许可头,
+  界面报「Unable to reach server」。2026-09-04 的真实会话才发现,套件照不到它。现由
+  `server/geocode/shell-identity.js` 的副本收口,`desktop-identity.test.mjs` 读副本对身份模块钉住,
+  `shell-identity.test.js` 真实驱动来源检查;
 - **批 2 · Shell 数据根**:注入 `OPENCHAMBER_DATA_DIR` 与 `OPENCHAMBER_MANAGED_PROCESS_REGISTRY`
   (后者是防御性的:skip-start 后不再注册托管进程,但孤儿回收仍在启动路径上)。上游把同一个三元
   表达式复制进了十几个文件、每份都认前者,那批零改动;不认的少数几处靠下面的命令列出,其中

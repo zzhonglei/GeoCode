@@ -300,6 +300,12 @@ agent 的工具里:agent 的 `bash` 看不到 `OTEL_EXPORTER_OTLP_HEADERS`,也�
   有内核、`nc` 收不到任何连接、设置页仍落 GeoCode 根。**这道门看读,foreign-writes 看写,互补。**
 - 打包版复验 `NODE_OPTIONS`:实验用的是合成的 `isPackaged`,不是 electron-builder 产物,结论充分但应在
   一次真正的打包上再跑一遍。
+- 2026-09-04 实测(批 2 验收):终端 export 了 `OPENCHAMBER_SKIP_LOCAL_SERVER=1`、`OPENCHAMBER_OPENCODE_CWD=/tmp/x`、
+  `OPENCODE_CONFIG_DIR=/tmp/poison`、遥测端点与 `OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN=true` 后起
+  `electron:dev:bundled`。主进程的初始环境块里五个都在;服务器照常启动并以 skip-start 指向我们的内核;
+  内核工作目录是家目录;内核环境块里带商标名字与 `NODE_OPTIONS` 共 0 个;遥测监听 0 次连接;对话与 git
+  面板可用;整个会话写入检测干净。顺带发现并修了一处与本设计无关的旧缺口:服务器的来源名单没跟上 UI 协议
+  改名(`DESKTOP.md` 阶段 6 批 1)。
 
 ## 8. 分批
 

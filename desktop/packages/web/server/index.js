@@ -114,6 +114,7 @@ import { createScheduledTaskService } from './lib/scheduled-tasks/service.js';
 import { createOpenChamberControlService } from './lib/openchamber-control/service.js';
 import { OpenChamberControlError } from './lib/openchamber-control/error.js';
 import webPush from 'web-push';
+import { PACKAGED_UI_ORIGIN } from './geocode/shell-identity.js'; // GeoCode: the renderer's own scheme
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1634,6 +1635,7 @@ async function main(options = {}) {
   const serverStartedAt = new Date().toISOString();
   const packagedClientOrigins = new Set([
     'openchamber-ui://app',
+    PACKAGED_UI_ORIGIN, // GeoCode: the bundled UI's origin, or its requests get no CORS headers
     'capacitor://localhost',
     'http://localhost',
     'https://localhost',

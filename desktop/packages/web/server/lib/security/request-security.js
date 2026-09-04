@@ -1,3 +1,5 @@
+import { PACKAGED_UI_ORIGIN } from '../../geocode/shell-identity.js'; // GeoCode: the renderer's own scheme
+
 export const createRequestSecurityRuntime = (deps) => {
   const { readSettingsFromDiskMigrated } = deps;
   // Origins of packaged (non-browser) clients whose WebView origin never
@@ -8,6 +10,7 @@ export const createRequestSecurityRuntime = (deps) => {
   // (message stream, terminal, dictation) while SSE kept working.
   const packagedClientOrigins = new Set([
     'openchamber-ui://app',
+    PACKAGED_UI_ORIGIN, // GeoCode: the bundled UI's origin, or its requests get no CORS headers
     'capacitor://localhost',
     'https://localhost',
   ]);
