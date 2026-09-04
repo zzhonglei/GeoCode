@@ -1,11 +1,7 @@
-# 环境变量边界:设计方案
+# 环境变量边界
 
-状态:**已批准**(2026-09-03;决策点 6.1 定为「去掉」,其余按推荐)。本文把 `PATHS.md` §3.6 与 `DESKTOP.md` §8.2 记下的那条边界重新设计一遍。
-起因是一次逐文件审计发现,文档里写的边界在运行时并不成立:剥离做了,但随后被两次登录 shell 回灌撤销。
-审计分五个模块进行(Electron 主进程与 CLI、web 服务器、内核、既有测试与文档、Electron 运行时实验),
-结论全部并入本文;凡写「实测」的都是执行过的,凡写「未验证」的都还没有。
-
-批准后本文替代 §3.6 与 §8.2 成为这条边界的主文,那两节改为指回本文。
+本文是 GeoCode 环境变量边界的设计:规则、变量分类、时序、机制与验证。`PATHS.md` §3.6 与 `DESKTOP.md` §8.2
+指向这里。凡写「实测」的都执行过,凡写「未验证」的都还没有。
 
 ---
 
@@ -18,8 +14,8 @@
 带商标的名字里有一批是我们自己要用的(壳与内核之间的内部 ABI、开发脚本的旋钮),它们必须在剥离**之后**由
 我们的代码写入,或在未打包时明确豁免。**这一批是整个设计里最要盯住的**,漏一个就是白屏或双内核,§4.1 逐个列出。
 
-唯一的例外候选是一小批不带商标、但能改变内核子进程「跑什么代码」的运行时变量(`NODE_OPTIONS` 一类),
-§4 类 B。它们不是配置也不是凭据,建议作为安全例外从内核子进程环境里去掉;这是决策点 §6.1。
+唯一的例外是一小批不带商标、但能改变内核子进程「跑什么代码」的运行时变量(`NODE_OPTIONS` 一类),
+§4 类 B。它们不是配置也不是凭据,作为安全例外从内核子进程环境里去掉(§6.1)。
 
 ## 2. 为什么上游帮不了我们
 
@@ -32,27 +28,25 @@ OpenCode 自己的桌面端(v1.18.18,`packages/desktop`,与内核同版本,同�
 对上游这是正确的:桌面端与 CLI 是同一个产品,共享 shell 里的 `OPENCODE_*` 是功能。它甚至在往反方向走,
 v2 路径会主动扫三个兄弟产品的 appData 目录复用已在跑的守护进程。**「不读兄弟产品的环境」是只有 fork
 才有的问题,没有参考实现可抄。** OpenChamber 照搬了 `createSidecarEnv` 的两行删除,没有加任何过滤;
-前缀过滤是 GeoCode 自己加的,而第一版把它放在了两次回灌之前。
+前缀过滤是 GeoCode 自己加的。
 
 上游给出的是边界应在的**位置**:它把应用的值叠在 shell 并入**之后**。我们的剥离放到同一个位置就对了。
 
-## 3. 现状:实测出来的九件事
+## 3. 上游的形状,和它决定的边界位置
 
-| # | 事实 | 证据 |
-|---|---|---|
-| 1 | **剥离被回灌。** `main.mjs:105` 删掉 `OPENCODE_*`/`OTEL_*`;`inheritUserShellEnv()`(1527/1534)按「当前为 `undefined` 才填」把登录 shell 的值填回去;web 服务器 `index.js:756` 的 `applyLoginShellEnvSnapshot()` 按「当前为空才填」再填一次。两处都在内核 fork 与服务器导入之前或之中。 | 用桩 `$SHELL` 实测:`OPENCODE_CONFIG` 从 `undefined` 变回 shell 的值;`OTEL_EXPORTER_OTLP_HEADERS=authorization=leaked` 同样回来 |
-| 2 | **内核子进程是干净的,但属侥幸。** `createKernelProcessEnvironment` 在 fork 时重新按前缀过滤,所以回灌的值到不了内核。这一层保护与第 105 行的剥离无关,任何人都可能以为它多余而删掉。 | `kernel-boot.test.mjs:44` 只证明「传入对象里的 `OPENCODE_CONFIG` 不进子进程」,没有任何测试驱动过真实的登录 shell |
-| 3 | **`OPENCHAMBER_*` 完全不剥**,web 服务器读 46 个名字、主进程读约 30 个。其中一批在回灌之后才读,shell 里的值直接生效:`SKIP_LOCAL_SERVER`(整个服务器与内核都不起)、`OPENCODE_CWD`(内核工作目录)、`SERVER_URL`(把桌面端指向远端服务器)、`ALLOW_UNAUTHENTICATED_LAN`、`DEV_SHUTDOWN`、`DIST_DIR`(当作界面文件目录去 serve 的路径)、`MANAGED_PROCESS_REGISTRY`(启动时**杀掉**其中记录的 pid 的那个目录)、`OPENCODE_PATH`/`OPENCODE_BIN`、`TERMINAL_SHELL`、`PUSH_RELAY_URL`、`RELAY_URL`、`APNS_*`。 | 实测 `OPENCHAMBER_SKIP_LOCAL_SERVER=1` 与 `OPENCHAMBER_OPENCODE_CWD=/tmp/attacker-cwd` 从桩 shell 到达读取点 |
-| 4 | **内核子进程只挡前缀 + `DEBUG` + `LD_PRELOAD`**。`NODE_OPTIONS='--require x.js'` 放进子进程 env,x.js 在 utility 进程里执行,`--import` 与 `--inspect` 同样;**打包后 Electron 只在主进程拒绝 `NODE_OPTIONS`,utility 子进程不受保护**。`DYLD_INSERT_LIBRARIES` 注入成功,而我们的 `entitlements.mac.plist` 明确授予 `allow-dyld-environment-variables` 与 `disable-library-validation`,正式版同样不受 SIP 保护。`ELECTRON_RUN_AS_NODE=1` 让子进程直接起不来(exit 2304)。`NODE_V8_COVERAGE` 往磁盘写 403 KB。`DEBUG=*` 对 Electron/Node 本身**无任何输出**,`NODE_DEBUG=*` 才是噪音源。 | 全部实测,Electron 43.3.0,含一次合成的 `app.isPackaged === true` 运行。还有一条复活链:打包后 Electron 会从 `process.env` **删掉** `NODE_OPTIONS`,于是它变成 `undefined`,正好满足回灌条件,shell 里 export 的值被填回来再复制进内核 env |
-| 5 | **壳内部的 XDG 时序劈叉。** `shared.js:20` 在导入时把内核配置根冻结成常量(早于 756 行),`plugins.js`/`skill-routes.js`/`skills.js` 每次调用时重算(晚于 756 行)。第二次回灌若带进 `XDG_CONFIG_HOME`,两组读到不同的根。Electron 里两次探测通常返回同一份,但主进程遇 nushell 整个跳过探测,服务器却会退到 `/bin/zsh`——劈叉可达。 | 实测:`shared_OPENCODE_CONFIG_DIR = ~/.config/GeoCode`,同一进程 `kernelConfigRoot()` 随后返回 `<probe>/GeoCode` |
-| 6 | **外部内核那条路还在。** `lifecycle.js:1078` 的 `startOpenCode()` 会按 `OPENCODE_BINARY` → 随包 `opencode-cli` → **PATH 扫描** → 家目录候选 → `$SHELL -lic 'command -v opencode'` 的顺序找一个二进制拉起来。Electron 里它不可达,靠的是一对变量(`ENV_SKIP_OPENCODE_START && ENV_EFFECTIVE_PORT`)恰好都在 756 行**之前**读,所以 shell 改不了它。这条时序在两处都没写。一对里任何一个为空,静默落到 PATH 扫描。 | `index.js:612-623`、`lifecycle.js:1038-1080` 逐行读;`extraResources` 确认随包带了 `opencode-cli` |
-| 7 | **界面口令进了内核子进程的环境块。** `main.mjs:1587` 把 `OPENCHAMBER_UI_PASSWORD` 写进 `process.env`,`createKernelProcessEnvironment` 不按这个前缀过滤,于是 `ps -E` 可见。同一模块的头注释写着内核口令刻意走 IPC。 | `kernel-environment.mjs:37-41` |
-| 8 | **唯一的守卫是源码文本顺序绊线**(`kernel-environment.test.mjs:61-71`,比三个 `indexOf`)。它对「剥离被移走或删掉」会红,对「剥离之后又插了回灌」是盲的。 | 用变异过的 `main.mjs` 副本验证过它能红,也验证过它对现状全绿 |
-| 9 | **文档与代码六处矛盾**:`GEOCODE_*`→`OPENCODE_*` 翻译通道文档说已删,`scripts/kernel-tui.sh:27-30` 里还活着,且它那份剥离只认 `OPENCODE_` 不认 `OTEL_`;`PATHS.md` §3.4 仍宣告 `GEOCODE_*` 为公开命名空间;`DESKTOP.md` §2、§5.1、阶段 6 清单仍把映射写成契约;§2 的内部 ABI 表列了两个从未写入的名字;§8.2 说前缀表拿壳读的名字核过,绊线只读两个内核文件;§3.6 说凡拉起内核或壳的入口都剥,实际只有一个入口剥。 | `C` 组逐条引文 |
+| # | 上游机制 | 对边界的含义 | 证据 |
+|---|---|---|---|
+| 1 | **两次登录 shell 回灌。** 主进程的 `inheritUserShellEnv()` 按「当前为 `undefined` 才填」把登录 shell 的值并入 `process.env`;web 服务器导入时 `applyLoginShellEnvSnapshot()` 按「当前为空才填」再并一次。两处都在内核 fork 与服务器导入之前或之中。 | 一次「删掉」正好制造出「undefined」,合并就把它填回来。剥离必须与合并同一函数体,且壳内只能合并一次(§5.2) | 用桩 `$SHELL` 驱动真实合并:删掉的 `OPENCODE_CONFIG` 与 `OTEL_EXPORTER_OTLP_HEADERS` 都回来 |
+| 2 | **子进程环境只取决于交给 fork 的对象。** `createKernelProcessEnvironment` 从零建对象、按前缀过滤;`utilityProcess.fork` 传了 `env` 就只有那个对象。 | 内核那一半的干净由 fork 边界独立保证,不依赖壳进程剥得多干净 | 传一个 3 键对象,子进程只剩这 3 个加系统自塞的 2 个 |
+| 3 | **`OPENCHAMBER_*` 是壳的配置面**,web 服务器读约 46 个名字、主进程约 30 个;一批在回灌之后才读:`SKIP_LOCAL_SERVER`(整个服务器与内核都不起)、`OPENCODE_CWD`(内核工作目录)、`SERVER_URL`(把桌面端指向远端服务器)、`ALLOW_UNAUTHENTICATED_LAN`、`DEV_SHUTDOWN`、`DIST_DIR`(当作界面文件目录去 serve 的路径)、`MANAGED_PROCESS_REGISTRY`(启动时**杀掉**其中记录的 pid 的目录)、`OPENCODE_PATH`/`OPENCODE_BIN`、`TERMINAL_SHELL`、`PUSH_RELAY_URL`、`RELAY_URL`、`APNS_*`。 | 第三个商标必须入表,我们自己要用的名字在剥离之后写回(§4.1) | 桩 shell 里的 `OPENCHAMBER_SKIP_LOCAL_SERVER=1` 与 `OPENCHAMBER_OPENCODE_CWD` 到达读取点 |
+| 4 | **运行时变量在任何代码之前生效。** `NODE_OPTIONS='--require x.js'` 放进子进程 env,x.js 在 utility 进程里执行,`--import` 与 `--inspect` 同样;**打包后 Electron 只在主进程拒绝 `NODE_OPTIONS`,utility 子进程不受保护**。`DYLD_INSERT_LIBRARIES` 注入成功。`ELECTRON_RUN_AS_NODE=1` 让子进程直接起不来(exit 2304)。`NODE_V8_COVERAGE` 往磁盘写 403 KB。`DEBUG=*` 对 Electron/Node 本身**无任何输出**,`NODE_DEBUG=*` 才是噪音源。 | 这些没有读取点可屏蔽,只能在 fork 边界删(§5.3) | 全部实测,Electron 43.3.0,含一次合成的 `app.isPackaged === true` 运行。打包后 Electron 会从 `process.env` 删掉 `NODE_OPTIONS`,它变成 `undefined`,正好满足回灌条件 |
+| 5 | **壳内两组读取时机不同。** `shared.js` 在导入时把内核配置根冻结成常量,`plugins.js`/`skill-routes.js`/`skills.js` 每次调用时重算。第二次回灌若带进 `XDG_CONFIG_HOME`,两组读到不同的根。主进程遇 nushell 整个跳过探测,服务器却会退到 `/bin/zsh`,两次探测可以不一致。 | 壳内只合并一次,三方(冻结常量、懒调用、内核子进程)才读到同一份 XDG(§5.4) | 实测:同一进程里冻结值为 `~/.config/GeoCode`,随后 `kernelConfigRoot()` 返回探针值 |
+| 6 | **壳有一条托管内核启动路。** `lifecycle.js` 的 `startOpenCode()` 按 `OPENCODE_BINARY` → 随包 `opencode-cli` → **PATH 扫描** → 家目录候选 → `$SHELL -lic 'command -v opencode'` 找一个二进制拉起来。不走这条路的条件是一对变量(`ENV_SKIP_OPENCODE_START && ENV_EFFECTIVE_PORT`),一对里任何一个为空,静默落到 PATH 扫描。 | 失败方向是「打开」,要改成「关闭」(§5.6) | `index.js` 与 `lifecycle.js` 逐行读 |
+| 7 | **`OPENCHAMBER_UI_PASSWORD` 由主进程写进 `process.env`**,再由 fork 边界复制给子进程;内核口令则走 IPC。 | 前缀表含 `OPENCHAMBER_`,口令自然不进子进程环境块 | `ps -E` 可见与否 |
 
 另有两件不在桌面路径上、只记录:`openchamber startup enable` 把整份 `process.env`(含全部 API 密钥)
 写进 launchd plist 与 `startup.env`,仅 27 个 shell 杂项进拒绝表(mode 0600,是 blast radius 不是权限洞);
-`ssh-manager.mjs:433-443` 把 SSH 口令放进子进程环境块,与内核口令走 IPC 的规则相悖,上游代码且有测试钉着现状。
+`ssh-manager.mjs` 把 SSH 口令放进子进程环境块,与内核口令走 IPC 的规则相悖,上游代码且有测试钉着现状。
 
 ## 4. 变量分类
 
@@ -61,7 +55,7 @@ v2 路径会主动扫三个兄弟产品的 appData 目录复用已在跑的守�
 | 类 | 是什么 | 例 | 处置 | 依据 |
 |---|---|---|---|---|
 | **A 带商标** | 三个产品各自的配置命名空间 | `OPENCODE_*`(内核两个注册表共 54 条,4 个重名,GeoCode 一条没改)、`OTEL_*`、`OPENCHAMBER_*`(壳约 100 个) | **剥**:壳进程与内核子进程都不留继承来的;我们要用的在剥离之后自己写(类 E)或未打包时豁免(类 F) | §1;上游把它们当功能,我们当另一个产品的设置 |
-| **B 不带商标、但能改「跑什么代码」** | Node/Electron/加载器的运行时变量:注入代码、让子进程起不来、往磁盘写文件 | `NODE_OPTIONS`、`NODE_PATH`、`ELECTRON_RUN_AS_NODE`、`ELECTRON_NO_ASAR`、`DYLD_INSERT_LIBRARIES`、`LD_PRELOAD`、`OPENSSL_CONF`、`NODE_ICU_DATA`、`NODE_V8_COVERAGE`、`NODE_REDIRECT_WARNINGS`、`ELECTRON_LOG_FILE`、`CHROME_LOG_FILE`、`NODE_DEBUG`、`DEBUG` | **建议作为唯一例外,不交给内核子进程**(黑名单,按平台;决策点 §6.1)。壳自己的进程不动——Electron 主进程的环境是操作系统给的,打包后 Electron 自己会拒绝 `NODE_OPTIONS` | 实测 §3 第 4 条;`DEBUG` 沿用上游理由(污染我们解析的 stdout),`NODE_DEBUG` 是实测出来的真噪音源。它们既不是配置也不是凭据,是安全 |
+| **B 不带商标、但能改「跑什么代码」** | Node/Electron/加载器的运行时变量:注入代码、让子进程起不来、往磁盘写文件 | `NODE_OPTIONS`、`NODE_PATH`、`ELECTRON_RUN_AS_NODE`、`ELECTRON_NO_ASAR`、`DYLD_INSERT_LIBRARIES`、`LD_PRELOAD`、`OPENSSL_CONF`、`NODE_ICU_DATA`、`NODE_V8_COVERAGE`、`NODE_REDIRECT_WARNINGS`、`ELECTRON_LOG_FILE`、`CHROME_LOG_FILE`、`NODE_DEBUG`、`DEBUG` | **唯一例外,不交给内核子进程**(黑名单,按平台;§6.1)。壳自己的进程不动——Electron 主进程的环境是操作系统给的,打包后 Electron 自己会拒绝 `NODE_OPTIONS` | 实测 §3 第 4 条;`DEBUG` 沿用上游理由(污染我们解析的 stdout),`NODE_DEBUG` 是实测出来的真噪音源。它们既不是配置也不是凭据,是安全 |
 | **C 不带商标** | 用户自己的一切:身份、工具链、凭据 | `HOME`、`PATH`、`SHELL`、`TMPDIR`、`LANG`、`TZ`、`SSH_AUTH_SOCK`、`GIT_*`、代理六件套、`NODE_EXTRA_CA_CERTS`、`LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`、`PYTHONPATH`、**`XDG_*`**;供应商凭据 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GITHUB_TOKEN`、`GOOGLE_APPLICATION_CREDENTIALS`(名字由 models.dev 目录数据驱动,内核带的那份 211 家、208 个名字) | **原样放行,一个不动** | 实测传空对象给 `utilityProcess.fork` 时子进程只剩 5 个键;GDAL/PROJ 靠 `LD_LIBRARY_PATH`,GEE 靠 `GOOGLE_APPLICATION_CREDENTIALS`,agent 的 `gh` 靠 `GITHUB_TOKEN`,内核用 `extendEnv: true` 把它们传给子进程;供应商凭据的读取点在 `KERNEL.md` 冻结区,内核优先级本就是配置文件 > `auth.json` > 环境;上游桌面端同形;XDG 见 §5.4 |
 | **E 我们的注入** | 壳与内核之间的内部 ABI,由我们的代码在剥离**之后**写入 | §4.1 的表 | **写在最后一次剥离之后**;名字不成为公开配置面 | 它们带商标,所以顺序就是全部:先剥,后写 |
 | **F 开发启动器旋钮** | 我们自己的启动脚本传给主进程的开关 | `electron:dev` 的 `OPENCHAMBER_ELECTRON_DEV`、`_ELECTRON_USE_BUNDLED_UI`、`_HMR_UI_PORT`、`_HMR_API_PORT`;更新器 e2e 夹具的 `_E2E`、`_UPDATER_E2E_URL` | **前四个仅未打包时豁免**,打包版一律剥;**后两个各形态都豁免**,它们没有构建期 define 时是惰性的,而夹具驱动的正是打包版 | 它们带商标,但发送方是我们的脚本;打包版没有 dev 发送方,一个 shell 里的 `OPENCHAMBER_ELECTRON_DEV=1` 不该把正式版翻成开发态 |
@@ -70,8 +64,8 @@ v2 路径会主动扫三个兄弟产品的 appData 目录复用已在跑的守�
 
 供应商凭据不再单独成类,它就是类 C。放行的可见后果只有一件:用户 shell 里有 `ANTHROPIC_API_KEY`,GeoCode 的模型
 列表里就会出现 Anthropic,虽然用户没在 GeoCode 里配过。那是用户自己的钥匙,不是别人的设置;一旦在界面登录或写进
-配置文件,文件里的值优先,环境的值就不起作用。曾考虑过按 `_API_KEY` 后缀剥、其余 35 个名字手工二分再配一条读
-models.dev 的绊线,否决:那 35 个里一大半是 `AWS_*`、`GOOGLE_APPLICATION_CREDENTIALS`、`GITHUB_TOKEN` 这类身兼
+配置文件,文件里的值优先,环境的值就不起作用。按 `_API_KEY` 后缀剥、其余 35 个名字手工二分再配一条读 models.dev 的绊线,这条路
+做不到更好:那 35 个里一大半是 `AWS_*`、`GOOGLE_APPLICATION_CREDENTIALS`、`GITHUB_TOKEN` 这类身兼
 两职的名字,剥了断工具链,留了照样激活供应商,规则做不到比商标判据更好,却多出一张会漂的名单。
 
 ### 4.1 带商标却是我们自己要用的名字
@@ -100,7 +94,7 @@ models.dev 的绊线,否决:那 35 个里一大半是 `AWS_*`、`GOOGLE_APPLICAT
 agent-tool 插件的 `OPENCHAMBER_AGENT_TOOL_URL`/`_TOKEN`)一律走 `startEmbeddedKernel` 的 `overrides`,它叠在过滤之后。
 
 三个带商标、树里**没有任何脚本设置**、只在测试里出现的名字——`OPENCHAMBER_MEMORY_ENABLE`、`OPENCHAMBER_STARTUP_PERF`、
-`OPENCHAMBER_ELECTRON_LOAD_SERVER_UI`——剥掉等于今天的默认,不进白名单。开发脚本还设 `OPENCHAMBER_PORT`、
+`OPENCHAMBER_ELECTRON_LOAD_SERVER_UI`——剥掉与默认无异,不进白名单。开发脚本还设 `OPENCHAMBER_PORT`、
 `OPENCHAMBER_RELAY_HOST`、`OPENCHAMBER_DISABLE_PWA_DEV`,但收件人是独立的 dev 服务器进程与 vite,不经过 Electron
 主进程,不受本设计影响。
 
@@ -129,7 +123,7 @@ agent-tool 插件的 `OPENCHAMBER_AGENT_TOOL_URL`/`_TOKEN`)一律走 `startEmbed
 ```
   1  import './geocode/environment-boundary.mjs'   ← **第一条 import**:模块加载即做第一次剥离,
                                                      早于 mintOutsideFileGrant 拉进来的服务器闭包,
-                                                     早于第 50 行的 isDev(批 2)
+                                                     早于第 50 行的 isDev
 103  applyShellDataRoot(process.env)               ← 注入数据根(类 E)
 ...
 1500 inheritUserShellEnv() {
@@ -151,8 +145,8 @@ agent-tool 插件的 `OPENCHAMBER_AGENT_TOOL_URL`/`_TOKEN`)一律走 `startEmbed
 
 1. **合并之后立刻剥离,同一函数体内。** 剥离不再是一个可以被隔开的独立语句。上游若新增第三个
    `inheritUserShellEnv()` 调用点,自动带上。
-2. **所有注入都在最后一次剥离之后。** 现有的 1570-1593 与 kernel-boot 的连接写入已经满足;数据根
-   (103 行)不满足,所以在剥离函数里重写一次。
+2. **所有注入都在最后一次剥离之后。** 1570-1593 的注入与 kernel-boot 的连接写入都在其后;数据根写在
+   103 行,所以在剥离函数里重写一次。
 3. **壳内不做第二次合并。** 主进程已经把同一个登录 shell 并进同一份 `process.env`,服务器再并一次只会
    把剥掉的填回来。判据 `process.versions.electron` 是进程的固有事实,不是变量,丢不了;`openchamber
    serve` 单独跑时它为空,上游行为不变。实测 `ELECTRON_RUN_AS_NODE=1` 下它仍为 `43.3.0`,所以
@@ -184,15 +178,14 @@ agent-tool 插件的 `OPENCHAMBER_AGENT_TOOL_URL`/`_TOKEN`)一律走 `startEmbed
 **明确不删**:`LD_LIBRARY_PATH`、`DYLD_LIBRARY_PATH`(用户工具链,GDAL/PROJ 依赖)、`NODE_EXTRA_CA_CERTS`、
 `SSL_CERT_FILE`/`SSL_CERT_DIR`(企业 CA)、代理六件套(内核对外连线靠它,企业环境必需;`kernel-sidecar.mjs`
 已自行把 loopback 补进 `NO_PROXY`)、`NODE_TLS_REJECT_UNAUTHORIZED`(降级 TLS 但不改代码,是用户对所有
-Node 程序的选择,决策点 §6.4)。
+Node 程序的选择,§6.4)。
 
 `utilityProcess.fork` 的 `execArgv` 选项我们不传,保持为空。
 
-口令:内核口令已走 IPC;界面口令随 `OPENCHAMBER_` 入表后自然不再进子进程。批 1 若先于批 2 落地,
-用一条 `overrides: { OPENCHAMBER_UI_PASSWORD: undefined }` 顶上,批 2 后删掉。
+口令:内核口令走 IPC;界面口令带 `OPENCHAMBER_` 前缀,不进子进程。
 
 内核子进程**收到的**环境就是它的 bash 工具、MCP、LSP、git、GEO 子进程**继承的**环境——内核起的每个
-子进程都是 `{...process.env, ...overlay}`(审计 B 组 §5,仅三处例外)。所以这一层过滤的收益直接传到
+子进程都是 `{...process.env, ...overlay}`(仅三处例外)。所以这一层过滤的收益直接传到
 agent 的工具里:agent 的 `bash` 看不到 `OTEL_EXPORTER_OTLP_HEADERS`,也看不到 `OPENCHAMBER_UI_PASSWORD`。
 
 ### 5.4 XDG 四根:保留,并且让两半看到同一份
@@ -217,7 +210,7 @@ agent 的工具里:agent 的 `bash` 看不到 `OTEL_EXPORTER_OTLP_HEADERS`,也�
 
 被否决的替代:把这些旋钮改成命令行参数。要动主进程的读取点,全是上游行,换来的只是少一张 6 行的表。
 
-### 5.6 外部内核那条路(批 3)
+### 5.6 外部内核那条路
 
 目标是让 §3 第 6 条的能力**不存在**,而不是被一对变量拦着。形态:`startOpenCode()` 函数体的第一句是早退,
 `process.versions.electron` 为真时抛错「GeoCode owns its kernel; the shell runtime does not start one」,上游
@@ -230,9 +223,8 @@ bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 
 一步都不执行。绊线在 `server/geocode/managed-kernel.test.js`:带 Electron 标记的运行时拒绝且不 spawn,
 同一个运行时去掉标记后作对照,必须到达 spawn。
 
-随包的 `opencode-cli`(决策点 §6.6):查实 `resources/opencode-cli` 里只有一个 `.gitkeep`。我们的
-`prepare-geocode-kernel.mjs` 早已替代上游的下载步骤,从未有过一个 opencode 二进制被打进包里,
-`extraResources` 那条只是在复制一个空目录。条目与占位目录一并删除;上游的 `prepare-opencode-cli.mjs`、
+随包的 `opencode-cli`(§6.6):`prepare-geocode-kernel.mjs` 替代了上游的下载步骤,`resources/opencode-cli`
+从未装过一个 opencode 二进制,`extraResources` 那条只是在复制一个空目录。条目与占位目录一并删除;上游的 `prepare-opencode-cli.mjs`、
 `verify-opencode-cli.mjs` 与 `verify-linux-appimage.mjs` 对它的期待原样保留,不在我们的发布流程上。
 
 ### 5.7 CLI 与 `startup enable`:不在产品面
@@ -242,20 +234,20 @@ bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 
 的入口。**本设计不改它们**,在 `DESKTOP.md` §7 产品能力边界记一条「CLI 不是产品入口」,并配一条绊线:
 `main.mjs` 与 `geocode/*.mjs` 不引用 `packages/web/bin`。
 
-## 6. 决策点
+## 6. 取舍
 
-需要产品拍板的七件,每件带推荐。不拍板的默认按推荐执行。
+本设计里做过取舍的几处,决定与理由。
 
-| # | 问题 | 推荐 | 理由 |
+| # | 问题 | 决定 | 理由 |
 |---|---|---|---|
-| 6.1 | 类 B(`NODE_OPTIONS` 一类)不带商标,按总原则该放行;是否作为唯一例外从内核子进程环境去掉 | **去掉** | 它们既不是配置也不是凭据,是注入代码、让子进程崩溃或往磁盘写文件的运行时开关,三条都实测过;上游自己也删 `DEBUG` 与 `LD_PRELOAD`,这只是把同一个理由用全。只动内核子进程的环境,壳进程不动 |
-| 6.1a | 供应商 API 密钥是否也只认配置文件 | **已定:放行**(类 C) | 不带商标,是用户自己的钥匙;读取点在冻结区;内核优先级本就是配置文件 > `auth.json` > 环境;上游桌面端同形。§4 末段记了被否决的后缀规则 |
-| 6.2 | 上游文档承诺可从 shell 设的 `OPENCHAMBER_*`(`CONTRIBUTING.md` 的 HMR 端口、docker 的 `UI_PASSWORD`/`HOST`/`TUNNEL_*`) | **剥。** HMR 端口归类 F 豁免;docker 的那批 GeoCode 没有 docker 形态 | 桌面形态没有这些面;`README.md` 实际一个环境变量都没写 |
-| 6.3 | `XDG_*` | **保留并统一**(§5.4) | 是标准不是配置;开发沙箱与内核都依赖 |
-| 6.4 | `NODE_TLS_REJECT_UNAUTHORIZED`、`LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH` | **保留** | 不改代码;用户对自己工具链的选择;地理工具链依赖后两者 |
-| 6.5 | `entitlements.mac.plist` 的 `allow-dyld-environment-variables` 与 `disable-library-validation` | **单独调查,不在本设计** | 上游注释说是给 Electron JIT 与 native 模块的(`bun-pty`、`node-pty`、`sherpa-onnx-node` 三个 native 依赖);去掉可能让它们加载失败。本设计从子进程侧删 `DYLD_INSERT_LIBRARIES` 已覆盖注入路径 |
-| 6.6 | 随包的 `opencode-cli` 二进制 | **已定:删掉 `extraResources` 条目与占位目录**(§5.6) | 从未真的打进过包,目录是空的;它唯一的消费者是那条已封的路 |
-| 6.7 | CLI(`openchamber serve`、`startup enable`) | **不改,记为非产品入口**(§5.7) | 不随应用分发;改它是另一个交付物 |
+| 6.1 | 类 B(`NODE_OPTIONS` 一类)不带商标,按总原则该放行;是否作为唯一例外从内核子进程环境去掉 | 去掉 | 它们既不是配置也不是凭据,是注入代码、让子进程崩溃或往磁盘写文件的运行时开关,三条都实测过;上游自己也删 `DEBUG` 与 `LD_PRELOAD`,这只是把同一个理由用全。只动内核子进程的环境,壳进程不动 |
+| 6.1a | 供应商 API 密钥是否也只认配置文件 | 放行(类 C) | 不带商标,是用户自己的钥匙;读取点在冻结区;内核优先级本就是配置文件 > `auth.json` > 环境;上游桌面端同形。§4 末段记了被否决的后缀规则 |
+| 6.2 | 上游文档承诺可从 shell 设的 `OPENCHAMBER_*`(`CONTRIBUTING.md` 的 HMR 端口、docker 的 `UI_PASSWORD`/`HOST`/`TUNNEL_*`) | 剥。 HMR 端口归类 F 豁免;docker 的那批 GeoCode 没有 docker 形态 | 桌面形态没有这些面;`README.md` 实际一个环境变量都没写 |
+| 6.3 | `XDG_*` | 保留并统一(§5.4) | 是标准不是配置;开发沙箱与内核都依赖 |
+| 6.4 | `NODE_TLS_REJECT_UNAUTHORIZED`、`LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH` | 保留 | 不改代码;用户对自己工具链的选择;地理工具链依赖后两者 |
+| 6.5 | `entitlements.mac.plist` 的 `allow-dyld-environment-variables` 与 `disable-library-validation` | 不动 | 这两行只在用 Apple 开发者证书签名、启用硬化运行时时才有意义;GeoCode 是免费开源项目,不签名,文件形同虚设,而未签名应用本就不受 SIP 对 `DYLD_*` 的限制。真正挡住注入的是子进程侧删 `DYLD_INSERT_LIBRARIES`(§5.3),已落地并实测。上游注释说这两行是给 `bun-pty`、`node-pty`、`sherpa-onnx-node` 三个 native 模块的,原样保留;哪天有证书再回头看 |
+| 6.6 | 随包的 `opencode-cli` 二进制 | 删掉 `extraResources` 条目与占位目录(§5.6) | 从未真的打进过包,目录是空的;它唯一的消费者是那条已封的路 |
+| 6.7 | CLI(`openchamber serve`、`startup enable`) | 不改,记为非产品入口(§5.7) | 不随应用分发;改它是另一个交付物 |
 
 ## 7. 验证与绊线
 
@@ -271,19 +263,19 @@ bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 
 - `OPENCHAMBER_UI_PASSWORD` 不进子进程环境;
 - 反证:把 `OPENCHAMBER_` 从表里拿掉、把 `NODE_OPTIONS` 从黑名单拿掉,各自应有且只有对应断言变红。
 
-**顺序绊线(源码文本,升级现有的那条)**
+**顺序绊线(源码文本)**
 - `stripInheritedForeignVariables` 的调用出现在 `inheritUserShellEnv` 函数体内、`for` 合并循环之后;
 - `index.js` 第 756 行处存在 `/* applyLoginShellEnvSnapshot(); */` 且其前一行是带 `process.versions.electron`
   的条件调用;
 - `inheritUserShellEnv();` 的每一处调用都在 `startEmbeddedKernel({` 之前(不变量 2:剥离现在随合并走,
   一次晚于内核连接写入的合并会把 `OPENCODE_HOST` 与口令一并剥掉);
-- 现有的「剥离早于 kernel start 与 server import」保留。
+- 「剥离早于 kernel start 与 server import」。
 - 反证:各删一行,各应变红。
 
-**前缀覆盖绊线(现有那条,扩到壳侧)**
-- 现有:扫内核两个 flag 注册表,所有引号里的大写名必须被前缀表覆盖。保留,并把没用的 `notEnvironment` 表删掉;
-- 新增:扫 `packages/web/server/**` 与 `main.mjs` 里 `process.env.X` / `env.X` 形状的读取,去掉注释,
-  名字以 `OPENCODE_`/`OTEL_`/`OPENCHAMBER_` 开头的必须在前缀表内。它今天必然全绿,存在的意义是钉住
+**前缀覆盖绊线**
+- 内核侧:扫内核两个 flag 注册表,所有引号里的大写名必须被前缀表覆盖;
+- 壳侧:扫 `packages/web/server/**` 与 `main.mjs` 里 `process.env.X` / `env.X` 形状的读取,去掉注释,
+  名字以 `OPENCODE_`/`OTEL_`/`OPENCHAMBER_` 开头的必须在前缀表内。它必然全绿,存在的意义是钉住
   「壳读的名字与表同源」这条 `DESKTOP.md` §8.2 已经许下但没兑现的承诺。
 
 **运行时(新,`geocode/` 下,进 `test-gate.sh` 的 electron 段)**
@@ -299,7 +291,7 @@ bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 
   指向本地一个只数连接的监听、`NODE_OPTIONS=--require` 一个落标记文件的脚本、`OPENCHAMBER_UI_PASSWORD`。观察四件事:
   `/config` 有没有回显毒配置、标记文件有没有出现、监听收到几次连接、`ps -E` 的环境块里有没有这四个名字;XDG 重定向到
   临时目录,内核不碰真实根。
-- 第二次绕过边界直接 `startKernelHost`,同一份毒:四个探针必须全响。2026-09-03 实测:产品路径四项全空、XDG 生效;
+- 第二次绕过边界直接 `startKernelHost`,同一份毒:四个探针必须全响。实测:产品路径四项全空、XDG 生效;
   对照组配置回显 `poison-user`、标记文件写出(`--require` 在真实 utility 进程里执行了)、OTLP 监听 3 次连接、
   环境块四个名字全在。绿的条件是「A 全空且 B 全响」,少一边都红。
 
@@ -309,38 +301,13 @@ bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 
   有内核、`nc` 收不到任何连接、设置页仍落 GeoCode 根。**这道门看读,foreign-writes 看写,互补。**
 - 打包版复验 `NODE_OPTIONS`:实验用的是合成的 `isPackaged`,不是 electron-builder 产物,结论充分但应在
   一次真正的打包上再跑一遍。
-- 2026-09-04 实测(批 2 验收):终端 export 了 `OPENCHAMBER_SKIP_LOCAL_SERVER=1`、`OPENCHAMBER_OPENCODE_CWD=/tmp/x`、
+- 一次验收样本:终端 export 了 `OPENCHAMBER_SKIP_LOCAL_SERVER=1`、`OPENCHAMBER_OPENCODE_CWD=/tmp/x`、
   `OPENCODE_CONFIG_DIR=/tmp/poison`、遥测端点与 `OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN=true` 后起
   `electron:dev:bundled`。主进程的初始环境块里五个都在;服务器照常启动并以 skip-start 指向我们的内核;
   内核工作目录是家目录;内核环境块里带商标名字与 `NODE_OPTIONS` 共 0 个;遥测监听 0 次连接;对话与 git
-  面板可用;整个会话写入检测干净。顺带发现并修了一处与本设计无关的旧缺口:服务器的来源名单没跟上 UI 协议
-  改名(`DESKTOP.md` 阶段 6 批 1)。
+  面板可用;整个会话写入检测干净。
 
-## 8. 分批
-
-| 批 | 内容 | 动到的文件 | 依赖 |
-|---|---|---|---|
-| **1 · 已落地(2026-09-03)** | 剥离追加在 `inheritUserShellEnv` 尾部;`index.js:756` 屏蔽;黑名单 `CHILD_DENYLIST`;界面口令 override;`keep` 参数提前进来给批 2 用;顺序绊线三条(函数体内的剥离、`index.js` 的屏蔽形态、口令 override);运行时测试 `login-shell-boundary.test.js`(桩 shell 驱动真实导入,plain 为对照、electron 为断言)。三条绊线各做过反证,全项目门绿,写入检测前后干净;真实内核探针 `scripts/kernel-env-probe.sh` 绿,把子进程过滤临时拆掉后判 RED | `kernel-environment.mjs`(+23/-9)、`main.mjs`(+7/-0)、`index.js`(+7/-1,那 1 行是逐字节包进注释的上游行)、两个测试文件扩充、两个新测试文件、探针脚本四个文件 | 无 |
-| **2 · 已落地(2026-09-03)** | `OPENCHAMBER_` 入表;两张白名单;第一次剥离搬进首个 import(`environment-boundary.mjs`);`applyShellDataRoot` 在合并尾部的剥离后重跑;删批 1 的口令 override;壳侧前缀覆盖绊线;白名单来源绊线;文档(§9)。四条新绊线各做过反证,全项目门绿,内核探针绿 | `kernel-environment.mjs`、`environment-boundary.mjs`(新)、`main.mjs`(+8/-8,删的 8 行全是批 1 自己的)、tests、`PATHS.md`、`DESKTOP.md`、`CONVENTIONS.md`、`kernel-tui.sh` | 批 1 |
-| **3 · 已落地(2026-09-04)** | `startOpenCode()` 顶部早退,Electron 下拒绝托管启动;`managed-kernel.test.js` 两条(拒绝 + 对照),反证做过;删空的 `opencode-cli` 资源条目与占位目录 | `lifecycle.js`(+8/-0)、`package.json`、`.gitkeep`、一个新测试文件 | 批 2 |
-
-批 1 的改动面:`main.mjs` 加两行(函数尾部的剥离与数据根重写),`index.js` 改一行,其余在我们自己的模块与测试里。
-
-## 9. 文档改动清单(随批 2)
-
-| 文件 | 改什么 |
-|---|---|
-| `PATHS.md` §3.4 | 删「环境变量(对外)`GEOCODE_*`」一行;内核内部行保留 |
-| `PATHS.md` §3.6 | 缩成指回本文,保留「为什么在进程边界」那段;补 XDG 一句 |
-| `DESKTOP.md` §2 | 内部 ABI 表删 `OPENCODE_SERVER_USERNAME` 与 `OPENCODE_SKIP_START`(从未写入),删「再从公开的 `GEOCODE_*` 映射」 |
-| `DESKTOP.md` §5.1 第 3 步 | 改为「剥离继承的三个前缀,再由我们的代码注入」 |
-| `DESKTOP.md` §8.2 | 指回本文 |
-| `DESKTOP.md` 阶段 6 | 「验证环境变量翻译」改为「环境边界见 `ENVIRONMENT.md`」;加批 1/2/3 的完成记录 |
-| `DESKTOP.md` §7 | 加「CLI 不是产品入口」 |
-| `CONVENTIONS.md` §7 | foreign-writes 那段加 §7 的读侧手工检查;`electron:dev` 描述改为事实(它是我们的 dev 脚本起的壳,分叉在 5 秒健康探测的竞态上,不是 Electron 分叉的) |
-| `scripts/kernel-tui.sh` | 删「Same two rules apply to the Electron shell」;它自己的剥离改为调同一张表(或至少加 `OTEL_`);`GEOCODE_*` 映射是沙箱专用,注释说清「仅此脚本,产品无此通道」 |
-
-## 10. 记录、不修
+## 8. 记录、不修
 
 上游代码里与本题相邻但不在 GeoCode 增改面上的,记在这里,不为它们改上游:
 

@@ -634,7 +634,7 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   `PATHS.md` §2 记着这条造成过真实事故,且错误会在注册表的 `InstallLocation` 里固化;
   ⚠️ **这批漏了服务器那一侧**:web 服务器信任的打包 UI 来源名单(`index.js` 与 `request-security.js`
   各一处)写死了上游的 `openchamber-ui://app`,协议改名后打包界面发出的每个请求都拿不到跨域许可头,
-  界面报「Unable to reach server」。2026-09-04 的真实会话才发现,套件照不到它。现由
+  界面报「Unable to reach server」。套件照不到它,只有真实会话能。现由
   `server/geocode/shell-identity.js` 的副本收口,`desktop-identity.test.mjs` 读副本对身份模块钉住,
   `shell-identity.test.js` 真实驱动来源检查;
 - **批 2 · Shell 数据根**:注入 `OPENCHAMBER_DATA_DIR` 与 `OPENCHAMBER_MANAGED_PROCESS_REGISTRY`
@@ -679,7 +679,7 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
 - **批 8 · 内核侧残留**:已完成。`cli/network.ts` 的 mDNS 默认值(见 `PATHS.md` §5「一次全面审计」)、
   `tui/context/theme.tsx` 的第三处项目扫描、`plugin/install.ts` 往用户仓库写 `.opencode/opencode.json`、
   `tui/clipboard.ts` 落在共享 `/tmp` 的 `opencode-clipboard.png`;
-- **批 9 · 环境边界**:三批全部落地(2026-09-03 至 09-04),规则、时序、绊线与实测记录见 `ENVIRONMENT.md`。
+- **批 9 · 环境边界**:已完成,规则、时序、绊线与实测记录见 `ENVIRONMENT.md`。
   批 3 把壳的托管启动在 Electron 下改为拒绝,§7.3「选择或自动发现系统 OpenCode」从此有了运行时绊线;
 - 验证与用户自装 OpenCode 并存互不读写(现在由 `scripts/foreign-writes.sh` 客观给出,
   `CONVENTIONS.md` §7;读侧由 `scripts/kernel-env-probe.sh` 给出内核那一半)。
