@@ -1,3 +1,5 @@
+// GeoCode: first, so the inherited environment is stripped before any module below evaluates.
+import { inheritedKeep } from './geocode/environment-boundary.mjs';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net as electronNet, Notification, powerMonitor, powerSaveBlocker, protocol, screen, session, shell, webContents } from 'electron';
 import contextMenu from 'electron-context-menu';
 import log from 'electron-log/main.js';
@@ -99,10 +101,9 @@ if (isDev) {
 }
 app.setAppUserModelId(APP_USER_MODEL_ID);
 // --- GeoCode: the shell runtime's data root, placed here because `sshManager` below
-// resolves a settings path at module top level and keeps the string (docs/PATHS.md §5). ---
+// resolves a settings path at module top level and keeps the string (docs/PATHS.md §5).
+// The inherited environment was stripped at the first import above, so this is a write. ---
 applyShellDataRoot({ environment: process.env, homeDirectory: os.homedir() });
-// Before the shell runtime loads and before the kernel connection is written here.
-stripInheritedForeignVariables(process.env);
 // --- /GeoCode ---
 app.commandLine.appendSwitch('proxy-bypass-list', '<-loopback>');
 // Lift Chromium's per-host cap only for bundled UI. Applying this to Vite HMR
@@ -1523,8 +1524,10 @@ const inheritUserShellEnv = () => {
   }
 
   // GeoCode: the merge above refills every name the strip at module load removed, so it repeats
-  // here in the same body, where nothing can land between the two (docs/ENVIRONMENT.md §5.2).
-  stripInheritedForeignVariables(process.env);
+  // here in the same body, where nothing can land between the two, and the data root it takes
+  // with it is written straight back (docs/ENVIRONMENT.md §5.2).
+  stripInheritedForeignVariables(process.env, { keep: inheritedKeep });
+  applyShellDataRoot({ environment: process.env, homeDirectory: os.homedir() });
 };
 
 const shouldSkipLocalServer = () => {
@@ -1606,9 +1609,6 @@ const spawnLocalServer = async () => {
     fork: (modulePath, forkArgs, options) => utilityProcess.fork(modulePath, forkArgs, options),
     cwd: process.env.OPENCHAMBER_OPENCODE_CWD,
     environment: process.env,
-    // Until OPENCHAMBER_ joins INHERITED_PREFIXES (docs/ENVIRONMENT.md §8, batch 2): the UI
-    // password otherwise reaches the child's environment block, which any process listing shows.
-    overrides: { OPENCHAMBER_UI_PASSWORD: undefined },
     logger: log,
   });
 

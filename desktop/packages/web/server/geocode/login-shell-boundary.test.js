@@ -35,11 +35,13 @@ describe('login-shell merge at import of server/index.js', () => {
     const reached = importShellRuntime('plain');
     expect(reached.OPENCODE_CONFIG).toBe('/probe/opencode.json');
     expect(reached.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://probe:4318');
+    expect(reached.OPENCHAMBER_SKIP_LOCAL_SERVER).toBe('1');
   }, 60_000);
 
   it('under Electron: leaves the names main removed removed', () => {
     const reached = importShellRuntime('electron');
     expect(reached.OPENCODE_CONFIG).toBeNull();
     expect(reached.OTEL_EXPORTER_OTLP_ENDPOINT).toBeNull();
+    expect(reached.OPENCHAMBER_SKIP_LOCAL_SERVER).toBeNull();
   }, 60_000);
 });

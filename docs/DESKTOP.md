@@ -103,12 +103,12 @@ Kernel,再在动态导入 Shell Runtime 前写入以下**内部进程 ABI**:
 | 内部字段 | 值 |
 |---|---|
 | `OPENCODE_HOST` | 本次启动的 Kernel loopback URL |
-| `OPENCODE_SERVER_USERNAME/PASSWORD` | 本次启动生成的 Kernel Basic 凭据 |
-| `OPENCODE_SKIP_START` / `OPENCHAMBER_SKIP_OPENCODE_START` | 固定为 `true` |
+| `OPENCODE_SERVER_PASSWORD` | 本次启动生成的 Kernel Basic 口令;用户名不写,壳侧默认值与 sidecar 写死的 `opencode` 一致 |
+| `OPENCHAMBER_SKIP_OPENCODE_START` | 固定为 `true` |
 
-这些名字不成为 GeoCode 的公开配置;main 会先剥离继承的 `OPENCODE_*`,再从公开的
-`GEOCODE_*` 映射,最后用受管连接覆盖 host 与认证。对 Shell Runtime 而言 Kernel 是
-「外部服务」,但对整个应用而言它仍是 Electron 自己拥有的内嵌进程。
+这些名字不成为 GeoCode 的公开配置;main 先剥离继承环境里带商标的名字,再写入受管连接
+(`ENVIRONMENT.md` §5.2)。对 Shell Runtime 而言 Kernel 是「外部服务」,但对整个应用而言它仍是
+Electron 自己拥有的内嵌进程。
 
 Shell Runtime 到 Kernel 的这一段使用固定到本次应用进程的连接。OpenChamber 的 external
 restart 当前只会重新探测健康,不会重启 Kernel;将配置 Apply/Restart 委托回 Electron main
@@ -270,7 +270,8 @@ Shell 使用的 `@opencode-ai/sdk` 必须由**同一份 GeoCode Kernel OpenAPI**
 
 1. Electron main 建立 GeoCode appId、userData 与日志路径;
 2. 清理上次崩溃留下且能证明属于 GeoCode 的孤儿进程;
-3. 从公开 `GEOCODE_*` 环境构造 Kernel 内部环境,剥离继承来的 `OPENCODE_*` 后再映射;
+3. 剥离继承环境里带商标的名字(`OPENCODE_*`、`OTEL_*`、`OPENCHAMBER_*`),再由我们的代码注入内部 ABI
+   (`ENVIRONMENT.md` §5.2);
 4. 选择 Kernel loopback 端口并生成随机口令;
 5. 启动 Kernel utility process,等待 ready 与 `/global/health`;
 6. 启动 Shell Runtime,以注入的 Kernel URL 与认证作为唯一上游;
@@ -375,7 +376,8 @@ Agent Kernel。GeoCode 产品配置中被排除的能力也不能只靠隐藏按
 - Web / PWA;
 - VS Code extension;
 - iOS / Android;
-- 对外 CLI / Server;
+- 对外 CLI / Server(`packages/web/bin` 不随应用分发,`openchamber serve` 与 `startup enable` 不是产品入口,
+  `ENVIRONMENT.md` §5.7);
 - LAN、SSH host、Remote Instance、Relay、Tunnel 与设备配对;
 - 选择或自动发现系统 OpenCode;
 - OpenCode 自升级;
@@ -408,32 +410,9 @@ OpenChamber Settings 的逐页调查、Kernel API 缺口、目标请求流与实
 
 ### 8.2 环境变量边界
 
-**内核与壳都不从继承来的环境里取配置。** 两个进程各在一处收口,用的是同一份前缀表,由
-`kernel-environment.mjs` 持有。
-
-内核读的环境变量数以十计:配置根、配置文件、配置正文、权限集、数据库路径、模型清单地址,外加
-一批实验开关。对 GeoCode 来说这些都不是有意义的配置面——桌面应用的用户不 export shell 变量,
-所以一个被设上的变量,现实中几乎只能来自这台机器上另有一个 opencode。因此这些名字**一个都不接**。
-
-**曾经有一条 `GEOCODE_*` → `OPENCODE_*` 的翻译通道,已经删除。** 生产代码里从来没有消费者
-——树里那些 `GEOCODE_` 开头的东西是我们地理工具的常量与子进程输出标记,不是环境变量。留着它
-等于给「用户环境能操纵内核」保留一条路,而这正是要关的东西。
-
-仍能到达内核的只有两样,都不是继承来的变量:`startEmbeddedKernel` 的 `overrides` 参数,以及
-sidecar 在自己进程内设的凭据(口令根本不进环境块,走 IPC)。**用 `overrides` 要改代码、走提交
-、过审查**,这正是想要的区别——划的界线不是「没有变量」,而是「我们不控制的 shell 放不进东西」。
-
-⚠️ **剥离按一份前缀表判断,不按单个前缀。** 这条曾经只写 `OPENCODE_`,而那个形状是错的:遥测
-导出地址与随它发送的凭据头都不带这个前缀,于是直接继承。新出现的同类名字对单前缀规则是隐形的,
-所以表要拿内核实际读取的名字去核——绊线就在 `kernel-environment.mjs` 旁边。
-
-壳与内核用同一份表,是因为壳自己也读其中一批名字(配置根、配置文件、JWT 签名密钥)。只关内核会
-让两半对「自己跑在什么配置下」各执一词,那是这棵树反复出现的同一种劈叉。
-
-时序有两条,都吃重:壳的模块在导入时就把值求出来,所以剥离要排在导入之前;而 main 启动内核时会
-把连接变量写进同一个环境,所以剥离也要排在那之前,否则会把刚设好的连接从壳底下抽掉。
-
----
+规则与实现记录在 `ENVIRONMENT.md`:**带商标的剥,不带商标的不动。** 壳与内核用同一份前缀表
+(`kernel-environment.mjs`),剥离在主进程的登录 shell 合并之后、我们自己的注入之前,壳的第一条 import
+就是它;仍能到达内核的只有 `startEmbeddedKernel` 的 `overrides` 与 sidecar 经 IPC 自设的凭据。
 
 ## 9. 双上游维护
 
@@ -695,9 +674,10 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
 - **批 8 · 内核侧残留**:已完成。`cli/network.ts` 的 mDNS 默认值(见 `PATHS.md` §5「一次全面审计」)、
   `tui/context/theme.tsx` 的第三处项目扫描、`plugin/install.ts` 往用户仓库写 `.opencode/opencode.json`、
   `tui/clipboard.ts` 落在共享 `/tmp` 的 `opencode-clipboard.png`;
-- 验证环境变量翻译;
+- **批 9 · 环境边界**:批 1 与批 2 已落地(2026-09-03),规则、时序、绊线与实测记录见 `ENVIRONMENT.md`;
+  批 3(外部内核路径 fail-closed 与随包 `opencode-cli` 的去留)待做;
 - 验证与用户自装 OpenCode 并存互不读写(现在由 `scripts/foreign-writes.sh` 客观给出,
-  `CONVENTIONS.md` §7)。
+  `CONVENTIONS.md` §7;读侧由 `scripts/kernel-env-probe.sh` 给出内核那一半)。
 
 **阶段 6 剩余**,按产品优先级而非严重性排列(用户定的顺序:先路径、再对接、最后特性):
 

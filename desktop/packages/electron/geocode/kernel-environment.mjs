@@ -6,9 +6,22 @@
  * process IPC instead (kernel-protocol.mjs), so it never appears in the child's environment
  * block where any process listing would show it. --- */
 
-/** Prefixes the kernel reads configuration under. `OTEL_` is here because a rule written for
- *  `OPENCODE_` alone cannot see the telemetry pair, which steers where traces go. */
-export const INHERITED_PREFIXES = ['OPENCODE_', 'OTEL_'];
+/** Prefixes the kernel and the shell read configuration under. `OTEL_` is here because a rule
+ *  written for `OPENCODE_` alone cannot see the telemetry pair, which steers where traces go. */
+export const INHERITED_PREFIXES = ['OPENCODE_', 'OTEL_', 'OPENCHAMBER_'];
+
+/** What our own `electron:dev` scripts hand the main process; honoured only while unpackaged,
+ *  so a shell export cannot turn a release build into the development form. */
+export const LAUNCHER_ALLOWLIST = [
+  'OPENCHAMBER_ELECTRON_DEV',
+  'OPENCHAMBER_ELECTRON_USE_BUNDLED_UI',
+  'OPENCHAMBER_HMR_UI_PORT',
+  'OPENCHAMBER_HMR_API_PORT',
+];
+
+/** The updater e2e fixture drives a packaged build with these; inert unless the build was made
+ *  with the e2e define, so they can stay in every form. */
+export const E2E_ALLOWLIST = ['OPENCHAMBER_E2E', 'OPENCHAMBER_UPDATER_E2E_URL'];
 
 /** Runtime switches read by Node, Electron or the loader before any code of ours runs, so the
  *  process boundary is the only place to handle them. Each either runs code of its own in the

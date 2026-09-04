@@ -46,15 +46,25 @@ describe('startEmbeddedKernel', () => {
     expect(calls[0].environment.PATH).toBe('/usr/bin');
   });
 
-  it('drops a name an override sets to undefined, which is how the UI password stays out', async () => {
+  it('drops a name an override sets to undefined', async () => {
     const { started, calls } = bootWith({
-      environment: { PATH: '/usr/bin', OPENCHAMBER_UI_PASSWORD: 'ui-secret' },
-      overrides: { OPENCHAMBER_UI_PASSWORD: undefined },
+      environment: { PATH: '/usr/bin', SOME_SECRET: 'value' },
+      overrides: { SOME_SECRET: undefined },
+    });
+    await started;
+
+    expect(calls[0].environment).not.toHaveProperty('SOME_SECRET');
+    expect(calls[0].environment.PATH).toBe('/usr/bin');
+  });
+
+  it('keeps the shell runtime\'s own variables, the UI password among them, out of the kernel', async () => {
+    const { started, calls } = bootWith({
+      environment: { PATH: '/usr/bin', OPENCHAMBER_UI_PASSWORD: 'ui-secret', OPENCHAMBER_DATA_DIR: '/data' },
     });
     await started;
 
     expect(calls[0].environment).not.toHaveProperty('OPENCHAMBER_UI_PASSWORD');
-    expect(calls[0].environment.PATH).toBe('/usr/bin');
+    expect(calls[0].environment).not.toHaveProperty('OPENCHAMBER_DATA_DIR');
   });
 
   it('refuses to start when the runtime was never staged, naming the fix', async () => {

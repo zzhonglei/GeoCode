@@ -17,13 +17,13 @@ export XDG_CONFIG_HOME="$SANDBOX/config"
 export XDG_CACHE_HOME="$SANDBOX/cache"
 export XDG_STATE_HOME="$SANDBOX/state"
 
-# GeoCode's public env namespace is GEOCODE_*. At this boundary we
-# 1) strip inherited OPENCODE_* (this machine may also run real OpenCode —
+# The sandbox's own boundary (docs/ENVIRONMENT.md):
+# 1) strip inherited OPENCODE_* and OTEL_* (this machine may also run real OpenCode —
 #    a stray OPENCODE_CONFIG(_DIR)/OPENCODE_DB would silently steer the kernel),
 # 2) map every GEOCODE_X to OPENCODE_X, the names the kernel natively reads.
-# Generic on purpose: future upstream flags get GEOCODE_ aliases for free.
-# Same two rules apply to the Electron shell when spawning the sidecar.
-for v in $(env | sed -n 's/^\(OPENCODE_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$v"; done
+# Rule 2 exists only here: the product has no GEOCODE_* channel, and the Electron shell
+# strips without mapping (packages/electron/geocode/kernel-environment.mjs).
+for v in $(env | sed -nE 's/^((OPENCODE|OTEL)_[A-Za-z0-9_]*)=.*/\1/p'); do unset "$v"; done
 for v in $(env | sed -n 's/^GEOCODE_\([A-Za-z0-9_]*\)=.*/\1/p'); do
   [ "$v" = "KERNEL_HOME" ] && continue # script-own knob, not a kernel flag
   eval "export OPENCODE_$v=\"\$GEOCODE_$v\""

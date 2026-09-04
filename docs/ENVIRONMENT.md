@@ -64,7 +64,7 @@ v2 路径会主动扫三个兄弟产品的 appData 目录复用已在跑的守�
 | **B 不带商标、但能改「跑什么代码」** | Node/Electron/加载器的运行时变量:注入代码、让子进程起不来、往磁盘写文件 | `NODE_OPTIONS`、`NODE_PATH`、`ELECTRON_RUN_AS_NODE`、`ELECTRON_NO_ASAR`、`DYLD_INSERT_LIBRARIES`、`LD_PRELOAD`、`OPENSSL_CONF`、`NODE_ICU_DATA`、`NODE_V8_COVERAGE`、`NODE_REDIRECT_WARNINGS`、`ELECTRON_LOG_FILE`、`CHROME_LOG_FILE`、`NODE_DEBUG`、`DEBUG` | **建议作为唯一例外,不交给内核子进程**(黑名单,按平台;决策点 §6.1)。壳自己的进程不动——Electron 主进程的环境是操作系统给的,打包后 Electron 自己会拒绝 `NODE_OPTIONS` | 实测 §3 第 4 条;`DEBUG` 沿用上游理由(污染我们解析的 stdout),`NODE_DEBUG` 是实测出来的真噪音源。它们既不是配置也不是凭据,是安全 |
 | **C 不带商标** | 用户自己的一切:身份、工具链、凭据 | `HOME`、`PATH`、`SHELL`、`TMPDIR`、`LANG`、`TZ`、`SSH_AUTH_SOCK`、`GIT_*`、代理六件套、`NODE_EXTRA_CA_CERTS`、`LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`、`PYTHONPATH`、**`XDG_*`**;供应商凭据 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GITHUB_TOKEN`、`GOOGLE_APPLICATION_CREDENTIALS`(名字由 models.dev 目录数据驱动,内核带的那份 211 家、208 个名字) | **原样放行,一个不动** | 实测传空对象给 `utilityProcess.fork` 时子进程只剩 5 个键;GDAL/PROJ 靠 `LD_LIBRARY_PATH`,GEE 靠 `GOOGLE_APPLICATION_CREDENTIALS`,agent 的 `gh` 靠 `GITHUB_TOKEN`,内核用 `extendEnv: true` 把它们传给子进程;供应商凭据的读取点在 `KERNEL.md` 冻结区,内核优先级本就是配置文件 > `auth.json` > 环境;上游桌面端同形;XDG 见 §5.4 |
 | **E 我们的注入** | 壳与内核之间的内部 ABI,由我们的代码在剥离**之后**写入 | §4.1 的表 | **写在最后一次剥离之后**;名字不成为公开配置面 | 它们带商标,所以顺序就是全部:先剥,后写 |
-| **F 开发启动器旋钮** | 我们自己的 `electron:dev` 脚本传给主进程的开关 | `OPENCHAMBER_ELECTRON_DEV`、`_ELECTRON_USE_BUNDLED_UI`、`_HMR_UI_PORT`、`_HMR_API_PORT`;e2e 夹具的 `_E2E`、`_UPDATER_E2E_URL` | **仅未打包时豁免**(白名单,6 个名字);打包版一律剥 | 它们带商标,但发送方是我们的脚本;打包版没有发送方,一个 shell 里的 `OPENCHAMBER_ELECTRON_DEV=1` 不该把正式版翻成开发态 |
+| **F 开发启动器旋钮** | 我们自己的启动脚本传给主进程的开关 | `electron:dev` 的 `OPENCHAMBER_ELECTRON_DEV`、`_ELECTRON_USE_BUNDLED_UI`、`_HMR_UI_PORT`、`_HMR_API_PORT`;更新器 e2e 夹具的 `_E2E`、`_UPDATER_E2E_URL` | **前四个仅未打包时豁免**,打包版一律剥;**后两个各形态都豁免**,它们没有构建期 define 时是惰性的,而夹具驱动的正是打包版 | 它们带商标,但发送方是我们的脚本;打包版没有 dev 发送方,一个 shell 里的 `OPENCHAMBER_ELECTRON_DEV=1` 不该把正式版翻成开发态 |
 
 不在表里的都是类 C:默认放行。**黑名单只有 B,白名单只有 F,其余按商标。** 三张表都住在一个模块里。
 
@@ -114,12 +114,13 @@ agent-tool 插件的 `OPENCHAMBER_AGENT_TOOL_URL`/`_TOKEN`)一律走 `startEmbed
 |---|---|
 | `INHERITED_PREFIXES` | `['OPENCODE_', 'OTEL_', 'OPENCHAMBER_']`(类 A) |
 | `CHILD_DENYLIST` | 类 B,按平台分组:通用一组,`darwin` 加 `DYLD_INSERT_LIBRARIES`,`linux` 加 `LD_PRELOAD` |
-| `LAUNCHER_ALLOWLIST` | 类 F 的 6 个名字 |
+| `LAUNCHER_ALLOWLIST` / `E2E_ALLOWLIST` | 类 F:前者 4 个 dev 旋钮,后者 2 个 e2e 名字 |
 | `stripInheritedForeignVariables(env, { keep })` | 按前缀删,`keep` 里的名字跳过;返回删掉的名字 |
+| `environment-boundary.mjs` 的 `inheritedKeep` | 本进程的 `keep`:未打包时两张表都留,打包时只留 e2e;模块加载即做第一次剥离,是 `main.mjs` 的第一条 import。Electron 之外没有 `app`,按打包处理 |
 | `createKernelProcessEnvironment({ environment, platform, overrides })` | 从零建子进程环境:按前缀过滤 → 按黑名单删 → 叠 `overrides`。`overrides` 仍是唯一有意驱动内核的通道(要改代码、走提交、过审查) |
 | `applyKernelConnectionToShellEnvironment` | 不变 |
 
-`keep` 只在未打包时由调用方传入 `LAUNCHER_ALLOWLIST`;打包版传空。判据用 `app.isPackaged`,不用任何环境变量。
+判据用 `app.isPackaged`,不用任何环境变量。
 
 ### 5.2 壳进程的时序
 
@@ -208,9 +209,10 @@ agent 的工具里:agent 的 `bash` 看不到 `OTEL_EXPORTER_OTLP_HEADERS`,也�
 
 `electron-dev.mjs` 与 `package.json` 的 `electron:dev:bundled` 把类 F 的名字传给主进程。改后:
 
-- `LAUNCHER_ALLOWLIST` 在 `!app.isPackaged` 时作为 `keep` 传入剥离函数,6 个名字幸存;
-- 打包版 `keep` 为空,6 个名字与其他 `OPENCHAMBER_*` 一起剥掉。`OPENCHAMBER_ELECTRON_DEV` 在第 50 行
-  就读,所以第一次剥离必须早于它——这就是 §5.2 第 1 行把剥离搬进首个 import 的原因;
+- 未打包时 `keep` 是 `LAUNCHER_ALLOWLIST` 加 `E2E_ALLOWLIST`,6 个名字幸存;
+- 打包版 `keep` 只剩 `E2E_ALLOWLIST`,4 个 dev 旋钮与其他 `OPENCHAMBER_*` 一起剥掉。`OPENCHAMBER_ELECTRON_DEV`
+  在第 50 行就读,所以第一次剥离必须早于它——这就是 §5.2 第 1 行把剥离搬进首个 import 的原因;
+- e2e 两个名字各形态都留:更新器 e2e 夹具驱动的正是打包版,而没有构建期 define 时它们是惰性的;
 - `OPENCHAMBER_DISABLE_PWA_DEV` 是 vite 进程读的,不经过主进程,不用管。
 
 被否决的替代:把这些旋钮改成命令行参数。要动主进程的读取点,全是上游行,换来的只是少一张 6 行的表。
@@ -304,7 +306,7 @@ agent 的工具里:agent 的 `bash` 看不到 `OTEL_EXPORTER_OTLP_HEADERS`,也�
 | 批 | 内容 | 动到的文件 | 依赖 |
 |---|---|---|---|
 | **1 · 已落地(2026-09-03)** | 剥离追加在 `inheritUserShellEnv` 尾部;`index.js:756` 屏蔽;黑名单 `CHILD_DENYLIST`;界面口令 override;`keep` 参数提前进来给批 2 用;顺序绊线三条(函数体内的剥离、`index.js` 的屏蔽形态、口令 override);运行时测试 `login-shell-boundary.test.js`(桩 shell 驱动真实导入,plain 为对照、electron 为断言)。三条绊线各做过反证,全项目门绿,写入检测前后干净;真实内核探针 `scripts/kernel-env-probe.sh` 绿,把子进程过滤临时拆掉后判 RED | `kernel-environment.mjs`(+23/-9)、`main.mjs`(+7/-0)、`index.js`(+7/-1,那 1 行是逐字节包进注释的上游行)、两个测试文件扩充、两个新测试文件、探针脚本四个文件 | 无 |
-| **2** | `OPENCHAMBER_` 入表;`LAUNCHER_ALLOWLIST`;第一次剥离搬进首个 import;`applyShellDataRoot` 在剥离后重跑;删批 1 的口令 override;壳侧前缀覆盖绊线;文档(§9) | 同上 + `environment-boundary.mjs`(新)+ 五处文档 | 批 1 |
+| **2 · 已落地(2026-09-03)** | `OPENCHAMBER_` 入表;两张白名单;第一次剥离搬进首个 import(`environment-boundary.mjs`);`applyShellDataRoot` 在合并尾部的剥离后重跑;删批 1 的口令 override;壳侧前缀覆盖绊线;白名单来源绊线;文档(§9)。四条新绊线各做过反证,全项目门绿,内核探针绿 | `kernel-environment.mjs`、`environment-boundary.mjs`(新)、`main.mjs`(+8/-8,删的 8 行全是批 1 自己的)、tests、`PATHS.md`、`DESKTOP.md`、`CONVENTIONS.md`、`kernel-tui.sh` | 批 1 |
 | **3** | 外部内核路径 fail-closed;`opencode-cli` 资源去留;绊线 | `lifecycle.js`(1 处早退)、`package.json`、tests | 无,但排在 2 后以免同时改 `index.js` 附近 |
 
 批 1 的改动面:`main.mjs` 加两行(函数尾部的剥离与数据根重写),`index.js` 改一行,其余在我们自己的模块与测试里。

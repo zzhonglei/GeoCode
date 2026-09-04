@@ -6,9 +6,13 @@ import {
   applyKernelConnectionToShellEnvironment,
   buildKernelBaseUrl,
   createKernelProcessEnvironment,
+  E2E_ALLOWLIST,
   INHERITED_PREFIXES,
+  LAUNCHER_ALLOWLIST,
   stripInheritedForeignVariables,
 } from './kernel-environment.mjs';
+
+const readMain = () => fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
 
 describe('createKernelProcessEnvironment', () => {
   it('strips inherited OPENCODE_* so a user-installed opencode cannot steer our kernel', () => {
@@ -58,49 +62,94 @@ describe('createKernelProcessEnvironment', () => {
     expect(uncovered).toEqual([]);
   });
 
-  it('closes the shell process too, ahead of anything that reads or sets those names', () => {
-    // Two orderings: shell modules resolve at import, and the kernel connection is written into
-    // this same environment, so a late strip would take `OPENCODE_HOST` with it.
-    const main = fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
-    const strippedAt = main.indexOf('stripInheritedForeignVariables(process.env)');
-    const kernelStartAt = main.indexOf('startEmbeddedKernel({');
-    const shellImportAt = main.indexOf("import('@openchamber/web/server/index.js')");
-    expect(strippedAt).toBeGreaterThan(-1);
-    expect(kernelStartAt).toBeGreaterThan(strippedAt);
-    expect(shellImportAt).toBeGreaterThan(strippedAt);
+  it('strips the shell process at its very first import, ahead of every other module', () => {
+    // Static imports evaluate before any statement, and one of them pulls in shell runtime
+    // modules; `isDev` reads the environment right after. Only a module imported first runs
+    // before both (docs/ENVIRONMENT.md §5.2).
+    const main = readMain();
+    const firstImport = main.match(/^import .*$/m)[0];
+    expect(firstImport).toContain("'./geocode/environment-boundary.mjs'");
+    const boundaryAt = main.indexOf(firstImport);
+    expect(boundaryAt).toBeLessThan(main.indexOf("from '@openchamber/web/server/lib/fs/routes.js'"));
+    expect(boundaryAt).toBeLessThan(main.indexOf('const isDev = '));
+    expect(boundaryAt).toBeLessThan(main.indexOf('applyShellDataRoot({'));
   });
 
-  it('strips again inside the login-shell merge, which refills whatever module load removed', () => {
+  it('strips again inside the login-shell merge and writes the data root straight back', () => {
     // The merge fills every key that is undefined, and a stripped key is exactly that. So the
     // strip has to sit in the same function body, after the loop, where no later call can land
-    // between them (docs/ENVIRONMENT.md §5.2 invariant 1).
-    const main = fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
+    // between them; and the data root, which shares the prefix, is rewritten right after it
+    // (docs/ENVIRONMENT.md §5.2 invariants 1 and 2).
+    const main = readMain();
     const functionStart = main.indexOf('const inheritUserShellEnv = () => {');
     const functionEnd = main.indexOf('\n};', functionStart);
     const mergeLoop = main.indexOf('for (const [key, value] of Object.entries(shellEnv))', functionStart);
-    const stripInside = main.indexOf('stripInheritedForeignVariables(process.env)', mergeLoop);
+    const stripInside = main.indexOf('stripInheritedForeignVariables(process.env, { keep: inheritedKeep })', mergeLoop);
+    const rootRewrite = main.indexOf('applyShellDataRoot({', stripInside);
     expect(functionStart).toBeGreaterThan(-1);
     expect(mergeLoop).toBeGreaterThan(functionStart);
     expect(mergeLoop).toBeLessThan(functionEnd);
     expect(stripInside).toBeGreaterThan(mergeLoop);
     expect(stripInside).toBeLessThan(functionEnd);
+    expect(rootRewrite).toBeGreaterThan(stripInside);
+    expect(rootRewrite).toBeLessThan(functionEnd);
   });
 
   it('never merges the login shell again once the kernel connection has been written', () => {
     // Invariant 2: the strip now rides inside the merge, so a merge placed after
     // startEmbeddedKernel would take OPENCODE_HOST and the password with it.
-    const main = fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
+    const main = readMain();
     const kernelStartAt = main.indexOf('startEmbeddedKernel({');
     const calls = [...main.matchAll(/inheritUserShellEnv\(\);/g)].map((match) => match.index);
     expect(calls.length).toBeGreaterThan(0);
     for (const at of calls) expect(at).toBeLessThan(kernelStartAt);
   });
 
-  it('keeps the UI password out of the child until OPENCHAMBER_ joins the prefix table', () => {
-    const main = fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
-    const kernelStartAt = main.indexOf('startEmbeddedKernel({');
-    const callEnd = main.indexOf('});', kernelStartAt);
-    expect(main.slice(kernelStartAt, callEnd)).toContain('OPENCHAMBER_UI_PASSWORD: undefined');
+  it('keeps the UI password out of the child by prefix, with no override needed', () => {
+    const next = createKernelProcessEnvironment({
+      environment: { OPENCHAMBER_UI_PASSWORD: 'ui-secret', OPENCHAMBER_HOST: '0.0.0.0', PATH: '/usr/bin' },
+      platform: 'darwin',
+    });
+    expect(next).not.toHaveProperty('OPENCHAMBER_UI_PASSWORD');
+    expect(next).not.toHaveProperty('OPENCHAMBER_HOST');
+    expect(next.PATH).toBe('/usr/bin');
+  });
+
+  it('covers every prefix the shell reads its own configuration under', () => {
+    // The kernel check above reads two registries; the shell has none, so its reads are
+    // collected from source. Comments are dropped first: shielded blocks still spell the names.
+    const serverRoot = new URL('../../web/server/', import.meta.url).pathname;
+    const files = fs.readdirSync(serverRoot, { recursive: true })
+      .filter((name) => name.endsWith('.js') && !name.includes('.test.') && !name.includes('node_modules'))
+      .map((name) => path.join(serverRoot, name));
+    files.push(new URL('../main.mjs', import.meta.url).pathname);
+    const names = new Set();
+    for (const file of files) {
+      const source = fs.readFileSync(file, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
+      for (const match of source.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g)) names.add(match[1]);
+    }
+    const branded = [...names].filter((name) => /OPENCODE|OPENCHAMBER|OTEL/.test(name));
+    expect(branded.length).toBeGreaterThan(50);
+    expect(branded).toContain('OPENCHAMBER_DATA_DIR');
+    expect(branded).toContain('OPENCODE_JWT_SECRET');
+    expect(branded).toContain('OPENCODE_CONFIG_DIR');
+    const uncovered = branded.filter((name) => !INHERITED_PREFIXES.some((prefix) => name.startsWith(prefix)));
+    expect(uncovered).toEqual([]);
+  });
+
+  it('names only branded launcher knobs in the allowlists, all of them set by our own scripts', () => {
+    const launcher = fs.readFileSync(new URL('../scripts/electron-dev.mjs', import.meta.url).pathname, 'utf8');
+    for (const name of LAUNCHER_ALLOWLIST) {
+      expect(INHERITED_PREFIXES.some((prefix) => name.startsWith(prefix))).toBe(true);
+      expect(launcher).toContain(name);
+    }
+    const fixture = fs.readFileSync(new URL('../scripts/updater-e2e-fixture.mjs', import.meta.url).pathname, 'utf8');
+    for (const name of E2E_ALLOWLIST) {
+      expect(INHERITED_PREFIXES.some((prefix) => name.startsWith(prefix))).toBe(true);
+      expect(fixture).toContain(name);
+    }
   });
 
   it('lets the shell runtime skip its own login-shell merge under Electron', () => {
@@ -125,10 +174,22 @@ describe('createKernelProcessEnvironment', () => {
   });
 
   it('keeps the names the caller asks for, which is how launcher knobs survive the strip', () => {
-    const environment = { OPENCODE_KEEP_ME: '1', OPENCODE_GONE: '2' };
-    const removed = stripInheritedForeignVariables(environment, { keep: ['OPENCODE_KEEP_ME'] });
-    expect(removed).toEqual(['OPENCODE_GONE']);
-    expect(environment).toEqual({ OPENCODE_KEEP_ME: '1' });
+    const environment = { OPENCHAMBER_HMR_UI_PORT: '5999', OPENCHAMBER_SKIP_LOCAL_SERVER: '1', HOME: '/home/user' };
+    const removed = stripInheritedForeignVariables(environment, { keep: LAUNCHER_ALLOWLIST });
+    expect(removed).toEqual(['OPENCHAMBER_SKIP_LOCAL_SERVER']);
+    expect(environment).toEqual({ OPENCHAMBER_HMR_UI_PORT: '5999', HOME: '/home/user' });
+  });
+
+  it('strips the shell knobs a user-installed OpenChamber would have exported', () => {
+    const environment = {
+      OPENCHAMBER_SKIP_LOCAL_SERVER: '1',
+      OPENCHAMBER_OPENCODE_CWD: '/tmp/attacker-cwd',
+      OPENCHAMBER_SERVER_URL: 'https://remote.example',
+      OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN: 'true',
+      ANTHROPIC_API_KEY: 'sk-user',
+    };
+    stripInheritedForeignVariables(environment);
+    expect(environment).toEqual({ ANTHROPIC_API_KEY: 'sk-user' });
   });
 
   it('drops the runtime switches that change what code the child runs, per platform', () => {
@@ -208,6 +269,29 @@ describe('createKernelProcessEnvironment', () => {
       platform: 'darwin',
     });
     expect(next).not.toHaveProperty('OPENCODE_SERVER_PASSWORD');
+  });
+});
+
+describe('environment-boundary.mjs', () => {
+  it('strips this very process at import, treating anything but a real dev launch as packaged', async () => {
+    // Outside Electron there is no `app`, so the module takes the strict form: dev knobs go,
+    // the e2e pair stays, and nothing unbranded is touched.
+    process.env.OPENCHAMBER_PROBE_STRIPPED = '1';
+    process.env.OPENCODE_PROBE_STRIPPED = '1';
+    process.env.OPENCHAMBER_HMR_UI_PORT = '5999';
+    process.env.OPENCHAMBER_E2E = '1';
+    process.env.GEOCODE_PROBE_KEPT = '1';
+    try {
+      const { inheritedKeep } = await import('./environment-boundary.mjs');
+      expect(inheritedKeep).toEqual(E2E_ALLOWLIST);
+      expect(process.env).not.toHaveProperty('OPENCHAMBER_PROBE_STRIPPED');
+      expect(process.env).not.toHaveProperty('OPENCODE_PROBE_STRIPPED');
+      expect(process.env).not.toHaveProperty('OPENCHAMBER_HMR_UI_PORT');
+      expect(process.env.OPENCHAMBER_E2E).toBe('1');
+      expect(process.env.GEOCODE_PROBE_KEPT).toBe('1');
+    } finally {
+      for (const key of ['OPENCHAMBER_E2E', 'GEOCODE_PROBE_KEPT']) delete process.env[key];
+    }
   });
 });
 

@@ -12,11 +12,11 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-login-shell-'));
 const stubShell = path.join(scratch, 'stub-shell');
 fs.writeFileSync(
   stubShell,
-  '#!/bin/sh\nprintf "OPENCODE_CONFIG=/probe/opencode.json\\000OTEL_EXPORTER_OTLP_ENDPOINT=http://probe:4318\\000PATH=/probe/bin\\000"\n',
+  '#!/bin/sh\nprintf "OPENCODE_CONFIG=/probe/opencode.json\\000OTEL_EXPORTER_OTLP_ENDPOINT=http://probe:4318\\000OPENCHAMBER_SKIP_LOCAL_SERVER=1\\000PATH=/probe/bin\\000"\n',
   { mode: 0o755 },
 );
 
-for (const key of ['OPENCODE_CONFIG', 'OTEL_EXPORTER_OTLP_ENDPOINT']) delete process.env[key];
+for (const key of ['OPENCODE_CONFIG', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'OPENCHAMBER_SKIP_LOCAL_SERVER']) delete process.env[key];
 process.env.SHELL = stubShell;
 process.env.HOME = scratch;
 process.env.XDG_CONFIG_HOME = path.join(scratch, 'config');
@@ -32,6 +32,7 @@ await import('../index.js');
 const reached = {
   OPENCODE_CONFIG: process.env.OPENCODE_CONFIG ?? null,
   OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? null,
+  OPENCHAMBER_SKIP_LOCAL_SERVER: process.env.OPENCHAMBER_SKIP_LOCAL_SERVER ?? null,
 };
 process.stdout.write(`\n@@RESULT@@${JSON.stringify(reached)}\n`);
 fs.rmSync(scratch, { recursive: true, force: true });
