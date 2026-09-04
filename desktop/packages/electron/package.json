@@ -82,10 +82,6 @@
       {
         "from": "resources/kernel",
         "to": "kernel"
-      },
-      {
-        "from": "resources/opencode-cli",
-        "to": "opencode-cli"
       }
     ],
     "afterPack": "scripts/after-pack.cjs",

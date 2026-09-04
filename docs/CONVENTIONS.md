@@ -142,7 +142,7 @@ web 包还剩一条**未定位**的:`project-context/routes.http.test.js` 的「
 
 - **补丁写对了但是死代码**:`mdns.ts` 的 `?? Brand.mdnsHost` 是对的、绊线也钉住了它,而 `cli/network.ts` 的一个 yargs 默认值让它永远走不到,GeoCode 照旧广播 `opencode.local`;
 - **路径编译进了 vendor 产物**:`gitlab-ai-provider` 的 bundle 里带着 `~/.cache/opencode` 的路径代码,源码里搜不到;
-- **开发脚本的分叉**:`electron:dev` 由我们的 dev 脚本另起一个 web 服务器进程,主进程在 5 秒健康探测里探到它的 HMR 端口就不再走 `spawnLocalServer()`,于是那个壳没有内核注入,去磁盘上找到并拉起了用户自己安装的 OpenCode;
+- **开发脚本的分叉**:`electron:dev` 由我们的 dev 脚本另起一个 web 服务器进程,主进程在 5 秒健康探测里探到它的 HMR 端口就不再走 `spawnLocalServer()`,于是那个壳没有内核注入,去磁盘上找到并拉起了用户自己安装的 OpenCode。产品路径上这条路现已封死(`ENVIRONMENT.md` §5.6:Electron 里的壳一律拒绝托管启动),但那个单独的 dev 服务器进程不在 Electron 里,分叉本身还在;
 - **共享的进程注册表**:孤儿回收在任何分支判断之前无条件运行,读的是与用户 OpenChamber 共用的目录。
 
 `~/.claude` 只盯 GeoCode 真能够到的几个子路径。盯整个目录没有用——Claude Code 自己在持续写会话记录,那些噪音会把真命中埋掉。

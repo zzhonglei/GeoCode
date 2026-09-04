@@ -219,12 +219,21 @@ agent 的工具里:agent 的 `bash` 看不到 `OTEL_EXPORTER_OTLP_HEADERS`,也�
 
 ### 5.6 外部内核那条路(批 3)
 
-目标是让 §3 第 6 条的能力**不存在**,而不是被一对变量拦着。形态:`lifecycle.js:1078` 落到 `startOpenCode()`
-的分支前加一句早退——`process.versions.electron` 为真时抛错「GeoCode 自己持有内核,没有托管启动」——
-上游分支逐字节留在后面。`openchamber serve` 单独跑时不受影响。
+目标是让 §3 第 6 条的能力**不存在**,而不是被一对变量拦着。形态:`startOpenCode()` 函数体的第一句是早退,
+`process.versions.electron` 为真时抛错「GeoCode owns its kernel; the shell runtime does not start one」,上游
+函数体逐字节留在后面。放在函数顶部而不是启动那一处分支,是因为它有三个调用方:启动引导、配置变更后的
+重启、托管进程退出后的重启,一处早退全部覆盖。`openchamber serve` 单独跑时不受影响;`electron:dev` 不带
+bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 里,它仍走上游那条路,这是
+`CONVENTIONS.md` §7 早已记下的已知分叉,不在产品路径上。
 
-顺带两件:那对变量的脆弱性(`effectivePort` 为 `null` 时静默落到 PATH 扫描)被早退一并关掉;
-`extraResources` 里随包带的 `opencode-cli` 二进制只服务于这条路,批 3 决定去留(决策点 §6.6)。
+效果:那对变量任何一个丢了,启动引导记下错误、界面报内核不可用,而不是悄悄拉起用户的 OpenCode;五步查找
+一步都不执行。绊线在 `server/geocode/managed-kernel.test.js`:带 Electron 标记的运行时拒绝且不 spawn,
+同一个运行时去掉标记后作对照,必须到达 spawn。
+
+随包的 `opencode-cli`(决策点 §6.6):查实 `resources/opencode-cli` 里只有一个 `.gitkeep`。我们的
+`prepare-geocode-kernel.mjs` 早已替代上游的下载步骤,从未有过一个 opencode 二进制被打进包里,
+`extraResources` 那条只是在复制一个空目录。条目与占位目录一并删除;上游的 `prepare-opencode-cli.mjs`、
+`verify-opencode-cli.mjs` 与 `verify-linux-appimage.mjs` 对它的期待原样保留,不在我们的发布流程上。
 
 ### 5.7 CLI 与 `startup enable`:不在产品面
 
@@ -245,7 +254,7 @@ agent 的工具里:agent 的 `bash` 看不到 `OTEL_EXPORTER_OTLP_HEADERS`,也�
 | 6.3 | `XDG_*` | **保留并统一**(§5.4) | 是标准不是配置;开发沙箱与内核都依赖 |
 | 6.4 | `NODE_TLS_REJECT_UNAUTHORIZED`、`LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH` | **保留** | 不改代码;用户对自己工具链的选择;地理工具链依赖后两者 |
 | 6.5 | `entitlements.mac.plist` 的 `allow-dyld-environment-variables` 与 `disable-library-validation` | **单独调查,不在本设计** | 上游注释说是给 Electron JIT 与 native 模块的(`bun-pty`、`node-pty`、`sherpa-onnx-node` 三个 native 依赖);去掉可能让它们加载失败。本设计从子进程侧删 `DYLD_INSERT_LIBRARIES` 已覆盖注入路径 |
-| 6.6 | 随包的 `opencode-cli` 二进制 | **批 3 与外部内核路径一起决定**;倾向移除 | 它唯一的消费者是那条路 |
+| 6.6 | 随包的 `opencode-cli` 二进制 | **已定:删掉 `extraResources` 条目与占位目录**(§5.6) | 从未真的打进过包,目录是空的;它唯一的消费者是那条已封的路 |
 | 6.7 | CLI(`openchamber serve`、`startup enable`) | **不改,记为非产品入口**(§5.7) | 不随应用分发;改它是另一个交付物 |
 
 ## 7. 验证与绊线
@@ -313,7 +322,7 @@ agent 的工具里:agent 的 `bash` 看不到 `OTEL_EXPORTER_OTLP_HEADERS`,也�
 |---|---|---|---|
 | **1 · 已落地(2026-09-03)** | 剥离追加在 `inheritUserShellEnv` 尾部;`index.js:756` 屏蔽;黑名单 `CHILD_DENYLIST`;界面口令 override;`keep` 参数提前进来给批 2 用;顺序绊线三条(函数体内的剥离、`index.js` 的屏蔽形态、口令 override);运行时测试 `login-shell-boundary.test.js`(桩 shell 驱动真实导入,plain 为对照、electron 为断言)。三条绊线各做过反证,全项目门绿,写入检测前后干净;真实内核探针 `scripts/kernel-env-probe.sh` 绿,把子进程过滤临时拆掉后判 RED | `kernel-environment.mjs`(+23/-9)、`main.mjs`(+7/-0)、`index.js`(+7/-1,那 1 行是逐字节包进注释的上游行)、两个测试文件扩充、两个新测试文件、探针脚本四个文件 | 无 |
 | **2 · 已落地(2026-09-03)** | `OPENCHAMBER_` 入表;两张白名单;第一次剥离搬进首个 import(`environment-boundary.mjs`);`applyShellDataRoot` 在合并尾部的剥离后重跑;删批 1 的口令 override;壳侧前缀覆盖绊线;白名单来源绊线;文档(§9)。四条新绊线各做过反证,全项目门绿,内核探针绿 | `kernel-environment.mjs`、`environment-boundary.mjs`(新)、`main.mjs`(+8/-8,删的 8 行全是批 1 自己的)、tests、`PATHS.md`、`DESKTOP.md`、`CONVENTIONS.md`、`kernel-tui.sh` | 批 1 |
-| **3** | 外部内核路径 fail-closed;`opencode-cli` 资源去留;绊线 | `lifecycle.js`(1 处早退)、`package.json`、tests | 无,但排在 2 后以免同时改 `index.js` 附近 |
+| **3 · 已落地(2026-09-04)** | `startOpenCode()` 顶部早退,Electron 下拒绝托管启动;`managed-kernel.test.js` 两条(拒绝 + 对照),反证做过;删空的 `opencode-cli` 资源条目与占位目录 | `lifecycle.js`(+8/-0)、`package.json`、`.gitkeep`、一个新测试文件 | 批 2 |
 
 批 1 的改动面:`main.mjs` 加两行(函数尾部的剥离与数据根重写),`index.js` 改一行,其余在我们自己的模块与测试里。
 

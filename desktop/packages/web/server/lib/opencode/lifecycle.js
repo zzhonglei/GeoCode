@@ -751,6 +751,14 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
   };
 
   const startOpenCode = async () => {
+    // --- GeoCode: Electron main owns the kernel and hands this runtime its connection before
+    // the import. A managed start here would go looking for an opencode on disk, and on this
+    // machine that can only be another product's; every caller lands here, so the refusal
+    // does too (docs/ENVIRONMENT.md §5.6). Standalone serve keeps the upstream path. ---
+    if (process.versions.electron) {
+      throw new Error('GeoCode owns its kernel; the shell runtime does not start one');
+    }
+    // --- /GeoCode ---
     let lastError = null;
     for (let attempt = 1; attempt <= START_OPEN_CODE_MAX_ATTEMPTS; attempt += 1) {
       try {

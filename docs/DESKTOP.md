@@ -679,8 +679,8 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
 - **批 8 · 内核侧残留**:已完成。`cli/network.ts` 的 mDNS 默认值(见 `PATHS.md` §5「一次全面审计」)、
   `tui/context/theme.tsx` 的第三处项目扫描、`plugin/install.ts` 往用户仓库写 `.opencode/opencode.json`、
   `tui/clipboard.ts` 落在共享 `/tmp` 的 `opencode-clipboard.png`;
-- **批 9 · 环境边界**:批 1 与批 2 已落地(2026-09-03),规则、时序、绊线与实测记录见 `ENVIRONMENT.md`;
-  批 3(外部内核路径 fail-closed 与随包 `opencode-cli` 的去留)待做;
+- **批 9 · 环境边界**:三批全部落地(2026-09-03 至 09-04),规则、时序、绊线与实测记录见 `ENVIRONMENT.md`。
+  批 3 把壳的托管启动在 Electron 下改为拒绝,§7.3「选择或自动发现系统 OpenCode」从此有了运行时绊线;
 - 验证与用户自装 OpenCode 并存互不读写(现在由 `scripts/foreign-writes.sh` 客观给出,
   `CONVENTIONS.md` §7;读侧由 `scripts/kernel-env-probe.sh` 给出内核那一半)。
 
