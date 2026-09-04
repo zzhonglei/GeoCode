@@ -90,6 +90,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
     })
 
     const dispose = Effect.fn("GlobalHttpApi.dispose")(function* () {
+      yield* config.invalidate() // GeoCode: the global layer caches forever; a shell that edited the file relies on this (docs/DESKTOP.md §5.2)
       yield* disposeAllInstancesAndEmitGlobalDisposed()
       return true
     })

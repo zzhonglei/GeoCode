@@ -67,7 +67,8 @@ echo "== geo kernel (opencode) =="
   test/geocode-osm-features.test.ts \
   test/geocode-geo-permissions.test.ts \
   test/geocode-osmfetch.test.ts \
-  test/geocode-read-handoff.test.ts)
+  test/geocode-read-handoff.test.ts \
+  test/geocode-global-dispose.test.ts)
 
 echo
 echo "== shielding tripwires living inside upstream's own test files =="
