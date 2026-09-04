@@ -4,6 +4,7 @@ import { stripAppImageArgv0Leak } from '../inherited-env.js';
 import { registerManagedProcess, unregisterManagedProcess, reapOrphanedProcesses } from './managed-process-registry.js';
 import { applyProviderEnvAliases } from './provider-env-aliases.js';
 import { recordStartupPerformance } from './startup-performance.js';
+import { refreshEmbeddedKernel } from '../../geocode/kernel-refresh.js'; // GeoCode: apply config without a restart
 
 const parsePositiveInt = (value, fallback) => {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -999,6 +1000,20 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
     // honestly so callers don't claim the change is live.
     const external = state.isExternalOpenCode === true;
 
+    // --- GeoCode: under Electron the external server is the embedded kernel, and a saved
+    // configuration is applied by dropping its caches, not by restarting a process
+    // (docs/DESKTOP.md §5.2). The drop would cut running chats off, so they block it. ---
+    let geocodeKernelRefreshed = false;
+    if (external && process.versions.electron) {
+      const busy = getActiveSessionCount();
+      if (busy > 0) {
+        throw new Error(`${busy} chat${busy === 1 ? ' is' : 's are'} still running. Wait for ${busy === 1 ? 'it' : 'them'} to finish, then apply again.`);
+      }
+      await refreshEmbeddedKernel({ buildOpenCodeUrl, getOpenCodeAuthHeaders });
+      geocodeKernelRefreshed = true;
+    }
+    // --- /GeoCode ---
+
     try {
       await waitForOpenCodeReady();
       state.isOpenCodeReady = true;
@@ -1018,6 +1033,18 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
       console.error(`Failed to refresh OpenCode after ${reason}:`, error.message);
       throw error;
     }
+
+    // --- GeoCode: the caches are gone and the kernel is healthy again; report a reload so the
+    // upstream route and the UI take their success path. ---
+    if (geocodeKernelRefreshed) {
+      try {
+        onOpenCodeRestarted?.();
+      } catch (error) {
+        console.warn('Failed to run post-refresh hooks:', error?.message ?? error);
+      }
+      return { reloaded: true, external: false };
+    }
+    // --- /GeoCode ---
 
     return { reloaded: !external, external };
   };

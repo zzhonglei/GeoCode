@@ -162,11 +162,12 @@ function getProjectConfigPath(workingDirectory) {
 function getConfigPaths(workingDirectory) {
   return {
     userPaths: [
-      // --- GeoCode: same three layers the kernel merges, in the same order
-      // (`config/config.ts` loadGlobal). `config.json` keeps its unbranded name there too. ---
-      path.join(OPENCODE_CONFIG_DIR, 'config.json'),
-      path.join(OPENCODE_CONFIG_DIR, KERNEL_CONFIG_JSON),
+      // --- GeoCode: the kernel's candidates in the kernel's order (`config/config.ts`
+      // globalConfigFile), so the first that exists is the file both sides write.
+      // `config.json` keeps its unbranded name there too. ---
       path.join(OPENCODE_CONFIG_DIR, KERNEL_CONFIG_JSONC),
+      path.join(OPENCODE_CONFIG_DIR, KERNEL_CONFIG_JSON),
+      path.join(OPENCODE_CONFIG_DIR, 'config.json'),
       // --- /GeoCode ---
     ],
     projectPath: getProjectConfigPath(workingDirectory),
@@ -184,6 +185,9 @@ function getPrimaryUserConfigPath(userPaths) {
     }
   }
 
+  // --- GeoCode: nothing exists yet, so create what the kernel would create first. ---
+  return userPaths[0] ?? CONFIG_FILE;
+  // --- /GeoCode ---
   return CONFIG_FILE;
 }
 

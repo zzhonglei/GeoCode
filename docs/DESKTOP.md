@@ -110,9 +110,10 @@ Kernel,再在动态导入 Shell Runtime 前写入以下**内部进程 ABI**:
 (`ENVIRONMENT.md` §5.2)。对 Shell Runtime 而言 Kernel 是「外部服务」,但对整个应用而言它仍是
 Electron 自己拥有的内嵌进程。
 
-Shell Runtime 到 Kernel 的这一段使用固定到本次应用进程的连接。OpenChamber 的 external
-restart 当前只会重新探测健康,不会重启 Kernel;将配置 Apply/Restart 委托回 Electron main
-并完成事件流重绑,仍是阶段 3 完成前必须补齐的生命周期接缝。
+Shell Runtime 到 Kernel 的这一段使用固定到本次应用进程的连接。上游为「外部服务器」写的重启在这里
+只会重新探测健康,所以配置生效不能沿用上游「重启进程」的做法:壳在 Electron 下把「应用配置」交给
+Kernel 自己的失效通道,不重启任何进程(§5.2);真正的进程重启只留给崩溃恢复,由 Electron main
+执行(§5.2 第二部分)。
 
 代理**剥掉 `/api` 前缀**再转发,这条之所以成立,是因为 Kernel 同时挂着裸路径(v1 wire)与
 `/api` 前缀(v2)两套。SDK v2 发出的请求自带 `/api`,叠加客户端 baseUrl 后剥一层正好命中 v2;
@@ -282,9 +283,34 @@ Shell 使用的 `@opencode-ai/sdk` 必须由**同一份 GeoCode Kernel OpenAPI**
 窗口不能在「服务地址尚未确定」时自行猜测默认端口。失败必须落在可诊断的启动阶段,
 而不是让 UI 在一个永远连不上的地址上转圈。
 
-### 5.2 Kernel 重启
+### 5.2 配置生效与 Kernel 重启
 
-需要重启 Kernel 的配置变更由 Shell Runtime 请求 Electron main 执行:
+**配置生效不重启进程。** 设置页保存的每一项都先落盘(壳写内核配置根下的文件,或经代理调 Kernel 的
+`PUT /auth`),再由用户点「应用」。上游在这一步重启它自己 spawn 的 CLI;GeoCode 的壳不拥有 Kernel,
+改为调 Kernel 的 `POST /global/dispose`:Kernel 丢弃全部实例状态并失效全局配置缓存,下一个请求按当前
+磁盘重建。这条通路的两半:
+
+- Kernel 侧:全局配置层的缓存永不过期,唯一失效口原本只被 `PATCH /global/config` 调用,配置、环境变量、
+  外挂进程、界面四层都够不到它,因此 `/global/dispose` 的处理器补一次失效调用。上游对这个端点没有生产
+  调用点,语义变更的辐射面为零;路由与 OpenAPI 不动,SDK 不重生成。单靠丢弃实例救不了全局文件的改动,
+  这是实测结论,不是推断;
+- 壳侧:`refreshOpenCodeAfterConfigChange` 在「外部服务器 + Electron」下走这条通路并返回「已重载」,上游的
+  `/api/config/reload` 路由、待应用徽标、全屏遮罩与成功后的全量重拉因此一行不改地走通;MCP OAuth 授权前的
+  强制应用、技能重命名与升级路由也不再谎报。判据仍是 `process.versions.electron`:Electron 下的外部服务器
+  只可能是内嵌 Kernel。
+
+丢弃实例会像手动中断一样终止正在运行的会话,Kernel 没有忙时保护。壳在丢弃之前用自己的活动会话计数拦下:
+有会话在跑就报错并保留徽标,让用户等它结束再应用。这是刻意选「拦下」而不是上游的「确认后中断」:
+刷新是用户主动点的,等得起。
+
+丢弃后实例事件流会被 Kernel 掐断,壳的上游读取器约 250 毫秒后重连;Kernel 的 SSE 不带事件 id,窗口内
+的事件无法回放,由界面收到 `global.disposed` 后整体重新 bootstrap 兜住。
+
+两条相关约束:壳挑全局配置文件的候选顺序必须与 Kernel 一致(`geocode.jsonc`、`geocode.json`、
+`config.json`),否则目录里多一份遗留文件时两边写进不同的文件;壳写全局配置是整文件覆盖,注释不保留,
+这是上游形态。
+
+**Kernel 重启只用于崩溃恢复与显式重启**,由 Shell Runtime 请求 Electron main 执行:
 
 1. UI 发起明确的 apply / restart 动作;
 2. main 将 Shell Runtime 的上游状态置为 restarting;
@@ -294,7 +320,9 @@ Shell 使用的 `@opencode-ai/sdk` 必须由**同一份 GeoCode Kernel OpenAPI**
 6. Shell Runtime 重绑代理与事件流;
 7. UI 从快照重新建立状态。
 
-Shell Runtime 不得自行 spawn 第二个 Kernel;renderer 也不得持有旧 Kernel 地址并尝试直连。
+Shell Runtime 不得自行 spawn 第二个 Kernel;renderer 也不得持有旧 Kernel 地址并尝试直连。重启后端口
+重新分配、口令复用;壳侧只需更新 Kernel 基址与端口并重绑事件流,代理按请求解析目标,不重挂。
+这一部分尚未实现:main 目前只有停止与强制结束,Kernel 崩溃后壳也不会把状态翻为不可用。
 
 ### 5.3 正常退出
 
