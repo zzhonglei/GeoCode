@@ -447,6 +447,12 @@ Release 页面地址交给上游的更新对话框,「下载」按钮打开 Rele
   选绑定地址之前剥掉 `desktopLanAccessEnabled` 与 `desktopUiPassword`(`electron/geocode/loopback-settings.mjs`),
   所以旧版本或手工写进 settings.json 的值也只会得到回环绑定与无口令的本机窗口,§6.1 不依赖界面是否显示。
   绊线在 `electron/geocode/loopback-settings.test.mjs` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
+- **Tunnel**:设置里「External Tunnel」整页在桌面壳不可用(`ui/src/lib/settings/metadata.ts` 的页面可用性判断,
+  导航、直达路由与搜索都读它);壳在 Electron 下不注册 `/api/openchamber/tunnel/*` 任何一条路由
+  (`lib/tunnels/routes.js` 首行早退),所以 cloudflared 与 ngrok 没有任何入口能被拉起。隧道服务对象保留,
+  relay 与系统信息接口从它读当前端口,公网地址恒为空。它本就不在启动时做任何事,没有自动恢复与定时器。
+  绊线在 `server/geocode/tunnel-surface.test.js`(记录式桩应用,Electron 下零挂载,对照组挂满)与
+  `ui/src/geocode/desktop-settings-surface.test.ts`。
 
 ---
 

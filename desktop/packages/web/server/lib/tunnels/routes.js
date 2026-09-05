@@ -210,6 +210,12 @@ export const createTunnelRoutesRuntime = (dependencies) => {
   };
 
   const registerRoutes = (app) => {
+    // --- GeoCode: under Electron the shell publishes nothing (docs/DESKTOP.md §6.1, §7.3). The
+    // settings page is gone too (ui/src/lib/settings/metadata.ts); this is the half that holds
+    // when a client bypasses the page. The tunnel service object stays, so the relay and the
+    // system-info route still read the port from it; its public URL is simply never set. ---
+    if (process.versions.electron) return;
+    // --- /GeoCode ---
     app.get('/api/openchamber/tunnel/check', async (req, res) => {
       try {
         const requestedProvider = typeof req?.query?.provider === 'string' && req.query.provider.trim().length > 0

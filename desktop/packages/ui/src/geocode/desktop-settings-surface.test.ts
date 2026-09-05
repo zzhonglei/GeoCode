@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS, isSettingsSearchItemHiddenOnDesktop } from './desktop-settings-surface';
+import { getSettingsPageMeta } from '../lib/settings/metadata';
 
 const read = (relative: string) =>
   readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', relative), 'utf8');
@@ -74,5 +75,15 @@ describe('desktop settings surface', () => {
     }
     // The menu bar option is the only value that goes through the settings file.
     expect(section.match(/desktopMacMenuBarEnabled: draftMacMenuBarEnabled/g)?.length).toBe(1);
+  });
+
+  test('the External Tunnel page is unavailable in the desktop shell only', () => {
+    // Navigation, direct routes and search all read this one predicate (SettingsView.tsx
+    // isPageAvailable, search.ts buildSettingsSearchResults), so hiding the page here hides
+    // every way to reach it.
+    const tunnel = getSettingsPageMeta('tunnel');
+    const base = { isVSCode: false, isWeb: false, isMobile: false };
+    expect(tunnel?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
+    expect(tunnel?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
   });
 });
