@@ -265,6 +265,16 @@ Shell 使用的 `@opencode-ai/sdk` 必须由**同一份 GeoCode Kernel OpenAPI**
 
 ---
 
+### 4.6 版本号
+
+上游的发布脚本每次发版把五个 `package.json` 的 `version` 一起改写。这些数字留给上游,合并时无条件取
+上游,它们从此只表示「壳基于 OpenChamber 哪一版」。GeoCode 的产品版本是另一个数字,从 `1.0.0` 起,
+放在自己的文件里:Electron 包一份、web 包一份手抄(两个包不能互相 import),由测试钉住相等,
+由 `scripts/bump-geocode-version.mjs` 一次改两份。三个读取点都读它:Electron main 的应用版本(更新检查
+用它比对)、渲染层的 `__APP_VERSION__`、打包时经 `extraMetadata.version` 写进安装包与安装器元数据。
+About 对话框沿用上游的版式,只显示图标、产品名、产品版本与代码仓库链接;壳基线那个数字仍由
+`/api/system/info` 报出,供 §9.5 要求的发布记录与诊断使用,不上界面。
+
 ## 5. 启动、重启与退出
 
 ### 5.1 启动顺序

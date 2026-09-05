@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveTargetArchitecture } from './target-architecture.mjs';
+import { GEOCODE_VERSION } from '../geocode/app-version.mjs'; // GeoCode: the version the installer carries
 
 const env = { ...process.env };
 const builderArgs = process.argv.slice(2);
@@ -30,6 +31,11 @@ if (process.platform === 'linux' && !builderArgs.some((argument) => (
 ))) {
   builderArgs.push(`--${targetArchitecture.electronBuilder}`);
 }
+
+// --- GeoCode: package.json keeps upstream's version; the artifact carries GeoCode's
+// (docs/DESKTOP.md §4.6), through the same extraMetadata channel as the Windows name. ---
+builderArgs.push(`--config.extraMetadata.version=${GEOCODE_VERSION}`);
+// --- /GeoCode ---
 
 const child = spawn(bunBinary, ['x', 'electron-builder', ...builderArgs], {
   env,

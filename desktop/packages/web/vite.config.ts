@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { VitePWA } from 'vite-plugin-pwa';
 import { themeStoragePlugin } from '../../vite-theme-plugin';
+import { GEOCODE_VERSION } from './server/geocode/app-version.js'; // GeoCode: the version the renderer shows
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
@@ -99,7 +100,7 @@ export default defineConfig({
   define: {
     'process.env': {},
     global: 'globalThis',
-    __APP_VERSION__: JSON.stringify(packageJson.version),
+    __APP_VERSION__: JSON.stringify(GEOCODE_VERSION), // GeoCode: not packageJson.version, which is the OpenChamber baseline
   },
   optimizeDeps: {
     include: ['@opencode-ai/sdk/v2'],

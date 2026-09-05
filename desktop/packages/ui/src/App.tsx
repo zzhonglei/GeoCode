@@ -42,7 +42,8 @@ import { resumeAutoReviewRun } from '@/lib/reviewFlow';
 import { SyncProvider } from '@/sync/sync-context';
 import { useSync } from '@/sync/use-sync';
 import { ConfigUpdateOverlay } from '@/components/ui/ConfigUpdateOverlay';
-import { AboutDialog } from '@/components/ui/AboutDialog';
+import { AboutDialog as UpstreamAboutDialog } from '@/components/ui/AboutDialog'; // GeoCode: wrapped below
+import { GeoCodeAboutDialog } from '@/geocode/GeoCodeAboutDialog';
 import { RuntimeAPIProvider } from '@/contexts/RuntimeAPIProvider';
 import { registerRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { useUIStore } from '@/stores/useUIStore';
@@ -70,6 +71,13 @@ import { markStartupTrace, startupTraceEnabled } from '@/lib/startupTrace';
 const OnboardingScreen = lazyWithChunkRecovery(() =>
   import('@/components/onboarding/OnboardingScreen').then((m) => ({ default: m.OnboardingScreen })),
 );
+
+// --- GeoCode: the About dialog is the product's identity screen; the desktop shell shows
+// its own (geocode/GeoCodeAboutDialog.tsx, docs/DESKTOP.md §4.6). ---
+const AboutDialog: React.FC<React.ComponentProps<typeof UpstreamAboutDialog>> = (props) => (
+  isDesktopShell() ? <GeoCodeAboutDialog {...props} /> : <UpstreamAboutDialog {...props} />
+);
+// --- /GeoCode ---
 
 const AboutDialogWrapper: React.FC = () => {
   const isAboutDialogOpen = useUIStore((s) => s.isAboutDialogOpen);

@@ -22,6 +22,7 @@ import { utilityProcess } from 'electron';
 import { startEmbeddedKernel } from './geocode/kernel-boot.mjs';
 import { DesktopIdentity } from './geocode/desktop-identity.mjs';
 import { compareReleaseVersions, createReleaseUpdateBackend } from './geocode/release-updater.mjs';
+import { GEOCODE_VERSION } from './geocode/app-version.mjs';
 import { applyShellDataRoot } from './geocode/shell-data-root.mjs';
 import { stripInheritedForeignVariables } from './geocode/kernel-environment.mjs';
 import { geocodeDeniedSegments } from './geocode/denied-paths.mjs';
@@ -226,7 +227,7 @@ const readAppMetadata = () => {
 };
 
 const APP_METADATA = readAppMetadata();
-const APP_VERSION = APP_METADATA.version;
+const APP_VERSION = GEOCODE_VERSION; // GeoCode: the product version; APP_METADATA.version is the OpenChamber baseline (docs/DESKTOP.md §4.6)
 // GeoCode: notify-only updates from GitHub Releases (geocode/release-updater.mjs).
 const releaseUpdateBackend = createReleaseUpdateBackend({ currentVersion: APP_VERSION });
 
