@@ -2982,7 +2982,7 @@ export const dict = {
   'updateDialog.actions.copyCommand': 'Copy command',
   'updateDialog.actions.copied': 'Copied!',
   'updateDialog.status.downloadingPayload': 'Downloading update payload...',
-  'updateDialog.actions.downloadUpdate': 'Download Update',
+  'updateDialog.actions.downloadUpdate': 'Open download page',
   'updateDialog.status.downloading': 'Downloading...',
   'updateDialog.actions.restartToUpdate': 'Restart to Update',
   'updateDialog.actions.updateNow': 'Update Now',

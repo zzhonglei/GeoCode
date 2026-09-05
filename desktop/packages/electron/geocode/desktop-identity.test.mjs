@@ -51,6 +51,20 @@ describe('desktop identity', () => {
     expect(manifest.name).toBe('@openchamber/electron');
   });
 
+  it('publishes to, and announces from, the release repository it names', () => {
+    // package.json cannot import the identity; the renderer cannot import the electron package.
+    // Both carry a copy, and each copy is pinned here so neither can drift back to upstream's.
+    const { build } = JSON.parse(readElectronFile('package.json'));
+    expect(`${build.publish.owner}/${build.publish.repo}`).toBe(DesktopIdentity.releaseRepository);
+    expect(DesktopIdentity.releasesUrl).toBe(`https://github.com/${DesktopIdentity.releaseRepository}/releases`);
+    const dialog = fs.readFileSync(
+      path.resolve(electronRoot, '../ui/src/components/ui/UpdateDialog.tsx'),
+      'utf8',
+    );
+    const copied = dialog.match(/const GITHUB_RELEASES_URL = '([^']+)'/)?.[1];
+    expect(copied).toBe(DesktopIdentity.releasesUrl);
+  });
+
   it('rewrites the Windows install directory, which comes from name and not productName', () => {
     // PATHS.md §2: without this, GeoCode installs over upstream OpenCode, and the wrong path
     // then sticks in the registry's InstallLocation where reinstalling does not clear it.

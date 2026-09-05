@@ -12,6 +12,7 @@ import {
   isWebRuntime,
 } from '@/lib/desktop';
 import { runtimeFetch } from '@/lib/runtime-fetch';
+import { openExternalUrl } from '@/lib/url'; // GeoCode: notify-only updates open the release page
 import { getClientPlatform, isCapacitorApp } from '@/lib/platform';
 
 declare const __APP_VERSION__: string | undefined;
@@ -264,6 +265,17 @@ export const useUpdateStore = create<UpdateStore>()((set, get) => ({
 
   downloadUpdate: async () => {
     const { available, runtimeType } = get();
+
+    // --- GeoCode: nothing is downloaded in-app; the release page opens for the user
+    // (docs/DESKTOP.md §7.2). ---
+    if (get().runtimeType === 'desktop') {
+      const releaseUrl = get().info?.releaseUrl;
+      if (available && releaseUrl) {
+        await openExternalUrl(releaseUrl);
+      }
+      return;
+    }
+    // --- /GeoCode ---
 
     // For web runtime, there's no download - user uses in-app update or CLI
     if (runtimeType !== 'desktop' || !available) {

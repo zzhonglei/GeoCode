@@ -31,6 +31,20 @@ export const registerOpenChamberRoutes = (app, dependencies) => {
     getCachedZenModels,
   } = dependencies;
 
+  // --- GeoCode: the shell does not ask OpenChamber's update service, which would also report
+  // an install id; the desktop shell checks GitHub Releases from Electron main instead
+  // (docs/DESKTOP.md §7.2). Registered first, so these answer before the handlers below.
+  // `process` here is an injected dependency; the runtime fact is read from the real one. ---
+  if (globalThis.process.versions.electron) {
+    app.get('/api/openchamber/update-check', (_req, res) => {
+      res.json({ available: false });
+    });
+    app.post('/api/openchamber/update-install', (_req, res) => {
+      res.status(404).json({ error: 'Not available in GeoCode' });
+    });
+  }
+  // --- /GeoCode ---
+
   app.get('/api/openchamber/update-check', async (req, res) => {
     try {
       const { checkForUpdates } = await import('../package-manager.js');

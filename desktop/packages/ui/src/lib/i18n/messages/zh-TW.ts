@@ -2945,7 +2945,7 @@ export const dict: Record<I18nKey, string> = {
   'updateDialog.actions.copyCommand': '複製命令',
   'updateDialog.actions.copied': '已複製！',
   'updateDialog.status.downloadingPayload': '正在下載更新包...',
-  'updateDialog.actions.downloadUpdate': '下載更新',
+  'updateDialog.actions.downloadUpdate': '前往下載頁面',
   'updateDialog.status.downloading': '下載中...',
   'updateDialog.actions.restartToUpdate': '重新啟動以更新',
   'updateDialog.actions.updateNow': '立即更新',

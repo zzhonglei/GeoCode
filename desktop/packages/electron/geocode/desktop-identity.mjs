@@ -43,4 +43,12 @@ export const DesktopIdentity = {
    * `extraMetadata` rewrites `name` at package time; this is the value it writes.
    */
   windowsPackageName: dirName,
+  /**
+   * Releases live in a repository of their own, as they did for the previous GeoCode. The
+   * app only announces them (docs/DESKTOP.md §7.2); the renderer keeps a hand-copy of
+   * `releasesUrl` in UpdateDialog.tsx, pinned by desktop-identity.test.mjs.
+   */
+  releaseRepository: `zzhonglei/${dirName}-Release`,
+  releasesUrl: `https://github.com/zzhonglei/${dirName}-Release/releases`,
+  releasesApiUrl: `https://api.github.com/repos/zzhonglei/${dirName}-Release/releases/latest`,
 };

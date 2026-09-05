@@ -166,8 +166,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "openchamber",
-      "repo": "openchamber"
+      "owner": "zzhonglei",
+      "repo": "GeoCode-Release"
     }
   }
 }

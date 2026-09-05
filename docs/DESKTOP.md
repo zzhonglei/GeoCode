@@ -399,6 +399,14 @@ Agent Kernel。GeoCode 产品配置中被排除的能力也不能只靠隐藏按
 
 这些仍属于同一个 Desktop 产品,只是不能进入「壳与内核是否接通」的第一验收面。
 
+**应用更新只通知,不安装。** 应用不签名,macOS 上装不了应用内更新,所以形态与旧版 GeoCode 相同:
+Electron main 匿名查发布仓库的 GitHub Releases 最新一条(仓库名由 `desktop-identity.mjs` 派生),
+去掉 tag 前导 `v` 后与当前版本按语义化版本比较,预发布后缀算更旧;有新版就把版本号、Release 正文与
+Release 页面地址交给上游的更新对话框,「下载」按钮打开 Release 页面由用户自己下载安装。节奏沿用
+上游的轮询钩子:启动 3 秒后一次,之后每小时一次;没有「跳过此版本」,与上游一致。上游的 electron-updater
+不配置更新源,应用内下载入口直接拒绝;壳向 OpenChamber 更新服务上报安装标识的那条路由在 Electron 下
+只返回「无更新」,不出网。发布仓库里没有任何 Release 时按「无更新」处理,不报错。
+
 ### 7.3 不进入 GeoCode 产品
 
 - Web / PWA;
@@ -961,7 +969,8 @@ macOS arm64 与 Windows x64 分别完成:
 3. Shell 补丁的注入表放 `docs/SHELL.md` 还是本文的扩展章节(§9.4),待补丁实际分布可见后定;
 4. Shell Runtime 凭据的具体 token 形状与过期策略;
 5. utility process 异常退出后的自动重启次数与退避;
-6. GeoCode 应用更新通知的检查间隔和发布清单格式。
+6. GeoCode 应用更新通知的检查间隔和发布清单格式:已定,见 §7.2。清单就是 GitHub Release 本身,
+   不另生成 `latest.yml` 一类文件。
 
 这些细节必须有一个明确所有者和运行时测试,但不应重新打开「是否只有 Desktop」「是否内置
 Kernel」「是否保留 Shell Runtime」「是否由 main 管理 Kernel」四项已定决策。

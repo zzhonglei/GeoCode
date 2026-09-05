@@ -21,6 +21,7 @@ import { resolveManagedOpenCodeCwd } from './opencode-cwd.mjs';
 import { utilityProcess } from 'electron';
 import { startEmbeddedKernel } from './geocode/kernel-boot.mjs';
 import { DesktopIdentity } from './geocode/desktop-identity.mjs';
+import { compareReleaseVersions, createReleaseUpdateBackend } from './geocode/release-updater.mjs';
 import { applyShellDataRoot } from './geocode/shell-data-root.mjs';
 import { stripInheritedForeignVariables } from './geocode/kernel-environment.mjs';
 import { geocodeDeniedSegments } from './geocode/denied-paths.mjs';
@@ -226,6 +227,8 @@ const readAppMetadata = () => {
 
 const APP_METADATA = readAppMetadata();
 const APP_VERSION = APP_METADATA.version;
+// GeoCode: notify-only updates from GitHub Releases (geocode/release-updater.mjs).
+const releaseUpdateBackend = createReleaseUpdateBackend({ currentVersion: APP_VERSION });
 
 const DEFAULT_DESKTOP_PORT = 57123;
 const LOOPBACK_BIND_HOST = '127.0.0.1';
@@ -3132,6 +3135,10 @@ const compareSemver = (left, right) => {
 };
 
 const setupAutoUpdater = () => {
+  // --- GeoCode: no electron-updater feed is configured. Updates are announced from GitHub
+  // Releases and installed by the user (docs/DESKTOP.md §7.2), so nothing below runs. ---
+  return;
+  // --- /GeoCode ---
   if (!app.isPackaged) {
     return;
   }
@@ -4472,6 +4479,27 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
     }
 
     case 'desktop_check_for_updates': {
+      // --- GeoCode: the check asks GitHub Releases and returns the release page; the
+      // electron-updater path below is never reached (docs/DESKTOP.md §7.2). ---
+      {
+        const currentVersion = APP_VERSION;
+        const { available, updateInfo, nextVersion, pendingUpdate } = await checkForDesktopUpdate({
+          autoUpdater: releaseUpdateBackend,
+          currentVersion,
+          pendingUpdate: state.pendingUpdate,
+          compareVersions: compareReleaseVersions,
+        });
+        state.pendingUpdate = pendingUpdate;
+        return {
+          available,
+          currentVersion,
+          version: available ? nextVersion : null,
+          body: available ? (updateInfo?.releaseNotes ?? null) : null,
+          date: available ? (updateInfo?.releaseDate ?? null) : null,
+          releaseUrl: available ? (updateInfo?.releaseUrl ?? null) : null,
+        };
+      }
+      // --- /GeoCode ---
       assertUpdaterCapability({ packaged: app.isPackaged });
       const currentVersion = APP_VERSION;
       const { available, updateInfo, updateResult, nextVersion, pendingUpdate } = await checkForDesktopUpdate({
@@ -4496,6 +4524,9 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
     }
 
     case 'desktop_download_and_install_update':
+      // --- GeoCode: nothing is downloaded in-app (docs/DESKTOP.md §7.2). ---
+      throw new Error('GeoCode updates are downloaded from the release page');
+      // --- /GeoCode ---
       assertUpdaterCapability({ packaged: app.isPackaged });
       if (!state.pendingUpdate) {
         throw new Error('No pending update');
