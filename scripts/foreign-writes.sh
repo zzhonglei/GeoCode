@@ -15,6 +15,11 @@ ROOTS="$HOME/.config/opencode $HOME/.local/share/opencode $HOME/.cache/opencode
        ${TMPDIR:-/tmp}/opencode"
 SNAP="${FOREIGN_WRITES_SNAPSHOT:-/tmp/geocode-foreign-writes}"
 
+openchamber_pid() {
+  pgrep -f 'OpenChamber.app/Contents/MacOS/OpenChamber' 2>/dev/null | head -1
+  return 0
+}
+
 snapshot() {
   for root in $ROOTS; do
     [ -e "$root" ] || continue
@@ -23,14 +28,30 @@ snapshot() {
 }
 
 case "$1" in
-  before) snapshot > "$SNAP"; echo "recorded $(wc -l < "$SNAP" | tr -d ' ') entries" ;;
+  before)
+    snapshot > "$SNAP"
+    openchamber_pid > "$SNAP.openchamber"
+    echo "recorded $(wc -l < "$SNAP" | tr -d ' ') entries"
+    [ -s "$SNAP.openchamber" ] && echo "note: OpenChamber.app is running (pid $(cat "$SNAP.openchamber")); its own writes under ~/.config/openchamber are expected" ;;
   after)
     snapshot > "$SNAP.after"
     if diff -q "$SNAP" "$SNAP.after" > /dev/null 2>&1; then
       echo "clean — nothing outside GeoCode's own directories changed"
     else
+      changed="$(diff "$SNAP" "$SNAP.after" | grep '^[<>]' | head -40)"
+      # A running OpenChamber.app writes its own settings on quit and on every settings
+      # change. Those land in ~/.config/openchamber too, so they are reported apart: the
+      # reader confirms them against ~/Library/Logs/OpenChamber/main.log and the port
+      # recorded in that settings.json, which is OpenChamber's, not ours.
+      pid="$({ cat "$SNAP.openchamber" 2>/dev/null || true; openchamber_pid; })"
+      if [ -n "$pid" ] && ! printf '%s\n' "$changed" | grep -v "$HOME/.config/openchamber" > /dev/null; then
+        echo "writes under ~/.config/openchamber while OpenChamber.app was running (pid $(printf '%s' "$pid" | head -1)):"
+        printf '%s\n' "$changed"
+        echo "likely OpenChamber's own; confirm against ~/Library/Logs/OpenChamber/main.log before treating as ours"
+        exit 3
+      fi
       echo "FOREIGN WRITE DETECTED:"
-      diff "$SNAP" "$SNAP.after" | grep '^[<>]' | head -40
+      printf '%s\n' "$changed"
       exit 1
     fi ;;
   *) echo "usage: $0 before|after" >&2; exit 2 ;;
