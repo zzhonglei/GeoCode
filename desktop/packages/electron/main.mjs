@@ -29,6 +29,7 @@ import { stripInheritedForeignVariables } from './geocode/kernel-environment.mjs
 import { geocodeDeniedSegments } from './geocode/denied-paths.mjs';
 import { hasRelaySettings, dropRelaySettings, stripRemoteAccessSettings } from './geocode/loopback-settings.mjs';
 import { isRemoteIpcCommand, REMOTE_IPC_REFUSAL } from './geocode/remote-ipc.mjs';
+import { describeKernelFailure } from './geocode/kernel-failure.mjs';
 // --- /GeoCode ---
 import { resolveStartupUrlProbePlan, shouldIgnoreLoopbackConnectionLimit } from './startup-url-selection.mjs';
 import { sanitizeRuntimeRequestHeaders } from './runtime-request-headers.mjs';
@@ -800,6 +801,11 @@ const buildStoredHostEntry = (entry) => {
 };
 
 const readDesktopHostsConfig = () => {
+  // --- GeoCode: one host, this machine (docs/DESKTOP.md §5.1). Nothing stored can make the
+  // boot ask which server to use or point the window elsewhere; the hosts list below is
+  // never read, so a stale entry from an earlier build has no effect either. ---
+  return { hosts: [], defaultHostId: LOCAL_HOST_ID, initialHostChoiceCompleted: true };
+  // --- /GeoCode ---
   const root = readSettingsRoot();
   const hostsRaw = Array.isArray(root.desktopHosts) ? root.desktopHosts : [];
   const hosts = hostsRaw
@@ -1612,18 +1618,27 @@ const spawnLocalServer = async () => {
   process.env.NO_PROXY = process.env.NO_PROXY || 'localhost,127.0.0.1';
   process.env.no_proxy = process.env.no_proxy || 'localhost,127.0.0.1';
 
-  // GeoCode: the kernel comes up before the shell is imported, because the shell reads its
-  // OpenCode connection at import time (geocode/kernel-boot.mjs). A kernel that fails to
-  // start throws here, so no shell is left running against an address nothing answers.
-  state.kernelHandle = await startEmbeddedKernel({
-    isDev,
-    moduleDirectory: __dirname,
-    resourcesPath: process.resourcesPath,
-    fork: (modulePath, forkArgs, options) => utilityProcess.fork(modulePath, forkArgs, options),
-    cwd: process.env.OPENCHAMBER_OPENCODE_CWD,
-    environment: process.env,
-    logger: log,
-  });
+  // --- GeoCode: the kernel comes up before the shell is imported, because the shell reads its
+  // OpenCode connection at import time (geocode/kernel-boot.mjs). A kernel that fails to start
+  // ends this function here with no server: the boot outcome then says the local host is
+  // unreachable and the window shows the failure screen (docs/DESKTOP.md §5.1), instead of
+  // the process exiting with nothing on screen. ---
+  try {
+    state.kernelHandle = await startEmbeddedKernel({
+      isDev,
+      moduleDirectory: __dirname,
+      resourcesPath: process.resourcesPath,
+      fork: (modulePath, forkArgs, options) => utilityProcess.fork(modulePath, forkArgs, options),
+      cwd: process.env.OPENCHAMBER_OPENCODE_CWD,
+      environment: process.env,
+      logger: log,
+    });
+  } catch (error) {
+    state.kernelFailure = describeKernelFailure({ error, logPath: log.transports.file.getFile().path });
+    log.error('[geocode-kernel] failed to start:', state.kernelFailure);
+    return null;
+  }
+  // --- /GeoCode ---
 
   const { startWebUiServer } = await import('@openchamber/web/server/index.js');
 
@@ -3866,6 +3881,8 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
   // --- GeoCode: the commands behind Remote Instances are refused before the switch, whatever
   // called them (docs/DESKTOP.md §7.3, geocode/remote-ipc.mjs). ---
   if (isRemoteIpcCommand(command)) throw new Error(REMOTE_IPC_REFUSAL);
+  // The failure screen reads why the kernel did not come up (geocode/kernel-failure.mjs).
+  if (command === 'geocode_kernel_failure') return state.kernelFailure ?? null;
   // --- /GeoCode ---
   switch (command) {
     case 'desktop_start_window_drag':

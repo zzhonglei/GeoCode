@@ -44,6 +44,7 @@ import { useSync } from '@/sync/use-sync';
 import { ConfigUpdateOverlay } from '@/components/ui/ConfigUpdateOverlay';
 import { AboutDialog as UpstreamAboutDialog } from '@/components/ui/AboutDialog'; // GeoCode: wrapped below
 import { GeoCodeAboutDialog } from '@/geocode/GeoCodeAboutDialog';
+import { GeoCodeKernelFailureScreen } from '@/geocode/GeoCodeKernelFailureScreen';
 import { RuntimeAPIProvider } from '@/contexts/RuntimeAPIProvider';
 import { registerRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { useUIStore } from '@/stores/useUIStore';
@@ -846,6 +847,19 @@ function App({ apis }: AppProps) {
   // Desktop boot view routing.
   // When the boot outcome resolves to a non-main screen (chooser, recovery),
   // render OnboardingScreen with appropriate mode/variant.
+  // --- GeoCode: the desktop shell has one host, this machine, so a boot view that is not the
+  // main view has one meaning: the embedded kernel did not come up (docs/DESKTOP.md §5.1). The
+  // upstream chooser and recovery screens below are never reached in the desktop shell. ---
+  if (isDesktopRuntime && bootView && bootView.screen !== 'main') {
+    return (
+      <ErrorBoundary>
+        <div className="h-full text-foreground bg-background">
+          <GeoCodeKernelFailureScreen onRetry={handleDesktopBootDismiss} />
+        </div>
+      </ErrorBoundary>
+    );
+  }
+  // --- /GeoCode ---
   if (isDesktopRuntime && bootView && bootView.screen !== 'main') {
     // First-launch chooser
     if (bootView.screen === 'chooser') {

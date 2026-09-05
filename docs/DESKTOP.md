@@ -293,6 +293,15 @@ About 对话框沿用上游的版式,只显示图标、产品名、产品版本�
 窗口不能在「服务地址尚未确定」时自行猜测默认端口。失败必须落在可诊断的启动阶段,
 而不是让 UI 在一个永远连不上的地址上转圈。
 
+**启动只有两种结果。** 上游桌面端启动时先回答「这个界面该连哪台服务器」,围绕它有首次启动选择页、
+远程主机探测与几种恢复页;GeoCode 的内核在应用里,这个问题不存在。主进程读到的主机配置恒为
+「本机」(`readDesktopHostsConfig` 首行返回,存量设置文件里的主机列表不再被读),所以结果只剩:
+Kernel 起来了,进主界面;Kernel 没起来,`spawnLocalServer` 记下失败(错误、Kernel 最后几十行输出、
+日志路径,`electron/geocode/kernel-failure.mjs`)并且不启动 Shell Runtime,窗口照常打开,渲染进程
+把任何非主界面的启动结果都交给 GeoCode 自己的失败屏(`ui/src/geocode/GeoCodeKernelFailureScreen.tsx`),
+它经 `geocode_kernel_failure` 读那份记录,提供「在文件夹中显示」日志与重试(重新启动应用)。
+上游的选择页、安装页与恢复页在桌面壳下没有到达路径。运行中 Kernel 死亡的处理见 §5.2 第二部分。
+
 ### 5.2 配置生效与 Kernel 重启
 
 **配置生效不重启进程。** 设置页保存的每一项都先落盘(壳写内核配置根下的文件,或经代理调 Kernel 的
@@ -463,6 +472,8 @@ Release 页面地址交给上游的更新对话框,「下载」按钮打开 Rele
   在启动时清理一次。`dev-tunnel` 不动:它只在 API 地址是远程时启用,主机切换没了它不可达。
   绊线在 `server/geocode/remote-access-surface.test.js`、`electron/geocode/remote-ipc.test.mjs` 与
   `ui/src/geocode/desktop-settings-surface.test.ts`。
+- **首次启动选择页、「安装 OpenCode」页与恢复页**:按 §5.1「启动只有两种结果」处理,三页在桌面壳下没有到达路径。
+  绊线在 `electron/geocode/kernel-failure.test.mjs` 与 `ui/src/geocode/kernel-failure-screen.test.ts`。
 
 ---
 
