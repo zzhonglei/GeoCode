@@ -86,4 +86,21 @@ describe('desktop settings surface', () => {
     expect(tunnel?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
     expect(tunnel?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
   });
+
+  test('the Remote Instances page is unavailable in the desktop shell only', () => {
+    const remote = getSettingsPageMeta('remote-instances');
+    const base = { isVSCode: false, isWeb: false, isMobile: false };
+    expect(remote?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
+    expect(remote?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
+  });
+
+  test('the header services menu, which is the host switcher, renders nothing in the desktop shell', () => {
+    const header = read('components/layout/Header.tsx');
+    const menu = header.indexOf('function DesktopServicesMenu(');
+    const guard = header.indexOf('if (isDesktopShell()) return null;', menu);
+    const firstReturn = header.indexOf('return (', menu);
+    expect(menu).toBeGreaterThan(-1);
+    expect(guard).toBeGreaterThan(menu);
+    expect(guard).toBeLessThan(firstReturn);
+  });
 });

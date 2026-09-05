@@ -453,6 +453,16 @@ Release 页面地址交给上游的更新对话框,「下载」按钮打开 Rele
   relay 与系统信息接口从它读当前端口,公网地址恒为空。它本就不在启动时做任何事,没有自动恢复与定时器。
   绊线在 `server/geocode/tunnel-surface.test.js`(记录式桩应用,Electron 下零挂载,对照组挂满)与
   `ui/src/geocode/desktop-settings-surface.test.ts`。
+- **SSH host、Remote Instance、Relay 与设备配对**:「远程实例」页在桌面壳不可用(与 Tunnel 同一个页面可用性谓词);
+  顶栏的服务菜单就是主机切换器,在桌面壳不渲染(`Header.tsx`)。壳在 Electron 下由 `createRelayService` 返回惰性对象
+  (`server/geocode/inert-relay.js`):不注册路由、不建宿主客户端、不生成写进 settings.json 的身份密钥,serverId 恒为 null;
+  配对的五条路由(会话、传输候选、兑换)先于上游 handler 注册 404(`server/geocode/remote-access-surface.js`),
+  已配对设备的列表路由保留,只读且恒空。主进程在命令分发前拒绝 11 个远程命令(8 个 `desktop_ssh_*`、远程口令登录、
+  主机探测、主机写入;`electron/geocode/remote-ipc.mjs`),`desktop_hosts_get` 保留给顶栏与恢复页判断「当前是本机」;
+  `connect` 深链在分发前丢弃;早期构建写进 settings.json 的 `privateRelay`、`relaySigningKey`、`relayEncryptionKey`
+  在启动时清理一次。`dev-tunnel` 不动:它只在 API 地址是远程时启用,主机切换没了它不可达。
+  绊线在 `server/geocode/remote-access-surface.test.js`、`electron/geocode/remote-ipc.test.mjs` 与
+  `ui/src/geocode/desktop-settings-surface.test.ts`。
 
 ---
 

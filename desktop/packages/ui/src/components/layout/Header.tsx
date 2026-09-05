@@ -279,6 +279,9 @@ const DesktopServicesMenu = React.memo(function DesktopServicesMenu({
   onOpenRemoteUpdate,
 }: DesktopServicesMenuProps) {
   const { t } = useI18n();
+  // --- GeoCode: this menu is the host switcher; the desktop shell has one host (docs/DESKTOP.md §7.3) ---
+  if (isDesktopShell()) return null;
+  // --- /GeoCode ---
   return (
     <DropdownMenu
       open={isDesktopServicesOpen}

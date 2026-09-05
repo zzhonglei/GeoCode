@@ -1,4 +1,5 @@
 import { buildExternalManualRestartResponse } from './config-mutation-response.js';
+import { refusePairingRoutesUnderElectron } from '../../geocode/remote-access-surface.js'; // GeoCode: own module
 
 const parseLoopbackUrl = (rawUrl) => {
   if (typeof rawUrl !== 'string') {
@@ -791,6 +792,10 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
     });
   });
 
+  // --- GeoCode: device pairing is not a desktop-shell surface (docs/DESKTOP.md §7.3). Registered
+  // first, so under Electron these answer before the upstream handlers below. ---
+  refusePairingRoutesUnderElectron(app);
+  // --- /GeoCode ---
   app.post('/api/client-auth/pairing/sessions', express.json({ limit: '64kb' }), async (req, res, next) => {
     await runWithClientCreateAuth(req, res, next, async (authContext) => {
       const candidates = await pairingServerCandidates(req, {

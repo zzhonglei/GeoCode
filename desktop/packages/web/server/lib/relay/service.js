@@ -14,6 +14,7 @@
 import express from 'express';
 
 import { createRelayIdentityRuntime } from './identity.js';
+import { createInertRelayService } from '../../geocode/inert-relay.js'; // GeoCode: own module
 import { startRelayHost } from './host-client.js';
 
 export const DEFAULT_RELAY_URL = 'wss://relay.openchamber.dev/ws';
@@ -77,6 +78,11 @@ export const createRelayService = ({
   allowPassiveHost = true,
   logger = console,
 }) => {
+  // --- GeoCode: under Electron nothing below may run: no routes, no host client, no identity
+  // written to settings.json (docs/DESKTOP.md §6.1, §7.3). geocode/inert-relay.js keeps the
+  // interface so index.js and core-routes.js stay byte-identical. ---
+  if (process.versions.electron) return createInertRelayService();
+  // --- /GeoCode ---
   const identityRuntime = createRelayIdentityRuntime({ crypto, readSettingsFromDiskMigrated, writeSettingsToDisk, readSettingsStrict });
 
   let hostClient = null;

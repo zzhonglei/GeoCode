@@ -80,7 +80,7 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
     group: 'projects',
     kind: 'single',
     keywords: ['ssh', 'remote', 'instances', 'tunnels', 'forwarding', 'connection'],
-    isAvailable: (ctx) => !ctx.isVSCode,
+    isAvailable: (ctx) => !ctx.isVSCode && !ctx.isDesktop, // GeoCode: the desktop shell has one host, this machine (docs/DESKTOP.md §7.3)
   },
   {
     slug: 'providers',

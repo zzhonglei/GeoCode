@@ -27,7 +27,8 @@ import { GEOCODE_VERSION } from './geocode/app-version.mjs';
 import { applyShellDataRoot } from './geocode/shell-data-root.mjs';
 import { stripInheritedForeignVariables } from './geocode/kernel-environment.mjs';
 import { geocodeDeniedSegments } from './geocode/denied-paths.mjs';
-import { stripRemoteAccessSettings } from './geocode/loopback-settings.mjs';
+import { hasRelaySettings, dropRelaySettings, stripRemoteAccessSettings } from './geocode/loopback-settings.mjs';
+import { isRemoteIpcCommand, REMOTE_IPC_REFUSAL } from './geocode/remote-ipc.mjs';
 // --- /GeoCode ---
 import { resolveStartupUrlProbePlan, shouldIgnoreLoopbackConnectionLimit } from './startup-url-selection.mjs';
 import { sanitizeRuntimeRequestHeaders } from './runtime-request-headers.mjs';
@@ -1550,6 +1551,8 @@ const spawnLocalServer = async () => {
   const settings = readSettingsRoot();
   // --- GeoCode: loopback only (docs/DESKTOP.md §6.1); the upstream lines below then see LAN off and no password ---
   stripRemoteAccessSettings(settings);
+  // The relay identity an earlier build wrote is read by nothing now; drop it once (docs/DESKTOP.md §7.3).
+  if (hasRelaySettings(settings)) await mutateSettingsRoot((root) => dropRelaySettings(root));
   // --- /GeoCode ---
   const storedPort = Number.isFinite(settings.desktopLocalPort) ? settings.desktopLocalPort : null;
   // When the user enables "Desktop Network Access" we bind on all interfaces
@@ -2297,6 +2300,9 @@ const confirmConnectDeepLink = async (payload) => {
 
 const dispatchDeepLink = (link) => {
   if (!link) return;
+  // --- GeoCode: a connect link pairs this desktop with another server (docs/DESKTOP.md §7.3) ---
+  if (link.type === 'connect') return;
+  // --- /GeoCode ---
   log.info('[electron] dispatching deep-link', { type: link.type, valueLen: link.value?.length || 0 });
   if (link.type === 'connect') {
     const pairingPayload = parseConnectPairingDeepLinkPayload(link.raw);
@@ -3857,6 +3863,10 @@ const closeAllDevTunnels = () => {
 };
 
 const handleInvoke = async (browserWindow, command, args = {}) => {
+  // --- GeoCode: the commands behind Remote Instances are refused before the switch, whatever
+  // called them (docs/DESKTOP.md §7.3, geocode/remote-ipc.mjs). ---
+  if (isRemoteIpcCommand(command)) throw new Error(REMOTE_IPC_REFUSAL);
+  // --- /GeoCode ---
   switch (command) {
     case 'desktop_start_window_drag':
       return null;

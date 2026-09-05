@@ -17,3 +17,18 @@ export const stripRemoteAccessSettings = (settings) => {
   }
   return settings;
 };
+
+// Written by upstream's relay service on first use; the inert relay never writes them, so a
+// value found here came from an earlier build.
+export const RELAY_SETTING_KEYS = Object.freeze(['privateRelay', 'relaySigningKey', 'relayEncryptionKey']);
+
+export const hasRelaySettings = (settings) =>
+  Boolean(settings) && typeof settings === 'object' && RELAY_SETTING_KEYS.some((key) => key in settings);
+
+export const dropRelaySettings = (settings) => {
+  if (!settings || typeof settings !== 'object') return settings;
+  for (const key of RELAY_SETTING_KEYS) {
+    delete settings[key];
+  }
+  return settings;
+};
