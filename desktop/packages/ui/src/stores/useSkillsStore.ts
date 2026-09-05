@@ -96,8 +96,8 @@ export interface DiscoveredSkill {
 }
 
 /** Parse the domain group folder from a skill file path.
- *  e.g. "~/.config/GeoCode/skills/automation-ai/ai-production/SKILL.md" → "automation-ai"
- *  e.g. "~/.config/GeoCode/skills/theme-system/SKILL.md"                → undefined (flat)
+ *  e.g. "~/.config/opencode/skills/automation-ai/ai-production/SKILL.md" → "automation-ai"
+ *  e.g. "~/.config/opencode/skills/theme-system/SKILL.md"                → undefined (flat)
  */
 function parseSkillGroup(path: string): string | undefined {
   const normalizedPath = path.replace(/\\/g, '/');

@@ -47,7 +47,7 @@ import { useMessageTTS } from '@/hooks/useMessageTTS';
 import { renderMagicPrompt } from '@/lib/magicPrompts';
 import { useI18n } from '@/lib/i18n';
 // GeoCode: the kernel's project directory, which the renderer reads plan files out of
-import { KERNEL_PLANS_SEGMENTS, KERNEL_PROJECT_DIR } from '@/geocode/kernel-roots';
+import { KERNEL_PLANS_SEGMENTS, KERNEL_PROJECT_DIR } from '@/geocode/kernel-roots'; // GeoCode: own module
 
 type PlanViewProps = {
   targetPath?: string | null;

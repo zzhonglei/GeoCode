@@ -3,7 +3,7 @@ import { normalizePath } from '@/lib/pathNormalization';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { getRuntimeKey } from '@/lib/runtime-switch';
 // GeoCode: the shell data root the server also uses (src/geocode/shell-data-root.ts)
-import { CHATS_SEGMENTS, MANAGED_CHATS_PATH_SEGMENT } from '@/geocode/shell-data-root';
+import { CHATS_SEGMENTS, MANAGED_CHATS_PATH_SEGMENT } from '@/geocode/shell-data-root'; // GeoCode: own module
 
 export const CHAT_DRAFT_PROJECT_ID = 'openchamber:chats';
 const chatsRootByRuntime = new Map<string, Promise<string>>();

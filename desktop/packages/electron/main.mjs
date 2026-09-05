@@ -19,6 +19,7 @@ import { resolveManagedOpenCodeCwd } from './opencode-cwd.mjs';
 // GeoCode: a second import of 'electron' rather than widening the one above, so the
 // upstream line stays byte-identical across merges (docs/DESKTOP.md §9.3).
 import { utilityProcess } from 'electron';
+// --- GeoCode: own modules (electron/geocode/); environment-boundary.mjs stays first, above ---
 import { startEmbeddedKernel } from './geocode/kernel-boot.mjs';
 import { DesktopIdentity } from './geocode/desktop-identity.mjs';
 import { compareReleaseVersions, createReleaseUpdateBackend } from './geocode/release-updater.mjs';
@@ -27,6 +28,7 @@ import { applyShellDataRoot } from './geocode/shell-data-root.mjs';
 import { stripInheritedForeignVariables } from './geocode/kernel-environment.mjs';
 import { geocodeDeniedSegments } from './geocode/denied-paths.mjs';
 import { stripRemoteAccessSettings } from './geocode/loopback-settings.mjs';
+// --- /GeoCode ---
 import { resolveStartupUrlProbePlan, shouldIgnoreLoopbackConnectionLimit } from './startup-url-selection.mjs';
 import { sanitizeRuntimeRequestHeaders } from './runtime-request-headers.mjs';
 import { assertUpdaterCapability } from './updater-capability.mjs';

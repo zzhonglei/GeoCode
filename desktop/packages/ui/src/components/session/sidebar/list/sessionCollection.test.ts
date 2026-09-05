@@ -5,7 +5,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { deriveRecentSessions } from '../recent/activitySections';
 // GeoCode: chat fixtures must carry the root the code now composes (src/geocode/shell-data-root.ts)
-import { MANAGED_CHATS_PATH_SEGMENT } from '@/geocode/shell-data-root';
+import { MANAGED_CHATS_PATH_SEGMENT } from '@/geocode/shell-data-root'; // GeoCode: own module
 
 import { applyGlobalSessionStatusEvent, replaceGlobalSessionStatusById } from '@/sync/global-session-status';
 import {

@@ -566,6 +566,9 @@ grep -rlE '// GeoCode:|--- GeoCode|"GeoCode: ' desktop/ | wc -l
 **任一数字变小就有补丁不见了,而它未必伴随任何冲突**——上游删掉或改名一个我们打过补丁的
 文件时,git 不报冲突,只是让那处补丁随文件一起消失。
 
+第二次账的「差集」部分(改过却查不到的文件)由验收门每次都算(`patch-surface.sh <root> --check`),放行的只有
+载不动标记的四类文件;翻译字典的绑定方式见 `CONVENTIONS.md` §5。
+
 `bun.lock` 是例外:`chamber-upstream` 上取上游原味,main 上则是 `bun install` over 闭包的产物,
 两者差着数千行。冲突时删掉重新生成,永远不要手工解。
 

@@ -154,8 +154,8 @@ export type AgentWithExtras = Agent & {
 };
 
 /** Parse the subfolder group name from an agent file path.
- *  e.g. "~/.config/GeoCode/agents/business/ceo.md" → "business"
- *  e.g. "~/.config/GeoCode/agents/ceo.md"          → undefined
+ *  e.g. "~/.config/opencode/agents/business/ceo.md" → "business"
+ *  e.g. "~/.config/opencode/agents/ceo.md"          → undefined
  */
 function parseAgentGroup(path: string | null | undefined): string | undefined {
   if (!path) return undefined;

@@ -143,4 +143,12 @@ echo "== settings round trip (shell writes, kernel reads) =="
 "$ROOT/scripts/settings-roundtrip.sh"
 
 echo
+echo "== patch auditability =="
+# Every patched upstream file must be findable by the marker grep (docs/CONVENTIONS.md §5).
+# Kinds that cannot carry a marker pass; translation dictionaries are bound by
+# ui/src/geocode/locale-*.test.ts instead.
+"$ROOT/scripts/patch-surface.sh" kernel --check
+"$ROOT/scripts/patch-surface.sh" desktop --check
+
+echo
 echo "gate green"

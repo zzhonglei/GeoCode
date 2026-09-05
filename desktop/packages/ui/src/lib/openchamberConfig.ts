@@ -15,7 +15,7 @@ import { isVSCodeRuntime } from './desktop';
 import { sanitizeStarterRefs, type DraftStarterRef } from './draftStarters';
 import { createProjectIdFromPath } from './projectId';
 import { runtimeFetch } from './runtime-fetch';
-import { PROJECTS_SEGMENTS } from '@/geocode/shell-data-root';
+import { PROJECTS_SEGMENTS } from '@/geocode/shell-data-root'; // GeoCode: own module
 
 type ProjectRef = { id: string; path: string };
 

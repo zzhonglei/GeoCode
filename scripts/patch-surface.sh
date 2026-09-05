@@ -15,14 +15,22 @@
 # to drive down — session/system.ts went from the tree's most expensive patch to
 # zero deleted lines by shielding with an early return instead of deleting.
 #
-# This reports; it does not gate. There is no threshold worth hardcoding — the
-# number to watch is whether it grows between upgrades.
+# Exposure reports; it does not gate. There is no threshold worth hardcoding — the
+# number to watch is whether it grows between upgrades. Auditability does gate,
+# with --check: a patched upstream file the marker grep cannot find is one a
+# merge has to discover by reading (docs/CONVENTIONS.md §5). Only the kinds that
+# cannot carry a marker pass — JSON, the lock file, .txt prompts, and the
+# translation dictionaries, which are bound by tests instead.
 #
-# Usage:  ./scripts/patch-surface.sh kernel
-#         ./scripts/patch-surface.sh desktop
+# Measures the working tree, not the last commit, so the gate sees an edit
+# before it is committed.
+#
+# Usage:  ./scripts/patch-surface.sh kernel [--check]
+#         ./scripts/patch-surface.sh desktop [--check]
 set -e
 
 ROOT="$1"
+CHECK="${2:-}"
 case "$ROOT" in
   kernel)  BRANCH=kernel-upstream ;;
   desktop) BRANCH=chamber-upstream ;;
@@ -37,7 +45,12 @@ fi
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
-git diff --name-status "$BRANCH" "main:$ROOT" > "$tmp/surface"
+# `stash create` writes the working tree as a commit without touching the index,
+# the stash list, or the files; empty when the tree is clean.
+TREE=$(git stash create 2>/dev/null || true)
+TREE="${TREE:-HEAD}"
+
+git diff --name-status "$BRANCH" "$TREE:$ROOT" > "$tmp/surface"
 added=$(awk '$1=="A"' "$tmp/surface" | wc -l | tr -d ' ')
 modified=$(awk '$1=="M"' "$tmp/surface" | wc -l | tr -d ' ')
 deleted=$(awk '$1=="D"' "$tmp/surface" | wc -l | tr -d ' ')
@@ -52,7 +65,7 @@ echo
 # `bun install` over the closure, and it differs from upstream by thousands of
 # lines that cost nothing (docs/CONVENTIONS.md §5).
 echo "== exposure: upstream lines deleted or rewritten =="
-git diff --numstat "$BRANCH" "main:$ROOT" \
+git diff --numstat "$BRANCH" "$TREE:$ROOT" \
   | awk '$1 ~ /^[0-9]+$/ && $3 != "bun.lock" && $2 > 0 { print $2, $3 }' \
   | sort -rn > "$tmp/exposure"
 
@@ -79,5 +92,13 @@ printf "  patched files carrying a marker  %s / %s\n" "$((modified - n))" "$modi
 if [ "$n" -gt 0 ]; then
   echo "  changed but not locatable by the grep:"
   echo "$unmarked" | sed 's/^/    /'
-  echo "  (.txt prompts and JSON cannot carry markers — those are expected here)"
+  echo "  (.txt prompts, JSON, the lock file and translation dictionaries cannot carry markers — those are expected here)"
+fi
+
+offending=$(printf '%s\n' "$unmarked" | grep -vE '(^|/)bun\.lock$|\.json$|\.txt$|^packages/ui/src/lib/i18n/messages/[^/]+\.ts$' | grep . || true)
+if [ "$CHECK" = "--check" ] && [ -n "$offending" ]; then
+  echo
+  echo "refuse: patched upstream files without a marker (docs/CONVENTIONS.md §5):" >&2
+  echo "$offending" | sed 's/^/    /' >&2
+  exit 1
 fi

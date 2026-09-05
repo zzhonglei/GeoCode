@@ -3,7 +3,7 @@ import type { OpencodeClient, Session } from '@opencode-ai/sdk/v2'
 
 import { filterManagedChatsForRuntime, listGlobalSessionPages, splitGlobalSessionsByArchived } from './globalSessions'
 // GeoCode: chat fixtures must carry the root the code now composes (src/geocode/shell-data-root.ts)
-import { MANAGED_CHATS_PATH_SEGMENT } from '@/geocode/shell-data-root'
+import { MANAGED_CHATS_PATH_SEGMENT } from '@/geocode/shell-data-root' // GeoCode: own module
 
 
 describe('managed Chats runtime visibility', () => {

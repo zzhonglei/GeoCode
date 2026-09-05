@@ -3,7 +3,7 @@ import { useUIStore } from '@/stores/useUIStore';
 import type { SettingsPageSlug, SettingsRuntimeContext } from './metadata';
 import { getSettingsPageMeta } from './metadata';
 import { isDesktopShell } from '@/lib/desktop'; // GeoCode: see the filter in buildSettingsSearchResults
-import { isSettingsSearchItemHiddenOnDesktop } from '@/geocode/desktop-settings-surface';
+import { isSettingsSearchItemHiddenOnDesktop } from '@/geocode/desktop-settings-surface'; // GeoCode: own module
 
 interface SettingsSearchItem {
   id: string;
