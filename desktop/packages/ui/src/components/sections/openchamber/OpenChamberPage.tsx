@@ -12,8 +12,9 @@ import { VoiceSettings } from './VoiceSettings';
 import { TunnelSettings } from './TunnelSettings';
 import { OpenCodeCliSettings as UpstreamOpenCodeCliSettings } from './OpenCodeCliSettings'; // GeoCode: wrapped below
 import { OpenChamberToolsSettings } from './OpenChamberToolsSettings';
-import { DesktopNetworkSettings } from './DesktopNetworkSettings';
+import { DesktopNetworkSettings as UpstreamDesktopNetworkSettings } from './DesktopNetworkSettings'; // GeoCode: wrapped below
 import { KeyboardShortcutsSettings } from './KeyboardShortcutsSettings';
+import { GeoCodeDesktopSettings } from '@/geocode/GeoCodeDesktopSettings';
 import { SettingsPageLayout } from '@/components/sections/shared/SettingsPageLayout';
 import { useDeviceInfo } from '@/lib/device';
 import { isDesktopLocalOriginActive, isDesktopShell, isVSCodeRuntime, isWebRuntime } from '@/lib/desktop';
@@ -26,6 +27,8 @@ import type { OpenChamberSection } from './types';
 // surface, so the desktop shell renders nothing here (docs/DESKTOP.md §7.3,
 // geocode/desktop-settings-surface.ts hides the matching search entries). ---
 const OpenCodeCliSettings: React.FC = () => (isDesktopShell() ? null : <UpstreamOpenCodeCliSettings />);
+// The desktop section without LAN access and the UI password (docs/DESKTOP.md §6.1).
+const DesktopNetworkSettings: React.FC = () => (isDesktopShell() ? <GeoCodeDesktopSettings /> : <UpstreamDesktopNetworkSettings />);
 // --- /GeoCode ---
 
 const useRuntimeEndpointEpoch = (): number => {

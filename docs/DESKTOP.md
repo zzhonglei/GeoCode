@@ -441,6 +441,12 @@ Release 页面地址交给上游的更新对话框,「下载」按钮打开 Rele
   「解析二进制」与「升级」两条路由返回 404,`opencodeBinary` 旧设置不再写入 `OPENCODE_BINARY` 与主进程
   `PATH`。读版本号的「升级状态」路由保留,它在外部模式下不访问网络,About 页靠它显示内核版本。
   绊线在 `server/geocode/system-opencode-surface.test.js` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
+- **LAN**:设置里「桌面」一节在桌面壳换成 GeoCode 自己的组件(`ui/src/geocode/GeoCodeDesktopSettings.tsx`),
+  只保留登录时启动、菜单栏图标、最小化到托盘、保持唤醒四个本机选项,复用上游的 IPC、搜索 id 与文案;
+  「允许局域网访问」开关与为它配套的「桌面 UI 密码」不再出现,搜索也不列。主进程在解析设置文件之后、
+  选绑定地址之前剥掉 `desktopLanAccessEnabled` 与 `desktopUiPassword`(`electron/geocode/loopback-settings.mjs`),
+  所以旧版本或手工写进 settings.json 的值也只会得到回环绑定与无口令的本机窗口,§6.1 不依赖界面是否显示。
+  绊线在 `electron/geocode/loopback-settings.test.mjs` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
 
 ---
 

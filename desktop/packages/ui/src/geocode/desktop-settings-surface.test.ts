@@ -1,8 +1,8 @@
-/* --- GeoCode: the "OpenCode CLI" settings section stays off the desktop shell
- * (docs/DESKTOP.md §7.3).
+/* --- GeoCode: the "OpenCode CLI" section and the network half of the desktop section stay
+ * off the desktop shell (docs/DESKTOP.md §7.3, §6.1).
  *
- * Two halves have to agree: the page must not render the section, and the settings search
- * must not offer entries that lead to it. The filter is a pure function pinned here; the two
+ * Two halves have to agree: the page must not render the controls, and the settings search
+ * must not offer entries that lead to them. The filter is a pure function pinned here; the
  * call sites are pinned by reading their source, because a renderer test that mounts the
  * settings page would drag every store along and prove less than it costs. --- */
 import { describe, expect, test } from 'bun:test';
@@ -15,13 +15,25 @@ import { HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS, isSettingsSearchItemHiddenOnDesktop
 const read = (relative: string) =>
   readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', relative), 'utf8');
 
+const KEPT_DESKTOP_OPTION_IDS = [
+  'sessions.desktop-launch-at-login',
+  'sessions.desktop-mac-menu-bar',
+  'sessions.desktop-minimize-to-tray',
+  'sessions.desktop-keep-awake',
+];
+
 describe('desktop settings surface', () => {
-  test('the two OpenCode CLI search entries are hidden in the desktop shell only', () => {
+  test('the hidden search entries are hidden in the desktop shell only', () => {
+    for (const id of ['sessions.opencode-binary', 'sessions.desktop-ui-password', 'sessions.desktop-lan-access']) {
+      expect(HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS.has(id)).toBe(true);
+    }
     for (const id of HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS) {
       expect(isSettingsSearchItemHiddenOnDesktop(id, true)).toBe(true);
       expect(isSettingsSearchItemHiddenOnDesktop(id, false)).toBe(false);
     }
-    expect(isSettingsSearchItemHiddenOnDesktop('sessions.desktop-lan-access', true)).toBe(false);
+    for (const id of KEPT_DESKTOP_OPTION_IDS) {
+      expect(isSettingsSearchItemHiddenOnDesktop(id, true)).toBe(false);
+    }
   });
 
   test('the hidden ids are the ids the search table declares', () => {
@@ -32,12 +44,35 @@ describe('desktop settings surface', () => {
     expect(search).toContain('isSettingsSearchItemHiddenOnDesktop(item.id, isDesktopShell())');
   });
 
-  test('the settings page renders the section through the desktop guard only', () => {
+  test('the settings page renders the OpenCode CLI section through the desktop guard only', () => {
     const page = read('components/sections/openchamber/OpenChamberPage.tsx');
     expect(page).toContain("import { OpenCodeCliSettings as UpstreamOpenCodeCliSettings } from './OpenCodeCliSettings'");
     expect(page).toContain('isDesktopShell() ? null : <UpstreamOpenCodeCliSettings />');
     // The upstream JSX sites keep their name, so they resolve to the guarded component above.
     expect(page.match(/<OpenCodeCliSettings \/>/g)?.length).toBe(2);
     expect(page.match(/<UpstreamOpenCodeCliSettings \/>/g)?.length).toBe(1);
+  });
+
+  test('the settings page renders the desktop section through the GeoCode component only', () => {
+    const page = read('components/sections/openchamber/OpenChamberPage.tsx');
+    expect(page).toContain("import { DesktopNetworkSettings as UpstreamDesktopNetworkSettings } from './DesktopNetworkSettings'");
+    expect(page).toContain('isDesktopShell() ? <GeoCodeDesktopSettings /> : <UpstreamDesktopNetworkSettings />');
+    expect(page.match(/<DesktopNetworkSettings \/>/g)?.length).toBe(2);
+    expect(page.match(/<UpstreamDesktopNetworkSettings \/>/g)?.length).toBe(1);
+  });
+
+  test('the GeoCode desktop section keeps the machine options and has no network half', () => {
+    const section = read('geocode/GeoCodeDesktopSettings.tsx');
+    for (const id of KEPT_DESKTOP_OPTION_IDS) {
+      expect(section).toContain(`settingsItem="${id}"`);
+    }
+    for (const id of ['sessions.desktop-ui-password', 'sessions.desktop-lan-access']) {
+      expect(section).not.toContain(id);
+    }
+    for (const token of ['desktopLanAccess', 'desktopUiPassword', 'getDesktopLanAddress']) {
+      expect(section).not.toContain(token);
+    }
+    // The menu bar option is the only value that goes through the settings file.
+    expect(section.match(/desktopMacMenuBarEnabled: draftMacMenuBarEnabled/g)?.length).toBe(1);
   });
 });

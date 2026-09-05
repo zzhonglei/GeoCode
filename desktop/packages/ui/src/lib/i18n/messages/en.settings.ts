@@ -973,7 +973,7 @@ export const settingsDict = {
   'settings.openchamber.sessionRetention.toast.deletedCount': 'Deleted {count} session(s)',
   'settings.openchamber.sessionRetention.toast.failedArchiveCount': 'Failed to archive {count} session(s)',
   'settings.openchamber.sessionRetention.toast.failedDeleteCount': 'Failed to delete {count} session(s)',
-  'settings.openchamber.desktopNetwork.title': 'Desktop Network Access',
+  'settings.openchamber.desktopNetwork.title': 'Desktop',
   'settings.openchamber.desktopNetwork.field.windowControlsPosition': 'Window controls position',
   'settings.openchamber.desktopNetwork.field.windowControlsPositionDescription': 'Choose where minimize, maximize, and close buttons appear. Defaults to the right.',
   'settings.openchamber.desktopNetwork.field.windowControlsPositionAria': 'Window controls position',

@@ -938,7 +938,7 @@ export const settingsDict = {
   'settings.openchamber.sessionRetention.toast.deletedCount': '已刪除 {count} 個工作階段',
   'settings.openchamber.sessionRetention.toast.failedArchiveCount': '封存 {count} 個工作階段失敗',
   'settings.openchamber.sessionRetention.toast.failedDeleteCount': '刪除 {count} 個工作階段失敗',
-  'settings.openchamber.desktopNetwork.title': '桌面端網路存取',
+  'settings.openchamber.desktopNetwork.title': '桌面',
   'settings.openchamber.desktopNetwork.field.windowControlsPosition': '視窗控制項位置',
   'settings.openchamber.desktopNetwork.field.windowControlsPositionDescription': '選擇最小化、最大化和關閉按鈕的顯示位置。預設在右側。',
   'settings.openchamber.desktopNetwork.field.windowControlsPositionAria': '視窗控制項位置',

@@ -941,7 +941,7 @@ export const settingsDict = {
   'settings.openchamber.sessionRetention.toast.deletedCount': '已删除 {count} 个会话',
   'settings.openchamber.sessionRetention.toast.failedArchiveCount': '归档 {count} 个会话失败',
   'settings.openchamber.sessionRetention.toast.failedDeleteCount': '删除 {count} 个会话失败',
-  'settings.openchamber.desktopNetwork.title': '桌面端网络访问',
+  'settings.openchamber.desktopNetwork.title': '桌面',
   'settings.openchamber.desktopNetwork.field.windowControlsPosition': '窗口控件位置',
   'settings.openchamber.desktopNetwork.field.windowControlsPositionDescription': '选择最小化、最大化和关闭按钮的显示位置。默认在右侧。',
   'settings.openchamber.desktopNetwork.field.windowControlsPositionAria': '窗口控件位置',

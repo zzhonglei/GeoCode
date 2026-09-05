@@ -26,6 +26,7 @@ import { GEOCODE_VERSION } from './geocode/app-version.mjs';
 import { applyShellDataRoot } from './geocode/shell-data-root.mjs';
 import { stripInheritedForeignVariables } from './geocode/kernel-environment.mjs';
 import { geocodeDeniedSegments } from './geocode/denied-paths.mjs';
+import { stripRemoteAccessSettings } from './geocode/loopback-settings.mjs';
 import { resolveStartupUrlProbePlan, shouldIgnoreLoopbackConnectionLimit } from './startup-url-selection.mjs';
 import { sanitizeRuntimeRequestHeaders } from './runtime-request-headers.mjs';
 import { assertUpdaterCapability } from './updater-capability.mjs';
@@ -1545,6 +1546,9 @@ const spawnLocalServer = async () => {
   inheritUserShellEnv();
 
   const settings = readSettingsRoot();
+  // --- GeoCode: loopback only (docs/DESKTOP.md §6.1); the upstream lines below then see LAN off and no password ---
+  stripRemoteAccessSettings(settings);
+  // --- /GeoCode ---
   const storedPort = Number.isFinite(settings.desktopLocalPort) ? settings.desktopLocalPort : null;
   // When the user enables "Desktop Network Access" we bind on all interfaces
   // so phones/tablets on the same Wi-Fi can reach the app. UI shows a clear
