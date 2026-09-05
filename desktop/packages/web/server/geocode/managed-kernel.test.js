@@ -10,7 +10,21 @@
  * or the refusal above proves nothing about the path it guards. Harness mirrors
  * lib/opencode/lifecycle.test.js. --- */
 import { EventEmitter } from 'node:events';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+
+// The control run below registers its fake child in the managed-process registry, whose
+// default location is the user's real data root; point it at a scratch directory first.
+const registryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-managed-kernel-test-'));
+const originalRegistry = process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY;
+process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY = registryDir;
+afterAll(() => {
+  if (originalRegistry === undefined) delete process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY;
+  else process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY = originalRegistry;
+  fs.rmSync(registryDir, { recursive: true, force: true });
+});
 
 const spawnMock = vi.fn();
 vi.mock('node:child_process', () => ({ spawn: spawnMock, spawnSync: vi.fn() }));

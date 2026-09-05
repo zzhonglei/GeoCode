@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { REMOTE_IPC_COMMANDS, REMOTE_IPC_REFUSAL, isRemoteIpcCommand } from './remote-ipc.mjs';
+import { REMOTE_IPC_COMMANDS, REMOTE_IPC_REFUSAL, answerRemoteIpc, isRemoteIpcCommand } from './remote-ipc.mjs';
 import { RELAY_SETTING_KEYS, dropRelaySettings, hasRelaySettings } from './loopback-settings.mjs';
 
 const electronRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,8 +29,17 @@ describe('remote IPC commands', () => {
     }
   });
 
-  it('main.mjs refuses them before the command switch', () => {
-    const guard = mainSource.indexOf(`if (isRemoteIpcCommand(command)) throw new Error(REMOTE_IPC_REFUSAL);`);
+  it('answers the start-up reads with nothing and refuses every action', () => {
+    expect(answerRemoteIpc('desktop_ssh_instances_get')).toEqual({ instances: [] });
+    expect(answerRemoteIpc('desktop_ssh_status')).toEqual([]);
+    expect(answerRemoteIpc('desktop_ssh_logs')).toEqual([]);
+    for (const command of ['desktop_ssh_connect', 'desktop_ssh_instances_set', 'desktop_ssh_import_hosts', 'desktop_remote_password_login', 'desktop_host_probe', 'desktop_hosts_set']) {
+      expect(() => answerRemoteIpc(command)).toThrow(REMOTE_IPC_REFUSAL);
+    }
+  });
+
+  it('main.mjs answers them before the command switch', () => {
+    const guard = mainSource.indexOf(`if (isRemoteIpcCommand(command)) return answerRemoteIpc(command);`);
     const handler = mainSource.indexOf('const handleInvoke = async (browserWindow, command, args = {}) => {');
     const firstSwitch = mainSource.indexOf('switch (command) {', handler);
     expect(handler).toBeGreaterThan(-1);

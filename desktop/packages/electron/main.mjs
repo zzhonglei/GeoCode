@@ -28,8 +28,9 @@ import { applyShellDataRoot } from './geocode/shell-data-root.mjs';
 import { stripInheritedForeignVariables } from './geocode/kernel-environment.mjs';
 import { geocodeDeniedSegments } from './geocode/denied-paths.mjs';
 import { hasRelaySettings, dropRelaySettings, stripRemoteAccessSettings } from './geocode/loopback-settings.mjs';
-import { isRemoteIpcCommand, REMOTE_IPC_REFUSAL } from './geocode/remote-ipc.mjs';
+import { answerRemoteIpc, isRemoteIpcCommand } from './geocode/remote-ipc.mjs';
 import { describeKernelFailure } from './geocode/kernel-failure.mjs';
+import { relaunchOptions } from './geocode/relaunch.mjs';
 // --- /GeoCode ---
 import { resolveStartupUrlProbePlan, shouldIgnoreLoopbackConnectionLimit } from './startup-url-selection.mjs';
 import { sanitizeRuntimeRequestHeaders } from './runtime-request-headers.mjs';
@@ -2468,7 +2469,7 @@ const openDevToolsForMenuTarget = () => {
 
 const relaunchFromMenu = () => {
   prepareForQuit();
-  app.relaunch();
+  app.relaunch(relaunchOptions({ packaged: app.isPackaged, argv: process.argv, entryFile: __filename })); // GeoCode: geocode/relaunch.mjs
   app.exit(0);
 };
 
@@ -3878,9 +3879,10 @@ const closeAllDevTunnels = () => {
 };
 
 const handleInvoke = async (browserWindow, command, args = {}) => {
-  // --- GeoCode: the commands behind Remote Instances are refused before the switch, whatever
-  // called them (docs/DESKTOP.md §7.3, geocode/remote-ipc.mjs). ---
-  if (isRemoteIpcCommand(command)) throw new Error(REMOTE_IPC_REFUSAL);
+  // --- GeoCode: the commands behind Remote Instances are answered before the switch, whatever
+  // called them: reads get empty results, the rest are refused (docs/DESKTOP.md §7.3,
+  // geocode/remote-ipc.mjs). ---
+  if (isRemoteIpcCommand(command)) return answerRemoteIpc(command);
   // The failure screen reads why the kernel did not come up (geocode/kernel-failure.mjs).
   if (command === 'geocode_kernel_failure') return state.kernelFailure ?? null;
   // --- /GeoCode ---
@@ -4643,7 +4645,7 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
             autoUpdater.quitAndInstall();
           } else {
             prepareForQuit();
-            app.relaunch();
+            app.relaunch(relaunchOptions({ packaged: app.isPackaged, argv: process.argv, entryFile: __filename })); // GeoCode: geocode/relaunch.mjs
             app.exit(0);
           }
         } catch (err) {

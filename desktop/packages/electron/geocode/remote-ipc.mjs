@@ -26,4 +26,19 @@ const REMOTE_IPC_SET = new Set(REMOTE_IPC_COMMANDS);
 
 export const REMOTE_IPC_REFUSAL = 'Remote instances are not part of GeoCode';
 
+// Upstream stores query these at start-up (useDesktopSshStore.load) whether or not the page
+// exists; an empty answer keeps them quiet, where a refusal would log an error on every launch.
+const EMPTY_READ_RESULTS = Object.freeze({
+  desktop_ssh_instances_get: () => ({ instances: [] }),
+  desktop_ssh_status: () => [],
+  desktop_ssh_logs: () => [],
+});
+
 export const isRemoteIpcCommand = (command) => REMOTE_IPC_SET.has(command);
+
+// Reads answer empty; everything else throws.
+export const answerRemoteIpc = (command) => {
+  const empty = EMPTY_READ_RESULTS[command];
+  if (empty) return empty();
+  throw new Error(REMOTE_IPC_REFUSAL);
+};
