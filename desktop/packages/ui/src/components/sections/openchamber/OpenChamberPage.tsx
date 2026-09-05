@@ -10,7 +10,7 @@ import { NotificationSettings } from './NotificationSettings';
 import { GitHubSettings } from './GitHubSettings';
 import { VoiceSettings } from './VoiceSettings';
 import { TunnelSettings } from './TunnelSettings';
-import { OpenCodeCliSettings } from './OpenCodeCliSettings';
+import { OpenCodeCliSettings as UpstreamOpenCodeCliSettings } from './OpenCodeCliSettings'; // GeoCode: wrapped below
 import { OpenChamberToolsSettings } from './OpenChamberToolsSettings';
 import { DesktopNetworkSettings } from './DesktopNetworkSettings';
 import { KeyboardShortcutsSettings } from './KeyboardShortcutsSettings';
@@ -21,6 +21,12 @@ import { isCapacitorApp } from '@/lib/platform';
 import { useI18n } from '@/lib/i18n';
 import { subscribeRuntimeEndpointChanged } from '@/lib/runtime-switch';
 import type { OpenChamberSection } from './types';
+
+// --- GeoCode: the kernel is embedded; choosing or upgrading a system OpenCode is not a product
+// surface, so the desktop shell renders nothing here (docs/DESKTOP.md §7.3,
+// geocode/desktop-settings-surface.ts hides the matching search entries). ---
+const OpenCodeCliSettings: React.FC = () => (isDesktopShell() ? null : <UpstreamOpenCodeCliSettings />);
+// --- /GeoCode ---
 
 const useRuntimeEndpointEpoch = (): number => {
     const [epoch, setEpoch] = React.useState(0);

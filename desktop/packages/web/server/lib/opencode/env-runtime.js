@@ -998,6 +998,10 @@ export const createOpenCodeEnvRuntime = (deps) => {
   };
 
   const applyOpencodeBinaryFromSettings = async (options = {}) => {
+    // --- GeoCode: the kernel is embedded under Electron; a leftover opencodeBinary setting
+    // must not reach OPENCODE_BINARY or the main process PATH (docs/DESKTOP.md §7.3). ---
+    if (process.versions.electron) return null;
+    // --- /GeoCode ---
     const strict = options?.strict === true;
     try {
       const settings = await readSettingsFromDiskMigrated();

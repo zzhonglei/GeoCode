@@ -2,6 +2,8 @@ import type { I18nKey } from '@/lib/i18n/store';
 import { useUIStore } from '@/stores/useUIStore';
 import type { SettingsPageSlug, SettingsRuntimeContext } from './metadata';
 import { getSettingsPageMeta } from './metadata';
+import { isDesktopShell } from '@/lib/desktop'; // GeoCode: see the filter in buildSettingsSearchResults
+import { isSettingsSearchItemHiddenOnDesktop } from '@/geocode/desktop-settings-surface';
 
 interface SettingsSearchItem {
   id: string;
@@ -1030,6 +1032,12 @@ export function buildSettingsSearchResults({
     if (allowedPages && !allowedPages.has(item.page)) {
       return [];
     }
+
+    // --- GeoCode: entries whose section the desktop shell does not render (docs/DESKTOP.md §7.3) ---
+    if (isSettingsSearchItemHiddenOnDesktop(item.id, isDesktopShell())) {
+      return [];
+    }
+    // --- /GeoCode ---
 
     const pageMeta = getSettingsPageMeta(item.page);
     if (!pageMeta || (pageMeta.isAvailable && !pageMeta.isAvailable(runtimeCtx)) || (item.isAvailable && !item.isAvailable(runtimeCtx))) {

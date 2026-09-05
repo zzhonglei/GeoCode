@@ -416,6 +416,14 @@ Agent Kernel。GeoCode 产品配置中被排除的能力也不能只靠隐藏按
 上游源码中的这些模块可以保留,但 GeoCode profile 下不得注册路由、启动定时器、建立网络连接
 或显示入口。此约束需用运行时测试验证,不能从「构建命令没有点名它」推断。
 
+已按此执行的项,连同它们的判据与绊线:
+
+- **选择或自动发现系统 OpenCode、OpenCode 自升级**:设置里的「OpenCode CLI」一节在桌面壳不渲染,
+  设置搜索不再列出它的两个条目(`geocode/desktop-settings-surface.ts`);壳在 Electron 下让
+  「解析二进制」与「升级」两条路由返回 404,`opencodeBinary` 旧设置不再写入 `OPENCODE_BINARY` 与主进程
+  `PATH`。读版本号的「升级状态」路由保留,它在外部模式下不访问网络,About 页靠它显示内核版本。
+  绊线在 `server/geocode/system-opencode-surface.test.js` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
+
 ---
 
 ## 8. 磁盘与身份
