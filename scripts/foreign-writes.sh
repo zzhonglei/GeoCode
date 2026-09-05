@@ -40,14 +40,14 @@ case "$1" in
     else
       changed="$(diff "$SNAP" "$SNAP.after" | grep '^[<>]' | head -40)"
       # A running OpenChamber.app writes its own settings on quit and on every settings
-      # change. Those land in ~/.config/openchamber too, so they are reported apart: the
-      # reader confirms them against ~/Library/Logs/OpenChamber/main.log and the port
-      # recorded in that settings.json, which is OpenChamber's, not ours.
+      # change, and the OpenCode it bundles writes the opencode roots. Those are reported
+      # apart: the reader confirms them against ~/Library/Logs/OpenChamber/main.log (and the
+      # port in its settings.json, which is OpenChamber's), or reruns with it closed.
       pid="$({ cat "$SNAP.openchamber" 2>/dev/null || true; openchamber_pid; })"
-      if [ -n "$pid" ] && ! printf '%s\n' "$changed" | grep -v "$HOME/.config/openchamber" > /dev/null; then
-        echo "writes under ~/.config/openchamber while OpenChamber.app was running (pid $(printf '%s' "$pid" | head -1)):"
+      if [ -n "$pid" ] && ! printf '%s\n' "$changed" | grep -Ev "$HOME/(\.config/openchamber|\.config/opencode|\.local/share/opencode|\.cache/opencode)" > /dev/null; then
+        echo "writes under OpenChamber's and OpenCode's own roots while OpenChamber.app was running (pid $(printf '%s' "$pid" | head -1)):"
         printf '%s\n' "$changed"
-        echo "likely OpenChamber's own; confirm against ~/Library/Logs/OpenChamber/main.log before treating as ours"
+        echo "likely OpenChamber's or its bundled OpenCode's; confirm against ~/Library/Logs/OpenChamber/main.log, or rerun with it closed"
         exit 3
       fi
       echo "FOREIGN WRITE DETECTED:"
