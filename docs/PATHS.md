@@ -127,7 +127,9 @@ $TMPDIR/GeoCode/                 临时根:进程内的短命文件
 
 <appData>/GeoCode/               Electron 壳自己的数据(与上面四根分离,是上游的设计)
 └── desktop/
-    └── settings.json            窗口、主题、布局等桌面偏好
+    ├── settings.json            窗口、主题、布局等桌面偏好
+    └── agent-tool/geocode-browser-plugin.js   主进程每次启动重写、内核加载的浏览器工具插件(DESKTOP.md §7.2);
+                                 内核侧以 `<配置根>/desktop/agent-tool/…` 拼出同一路径,两边的拼写由 browser-tool.test.mjs 对账
 
 ~/Library/Logs/GeoCode/          壳侧日志:macOS 惯例位置,Windows 上落在 <appData>/GeoCode/logs
 └── main.log                     滚动,上限 5 MB
@@ -200,6 +202,7 @@ id 按三档推导:**远端 URL 的哈希** → **本文件记的值** → **首
 | Windows 安装目录 | 由 package.json `name` 推导 | 经 `extraMetadata` 改写为 `GeoCode` | **必须显式改写**,否则与上游同目录 |
 | Electron userData | `<appData>/<appId>` | `<appData>/GeoCode` | 壳自己的数据;取显示名而非 appId,`app.setName` 一句带出,用户在 Finder 里看到的与应用名一致 |
 | 应用日志 | `<userData>/logs` | 随平台惯例:macOS `~/Library/Logs/GeoCode`,Windows `<userData>/logs` | electron-log 取 `app.getPath('logs')`,不覆写;打包版由 `productName` 写进 bundle 带出,开发版见下 |
+| 浏览器面板 partition | `persist:openchamber-browser`(壳上游) | `persist:geocode-browser` | 主进程只对该 partition 的视图回答截图与清除数据;渲染端 `BrowserPane.tsx` 手抄一份,`desktop-identity.test.mjs` 钉住两份一致 |
 | mDNS 服务名 | `opencode-<port>` | `geocode-<port>` | 局域网发现 |
 | mDNS 默认域名 | `opencode.local` | `geocode.local` | 用户可在配置中覆盖 |
 | macOS MDM plist 域 | `ai.opencode.managed` | `ai.geocode.managed` | `/Library/Managed Preferences/` 下的策略文件名 |

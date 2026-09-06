@@ -102,7 +102,7 @@ const CONTROL_PARAMETER_PROPERTIES = pickParameters(
     !WEB_PARAMETER_NAMES.includes(name) && !MEMORY_ONLY_PARAMETER_NAMES.includes(name)
   )),
 );
-const WEB_PARAMETER_PROPERTIES = pickParameters(WEB_PARAMETER_NAMES);
+export const WEB_PARAMETER_PROPERTIES = pickParameters(WEB_PARAMETER_NAMES); // GeoCode: read by electron/geocode/browser-tool.mjs
 const MEMORY_PARAMETER_PROPERTIES = {
   ...pickParameters(MEMORY_PARAMETER_NAMES),
   ...MEMORY_PARAMETER_OVERRIDES,
@@ -144,7 +144,8 @@ const isLoopbackAddress = (value) => {
  * keeps the transport, metadata and failure handling identical, which is what
  * the caller depends on.
  */
-const createToolEntry = ({ name, description, actions, definitions, parameters }) => String.raw`    ${name}: {
+// GeoCode: exported, read by electron/geocode/browser-tool.mjs
+export const createToolEntry = ({ name, description, actions, definitions, parameters }) => String.raw`    ${name}: {
       description: ${JSON.stringify(description)},
       args: {
         action: { type: "string", enum: ${JSON.stringify(actions)}, oneOf: ${JSON.stringify(definitions.map((entry) => ({ const: entry.action, description: entry.description })))}, description: "OpenChamber action to perform" },
@@ -282,6 +283,13 @@ export const createAgentToolRuntime = (dependencies) => {
   const pluginDirectory = path.join(dataDir, 'agent-tool');
   const pluginPath = path.join(pluginDirectory, 'openchamber-plugin.js');
   let activeToken = null;
+  // --- GeoCode: under Electron the desktop's main process starts the kernel with the browser tool
+  // plugin and issues the token itself, before this runtime exists; it arrives in the environment
+  // and prepareManagedOpenCodeEnv below is never reached (docs/DESKTOP.md §7.2). ---
+  if (process.versions.electron && asNonEmptyString(env.OPENCHAMBER_AGENT_TOOL_TOKEN)) {
+    activeToken = env.OPENCHAMBER_AGENT_TOOL_TOKEN;
+  }
+  // --- /GeoCode ---
 
   const prepareManagedOpenCodeEnv = async ({ includeControl = true, includeWeb = true, includeMemory = true } = {}) => {
     const port = getActivePort();
@@ -317,6 +325,20 @@ export const createAgentToolRuntime = (dependencies) => {
     // namespace that the tool's name already implies, and answering "read" with
     // a bare "unsupported" leaves them to guess a second wrong name.
     const resolution = resolveAgentToolAction(requested, asNonEmptyString(payload.tool));
+    // --- GeoCode: the desktop shell injects the browser tool and nothing else, so both refusals here
+    // name its own actions: a caller holding the token reaches no control or memory action, and a name
+    // that resolved to none must not advertise the surface we closed (docs/DESKTOP.md §7.2) ---
+    if (process.versions.electron && (resolution.error || !OPENCHAMBER_WEB_ACTIONS.includes(resolution.action))) {
+      return createResult({
+        ok: false,
+        action: resolution.action ?? requested,
+        error: {
+          message: `Unsupported GeoCode browser action: ${requested || 'missing'}. Use one of: ${OPENCHAMBER_WEB_ACTIONS.join(', ')}`,
+          kind: 'usage',
+        },
+      });
+    }
+    // --- /GeoCode ---
     if (resolution.error) {
       return createResult({ ok: false, action: requested, error: { message: resolution.error, kind: 'usage' } });
     }

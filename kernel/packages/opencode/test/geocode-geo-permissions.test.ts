@@ -44,6 +44,13 @@ const visible = Effect.fnUntraced(function* (name: string) {
   return GEO_TOOLS.filter((tool) => !hidden.has(tool))
 })
 
+/** Whether this agent is offered the tool at all: only a wildcard deny takes it off the list. */
+const offered = Effect.fnUntraced(function* (name: string, tool: string) {
+  const agent = yield* Agent.Service.use((svc) => svc.get(name))
+  expect(agent).toBeDefined()
+  return !Permission.disabled([tool], agent!.permission).has(tool)
+})
+
 /** What the engine decides when this agent asks under `key` about `pattern`. */
 const verdict = Effect.fnUntraced(function* (name: string, key: string, pattern = "*") {
   const agent = yield* Agent.Service.use((svc) => svc.get(name))
@@ -355,4 +362,33 @@ describe("what the prompt actually says", () => {
     // whether Earth Engine may run at all.
     expect(shown).not.toContain("secret-pipeline")
   })
+})
+
+/* The browser tool comes from a plugin rather than the registry, so it is absent from GEO_TOOLS and needs its
+ * own reading of both questions: who may drive it, and who is offered it at all. GeoAgent and plan may; for the
+ * rest the global deny is what keeps it off the list, since `Permission.disabled` acts on a wildcard deny alone
+ * (session/llm/request.ts filters every tool through it). Docs/DESKTOP.md §7.2. */
+describe("the browser tool's verdicts", () => {
+  it.instance("GeoAgent and plan may drive it, acting included", () =>
+    Effect.gen(function* () {
+      const acting = ["browser.open", "browser.snapshot", "browser.scroll", "browser.inspect", "browser.capture", "browser.click", "browser.type"]
+      for (const agent of ["GeoAgent", "plan"]) {
+        for (const pattern of acting) {
+          expect([agent, pattern, yield* verdict(agent, "browser", pattern)]).toEqual([agent, pattern, "allow"])
+        }
+      }
+    }),
+  )
+
+  it.instance("no other agent has it, and the deny hides it rather than failing at the call", () =>
+    Effect.gen(function* () {
+      for (const agent of ["osmfetch", "summary", "explore"]) {
+        expect([agent, yield* verdict(agent, "browser", "browser.open")]).toEqual([agent, "deny"])
+        expect([agent, yield* offered(agent, "browser")]).toEqual([agent, false])
+      }
+      for (const agent of ["GeoAgent", "plan"]) {
+        expect([agent, yield* offered(agent, "browser")]).toEqual([agent, true])
+      }
+    }),
+  )
 })

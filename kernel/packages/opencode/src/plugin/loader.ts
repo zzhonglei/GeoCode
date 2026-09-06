@@ -11,6 +11,7 @@ import {
 import { ConfigPlugin } from "@/config/plugin"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { trustedPluginSpec } from "./geocode-trusted" // GeoCode: own module
 
 /* --- GeoCode: GeoCode does not load external plugins. Users extend it through MCP, which runs out of process
  * and is authorized per server; a plugin runs inside the kernel with its credentials and file access.
@@ -216,6 +217,17 @@ export namespace PluginLoader {
   // once after the caller finishes preparing dependencies. Once dynamic import runs, failures are
   // treated as permanent for this process because Bun caches failed module resolution.
   export async function loadExternal<R = Loaded>(input: Input<R>): Promise<R[]> {
+    // --- GeoCode: external plugins stay off. The one exception is the browser tool file the desktop's
+    // main process writes and names at start-up, and only that exact path (plugin/geocode-trusted.ts);
+    // it goes through the same resolve, import and finish steps as any plugin would. ---
+    if (!EXTERNAL_PLUGINS_ENABLED) {
+      const trusted = trustedPluginSpec({ kind: input.kind })
+      if (!trusted) return []
+      const candidate: Candidate = { origin: { spec: trusted, source: "geocode", scope: "global" }, plan: plan(trusted) }
+      const result = await attempt(candidate, input.kind, false, input.finish, input.missing, input.report)
+      return result.value === undefined ? [] : [result.value]
+    }
+    // --- /GeoCode ---
     if (!EXTERNAL_PLUGINS_ENABLED) return []
     const candidates = input.items.map((origin) => ({ origin, plan: plan(origin.spec) }))
     const list: Array<Promise<AttemptResult<R>>> = []

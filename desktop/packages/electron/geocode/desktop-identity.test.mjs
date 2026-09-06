@@ -72,6 +72,18 @@ describe('desktop identity', () => {
     expect(build.extraMetadata?.name).toBe(DesktopIdentity.windowsPackageName);
   });
 
+  it('names the browser panel partition the renderer actually mounts', () => {
+    // The renderer cannot import the identity either. main.mjs answers capture and clear-data only
+    // for views in this partition, so a drift here breaks both while open and click still work.
+    const pane = fs.readFileSync(
+      path.resolve(electronRoot, '../ui/src/components/browser/BrowserPane.tsx'),
+      'utf8',
+    );
+    expect(pane.match(/const BROWSER_PARTITION = '([^']+)'/)?.[1]).toBe(DesktopIdentity.browserPanelPartition);
+    expect(pane).not.toContain("'persist:openchamber-browser'");
+    expect(pane).not.toContain('partition="persist:');
+  });
+
   it('leaves no upstream identity literal in main.mjs', () => {
     // Guards the merge that quietly restores one. Wire fingerprints are deliberately absent
     // from this list: OPENCHAMBER_* variables, the @openchamber/electron package name and

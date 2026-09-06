@@ -37,6 +37,8 @@ export function base(): ConfigV1.Info {
       qgis: "deny",
       osm: "deny",
       gee: "deny",
+      // The browser tool's id and key are the same word, so it needs no row in permission/index.ts.
+      browser: "deny",
     },
     agent: {
       GeoAgent: {
@@ -59,6 +61,9 @@ export function base(): ConfigV1.Info {
            * (cli/cmd/run/permission.shared.ts), and `always: ["*"]` in geo-gee-run.ts keeps it to one prompt
            * per app run. */
           gee: "ask",
+          /* Allowed outright, the way upstream ships it: a click reaches nothing this agent could not already
+           * reach, since `bash` is unnamed here and falls through to the engine's allow (docs/DESKTOP.md §7.2). */
+          browser: "allow",
           // No `osm`: downloads go through the osmfetch subagent, and the wildcard deny above also keeps the
           // four OSM tools out of GeoAgent's tool list (docs/TOOLS.md §4.2 ①).
         },
@@ -95,6 +100,8 @@ export function base(): ConfigV1.Info {
           // (tool/registry.ts) and a planner that does not know osmfetch exists cannot plan a download.
           // `explore` is left unnamed and falls through to the engine's allow: it only reads.
           task: { osmfetch: "ask" },
+          // Reading the web is research, which is what planning is; it changes nothing on disk.
+          browser: "allow",
         },
       },
       /* Kept rather than disabled, because it is the far end of upstream's context offloading: `grep.txt` and

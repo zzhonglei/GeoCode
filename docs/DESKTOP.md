@@ -430,6 +430,42 @@ Release 页面地址交给上游的更新对话框,「下载」按钮打开 Rele
 不配置更新源,应用内下载入口直接拒绝;壳向 OpenChamber 更新服务上报安装标识的那条路由在 Electron 下
 只返回「无更新」,不出网。发布仓库里没有任何 Release 时按「无更新」处理,不报错。
 
+**浏览器工具:智能体能操控应用内的浏览器面板,强制开启,没有开关。** 它给 GeoAgent 与 plan 一个名为 `browser` 的工具,
+动作是上游 Web 工具的十个:打开、读页、点击、输入、滚动、前进后退、读样式、截图、改视口;用途是查资料、
+操作网页、把看到的东西截图回到对话。它与地理数据预览是两件事,不共用任何部件。
+
+上游把这个工具做成壳写到磁盘、再由壳 spawn 的 OpenCode 加载的插件;GeoCode 的内核由主进程启动且先于壳,
+所以链路改成:主进程在选定壳端口之后、启动内核之前,把插件写成 `<壳数据根>/agent-tool/geocode-browser-plugin.js`
+(`electron/geocode/browser-tool.mjs`,源码复用上游的工具模板,改名、改描述、去掉品牌字样、只带 Web 动作、
+每次调用先向权限系统 `ask`),铸一枚一次性令牌,经 `createKernelProcessEnvironment` 的 `overrides` 递给内核三个变量:
+插件文件地址、回调地址、令牌;壳启动后从主进程环境采纳同一枚令牌(`agent-tool/runtime.js`),之后主进程删掉它。
+内核侧**不开放插件**:`loadExternal` 仍对配置声明与目录扫描一律返回空,唯一的例外是「主进程点名、且解析路径恰为
+`<配置根>/desktop/agent-tool/geocode-browser-plugin.js`」的那一个文件,仅限 server 形态(`plugin/geocode-trusted.ts`,
+KERNEL.md §6 第 1 项)。回调路由 `/api/openchamber/agent-tool` 在 Electron 下只接受 Web 动作,持令牌也调不到控制与记忆动作;
+解析不出来的动作名同样由这道关卡回话,只列十个浏览器动作,措辞与工具其余两条错误一致都以 GeoCode 起头——
+上游原本会把它知道的二十八个动作全列出来,那既带商标,又等于把我们关掉的那套能力广告给模型。
+
+权限在 `config/geocode.ts`:GeoAgent 与 plan 是 `browser: "allow"`,其余 agent 落在全局的 `browser: "deny"` 上。
+这里不设询问,理由是询问在这条链上不区分风险:上游根本不接权限系统(生成的插件里没有 `ask`),而 GeoAgent 的
+`bash` 没有写规则,落回引擎给每个 agent 的通配放行——一个能任意执行 shell 的智能体,点一下网页并没有多拿到什么;
+何况 `browser.open` 免费,拦下点击也不减少它能到达的页面,只是让每次查资料断一次。全局的 deny 保留的是范围而不是
+危险:`Permission.disabled` 只认「通配 + deny」,所以未点名的 agent 连工具列表里都看不到它,而不是调用时才被拒。
+插件仍然每次调用都走一遍 `ask`,机制留着,策略由配置决定:将来要收紧改一行配置即可,不必改代码,裁决也会进日志。
+plan 拿到的理由与它的 `geodata: "allow"` 一致——读网页是研究,不落盘。
+模型常把 `browser.` 前缀省掉只发 `click`,壳会把它解析成唯一同名的动作;插件在 `ask` 之前做同一归一,
+否则规则永远匹配不到、由通配放行(09-06 真机第一次点击就是这样漏过去的)。
+`browser.capture` 落到项目的 `.browser/`,与工作区内写文件同级,不问;它还要求面板正在显示,
+因为面板不是当前标签时仍然挂载却被置为不显示,合成器不出帧,截图会二十秒超时或报 `UnknownVizError`,
+而读页、点击这些在页面内执行脚本的动作不受影响。截图与清除浏览数据经主进程,主进程只认面板
+自己的 partition(`DesktopIdentity.browserPanelPartition`);渲染端 `BrowserPane.tsx` 手抄同一值,由 `desktop-identity.test.mjs` 钉住,
+漂回上游拼写时打开与点击照常而截图报「不是浏览器面板页面」(PATHS.md §3.4)。下载:工具本身没有下载动作,点到下载链接后
+文件落到哪取决于面板的下载处理,待真机验证后定。
+
+绊线:`kernel/test/geocode-trusted-plugin.test.ts`(四个方向)、`geocode-geo-permissions.test.ts`(裁决)、
+`electron/geocode/browser-tool.test.mjs`(文件、覆盖变量、生成源码可导入且无品牌字样、裸动作名归一后再问、两侧路径一致、主进程顺序)、
+`electron/geocode/desktop-identity.test.mjs`(渲染端的面板 partition)、
+`web/server/geocode/browser-tool-callback.test.js`(令牌、动作限制、解析不出时不泄露关掉的动作)。
+
 ### 7.3 不进入 GeoCode 产品
 
 - Web / PWA;
@@ -481,11 +517,12 @@ Release 页面地址交给上游的更新对话框,「下载」按钮打开 Rele
 - **agent-tool 注入的三个开关、以及 system-prompt optimizer**:上游把控制工具、Web 工具、记忆工具做成三个开关,
   都靠「壳把一个插件写到磁盘,再让壳自己 spawn 的 OpenCode 加载它」这条管道,而桌面壳不 spawn 任何 OpenCode
   (四层断口见 `.artifacts/DECISIONS.md` 09-04)。GeoCode 里它们不是开关:控制工具(让智能体建会话、派提示、管计划任务)
-  不提供;**浏览器工具是产品能力,强制开启、无法关闭**,由 GeoCode 自己走一条窄路注入(主进程写插件并经 `overrides`
-  递进内核,`loadExternal` 按路径白名单放行,插件只带浏览器工具并改名,不读 `agentWebToolEnabled`),那是下一批的工作;
+  不提供;**浏览器工具是产品能力,强制开启、无法关闭**,由 GeoCode 自己注入,做法见 §7.2「浏览器工具」,
+  不读 `agentWebToolEnabled`;
   记忆工具是上游未发布的功能,等它发布再判。所以设置里「工具」一节在桌面壳整节不渲染,三个搜索条目不列。
-  optimizer 重写的是 `build`/`plan` 的提示词而 GeoCode 已禁用这两个 agent,Behavior 页的那一节不渲染,搜索条目不列。
-  `/api/openchamber/agent-tool` 与 `/api/openchamber/control` 两条路由为窄路保留。
+  optimizer 走的也是这条管道,这是它不渲染的理由;它重写 `build` 与 `plan` 的提示词,前者 GeoCode 禁用,
+  后者保留上游原文(禁用的是 `build` 与 `general`,`plan` 是活的)。Behavior 页的那一节不渲染,搜索条目不列。
+  `/api/openchamber/agent-tool` 是浏览器工具的回调路由,保留;`/api/openchamber/control` 是同一控制服务的 HTTP 入口,保留。
   绊线在 `ui/src/geocode/desktop-settings-surface.test.ts`。
 
 ---

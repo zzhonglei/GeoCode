@@ -68,7 +68,9 @@ const DEV_SERVER_WAIT_MS = 40_000;
 const ZOOM_STEP = 0.5;
 const ZOOM_MIN = -3;
 const ZOOM_MAX = 4;
-const BROWSER_PARTITION = 'persist:openchamber-browser';
+// --- GeoCode: the panel's partition is the shell identity's; main.mjs answers capture and clear-data for it alone ---
+const BROWSER_PARTITION = 'persist:geocode-browser';
+// --- /GeoCode ---
 /** Kept small: this rides along with every snapshot. */
 const CONSOLE_PROBLEM_LIMIT = 20;
 const DEV_SERVER_RETRY_DELAY_MS = 600;
@@ -754,7 +756,7 @@ const WebviewBrowser: React.FC<BrowserPaneProps> = ({ initialUrl, directory, tab
           <webview
             ref={attachWebview}
             src={initialSrc}
-            partition="persist:openchamber-browser"
+            partition={BROWSER_PARTITION /* GeoCode: the constant above */}
             allowpopups
             style={layout
               ? {

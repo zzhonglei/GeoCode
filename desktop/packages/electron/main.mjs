@@ -31,6 +31,7 @@ import { hasRelaySettings, dropRelaySettings, stripRemoteAccessSettings } from '
 import { answerRemoteIpc, isRemoteIpcCommand } from './geocode/remote-ipc.mjs';
 import { describeKernelFailure } from './geocode/kernel-failure.mjs';
 import { relaunchOptions } from './geocode/relaunch.mjs';
+import { prepareBrowserTool } from './geocode/browser-tool.mjs';
 // --- /GeoCode ---
 import { resolveStartupUrlProbePlan, shouldIgnoreLoopbackConnectionLimit } from './startup-url-selection.mjs';
 import { sanitizeRuntimeRequestHeaders } from './runtime-request-headers.mjs';
@@ -1624,6 +1625,16 @@ const spawnLocalServer = async () => {
   // ends this function here with no server: the boot outcome then says the local host is
   // unreachable and the window shows the failure screen (docs/DESKTOP.md §5.1), instead of
   // the process exiting with nothing on screen. ---
+  // The browser tool is prepared here because the kernel starts before the shell: the plugin file,
+  // the callback address and the token (geocode/browser-tool.mjs). The shell adopts the token from
+  // this environment when it starts below. A failure here costs the tool, not the kernel.
+  let browserTool = null;
+  try {
+    browserTool = await prepareBrowserTool({ dataDirectory: process.env.OPENCHAMBER_DATA_DIR, shellPort: chosenPort });
+    process.env.OPENCHAMBER_AGENT_TOOL_TOKEN = browserTool.token;
+  } catch (error) {
+    log.warn('[geocode] browser tool not prepared; the kernel starts without it:', error);
+  }
   try {
     state.kernelHandle = await startEmbeddedKernel({
       isDev,
@@ -1633,6 +1644,7 @@ const spawnLocalServer = async () => {
       cwd: process.env.OPENCHAMBER_OPENCODE_CWD,
       environment: process.env,
       logger: log,
+      overrides: browserTool?.overrides ?? {},
     });
   } catch (error) {
     state.kernelFailure = describeKernelFailure({ error, logPath: log.transports.file.getFile().path });
@@ -1658,6 +1670,9 @@ const spawnLocalServer = async () => {
     }),
   });
 
+  // --- GeoCode: the shell has adopted the token by now; nothing else main spawns should inherit it ---
+  delete process.env.OPENCHAMBER_AGENT_TOOL_TOKEN;
+  // --- /GeoCode ---
   const port = handle.getPort();
   const url = buildLocalUrl(port);
 

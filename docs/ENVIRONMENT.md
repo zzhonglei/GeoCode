@@ -86,6 +86,8 @@ v2 路径会主动扫三个兄弟产品的 appData 目录复用已在跑的守�
 | `OPENCHAMBER_UI_PASSWORD` | 1587/1589 | `index.js:1573`,启动时 | 界面无口令;开了局域网访问时被 `bind-host.js` 拒绝启动 |
 | `OPENCHAMBER_SKIP_API_COMPRESSION` | 1591 | `index.js:220`,每次请求 | 压缩打开,性能 |
 | `OPENCHAMBER_SKIP_OPENCODE_START` | `kernel-boot.mjs:44` → `applyKernelConnectionToShellEnvironment` | `index.js:623`,**导入时** | **壳去磁盘找 opencode 拉起第二个内核**(§3 第 6 条) |
+| `GEOCODE_BROWSER_PLUGIN` | `browser-tool.mjs` → `startEmbeddedKernel` 的 `overrides` | 内核 `plugin/geocode-trusted.ts`,`loadExternal` 时 | 内核不加载浏览器工具;它只认这一个路径 |
+| `OPENCHAMBER_AGENT_TOOL_URL` / `_TOKEN` | 同上,注入内核;`_TOKEN` 另放进主进程环境供壳采纳,壳起来后删除 | 插件源码在每次调用时读;壳 `agent-tool/runtime.js` 创建时读 | 工具回调无门,或壳的令牌为空恒 401。带商标是因为沿用上游模板读的名字,它们是我们注入的 ABI,不是继承的配置 |
 | `OPENCODE_HOST` | 同上 | `env-config.js:41`,**导入时** | 同上,那对变量的另一半 |
 | `OPENCODE_SERVER_PASSWORD` | 同上 | `auth-state-runtime.js:48`,每次向内核的请求 | 壳对内核每个请求 401 |
 
