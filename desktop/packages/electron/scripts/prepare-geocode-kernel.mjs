@@ -77,12 +77,35 @@ const capture = (command, commandArgs, options = {}) => {
   return result.status === 0 ? String(result.stdout ?? '').trim() : '';
 };
 
+const stampPath = path.join(outputDir, 'kernel-stamp.json');
+const currentKernelTree = () => capture('git', ['rev-parse', 'HEAD:kernel'], { cwd: repoRoot }) || null;
+const kernelTreeDirty = () => capture('git', ['status', '--porcelain', 'kernel'], { cwd: repoRoot }).length > 0;
+
+// A staged bundle is reused only when it came from exactly the kernel tree that is checked out
+// now, with no uncommitted kernel changes then or now; anything else rebuilds. Returns the reason
+// a rebuild is due, or null when the stage is fresh.
+const staleReason = () => {
+  let stamp;
+  try {
+    stamp = JSON.parse(fs.readFileSync(stampPath, 'utf8'));
+  } catch {
+    return 'no stamp for the staged kernel';
+  }
+  if (!stamp.kernelTree) return 'the staged kernel has no tree hash';
+  if (stamp.kernelTree !== currentKernelTree()) return `the kernel tree moved since the stage (${stamp.kernelTree.slice(0, 12)} -> ${(currentKernelTree() || '?').slice(0, 12)})`;
+  if (stamp.kernelDirty) return 'the staged kernel was built from uncommitted changes';
+  if (kernelTreeDirty()) return 'the kernel tree has uncommitted changes';
+  return null;
+};
+
 const ensureBundle = () => {
   const bundlePath = path.join(bundleDir, BUNDLE_FILENAME);
-  if (fs.existsSync(bundlePath) && !force) {
+  const stale = fs.existsSync(bundlePath) ? staleReason() : 'no bundle yet';
+  if (fs.existsSync(bundlePath) && !force && !stale) {
     log(`reusing existing bundle at ${path.relative(repoRoot, bundlePath)} (pass --force to rebuild)`);
     return bundlePath;
   }
+  if (!force && stale) log(`rebuilding: ${stale}`);
   if (!fs.existsSync(kernelPackage)) {
     throw new Error(`Kernel vendor root is missing at ${kernelPackage}. The desktop build reads it directly.`);
   }
@@ -191,10 +214,12 @@ const main = () => {
   // Records what this staging came from, so a stale stage can be recognised without
   // rebuilding to compare.
   fs.writeFileSync(
-    path.join(outputDir, 'kernel-stamp.json'),
+    stampPath,
     `${JSON.stringify({
-      kernelTree: capture('git', ['rev-parse', 'HEAD:kernel'], { cwd: repoRoot }) || null,
-      kernelDirty: capture('git', ['status', '--porcelain', 'kernel'], { cwd: repoRoot }).length > 0,
+      // The same two readings the reuse check makes, so what is written and what is compared
+      // cannot drift apart.
+      kernelTree: currentKernelTree(),
+      kernelDirty: kernelTreeDirty(),
       platform,
       arch: target.node,
       nodePtyPackage: nodePtyPlatformPackage,

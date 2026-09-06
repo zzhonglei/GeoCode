@@ -265,6 +265,10 @@ Shell 使用的 `@opencode-ai/sdk` 必须由**同一份 GeoCode Kernel OpenAPI**
 
 ---
 
+**开发启动跑的内核产物必须来自当前签出。** 两个 `electron:dev*` 脚本先运行 `prepare-geocode-kernel.mjs`,它按
+`kernel-stamp.json` 里记的树哈希与脏标记决定复用还是重建:与当前 `HEAD:kernel` 不一致、或暂存时与现在任一方有
+未提交改动,都重建。绊线 `electron/geocode/kernel-freshness.test.mjs`。
+
 ### 4.6 版本号
 
 上游的发布脚本每次发版把五个 `package.json` 的 `version` 一起改写。这些数字留给上游,合并时无条件取
