@@ -474,6 +474,15 @@ Release 页面地址交给上游的更新对话框,「下载」按钮打开 Rele
   `ui/src/geocode/desktop-settings-surface.test.ts`。
 - **首次启动选择页、「安装 OpenCode」页与恢复页**:按 §5.1「启动只有两种结果」处理,三页在桌面壳下没有到达路径。
   绊线在 `electron/geocode/kernel-failure.test.mjs` 与 `ui/src/geocode/kernel-failure-screen.test.ts`。
+- **agent-tool 注入的三个开关、以及 system-prompt optimizer**:上游把控制工具、Web 工具、记忆工具做成三个开关,
+  都靠「壳把一个插件写到磁盘,再让壳自己 spawn 的 OpenCode 加载它」这条管道,而桌面壳不 spawn 任何 OpenCode
+  (四层断口见 `.artifacts/DECISIONS.md` 09-04)。GeoCode 里它们不是开关:控制工具(让智能体建会话、派提示、管计划任务)
+  不提供;**浏览器工具是产品能力,强制开启、无法关闭**,由 GeoCode 自己走一条窄路注入(主进程写插件并经 `overrides`
+  递进内核,`loadExternal` 按路径白名单放行,插件只带浏览器工具并改名,不读 `agentWebToolEnabled`),那是下一批的工作;
+  记忆工具是上游未发布的功能,等它发布再判。所以设置里「工具」一节在桌面壳整节不渲染,三个搜索条目不列。
+  optimizer 重写的是 `build`/`plan` 的提示词而 GeoCode 已禁用这两个 agent,Behavior 页的那一节不渲染,搜索条目不列。
+  `/api/openchamber/agent-tool` 与 `/api/openchamber/control` 两条路由为窄路保留。
+  绊线在 `ui/src/geocode/desktop-settings-surface.test.ts`。
 
 ---
 

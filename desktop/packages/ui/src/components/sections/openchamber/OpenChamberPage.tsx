@@ -11,7 +11,7 @@ import { GitHubSettings } from './GitHubSettings';
 import { VoiceSettings } from './VoiceSettings';
 import { TunnelSettings } from './TunnelSettings';
 import { OpenCodeCliSettings as UpstreamOpenCodeCliSettings } from './OpenCodeCliSettings'; // GeoCode: wrapped below
-import { OpenChamberToolsSettings } from './OpenChamberToolsSettings';
+import { OpenChamberToolsSettings as UpstreamOpenChamberToolsSettings } from './OpenChamberToolsSettings'; // GeoCode: wrapped below
 import { DesktopNetworkSettings as UpstreamDesktopNetworkSettings } from './DesktopNetworkSettings'; // GeoCode: wrapped below
 import { KeyboardShortcutsSettings } from './KeyboardShortcutsSettings';
 import { GeoCodeDesktopSettings } from '@/geocode/GeoCodeDesktopSettings';
@@ -29,6 +29,9 @@ import type { OpenChamberSection } from './types';
 const OpenCodeCliSettings: React.FC = () => (isDesktopShell() ? null : <UpstreamOpenCodeCliSettings />);
 // The desktop section without LAN access and the UI password (docs/DESKTOP.md §6.1).
 const DesktopNetworkSettings: React.FC = () => (isDesktopShell() ? <GeoCodeDesktopSettings /> : <UpstreamDesktopNetworkSettings />);
+// The agent tools are not switches in GeoCode: the control tool is not offered, and the browser
+// tool is always on once GeoCode's own plugin lane delivers it (§7.3), so the section is gone.
+const OpenChamberToolsSettings: React.FC = () => (isDesktopShell() ? null : <UpstreamOpenChamberToolsSettings />);
 // --- /GeoCode ---
 
 const useRuntimeEndpointEpoch = (): number => {

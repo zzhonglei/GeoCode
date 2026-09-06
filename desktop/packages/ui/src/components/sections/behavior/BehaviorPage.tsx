@@ -5,6 +5,7 @@ import { toast } from '@/components/ui';
 import { useI18n, type I18nKey } from '@/lib/i18n';
 import { reportSettingsSaveState } from '@/lib/persistence';
 import { useIsVSCodeRuntime } from '@/hooks/useRuntimeAPIs';
+import { isDesktopShell } from '@/lib/desktop'; // GeoCode: see the optimizer section below
 import {
   Select,
   SelectContent,
@@ -290,7 +291,10 @@ export const BehaviorPage: React.FC = () => {
       description={t('settings.page.behavior.description')}
       showSaveStatus
     >
-      {!isVSCode && (
+      {/* --- GeoCode: the optimizer is injected through the same plugin pipeline as the agent
+          tools, which the desktop shell does not have, and it rewrites the prompt of `build`
+          and `plan`, the two agents GeoCode disables (docs/DESKTOP.md §7.3) --- */}
+      {!isVSCode && !isDesktopShell() && (
         <SettingsSection
           title={t('settings.behavior.page.section.systemPromptOptimization')}
           divider={false}

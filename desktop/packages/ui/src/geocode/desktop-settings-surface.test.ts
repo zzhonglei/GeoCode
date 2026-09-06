@@ -25,7 +25,15 @@ const KEPT_DESKTOP_OPTION_IDS = [
 
 describe('desktop settings surface', () => {
   test('the hidden search entries are hidden in the desktop shell only', () => {
-    for (const id of ['sessions.opencode-binary', 'sessions.desktop-ui-password', 'sessions.desktop-lan-access']) {
+    for (const id of [
+      'sessions.opencode-binary',
+      'sessions.desktop-ui-password',
+      'sessions.desktop-lan-access',
+      'sessions.agent-control-tool',
+      'sessions.agent-web-tool',
+      'sessions.agent-memory-tool',
+      'behavior.system-prompt-optimization',
+    ]) {
       expect(HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS.has(id)).toBe(true);
     }
     for (const id of HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS) {
@@ -102,5 +110,23 @@ describe('desktop settings surface', () => {
     expect(menu).toBeGreaterThan(-1);
     expect(guard).toBeGreaterThan(menu);
     expect(guard).toBeLessThan(firstReturn);
+  });
+
+  test('the settings page renders the agent tools section through the desktop guard only', () => {
+    const page = read('components/sections/openchamber/OpenChamberPage.tsx');
+    expect(page).toContain("import { OpenChamberToolsSettings as UpstreamOpenChamberToolsSettings } from './OpenChamberToolsSettings'");
+    expect(page).toContain('isDesktopShell() ? null : <UpstreamOpenChamberToolsSettings />');
+    expect(page.match(/<OpenChamberToolsSettings \/>/g)?.length).toBe(2);
+    expect(page.match(/<UpstreamOpenChamberToolsSettings \/>/g)?.length).toBe(1);
+  });
+
+  test('the behaviour page renders the system-prompt optimizer outside the desktop shell only', () => {
+    const page = read('components/sections/behavior/BehaviorPage.tsx');
+    const guard = page.indexOf('{!isVSCode && !isDesktopShell() && (');
+    const section = page.indexOf("t('settings.behavior.page.section.systemPromptOptimization')", guard);
+    expect(guard).toBeGreaterThan(-1);
+    expect(section).toBeGreaterThan(guard);
+    // The optimizer is the only section behind that guard; the rest of the page still renders.
+    expect(page).toContain("t('settings.behavior.page.section.systemPrompt')");
   });
 });
