@@ -95,6 +95,15 @@ describe('desktop settings surface', () => {
     expect(tunnel?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
   });
 
+  test('the Plugins page is unavailable in the desktop shell only', () => {
+    // The kernel loads no plugin a configuration declares, so everything this page writes would be
+    // discarded; the shell half is server/geocode/plugin-surface.test.js.
+    const plugins = getSettingsPageMeta('plugins');
+    const base = { isVSCode: false, isWeb: false, isMobile: false };
+    expect(plugins?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
+    expect(plugins?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
+  });
+
   test('the Remote Instances page is unavailable in the desktop shell only', () => {
     const remote = getSettingsPageMeta('remote-instances');
     const base = { isVSCode: false, isWeb: false, isMobile: false };

@@ -130,6 +130,8 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
     group: 'opencode',
     kind: 'split',
     keywords: ['plugin', 'plugins', 'extensions', 'addons', 'npm', 'opencode-wakatime'],
+    // GeoCode: the kernel loads no external plugin, so there is nothing here to manage (KERNEL.md §6 item 1)
+    isAvailable: (ctx) => !ctx.isDesktop,
   },
   {
     slug: 'skills.installed',

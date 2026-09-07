@@ -11,6 +11,12 @@ const NOT_FOUND_CODES = new Set(['NOT_FOUND', 'ENOENT']);
 const BAD_REQUEST_CODES = new Set(['INVALID_FILENAME', 'INVALID_SCOPE', 'INVALID_SPEC', 'EINVAL']);
 
 export const registerPluginRoutes = (app, dependencies) => {
+  // --- GeoCode: the kernel loads no external plugin, so this surface manages nothing (KERNEL.md §6
+  // item 1). The settings page is gone too (ui/src/lib/settings/metadata.ts); this is the half that
+  // holds when a client bypasses the page, and it also stops the registry route from reaching npm
+  // (docs/DESKTOP.md §7.3). ---
+  if (process.versions.electron) return;
+  // --- /GeoCode ---
   const {
     resolveOptionalProjectDirectory,
     listPluginEntries,
