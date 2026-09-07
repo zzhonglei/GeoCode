@@ -45,6 +45,10 @@ TIMEOUT="--timeout 30000"
 # eleven seconds warm.
 echo "== typecheck =="
 (cd "$ROOT/kernel" && bun run typecheck)
+# GeoCode: the renderer too. It was absent until 2026-09-07, and a duplicate import shipped
+# through the gate green because `bun test` does not typecheck. `packages/web` and
+# `packages/electron` are JavaScript, so this is the whole of the desktop side.
+(cd "$ROOT/desktop/packages/ui" && bun run build)
 
 echo
 echo "== geo kernel (opencode) =="

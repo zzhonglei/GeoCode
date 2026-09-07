@@ -10,11 +10,6 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS, isSettingsSearchItemHiddenOnDesktop } from './desktop-settings-surface';
 import { getSettingsPageMeta } from '../lib/settings/metadata';
 
@@ -130,10 +125,7 @@ describe('desktop settings surface', () => {
   test('the composer offers no snippet popup in the desktop shell', () => {
     // Pinned by source: three composers mount it, so the wrapper is the one place that covers
     // them all, and a merge that reinstates upstream's direct export must fail here.
-    const source = readFileSync(
-      path.resolve(here, '../components/chat/SnippetAutocomplete.tsx'),
-      'utf8',
-    );
+    const source = read('components/chat/SnippetAutocomplete.tsx');
     expect(source).toContain('const SnippetAutocompleteUpstream = React.forwardRef');
     expect(source).toContain('isDesktopShell() ? null :');
   });
