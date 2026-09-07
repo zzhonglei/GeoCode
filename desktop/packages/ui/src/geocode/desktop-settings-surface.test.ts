@@ -104,6 +104,15 @@ describe('desktop settings surface', () => {
     expect(plugins?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
   });
 
+  test('the Magic Prompts page is unavailable in the desktop shell only', () => {
+    // Its VS Code exclusion is upstream's; the desktop half is ours. Server side is
+    // server/geocode/magic-prompts-surface.test.js.
+    const prompts = getSettingsPageMeta('magic-prompts');
+    const base = { isVSCode: false, isWeb: false, isMobile: false };
+    expect(prompts?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
+    expect(prompts?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
+  });
+
   test('the Remote Instances page is unavailable in the desktop shell only', () => {
     const remote = getSettingsPageMeta('remote-instances');
     const base = { isVSCode: false, isWeb: false, isMobile: false };

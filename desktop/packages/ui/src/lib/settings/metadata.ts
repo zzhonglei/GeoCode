@@ -190,7 +190,8 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
     group: 'content',
     kind: 'split',
     keywords: ['prompts', 'templates', 'git', 'github', 'review', 'commit', 'pull request'],
-    isAvailable: (ctx) => !ctx.isVSCode,
+    // GeoCode: the prompts behind our own one-click actions are ours to write, not a user setting (docs/DESKTOP.md §7.3)
+    isAvailable: (ctx) => !ctx.isVSCode && !ctx.isDesktop,
   },
   {
     slug: 'snippets',

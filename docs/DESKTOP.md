@@ -544,6 +544,15 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   `ui/src/geocode/desktop-settings-surface.test.ts`。
 - **首次启动选择页、「安装 OpenCode」页与恢复页**:按 §5.1「启动只有两种结果」处理,三页在桌面壳下没有到达路径。
   绊线在 `electron/geocode/kernel-failure.test.mjs` 与 `ui/src/geocode/kernel-failure-screen.test.ts`。
+- **魔法提示词**:「魔法提示词」页在桌面壳不可用,`registerMagicPromptRoutes` 在 Electron 下首行早退,四条路由
+  一条不注册。这一页管的不是用户写的咒语,而是**产品自己那些一键动作背后的提示词**——生成提交信息、会话摘要、
+  追进度、起草目标、多路合并等二十五对,共五十条。判据:这些提示词是 GeoCode 该自己写的东西,不是设置项
+  (2026-09-07 用户决定)。关掉不影响任何功能,因为取覆盖值的那一步本就带 `catch` 回落到内置模板
+  (`ui/src/lib/magicPrompts.ts` 的 `getEffectiveMagicPromptTemplate`),路由消失后一律用默认值。
+  ⚠️ **随之而来的欠账**:那五十条是给编程助手写的,全文点名代码、仓库、提交、分支处逾百,例如「探索」开头就是
+  「get oriented in this codebase」;而它们驱动的正是我们保留的功能(起草目标、创建定时任务、多路合并)。
+  屏蔽这一页把改写它们的口子关上了,所以改写从此是我们的活,归改牌那一批,记在 `.artifacts/OPEN.md`。
+  绊线在 `server/geocode/magic-prompts-surface.test.js` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
 - **外部插件管理**:「插件」页在桌面壳不可用(与 Tunnel 同一个页面可用性谓词),壳在 Electron 下
   `registerPluginRoutes` 首行早退,十条路由一条都不注册。判据不是「这个功能不好」,而是**内核保证不加载**:
   `loadExternal` 对配置声明与目录扫描一律返回空(KERNEL.md §6 第 1 项),所以这一页写下的配置与文件
