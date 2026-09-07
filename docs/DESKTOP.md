@@ -477,19 +477,27 @@ plan 拿到的理由与它的 `geodata: "allow"` 一致——读网页是研究,
 - 选择或自动发现系统 OpenCode;
 - OpenCode 自升级;
 - OpenChamber 的外部插件管理、system-prompt optimizer 与 agent-tool 注入;
-- GitHub 发布流与 PR 面:**挂起**,见下方说明;
-- 面向编程项目的 agent / command 管理表面。
+- GitHub 发布流与 PR 面:**挂起**,见下方说明。
 
 上游源码中的这些模块可以保留,但 GeoCode profile 下不得注册路由、启动定时器、建立网络连接
 或显示入口。此约束需用运行时测试验证,不能从「构建命令没有点名它」推断。
 
-**2026-09-07 重判:计划任务、Session Goals 与 Multi-run / Fusion 保留。** 这三样原先和 GitHub 写在同一句里,
-归类为「面向编程工作的」——那是照抄 OpenChamber 对自己的定位,我们从未重判。逐一读过实现之后判据不成立:
+**2026-09-07 重判:计划任务、Session Goals、Multi-run / Fusion 与 agent / command 管理表面保留。** 前三样原先和 GitHub 写在同一句里,归类为
+「面向编程工作的」;agent 与 command 管理表面是另一条,归类为「面向编程项目的」。两条都是照抄 OpenChamber
+对自己的定位,我们从未重判。逐一读过实现之后判据不成立:
 计划任务是「到点在项目里开一个会话跑一段提示词」,Session Goals 是「盯住一个目标、由独立评估决定何时停、
 花超预算就停」,Multi-run 是「同一任务分组各跑一遍再合成一个答案」。三者都是通用的智能体能力,机制里没有
 一处与编程绑定,对地理工作反而对路:定期抓取与刷新、多轮且容易半途宣布完成的清洗任务、同一分析换几套参数
 比着看。权限一律走既有体系,不为它们新增任何机制——包括自动批准:那是「用户提前回答确认框」,不是绕过它,
 和用户在会话里手动打开是同一件事。
+
+agent 与 command 两页同判,而且不需要任何额外工作。斜杠命令就是可复用的提示词模板,「把这个目录的 shapefile
+重投影到 EPSG:4326 并出质检报告」正是地理用户想要的东西。新建智能体由构造保证安全:全局权限块关掉了
+geodata、qgis、osm、gee 与 browser,新 agent 继承这些关闭状态,除非用户明确打开。编辑内置智能体会生成用户级
+文件覆盖装配层,这一点是配置体系本身的性质(装配层最先合并,用户与项目配置可以覆盖),而界面对它有完整交代:
+内置单独分组、不可删除、以「重置」代替删除——重置删的是覆盖文件而不是智能体。删不掉是结构使然而非界面拦阻,
+`agents.js` 的 `deleteAgent` 找不到任何承载文件时直接抛「built-in or not deletable」,因为 `config/geocode.ts`
+装配的智能体在磁盘上没有文件。内置这个标记本身也是我们加的(`agent/agent.ts` 的 `native: shippedAgents.has(key)`)。
 
 Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着「You audit progress of a **coding** agent」,
 而评估模型是唯一有权判定目标达成的角色(干活的 agent 没有渠道结束自己的目标),它把什么当作证据就决定循环
