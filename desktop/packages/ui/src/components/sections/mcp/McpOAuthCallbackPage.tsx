@@ -19,7 +19,8 @@ import { cn } from '@/lib/utils';
 const returnToApp = (startedFromDesktop: boolean): void => {
   if (typeof window === 'undefined') return;
   if (startedFromDesktop) {
-    window.location.href = 'openchamber://focus/mcp-auth';
+    // GeoCode: renamed with the protocol (desktop-identity.mjs deepLinkProtocol)
+    window.location.href = 'geocode://focus/mcp-auth';
     return;
   }
   window.location.replace('/');

@@ -89,6 +89,18 @@ describe('desktop identity', () => {
     expect(blocked).not.toContain("'openchamber-ui'");
   });
 
+  it('sends the OAuth return leg to our own protocol', () => {
+    // The MCP authorization return lands in the system browser, which raises the app by opening a
+    // deep link. Two pages carry it — the in-app route and the self-contained one the server
+    // renders for a browser with no UI session — and neither can import this module.
+    const focus = `${DesktopIdentity.deepLinkProtocol}://focus/mcp-auth`;
+    for (const file of ['../ui/src/components/sections/mcp/McpOAuthCallbackPage.tsx', '../web/server/lib/opencode/routes.js']) {
+      const source = fs.readFileSync(path.resolve(electronRoot, file), 'utf8');
+      expect([file, source.includes(focus)]).toEqual([file, true]);
+      expect([file, source.includes('openchamber://focus')]).toEqual([file, false]);
+    }
+  });
+
   it('names the browser panel partition the renderer actually mounts', () => {
     // The renderer cannot import the identity either. main.mjs answers capture and clear-data only
     // for views in this partition, so a drift here breaks both while open and click still work.

@@ -67,7 +67,8 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
 
   // Self-contained page for the OAuth return leg: the system browser has no UI
   // session, so it cannot load the SPA behind the auth gate — everything it
-  // needs ships inline. `openchamber://focus/mcp-auth` raises the desktop app;
+  // needs ships inline. `geocode://focus/mcp-auth` raises the desktop app (GeoCode: renamed
+  // with the protocol, desktop-identity.mjs deepLinkProtocol; pinned by desktop-identity.test.mjs);
   // the link stays visible because some browsers only follow custom-protocol
   // URLs from a user gesture.
   const renderMcpOAuthCallbackPage = ({ title, message, desktopReturn }) => `<!doctype html>
@@ -92,8 +93,8 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
 <main>
 <h1>${escapeHtml(title)}</h1>
 <p>${escapeHtml(message)}</p>
-${desktopReturn ? `<a class="return" href="openchamber://focus/mcp-auth">Return to OpenChamber</a>
-<script>window.location.href = 'openchamber://focus/mcp-auth';</script>` : ''}
+${desktopReturn ? `<a class="return" href="geocode://focus/mcp-auth">Return to GeoCode</a>
+<script>window.location.href = 'geocode://focus/mcp-auth';</script>` : ''}
 </main>
 </body>
 </html>`;
