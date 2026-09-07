@@ -52,8 +52,15 @@ const BLOCKED_APP_LINK_SCHEMES = new Set([
   // Historically abused Windows handlers can invoke diagnostic, shell, or
   // file-search flows that must not be offered from untrusted chat content.
   'ms-msdt', 'search-ms', 'shell',
-  // OpenChamber's own schemes must not be re-launched from chat content
-  'openchamber', 'openchamber-ui', 'capacitor',
+  // --- GeoCode: the app's own schemes must not be re-launched from chat content. Renamed with
+  // the product, and a hand-copy because the renderer cannot import the Electron identity
+  // (desktop-identity.mjs deepLinkProtocol / uiProtocol); desktop-identity.test.mjs pins the two
+  // against it. Leaving upstream's names here would have made `geocode://` an ordinary third-party
+  // app link: offered behind a confirmation whose "trust" option then opens every later one
+  // silently, from any content the reply happens to quote. ---
+  'geocode', 'geocode-ui',
+  // --- /GeoCode ---
+  'capacitor',
 ]);
 
 const APP_LINK_SCHEME_RE = /^[a-z][a-z0-9+.-]{1,31}$/;

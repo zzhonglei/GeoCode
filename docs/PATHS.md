@@ -197,7 +197,7 @@ id 按三档推导:**远端 URL 的哈希** → **本文件记的值** → **首
 |---|---|---|---|
 | bundle id / appId | `ai.opencode.desktop` | `ai.geocode.desktop` | macOS 包标识;Windows 注册表键名 |
 | 通道变体 | `.dev` / `.beta` 后缀 | 同构 | |
-| URL 协议 | `opencode://` | `geocode://` | 深链;注册在系统 |
+| URL 协议 | `opencode://` | `geocode://` | 深链;注册在系统。**改名的另一半在渲染端**:`ui/src/lib/url.ts` 的 `BLOCKED_APP_LINK_SCHEMES` 必须同步换成自家协议,否则聊天内容里的 `geocode://` 会被当成普通第三方应用深链、可点、且「信任」之后不再询问。两处由 `desktop-identity.test.mjs` 钉住 |
 | 产品名 | `OpenCode` | `GeoCode` | 显示名 |
 | Windows 安装目录 | 由 package.json `name` 推导 | 经 `extraMetadata` 改写为 `GeoCode` | **必须显式改写**,否则与上游同目录 |
 | Electron userData | `<appData>/<appId>` | `<appData>/GeoCode` | 壳自己的数据;取显示名而非 appId,`app.setName` 一句带出,用户在 Finder 里看到的与应用名一致 |

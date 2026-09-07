@@ -72,6 +72,23 @@ describe('desktop identity', () => {
     expect(build.extraMetadata?.name).toBe(DesktopIdentity.windowsPackageName);
   });
 
+  it('refuses our own schemes in the chat link classifier, and no longer the upstream pair', () => {
+    // Upstream keeps its own schemes off the app-link path so chat content cannot re-launch the
+    // product's internal deep links; the classifier is in the renderer, which cannot import this
+    // module, so it hand-copies the two names. Renaming one side alone silently turns
+    // `geocode://` into an ordinary third-party app link, and its "trust" option then opens
+    // every later one without asking.
+    const url = fs.readFileSync(
+      path.resolve(electronRoot, '../ui/src/lib/url.ts'),
+      'utf8',
+    );
+    const blocked = url.match(/const BLOCKED_APP_LINK_SCHEMES = new Set\(\[([\s\S]*?)\]\)/)?.[1] ?? '';
+    expect(blocked).toContain(`'${DesktopIdentity.deepLinkProtocol}'`);
+    expect(blocked).toContain(`'${DesktopIdentity.uiProtocol}'`);
+    expect(blocked).not.toContain("'openchamber'");
+    expect(blocked).not.toContain("'openchamber-ui'");
+  });
+
   it('names the browser panel partition the renderer actually mounts', () => {
     // The renderer cannot import the identity either. main.mjs answers capture and clear-data only
     // for views in this partition, so a drift here breaks both while open and click still work.
