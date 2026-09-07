@@ -62,7 +62,9 @@ export const getToolIcon = (toolName: string) => {
     if (tool === 'cloudflare' || tool.startsWith('cloudflare_') || tool === 'claudflare' || tool.startsWith('claudflare_')) {
         return <Icon name="cloudflare" className={iconClass} />;
     }
-    if (tool === 'openchamber_web') {
+    // GeoCode: upstream's web tool ships here renamed `browser`, keeping its icon
+    // (electron/geocode/browser-tool.mjs BROWSER_TOOL_NAME)
+    if (tool === 'browser') {
         return <Icon name="global" className={iconClass} />;
     }
     if (tool === 'openchamber_memory') {

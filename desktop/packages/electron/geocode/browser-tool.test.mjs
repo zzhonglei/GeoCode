@@ -151,6 +151,20 @@ describe('the two sides agree on the file', () => {
   });
 });
 
+describe('the chat surface knows the tool by its GeoCode name', () => {
+  it('keeps the upstream icon and hides the raw input, under the new name', () => {
+    // Both are keyed by tool name in the renderer, which cannot import this module. Renaming the
+    // tool without them leaves every browser call rendered as a generic wrench plus a dump of the
+    // call arguments, while the curated card upstream wrote for it goes unused.
+    const read = (file) => fs.readFileSync(path.resolve(electronRoot, '../ui/src/components/chat/message/parts', file), 'utf8');
+    for (const file of ['toolPresentation.tsx', 'ToolPart.tsx']) {
+      const source = read(file);
+      expect([file, source.includes(`'${BROWSER_TOOL_NAME}'`)]).toEqual([file, true]);
+      expect([file, source.includes("'openchamber_web'")]).toEqual([file, false]);
+    }
+  });
+});
+
 describe('main.mjs wiring', () => {
   it('prepares the tool before the kernel starts, hands over the overrides, and drops the token afterwards', () => {
     const prepare = mainSource.indexOf('browserTool = await prepareBrowserTool({ dataDirectory: process.env.OPENCHAMBER_DATA_DIR, shellPort: chosenPort });');

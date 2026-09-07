@@ -1256,7 +1256,8 @@ const ToolExpandedContent: React.FC<ToolExpandedContentProps> = React.memo(({
     );
     const hasVisualDiffEntry = diffEntries.some((entry) => entry.renderMode === 'diff');
     const hideToolInputPreview = part.tool === 'openchamber'
-        || part.tool === 'openchamber_web'
+        // GeoCode: renamed, same treatment — the result carries its own title and description
+        || part.tool === 'browser'
         || part.tool === 'openchamber_memory'
         || part.tool === 'apply_patch'
         || part.tool === 'edit'
