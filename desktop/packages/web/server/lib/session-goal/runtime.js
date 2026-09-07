@@ -103,7 +103,7 @@ const buildContinuationPrompt = (goal) => {
 };
 
 const buildAuditSystemPrompt = () => [
-  'You audit progress of a coding agent working toward a user-defined goal. Based on the objective and the latest exchange, return exactly one JSON object and nothing else — no prose, no markdown, no code fences.',
+  'You audit progress of an agent working toward a user-defined goal. Based on the objective and the latest exchange, return exactly one JSON object and nothing else — no prose, no markdown, no code fences.',
   'Shape: {"verdict": "continue" | "complete" | "blocked", "note": string}',
   'verdict rules:',
   '- "complete" ONLY when the latest reply contains concrete, verified evidence that every requirement of the objective is achieved. Claims without verification are not completion.',
