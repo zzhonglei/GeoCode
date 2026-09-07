@@ -10,6 +10,11 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const here = path.dirname(fileURLToPath(import.meta.url));
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS, isSettingsSearchItemHiddenOnDesktop } from './desktop-settings-surface';
 import { getSettingsPageMeta } from '../lib/settings/metadata';
 
@@ -111,6 +116,26 @@ describe('desktop settings surface', () => {
     const base = { isVSCode: false, isWeb: false, isMobile: false };
     expect(prompts?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
     expect(prompts?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
+  });
+
+  test('the Snippets page is unavailable in the desktop shell only', () => {
+    // The composer affordance and the six routes are the other two halves
+    // (SnippetAutocomplete.tsx, server/geocode/snippet-surface.test.js).
+    const snippets = getSettingsPageMeta('snippets');
+    const base = { isVSCode: false, isWeb: false, isMobile: false };
+    expect(snippets?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
+    expect(snippets?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
+  });
+
+  test('the composer offers no snippet popup in the desktop shell', () => {
+    // Pinned by source: three composers mount it, so the wrapper is the one place that covers
+    // them all, and a merge that reinstates upstream's direct export must fail here.
+    const source = readFileSync(
+      path.resolve(here, '../components/chat/SnippetAutocomplete.tsx'),
+      'utf8',
+    );
+    expect(source).toContain('const SnippetAutocompleteUpstream = React.forwardRef');
+    expect(source).toContain('isDesktopShell() ? null :');
   });
 
   test('the Remote Instances page is unavailable in the desktop shell only', () => {

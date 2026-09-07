@@ -1,3 +1,4 @@
+import { refuseSnippetRoutesUnderElectron } from '../../geocode/snippet-surface.js'; // GeoCode: own module
 import { buildDeferredRestartResponse } from './config-mutation-response.js';
 
 export const registerConfigEntityRoutes = (app, dependencies) => {
@@ -329,6 +330,9 @@ export const registerConfigEntityRoutes = (app, dependencies) => {
       res.status(500).json({ error: error.message || 'Failed to delete command' });
     }
   });
+
+  // GeoCode: 404 ahead of the six snippet routes below (geocode/snippet-surface.js)
+  refuseSnippetRoutesUnderElectron(app);
 
   app.get('/api/config/snippets', async (req, res) => {
     try {

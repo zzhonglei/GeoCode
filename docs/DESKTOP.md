@@ -544,6 +544,17 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   `ui/src/geocode/desktop-settings-surface.test.ts`。
 - **首次启动选择页、「安装 OpenCode」页与恢复页**:按 §5.1「启动只有两种结果」处理,三页在桌面壳下没有到达路径。
   绊线在 `electron/geocode/kernel-failure.test.mjs` 与 `ui/src/geocode/kernel-failure-screen.test.ts`。
+- **代码片段(Snippets)**:「代码片段」页在桌面壳不可用,六条管理路由在 Electron 下先于上游的 handler 注册 404
+  (`server/geocode/snippet-surface.js`,做法与配对路由同形——它们嵌在与 MCP、agent、command 共用的注册函数里,
+  没法整体早退,靠 Express 的匹配顺序解决),输入框里 `#` 不再弹出补全。片段是「把 `#名字` 在发送前替换成一段
+  预存文本」,替换发生在壳侧,内核只收到替换后的完整文本。判据:这不是 GeoCode 要提供的表面(2026-09-07 用户决定)。
+  **展开函数本身不动**——和其余保留但不暴露的模块一样,§7.3 要求的是关入口不是拆机器;应用里既然无法创建片段,
+  注册表恒空,展开就是一次空操作。补全必须一并摘掉,因为路由关闭后它会弹出一个空列表,而列表里唯一剩下的动作
+  是跳转到已经隐藏的设置页。三个组合器都挂它(聊天、多路启动、定时任务编辑),所以收口做在组件自身的包装上,
+  渲染 null 让父组件的 ref 始终为空,而父组件只在 ref 存在时才路由按键(`ChatInput.tsx`),于是 `#` 落回普通字符。
+  遗留:输入框占位文字仍写着「# 用于代码片段」,那是十种语言的翻译串,归改牌那一批。绊线在
+  `server/geocode/snippet-surface.test.js`(真实 Express,拒绝必须先于记录式 handler 命中)与
+  `ui/src/geocode/desktop-settings-surface.test.ts`(页面可用性与包装的存在)。
 - **魔法提示词**:「魔法提示词」页在桌面壳不可用,`registerMagicPromptRoutes` 在 Electron 下首行早退,四条路由
   一条不注册。这一页管的不是用户写的咒语,而是**产品自己那些一键动作背后的提示词**——生成提交信息、会话摘要、
   追进度、起草目标、多路合并等二十五对,共五十条。判据:这些提示词是 GeoCode 该自己写的东西,不是设置项

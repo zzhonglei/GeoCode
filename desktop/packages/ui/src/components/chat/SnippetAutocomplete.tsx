@@ -7,6 +7,7 @@ import { Icon } from '@/components/icon/Icon';
 import { useI18n } from '@/lib/i18n';
 import type { Snippet } from '@/types/snippet';
 import { useMobileAutocompleteMaxHeight } from './useMobileAutocompleteMaxHeight';
+import { isDesktopShell } from '@/lib/desktop'; // GeoCode: see the wrapper at the end of this file
 
 export interface SnippetAutocompleteHandle {
   handleKeyDown: (key: string) => void;
@@ -23,7 +24,7 @@ function snippetPreview(snippet: Snippet): string {
   return (snippet.description || snippet.content).replace(/\s+/g, ' ').trim().slice(0, 120);
 }
 
-export const SnippetAutocomplete = React.forwardRef<SnippetAutocompleteHandle, SnippetAutocompleteProps>(({
+const SnippetAutocompleteUpstream = React.forwardRef<SnippetAutocompleteHandle, SnippetAutocompleteProps>(({
   searchQuery,
   onSnippetSelect,
   onClose,
@@ -163,4 +164,16 @@ export const SnippetAutocomplete = React.forwardRef<SnippetAutocompleteHandle, S
   );
 });
 
+/* --- GeoCode: `#name` substitution is not a surface GeoCode offers (docs/DESKTOP.md §7.3). Three
+ * composers mount this — chat, multi-run, the scheduled task editor — so the one wrapper covers
+ * them all, including one upstream adds later. Rendering nothing leaves the parents' ref null, and
+ * they route keys only when it is set (ChatInput.tsx), so `#` falls back to an ordinary character
+ * instead of opening a popup whose only remaining action leads to a settings page that is gone. --- */
+SnippetAutocompleteUpstream.displayName = 'SnippetAutocomplete';
+
+export const SnippetAutocomplete = React.forwardRef<SnippetAutocompleteHandle, SnippetAutocompleteProps>(
+  (props, ref) => (isDesktopShell() ? null : <SnippetAutocompleteUpstream {...props} ref={ref} />),
+);
+
 SnippetAutocomplete.displayName = 'SnippetAutocomplete';
+/* --- /GeoCode --- */

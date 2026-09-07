@@ -199,6 +199,8 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
     group: 'content',
     kind: 'split',
     keywords: ['prompt', 'templates', 'multi-run', 'strategy', 'approach'],
+    // GeoCode: `#name` text substitution is not a surface GeoCode offers (docs/DESKTOP.md §7.3)
+    isAvailable: (ctx) => !ctx.isDesktop,
   },
 
   { slug: 'notifications', title: 'Notifications', group: 'general', kind: 'single', keywords: ['alerts', 'native', 'summary', 'summarization'], },
