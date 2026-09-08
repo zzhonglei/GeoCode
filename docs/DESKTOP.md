@@ -476,6 +476,7 @@ plan 拿到的理由与它的 `geodata: "allow"` 一致——读网页是研究,
 - LAN、SSH host、Remote Instance、Relay、Tunnel 与设备配对;
 - 选择或自动发现系统 OpenCode;
 - OpenCode 自升级;
+- 会话分享(内核侧的截断见 `KERNEL.md` §6 第 5 项,这里关的是界面入口);
 - OpenChamber 的外部插件管理、system-prompt optimizer 与 agent-tool 注入;
 - GitHub 发布流与 PR 面:**挂起**,见下方说明。
 
@@ -583,6 +584,16 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   后者保留上游原文(禁用的是 `build` 与 `general`,`plan` 是活的)。Behavior 页的那一节不渲染,搜索条目不列。
   `/api/openchamber/agent-tool` 是浏览器工具的回调路由,保留;`/api/openchamber/control` 是同一控制服务的 HTTP 入口,保留。
   绊线在 `ui/src/geocode/desktop-settings-surface.test.ts`。
+- **会话分享**:侧栏菜单与顶栏两处菜单里的「分享」不再渲染(`ui/src/geocode/session-share-surface.ts`)。
+  内核早已拒绝(`KERNEL.md` §6 第 5 项),界面却照旧提供入口,而且失败是静默的:SDK 断言在那句
+  `toast.error` 之前抛出,点击处理器又是无人接管的 promise,于是点下去只有菜单关闭,没有链接也没有报错。
+  判据是数据去向:一次分享把整场会话推给 `https://opncd.ai` 这个上游服务——每条消息、每次工具调用及其结果、
+  会话 diff 与工作目录,并在会话继续时持续增量同步;GeoCode 的会话可能带着尚未发表的研究数据。
+  常量不读运行环境,因为内核那道闸也不读:Electron 形态与网页形态下分享同样是死的。「复制链接」与
+  「取消分享」跟着一并关闭,它们本就只在分享成功之后才出现。壳侧不再加第二道拒绝:内核那道是权威的,
+  而给 `session-actions.ts` 加早退会打红上游自己的测试,抬高补丁面。
+  绊线在 `ui/src/geocode/session-share-surface.test.ts`:它不钉这两个文件,而是走遍渲染层源码,断言任一文件里
+  分享菜单项的出现次数等于守卫的出现次数,所以上游日后把入口加进第三个文件同样会转红。
 
 ---
 
