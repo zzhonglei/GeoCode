@@ -20,6 +20,33 @@ openchamber_pid() {
   return 0
 }
 
+# The roots OpenChamber and the OpenCode it bundles write for themselves. Derived from ROOTS,
+# minus the ones only GeoCode could reach.
+THEIRS="$HOME/.config/openchamber $HOME/.config/opencode $HOME/.local/share/opencode
+        $HOME/.cache/opencode ${TMPDIR:-/tmp}/opencode"
+
+# Sampling pgrep at `before` and at `after` misses an OpenChamber opened and closed inside the
+# window, which is what comparing the two applications side by side looks like. Its own log is
+# the evidence that survives the process: newer than the snapshot means it ran during it.
+openchamber_ran() {
+  [ -s "$SNAP.openchamber" ] && return 0
+  [ -n "$(openchamber_pid)" ] && return 0
+  log="$HOME/Library/Logs/OpenChamber/main.log"
+  [ -f "$log" ] && [ -f "$SNAP" ] && [ "$(stat -f %m "$log")" -gt "$(stat -f %m "$SNAP")" ]
+}
+
+# Diff lines naming a path outside THEIRS. One of these is enough to make the whole run ours.
+not_theirs() {
+  printf '%s\n' "$1" | while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    owner=none
+    for root in $THEIRS; do
+      case "$line" in *"$root"*) owner=theirs ;; esac
+    done
+    [ "$owner" = theirs ] || printf '%s\n' "$line"
+  done
+}
+
 snapshot() {
   for root in $ROOTS; do
     [ -e "$root" ] || continue
@@ -38,14 +65,16 @@ case "$1" in
     if diff -q "$SNAP" "$SNAP.after" > /dev/null 2>&1; then
       echo "clean — nothing outside GeoCode's own directories changed"
     else
-      changed="$(diff "$SNAP" "$SNAP.after" | grep '^[<>]' | head -40)"
+      # The verdict reads every changed line; only the report is trimmed, or a foreign write
+      # past the fortieth would be judged on lines that were never looked at.
+      all_changed="$(diff "$SNAP" "$SNAP.after" | grep '^[<>]')"
+      changed="$(printf '%s\n' "$all_changed" | head -40)"
       # A running OpenChamber.app writes its own settings on quit and on every settings
       # change, and the OpenCode it bundles writes the opencode roots. Those are reported
       # apart: the reader confirms them against ~/Library/Logs/OpenChamber/main.log (and the
       # port in its settings.json, which is OpenChamber's), or reruns with it closed.
-      pid="$({ cat "$SNAP.openchamber" 2>/dev/null || true; openchamber_pid; })"
-      if [ -n "$pid" ] && ! printf '%s\n' "$changed" | grep -Ev "$HOME/(\.config/openchamber|\.config/opencode|\.local/share/opencode|\.cache/opencode)" > /dev/null; then
-        echo "writes under OpenChamber's and OpenCode's own roots while OpenChamber.app was running (pid $(printf '%s' "$pid" | head -1)):"
+      if openchamber_ran && [ -z "$(not_theirs "$all_changed")" ]; then
+        echo "writes under OpenChamber's and OpenCode's own roots while OpenChamber.app ran:"
         printf '%s\n' "$changed"
         echo "likely OpenChamber's or its bundled OpenCode's; confirm against ~/Library/Logs/OpenChamber/main.log, or rerun with it closed"
         exit 3

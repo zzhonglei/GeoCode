@@ -168,7 +168,7 @@ web 包还剩一条**未定位**的:`project-context/routes.http.test.js` 的「
 ./scripts/foreign-writes.sh after
 ```
 
-用 `electron:dev:bundled` 而不是 `electron:dev`——后者的壳是 dev 脚本单独起的进程,主进程探到它就不再注入内核,那个壳会去磁盘上找并拉起用户自装的 OpenCode(阶段 3)。跑之前先确认用户自己的 OpenChamber 没在运行,否则它的写入会变成误报。
+用 `electron:dev:bundled` 而不是 `electron:dev`——后者的壳是 dev 脚本单独起的进程,主进程探到它就不再注入内核,那个壳会去磁盘上找并拉起用户自装的 OpenCode(阶段 3)。用户自己的 OpenChamber 若在这段时间里跑过,**包括窗口中间开、跑完前关**,它与它自带的 OpenCode 的写入会被单独报成退出码 3 并附归因线索,不混进红报;退出码 3 是「要人确认」而不是「干净」,要一个干净结论就关掉它重跑。
 
 **读侧也要一次真实会话**(`ENVIRONMENT.md` §7)。写入检测看不见读取,所以再从一个下了毒的终端起同一个命令:`export OPENCODE_CONFIG_DIR=/tmp/poison OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 OPENCHAMBER_SKIP_LOCAL_SERVER=1`,旁边 `nc -l 4318`。应用要正常起来、有内核、`nc` 收不到任何连接、设置页仍落在 GeoCode 的根下。内核那一半有自动形式,`scripts/kernel-env-probe.sh`,不开窗口。
 
