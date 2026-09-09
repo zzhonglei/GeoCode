@@ -17,6 +17,12 @@ import { getRuntimeApiBaseUrl, getRuntimeKey } from '@/lib/runtime-switch';
  * word "Instance" while the switcher two clicks away named it correctly.
  */
 
+// --- GeoCode: the scheme the shell serves the bundled UI over, renamed with the product
+// (electron/geocode/desktop-identity.mjs uiProtocol). A hand-copy because the renderer cannot
+// import that module; desktop-identity.test.mjs pins it. ---
+const PACKAGED_UI_SCHEME = 'geocode-ui://';
+// --- /GeoCode ---
+
 export const LOCAL_HOST_ID = 'local';
 
 export const buildLocalDesktopHost = (localOrigin?: string | null): DesktopHost => ({
@@ -83,7 +89,7 @@ export const resolveCurrentDesktopHost = (hosts: DesktopHost[]): ResolvedDesktop
     return { id: match.id, label: match.label, url: normalizeHostUrl(match.url) || match.url };
   }
 
-  if (currentHref.startsWith('openchamber-ui://')) {
+  if (currentHref.startsWith(PACKAGED_UI_SCHEME)) {
     return { id: LOCAL_HOST_ID, label: 'Local', url: normalizedLocal };
   }
 

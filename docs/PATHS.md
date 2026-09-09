@@ -204,6 +204,7 @@ id 按三档推导:**远端 URL 的哈希** → **本文件记的值** → **首
 | Electron userData | `<appData>/<appId>` | `<appData>/GeoCode` | 壳自己的数据;取显示名而非 appId,`app.setName` 一句带出,用户在 Finder 里看到的与应用名一致 |
 | 应用日志 | `<userData>/logs` | 随平台惯例:macOS `~/Library/Logs/GeoCode`,Windows `<userData>/logs` | electron-log 取 `app.getPath('logs')`,不覆写;打包版由 `productName` 写进 bundle 带出,开发版见下 |
 | 浏览器面板 partition | `persist:openchamber-browser`(壳上游) | `persist:geocode-browser` | 主进程只对该 partition 的视图回答截图与清除数据;渲染端 `BrowserPane.tsx` 手抄一份,`desktop-identity.test.mjs` 钉住两份一致 |
+| 打包 UI 的自有协议 | `openchamber-ui://app`(壳上游) | `geocode-ui://app` | 打包版与 `electron:dev:bundled` 的窗口都从这个源载入。三处要认这个源:服务器的 CORS 白名单(`web/server/geocode/shell-identity.js`)与渲染端判断「当前就是本机实例」那处(`ui/src/lib/desktopCurrentHost.ts`)各手抄一份;preload 不抄——它随安装包**原样复制、不参与打包**(`package.json` 的 `build.files`),import 不到身份模块,所以由主进程经 `--openchamber-packaged-origin` 把算好的值传进去。三处都由 `desktop-identity.test.mjs` 钉住,其中 literal 扫描的文件清单取自 `build.files` 而不是另列一份——preload 当初正是因为不在那份清单里,才留着上游的源比对了很久 |
 | mDNS 服务名 | `opencode-<port>` | `geocode-<port>` | 局域网发现 |
 | mDNS 默认域名 | `opencode.local` | `geocode.local` | 用户可在配置中覆盖 |
 | macOS MDM plist 域 | `ai.opencode.managed` | `ai.geocode.managed` | `/Library/Managed Preferences/` 下的策略文件名 |

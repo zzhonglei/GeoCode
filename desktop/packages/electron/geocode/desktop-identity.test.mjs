@@ -113,20 +113,55 @@ describe('desktop identity', () => {
     expect(pane).not.toContain('partition="persist:');
   });
 
-  it('leaves no upstream identity literal in main.mjs', () => {
-    // Guards the merge that quietly restores one. Wire fingerprints are deliberately absent
-    // from this list: OPENCHAMBER_* variables, the @openchamber/electron package name and
-    // the openchamber: IPC channels identify the code, not the product, and stay upstream.
+  it('reads the bundled UI origin from the shell instead of naming it', () => {
+    // preload ships unbundled (build.files below), so it cannot import this module, and the
+    // literal it used to compare against was upstream's: the four capabilities it gates were
+    // withheld from the very window they are meant for, and two other injection paths happened
+    // to cover most of them. Every window that opens with a preload has to pass the value.
+    const preload = readElectronFile('preload.mjs');
+    expect(preload).toContain("readArgValue('--openchamber-packaged-origin')");
+    // The declaration alone is not the comparison: the gate has to be the thing that reads it.
+    expect(preload).toMatch(/isLocalPage =[\s\S]*?currentOrigin === packagedOrigin/);
     const main = readElectronFile('main.mjs');
-    for (const literal of [
-      "app.setName('OpenChamber')",
-      "'dev.openchamber.desktop'",
-      "'openchamber-ui'",
-      "'persist:openchamber-browser'",
-      "'openchamber.desktop'",
-      "'OpenChamber Dev'",
-    ]) {
-      expect(main).not.toContain(literal);
+    const windows = main.split('additionalArguments:').length - 1;
+    const passes = main.split('`--openchamber-packaged-origin=${packagedUiOrigin()}`').length - 1;
+    expect(windows).toBeGreaterThan(0);
+    expect(passes).toBe(windows);
+  });
+
+  it('names our scheme where the renderer decides the window is the local instance', () => {
+    // Another hand-copy the renderer cannot avoid. It sits behind an earlier short circuit today,
+    // so a drift here is invisible until the branch is reached.
+    const host = fs.readFileSync(
+      path.resolve(electronRoot, '../ui/src/lib/desktopCurrentHost.ts'),
+      'utf8',
+    );
+    expect(host.match(/const PACKAGED_UI_SCHEME = '([^']+)'/)?.[1]).toBe(`${DesktopIdentity.uiProtocol}://`);
+    expect(host).not.toContain('openchamber-ui');
+  });
+
+  it('leaves no upstream identity literal in the files the installer ships', () => {
+    // Guards the merge that quietly restores one. The file list comes from build.files rather
+    // than from a list kept here, because a per-file list cannot see a file it does not name —
+    // preload was outside the old one, which is how its stale origin survived. Wire fingerprints
+    // are deliberately absent: OPENCHAMBER_* variables, the @openchamber/electron package name
+    // and the openchamber: IPC channels identify the code, not the product, and stay upstream.
+    const { build } = JSON.parse(readElectronFile('package.json'));
+    // `dist-bundle/main.mjs` is built from `main.mjs`; the source is what a merge touches.
+    const shipped = build.files.map((entry) => entry.replace(/^dist-bundle\//, ''));
+    expect(shipped.length).toBeGreaterThan(1);
+    for (const file of shipped) {
+      const source = readElectronFile(file);
+      for (const literal of [
+        "app.setName('OpenChamber')",
+        "'dev.openchamber.desktop'",
+        'openchamber-ui',
+        "'persist:openchamber-browser'",
+        "'openchamber.desktop'",
+        "'OpenChamber Dev'",
+      ]) {
+        expect([file, literal, source.includes(literal)]).toEqual([file, literal, false]);
+      }
     }
   });
 });

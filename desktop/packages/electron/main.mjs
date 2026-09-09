@@ -2569,6 +2569,8 @@ const createBrowserWindow = ({ label, restoreGeometry, url, runtimeConfig = {} }
         `--openchamber-tray-enabled=${trayEnabled ? '1' : '0'}`,
         `--openchamber-boot-outcome=${JSON.stringify(state.bootOutcome || null)}`,
         `--openchamber-relay-host-id=${rendererRuntimeConfig.relayHostId || ''}`,
+        // GeoCode: preload ships unbundled, so the origin is passed rather than copied
+        `--openchamber-packaged-origin=${packagedUiOrigin()}`,
       ],
       preload: isDev ? path.join(__dirname, 'preload.mjs') : path.join(app.getAppPath(), 'preload.mjs'),
       backgroundThrottling: false,
@@ -2964,6 +2966,8 @@ const createMiniChatWindow = async ({ mode, sessionId = '', directory = '', proj
         `--openchamber-home=${desktopHome}`,
         `--openchamber-macos-major=${desktopMacosMajor}`,
         `--openchamber-tray-enabled=${trayEnabled ? '1' : '0'}`,
+        // GeoCode: preload ships unbundled, so the origin is passed rather than copied
+        `--openchamber-packaged-origin=${packagedUiOrigin()}`,
       ],
       preload: isDev ? path.join(__dirname, 'preload.mjs') : path.join(app.getAppPath(), 'preload.mjs'),
       backgroundThrottling: false,
