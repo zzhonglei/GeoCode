@@ -28,6 +28,29 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # the backstop behind those.
 TIMEOUT="--timeout 30000"
 
+# GeoCode: the gate itself must not touch user data. 2026-09-05 caught a control case writing a
+# fake process record into the real managed-opencode directory, which the shell reads at startup
+# to kill pids; nothing was watching, and the same class of mistake in a suite that builds real
+# git repositories or config layers would land in the developer's own GeoCode roots. The detector
+# already watches the other products' directories, so this only adds ours and wraps the run.
+GATE_WRITES_SNAPSHOT="${TMPDIR:-/tmp}/geocode-gate-writes"
+GATE_WRITES_ROOTS="$HOME/.config/GeoCode $HOME/.local/share/GeoCode $HOME/.cache/GeoCode $HOME/.local/state/GeoCode"
+export FOREIGN_WRITES_SNAPSHOT="$GATE_WRITES_SNAPSHOT"
+export FOREIGN_WRITES_EXTRA_ROOTS="$GATE_WRITES_ROOTS"
+
+# Reported through an EXIT trap rather than at the end, or a suite that goes red takes the answer
+# with it — and a suite that writes is exactly the kind that also fails.
+report_gate_writes() {
+  status=$?
+  trap - EXIT
+  echo
+  echo "== write detection: the gate must not touch user data =="
+  "$ROOT/scripts/foreign-writes.sh" after || status=1
+  exit $status
+}
+"$ROOT/scripts/foreign-writes.sh" before > /dev/null
+trap report_gate_writes EXIT
+
 # The WHOLE workspace, not just packages/opencode — which is all this used to
 # check, and the gap was invisible from inside the gate.
 #

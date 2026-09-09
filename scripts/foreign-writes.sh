@@ -13,6 +13,9 @@ ROOTS="$HOME/.config/opencode $HOME/.local/share/opencode $HOME/.cache/opencode
        $HOME/.claude/skills $HOME/.claude/ide $HOME/.claude/agents
        $HOME/.claude/commands $HOME/.claude/CLAUDE.md $HOME/.claude/.credentials.json
        ${TMPDIR:-/tmp}/opencode"
+# The gate adds GeoCode's own roots through this: a test suite has no business writing into the
+# user's data either, and once it does, nothing downstream can tell that write from the app's.
+ROOTS="$ROOTS ${FOREIGN_WRITES_EXTRA_ROOTS:-}"
 SNAP="${FOREIGN_WRITES_SNAPSHOT:-/tmp/geocode-foreign-writes}"
 
 openchamber_pid() {
@@ -59,11 +62,15 @@ case "$1" in
     snapshot > "$SNAP"
     openchamber_pid > "$SNAP.openchamber"
     echo "recorded $(wc -l < "$SNAP" | tr -d ' ') entries"
-    [ -s "$SNAP.openchamber" ] && echo "note: OpenChamber.app is running (pid $(cat "$SNAP.openchamber")); its own writes under ~/.config/openchamber are expected" ;;
+    # An `&&` here would make the absence of OpenChamber the branch's exit status, and `before`
+    # would report failure on every machine that is not running it. Callers under `set -e` die.
+    if [ -s "$SNAP.openchamber" ]; then
+      echo "note: OpenChamber.app is running (pid $(cat "$SNAP.openchamber")); its own writes under ~/.config/openchamber are expected"
+    fi ;;
   after)
     snapshot > "$SNAP.after"
     if diff -q "$SNAP" "$SNAP.after" > /dev/null 2>&1; then
-      echo "clean — nothing outside GeoCode's own directories changed"
+      echo "clean — nothing under the watched roots changed"
     else
       # The verdict reads every changed line; only the report is trimmed, or a foreign write
       # past the fortieth would be judged on lines that were never looked at.

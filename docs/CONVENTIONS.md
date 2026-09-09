@@ -148,6 +148,10 @@ web 包还剩一条**未定位**的:`project-context/routes.http.test.js` 的「
 
 `scripts/foreign-writes.sh` 是**第二道门,断言的是磁盘而不是源码**。用法是 `before` 记快照、跑一遍要验的东西、`after` 报差异;它盯八个 GeoCode 绝不该碰的位置(OpenCode 的四根、`~/.opencode`、`~/.config/openchamber`、`~/.agents`、`~/.claude` 里我们够得到的几处、`$TMPDIR/opencode`),**任何变化即失败**。
 
+**门自己也被它围着**(2026-09-09 起)。`test-gate.sh` 开头 `before`、经 `EXIT` 陷阱收尾 `after`,并用 `FOREIGN_WRITES_EXTRA_ROOTS` 把 GeoCode 自己的四个根(config / data / cache / state)一并纳入监视:**门不该碰用户数据**,别家的不该碰,我们自己的也不该碰,而一旦碰了,下游没有任何东西能把那次写入和应用自己的写入分开。09-05 抓到过 `managed-kernel.test.js` 的对照组把假进程记录写进真实的 `managed-opencode/`(壳启动时会按这个目录杀 pid),当时没有任何东西看着。收尾放在陷阱里而不是脚本末尾,是因为某一节红了就退出,而**会写盘的用例恰恰也是容易红的那一类**;放末尾等于在最需要答案的时候把答案丢掉。
+
+⚠️ 接上这一步时顺带修掉一个潜伏的坑:`before` 分支原本以 `[ -s ... ] && echo ...` 结尾,于是**在没跑 OpenChamber 的机器上返回 1**。以前没人看它的退出码,所以一直无害;门在 `set -e` 下调用它的那一刻,门当场死掉且零输出。凡是要被别的脚本调用的脚本,退出码就是接口的一部分。
+
 为什么需要第二道门:2026-08-30 的全面审计查出四类问题,**没有一类是源码层断言能发现的**——
 
 - **补丁写对了但是死代码**:`mdns.ts` 的 `?? Brand.mdnsHost` 是对的、绊线也钉住了它,而 `cli/network.ts` 的一个 yargs 默认值让它永远走不到,GeoCode 照旧广播 `opencode.local`;
