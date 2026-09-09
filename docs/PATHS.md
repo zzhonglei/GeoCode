@@ -211,7 +211,7 @@ id 按三档推导:**远端 URL 的哈希** → **本文件记的值** → **首
 | macOS MDM plist 域 | `ai.opencode.managed` | `ai.geocode.managed` | `/Library/Managed Preferences/` 下的策略文件名 |
 | 系统托管配置目录 | `/Library/Application Support/opencode`(macOS)/ `%ProgramData%\opencode`(Windows) | 同构,`GeoCode` | 目录内的配置文件同样按 `geocode.json(c)` 命名 |
 | 环境变量(内核内部) | `OPENCODE_*` | **原样保留** | 降格为壳与内核之间的内部 ABI,人类不再直接书写;产品没有公开的环境变量面(§3.6) |
-| npm 包名 / User-Agent / config schema URL | 上游值 | **原样保留** | 同上 |
+| npm 包名 / User-Agent / config schema URL / 模型目录 URL | 上游值 | **原样保留** | 同上。模型目录取自 `https://models.opencode.ai`,请求头是 `opencode/<通道>/<版本>/<客户端>`——两者是同一条链路的两半。**刻意不换**:产品小众,借上游已有的商标身份接入各家 LLM 供应商更现实,而用户体感没有差别(2026-09-09 用户定)。这一行同时是启动期出站连接清单里 `models.opencode.ai` 的判决 |
 
 ### 3.5 Windows 注册表
 
