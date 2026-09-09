@@ -59,6 +59,7 @@ Windows 上还发生过真实事故:NSIS 单击安装器的安装目录取自 pa
 | state | `model.json` `plugin-meta.json` `locks/` | 同名 | |
 | cache | `skills/` 暂存区内 `.opencode-version` | `.geocode-version` | 技能暂存版本标记 |
 | 用户项目 `.git/` | `opencode`(项目 id 标记文件) | `geocode` | 内核写进项目 git 目录的唯一文件;改名后两个程序各记各的项目 id,互不干扰 |
+| 用户项目的分支 | `openchamber/<名字>`(壳上游) | `geocode/<名字>` | 会话移到 worktree 时建的分支。工作区目录落在我们的数据根下(`worktree/<项目 id>/`),分支却只能建在用户仓库里——worktree 与主工作区共用同一份 `.git`,这是 git 的机制。只有调用方不指定分支名时才用这个前缀,而应用里每条创建路径都指定(`ui/src/lib/worktreeSessionCreator.ts` 的 `createQuickWorktree` 连名字都自己生成),所以今天到不了;它此前也没有任何测试,绊线 `server/geocode/worktree-branch.test.js` 用真实仓库跑一遍,是这行代码的第一份覆盖 |
 | config / data / 用户项目 | `<文件名>.openchamber.backup` | `<文件名>.geocode.backup` | 壳在覆盖配置层或凭据前留下的副本(`web/server/geocode/config-backup.js`)。它由壳而非内核写出,所以旧名是 OpenChamber 的;配置层含项目层,那一份会落在**用户自己的仓库里**。没有任何代码读回它,它只供人手动恢复,因此名字必须是我们的。后缀定义在一处,两个调用点(`writeConfig`、`writeAuthFile`)与它们的测试都从那里取 |
 
 GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统一收进 `cache/geo/` 一层之下,不再与内核产物平铺。这条规则对将来新增的地理能力同样生效——地理内核的任何缓存都在 `geo/` 里,永远一眼可辨。已就位四个成员:`preview/`(预览产物,每次启动清空,§7.6)、`scripts/`(Python 脚本的物化产物,内容哈希命名、变更即换名,§4.13)、`qgis-pyhome/`(符号链接农场,§4.4)、`gee-runtime/`(随执行注入的运行时库,§5.10)——章节号均指 GEOKERNEL.md。

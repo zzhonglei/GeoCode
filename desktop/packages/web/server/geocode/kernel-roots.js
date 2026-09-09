@@ -44,6 +44,13 @@ export const KERNEL_CONFIG_JSON = `${NAME}.json`;
 export const KERNEL_CONFIG_JSONC = `${NAME}.jsonc`;
 export const KERNEL_PROJECT_DIR = `.${NAME}`;
 
+/**
+ * The branch a new worktree gets when the caller names none. Unlike everything else here it
+ * lands in the user's own repository, where `git branch` lists it and a push publishes it, so
+ * it carries the product's name rather than the upstream shell's.
+ */
+export const WORKTREE_BRANCH_PREFIX = `${NAME}/`;
+
 const xdgRoot = (variable, ...fallbackSegments) =>
   process.env[variable] || path.join(os.homedir(), ...fallbackSegments);
 

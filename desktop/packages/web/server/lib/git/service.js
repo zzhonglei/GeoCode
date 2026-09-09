@@ -5,7 +5,7 @@ import os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { createRequire } from 'module';
-import { kernelDataRoot, KERNEL_PROJECT_MARKER } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
+import { kernelDataRoot, KERNEL_PROJECT_MARKER, WORKTREE_BRANCH_PREFIX } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 
 const fsp = fs.promises;
 const require = createRequire(import.meta.url);
@@ -1640,7 +1640,8 @@ const resolveCandidateDirectory = async (worktreeRoot, preferredName, explicitBr
       return { name, directory, branch: explicitBranchName };
     }
 
-    const branch = `openchamber/${name}`;
+    // GeoCode: this branch is created in the user's own repository (geocode/kernel-roots.js)
+    const branch = `${WORKTREE_BRANCH_PREFIX}${name}`;
     const branchRef = `refs/heads/${branch}`;
     const branchExists = await runGitCommand(primaryWorktree, ['show-ref', '--verify', '--quiet', branchRef]);
     if (branchExists.success) {
