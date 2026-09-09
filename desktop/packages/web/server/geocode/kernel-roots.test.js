@@ -20,6 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { KERNEL_PROJECT_MARKER, kernelConfigRoot, kernelDataRoot } from './kernel-roots.js';
+import { CONFIG_BACKUP_SUFFIX } from './config-backup.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.dirname(here);
@@ -88,7 +89,7 @@ describe('kernel roots', () => {
 
     const root = path.join(dataHome, brand().dirName);
     expect(fs.existsSync(path.join(root, 'auth.json'))).toBe(true);
-    expect(fs.existsSync(path.join(root, 'auth.json.openchamber.backup'))).toBe(true);
+    expect(fs.existsSync(path.join(root, `auth.json${CONFIG_BACKUP_SUFFIX}`))).toBe(true);
   });
 
   it('writes config where the kernel reads it', async () => {

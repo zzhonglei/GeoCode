@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: fixtures must carry the names the code now discovers
+import { CONFIG_BACKUP_SUFFIX } from '../../geocode/config-backup.js'; // GeoCode: the shell no longer writes upstream's name
 
 import { parseMdFile, writeMdFile, readConfigFile, readConfigLayers, writeConfig } from './shared.js';
 import { updateAgent } from './agents.js';
@@ -306,7 +307,7 @@ describe('readConfigFile / writeConfig JSONC safety (issue #2923)', () => {
       /cannot be loaded safely/,
     );
     expect(fs.readFileSync(file, 'utf8')).toBe(PARTIAL_PARSE_CONFIG);
-    expect(fs.existsSync(`${file}.openchamber.backup`)).toBe(false);
+    expect(fs.existsSync(`${file}${CONFIG_BACKUP_SUFFIX}`)).toBe(false);
   });
 
   it('preserves a valid config across MCP updates', () => {
@@ -319,7 +320,7 @@ describe('readConfigFile / writeConfig JSONC safety (issue #2923)', () => {
     expect(rewritten.plugin).toEqual(['opencode-see-image']);
     expect(rewritten.provider['ollama-cloud'].name).toBe('Ollama Cloud');
     expect(rewritten.mcp.openproject.enabled).toBe(false);
-    expect(fs.readFileSync(`${file}.openchamber.backup`, 'utf8')).toBe(VALID_CONFIG);
+    expect(fs.readFileSync(`${file}${CONFIG_BACKUP_SUFFIX}`, 'utf8')).toBe(VALID_CONFIG);
   });
 
   it('does not wipe an unparseable user config during MCP mutation attempts', () => {
@@ -332,7 +333,7 @@ describe('readConfigFile / writeConfig JSONC safety (issue #2923)', () => {
         /cannot be loaded safely/,
       );
       expect(fs.readFileSync(file, 'utf8')).toBe(PARTIAL_PARSE_CONFIG);
-      expect(fs.existsSync(`${file}.openchamber.backup`)).toBe(false);
+      expect(fs.existsSync(`${file}${CONFIG_BACKUP_SUFFIX}`)).toBe(false);
     } finally {
       if (previousOpenCodeConfig === undefined) delete process.env.OPENCODE_CONFIG;
       else process.env.OPENCODE_CONFIG = previousOpenCodeConfig;
@@ -351,7 +352,7 @@ describe('readConfigFile / writeConfig JSONC safety (issue #2923)', () => {
       /cannot be loaded safely/,
     );
     expect(fs.readFileSync(yamlish, 'utf8')).toBe('mcp:\n  openproject:\n    type: remote\n');
-    expect(fs.existsSync(`${yamlish}.openchamber.backup`)).toBe(false);
+    expect(fs.existsSync(`${yamlish}${CONFIG_BACKUP_SUFFIX}`)).toBe(false);
   });
 
   it('keeps a valid custom layer readable when a project layer is unparseable', () => {
@@ -378,7 +379,7 @@ describe('readConfigFile / writeConfig JSONC safety (issue #2923)', () => {
       expect(rewritten.plugin).toEqual(['opencode-see-image']);
       expect(rewritten.mcp.openproject.enabled).toBe(false);
       expect(fs.readFileSync(projectFile, 'utf8')).toBe(PARTIAL_PARSE_CONFIG);
-      expect(fs.existsSync(`${projectFile}.openchamber.backup`)).toBe(false);
+      expect(fs.existsSync(`${projectFile}${CONFIG_BACKUP_SUFFIX}`)).toBe(false);
     } finally {
       if (previousOpenCodeConfig === undefined) delete process.env.OPENCODE_CONFIG;
       else process.env.OPENCODE_CONFIG = previousOpenCodeConfig;

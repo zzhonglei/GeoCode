@@ -7,6 +7,7 @@ import {
   KERNEL_CONFIG_JSONC,
   KERNEL_PROJECT_DIR,
 } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
+import { CONFIG_BACKUP_SUFFIX } from '../../geocode/config-backup.js'; // GeoCode: own module
 import yaml from 'yaml';
 import { parse as parseJsonc, printParseErrorCode } from 'jsonc-parser';
 
@@ -15,7 +16,7 @@ import { parse as parseJsonc, printParseErrorCode } from 'jsonc-parser';
 // --- GeoCode: the kernel's own config root, not the user's OpenCode installation
 // (geocode/kernel-roots.js). Everything in this file hangs off it — the three global config
 // layers, the agent/command/skill directories, and `writeConfig`, which copies the file it is
-// about to overwrite to `<name>.openchamber.backup` first. Pointed at OpenCode's directory
+// about to overwrite aside first (geocode/config-backup.js). Pointed at OpenCode's directory
 // that read the user's real provider keys and left a copy of them behind. ---
 const OPENCODE_CONFIG_DIR = kernelConfigRoot();
 // --- /GeoCode ---
@@ -343,7 +344,7 @@ function writeConfig(config, filePath = CONFIG_FILE) {
         parseConfigObject(existing, filePath);
       }
 
-      const backupFile = `${filePath}.openchamber.backup`;
+      const backupFile = `${filePath}${CONFIG_BACKUP_SUFFIX}`;
       fs.copyFileSync(filePath, backupFile);
       console.log(`Created config backup: ${backupFile}`);
     }

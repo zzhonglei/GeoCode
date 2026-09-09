@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: fixtures must carry the names the code now discovers
+import { CONFIG_BACKUP_SUFFIX } from '../../geocode/config-backup.js'; // GeoCode: the shell no longer writes upstream's name
 
 let rootDir;
 let projectDir;
@@ -137,7 +138,7 @@ describe('opencode plugins data layer', () => {
 
     expect(plugins.listPluginEntries(projectDir).map((entry) => entry.spec)).toEqual(['user-plugin']);
     expect(fs.readFileSync(projectFile, 'utf8')).toBe(partialProject);
-    expect(fs.existsSync(`${projectFile}.openchamber.backup`)).toBe(false);
+    expect(fs.existsSync(`${projectFile}${CONFIG_BACKUP_SUFFIX}`)).toBe(false);
   });
 
   test('lists entries from user and project layers with scopes and parsed kinds', () => {

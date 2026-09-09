@@ -862,7 +862,7 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   项目 id 标记,上游全部指向 `~/.local/share/opencode` 与 `~/.config/opencode`。四处改指内核自己的
   根,派生自 `packages/web/server/geocode/kernel-roots.js`(`PATHS.md` §5)。三条非显然的:
   **`writeAuthFile` 在覆盖前会把旧文件复制成 `.openchamber.backup`**,所以读的是别人的凭据、留下
-  的也是别人凭据的副本;**四处里有两处不认 `XDG_*` 而内核认**,不统一就会出现壳读一份 `auth.json`、
+  的也是别人凭据的副本(那个后缀本身也于 2026-09-09 改名,`PATHS.md` §3.2);**四处里有两处不认 `XDG_*` 而内核认**,不统一就会出现壳读一份 `auth.json`、
   内核写另一份,两边都不报错;**项目 id 标记与内核共用一个文件是安全的**,因为内核按
   `remote ?? previous ?? root` 取值,壳写进去的值盖不掉它优先的远端哈希;
 - **批 5 · 配置读取链**:已完成。`shared.js` 硬编码 `~/.config/opencode`,而它不是一个孤立常量,
