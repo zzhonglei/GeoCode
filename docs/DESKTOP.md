@@ -242,6 +242,10 @@ Shell 使用的 `@opencode-ai/sdk` 必须由**同一份 GeoCode Kernel OpenAPI**
 
 精确的 SDK 交付形式(本地 workspace 包或构建期产物)属于实施选择;「与 Kernel 同源」不是。
 
+**已执行的一半(2026-09-10)**:壳的四处声明——安装根自己那份加三个 workspace 包——一律钉在本仓 vendor 的内核版本上,由 `electron/geocode/sdk-source.test.mjs` 断言。它靠遍历安装根与 workspaces 找声明,不靠清单:第一版用手写清单,当场漏掉了安装根自己那处。此前四处钉的是 `1.18.23`,那是壳上游的 pin——OpenChamber 不自带内核、只能连用户装的那个,对不齐是它的常态;GeoCode 两边都出,所以能对齐。
+
+**没执行的一半**:版本相同不等于同源。壳装的仍是上游发布的产物,而不是由**我们这份内核**的 OpenAPI 生成的客户端——两者的差别今天看不出来(实测 1.18.18 与 1.18.23 的 162 条路径、1409 个导出类型逐一相同),但它有一个立刻能看见的后果:**`/geo/*` 在任何一份 SDK 里都没有**。生成线是现成的(`kernel/packages/sdk/js/script/build.ts`,它 `bun dev generate` 导出内核 OpenAPI 再生成客户端),从 vendor 之后没跑过。阶段七要调地理端点时补,连同一条「路由定义源码哈希 ≠ 生成印记就红」的绊线。
+
 ### 4.4 原生构建
 
 - macOS arm64 安装包在 macOS arm64 上构建;
