@@ -11,9 +11,9 @@
  *   - the start deadline is a STALL timer, refreshed by every message. A kernel that is
  *     slowly reporting progress is alive; one that has said nothing for the whole window
  *     is not, and the difference matters on a cold first launch;
- *   - stop asks before it kills. The kernel owes its own children a synchronous sweep
- *     (GEOKERNEL.md §10.1 #8b), and a kill that skips the ask orphans whatever QGIS
- *     process was mid-run;
+ *   - stop asks before it kills, and every kill here is a signal the kernel catches: its exit
+ *     handler owes its children a synchronous sweep (GEOKERNEL.md §10.1 #8b), and a kill it
+ *     cannot catch orphans whatever QGIS process was mid-run;
  *   - an exit before ready fails the start rather than hanging until the deadline.
  *
  * Readiness is reported by the kernel and then confirmed over HTTP: `listen` returning is
@@ -234,9 +234,9 @@ export const startKernelHost = async ({
   /**
    * The synchronous counterpart to `stop`, for the shutdown path Electron gives us.
    * `shutdownBackgroundServices` is followed immediately by `app.exit(0)` in the same tick,
-   * so an awaited stop would never be reached — and a utility process killed without
-   * warning takes its QGIS children with it (GEOKERNEL.md §10.1 #8b). Signalling instead
-   * lets the kernel's own exit handler run the sweep before it goes.
+   * so an awaited stop would never be reached. The signal is what lets the kernel's exit
+   * handler sweep its QGIS children, which sit in process groups of their own where no kill
+   * from here reaches them (GEOKERNEL.md §10.1 #8b).
    */
   const terminate = () => {
     if (exited || stopping) return;
