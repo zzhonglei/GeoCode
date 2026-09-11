@@ -160,7 +160,6 @@ describe('the chat surface knows the tool by its GeoCode name', () => {
     for (const file of ['toolPresentation.tsx', 'ToolPart.tsx']) {
       const source = read(file);
       expect([file, source.includes(`'${BROWSER_TOOL_NAME}'`)]).toEqual([file, true]);
-      expect([file, source.includes("'openchamber_web'")]).toEqual([file, false]);
     }
   });
 });

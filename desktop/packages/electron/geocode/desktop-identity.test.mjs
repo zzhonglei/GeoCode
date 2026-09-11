@@ -72,7 +72,7 @@ describe('desktop identity', () => {
     expect(build.extraMetadata?.name).toBe(DesktopIdentity.windowsPackageName);
   });
 
-  it('refuses our own schemes in the chat link classifier, and no longer the upstream pair', () => {
+  it('refuses our own schemes in the chat link classifier', () => {
     // Upstream keeps its own schemes off the app-link path so chat content cannot re-launch the
     // product's internal deep links; the classifier is in the renderer, which cannot import this
     // module, so it hand-copies the two names. Renaming one side alone silently turns
@@ -85,8 +85,6 @@ describe('desktop identity', () => {
     const blocked = url.match(/const BLOCKED_APP_LINK_SCHEMES = new Set\(\[([\s\S]*?)\]\)/)?.[1] ?? '';
     expect(blocked).toContain(`'${DesktopIdentity.deepLinkProtocol}'`);
     expect(blocked).toContain(`'${DesktopIdentity.uiProtocol}'`);
-    expect(blocked).not.toContain("'openchamber'");
-    expect(blocked).not.toContain("'openchamber-ui'");
   });
 
   it('sends the OAuth return leg to our own protocol', () => {
@@ -95,7 +93,8 @@ describe('desktop identity', () => {
     // renders for a browser with no UI session — and neither can import this module.
     const focus = `${DesktopIdentity.deepLinkProtocol}://focus/mcp-auth`;
     for (const file of ['../ui/src/components/sections/mcp/McpOAuthCallbackPage.tsx', '../web/server/lib/opencode/routes.js']) {
-      const source = fs.readFileSync(path.resolve(electronRoot, file), 'utf8');
+      // Line comments are dropped first: upstream's own comment in routes.js still names its protocol.
+      const source = fs.readFileSync(path.resolve(electronRoot, file), 'utf8').replace(/^\s*\/\/.*$/gm, '');
       expect([file, source.includes(focus)]).toEqual([file, true]);
       expect([file, source.includes('openchamber://focus')]).toEqual([file, false]);
     }

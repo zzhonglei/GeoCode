@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { kernelConfigRoot, KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 import {

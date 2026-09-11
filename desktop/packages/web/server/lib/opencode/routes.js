@@ -1,6 +1,7 @@
 import express from 'express';
 import { createProjectIdFromPath } from '../projects/project-id.js';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import {
   buildDeferredRestartResponse,
@@ -67,10 +68,10 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
 
   // Self-contained page for the OAuth return leg: the system browser has no UI
   // session, so it cannot load the SPA behind the auth gate — everything it
-  // needs ships inline. `geocode://focus/mcp-auth` raises the desktop app (GeoCode: renamed
-  // with the protocol, desktop-identity.mjs deepLinkProtocol; pinned by desktop-identity.test.mjs);
+  // needs ships inline. `openchamber://focus/mcp-auth` raises the desktop app;
   // the link stays visible because some browsers only follow custom-protocol
   // URLs from a user gesture.
+  // GeoCode: the return leg below uses our protocol (desktop-identity.mjs deepLinkProtocol, pinned by its test)
   const renderMcpOAuthCallbackPage = ({ title, message, desktopReturn }) => `<!doctype html>
 <html lang="en">
 <head>

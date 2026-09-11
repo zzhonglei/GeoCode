@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import yaml from 'yaml';
 import { kernelConfigRoot, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 
