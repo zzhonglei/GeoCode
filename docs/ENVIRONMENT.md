@@ -319,6 +319,9 @@ bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 
 - `lsp/server.ts:571` elixir-ls 的 `{ MIX_ENV: 'prod', ...process.env }` 顺序反了;
 - 内核把 `OPENCODE_CONSOLE_TOKEN`、`AWS_BEARER_TOKEN_BEDROCK`、`AICORE_SERVICE_KEY` 写回自己的 `process.env`,
   于是 agent 的 bash 能读到;`control-plane/workspace.ts` 把整份 `auth.json` 序列化进子进程环境变量;
+- 内核口令同理:内核的服务端只从环境变量读鉴权口令,所以 sidecar 只能把它设进内核自己的 `process.env`;内核起的
+  子进程按 `{...process.env, ...overlay}` 继承它,agent 的 bash 因此读得到(未验证)。GeoAgent 的 bash 本就通配放行,
+  读到口令并不多给它什么;
 - 九个供应商 handler 让环境赢过 `auth.json`(Cloudflare、Snowflake 等),与总规则相反;
 - `OPENCODE_TEST_HOME`、`OPENCODE_TEST_MANAGED_CONFIG_DIR` 两个测试钩子在生产可达(前缀已剥,到不了内核);
 - `startup enable` 的全量环境快照。
