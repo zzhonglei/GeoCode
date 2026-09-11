@@ -1125,7 +1125,7 @@ macOS arm64 与 Windows x64 分别完成:
 - `scripts/test-gate.sh` 保持全绿;
 - 新增 Shell gate 覆盖 capability、Kernel Host、代理、身份和打包绊线;
 - 根级集成门使用真实 Shell + 真实 Kernel,不以 mock 证明兼容;
-- 每次上游合并后补跑对应上游套件并分类预期差异;
+- 每次上游合并后逐项审阅 GeoCode 在该目录上的全部改动(清单取自 `git diff --name-status`,见 §9.2);上游自己的套件不归我们维护(`CONVENTIONS.md` §7);
 - 发版前两平台实机、全新档案与存量档案各走一轮。
 
 ---
