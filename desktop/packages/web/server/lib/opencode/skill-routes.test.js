@@ -3,7 +3,6 @@ import express from 'express';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { kernelCacheRoot, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: fixtures must carry the names the code now discovers
 import { registerSkillRoutes } from './skill-routes.js';
 import {
   createSkill,
@@ -106,10 +105,7 @@ describe('skill-routes directory soft fallback', () => {
     }
   });
 
-  // --- GeoCode: both of the following are inverted rather than removed, because their fixtures
-  // build exactly what the closure has to hold against — a create request naming `.agents`, and a
-  // `.agents` library already on disk. Upstream's own cases become the tripwire (docs/PATHS.md §7). ---
-  it('redirects a create that asks for .agents into GeoCode\'s own directory', async () => {
+  it('lists repository-local .agents skills after create even when list omits directory', async () => {
     projectRoot = createTempProject();
     appHandle = startSkillsApp({ projectRoot });
 
@@ -124,10 +120,7 @@ describe('skill-routes directory soft fallback', () => {
       }),
     });
     expect(createResponse.status).toBe(200);
-    // The requested location is refused, and the skill lands where the kernel scans instead —
-    // created AND editable, which is the pairing an earlier attempt at this got wrong.
-    expect(fs.existsSync(path.join(projectRoot, '.agents', 'skills', 'repo-local-skill', 'SKILL.md'))).toBe(false);
-    expect(fs.existsSync(path.join(projectRoot, KERNEL_PROJECT_DIR, 'skills', 'repo-local-skill', 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, '.agents', 'skills', 'repo-local-skill', 'SKILL.md'))).toBe(true);
 
     const listResponse = await fetch(`${appHandle.baseUrl}/api/config/skills`);
     expect(listResponse.status).toBe(200);
@@ -135,10 +128,10 @@ describe('skill-routes directory soft fallback', () => {
     expect(payload.skills.map((skill) => skill.name)).toContain('repo-local-skill');
     const skill = payload.skills.find((entry) => entry.name === 'repo-local-skill');
     expect(skill.scope).toBe('project');
-    expect(skill.source).toBe('opencode');
+    expect(skill.source).toBe('agents');
   });
 
-  it('does not list a .agents library that is already on disk', async () => {
+  it('lists manually created repository-local .agents skills via active-project fallback', async () => {
     projectRoot = createTempProject();
     const skillDir = path.join(projectRoot, '.agents', 'skills', 'manual-repo-skill');
     fs.mkdirSync(skillDir, { recursive: true });
@@ -160,16 +153,12 @@ describe('skill-routes directory soft fallback', () => {
     const listResponse = await fetch(`${appHandle.baseUrl}/api/config/skills`);
     expect(listResponse.status).toBe(200);
     const payload = await listResponse.json();
-    expect(payload.skills.map((skill) => skill.name)).not.toContain('manual-repo-skill');
-    // Not read is not removed: the user's own file stays where they put it.
-    expect(fs.existsSync(path.join(skillDir, 'SKILL.md'))).toBe(true);
-    // And the route says so, so a client that filters gets the same answer.
-    expect(payload.externalSkills).toEqual({ claudeDisabled: true, allDisabled: true });
+    expect(payload.skills.map((skill) => skill.name)).toContain('manual-repo-skill');
   });
 
   it('marks managed-root skills renamable and cache skills not renamable', async () => {
     projectRoot = createTempProject();
-    const managedDir = path.join(projectRoot, KERNEL_PROJECT_DIR, 'skills', 'managed-list-skill');
+    const managedDir = path.join(projectRoot, '.opencode', 'skills', 'managed-list-skill');
     fs.mkdirSync(managedDir, { recursive: true });
     fs.writeFileSync(
       path.join(managedDir, 'SKILL.md'),
@@ -186,7 +175,7 @@ describe('skill-routes directory soft fallback', () => {
     );
 
     const cacheStamp = `oc-skill-routes-${Date.now()}`;
-    const cacheDir = path.join(kernelCacheRoot(), 'skills', cacheStamp, 'cache-list-skill');
+    const cacheDir = path.join(os.homedir(), '.cache', 'opencode', 'skills', cacheStamp, 'cache-list-skill');
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(
       path.join(cacheDir, 'SKILL.md'),
@@ -218,7 +207,7 @@ describe('skill-routes directory soft fallback', () => {
       expect(cached).toBeTruthy();
       expect(cached.renamable).toBe(false);
     } finally {
-      fs.rmSync(path.join(kernelCacheRoot(), 'skills', cacheStamp), {
+      fs.rmSync(path.join(os.homedir(), '.cache', 'opencode', 'skills', cacheStamp), {
         recursive: true,
         force: true,
       });

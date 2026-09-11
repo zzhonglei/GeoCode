@@ -148,10 +148,7 @@ describe('scheduled-tasks runtime syncProject wiring', () => {
     ...overrides,
   });
 
-  // --- GeoCode: inverted rather than removed, with the fixture untouched. It writes a loop file
-  // into the repository and used to require that a task appear for it; that is the behaviour we
-  // closed, so the same fixture now pins its absence. ---
-  it('schedules nothing from a loop file, even with the project path known', async () => {
+  it('reconciles discovered loops when the project path is known', async () => {
     const { tempRoot, repoPath, cleanup } = await createTempProject();
     try {
       await writeFile(path.join(repoPath, '.agents', 'loops', 'daily.md'), `---
@@ -173,7 +170,11 @@ Run daily.
       await runtime.syncProject('proj');
 
       const tasks = await projectConfigRuntime.listScheduledTasks('proj');
-      expect(tasks).toEqual([]);
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0].id).toBe('loop:project:daily');
+      expect(tasks[0].loopFile).toBe(path.join(repoPath, '.agents', 'loops', 'daily.md'));
+      // syncTaskSchedule computed and persisted the next run for the enabled task.
+      expect(tasks[0].state.nextRunAt).toBeGreaterThan(0);
     } finally {
       await cleanup();
     }

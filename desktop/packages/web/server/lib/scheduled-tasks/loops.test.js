@@ -210,14 +210,8 @@ Run.
   });
 });
 
-// --- GeoCode: the six below are inverted rather than removed. Each fixture builds exactly the
-// thing we decided GeoCode must not act on — a loop definition in `.agents/loops`, in the home
-// directory or in a repository — so flipping the assertion turns upstream's own suite into the
-// tripwire for that decision. `.agents` holds what a user writes for any agent tool, and a loop
-// is the heavy case: it is not offered to the user, it starts by itself on a schedule
-// (docs/PATHS.md). ---
 describe('discoverLoops', () => {
-  it('does not discover a loop defined in the project', async () => {
+  it('discovers project loops and parses them', async () => {
     const { projectPath, cleanup } = await createProject();
     try {
       await writeLoop(projectPath, 'digest.md', `---
@@ -230,13 +224,16 @@ Summarize.
 
       const loops = discoverLoops(projectPath);
 
-      expect(loops).toEqual([]);
+      expect(loops).toHaveLength(1);
+      expect(loops[0].scope).toBe('project');
+      expect(loops[0].definition.name).toBe('daily-digest');
+      expect(loops[0].filePath.endsWith(path.join('.agents', 'loops', 'digest.md'))).toBe(true);
     } finally {
       await cleanup();
     }
   });
 
-  it('does not discover a loop from an ancestor directory', async () => {
+  it('scans ancestor directories up to the worktree root', async () => {
     const { projectPath, cleanup } = await createProject();
     try {
       // Worktree root contains the loop; the project directory is nested.
@@ -252,13 +249,14 @@ From the root.
 
       const loops = discoverLoops(nested);
 
-      expect(loops).toEqual([]);
+      expect(loops.map((loop) => loop.definition.name)).toEqual(['root-loop']);
+      expect(loops[0].scope).toBe('project');
     } finally {
       await cleanup();
     }
   });
 
-  it('does not discover a loop from ~/.agents/loops', async () => {
+  it('discovers user-scope loops from ~/.agents/loops', async () => {
     const { projectPath, cleanup } = await createProject();
     const home = await mkdtemp(path.join(os.tmpdir(), 'oc-loops-home-'));
     const userDir = path.join(home, '.agents', 'loops');
@@ -276,7 +274,8 @@ User scope.
     try {
       const loops = discoverLoops(projectPath);
 
-      expect(loops).toEqual([]);
+      expect(loops.map((loop) => loop.definition.name)).toEqual(['user-loop']);
+      expect(loops[0].scope).toBe('user');
     } finally {
       os.homedir = originalHome;
       await rm(home, { recursive: true, force: true });
@@ -284,7 +283,7 @@ User scope.
     }
   });
 
-  it('discovers neither scope, so there is nothing to shadow', async () => {
+  it('lets project scope shadow user scope on name collision', async () => {
     const { projectPath, cleanup } = await createProject();
     const home = await mkdtemp(path.join(os.tmpdir(), 'oc-loops-home-'));
     const userDir = path.join(home, '.agents', 'loops');
@@ -309,7 +308,10 @@ Project version.
     try {
       const loops = discoverLoops(projectPath);
 
-      expect(loops).toEqual([]);
+      expect(loops).toHaveLength(1);
+      expect(loops[0].scope).toBe('project');
+      expect(loops[0].definition.execution.providerID).toBe('anthropic');
+      expect(loops[0].definition.schedule.cron).toBe('0 8 * * *');
     } finally {
       os.homedir = originalHome;
       await rm(home, { recursive: true, force: true });
@@ -317,7 +319,7 @@ Project version.
     }
   });
 
-  it('reports neither the valid file nor the malformed one', async () => {
+  it('reports malformed files as unparsed entries without blocking valid ones', async () => {
     const { projectPath, cleanup } = await createProject();
     try {
       await writeLoop(projectPath, 'bad.md', `---
@@ -337,9 +339,15 @@ Valid.
       try {
         const loops = discoverLoops(projectPath);
 
-        expect(loops).toEqual([]);
-        // Nothing is read, so nothing is diagnosed either.
-        expect(warn).not.toHaveBeenCalled();
+        // The malformed file stays visible as a `definition: null` entry so
+        // the scheduler can keep its task alive while the file is fixed.
+        const bad = loops.find((loop) => loop.filePath.endsWith(path.join('.agents', 'loops', 'bad.md')));
+        expect(bad.definition).toBeNull();
+        expect(bad.scope).toBe('project');
+
+        const good = loops.find((loop) => loop.filePath.endsWith(path.join('.agents', 'loops', 'good.md')));
+        expect(good.definition.name).toBe('good');
+        expect(warn).toHaveBeenCalled();
       } finally {
         warn.mockRestore();
       }
@@ -357,7 +365,7 @@ Valid.
     }
   });
 
-  it('lists no raw loop files either', async () => {
+  it('lists raw loop files per scope without parsing', async () => {
     const { projectPath, cleanup } = await createProject();
     try {
       await writeLoop(projectPath, 'one.md', `---
@@ -371,7 +379,9 @@ One.
 
       const files = discoverLoopFiles(projectPath);
 
-      expect(files).toEqual([]);
+      expect(files).toHaveLength(1);
+      expect(files[0].scope).toBe('project');
+      expect(files[0].filePath.endsWith(path.join('.agents', 'loops', 'one.md'))).toBe(true);
     } finally {
       await cleanup();
     }

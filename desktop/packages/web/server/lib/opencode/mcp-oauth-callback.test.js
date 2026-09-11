@@ -47,7 +47,7 @@ describe('MCP OAuth browser callback route', () => {
 
     expect(response.text).toContain('Authorization Complete');
     // Started from the desktop shell: the page hands control back via deep link.
-    expect(response.text).toContain('geocode://focus/mcp-auth'); // GeoCode: renamed with the protocol
+    expect(response.text).toContain('openchamber://focus/mcp-auth');
 
     await request(app).get('/api/mcp/auth/pending').query({ state: 'state-1' }).expect(404);
   });

@@ -2,8 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: fixtures must carry the names the code now discovers
-import { CONFIG_BACKUP_SUFFIX } from '../../geocode/config-backup.js'; // GeoCode: the shell no longer writes upstream's name
 
 import { parseMdFile, writeMdFile, readConfigFile, readConfigLayers, writeConfig } from './shared.js';
 import { updateAgent } from './agents.js';
@@ -152,8 +150,8 @@ describe('updateAgent frontmatter preservation', () => {
     // newline). OpenCode parses it; OpenChamber previously treated the whole
     // file as the prompt body and prepended a second frontmatter block on save.
     const projectDir = path.join(FIXTURE_DIR, 'project');
-    const agentPath = path.join(projectDir, KERNEL_PROJECT_DIR, 'agents', 'strateg.md');
-    writeFixture(path.join('project', KERNEL_PROJECT_DIR, 'agents', 'strateg.md'), [
+    const agentPath = path.join(projectDir, '.opencode', 'agents', 'strateg.md');
+    writeFixture(path.join('project', '.opencode', 'agents', 'strateg.md'), [
       '---',
       'description: Strategy agent',
       'model: anthropic/claude-sonnet-4',
@@ -177,8 +175,8 @@ describe('updateAgent frontmatter preservation', () => {
 
   it('preserves unrelated frontmatter fields when saving one field', () => {
     const projectDir = path.join(FIXTURE_DIR, 'project');
-    const agentPath = path.join(projectDir, KERNEL_PROJECT_DIR, 'agents', 'strateg.md');
-    writeFixture(path.join('project', KERNEL_PROJECT_DIR, 'agents', 'strateg.md'), [
+    const agentPath = path.join(projectDir, '.opencode', 'agents', 'strateg.md');
+    writeFixture(path.join('project', '.opencode', 'agents', 'strateg.md'), [
       '---',
       'description: Strategy agent',
       'mode: primary',
@@ -307,7 +305,7 @@ describe('readConfigFile / writeConfig JSONC safety (issue #2923)', () => {
       /cannot be loaded safely/,
     );
     expect(fs.readFileSync(file, 'utf8')).toBe(PARTIAL_PARSE_CONFIG);
-    expect(fs.existsSync(`${file}${CONFIG_BACKUP_SUFFIX}`)).toBe(false);
+    expect(fs.existsSync(`${file}.openchamber.backup`)).toBe(false);
   });
 
   it('preserves a valid config across MCP updates', () => {
@@ -320,7 +318,7 @@ describe('readConfigFile / writeConfig JSONC safety (issue #2923)', () => {
     expect(rewritten.plugin).toEqual(['opencode-see-image']);
     expect(rewritten.provider['ollama-cloud'].name).toBe('Ollama Cloud');
     expect(rewritten.mcp.openproject.enabled).toBe(false);
-    expect(fs.readFileSync(`${file}${CONFIG_BACKUP_SUFFIX}`, 'utf8')).toBe(VALID_CONFIG);
+    expect(fs.readFileSync(`${file}.openchamber.backup`, 'utf8')).toBe(VALID_CONFIG);
   });
 
   it('does not wipe an unparseable user config during MCP mutation attempts', () => {
@@ -333,7 +331,7 @@ describe('readConfigFile / writeConfig JSONC safety (issue #2923)', () => {
         /cannot be loaded safely/,
       );
       expect(fs.readFileSync(file, 'utf8')).toBe(PARTIAL_PARSE_CONFIG);
-      expect(fs.existsSync(`${file}${CONFIG_BACKUP_SUFFIX}`)).toBe(false);
+      expect(fs.existsSync(`${file}.openchamber.backup`)).toBe(false);
     } finally {
       if (previousOpenCodeConfig === undefined) delete process.env.OPENCODE_CONFIG;
       else process.env.OPENCODE_CONFIG = previousOpenCodeConfig;
@@ -352,13 +350,13 @@ describe('readConfigFile / writeConfig JSONC safety (issue #2923)', () => {
       /cannot be loaded safely/,
     );
     expect(fs.readFileSync(yamlish, 'utf8')).toBe('mcp:\n  openproject:\n    type: remote\n');
-    expect(fs.existsSync(`${yamlish}${CONFIG_BACKUP_SUFFIX}`)).toBe(false);
+    expect(fs.existsSync(`${yamlish}.openchamber.backup`)).toBe(false);
   });
 
   it('keeps a valid custom layer readable when a project layer is unparseable', () => {
     const custom = writeFixture('custom.jsonc', VALID_CONFIG);
     const projectDir = path.join(FIXTURE_DIR, 'project');
-    const projectFile = writeFixture(path.join('project', KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSONC), PARTIAL_PARSE_CONFIG);
+    const projectFile = writeFixture(path.join('project', '.opencode', 'opencode.jsonc'), PARTIAL_PARSE_CONFIG);
     const previousOpenCodeConfig = process.env.OPENCODE_CONFIG;
 
     try {
@@ -379,7 +377,7 @@ describe('readConfigFile / writeConfig JSONC safety (issue #2923)', () => {
       expect(rewritten.plugin).toEqual(['opencode-see-image']);
       expect(rewritten.mcp.openproject.enabled).toBe(false);
       expect(fs.readFileSync(projectFile, 'utf8')).toBe(PARTIAL_PARSE_CONFIG);
-      expect(fs.existsSync(`${projectFile}${CONFIG_BACKUP_SUFFIX}`)).toBe(false);
+      expect(fs.existsSync(`${projectFile}.openchamber.backup`)).toBe(false);
     } finally {
       if (previousOpenCodeConfig === undefined) delete process.env.OPENCODE_CONFIG;
       else process.env.OPENCODE_CONFIG = previousOpenCodeConfig;
