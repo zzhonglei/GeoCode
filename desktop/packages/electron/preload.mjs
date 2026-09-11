@@ -44,7 +44,7 @@ const currentOrigin = (() => {
   }
 })();
 const isLocalPage = currentOrigin !== 'null'
-  && ((packagedOrigin && currentOrigin === packagedOrigin) /* GeoCode: was a literal, see above */
+  && ((packagedOrigin && currentOrigin === packagedOrigin) // GeoCode: was a literal, see above
   || (localOrigin && currentOrigin === localOrigin));
 
 // Remote pages need __OPENCHAMBER_LOCAL_ORIGIN__ so the HostSwitcher knows

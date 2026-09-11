@@ -2,20 +2,15 @@ import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 import { buildDeferredRestartResponse } from './config-mutation-response.js';
 import { kernelConfigRoot, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 
-// --- GeoCode: its only caller was the `externalSkills` report below, which no longer reads the
-// environment. Wrapped rather than deleted so an upstream change to it still merges. ---
-/*
 /**
  * Matches how OpenCode reads its own boolean env flags: any value other than
  * unset, empty, "0" or "false" enables the flag.
- *\/
+ */
 const isEnvFlagEnabled = (value) => {
   if (typeof value !== 'string') return false;
   const normalized = value.trim().toLowerCase();
   return normalized.length > 0 && normalized !== '0' && normalized !== 'false';
 };
-*/
-// --- /GeoCode ---
 
 export const registerSkillRoutes = (app, dependencies) => {
   const {

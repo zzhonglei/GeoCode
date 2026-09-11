@@ -756,7 +756,7 @@ const WebviewBrowser: React.FC<BrowserPaneProps> = ({ initialUrl, directory, tab
           <webview
             ref={attachWebview}
             src={initialSrc}
-            partition={BROWSER_PARTITION /* GeoCode: the constant above */}
+            partition={BROWSER_PARTITION} // GeoCode: the constant above
             allowpopups
             style={layout
               ? {

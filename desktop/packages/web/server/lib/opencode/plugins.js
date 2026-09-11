@@ -207,7 +207,7 @@ function pluginDirForScope(scope, workingDirectory) {
     if (!workingDirectory) {
       throw codedError('Project scope requires working directory', 'INVALID_SCOPE');
     }
-    return path.join(workingDirectory, KERNEL_PROJECT_DIR, 'plugins'); // GeoCode
+    return path.join(workingDirectory, KERNEL_PROJECT_DIR, 'plugins'); // GeoCode: the kernel's project directory
   }
   return path.join(getActiveOpencodeConfigDir(), 'plugins');
 }

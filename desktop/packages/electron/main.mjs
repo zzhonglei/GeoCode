@@ -100,7 +100,7 @@ const shouldStartInBackground = (loginItemSettings = readLoginItemSettings()) =>
 };
 
 // Set the product name early so electron-log derives its log directory as
-// ~/Library/Logs/GeoCode/ (not ~/Library/Logs/@openchamber/electron/).
+// ~/Library/Logs/OpenChamber/ (not ~/Library/Logs/@openchamber/electron/).
 app.setName(DesktopIdentity.productName);
 if (process.platform === 'linux') {
   app.setDesktopName(DesktopIdentity.desktopEntryName);

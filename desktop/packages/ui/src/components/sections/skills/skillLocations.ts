@@ -21,9 +21,7 @@ export const SKILL_LOCATION_OPTIONS: Array<{
     scope: 'project',
     source: 'opencode',
     label: 'Project / OpenCode',
-    // GeoCode: the directory the kernel actually scans. (The `OpenCode` in these labels is
-    // branding and moves with the rest of it, not here.)
-    description: 'Current project .geocode location',
+    description: 'Current project .opencode location',
   },
   // --- GeoCode: the two `.agents` options are gone. They wrote a skill into another agent
   // tool's library, which the kernel then refused to load — the option offered the user a

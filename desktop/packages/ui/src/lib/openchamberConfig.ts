@@ -1,7 +1,7 @@
 /**
  * OpenChamber project-level configuration service.
- * Stores per-project settings in ~/.config/GeoCode/desktop/projects/<projectId>.json.
- * --- GeoCode: the legacy <project>/.openchamber fallback is shielded, not migrated ---
+ * Stores per-project settings in ~/.config/openchamber/projects/<projectId>.json.
+ * Migrates from legacy <project>/.openchamber/openchamber.json.
  *
  * Notes, todos, and plan files used to live here too. They are now server-owned
  * (`packages/web/server/lib/project-context`) and reached through
@@ -405,7 +405,7 @@ async function readOpenChamberConfig(project: ProjectRef): Promise<OpenChamberCo
   return null;
   /*
   // 2) Migrate legacy <project>/.openchamber/openchamber.json.
-  // LEGACY_PROJECT_CONFIG: migrate project-local openchamber.json -> <projects dir>/<projectId>.json
+  // LEGACY_PROJECT_CONFIG: migrate project-local openchamber.json -> ~/.config/openchamber/projects/<projectId>.json
   const legacyPath = getLegacyConfigPath(projectDirectory);
   const legacyConfig = parseConfig(await readText(legacyPath));
   if (!legacyConfig) {
