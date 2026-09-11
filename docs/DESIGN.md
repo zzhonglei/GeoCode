@@ -41,8 +41,8 @@ Agent 内核迁自 OpenCode;两者都以可继续合并上游的薄 fork 维护�
 **Electron main**是唯一的进程管理者:它以 OpenCode Desktop 已验证的 `utilityProcess` 形态
 拉起 Agent 内核,同时在本进程内启动 Shell Runtime。Shell Runtime 承接 OpenChamber React UI
 所需的文件、终端、设置与通知等内部 API,并将 Agent API 代理到内核。renderer 只获得访问
-Shell Runtime 所需的连接信息,Kernel 口令留在 main / Shell Runtime 内存中。退出时壳必须
-杀进程树而非只杀内核本身,否则正在运行的地理子进程会被孤儿化。
+Shell Runtime 所需的连接信息,Kernel 口令留在 main / Shell Runtime 内存中。退出时壳只给内核
+发终止信号,由内核在退出前清扫正在运行的地理子进程;它们各自成组,壳杀不到。
 
 **Agent 内核**承载会话循环、模型路由、OAuth 登录、权限裁决与工具调度,对界面接近黑盒——
 界面使用与内核同源的 SDK,经 Shell Runtime 代理其 HTTP API。
@@ -74,8 +74,8 @@ GDAL、QGIS、GEE 是用户机器上的外部软件,地理内核只探测、诊�
 
 所有本地服务只监听 127.0.0.1,每次启动生成随机凭据,Agent Kernel 使用 HTTP Basic 校验;
 渲染进程 contextIsolation、零 Node 权限,只经 preload 获得 Shell Runtime 连接信息。权限裁决发生
-在 Agent 内核层,界面过滤只是体验不是安全。进程回收双保险:正常退出逐个终止;每次 spawn
-登记 pid 与端口,崩溃后的下次启动扫描并清理孤儿。GeoCode 与用户自装的 OpenCode 完全隔离:
+在 Agent 内核层,界面过滤只是体验不是安全。进程回收:正常退出时内核清扫全部地理子进程;崩溃时
+内核随 main 一起结束,留下的地理子进程不补救(GEOKERNEL.md §12)。GeoCode 与用户自装的 OpenCode 完全隔离:
 经环境变量把内核数据根定向到自己的目录,数据、配置、登录态互不可见。
 
 ## 5. 分发与更新

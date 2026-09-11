@@ -288,15 +288,14 @@ About 对话框沿用上游的版式,只显示图标、产品名、产品版本�
 ### 5.1 启动顺序
 
 1. Electron main 建立 GeoCode appId、userData 与日志路径;
-2. 清理上次崩溃留下且能证明属于 GeoCode 的孤儿进程;
-3. 剥离继承环境里带商标的名字(`OPENCODE_*`、`OTEL_*`、`OPENCHAMBER_*`),再由我们的代码注入内部 ABI
+2. 剥离继承环境里带商标的名字(`OPENCODE_*`、`OTEL_*`、`OPENCHAMBER_*`),再由我们的代码注入内部 ABI
    (`ENVIRONMENT.md` §5.2);
-4. 选择 Kernel loopback 端口并生成随机口令;
-5. 启动 Kernel utility process,等待 ready 与 `/global/health`;
-6. 启动 Shell Runtime,以注入的 Kernel URL 与认证作为唯一上游;
-7. 选择 Shell Runtime loopback 端口并确认健康;
-8. 创建窗口,经 preload 下发 Shell Runtime 连接信息;
-9. renderer 加载打包内 React UI 并开始同步。
+3. 选择 Kernel loopback 端口并生成随机口令;
+4. 启动 Kernel utility process,等待 ready 与 `/global/health`;
+5. 启动 Shell Runtime,以注入的 Kernel URL 与认证作为唯一上游;
+6. 选择 Shell Runtime loopback 端口并确认健康;
+7. 创建窗口,经 preload 下发 Shell Runtime 连接信息;
+8. renderer 加载打包内 React UI 并开始同步。
 
 窗口不能在「服务地址尚未确定」时自行猜测默认端口。失败必须落在可诊断的启动阶段,
 而不是让 UI 在一个永远连不上的地址上转圈。
@@ -380,12 +379,14 @@ Electron 下第 3 至 6 步是这样落地的:main 给 Kernel 发终止信号,�
 
 ### 5.4 崩溃恢复
 
-正常退出覆盖不了断电、主进程崩溃与强制结束。每次启动需要一份范围严格的孤儿清扫:
+正常退出覆盖不了断电、主进程崩溃与强制结束(包括用户在「强制退出」窗口里结束应用)。这几种情况会留下什么,
+2026-09-11 用与壳相同的 Electron 和相同的子进程形态实测过,强杀 main 三轮,结果一致:
 
-- 只处理有 GeoCode 所有权记录的 pid / 端口;
-- pid 复用时必须以进程身份或启动记录复核,不能凭一个旧数字杀进程;
-- 外部 QGIS / Python 只有在它是已登记 Kernel 后代时才能清理;
-- 清扫失败写日志并继续给出可诊断状态,不得无限阻塞启动。
+- **Kernel 不会留下。** 它是 main 的 utility process,main 一死它在十几毫秒内随之结束,所以启动时没有需要回收的 Kernel;
+- **地理子进程会留下。** Kernel 是被直接结束的,信号处理与退出钩子都来不及运行,而地理子进程各自成组,不随它结束。
+  这一种不做补救,理由见 `GEOKERNEL.md` §12;
+- 上游壳的启动回收器照旧运行,但无事可做:它只认上游自己以独立二进制拉起的 `opencode serve`,GeoCode 从不这样
+  启动 Kernel。
 
 ---
 
@@ -1086,7 +1087,7 @@ macOS arm64 与 Windows x64 分别完成:
 - 开发版与正式版数据隔离;
 - 启动、更新通知、卸载与重装;
 - 原生模块与 Kernel 架构验证;
-- 正常退出、崩溃恢复和孤儿清扫;
+- 正常退出、Kernel 崩溃恢复,以及 main 崩溃后的进程残留(§5.2、§5.3、§5.4);
 - 与旧版会话迁移的真实数据验证。
 
 ---
