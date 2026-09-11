@@ -12,9 +12,9 @@
  * lets the staged directory be started with a plain `node kernel-sidecar.mjs` and verified
  * without an Electron around it.
  *
- * The credential is set into this process's own environment rather than read from the one
- * we were forked with, so it never appears in a child environment block that any process
- * listing would show. --- */
+ * The credential arrives over the port, not in the environment we were forked with, and is set
+ * into this process's own environment because the kernel's server reads it only from there;
+ * every process the kernel starts inherits it from here (docs/ENVIRONMENT.md §8). --- */
 
 import http from 'node:http';
 import tls from 'node:tls';

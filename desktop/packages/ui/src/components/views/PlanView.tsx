@@ -92,8 +92,8 @@ const buildRepoPlanPath = (directory: string, created: number, slug: string): st
 };
 
 const buildHomePlanPath = (created: number, slug: string): string => {
-  // The kernel has no home-level plans root; this is a second location the panel probes, and it
-  // is here so that probe stays inside GeoCode's own directories.
+  // Upstream's second probe under our directory name. For a project without version control the
+  // kernel writes plans under its data root, which neither probe covers.
   return `~/${KERNEL_PROJECT_DIR}/plans/${created}-${slug}.md`;
 };
 // --- /GeoCode ---

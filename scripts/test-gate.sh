@@ -5,10 +5,8 @@
 # Deliberately NOT the vendored kernel's full suite. That suite asserts
 # upstream's identity and upstream's agent line-up, both of which GeoCode
 # changed on purpose, so a large permanent block of it fails and a plain pass
-# or fail says nothing about whether anything regressed. Running it is still
-# worth doing after a merge; see scripts/test-upstream.sh, which groups the
-# failures by cause and reports rather than gates. The current tally lives in
-# docs/CONVENTIONS.md §7 — one place, not two.
+# or fail says nothing about whether anything regressed. Upstream's suites
+# are not ours to maintain (docs/CONVENTIONS.md §7).
 #
 # Zero patch surface inside kernel/: this file lives outside the vendored tree
 # and names test paths rather than editing upstream's package.json.

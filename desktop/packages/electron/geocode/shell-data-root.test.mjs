@@ -62,8 +62,7 @@ describe('shell data root', () => {
   });
 
   it('refuses to guess when the home directory is missing', () => {
-    // Failing loudly beats defaulting: a silent fallback here would write to whatever the
-    // upstream ternary picks, which is the OpenChamber directory this whole change avoids.
+    // Failing loudly beats defaulting.
     for (const bad of [undefined, '', null, 42]) {
       expect(() => applyShellDataRoot({ environment: {}, homeDirectory: bad })).toThrow();
     }

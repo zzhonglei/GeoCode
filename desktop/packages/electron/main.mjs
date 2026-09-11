@@ -4197,8 +4197,8 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
         throw new Error('File is outside the allowed workspace');
       }
       const DENIED_SEGMENTS = ['.ssh', '.aws', '.gnupg', '.gpg', '.config/gh', '.config/openchamber/credentials'];
-      // --- GeoCode: upstream's list guards a path that does not exist and misses every file that
-      // actually holds a secret, ours included (geocode/denied-paths.mjs). Appended rather than
+      // --- GeoCode: upstream's list guards a path that does not exist and none of the files the
+      // shell and kernel keep credentials in (geocode/denied-paths.mjs). Appended rather than
       // rewritten so the line above stays byte-identical for merges. ---
       DENIED_SEGMENTS.push(...geocodeDeniedSegments(home));
       // --- /GeoCode ---

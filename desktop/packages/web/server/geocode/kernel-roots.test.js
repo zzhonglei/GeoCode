@@ -139,10 +139,8 @@ describe('kernel roots', () => {
 
   it('manages skills in the kernel\'s directories and not in OpenCode\'s', async () => {
     // `~/.opencode` is the second global root the kernel deletes rather than renames, so
-    // nothing there is ours to rename either. `.claude` and `.agents` are deliberately absent
-    // from this list: the kernel refuses to load them, but the shell can still create into
-    // `.agents`, and closing only this half would let a skill be created and then refuse to be
-    // renamed. That belongs to the batch that also closes createSkill and the UI picker.
+    // nothing there is ours to rename either. `.claude` and `.agents` are other tools' libraries
+    // rather than a root of ours, and have their own tests in external-skills.test.js.
     const { isManagedSkillPath } = await import('../lib/opencode/skills.js');
     const { KERNEL_PROJECT_DIR } = await import('./kernel-roots.js');
     const project = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-managed-roots-'));

@@ -573,7 +573,7 @@ function resolveSkillSearchDirectories(workingDirectory) {
   // --- GeoCode: `~/.opencode` is a second global root upstream kept from before the XDG
   // move, and the kernel deletes that scan rather than renaming it — GeoCode has exactly one
   // global root, so there is no `~/.geocode` to look in (KERNEL.md §6 item 4). Shielded, not
-  // deleted, so an upstream change to the line still merges. ---
+  // deleted, so a conflict on the line shows it was switched off on purpose. ---
   /* pushDir(path.join(os.homedir(), '.opencode')); */
   // --- /GeoCode ---
 

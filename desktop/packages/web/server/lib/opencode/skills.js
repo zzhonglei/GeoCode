@@ -112,7 +112,7 @@ function getSkillScope(skillName, workingDirectory) {
       return { scope: SKILL_SCOPE.PROJECT, path: projectPath, source: 'opencode' };
     }
     
-    // GeoCode: not ours to resolve into — see discoverSkills above.
+    // GeoCode: not ours to resolve into — see discoverSkills below.
     /*
     const claudePath = getClaudeSkillPath(workingDirectory, skillName);
     if (fs.existsSync(claudePath)) {

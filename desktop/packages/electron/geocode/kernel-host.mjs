@@ -16,9 +16,8 @@
  *     cannot catch orphans whatever QGIS process was mid-run;
  *   - an exit before ready fails the start rather than hanging until the deadline.
  *
- * Readiness is reported by the kernel and then confirmed over HTTP: `listen` returning is
- * not the same as the router answering, and the shell's first proxied request must not be
- * the thing that discovers the difference. --- */
+ * Readiness is the kernel's own report. `health.wait` confirms it over HTTP for a caller that
+ * needs the router answering, not just `listen` returning; starting does not wait for it. --- */
 
 import { randomBytes } from 'node:crypto';
 import net from 'node:net';

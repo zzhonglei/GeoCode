@@ -8,7 +8,7 @@
 
 export const KERNEL_OUTPUT_TAIL_LINES = 40;
 
-// The last N lines the kernel wrote, kept while it starts; only read when it fails.
+// The kernel's last `limit` output chunks, each maybe several lines; read only if the start fails.
 export const createOutputTail = (limit = KERNEL_OUTPUT_TAIL_LINES) => {
   const lines = [];
   return {
