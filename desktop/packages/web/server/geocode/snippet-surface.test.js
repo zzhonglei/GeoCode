@@ -6,11 +6,15 @@
  * Electron mark must reach every handler, or the guard proves nothing. --- */
 import { afterEach, describe, expect, it } from 'vitest';
 import express from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import request from 'supertest';
 
 import { SNIPPET_ROUTE_PATHS, refuseSnippetRoutesUnderElectron } from './snippet-surface.js';
 
 const originalElectron = process.versions.electron;
+const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 afterEach(() => {
   if (originalElectron === undefined) delete process.versions.electron;
@@ -46,5 +50,16 @@ describe('snippet surface', () => {
     await request(app).get('/api/config/snippets').expect(200);
     await request(app).delete('/api/config/snippets/crs').expect(200);
     expect(reached.length).toBe(2);
+  });
+
+  it('config-entity-routes.js mounts the refusal ahead of the snippet handlers', () => {
+    // The app above registers the refusal itself, so deleting the real call would leave it green.
+    const source = fs.readFileSync(path.join(serverRoot, 'lib/opencode/config-entity-routes.js'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    const refusal = source.indexOf('refuseSnippetRoutesUnderElectron(app);');
+    const firstSnippetRoute = source.indexOf("app.get('/api/config/snippets'");
+    expect(refusal).toBeGreaterThan(-1);
+    expect(firstSnippetRoute).toBeGreaterThan(refusal);
   });
 });

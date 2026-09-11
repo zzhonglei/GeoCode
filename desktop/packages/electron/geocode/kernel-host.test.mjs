@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import fs from 'node:fs';
 import net from 'node:net';
 
 import { KERNEL_COMMAND } from './kernel-protocol.mjs';
@@ -315,5 +316,19 @@ describe('startKernelHost terminate', () => {
     stoppingHost.stop();
     stoppingHost.terminate();
     expect(stoppingChild.killed).toBe(0);
+  });
+});
+
+describe('main.mjs quit path', () => {
+  it('terminates the kernel in the teardown that quitting runs', () => {
+    // The signal is what starts the kernel's sweep of its geographic children (docs/DESKTOP.md §5.3).
+    const main = fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
+    const body = (name) => {
+      const start = main.indexOf(`const ${name} = `);
+      expect(start).toBeGreaterThan(-1);
+      return main.slice(start, main.indexOf('\n};\n', start)).replace(/^\s*\/\/.*$/gm, '');
+    };
+    expect(body('shutdownBackgroundServices')).toContain('state.kernelHandle?.terminate();');
+    expect(body('prepareForQuit')).toContain('shutdownBackgroundServices();');
   });
 });

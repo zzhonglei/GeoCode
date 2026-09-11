@@ -374,7 +374,8 @@ Shell Runtime 不得自行 spawn 第二个 Kernel;renderer 也不得持有旧 Ke
 
 Electron 下第 3 至 6 步是这样落地的:main 给 Kernel 发终止信号,同一拍接着退出自己,不等回应;Kernel 的入口
 (`kernel-sidecar.mjs`)把信号转成正常退出,退出钩子同步清扫地理子进程(`GEOKERNEL.md` §10.1 #8b)。第 5 步
-的强制结束够不到地理子进程,它们各自成组,所以 main 这一侧只能发终止信号,不能改成直接强杀。
+的强制结束够不到地理子进程,它们各自成组,所以 main 这一侧只能发终止信号,不能改成直接强杀。main 这一侧的调用
+(`shutdownBackgroundServices` 里的 `terminate`,以及 `prepareForQuit` 调它)由 `kernel-host.test.mjs` 钉住。
 **2026-09-11 真实会话验过**:Kernel 跑着一个地理子进程时,Cmd+Q 一轮、直接给 main 发终止信号三轮,子进程每次
 都被清掉,Kernel 连同子进程总比 main 早约 50 到 70 毫秒结束。
 
@@ -578,7 +579,8 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   是跳转到已经隐藏的设置页。三个组合器都挂它(聊天、多路启动、定时任务编辑),所以收口做在组件自身的包装上,
   渲染 null 让父组件的 ref 始终为空,而父组件只在 ref 存在时才路由按键(`ChatInput.tsx`),于是 `#` 落回普通字符。
   遗留:输入框占位文字仍写着「# 用于代码片段」,那是十种语言的翻译串,归改牌那一批。绊线在
-  `server/geocode/snippet-surface.test.js`(真实 Express,拒绝必须先于记录式 handler 命中)与
+  `server/geocode/snippet-surface.test.js`(真实 Express,拒绝必须先于记录式 handler 命中;`config-entity-routes.js`
+  里那行调用必须排在第一条片段路由之前)与
   `ui/src/geocode/desktop-settings-surface.test.ts`(页面可用性与包装的存在)。
 - **魔法提示词**:「魔法提示词」页在桌面壳不可用,`registerMagicPromptRoutes` 在 Electron 下首行早退,四条路由
   一条不注册。这一页管的不是用户写的咒语,而是**产品自己那些一键动作背后的提示词**——生成提交信息、会话摘要、
@@ -936,7 +938,8 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   路径拼装**没有**搬到服务端:`project-context` 那次先例在这里不适用,渲染进程读不到环境变量、
   也没有路由告诉它根,一旦搬走这两条同步判据就要全部改成异步,首帧会认错会话类型。真正的约束是
   **渲染进程算不出来的根,两半迟早各说各话**,所以两端都挂 HOME、`.config` 写死不读 `XDG_CONFIG_HOME`。
-  这一批同时把 `packages/ui` 接进门——它此前整个不在门里,而缺口正好在出问题的地方;
+  这一批同时把 `packages/ui` 接进门——它此前整个不在门里,而缺口正好在出问题的地方;`chatDirectories.ts`
+  里 chats 根的四个派生点由 `ui/src/geocode/chat-directories.test.ts` 钉住;
 - **阶段 2 · 批 1 补遗**:已完成。按包重点一次之后补上的,共同形状是**坏掉的功能而不是泄漏**:
   `PlanView.tsx` 去 `.opencode/plans/` 找计划而内核写 `.geocode/plans/`(面板永远报「没有计划」);
   `routes.js` 把全局行为提示词存到 `~/.config/opencode/AGENTS.md` 而 `session/instruction.ts` 读

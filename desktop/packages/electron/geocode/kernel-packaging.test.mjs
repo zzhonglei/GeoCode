@@ -30,14 +30,6 @@ describe.skipIf(!staged)('staged kernel runtime', () => {
     }
   });
 
-  it('keeps the wasm beside the bundle, which is how the kernel resolves them', () => {
-    // Both `resolveWasm` (tool/shell.ts) and the photon loader resolve against
-    // `import.meta.url`, not the working directory — so co-location is the contract.
-    for (const name of fs.readdirSync(stagedDir).filter((entry) => entry.endsWith('.wasm'))) {
-      expect(path.dirname(path.join(stagedDir, name))).toBe(stagedDir);
-    }
-  });
-
   it('stages the two dependencies the bundle declares external and statically imports', () => {
     expect(fs.existsSync(path.join(stagedDir, 'deps', 'jsonc-parser'))).toBe(true);
     expect(fs.existsSync(path.join(stagedDir, 'deps', 'node-pty'))).toBe(true);

@@ -81,6 +81,26 @@ describe('external skill libraries', () => {
     expect(skills.discoverSkills(null).map((skill) => skill.name)).not.toContain(name);
   });
 
+  it('never deletes a project skill it did not create', () => {
+    // The same collision inside the user's repository, which is where the project halves reach.
+    const name = 'lint';
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-external-skills-project-'));
+    try {
+      fs.mkdirSync(path.join(project, '.git'));
+      const claudeSkill = writeSkill(path.join(project, '.claude', 'skills', name), name);
+      const agentsSkill = writeSkill(path.join(project, '.agents', 'skills', name), name);
+      skills.createSkill(name, { description: 'ours', instructions: 'Body.' }, project, 'project');
+
+      skills.deleteSkill(name, project);
+
+      expect(fs.existsSync(claudeSkill)).toBe(true);
+      expect(fs.existsSync(agentsSkill)).toBe(true);
+      expect(skills.discoverSkills(project).map((skill) => skill.name)).not.toContain(name);
+    } finally {
+      fs.rmSync(project, { recursive: true, force: true });
+    }
+  });
+
   it('creates into our own directory even when asked for .agents', () => {
     const name = 'redirected';
     skills.createSkill(name, { description: 'ours', instructions: 'Body.', source: 'agents' }, null, 'user');

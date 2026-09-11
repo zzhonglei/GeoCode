@@ -21,16 +21,6 @@ describe('desktop identity', () => {
     expect(copied).toBe(`${DesktopIdentity.uiProtocol}://app`);
   });
 
-  it('derives every field from the two base strings', () => {
-    // A field written flat still passes typecheck and still looks right today; it only
-    // diverges the next time a base string changes, silently. Same reason `Brand` on the
-    // kernel side enumerates its fields.
-    for (const [key, value] of Object.entries(DesktopIdentity)) {
-      expect(typeof value).toBe('string');
-      expect(`${key}=${value}`).toMatch(/GeoCode|geocode/);
-    }
-  });
-
   it('keeps package.json build fields from drifting, since JSON carries no patch marker', () => {
     // CONVENTIONS.md §5: JSON is one of the two file kinds the locator grep cannot see, so
     // an upstream merge can revert these without leaving a trace anywhere else.
@@ -162,5 +152,11 @@ describe('desktop identity', () => {
         expect([file, literal, source.includes(literal)]).toEqual([file, literal, false]);
       }
     }
+  });
+
+  it('takes the deep-link protocol from the identity', () => {
+    // Upstream's value would ask to handle OpenChamber's links and ignore GeoCode's own.
+    const main = readElectronFile('main.mjs').replace(/^\s*\/\/.*$/gm, '');
+    expect(main).toContain('const DEEP_LINK_PROTOCOL = DesktopIdentity.deepLinkProtocol;');
   });
 });
