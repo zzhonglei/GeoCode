@@ -62,7 +62,7 @@ React UI
 | 通道 | 承载 | 凭据归属 |
 |---|---|---|
 | UI → Shell Runtime | 文件、终端、设置、通知及代理后的 Agent API | renderer 只获得这一段本次运行所需的凭据 |
-| Shell Runtime → Agent Kernel | 会话、模型、权限、工具、事件及地理数据面 | Kernel 口令只在 main / Shell Runtime 内存中存在 |
+| Shell Runtime → Agent Kernel | 会话、模型、权限、工具、事件及地理数据面 | Kernel 口令只在 main(Shell Runtime 与它同进程)与 Kernel 两侧,不下发 renderer;它会进入哪些环境块见 §6.2 |
 
 Kernel 的 Basic 口令不下发给 renderer。这样即使将来 Shell Runtime 增加请求过滤或审计,
 也不会被一条拿到 Kernel 直连凭据的前端请求绕过。
@@ -291,7 +291,8 @@ About 对话框沿用上游的版式,只显示图标、产品名、产品版本�
 2. 剥离继承环境里带商标的名字(`OPENCODE_*`、`OTEL_*`、`OPENCHAMBER_*`),再由我们的代码注入内部 ABI
    (`ENVIRONMENT.md` §5.2);
 3. 选择 Kernel loopback 端口并生成随机口令;
-4. 启动 Kernel utility process,等待 ready 与 `/global/health`;
+4. 启动 Kernel utility process,以它经进程消息报告的 ready 为准(`/global/health` 的 HTTP 确认只有读侧探针
+   `scripts/kernel-env-probe.sh` 等待);
 5. 启动 Shell Runtime,以注入的 Kernel URL 与认证作为唯一上游;
 6. 选择 Shell Runtime loopback 端口并确认健康;
 7. 创建窗口,经 preload 下发 Shell Runtime 连接信息;
@@ -403,6 +404,10 @@ Electron 下第 3 至 6 步是这样落地的:main 给 Kernel 发终止信号,�
 
 - Kernel 口令每次启动随机生成;
 - renderer 不获得 Kernel 口令;
+- Kernel 口令会进入环境变量,两侧都是上游的读取方式决定的:Shell Runtime 按上游的外部服务器路径从环境读它,
+  所以 main 起完 Kernel 后把它写进自己的 `process.env`,此后 main 起的子进程随之继承,实测一个 Electron 辅助
+  进程的环境块里有它;Kernel 的服务端同样只从环境读,sidecar 把它设进 Kernel 自己的 `process.env`,Kernel 起的
+  子进程随之继承(`ENVIRONMENT.md` §8)。读得到它的只有同一用户的进程;
 - preload 只向受信任的打包 UI origin 暴露 Shell Runtime 凭据与桌面能力;
 - 供应商 OAuth / API key 的存储仍由 Agent Kernel 的既有认证体系负责;
 - 日志、错误页、启动参数和 URL 不得包含口令或供应商凭据。
@@ -622,14 +627,14 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
 
 | 所有者 | 内容 | 位置原则 |
 |---|---|---|
-| Electron / Shell | 窗口、主题、布局、桌面偏好 | `<appData>/GeoCode/desktop/`;壳日志见 `PATHS.md` §3.3 |
+| Electron / Shell | 窗口、主题、布局、桌面偏好 | `~/.config/GeoCode/desktop/`(挂在 HOME 下的理由见 `PATHS.md` §5);壳日志见 `PATHS.md` §3.3 |
 | Agent Kernel / GeoKernel | 会话、账号、配置、缓存、快照、地理环境 | `PATHS.md` 定义的 GeoCode XDG 根 |
 
 Shell Runtime 不得沿用 OpenChamber 的 `~/.config/openchamber`,也不得直接读写
 `~/.config/opencode`、`~/.local/share/opencode`、`.opencode/` 或 `opencode.json`。
 
-保留功能优先通过 Agent Kernel API 操作配置与认证。确实没有 API 的壳侧偏好留在 Electron
-userData;不能为了复用 OpenChamber 一段读文件代码而重新引入第二套 Agent 配置事实。
+保留功能优先通过 Agent Kernel API 操作配置与认证。确实没有 API 的壳侧偏好留在壳的数据根;
+不能为了复用 OpenChamber 一段读文件代码而重新引入第二套 Agent 配置事实。
 OpenChamber Settings 的逐页调查、Kernel API 缺口、目标请求流与实施门,在阶段 2 开工时对着当时的
 代码做,结论落在本节与 `KERNEL.md`(`CONVENTIONS.md` §10「新知识先找主题文档」)。真撑不下再另起
 专文,而不是先承诺一篇。
@@ -875,8 +880,10 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   表达式复制进了十几个文件、每份都认前者,那批零改动;不认的少数几处靠下面的命令列出,其中
   `proxy.js` 是 `settings.json` 的读取方而写入方认变量,**必须配往返测试**;
 - **批 3 · 跨产品凭据**:已完成。Claude 的 quota provider 由 `isConfigured` 反查登录钥匙串,
-  仅仅枚举 provider 就会触发,前端清单与服务端注册表两条路径都已屏蔽并各配绊线。Cursor 只在用户
-  主动点导入时才读 `state.vscdb`,不动;`.claude/skills` 扫描归内核屏蔽清单(`KERNEL.md` §6 第 6 项);
+  仅仅枚举 provider 就会触发,前端清单与服务端注册表两条路径都已屏蔽。绊线只在服务端
+  (`claude-disabled.test.js` 钉住注册表与具名直通两个入口):钥匙串只会经服务端被读,
+  前端清单被合并带回来,后果只是多出一项报错的额度。Cursor 只在用户主动点导入时才读
+  `state.vscdb`,不动;`.claude/skills` 扫描归内核屏蔽清单(`KERNEL.md` §6 第 6 项);
 - **批 4 · 内核文件的四个读写点**:已完成。`auth.json`、antigravity 账号、worktree 根、`.git` 里的
   项目 id 标记,上游全部指向 `~/.local/share/opencode` 与 `~/.config/opencode`。四处改指内核自己的
   根,派生自 `packages/web/server/geocode/kernel-roots.js`(`PATHS.md` §5)。三条非显然的:
@@ -974,11 +981,9 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   七类的写入端与读取端现在由 `scripts/settings-roundtrip.sh` 自动比对,不再靠人点。
   顺带确认了一件之前没查过的:内核对单复数一律通吃(`{agent,agents}`、`{command,commands}`、
   `{plugin,plugins}`、`{skill,skills}`),所以壳一直写复数不是隐患。
-  **查过但不动的一处**:内核 `globalConfigFile()` 在 `[geocode.jsonc, geocode.json, config.json]`
-  里取第一个存在的,壳 `getPrimaryUserConfigPath()` 在**相反顺序**里取第一个存在的。今天不咬人,
-  因为三者正常只会有一个存在(内核首启播下 `geocode.jsonc`,壳在空根下才建 `config.json`),
-  两边于是选中同一个;门里两种起始状态都覆盖了。这是上游的形状,`opencode.*` 那套名字下反转一模一样,
-  按既定政策不替上游修;
+  壳挑全局配置文件的顺序与内核一致:内核 `globalConfigFile()` 与壳的 `getPrimaryUserConfigPath()` 都在
+  `[geocode.jsonc, geocode.json, config.json]` 里取第一个存在的,都不存在时都取第一个(约束见 §5.2);
+  门里两种起始状态都覆盖了;
 
 - **归阶段 3 · agent 截图落点**:已完成。`browser.capture` 是控制模块里**唯一**碰磁盘的动作
   (整个模块的写盘点只有两行,都在 `screenshots.js`),它把 agent 截的图写进用户仓库。

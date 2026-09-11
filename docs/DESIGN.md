@@ -41,8 +41,8 @@ Agent 内核迁自 OpenCode;两者都以可继续合并上游的薄 fork 维护�
 **Electron main**是唯一的进程管理者:它以 OpenCode Desktop 已验证的 `utilityProcess` 形态
 拉起 Agent 内核,同时在本进程内启动 Shell Runtime。Shell Runtime 承接 OpenChamber React UI
 所需的文件、终端、设置与通知等内部 API,并将 Agent API 代理到内核。renderer 只获得访问
-Shell Runtime 所需的连接信息,Kernel 口令留在 main / Shell Runtime 内存中。退出时壳只给内核
-发终止信号,由内核在退出前清扫正在运行的地理子进程;它们各自成组,壳杀不到。
+Shell Runtime 所需的连接信息,拿不到 Kernel 口令(口令会进入哪些进程的环境见 `DESKTOP.md`
+§6.2)。退出时壳只给内核发终止信号,由内核在退出前清扫正在运行的地理子进程;它们各自成组,壳杀不到。
 
 **Agent 内核**承载会话循环、模型路由、OAuth 登录、权限裁决与工具调度,对界面接近黑盒——
 界面使用与内核同源的 SDK,经 Shell Runtime 代理其 HTTP API。

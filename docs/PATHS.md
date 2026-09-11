@@ -108,7 +108,12 @@ GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统�
 ~/.config/GeoCode/               配置根:用户手写,删了回到出厂状态
 ├── geocode.json / .jsonc        内核与 Agent 配置(模型、代理人、权限)
 ├── machine.json / .jsonc      ★ 本机地理环境:QGIS/GEE/GDAL 装在哪
-└── themes/  tui/  agents/       主题、终端形态、自定义 agent
+├── themes/  tui/  agents/       主题、终端形态、自定义 agent
+└── desktop/                     壳的数据根,不归内核(为什么挂在这里见 §5)
+    ├── settings.json            窗口、主题、布局等桌面偏好
+    ├── chats/  projects/        聊天的工作目录、按项目的壳侧设置
+    └── agent-tool/geocode-browser-plugin.js   主进程每次启动重写、内核加载的浏览器工具插件(DESKTOP.md §7.2);
+                                 内核侧以 `<配置根>/desktop/agent-tool/…` 拼出同一路径,两边的拼写由 browser-tool.test.mjs 对账
 
 ~/.cache/GeoCode/                缓存根:可整个删掉,下次自动重建
 ├── bin/                         LSP 与 ripgrep 二进制
@@ -127,11 +132,7 @@ GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统�
 
 $TMPDIR/GeoCode/                 临时根:进程内的短命文件
 
-<appData>/GeoCode/               Electron 壳自己的数据(与上面四根分离,是上游的设计)
-└── desktop/
-    ├── settings.json            窗口、主题、布局等桌面偏好
-    └── agent-tool/geocode-browser-plugin.js   主进程每次启动重写、内核加载的浏览器工具插件(DESKTOP.md §7.2);
-                                 内核侧以 `<配置根>/desktop/agent-tool/…` 拼出同一路径,两边的拼写由 browser-tool.test.mjs 对账
+<appData>/GeoCode/               Electron 的 userData:只有 Chromium 自己的东西(Cookie、本地存储、缓存、浏览器面板的会话分区)
 
 ~/Library/Logs/GeoCode/          壳侧日志:macOS 惯例位置,Windows 上落在 <appData>/GeoCode/logs
 └── main.log                     滚动,上限 5 MB
@@ -151,12 +152,12 @@ $TMPDIR/GeoCode/                 临时根:进程内的短命文件
 - **写进用户项目的只有 `.git/geocode`**。`.geocode/` 是用户自己建的,GeoCode 不主动创建它;写进去的只有计划文件,而且要实验性计划模式启用才会发生。上游会往每个配置目录(**含项目里的那个**)装 `@opencode-ai/plugin` 并写一份 `.gitignore`,那是为了让用户自写的插件能 import SDK——GeoCode 不加载插件,这两件事一并去掉了(KERNEL.md 屏蔽清单)。项目目录里因此不会出现 `node_modules/`。
 
 OpenChamber 迁入后同样不得产生 `~/.config/openchamber`、`~/.config/opencode` 或
-`~/.local/share/opencode`:Shell 偏好归 Electron userData,Agent 配置与认证归上表中的 GeoCode
+`~/.local/share/opencode`:Shell 偏好归上表的 `desktop/`,Agent 配置与认证归上表中的 GeoCode
 XDG 根。完整所有权见 `DESKTOP.md` §8,迁移批次与零访问验收见 §10 阶段 6;OpenChamber 配置页面的
 逐项处置与 Kernel API 边界归 §8.1 与阶段 2。
 
-**壳与内核是两套根,在支持的两个平台上都不相交。** 内核走上表的 XDG 布局,壳走 Electron 的
-userData(macOS `~/Library/Application Support/GeoCode`,Windows `%APPDATA%\GeoCode`)。Windows 上
+**Electron 的 userData 与内核的根,在支持的两个平台上都不相交。** 内核走上表的 XDG 布局,userData
+在 macOS 是 `~/Library/Application Support/GeoCode`,Windows 是 `%APPDATA%\GeoCode`。Windows 上
 也不撞,是因为 `xdg-basedir` **不区分平台**——没有 `XDG_*` 时它一律回落到 `~/.config`、
 `~/.local/share` 这样的 unix 形态,与 `%APPDATA%` 分处 `%USERPROFILE%` 下的不同子树。
 
