@@ -277,7 +277,8 @@ describe("GeeGuidance", () => {
     // An agent cannot reconfigure the user's proxy software, so the vocabulary only invites a diagnosis it cannot
     // make (§5.11 硬边界 3).
     const text = GeeGuidance.render(network({ status: "unreachable" }))
-    expect(text).not.toMatch(/proxy|VPN|SOCKS|tunnel/i)
+    // The temp directory is echoed in the interpreter path, and its random name can spell any of these.
+    expect(text.replaceAll(root, "")).not.toMatch(/proxy|VPN|SOCKS|tunnel/i)
     expect(text).toMatch(/network connection is what cannot currently\s+reach Earth Engine/)
     expect(text).toContain("All four steps")
     expect(text).toMatch(/leave the connection itself to them/)
