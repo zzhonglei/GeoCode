@@ -853,7 +853,7 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
 - 对着已落地的 vendor 代码调查 Settings 各页的所有权与 Kernel API 缺口,再定实施批次;结论并入
   §8.1 与 `KERNEL.md`,与阶段 6 的路径批次同样处理,不预先承诺专文。⚠️ codex 有一份底稿
   (`git show codex/desktop-init:docs/DESKTOP-CONFIG-MIGRATION.md`),基线是 **v1.18.4**,与当前树
-  隔着 345 个提交、772 个文件,路由名与模块名不可直接采信,只能当"要覆盖哪些面"的提纲;
+  隔着 345 个提交、772 个文件,路由名与模块名不可直接采信,只能当「要覆盖哪些面」的提纲;
 - 集中定义 GeoCode 品牌、appId、协议、平台和 capability;
 - 发布命令只选择 Desktop 闭包;
 - 禁止 Web / Mobile / VS Code / CLI 入口;
