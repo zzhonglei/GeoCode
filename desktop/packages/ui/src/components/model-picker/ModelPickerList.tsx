@@ -16,6 +16,7 @@ import { matchesRankQuery } from '@/lib/search/fuzzySearch';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { handleDropdownNavigationKey } from '@/components/ui/dropdown-navigation';
 import { getCurrentIntlLocale } from '@/lib/i18n';
 import { mergeModelMetadataWithLiveModel } from '@/lib/modelMetadata';
 import { getModelDisplayName as getSharedModelDisplayName } from '@/lib/modelDisplay';
@@ -585,9 +586,17 @@ export const ModelPickerList: React.FC<ModelPickerListProps> = ({
     filteredFavorites.map((entry) => [`${entry.providerID}:${entry.modelID}`, entry] as const),
   ), [filteredFavorites]);
 
-  React.useEffect(() => {
-    selectionStore.set(0);
-  }, [searchQuery, selectionStore]);
+  const initialSelectionIndex = searchQuery.trim() || !selectedModel ? 0 : Math.max(0,
+    flatModelList.findIndex((entry) => entry.providerID === selectedModel.providerID && entry.modelID === selectedModel.modelID),
+  );
+
+  React.useLayoutEffect(() => {
+    selectionStore.set(initialSelectionIndex);
+    // Opening or scrolling the list must not let a stationary pointer replace the current model.
+    keyboardOwnsSelectionRef.current = true;
+    lastMousePositionRef.current = null;
+    scrollIntoView(scrollRef.current, itemRefs.current[initialSelectionIndex]);
+  }, [initialSelectionIndex, searchQuery, selectedModel?.providerID, selectedModel?.modelID, selectionStore]);
 
   const selectIndex = React.useCallback((index: number) => {
     selectionStore.set(index);
@@ -608,10 +617,13 @@ export const ModelPickerList: React.FC<ModelPickerListProps> = ({
 
   React.useEffect(() => {
     onActiveEntryChange?.(flatModelList[selectionStore.getSnapshot()]);
-  }, [flatModelList, onActiveEntryChange, selectionStore]);
+  }, [flatModelList, initialSelectionIndex, onActiveEntryChange, selectionStore]);
 
   const handleKeyDown = React.useCallback((event: React.KeyboardEvent) => {
     if (event.defaultPrevented) return;
+    if (handleDropdownNavigationKey(event, (navigationKey) => {
+      moveSelection(navigationKey === 'ArrowDown' ? 1 : -1);
+    })) return;
     event.stopPropagation();
     if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
       const selected = flatModelList[selectionStore.getSnapshot()];
@@ -690,7 +702,9 @@ export const ModelPickerList: React.FC<ModelPickerListProps> = ({
               onMouseMove={handleMouseActivity}
               className={cn(
                 'w-full text-left px-2 py-1.5 rounded-md typography-meta flex items-center gap-2 cursor-pointer',
-                !disabled && (isHighlighted ? 'bg-interactive-selection' : 'hover:bg-interactive-hover/50'),
+                !disabled && (isHighlighted
+                  ? 'bg-interactive-selection text-interactive-selection-foreground'
+                  : 'hover:bg-interactive-hover/50'),
                 disabled && 'cursor-not-allowed opacity-60',
                 rowClassName,
               )}
@@ -703,9 +717,9 @@ export const ModelPickerList: React.FC<ModelPickerListProps> = ({
                 ) : null}
                 {showProviderLogo ? <ProviderLogo providerId={entry.providerID} className="h-3.5 w-3.5 flex-shrink-0" /> : null}
                 <span className="font-medium truncate">{getModelDisplayName(entry.model)}</span>
-                {contextTokens ? <span className="typography-micro text-muted-foreground flex-shrink-0">{contextTokens}</span> : null}
+                {contextTokens ? <span className={cn('typography-micro flex-shrink-0', isHighlighted ? 'text-interactive-selection-foreground/70' : 'text-muted-foreground')}>{contextTokens}</span> : null}
               </div>
-              {count > 0 ? <span className="typography-micro text-muted-foreground flex-shrink-0">x{count}</span> : null}
+              {count > 0 ? <span className={cn('typography-micro flex-shrink-0', isHighlighted ? 'text-interactive-selection-foreground/70' : 'text-muted-foreground')}>x{count}</span> : null}
               {renderRowEnd?.(entry, { isHighlighted, isSelected })}
               {isSelected ? <Icon name="check" className="h-4 w-4 text-primary flex-shrink-0" /> : null}
               {onToggleFavorite ? (
@@ -889,7 +903,7 @@ export const ModelPickerList: React.FC<ModelPickerListProps> = ({
           hideBottomScrollShadow
           scrollShadowSize={12}
           outerClassName={maxHeightClassName}
-          className="overlay-scrollbar-target--no-gutter"
+          className="oc-sticky-fade-scroller overlay-scrollbar-target--no-gutter"
           style={maxHeightStyle}
           onScroll={stickyHeaders ? (event) => syncStickyFade(event.currentTarget) : undefined}
         >

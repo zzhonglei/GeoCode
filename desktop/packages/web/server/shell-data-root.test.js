@@ -31,6 +31,7 @@ const PATCHED = [
   'lib/github/auth.js',
   'lib/quota/credentials/store.js',
   'lib/opencode/managed-process-registry.js',
+  'lib/linear/auth.js',
   // Outside `server/`, and the reason this list is not scoped to it: the published CLI
   // (`package.json` `bin`) resolves the same root, and it reads `settings.json` to find the
   // running desktop app. Renaming only the server's side split the pair (docs/PATHS.md §5).
@@ -39,11 +40,13 @@ const PATCHED = [
 ];
 
 /**
- * The one file whose `openchamber` literal stays: `package-manager.js` shields the upstream
- * resolution with an early return instead of replacing it, so those lines are unreachable and
- * byte-identical for merges (CONVENTIONS.md §5).
+ * The files whose `openchamber` literal stays. `package-manager.js` and `lib/linear/auth.js`
+ * shield the upstream resolution with an early return instead of replacing it, so those lines
+ * are unreachable and byte-identical for merges (CONVENTIONS.md §5). `index.js` keeps
+ * upstream's own default-root constant, which only `migrateLegacyUserDirs` reads — and that
+ * function returns before it uses either root.
  */
-const SHIELDED = 'lib/package-manager.js';
+const SHIELDED = new Set(['lib/package-manager.js', 'lib/linear/auth.js', 'index.js']);
 let dataRoot;
 let fakeHome;
 let realHome;
@@ -93,7 +96,7 @@ describe('shell data root', () => {
     for (const file of PATCHED) {
       const source = fs.readFileSync(path.join(serverRoot, file), 'utf8');
       expect([file, source.includes("'GeoCode', 'desktop'")]).toEqual([file, true]);
-      if (file === SHIELDED) continue;
+      if (SHIELDED.has(file)) continue;
       expect([file, source.includes("'.config', 'openchamber'")]).toEqual([file, false]);
     }
   });
@@ -102,10 +105,16 @@ describe('shell data root', () => {
     // Guards the merge that restores a hardcoded path. Two variables, not one: Electron main
     // injects the data root for most of these and a separate one for the process registry,
     // whose fallback is spelled out rather than derived from the root (shell-data-root.mjs).
-    const INJECTED = ['process.env.OPENCHAMBER_DATA_DIR', 'process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY'];
+    // Patterns, not substrings: `lib/linear/auth.js` reads the same variable through its own
+    // `readEnv` helper, and a plain `includes` would also pass on a file that only names the
+    // variable in a comment.
+    const INJECTED = [
+      /process\.env\.OPENCHAMBER_(?:DATA_DIR|MANAGED_PROCESS_REGISTRY)\b/,
+      /readEnv\('OPENCHAMBER_DATA_DIR'\)/,
+    ];
     for (const file of PATCHED) {
       const source = fs.readFileSync(path.join(serverRoot, file), 'utf8');
-      expect([file, INJECTED.some((name) => source.includes(name))]).toEqual([file, true]);
+      expect([file, INJECTED.some((pattern) => pattern.test(source))]).toEqual([file, true]);
     }
   });
 });

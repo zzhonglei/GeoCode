@@ -15,22 +15,12 @@
  * answer. --- */
 import { describe, expect, test } from 'bun:test';
 
-import { CHATS_SEGMENTS, MANAGED_CHATS_PATH_SEGMENT, PROJECTS_SEGMENTS, SHELL_DATA_ROOT_SEGMENTS } from './shell-data-root';
+import { CHATS_SEGMENTS, SHELL_DATA_ROOT_SEGMENTS } from './shell-data-root';
 
 describe('shell data root', () => {
-  test('chats and per-project config hang off the one root', () => {
+  test('chats hang off the one root', () => {
     // A root that moved without its children is the shape of the bug this file exists for.
     expect(CHATS_SEGMENTS).toEqual([...SHELL_DATA_ROOT_SEGMENTS, 'chats']);
-    expect(PROJECTS_SEGMENTS).toEqual([...SHELL_DATA_ROOT_SEGMENTS, 'projects']);
-  });
-
-  test('the substring test used to classify a chat directory is bounded by separators', () => {
-    // It stands in for "is this one of ours" across the session sidebar, the header, and the
-    // persistence cache. Unbounded, it would also match a project directory that merely ends
-    // in the same name.
-    expect(MANAGED_CHATS_PATH_SEGMENT).toBe(`/${CHATS_SEGMENTS.join('/')}/`);
-    expect(MANAGED_CHATS_PATH_SEGMENT.startsWith('/')).toBe(true);
-    expect(MANAGED_CHATS_PATH_SEGMENT.endsWith('/')).toBe(true);
   });
 
   test('names GeoCode, and no longer names OpenChamber', () => {
@@ -38,7 +28,7 @@ describe('shell data root', () => {
     // value. `.config/GeoCode` alone is the KERNEL's config root, so the `desktop` segment is
     // load-bearing: a case-insensitive filesystem folds `geocode` into it.
     expect(SHELL_DATA_ROOT_SEGMENTS).toEqual(['.config', 'GeoCode', 'desktop']);
-    expect(MANAGED_CHATS_PATH_SEGMENT).toBe('/.config/GeoCode/desktop/chats/');
-    expect(MANAGED_CHATS_PATH_SEGMENT).not.toContain('openchamber');
+    expect(CHATS_SEGMENTS.join('/')).toBe('.config/GeoCode/desktop/chats');
+    expect(CHATS_SEGMENTS.join('/')).not.toContain('openchamber');
   });
 });

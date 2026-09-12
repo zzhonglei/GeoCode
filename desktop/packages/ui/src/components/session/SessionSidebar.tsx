@@ -29,7 +29,10 @@ import {
   listProjectWorktrees,
   partitionWorktreesByRegisteredProject,
   worktreeMapsEqual,
+  type ProjectRef,
 } from '@/lib/worktrees/worktreeManager';
+import { resolveProjectsForWorktreeChange } from '@/lib/worktrees/worktreeTopologyRefresh';
+import type { WorktreeMetadata } from '@/types/worktree';
 import { checkIsGitRepository } from '@/lib/gitApi';
 import { useSessionDisplayStore } from '@/stores/useSessionDisplayStore';
 import { normalizePath } from './sidebar/utils';
@@ -38,8 +41,18 @@ import { getRuntimeKey } from '@/lib/runtime-switch';
 import { streamPerfCount, streamPerfMark } from '@/stores/utils/streamDebug';
 import { runBackgroundNetworkTask } from '@/lib/background-network';
 import { buildKnownSessionDirectories } from './sidebar/list/sessionListDirectories';
+import { sortProjectsByOrder } from './sidebar/list/projectSort';
 import { z } from 'zod';
 import { subscribeOpenchamberEvents } from '@/lib/openchamberEvents';
+import {
+  commitDiscoveredRawWorktreesByProject,
+  ensureRawWorktreesByProjectScope,
+  refreshProjectWorktreeTopology,
+  startSessionWorktreeMenuLoad,
+  type RawWorktreesByProjectScope,
+  type StartSessionWorktreeMenuLoadArgs,
+} from './sidebar/sessionWorktreeMenu';
+import { resolveProjectRef } from '@/lib/worktreeSessionCreator';
 
 const PROJECT_ACTIVE_SESSION_STORAGE_KEY = 'oc.sessions.activeSessionByProject';
 const EMPTY_STRING_ARRAY: string[] = [];
@@ -69,6 +82,8 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
   const { t } = useI18n();
   const [isSessionSearchOpen, setIsSessionSearchOpen] = React.useState(false);
   const [sessionSearchQuery, setSessionSearchQuery] = React.useState('');
+  // Reported by the session list below: the header cannot see what matched.
+  const [searchMatchCount, setSearchMatchCount] = React.useState(0);
   const sessionSearchContainerRef = React.useRef<HTMLDivElement | null>(null);
   const sessionSearchInputRef = React.useRef<HTMLInputElement | null>(null);
   const [editingProjectDialogId, setEditingProjectDialogId] = React.useState<string | null>(null);
@@ -189,6 +204,11 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
   const [worktreeDiscoveryRevision, requestWorktreeDiscovery] = React.useReducer((revision) => revision + 1, 0);
   const isWorktreeTopologyLoading = !isVSCode && resolvedWorktreeTopologyKey !== projectWorktreeDiscoveryKey;
   const [unresolvedWorktreeProjectPaths, setUnresolvedWorktreeProjectPaths] = React.useState<ReadonlySet<string>>(new Set());
+  const rawWorktreesByProjectRef = React.useRef<RawWorktreesByProjectScope>({
+    runtimeKey: null,
+    revision: 0,
+    worktreesByProject: new Map(),
+  });
 
   React.useEffect(() => {
     let cancelled = false;
@@ -198,14 +218,25 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
       const projectEntries = useProjectsStore.getState().projects;
       if (projectEntries.length === 0 || isVSCode) {
         if (!cancelled) {
+          rawWorktreesByProjectRef.current = {
+            runtimeKey: null,
+            revision: 0,
+            worktreesByProject: new Map(),
+          };
           setUnresolvedWorktreeProjectPaths(new Set());
           setResolvedWorktreeTopologyKey(projectWorktreeDiscoveryKey);
         }
         return;
       }
 
-      const knownWorktreesByProject = useSessionUIStore.getState().availableWorktreesByProject;
-      const worktreesByProject = new Map(knownWorktreesByProject);
+      const knownPublishedWorktreesByProject = useSessionUIStore.getState().availableWorktreesByProject;
+      const seededRawScope = ensureRawWorktreesByProjectScope({
+        rawWorktreesByProjectRef,
+        publishedWorktreesByProject: knownPublishedWorktreesByProject,
+        runtimeKey: discoveryRuntimeKey,
+      });
+      const capturedRawRevision = seededRawScope.revision;
+      const worktreesByProject = new Map(seededRawScope.worktreesByProject);
       const unresolvedProjectPaths = new Set<string>();
 
       // Constrain fanout: previously `Promise.all(projects.map(...))` could
@@ -258,18 +289,26 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
           worktreesByProject.delete(projectPath);
         }
       }
-      const partitionedWorktreesByProject = partitionWorktreesByRegisteredProject(projectEntries, worktreesByProject);
-      const allWorktrees = [...partitionedWorktreesByProject.values()].flat();
-      // Newly appearing worktrees sort to the top of their project's
-      // worktree list (see worktreeFirstSeen.ts).
-      recordWorktreesSeen(allWorktrees.map((worktree) => worktree.path), Date.now());
-
-      // Skip update if nothing changed — see worktreeMapsEqual JSDoc.
-      if (!worktreeMapsEqual(partitionedWorktreesByProject, knownWorktreesByProject)) {
-        useSessionUIStore.setState({
-          availableWorktrees: allWorktrees,
-          availableWorktreesByProject: partitionedWorktreesByProject,
-        });
+      const committed = commitDiscoveredRawWorktreesByProject({
+        rawWorktreesByProjectRef,
+        runtimeKey: discoveryRuntimeKey,
+        capturedRevision: capturedRawRevision,
+        nextRawWorktreesByProject: worktreesByProject,
+        publishedWorktreesByProject: knownPublishedWorktreesByProject,
+        partitionWorktreesByRegisteredProject,
+        projects: projectEntries,
+        worktreeMapsEqual,
+        recordWorktreesSeen,
+        publishTopology: (next) => {
+          useSessionUIStore.setState(next);
+        },
+        requestRediscovery: () => {
+          requestWorktreeDiscovery();
+        },
+        now: () => Date.now(),
+      });
+      if (!committed) {
+        return;
       }
       setUnresolvedWorktreeProjectPaths(unresolvedProjectPaths);
       setResolvedWorktreeTopologyKey(projectWorktreeDiscoveryKey);
@@ -281,13 +320,6 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
       cancelled = true;
     };
   }, [isVSCode, projectWorktreeDiscoveryKey, runtimeKey, worktreeDiscoveryRevision]);
-
-  React.useEffect(() => {
-    if (isVSCode) return;
-    return subscribeOpenchamberEvents((event) => {
-      if (event.type === 'session-created') requestWorktreeDiscovery();
-    });
-  }, [isVSCode]);
 
   const isDesktopShellRuntime = React.useMemo(() => isDesktopShell(), []);
 
@@ -365,7 +397,6 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
   const handleOpenDirectoryDialog = React.useCallback(() => {
     sessionEvents.requestDirectoryDialog();
   }, []);
-
 
 
   const normalizedProjects = React.useMemo(() => {
@@ -459,43 +490,10 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
   }
   previousSidebarRenderSourcesRef.current = sidebarRenderSources;
 
-  const sortedProjects = React.useMemo(() => {
-    const list = [...normalizedProjects];
-
-    switch (projectSortOrder) {
-      case 'a-z':
-        list.sort((a, b) => {
-          const aLabel = (a.label || a.path).toLowerCase();
-          const bLabel = (b.label || b.path).toLowerCase();
-          return aLabel.localeCompare(bLabel);
-        });
-        break;
-      case 'z-a':
-        list.sort((a, b) => {
-          const aLabel = (a.label || a.path).toLowerCase();
-          const bLabel = (b.label || b.path).toLowerCase();
-          return bLabel.localeCompare(aLabel);
-        });
-        break;
-      case 'date-added':
-        list.sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0));
-        break;
-      case 'recent':
-        list.sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0));
-        break;
-      case 'manual': {
-        const orderMap = new Map(manualProjectOrder.map((id, i) => [id, i]));
-        list.sort((a, b) => {
-          const ai = orderMap.get(a.id) ?? Infinity;
-          const bi = orderMap.get(b.id) ?? Infinity;
-          return ai - bi;
-        });
-        break;
-      }
-    }
-
-    return list;
-  }, [normalizedProjects, projectSortOrder, manualProjectOrder]);
+  const sortedProjects = React.useMemo(
+    () => sortProjectsByOrder(normalizedProjects, projectSortOrder, manualProjectOrder),
+    [normalizedProjects, projectSortOrder, manualProjectOrder],
+  );
   const projectView = useSessionProjectViewState({ isVSCode, projects: sortedProjects });
 
   const searchEmptyState = React.useMemo(() => (
@@ -527,6 +525,67 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
     openMultiRunLauncher();
   }, [mobileVariant, openMultiRunLauncher, setSessionSwitcherOpen]);
 
+  const worktreeRefreshDependencies = React.useMemo(() => ({
+    projects,
+    getCurrentProjects: () => useProjectsStore.getState().projects,
+    rawWorktreesByProjectRef,
+    getPublishedWorktreesByProject: () => useSessionUIStore.getState().availableWorktreesByProject,
+    resolveProject: (directory: string) => resolveProjectRef(directory),
+    listProjectWorktrees,
+    partitionWorktreesByRegisteredProject,
+    worktreeMapsEqual,
+    recordWorktreesSeen,
+    publishTopology: (next: {
+      availableWorktrees: WorktreeMetadata[];
+      availableWorktreesByProject: Map<string, WorktreeMetadata[]>;
+    }) => {
+      useSessionUIStore.setState(next);
+    },
+    getRuntimeKey,
+    now: () => Date.now(),
+  }), [projects]);
+
+  const handleSessionWorktreeMenuLoad = React.useCallback((args: StartSessionWorktreeMenuLoadArgs) => {
+    const resolvedProject: ProjectRef | null = args.projectId
+      ? (projects.find((candidate) => candidate.id === args.projectId) ?? null)
+      : (args.sourceDirectory ? resolveProjectRef(args.sourceDirectory) : null);
+    return startSessionWorktreeMenuLoad(args, {
+      ...worktreeRefreshDependencies,
+      projectRootBranch: resolvedProject ? (projectRootBranches.get(resolvedProject.id) ?? null) : null,
+    });
+  }, [projectRootBranches, projects, worktreeRefreshDependencies]);
+
+  React.useEffect(() => {
+    if (isVSCode) return;
+    return subscribeOpenchamberEvents((event) => {
+      if (event.type === 'session-created') {
+        requestWorktreeDiscovery();
+        return;
+      }
+      if (event.type !== 'worktree-changed') return;
+
+      // One event names every directory of the changed repository the server
+      // has seen; refresh each registered project among them exactly once.
+      for (const project of resolveProjectsForWorktreeChange(event.directories)) {
+        const projectPath = normalizePath(project.path);
+        void refreshProjectWorktreeTopology(project, null, worktreeRefreshDependencies)
+          .then(() => {
+            if (!projectPath) return;
+            setUnresolvedWorktreeProjectPaths((current) => {
+              if (!current.has(projectPath)) return current;
+              const next = new Set(current);
+              next.delete(projectPath);
+              return next;
+            });
+          })
+          .catch(() => {
+            if (!projectPath) return;
+            setUnresolvedWorktreeProjectPaths((current) => new Set(current).add(projectPath));
+          });
+      }
+    });
+  }, [isVSCode, worktreeRefreshDependencies]);
+
   const handleOpenNewSessionDraftFromHeader = React.useCallback(() => {
     useUIStore.getState().closeMainSurfaces();
     if (mobileVariant) {
@@ -536,13 +595,12 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
   }, [mobileVariant, openNewSessionDraft, setSessionSwitcherOpen]);
 
   return (
-    // One shared tooltip provider for the whole sidebar: session tooltips open
-    // instantly, and moving between rows hands the tooltip over (grouping)
-    // instead of replaying the exit/enter animation for each row.
-    // closeDelay bridges the small gap between rows: the tooltip survives the
-    // pointer crossing row margins, and the grouping timeout hands it over to
-    // the next row without an exit/enter cycle.
-    <TooltipProvider delay={0} closeDelay={150} timeout={600}>
+    // One shared tooltip provider for the whole sidebar, matching the opencode
+    // sidebar feel: 400ms before the first tooltip opens, instant close on
+    // leave, and grouping — moving between rows within 600ms hands the tooltip
+    // over to the next row without replaying the open delay or exit/enter
+    // animation.
+    <TooltipProvider delay={400} closeDelay={0} timeout={300}>
     <div
       ref={sessionSearchContainerRef}
       className={cn(
@@ -577,7 +635,7 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
         sessionSearchQuery={sessionSearchQuery}
         setSessionSearchQuery={setSessionSearchQuery}
         hasSessionSearchQuery={hasSessionSearchQuery}
-        searchMatchCount={0}
+        searchMatchCount={searchMatchCount}
         collapseAllProjects={projectView.actions.collapseAllProjects}
         expandAllProjects={projectView.actions.expandAllProjects}
       />
@@ -614,6 +672,7 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
           isWorktreeTopologyLoading,
           unresolvedWorktreeProjectPaths,
           projectView: projectView.state,
+          onSearchMatchCountChange: setSearchMatchCount,
         }}
         actions={{
           rowActions: {
@@ -637,6 +696,7 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
           openProjectEditDialog: setEditingProjectDialogId,
           removeProject,
           reorderProjects,
+          startSessionWorktreeMenuLoad: handleSessionWorktreeMenuLoad,
           initialActiveSessionByProject,
           persistActiveSessionByProject,
           projectViewActions: projectView.actions,

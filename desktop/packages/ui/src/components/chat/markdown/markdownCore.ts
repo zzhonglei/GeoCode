@@ -1,4 +1,5 @@
-import { Marked, marked, type Tokens } from 'marked';
+import { Marked, marked, type Tokens, type TokenizerAndRendererExtension } from 'marked';
+import markedLinkifyIt from 'marked-linkify-it';
 import remend from 'remend';
 import katex from 'katex';
 import DOMPurify from 'dompurify';
@@ -232,7 +233,7 @@ const streamBlocks = (text: string, live: boolean): MarkdownBlock[] => {
 
   let tokens: Tokens.Generic[];
   try {
-    tokens = marked.lexer(text) as Tokens.Generic[];
+    tokens = inlineImageParser.lexer(text);
   } catch {
     return [{ raw: text, src: heal(text), mode: 'live', highlight: true }];
   }
@@ -313,15 +314,25 @@ const inlineMathExtension = {
   },
 };
 
+// `\[` is display math in LaTeX, but it is also CommonMark's escape for a
+// literal `[`, and prose escapes brackets far more often than it opens display
+// math. Reading every `\[` as math turned text like
+// `[title \[Bug\] more](url)` into a KaTeX block that split the paragraph and
+// tore the link apart. Display math therefore has to own its line: it must
+// start one and its `\]` must end one. Anything mid-sentence stays an escape.
+const BLOCK_MATH_RE = /^[ \t]*\\\[([\s\S]+?)\\\][ \t]*(?:\n|$)/;
+const BLOCK_MATH_LINE_START_RE = /(?:^|\n)[ \t]*\\\[/;
+
 const blockMathExtension = {
   name: 'blockMath',
   level: 'block' as const,
   start(src: string) {
-    const index = src.indexOf('\\[');
-    return index < 0 ? undefined : index;
+    const match = BLOCK_MATH_LINE_START_RE.exec(src);
+    // Point marked at the `\[` itself, never at the newline before it.
+    return match ? match.index + match[0].length - 2 : undefined;
   },
   tokenizer(src: string): MathToken | undefined {
-    const match = /^\\\[([\s\S]+?)\\\]/.exec(src);
+    const match = BLOCK_MATH_RE.exec(src);
     if (!match) return undefined;
     return { type: 'blockMath', raw: match[0], text: match[1] ?? '' };
   },
@@ -331,10 +342,83 @@ const blockMathExtension = {
   },
 };
 
-const createParser = (imageMode: MarkdownImageMode) => new Marked().use({
-  gfm: true,
-  breaks: false,
-  extensions: [inlineMathExtension, blockMathExtension],
+// Own the entire disclosure token, including an unfinished streamed body. HTML
+// token boundaries otherwise split it at blank lines and close the DOM early.
+const detailsExtension: TokenizerAndRendererExtension = {
+  name: 'disclosure',
+  level: 'block',
+  start(src) {
+    const match = /(?:^|\n) {0,3}<details(?:\s|>)/i.exec(src);
+    return match ? match.index + (match[0].startsWith('\n') ? 1 : 0) : undefined;
+  },
+  tokenizer(src) {
+    // Only the native boolean open attribute is accepted. Never forward raw
+    // attributes, styles, event handlers, or an arbitrary HTML subtree.
+    const opening = /^ {0,3}<details(?:\s+(open(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?))?\s*>\s*<summary\s*>([\s\S]*?)<\/summary\s*>/i.exec(src);
+    if (!opening) return undefined;
+    const bodyStart = opening[0].length;
+    const body = src.slice(bodyStart);
+    const markers = /(^ {0,3}(`{3,}|~{3,})[^\n]*(?:\n|$))|(`+)|(<\/?details\b[^>]*>)/gim;
+    let depth = 1;
+    let bodyEnd = body.length;
+    let end = src.length;
+    let marker: RegExpExecArray | null;
+    while ((marker = markers.exec(body))) {
+      if (marker[2]) {
+        const fence = marker[2];
+        const close = new RegExp(`^ {0,3}${fence[0]}{${fence.length},}[\\t ]*(?:\\n|$)`, 'gm');
+        close.lastIndex = markers.lastIndex;
+        const found = close.exec(body);
+        if (!found) break;
+        markers.lastIndex = close.lastIndex;
+      } else if (marker[3]) {
+        const ticks = marker[3];
+        const close = /`+/g;
+        close.lastIndex = markers.lastIndex;
+        let found: RegExpExecArray | null;
+        while ((found = close.exec(body))) {
+          if (found[0].length === ticks.length) {
+            markers.lastIndex = close.lastIndex;
+            break;
+          }
+        }
+      } else if (marker[4]) {
+        const lineStart = body.lastIndexOf('\n', marker.index - 1) + 1;
+        const prefix = body.slice(lineStart, marker.index);
+        // Quoted and indented code belongs to the child Markdown parser. Its
+        // HTML-looking text must not terminate the surrounding disclosure.
+        if (/^(?: {4}|\t| {0,3}>)/.test(prefix) || /(?:^|[^\\])(?:\\\\)*\\$/.test(prefix)) continue;
+        depth += /^<\//.test(marker[4]) ? -1 : 1;
+        if (depth === 0) {
+          bodyEnd = marker.index;
+          end = bodyStart + markers.lastIndex;
+          break;
+        }
+      }
+    }
+    return {
+      type: 'disclosure',
+      raw: src.slice(0, end),
+      open: Boolean(opening[1]),
+      summary: this.lexer.inlineTokens(opening[2] ?? ''),
+      tokens: this.lexer.blockTokens(body.slice(0, bodyEnd)),
+    };
+  },
+  renderer(token) {
+    return `<details data-md-details${token.open ? ' open' : ''}><summary>${this.parser.parseInline(token.summary)}</summary>${this.parser.parse(token.tokens ?? [])}</details>`;
+  },
+  childTokens: ['summary', 'tokens'],
+};
+
+// marked's GFM autolink swallows CJK punctuation after a bare URL, so switch
+// to marked-linkify-it, which treats Unicode punctuation as a URL boundary.
+// Plain CJK characters right after a URL are still consumed, matching GitHub.
+const createParser = (imageMode: MarkdownImageMode) => new Marked().use(
+  markedLinkifyIt({ fuzzyLink: false }),
+  {
+    gfm: true,
+    breaks: false,
+    extensions: [inlineMathExtension, blockMathExtension, detailsExtension],
   renderer: {
     // Assistant output is untrusted. Markdown constructs still render as HTML,
     // but raw HTML must remain visible text so it cannot introduce active DOM

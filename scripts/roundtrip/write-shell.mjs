@@ -55,17 +55,11 @@ wrote.provider = upsertProviderConfig('roundtrip-provider', {
   env: ['ROUNDTRIP_API_KEY'],
 }, null, 'user');
 
-// The behavior page has no exported helper, so this composes the path the route composes. That
-// is a copy, and a copy the route could move away from silently, so check it against the source.
-const routes = fs.readFileSync(
-  new URL('../../desktop/packages/web/server/lib/opencode/routes.js', import.meta.url),
-  'utf8',
-);
-if (!routes.includes("path.join(kernelConfigRoot(), 'AGENTS.md')")) {
-  throw new Error('the behavior route no longer composes AGENTS.md the way this probe does');
-}
+// The behavior page has no exported helper. Rather than copy how the route spells the path, this
+// joins onto the same constant the route joins onto, so the two cannot drift apart.
+const { OPENCODE_CONFIG_DIR } = await import(lib('shared.js'));
 
-const agentsMd = path.join(configRoot, 'AGENTS.md');
+const agentsMd = path.join(OPENCODE_CONFIG_DIR, 'AGENTS.md');
 fs.mkdirSync(path.dirname(agentsMd), { recursive: true });
 fs.writeFileSync(agentsMd, 'ROUNDTRIP-INSTRUCTION\n', 'utf8');
 wrote.agentsMd = agentsMd;

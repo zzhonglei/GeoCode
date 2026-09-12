@@ -1,9 +1,9 @@
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
-import { kernelConfigRoot, KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
+import { KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 import {
   AGENT_SCOPE,
+  OPENCODE_CONFIG_DIR,
   readConfigFile,
   readConfigLayer,
   writeConfig,
@@ -72,8 +72,7 @@ function getActiveOpencodeConfigDir() {
   if (customConfigPath) {
     return path.dirname(path.resolve(customConfigPath));
   }
-  // GeoCode: the kernel's config root, paired with shared.js (geocode/kernel-roots.js)
-  return kernelConfigRoot();
+  return OPENCODE_CONFIG_DIR;
 }
 
 function getActiveUserConfigPaths() {

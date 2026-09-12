@@ -19,6 +19,15 @@ const sanitizeHooks: {
   afterSanitizeAttributes?: (node: unknown) => void;
 } = {};
 
+// Mirrors DOMPurify's default URI policy: approved schemes plus relative URLs.
+const DOMPURIFY_ALLOWED_URI_RE =
+  // Keep this byte-aligned with DOMPurify's default IS_ALLOWED_URI expression.
+  // eslint-disable-next-line no-useless-escape
+  /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|matrix):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i;
+const URI_ATTRIBUTE_WHITESPACE_RE =
+  // eslint-disable-next-line no-control-regex
+  /[\u0000-\u0020\u00A0\u1680\u180E\u2000-\u2029\u205F\u3000]/g;
+
 Object.assign(globalThis, {
   window: {},
   HTMLAnchorElement: TestAnchorElement,
@@ -36,7 +45,10 @@ mock.module('dompurify', () => ({
       sanitizeHooks.uponSanitizeAttribute?.(anchor, data);
       sanitizeHooks.afterSanitizeAttributes?.(anchor);
 
-      return data.forceKeepAttr || /^(?:https?|mailto|tel):/i.test(href) ? attribute : '';
+      const normalizedHref = href.replace(URI_ATTRIBUTE_WHITESPACE_RE, '');
+      return data.forceKeepAttr || DOMPURIFY_ALLOWED_URI_RE.test(normalizedHref)
+        ? attribute
+        : '';
     }),
   },
 }));
@@ -91,6 +103,61 @@ describe('markdown sanitization', () => {
     expect(html).not.toContain('href="ms-msdt:/id%20PCWDiagnostic"');
   });
 
+});
+
+describe('Markdown disclosures', () => {
+  test('renders summaries and rich Markdown without allowing raw HTML attributes', () => {
+    const html = renderMarkdownSync('<details open><summary>Review **ready**</summary>\n\n> Quoted review\n\n1. First\n2. Second\n\n```sh\nbun test\n```\n\n</details>\n\nAfter');
+    expect(html).toContain('<details data-md-details open>');
+    expect(html).toContain('<summary>Review <strong>ready</strong></summary>');
+    expect(html).toContain('<blockquote>');
+    expect(html).toContain('<ol>');
+    expect(html).toContain('<code class="language-sh">bun test');
+    expect(html).toContain('</details><p>After</p>');
+    const unsafe = renderMarkdownSync('<details onclick="alert(1)"><summary>Unsafe</summary>text</details>');
+    expect(unsafe).not.toContain('<details');
+    expect(unsafe).toContain('&lt;details');
+    expect(renderMarkdownSync('<details><summary>Safe</summary>\n\n<style>body{display:none}</style>\n\n</details>')).not.toContain('<style>');
+  });
+
+  test('keeps nested disclosures and literal closing tags inside code in their owner', () => {
+    const source = '<details><summary>Outer</summary>\n\n`</details>`\n\n```html\n</details>\n```\n\n<details open><summary>Inner</summary>\n\n**Nested**\n\n</details>\n\nOuter end\n\n</details>\n\nAfter';
+    const html = renderMarkdownSync(source);
+    expect(html.match(/<details /g)).toHaveLength(2);
+    expect(html).toContain('<code>&lt;/details&gt;</code>');
+    expect(html).toContain('<strong>Nested</strong>');
+    expect(html).toContain('</details><p>Outer end</p>');
+    expect(html).toContain('</details><p>After</p>');
+    expect(renderMarkdownSync('```html\n<details><summary>Example</summary></details>\n```')).not.toContain('<details');
+  });
+
+  test('keeps streamed bodies together and settled leading blocks cache-stable', async () => {
+    const prefix = 'Introduction\n\n<details><summary>Review</summary>\n\n';
+    const first = await renderMarkdownBlocks(`${prefix}> First\n\n1. Item`, true);
+    const next = await renderMarkdownBlocks(`${prefix}> First\n\n1. Item\n2. More\n\n\`\`\`sh\nbun test`, true);
+    expect(first).toHaveLength(2);
+    expect(next).toHaveLength(2);
+    expect(next[0]).toEqual(first[0]);
+    expect(next[1]?.html).toContain('<details data-md-details>');
+    expect(next[1]?.html).toContain('<li>More</li>');
+    expect(next[1]?.html).toContain('bun test');
+    expect(next[1]?.html.endsWith('</details>')).toBe(true);
+    const finished = await renderMarkdownBlocks(`${prefix}> First\n\n</details>\n\nAfter`, true);
+    expect(finished).toHaveLength(3);
+    expect(finished[2]?.html).toContain('<p>After</p>');
+  });
+
+  test('handles incomplete summary and closing tag prefixes without losing content', async () => {
+    const source = '<details><summary>Review</summary>\n\n**Body**\n\n</details>';
+    for (let length = 1; length <= source.length; length += 1) {
+      const blocks = await renderMarkdownBlocks(source.slice(0, length), true);
+      const html = blocks.map((block) => block.html).join('');
+      if (length >= source.indexOf('\n\n')) expect(html).toContain('<details data-md-details>');
+      if (length >= source.indexOf('\n\n</details>')) {
+        expect(html).toContain('<strong>Body</strong>');
+      }
+    }
+  });
 });
 
 describe('Markdown block cache reads', () => {
@@ -277,5 +344,70 @@ describe('Markdown images', () => {
 
     expect(html).toContain('<img src="https://example.test/image.png"');
     expect(html).not.toContain('data-openchamber-markdown-image');
+  });
+});
+
+describe('CJK-aware link parsing', () => {
+  const hrefOf = (html: string): string | null => /<a\b[^>]*href="([^"]*)"/.exec(html)?.[1] ?? null;
+
+  test('bare URL followed by a CJK annotation trims the annotation from the href', () => {
+    const html = renderMarkdownSync('访问 https://example.com/docs（中文说明）了解更多');
+    expect(hrefOf(html)).toBe('https://example.com/docs');
+  });
+
+  test('bare URL followed by CJK punctuation trims the punctuation', () => {
+    expect(hrefOf(renderMarkdownSync('地址 https://example.com/guide，详见'))).toBe(
+      'https://example.com/guide',
+    );
+    expect(hrefOf(renderMarkdownSync('官网 https://example.com。'))).toBe('https://example.com');
+  });
+
+  test('correct links are unaffected', () => {
+    expect(hrefOf(renderMarkdownSync('官方文档见 [这里](https://docs.example.com)（中文说明）'))).toBe(
+      'https://docs.example.com',
+    );
+    expect(hrefOf(renderMarkdownSync('[下载](https://dl.example.com/安装包（正式版）)'))).toBe(
+      'https://dl.example.com/安装包（正式版）',
+    );
+    expect(hrefOf(renderMarkdownSync('[a](url(1))'))).toBe('url(1)');
+    expect(hrefOf(renderMarkdownSync('[a](url "title")'))).toBe('url');
+  });
+});
+
+describe('Escaped brackets versus display math', () => {
+  // `\[...\]` is display math in LaTeX and an escaped bracket pair in
+  // CommonMark. Prose escapes brackets far more often than it opens display
+  // math mid-sentence, so math only wins when it owns its line.
+  test('keeps escaped brackets inside a link as link text', () => {
+    const html = renderMarkdownSync(
+      '[OpenChamber session completed: OPE-316 \\[Bug\\] Opening files](https://example.com/?session=ses_1)',
+    );
+    expect(html).toContain('href="https://example.com/?session=ses_1"');
+    expect(html).toContain('[Bug]');
+    expect(html).not.toContain('katex');
+  });
+
+  test('leaves escaped brackets in prose as literal brackets', () => {
+    const html = renderMarkdownSync('Release \\[Bug\\] fixed in v2.');
+    expect(html).toContain('[Bug]');
+    expect(html).not.toContain('katex');
+  });
+
+  // Verbatim body of a Linear status comment, which Linear itself renders as
+  // one link while we used to split it into three blocks.
+  test('renders a Linear comment with an escaped-bracket title as one link', () => {
+    const html = renderMarkdownSync(
+      '[OpenChamber session completed: OPE-316 \\[Bug\\] Opening files with template-literal'
+      + ' code triggers catastrophic backtracking → renderer OOM → black/frozen desktop app'
+      + ' (v1.17.2)](http://127.0.0.1:63418/?session=ses_fb0bb916effe26bQ1Ofr6Rv4Ei)',
+    );
+    expect(html.match(/<a /g)).toHaveLength(1);
+    expect(html).toContain('[Bug]');
+    expect(html).not.toContain('katex');
+  });
+
+  test('still renders display math that owns its line', () => {
+    expect(renderMarkdownSync('\\[x = y\\]')).toContain('katex');
+    expect(renderMarkdownSync('Before\n\n\\[\nx = y\n\\]\n\nAfter')).toContain('katex');
   });
 });

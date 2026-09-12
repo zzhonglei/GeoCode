@@ -6,7 +6,9 @@
  * nothing about what it changed. Harness mirrors geocode/managed-kernel.test.js. --- */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('node:child_process', () => ({ spawn: vi.fn(), spawnSync: vi.fn() }));
+// execFile: managed-process-registry.js promisifies it at module scope, so the mock has to
+// carry it even though nothing here calls it.
+vi.mock('node:child_process', () => ({ spawn: vi.fn(), spawnSync: vi.fn(), execFile: vi.fn() }));
 vi.mock('../lib/opencode/startup-performance.js', () => ({ recordStartupPerformance: vi.fn() }));
 
 const { createOpenCodeLifecycleRuntime } = await import('../lib/opencode/lifecycle.js');

@@ -27,7 +27,8 @@ afterAll(() => {
 });
 
 const spawnMock = vi.fn();
-vi.mock('node:child_process', () => ({ spawn: spawnMock, spawnSync: vi.fn() }));
+// execFile: promisified at module scope by managed-process-registry.js (see kernel-refresh.test.js).
+vi.mock('node:child_process', () => ({ spawn: spawnMock, spawnSync: vi.fn(), execFile: vi.fn() }));
 vi.mock('../lib/opencode/startup-performance.js', () => ({ recordStartupPerformance: vi.fn() }));
 
 const { createOpenCodeLifecycleRuntime } = await import('../lib/opencode/lifecycle.js');

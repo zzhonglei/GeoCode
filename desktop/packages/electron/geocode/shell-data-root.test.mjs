@@ -4,7 +4,7 @@ import path from 'node:path';
 import { applyShellDataRoot, resolveShellDataRoot } from './shell-data-root.mjs';
 // The renderer's copy of the same root. Imported across the package boundary on purpose —
 // see 'the renderer lands on the same root' below.
-import { CHATS_SEGMENTS, PROJECTS_SEGMENTS, SHELL_DATA_ROOT_SEGMENTS } from '../../ui/src/geocode/shell-data-root.ts';
+import { CHATS_SEGMENTS, SHELL_DATA_ROOT_SEGMENTS } from '../../ui/src/geocode/shell-data-root.ts';
 
 import fs from 'node:fs';
 
@@ -38,7 +38,6 @@ describe('shell data root', () => {
     // writes to — matched nothing (docs/PATHS.md §5).
     expect(resolveShellDataRoot(HOME)).toBe(path.join(HOME, ...SHELL_DATA_ROOT_SEGMENTS));
     expect(path.join(HOME, ...CHATS_SEGMENTS)).toBe(path.join(resolveShellDataRoot(HOME), 'chats'));
-    expect(path.join(HOME, ...PROJECTS_SEGMENTS)).toBe(path.join(resolveShellDataRoot(HOME), 'projects'));
   });
 
   it('keeps shell data out of the config root the kernel owns', () => {

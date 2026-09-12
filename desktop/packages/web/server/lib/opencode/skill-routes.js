@@ -1,6 +1,7 @@
 import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 import { buildDeferredRestartResponse } from './config-mutation-response.js';
-import { kernelConfigRoot, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
+import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
+import { OPENCODE_CONFIG_DIR } from './shared.js';
 
 /**
  * Matches how OpenCode reads its own boolean env flags: any value other than
@@ -115,7 +116,7 @@ export const registerSkillRoutes = (app, dependencies) => {
     }
 
     const userRoots = [
-      kernelConfigRoot(), // GeoCode: paired with the project directory above
+      OPENCODE_CONFIG_DIR,
       path.join(home, '.opencode'),
       path.join(home, '.claude', 'skills'),
       path.join(home, '.agents', 'skills'),

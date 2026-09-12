@@ -2,6 +2,7 @@ import React from 'react';
 import { WorktreeSectionContent } from '@/components/sections/openchamber/WorktreeSectionContent';
 import { ProjectActionsSection } from '@/components/sections/projects/ProjectActionsSection';
 import { ProjectIdentityFields } from '@/components/sections/projects/ProjectIdentityFields';
+import { SharedProjectConfigSection } from '@/components/sections/projects/SharedProjectConfigSection';
 import {
   useProjectIdentityForm,
   type ProjectIdentitySaveData,
@@ -49,6 +50,12 @@ export const ProjectSettingsPanel: React.FC<ProjectSettingsPanelProps> = ({
       <ProjectIdentityFields form={form} />
       <ProjectActionsSection projectRef={projectRef} />
       {showWorktrees ? <WorktreeSectionContent projectRef={projectRef} /> : null}
+      {/* --- GeoCode: this block is the team's shared file and nothing else — where it is,
+          whether it parsed, and the shared plans folder. The server reports it missing and
+          refuses the write (lib/projects/routes.js), so all it could show here is a file that
+          never appears and a folder setting that never saves. ---
+      <SharedProjectConfigSection projectRef={projectRef} />
+      --- /GeoCode --- */}
     </div>
   );
 };

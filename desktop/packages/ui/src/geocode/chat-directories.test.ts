@@ -1,7 +1,13 @@
-/* --- GeoCode: the renderer composes the chats root itself, in four places (docs/PATHS.md §5).
- * Any one of them going back to upstream's `.config/openchamber/chats` in a merge conflicts with
- * nothing: the create path would put GeoCode's chats in another product's directory, and the
- * classifiers would stop recognising the ones it did create. --- */
+/* --- GeoCode: the renderer's own chats root (docs/PATHS.md §5).
+ *
+ * Upstream v1.23 moved the configured root to the server, which answers `/api/fs/home` with it,
+ * and kept one literal on this side: the fallback the module uses when that answer omits it —
+ * and which every classifier here also accepts as a root of ours. Upstream spells that fallback
+ * `.config/openchamber/chats`, so leaving it would both put new chats in another product's
+ * directory whenever the server stays quiet and make that product's chats read as GeoCode's.
+ *
+ * The fallback is what the first case reads directly; the rest drive the module through the
+ * server answer that triggers it. --- */
 import { afterEach, describe, expect, test } from 'bun:test';
 
 import { opencodeClient } from '@/lib/opencode/client';
@@ -14,19 +20,27 @@ const OURS = `${ROOT}/2026-08-21/session-a`;
 const OPENCHAMBER = `${HOME}/.config/openchamber/chats/2026-08-21/session-a`;
 
 const original = {
-  getFilesystemHome: opencodeClient.getFilesystemHome,
+  getFilesystemHomeInfo: opencodeClient.getFilesystemHomeInfo,
   createDirectory: opencodeClient.createDirectory,
 };
 
 afterEach(() => {
-  opencodeClient.getFilesystemHome = original.getFilesystemHome;
+  opencodeClient.getFilesystemHomeInfo = original.getFilesystemHomeInfo;
   opencodeClient.createDirectory = original.createDirectory;
 });
 
 describe('chat directories', () => {
-  test('creates a chat under the shell data root', async () => {
+  // First, before anything below fills the module's per-runtime cache: with nothing cached
+  // this reads the fallback and nothing else.
+  test('falls back to the shell data root, not to the other product', () => {
+    const root = getChatsRootForHome(HOME);
+    expect(root).toBe(ROOT);
+    expect(root).not.toContain('openchamber');
+  });
+
+  test('creates a chat under the shell data root when the server names none', async () => {
     const created: string[] = [];
-    opencodeClient.getFilesystemHome = async () => HOME;
+    opencodeClient.getFilesystemHomeInfo = async () => ({ home: HOME });
     opencodeClient.createDirectory = async (path: string) => {
       created.push(path);
       return { success: true, path };
@@ -36,8 +50,7 @@ describe('chat directories', () => {
     expect(created).toEqual([directory]);
   });
 
-  test('recognises its own chats and not OpenChamber\'s', () => {
-    expect(getChatsRootForHome(HOME)).toBe(ROOT);
+  test('recognises its own chats and not the ones of the other product', () => {
     expect(isChatDirectoryForHome(OURS, HOME)).toBe(true);
     expect(isChatDirectoryPath(OURS)).toBe(true);
     expect(isChatDirectoryForHome(OPENCHAMBER, HOME)).toBe(false);

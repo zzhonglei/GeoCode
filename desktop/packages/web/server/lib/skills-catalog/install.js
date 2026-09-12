@@ -1,20 +1,18 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { kernelConfigRoot, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
+import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the block below
 
 import { assertGitAvailable, looksLikeAuthError, runGit } from './git.js';
 import { parseSkillRepoSource } from './source.js';
+import { OPENCODE_CONFIG_DIR } from '../opencode/shared.js';
 
 const SKILL_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
 
 function normalizeUserSkillDir(userSkillDir) {
   if (!userSkillDir) return null;
-  // --- GeoCode: the roots skills.js discovers (geocode/kernel-roots.js). Installing into the
-  // old ones would drop a skill where neither the list nor the kernel looks. ---
-  const legacySkillDir = path.join(kernelConfigRoot(), 'skill');
-  const pluralSkillDir = path.join(kernelConfigRoot(), 'skills');
-  // --- /GeoCode ---
+  const legacySkillDir = path.join(OPENCODE_CONFIG_DIR, 'skill');
+  const pluralSkillDir = path.join(OPENCODE_CONFIG_DIR, 'skills');
   if (userSkillDir === legacySkillDir) {
     if (fs.existsSync(legacySkillDir) && !fs.existsSync(pluralSkillDir)) return legacySkillDir;
     return pluralSkillDir;

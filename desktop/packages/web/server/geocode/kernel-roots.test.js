@@ -102,17 +102,22 @@ describe('kernel roots', () => {
     expect(shared.readConfigLayers().mergedConfig.model).toBe('geocode/round-trip');
   });
 
-  it('saves the global behaviour prompt where the kernel loads instructions from', () => {
+  it('saves the global behaviour prompt where the kernel loads instructions from', async () => {
     // Both ends, because only the pair is the invariant. `routes.js` wrote
     // `~/.config/opencode/AGENTS.md` while `session/instruction.ts` read `<config root>/AGENTS.md`,
     // so the Behavior page reported success and the agent never saw a word of it — and the PUT
     // creates the parent directory, so saving one also created OpenCode's config root.
     //
-    // Source rather than a round trip: the path is a constant inside `registerOpenCodeRoutes`,
-    // and standing that whole route up needs the dependency object the server assembles. What
-    // can drift is which root each side names, and that is what this reads.
+    // The route joins onto `shared.js`'s OPENCODE_CONFIG_DIR, the single constant upstream now
+    // routes every reader of the config root through and the one GeoCode patches. Assert its
+    // value rather than how the route spells it: standing the whole route up needs the
+    // dependency object the server assembles, but the root the route lands in is a value.
+    const { OPENCODE_CONFIG_DIR } = await import('../lib/opencode/shared.js');
+    expect(path.join(OPENCODE_CONFIG_DIR, 'AGENTS.md'))
+      .toBe(path.join(configHome, brand().dirName, 'AGENTS.md'));
+
     const shell = fs.readFileSync(path.join(serverRoot, 'lib/opencode/routes.js'), 'utf8');
-    expect(shell).toContain("path.join(kernelConfigRoot(), 'AGENTS.md')");
+    expect(shell).toContain("'AGENTS.md'");
     expect(shell).not.toContain("'.config', 'opencode'");
 
     const kernel = fs.readFileSync(

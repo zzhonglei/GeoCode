@@ -63,11 +63,33 @@ type Props = {
   | 'setDeleteSessionConfirm'
   | 'startFolderRename'
   | 'setCopiedSessionId'
+  | 'startSessionWorktreeMenuLoad'
 >;
 
 type RenderExtras = SessionNodeRenderExtras;
 
 const MAX_VISIBLE_RECENT_SESSIONS = 7;
+
+const RELATIVE_TIME_TICK_INTERVAL_MS = 60_000;
+
+/**
+ * One ticker for the whole Recent list. The rows render their compact
+ * timestamp ("5m") at render time, and the row memo only re-renders on
+ * session changes, so without a tick the label freezes at the value it had
+ * when the row mounted. A single minute interval per list keeps every
+ * visible row current at a cost independent of the row count — never one
+ * interval per row.
+ */
+const useRelativeTimeTick = (): number => {
+  const [tick, setTick] = React.useState(0);
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setTick((previous) => previous + 1);
+    }, RELATIVE_TIME_TICK_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, []);
+  return tick;
+};
 
 export function SidebarActivitySections(props: Props): React.ReactNode {
   const {
@@ -118,6 +140,8 @@ export function SidebarActivitySections(props: Props): React.ReactNode {
     });
   }, [batchSize]);
 
+  const relativeTimeTick = useRelativeTimeTick();
+
   const buildRenderExtras = React.useCallback((nodes: SessionNode[]) => {
     const subtreeContainsEditing = new Set<string>();
     collectSubtreeContainingId(nodes, props.editingId, subtreeContainsEditing);
@@ -133,6 +157,7 @@ export function SidebarActivitySections(props: Props): React.ReactNode {
       subtreeContainsEditing,
       menuOpenSessionId,
       nodeStructureKey: nodeStructureKeyByNode.get(child) ?? '',
+      relativeTimeTick,
       childRenderExtrasFor,
     });
 
@@ -140,9 +165,10 @@ export function SidebarActivitySections(props: Props): React.ReactNode {
       subtreeContainsEditing,
       menuOpenSessionId,
       nodeStructureKey: nodeStructureKeyByNode.get(node) ?? '',
+      relativeTimeTick,
       childRenderExtrasFor,
     });
-  }, [props.editingId, props.openSidebarMenuKey]);
+  }, [props.editingId, props.openSidebarMenuKey, relativeTimeTick]);
 
   const visibleSections = sections.filter((section) => section.items.length > 0 || section.key === 'chats');
   if (visibleSections.length === 0) {
@@ -198,6 +224,7 @@ export function SidebarActivitySections(props: Props): React.ReactNode {
             setDeleteSessionConfirm={props.setDeleteSessionConfirm}
             startFolderRename={props.startFolderRename}
             setCopiedSessionId={props.setCopiedSessionId}
+            startSessionWorktreeMenuLoad={props.startSessionWorktreeMenuLoad}
           />
         );
 
@@ -219,10 +246,12 @@ export function SidebarActivitySections(props: Props): React.ReactNode {
         }
 
         return (
-          <div key={section.key} className="relative space-y-1">
+          <div key={section.key} className="relative">
+            <div data-sidebar-activity-start={section.key} className="pointer-events-none absolute inset-x-0 top-0 h-px" aria-hidden="true" />
             <div className={cn(
               'relative group/chats',
               '-ml-2.5 -mr-2',
+              !isCollapsed && 'mb-1',
               stickyZoneHeaders && 'sticky top-0 z-20 bg-sidebar',
             )} data-sidebar-sticky-header={stickyZoneHeaders ? 'true' : undefined}>
               <button
@@ -237,7 +266,7 @@ export function SidebarActivitySections(props: Props): React.ReactNode {
                     {isCollapsed ? <Icon name="arrow-right-s" className="h-3.5 w-3.5" /> : <Icon name="arrow-down-s" className="h-3.5 w-3.5" />}
                   </span>
                 </span>
-                <span className="text-[14px] font-semibold lowercase text-foreground">{section.title}</span>
+                <span className="typography-ui-label font-semibold lowercase text-foreground">{section.title}</span>
               </button>
               {section.key === 'chats' && props.onNewChat ? (
                 <button
