@@ -35,6 +35,17 @@
 # .opencode/ — six agent definitions and three commands for upstream's own use.
 #   Our project config root is Brand.projectDir (.geocode), so nothing reads it.
 #
+# .openchamber/ — upstream's own shared project config: a setupWorktree step, a
+#   DevHMR action, a plansDir. The feature reads it from whatever checkout the
+#   user opens, never from here, and GeoCode serves no shared project config at
+#   all.
+#
+# changelog/ — one release note per OpenChamber version, plus the index.json
+#   built from them. The product reads none of it: update-notes.js fetches that
+#   index over HTTP from upstream's repository. The directory is read by
+#   scripts/changelog and upstream's release workflow, both of which publish
+#   OpenChamber's releases, not ours.
+#
 # .env — NODE_ENV=development, an environment default we have not decided on.
 #
 # Both .env and the six .claude/skills symlinks are matched by upstream's own
@@ -45,19 +56,21 @@
 # The same exclusions, as data. A whitelist's failure mode is silence: upstream
 # adds a top-level entry, no line here names it, and it is dropped with nothing
 # said. chamber-vendor.sh therefore reports any top-level entry that is neither
-# selected below nor declared here — which makes these eight lines the
+# selected below nor declared here — which makes these ten lines the
 # difference between "we decided against it" and "nobody has looked at it yet".
 !.agents
 !.claude
 !.env
 !.github
+!.openchamber
 !.opencode
 !AGENTS.md
 !CLAUDE.md
+!changelog
 !renovate.json
 
 # --- Root infrastructure. Nothing installs or builds without these; the
-# postinstall chain alone needs package.json, fix-deprecation.js, patches and
+# postinstall chain alone needs package.json, fix-deprecation.js and
 # packages/electron/scripts. ---
 package.json
 bun.lock
@@ -79,7 +92,6 @@ tools
 .gitignore
 .gitattributes
 .nvmrc
-patches
 bun-patches
 scripts
 
