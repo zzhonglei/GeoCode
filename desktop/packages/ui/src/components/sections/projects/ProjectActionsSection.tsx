@@ -49,6 +49,7 @@ import {
 import { SettingsInfoHint } from '@/components/sections/shared/SettingsInfoHint';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { REPOSITORY_SHARING_OFFERED } from '@/geocode/repository-sharing-surface'; // GeoCode: own module
 
 type EditableProjectAction = OpenChamberProjectAction;
 
@@ -403,7 +404,8 @@ export const ProjectActionsSection: React.FC<ProjectActionsSectionProps> = ({ pr
                     </div>
                   </CollapsibleTrigger>
 
-                  {action.name.trim() && action.command.trim() ? (
+                  {/* --- GeoCode: the entrance to the repository file, closed (geocode/repository-sharing-surface.ts) --- */}
+                  {!REPOSITORY_SHARING_OFFERED ? null : action.name.trim() && action.command.trim() ? (
                     <Button
                       type="button"
                       variant="ghost"

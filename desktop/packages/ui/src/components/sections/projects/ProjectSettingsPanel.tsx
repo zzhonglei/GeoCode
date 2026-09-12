@@ -9,6 +9,8 @@ import {
 } from '@/components/sections/projects/useProjectIdentityForm';
 import { useProjectIdentityAutoSave } from '@/components/sections/projects/useProjectIdentityAutoSave';
 import type { ProjectEntry } from '@/lib/api/types';
+import { PROJECT_ACTIONS_OFFERED } from '@/geocode/advanced-project-surface'; // GeoCode: own module
+import { REPOSITORY_SHARING_OFFERED } from '@/geocode/repository-sharing-surface'; // GeoCode: own module
 
 type ProjectSettingsPanelProps = {
   project: ProjectEntry | null;
@@ -48,14 +50,16 @@ export const ProjectSettingsPanel: React.FC<ProjectSettingsPanelProps> = ({
   return (
     <div className="space-y-0">
       <ProjectIdentityFields form={form} />
-      <ProjectActionsSection projectRef={projectRef} />
-      {showWorktrees ? <WorktreeSectionContent projectRef={projectRef} /> : null}
+      {/* --- GeoCode: a sidebar button bound to a shell command is not a GeoCode surface
+          (geocode/advanced-project-surface.ts) --- */}
+      {!PROJECT_ACTIONS_OFFERED ? null : <ProjectActionsSection projectRef={projectRef} />}
+      {/* GeoCode: upstream's own list-only mode, which drops the worktree setup commands and keeps the list */}
+      {showWorktrees ? <WorktreeSectionContent projectRef={projectRef} sections="list-only" /> : null}
       {/* --- GeoCode: this block is the team's shared file and nothing else — where it is,
           whether it parsed, and the shared plans folder. The server reports it missing and
           refuses the write (lib/projects/routes.js), so all it could show here is a file that
-          never appears and a folder setting that never saves. ---
-      <SharedProjectConfigSection projectRef={projectRef} />
-      --- /GeoCode --- */}
+          never appears and a folder setting that never saves. --- */}
+      {!REPOSITORY_SHARING_OFFERED ? null : <SharedProjectConfigSection projectRef={projectRef} />}
     </div>
   );
 };

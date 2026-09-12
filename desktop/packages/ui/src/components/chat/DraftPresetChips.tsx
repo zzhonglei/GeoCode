@@ -39,6 +39,7 @@ import {
     type PinnableItem,
     type PinnableSection,
 } from './useDraftStarters';
+import { REPOSITORY_SHARING_OFFERED } from '@/geocode/repository-sharing-surface'; // GeoCode: own module
 
 type DraftPresetChipsProps = {
     /** Called with the resolved starter invocation when a chip is clicked. */
@@ -338,7 +339,11 @@ const DraftPresetChipsContent: React.FC<DraftPresetChipsProps> = ({ onSubmit, cl
                         items={project}
                         onSubmit={onSubmit}
                         onRemove={(item) => removeStarter('project', item.ref)}
-                        onToggleShared={(item) => (item.shared ? unshareStarter(item.ref) : shareStarter(item.ref))}
+                        onToggleShared={
+                            // GeoCode: the entrance to the repository file, closed (geocode/repository-sharing-surface.ts).
+                            // Passing nothing is what drops the chip's hover button; StarterGroup takes the prop as optional.
+                            !REPOSITORY_SHARING_OFFERED ? undefined : (item) => (item.shared ? unshareStarter(item.ref) : shareStarter(item.ref))
+                        }
                         hideRemove={isMobile}
                     />
                 ) : null}

@@ -30,6 +30,7 @@ import {
   ProjectSettingsSubsection,
 } from '@/components/sections/projects/ProjectSettingsSubsection';
 import { useI18n } from '@/lib/i18n';
+import { REPOSITORY_SHARING_OFFERED } from '@/geocode/repository-sharing-surface'; // GeoCode: own module
 
 export interface WorktreeSectionContentProps {
   projectRef?: { id: string; path: string } | null;
@@ -512,7 +513,8 @@ export const WorktreeSectionContent: React.FC<WorktreeSectionContentProps> = ({ 
                   placeholder={t('settings.openchamber.worktrees.setup.commandPlaceholder')}
                   className="h-7 min-w-0 flex-1 font-mono text-xs"
                 />
-                {command.trim() ? (
+                {/* --- GeoCode: the entrance to the repository file, closed (geocode/repository-sharing-surface.ts) --- */}
+                {!REPOSITORY_SHARING_OFFERED ? null : command.trim() ? (
                   <Button
                     type="button"
                     variant="ghost"
