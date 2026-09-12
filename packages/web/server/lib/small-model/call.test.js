@@ -5,11 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // readConfig reads merged opencode config layers from disk; mock it so each
 // test controls the provider config without touching the filesystem. call.js
-// imports only readConfig from shared.js, so the rest of that module is left
-// untouched for this file.
+// imports the config readers and a plain-object predicate from shared.js, so
+// the rest of that module is left untouched for this file.
 vi.mock('../opencode/shared.js', () => ({
   readConfig: vi.fn(),
   readConfigLayers: vi.fn(),
+  // Pure predicate with no disk access — the real implementation, so header
+  // parsing is exercised rather than stubbed.
+  isPlainObject: (value) => value instanceof Object && !Array.isArray(value),
 }));
 
 vi.mock('./runtime-providers.js', () => ({ getRuntimeProvider: vi.fn(async () => null) }));
@@ -67,6 +70,7 @@ describe('callSmallModel — custom provider config', () => {
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
     delete process.env.OPENCHAMBER_TEST_PROVIDER_KEY;
+    delete process.env.OPENCHAMBER_TEST_GATEWAY_KEY;
   });
 
   describe('config-supplied credentials (no auth.json entry)', () => {
@@ -120,6 +124,105 @@ describe('callSmallModel — custom provider config', () => {
       });
 
       expect(lastCall(fetchMock).init.headers.Authorization).toBe('Bearer sk-env-key');
+    });
+
+    it('sends configured provider headers alongside the bearer token', async () => {
+      process.env.OPENCHAMBER_TEST_GATEWAY_KEY = 'sub-key';
+      readConfig.mockReturnValue({
+        provider: {
+          custom: {
+            options: {
+              apiKey: 'sk-config',
+              baseURL: 'https://proxy.example.test/v1',
+              headers: {
+                'Ocp-Apim-Subscription-Key': '{env:OPENCHAMBER_TEST_GATEWAY_KEY}',
+                'x-tenant': 'team',
+              },
+            },
+          },
+        },
+      });
+      fetchMock.mockResolvedValue(ok('hello'));
+
+      await callSmallModel({
+        auth: {},
+        catalog: {},
+        workingDirectory: '/proj',
+        providerID: 'custom',
+        modelID: 'model',
+        prompt: 'hi',
+      });
+
+      const { init } = lastCall(fetchMock);
+      expect(init.headers['Ocp-Apim-Subscription-Key']).toBe('sub-key');
+      expect(init.headers['x-tenant']).toBe('team');
+      expect(init.headers.Authorization).toBe('Bearer sk-config');
+    });
+
+    it('resolves a relative header file from the config layer that defines it', async () => {
+      const configPath = '/config/opencode.json';
+      const secretPath = '/config/gateway-key';
+      vi.spyOn(fs, 'readFileSync').mockImplementation((filePath) => {
+        if (filePath === secretPath) return 'sub-key\n';
+        throw new Error(`Unexpected file read: ${filePath}`);
+      });
+      const provider = {
+        custom: {
+          options: {
+            apiKey: 'sk-config',
+            baseURL: 'https://proxy.example.test/v1',
+            headers: { 'x-gateway-key': '{file:./gateway-key}' },
+          },
+        },
+      };
+      readConfig.mockReturnValue({ provider });
+      readConfigLayers.mockReturnValue({
+        customConfig: {},
+        projectConfig: {},
+        userConfig: { provider },
+        paths: { customPath: null, projectPath: '/project/opencode.json', userPath: configPath },
+      });
+      fetchMock.mockResolvedValue(ok('hello'));
+
+      await callSmallModel({
+        auth: {},
+        catalog: {},
+        workingDirectory: '/project',
+        providerID: 'custom',
+        modelID: 'model',
+        prompt: 'hi',
+      });
+
+      expect(lastCall(fetchMock).init.headers['x-gateway-key']).toBe('sub-key');
+      expect(fs.readFileSync).toHaveBeenCalledWith(secretPath, 'utf8');
+    });
+
+    it('overrides Authorization without depending on header-name casing', async () => {
+      readConfig.mockReturnValue({
+        provider: {
+          custom: {
+            options: {
+              apiKey: 'sk-config',
+              baseURL: 'https://proxy.example.test/v1',
+              headers: { authorization: 'Basic gateway-token' },
+            },
+          },
+        },
+      });
+      fetchMock.mockResolvedValue(ok('hello'));
+
+      await callSmallModel({
+        auth: {},
+        catalog: {},
+        workingDirectory: '/project',
+        providerID: 'custom',
+        modelID: 'model',
+        prompt: 'hi',
+      });
+
+      const headers = lastCall(fetchMock).init.headers;
+      expect(headers.authorization).toBe('Basic gateway-token');
+      expect(headers.Authorization).toBeUndefined();
     });
 
     it('uses apiKey and baseURL from provider config when no auth.json entry exists', async () => {
@@ -316,7 +419,93 @@ describe('callSmallModel — custom provider config', () => {
     });
   });
 
+  describe('anthropic provider custom baseURL override', () => {
+    const anthropicOk = (text) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ content: [{ type: 'text', text }] }),
+    });
+
+    it('respects provider.anthropic.options.baseURL over the hardcoded Anthropic endpoint', async () => {
+      readConfig.mockReturnValue({
+        provider: { anthropic: { options: { baseURL: 'http://127.0.0.1:3456/v1' } } },
+      });
+      fetchMock.mockResolvedValue(anthropicOk('ok'));
+
+      await callSmallModel({
+        auth: { anthropic: { type: 'api', key: 'dummy' } },
+        catalog: {},
+        workingDirectory: '/proj',
+        providerID: 'anthropic',
+        modelID: 'claude-haiku-4-5',
+        prompt: 'hi',
+      });
+
+      const { url, init } = lastCall(fetchMock);
+      expect(url).toBe('http://127.0.0.1:3456/v1/messages');
+      expect(url).not.toContain('api.anthropic.com');
+      expect(init.headers['x-api-key']).toBe('dummy');
+    });
+
+    it('uses a bare-host baseURL as-is without inserting /v1, matching @ai-sdk/anthropic', async () => {
+      readConfig.mockReturnValue({
+        provider: { anthropic: { options: { baseURL: 'http://127.0.0.1:3456' } } },
+      });
+      fetchMock.mockResolvedValue(anthropicOk('ok'));
+
+      await callSmallModel({
+        auth: { anthropic: { type: 'api', key: 'dummy' } },
+        catalog: {},
+        workingDirectory: '/proj',
+        providerID: 'anthropic',
+        modelID: 'claude-haiku-4-5',
+        prompt: 'hi',
+      });
+
+      expect(lastCall(fetchMock).url).toBe('http://127.0.0.1:3456/messages');
+    });
+
+    it('falls back to https://api.anthropic.com when no anthropic baseURL override is configured', async () => {
+      readConfig.mockReturnValue({});
+      fetchMock.mockResolvedValue(anthropicOk('ok'));
+
+      await callSmallModel({
+        auth: { anthropic: { type: 'api', key: 'sk-ant' } },
+        catalog: {},
+        workingDirectory: '/proj',
+        providerID: 'anthropic',
+        modelID: 'claude-haiku-4-5',
+        prompt: 'hi',
+      });
+
+      expect(lastCall(fetchMock).url).toBe('https://api.anthropic.com/v1/messages');
+    });
+  });
+
   describe('catalog-based base URL (no config override)', () => {
+    it('identifies OpenCode Go requests with the owning conversation', async () => {
+      readConfig.mockReturnValue({});
+      fetchMock.mockResolvedValue(ok('ok'));
+
+      await callSmallModel({
+        auth: { 'opencode-go': { type: 'api', key: 'go-key' } },
+        catalog: {
+          'opencode-go': {
+            id: 'opencode-go',
+            api: 'https://opencode.ai/zen/go/v1',
+            models: { utility: { id: 'utility' } },
+          },
+        },
+        workingDirectory: '/proj',
+        sessionID: 'ses_conversation',
+        providerID: 'opencode-go',
+        modelID: 'utility',
+        prompt: 'hi',
+      });
+
+      expect(lastCall(fetchMock).init.headers['x-opencode-session']).toBe('ses_conversation');
+    });
+
     it('uses the catalog api field when no config baseURL is set', async () => {
       readConfig.mockReturnValue({});
       fetchMock.mockResolvedValue(ok('ok'));
@@ -374,6 +563,35 @@ describe('callSmallModel — custom provider config', () => {
       const { url, init } = lastCall(fetchMock);
       expect(url).toBe('https://api.llmapi.ai/v1/chat/completions');
       expect(init.headers.Authorization).toBe('Bearer plugin-key');
+    });
+
+    it('uses the selected runtime model endpoint', async () => {
+      readConfig.mockReturnValue({});
+      getRuntimeProvider.mockResolvedValue({
+        id: 'runtime-provider',
+        apiKey: 'plugin-key',
+        baseURL: 'https://runtime-provider/v1beta',
+        models: new Map([
+          ['first-model', { api: { url: 'https://runtime-provider/v1beta', npm: '@ai-sdk/google' } }],
+          ['selected-model', { api: { url: 'https://runtime-provider/v1', npm: '@ai-sdk/openai' } }],
+        ]),
+        anonymousZen: false,
+      });
+      fetchMock.mockResolvedValue(ok('done'));
+
+      await callSmallModel({
+        auth: {},
+        catalog: {},
+        workingDirectory: '/proj',
+        providerID: 'runtime-provider',
+        modelID: 'selected-model',
+        prompt: 'hi',
+      });
+
+      const { url, init } = lastCall(fetchMock);
+      expect(url).toBe('https://runtime-provider/v1/chat/completions');
+      expect(url).not.toContain('/v1beta');
+      expect(JSON.parse(init.body).model).toBe('selected-model');
     });
 
     it('keeps the ChatGPT-plan login on its own transport instead of the runtime key', async () => {
@@ -535,6 +753,22 @@ describe('callSmallModel — Google thinking configuration', () => {
 
     const body = JSON.parse(lastCall(fetchMock).init.body);
     expect(body.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
+  });
+
+  it('omits thinkingConfig for other Google/Gemini models', async () => {
+    fetchMock.mockResolvedValue(googleResponse('generated commit'));
+
+    await callSmallModel({
+      auth: { google: { type: 'api', key: 'google-key' } },
+      catalog: {},
+      workingDirectory: '/proj',
+      providerID: 'google',
+      modelID: 'gemini-1.5-flash',
+      prompt: 'generate',
+    });
+
+    const body = JSON.parse(lastCall(fetchMock).init.body);
+    expect(body.generationConfig.thinkingConfig).toBeUndefined();
   });
 });
 

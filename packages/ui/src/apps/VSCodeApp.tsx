@@ -9,11 +9,13 @@ import { ConfigUpdateOverlay } from '@/components/ui/ConfigUpdateOverlay';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { OpenCodeUpdateToast } from '@/components/update/OpenCodeUpdateToast';
 import { AppLinkConfirmDialog } from '@/components/chat/AppLinkConfirmDialog';
+import { SharedTrustConfirmDialog } from '@/components/projects/SharedTrustConfirmDialog';
 import { VSCodeLayout } from '@/components/layout/VSCodeLayout';
 import { usePushVisibilityBeacon } from '@/hooks/usePushVisibilityBeacon';
 import { useGlobalSessionsPolling } from '@/hooks/useGlobalSessionsPolling';
 import { useRouter } from '@/hooks/useRouter';
 import { useWindowTitle } from '@/hooks/useWindowTitle';
+import { useRootScrollLock } from '@/hooks/useRootScrollLock';
 import { opencodeClient } from '@/lib/opencode/client';
 import type { RuntimeAPIs } from '@/lib/api/types';
 import { runtimeFetch } from '@/lib/runtime-fetch';
@@ -57,6 +59,7 @@ export function VSCodeApp({ apis }: VSCodeAppProps) {
   useAppFontEffects();
   usePushVisibilityBeacon({ enabled: true });
   useWindowTitle();
+  useRootScrollLock();
   useRouter();
   useGlobalSessionsPolling(panelType !== 'agentManager');
 
@@ -112,6 +115,7 @@ export function VSCodeApp({ apis }: VSCodeAppProps) {
                 <SyncAppEffects embeddedBackgroundWorkEnabled={true} />
                 <AgentManagerView />
                 <AppLinkConfirmDialog />
+                <SharedTrustConfirmDialog />
                 <OpenCodeUpdateToast />
                 <Toaster position="top-center" />
               </div>
@@ -132,6 +136,7 @@ export function VSCodeApp({ apis }: VSCodeAppProps) {
                 <SyncAppEffects embeddedBackgroundWorkEnabled={true} />
                 <VSCodeLayout />
                 <AppLinkConfirmDialog />
+                <SharedTrustConfirmDialog />
                 <OpenCodeUpdateToast />
                 <Toaster position="top-center" />
                 <ConfigUpdateOverlay />
