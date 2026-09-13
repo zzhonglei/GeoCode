@@ -54,7 +54,7 @@ export const settingsDict = {
   'settings.view.pendingRestart.manualRestartRequired': '已儲存到磁碟。請重新啟動已連線的 OpenCode 伺服器以套用變更。',
   'settings.view.pendingRestart.saved': '已儲存。點「套用變更」以生效。',
 
-  'settings.view.pendingRestart.confirm.title': '套用變更?',
+  'settings.view.pendingRestart.confirm.title': '套用變更？',
   'settings.view.pendingRestart.confirm.description': 'OpenCode 將重新載入設定。仍在進行的對話需要先結束。',
   'settings.view.pendingRestart.confirm.dontShowAgain': '不要再顯示',
   'settings.view.pendingRestart.confirm.cancel': '取消',  'settings.view.actions.backToSettings': '返回設定頁',

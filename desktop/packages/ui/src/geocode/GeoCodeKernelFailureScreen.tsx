@@ -49,7 +49,7 @@ const STRINGS: Record<'en' | 'zh-CN' | 'zh-TW', Strings> = {
   },
   'zh-CN': {
     title: 'GeoCode 内核未能启动',
-    description: '内置内核没有启动,工作区无法打开。下面的错误信息与日志文件说明了原因。',
+    description: '内置内核没有启动，工作区无法打开。下面的错误信息与日志文件说明了原因。',
     errorLabel: '错误',
     outputLabel: '内核最后输出',
     logLabel: '日志文件',
@@ -60,7 +60,7 @@ const STRINGS: Record<'en' | 'zh-CN' | 'zh-TW', Strings> = {
   },
   'zh-TW': {
     title: 'GeoCode 核心未能啟動',
-    description: '內建核心沒有啟動,工作區無法開啟。下面的錯誤資訊與記錄檔說明了原因。',
+    description: '內建核心沒有啟動，工作區無法開啟。下面的錯誤資訊與記錄檔說明了原因。',
     errorLabel: '錯誤',
     outputLabel: '核心最後輸出',
     logLabel: '記錄檔',
