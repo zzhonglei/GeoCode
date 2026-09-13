@@ -262,6 +262,30 @@ describe('startKernelHost health', () => {
     child.emit('exit', 3);
     await expect(host.health.wait).rejects.toThrow(/exited before answering a health check, with code 3/);
   });
+
+  it('leaves no rejection unhandled when nothing awaits it, as in production', async () => {
+    const unhandled = [];
+    const record = (reason) => unhandled.push(reason);
+    process.on('unhandledRejection', record);
+    try {
+      const child = createFakeChild({ onStart: readyOnStart('127.0.0.1', 51234) });
+      await startWith(child, { health: async () => false });
+      child.emit('exit', 3);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', record);
+    }
+  });
+});
+
+describe('startKernelHost exit', () => {
+  it('hands over the exit code of a kernel that goes away after ready', async () => {
+    const child = createFakeChild({ onStart: readyOnStart('127.0.0.1', 51234) });
+    const host = await startWith(child);
+    child.emit('exit', 137);
+    expect(await host.exit).toBe(137);
+  });
 });
 
 describe('pickFreePort', () => {

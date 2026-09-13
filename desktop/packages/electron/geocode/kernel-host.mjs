@@ -213,6 +213,9 @@ export const startKernelHost = async ({
     })();
     await Promise.race([poll, gone]);
   })();
+  // Production never awaits this, so a kernel that dies before its first answer would otherwise
+  // leave the rejection unhandled.
+  wait.catch(() => undefined);
 
   let stopping;
   const stop = () => {
@@ -245,6 +248,8 @@ export const startKernelHost = async ({
   return {
     connection,
     health: { wait },
+    /** Resolves with the exit code whenever the kernel exits, whoever caused it. */
+    exit: exit.promise,
     stop,
     terminate,
     get exited() {

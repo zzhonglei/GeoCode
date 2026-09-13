@@ -1,4 +1,4 @@
-/* --- GeoCode: the screen for a kernel that did not come up (docs/DESKTOP.md §5.1).
+/* --- GeoCode: the screen for a kernel that did not come up, or went away later (docs/DESKTOP.md §5.1, §5.2).
  *
  * The desktop shell has one host, this machine, so a boot that does not reach the main view
  * has one meaning: the embedded kernel failed to start. Upstream answers that case with its
@@ -13,10 +13,11 @@ import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/icon/Icon';
 import { OpenChamberLogo } from '@/components/ui/OpenChamberLogo';
-import { invokeDesktop } from '@/lib/desktop';
+import { invokeDesktop, restartDesktopApp } from '@/lib/desktop';
 import { useI18n } from '@/lib/i18n';
 
 export interface KernelFailure {
+  phase: 'start' | 'running';
   message: string;
   output: string[];
   logPath: string | null;
@@ -26,6 +27,8 @@ export interface KernelFailure {
 interface Strings {
   title: string;
   description: string;
+  lostTitle: string;
+  lostDescription: string;
   errorLabel: string;
   outputLabel: string;
   logLabel: string;
@@ -39,6 +42,8 @@ const STRINGS: Record<'en' | 'zh-CN' | 'zh-TW', Strings> = {
   en: {
     title: 'GeoCode could not start its kernel',
     description: 'The built-in kernel did not start, so the workspace cannot open. The details below and the log file say what went wrong.',
+    lostTitle: 'The GeoCode kernel stopped unexpectedly',
+    lostDescription: 'The built-in kernel stopped while GeoCode was running, and work in progress was interrupted. The details below and the log file say what went wrong. Retry reopens GeoCode.',
     errorLabel: 'Error',
     outputLabel: 'Last lines from the kernel',
     logLabel: 'Log file',
@@ -50,6 +55,8 @@ const STRINGS: Record<'en' | 'zh-CN' | 'zh-TW', Strings> = {
   'zh-CN': {
     title: 'GeoCode 内核未能启动',
     description: '内置内核没有启动，工作区无法打开。下面的错误信息与日志文件说明了原因。',
+    lostTitle: 'GeoCode 内核意外退出',
+    lostDescription: '内置内核在运行中退出，正在进行的工作已中断。下面的错误信息与日志文件说明了原因，重试会重新打开 GeoCode。',
     errorLabel: '错误',
     outputLabel: '内核最后输出',
     logLabel: '日志文件',
@@ -61,6 +68,8 @@ const STRINGS: Record<'en' | 'zh-CN' | 'zh-TW', Strings> = {
   'zh-TW': {
     title: 'GeoCode 核心未能啟動',
     description: '內建核心沒有啟動，工作區無法開啟。下面的錯誤資訊與記錄檔說明了原因。',
+    lostTitle: 'GeoCode 核心意外結束',
+    lostDescription: '內建核心在執行中結束，進行中的工作已中斷。下面的錯誤資訊與記錄檔說明了原因，重試會重新開啟 GeoCode。',
     errorLabel: '錯誤',
     outputLabel: '核心最後輸出',
     logLabel: '記錄檔',
@@ -74,15 +83,12 @@ const STRINGS: Record<'en' | 'zh-CN' | 'zh-TW', Strings> = {
 const stringsFor = (locale: string): Strings =>
   STRINGS[locale as keyof typeof STRINGS] ?? STRINGS.en;
 
-interface GeoCodeKernelFailureScreenProps {
-  onRetry: () => void | Promise<void>;
-}
-
-export const GeoCodeKernelFailureScreen: React.FC<GeoCodeKernelFailureScreenProps> = ({ onRetry }) => {
+export const GeoCodeKernelFailureScreen: React.FC = () => {
   const { locale } = useI18n();
   const s = stringsFor(locale);
   const [failure, setFailure] = React.useState<KernelFailure | null>(null);
   const [isRetrying, setIsRetrying] = React.useState(false);
+  const lost = failure?.phase === 'running';
 
   React.useEffect(() => {
     let cancelled = false;
@@ -95,14 +101,16 @@ export const GeoCodeKernelFailureScreen: React.FC<GeoCodeKernelFailureScreenProp
     };
   }, []);
 
+  // Always a relaunch: upstream's boot handler only reloads while the shell is up, and a reload
+  // after a lost kernel reads the same record and lands here again.
   const handleRetry = React.useCallback(async () => {
     setIsRetrying(true);
     try {
-      await onRetry();
+      if (!(await restartDesktopApp())) window.location.reload();
     } finally {
       setIsRetrying(false);
     }
-  }, [onRetry]);
+  }, []);
 
   const handleReveal = React.useCallback(() => {
     if (!failure?.logPath) return;
@@ -114,8 +122,8 @@ export const GeoCodeKernelFailureScreen: React.FC<GeoCodeKernelFailureScreenProp
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center space-y-3 text-center">
           <OpenChamberLogo width={64} height={64} />
-          <h1 className="typography-ui-header text-xl font-semibold text-foreground">{s.title}</h1>
-          <p className="text-muted-foreground text-sm max-w-sm">{s.description}</p>
+          <h1 className="typography-ui-header text-xl font-semibold text-foreground">{lost ? s.lostTitle : s.title}</h1>
+          <p className="text-muted-foreground text-sm max-w-sm">{lost ? s.lostDescription : s.description}</p>
         </div>
 
         <div className="rounded-lg border border-border bg-background/50 p-3">

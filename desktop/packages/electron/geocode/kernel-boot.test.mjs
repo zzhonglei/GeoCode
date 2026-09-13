@@ -35,6 +35,13 @@ describe('startEmbeddedKernel', () => {
     expect(environment.OPENCODE_SERVER_PASSWORD).toBe('secret');
   });
 
+  it('keeps the last output lines readable after a successful start', async () => {
+    const { started, calls } = bootWith();
+    const handle = await started;
+    calls[0].onStderr('panic: later');
+    expect(handle.outputTail()).toEqual(['panic: later']);
+  });
+
   it('hands the kernel an environment with no inherited configuration in it', async () => {
     const { started, calls } = bootWith({
       environment: { PATH: '/usr/bin', OPENCODE_CONFIG: '/inherited.json', GEOCODE_CONFIG: '/ours.json' },

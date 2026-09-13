@@ -48,6 +48,7 @@ import { ConfigUpdateOverlay } from '@/components/ui/ConfigUpdateOverlay';
 import { AboutDialog as UpstreamAboutDialog } from '@/components/ui/AboutDialog'; // GeoCode: wrapped below
 import { GeoCodeAboutDialog } from '@/geocode/GeoCodeAboutDialog';
 import { GeoCodeKernelFailureScreen } from '@/geocode/GeoCodeKernelFailureScreen';
+import { useKernelLost } from '@/geocode/kernel-lost'; // GeoCode: own module
 import { RuntimeAPIProvider } from '@/contexts/RuntimeAPIProvider';
 import { registerRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { useUIStore } from '@/stores/useUIStore';
@@ -281,6 +282,7 @@ function App({ apis }: AppProps) {
       ? resolveDesktopBootView({ isDesktopShell: true, bootOutcome: outcome })
       : null;
   });
+  const kernelLost = useKernelLost(isDesktopRuntime); // GeoCode: a kernel that dies after boot takes the failure screen below
   const appReadyDispatchedRef = React.useRef(false);
   const embeddedSessionChat = React.useMemo<EmbeddedSessionChatConfig | null>(() => readEmbeddedSessionChatConfig(), []);
   const embeddedBackgroundWorkEnabled = !embeddedSessionChat || isEmbeddedVisible;
@@ -868,13 +870,14 @@ function App({ apis }: AppProps) {
   // When the boot outcome resolves to a non-main screen (chooser, recovery),
   // render OnboardingScreen with appropriate mode/variant.
   // --- GeoCode: the desktop shell has one host, this machine, so a boot view that is not the
-  // main view has one meaning: the embedded kernel did not come up (docs/DESKTOP.md §5.1). The
-  // upstream chooser and recovery screens below are never reached in the desktop shell. ---
-  if (isDesktopRuntime && bootView && bootView.screen !== 'main') {
+  // main view has one meaning: the embedded kernel did not come up (docs/DESKTOP.md §5.1). A
+  // kernel that dies after boot lands here too (§5.2). The upstream chooser and recovery screens
+  // below are never reached in the desktop shell. ---
+  if (isDesktopRuntime && (kernelLost || (bootView && bootView.screen !== 'main'))) {
     return (
       <ErrorBoundary>
         <div className="h-full text-foreground bg-background">
-          <GeoCodeKernelFailureScreen onRetry={handleDesktopBootDismiss} />
+          <GeoCodeKernelFailureScreen />
         </div>
       </ErrorBoundary>
     );

@@ -1,21 +1,33 @@
-/* --- GeoCode: a boot has two outcomes, and the second one reaches the window
- * (docs/DESKTOP.md §5.1).
+/* --- GeoCode: a boot has two outcomes, and the second one reaches the window; so does a kernel
+ * that dies later (docs/DESKTOP.md §5.1, §5.2).
  *
  * The record and the output tail are pinned directly; startEmbeddedKernel is driven with a
  * kernel that writes then dies, so the tail is proven to travel with the error. main.mjs is
  * pinned by source: the hosts config collapses to the local host before anything reads it,
- * the kernel start is caught rather than allowed to end the process, and the window can ask
- * for the record. --- */
+ * the kernel start is caught rather than allowed to end the process, a started kernel is
+ * watched, and the window can ask for the record. --- */
 import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { startEmbeddedKernel } from './kernel-boot.mjs';
-import { KERNEL_OUTPUT_TAIL_LINES, createOutputTail, describeKernelFailure } from './kernel-failure.mjs';
+import {
+  KERNEL_LOST_EVENT,
+  KERNEL_OUTPUT_TAIL_LINES,
+  createOutputTail,
+  describeKernelFailure,
+  watchKernelExit,
+} from './kernel-failure.mjs';
 
 const electronRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mainSource = fs.readFileSync(path.join(electronRoot, 'main.mjs'), 'utf8');
+
+const exitingKernel = (output = []) => {
+  let resolveExit;
+  const handle = { exit: new Promise((resolve) => { resolveExit = resolve; }), outputTail: () => output };
+  return { handle, exit: (code) => resolveExit(code) };
+};
 
 describe('kernel failure record', () => {
   it('keeps only the last lines', () => {
@@ -31,6 +43,7 @@ describe('kernel failure record', () => {
     });
     const record = describeKernelFailure({ error, logPath: '/logs/main.log', at: new Date('2026-09-05T00:00:00Z') });
     expect(record).toEqual({
+      phase: 'start',
       message: 'GeoCode Kernel exited before reporting ready with code 1',
       output: ['boom'],
       logPath: '/logs/main.log',
@@ -65,6 +78,48 @@ describe('kernel failure record', () => {
   });
 });
 
+describe('kernel lost while running', () => {
+  it('records the exit code and the last lines, and hands the record on', async () => {
+    const kernel = exitingKernel(['panic: out of memory']);
+    const lost = [];
+    const watching = watchKernelExit({
+      handle: kernel.handle,
+      isCurrent: () => true,
+      logPath: () => '/logs/main.log',
+      onLost: (record) => lost.push(record),
+    });
+    kernel.exit(137);
+    await watching;
+    expect(lost).toHaveLength(1);
+    expect(lost[0]).toMatchObject({
+      phase: 'running',
+      message: 'GeoCode Kernel exited while running, with code 137',
+      output: ['panic: out of memory'],
+      logPath: '/logs/main.log',
+    });
+  });
+
+  it('says nothing about a kernel that exits because the app is quitting', async () => {
+    const kernel = exitingKernel();
+    const lost = [];
+    const watching = watchKernelExit({
+      handle: kernel.handle,
+      isCurrent: () => false,
+      logPath: () => '/logs/main.log',
+      onLost: (record) => lost.push(record),
+    });
+    kernel.exit(0);
+    await watching;
+    expect(lost).toEqual([]);
+  });
+
+  it('is announced under the name the renderer listens for', () => {
+    // The renderer cannot import this module, so it keeps a copy of the event name.
+    const source = fs.readFileSync(path.resolve(electronRoot, '../ui/src/geocode/kernel-lost.ts'), 'utf8');
+    expect(source.match(/export const KERNEL_LOST_EVENT = '([^']+)'/)?.[1]).toBe(KERNEL_LOST_EVENT);
+  });
+});
+
 describe('main.mjs boot', () => {
   it('has one host, this machine', () => {
     const reader = mainSource.indexOf('const readDesktopHostsConfig = () => {');
@@ -84,6 +139,16 @@ describe('main.mjs boot', () => {
     expect(bail).toBeLessThan(shellImport);
     // Preceded by try, so the failure is caught here and not by app.whenReady's exit.
     expect(mainSource.slice(start - 12, start)).toContain('try {');
+  });
+
+  it('watches a started kernel and announces its exit, unless the app is quitting', () => {
+    const start = mainSource.indexOf('state.kernelHandle = await startEmbeddedKernel({');
+    const shellImport = mainSource.indexOf("await import('@openchamber/web/server/index.js')", start);
+    const boot = mainSource.slice(start, shellImport).replace(/^\s*\/\/.*$/gm, '');
+    expect(boot).toContain('void watchKernelExit({');
+    expect(boot).toContain('isCurrent: () => state.kernelHandle === kernelHandle && !state.quitRequested,');
+    expect(boot).toContain('state.kernelFailure = record;');
+    expect(boot).toContain('emitToAllWindows(KERNEL_LOST_EVENT, record);');
   });
 
   it('answers the window with the record', () => {

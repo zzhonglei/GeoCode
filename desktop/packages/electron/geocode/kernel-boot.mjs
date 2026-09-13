@@ -33,7 +33,7 @@ export const startEmbeddedKernel = async ({
     ...(exists ? { exists } : {}),
   });
 
-  // The kernel's last lines travel with a start failure, so the failure screen can show them.
+  // The kernel's last lines travel with a failure, at start or later, so the failure screen can show them.
   const tail = createOutputTail();
   let handle;
   try {
@@ -53,5 +53,5 @@ export const startEmbeddedKernel = async ({
 
   applyKernelConnectionToShellEnvironment({ environment, connection: handle.connection });
   logger.info?.(`[geocode-kernel] ready at ${handle.connection.baseUrl}`);
-  return handle;
+  return Object.assign(handle, { outputTail: tail.lines });
 };

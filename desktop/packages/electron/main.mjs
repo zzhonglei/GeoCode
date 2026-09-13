@@ -29,7 +29,7 @@ import { stripInheritedForeignVariables } from './geocode/kernel-environment.mjs
 import { geocodeDeniedSegments } from './geocode/denied-paths.mjs';
 import { hasRelaySettings, dropRelaySettings, stripRemoteAccessSettings } from './geocode/loopback-settings.mjs';
 import { answerRemoteIpc, isRemoteIpcCommand } from './geocode/remote-ipc.mjs';
-import { describeKernelFailure } from './geocode/kernel-failure.mjs';
+import { KERNEL_LOST_EVENT, describeKernelFailure, watchKernelExit } from './geocode/kernel-failure.mjs';
 import { relaunchOptions } from './geocode/relaunch.mjs';
 import { prepareBrowserTool } from './geocode/browser-tool.mjs';
 // --- /GeoCode ---
@@ -1583,6 +1583,18 @@ const spawnLocalServer = async () => {
     delete process.env.OPENCHAMBER_AGENT_TOOL_TOKEN; // no shell starts to adopt it
     return null;
   }
+  // A kernel that dies later takes the window to the same failure screen; retry relaunches the app.
+  const kernelHandle = state.kernelHandle;
+  void watchKernelExit({
+    handle: kernelHandle,
+    isCurrent: () => state.kernelHandle === kernelHandle && !state.quitRequested,
+    logPath: () => log.transports.file.getFile().path,
+    onLost: (record) => {
+      state.kernelFailure = record;
+      log.error('[geocode-kernel] exited while running:', record);
+      emitToAllWindows(KERNEL_LOST_EVENT, record);
+    },
+  });
   // --- /GeoCode ---
 
   const { startWebUiServer } = await import('@openchamber/web/server/index.js');
