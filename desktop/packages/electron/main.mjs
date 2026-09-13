@@ -1580,6 +1580,7 @@ const spawnLocalServer = async () => {
   } catch (error) {
     state.kernelFailure = describeKernelFailure({ error, logPath: log.transports.file.getFile().path });
     log.error('[geocode-kernel] failed to start:', state.kernelFailure);
+    delete process.env.OPENCHAMBER_AGENT_TOOL_TOKEN; // no shell starts to adopt it
     return null;
   }
   // --- /GeoCode ---
