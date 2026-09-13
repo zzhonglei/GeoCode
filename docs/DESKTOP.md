@@ -479,12 +479,13 @@ KERNEL.md §6 第 1 项)。回调路由 `/api/openchamber/agent-tool` 在 Electr
 plan 拿到的理由与它的 `geodata: "allow"` 一致——读网页是研究,不落盘。
 模型常把 `browser.` 前缀省掉只发 `click`,壳会把它解析成唯一同名的动作;插件在 `ask` 之前做同一归一,
 否则规则永远匹配不到、由通配放行(09-06 真机第一次点击就是这样漏过去的)。
-`browser.capture` 落到项目的 `.browser/`,与工作区内写文件同级,不问;它还要求面板正在显示,
-因为面板不是当前标签时仍然挂载却被置为不显示,合成器不出帧,截图会二十秒超时或报 `UnknownVizError`,
-而读页、点击这些在页面内执行脚本的动作不受影响。截图与清除浏览数据经主进程,主进程只认面板
+`browser.capture` 落到项目的 `.browser/`,与工作区内写文件同级,不问。截图需要面板正在显示:面板关着或不是当前标签时
+合成器不出帧,会报 `UnknownVizError`。上游 v1.23 起在截图前自己打开面板并切到那个浏览器标签,等布局稳定再截,所以智能体
+截图时面板会弹出来;读页、点击这些在页面内执行脚本的动作不需要面板可见。截图与清除浏览数据经主进程,主进程只认面板
 自己的 partition(`DesktopIdentity.browserPanelPartition`);渲染端 `BrowserPane.tsx` 手抄同一值,由 `desktop-identity.test.mjs` 钉住,
-漂回上游拼写时打开与点击照常而截图报「不是浏览器面板页面」(PATHS.md §3.4)。下载:工具本身没有下载动作,点到下载链接后
-文件落到哪取决于面板的下载处理,待真机验证后定。
+漂回上游拼写时打开与点击照常而截图报「不是浏览器面板页面」(PATHS.md §3.4)。下载:工具本身没有下载动作,点到下载链接时
+照上游处理:上游与 GeoCode 都没有 `will-download` 处理器,Electron 走默认流程,弹出系统的另存为对话框由用户选位置。
+截图与下载这两点是 2026-09-13 读 v1.23.1 代码得出的,未真机验证。
 
 绊线:`kernel/test/geocode-trusted-plugin.test.ts`(四个方向)、`geocode-geo-permissions.test.ts`(裁决)、
 `electron/geocode/browser-tool.test.mjs`(文件、覆盖变量、生成源码可导入且无品牌字样、裸动作名归一后再问、两侧路径一致、主进程顺序)、
