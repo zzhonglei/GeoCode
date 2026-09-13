@@ -418,12 +418,12 @@ key 连同文件里的 `baseURL` 一起送进 `fetch`,触发者是 busy→idle �
 
 以下与「独立于 OpenCode」相关、但刻意不在路径阶段处理的事项,记录在此防止遗忘:
 
-- **内核自动更新检查**指向上游的 npm/brew/scoop 通道(`opencode-ai` 等),桌面形态必须关闭,归装配阶段(`OPENCODE_DISABLE_AUTOUPDATE` 或配置层)。
 - **CLI scriptName 与 OTLP serviceName** 等非磁盘品牌字符串,归界面/品牌阶段。
 - **开发版与正式版的数据未隔离,内核与壳都是。** 内核侧:嵌入式 Kernel 的启动不传 `XDG_*` 覆写,两个通道共用同一套 XDG 根;上游桌面壳的做法是注入 `XDG_STATE_HOME = userData`(即 §2 末尾那个刻意保留的漂移),我们没有照搬。壳侧原先靠 `<appData>/GeoCode Dev` 分开,**2026-08-30 起不再**:壳数据根从 userData 搬到了 HOME,因为渲染进程算不出 userData(见 §5),`GeoCode Dev` 现在只分开 Chromium 自己的东西。上游也是这个形状。`DESKTOP.md` 阶段 8 要求「开发版与正式版数据隔离」,届时两侧一起处理,或明确接受共享并写下理由——**壳侧要接受共享,得先回答渲染进程怎么知道自己在哪个通道**。
 
-原先挂在这里的两条已经处理,去向记在此处以免再被当作待办:
+原先挂在这里的三条已经处理,去向记在此处以免再被当作待办:
 
+- **内核自动更新检查**不必关闭,内嵌 Kernel 走不到它:检查只由 TUI 调用(`cli/tui/worker.ts` 调 `cli/upgrade.ts`),而 Kernel 是 `kernel-sidecar.mjs` 直接 `Server.listen` 起来的。`OPENCODE_DISABLE_AUTOUPDATE` 管的正是这段不运行的代码,所以不设。2026-09-13 在 v1.18.18 与 v1.18.30 上各查过一次,升级内核时复查 `cli/upgrade.ts` 的调用方。另外两条更新路径由壳侧关着:「升级 OpenCode」路由在 Electron 下 404(`system-opencode-surface.test.js`),OpenChamber 自己的检查更新在本地回答「无更新」(`DESKTOP.md` §7.2)。
 - **项目目录的 `.opencode/` 与 `opencode.json`** 已改名为 `.geocode/` 与 `geocode.json`,家目录那条没有开关保护的 `~/.opencode` 扫描直接删除(我们只有一个全局根)。跨产品执行代码的那一半由屏蔽清单解决——插件与文件式工具都不再加载,见 KERNEL.md。
 - **`.agents/skills`(家目录与项目各级)决定关闭**,与 `.claude/skills` 同级处理:两者都是用户写给**任意** agent 工具的技能库,不属于 GeoCode 体系,而 GeoCode 是地理助手不是通用 agent。判据因此是**归属**,不是开放与否。**`AGENTS.md` 保留**——它是信息而非能力注入,全局那份读的是 `~/.config/GeoCode/AGENTS.md`,本就在我们自己的配置根里。用户自定义技能改从 `~/.config/GeoCode/{skill,skills}`、项目 `.geocode/{skill,skills}` 或 `skills.paths` 进,关闭后仍生效(KERNEL.md §6 第 6 项)。
 

@@ -92,7 +92,7 @@ v2 路径会主动扫三个兄弟产品的 appData 目录复用已在跑的守�
 | `OPENCODE_SERVER_PASSWORD` | 同上 | `auth-state-runtime.js:48`,每次向内核的请求 | 壳对内核每个请求 401 |
 
 内核那一半**不需要**任何继承来的带商标名字:`OPENCODE_SERVER_USERNAME`/`_PASSWORD` 由 sidecar 收到 IPC 后在自己
-进程里设;将来要给内核的(`PATHS.md` §7 挂起的 `OPENCODE_DISABLE_AUTOUPDATE`、上游桌面端设的 `OPENCODE_CLIENT`)
+进程里设;将来要给内核的(比如上游桌面端设的 `OPENCODE_CLIENT`)
 一律走 `startEmbeddedKernel` 的 `overrides`,它叠在过滤之后。上游 agent-tool 插件的 `OPENCHAMBER_AGENT_TOOL_URL`/`_TOKEN`
 不在此列:那条注入不进产品(`DESKTOP.md` §7.3)。
 
