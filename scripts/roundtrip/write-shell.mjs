@@ -1,5 +1,6 @@
 // Writes one entry per kernel-facing settings page through the same server functions the routes
-// call, and reports what it wrote to the file named in argv. Run with XDG_* on a scratch root.
+// call, and reports what it wrote to the file named in argv[2]. Project-scope entries go into the
+// directory named in argv[3]. Run with XDG_* on a scratch root.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -54,6 +55,23 @@ wrote.provider = upsertProviderConfig('roundtrip-provider', {
   models: { 'probe-model': { name: 'Probe Model' } },
   env: ['ROUNDTRIP_API_KEY'],
 }, null, 'user');
+
+const project = process.argv[3];
+
+wrote.projectAgent = createAgent('roundtrip-project-agent', {
+  description: 'round trip probe',
+  prompt: 'You are a probe.',
+}, project, 'project');
+
+wrote.projectCommand = createCommand('roundtrip-project-command', {
+  description: 'round trip probe',
+  template: 'probe',
+}, project, 'project');
+
+wrote.projectSkill = createSkill('roundtrip-project-skill', {
+  description: 'round trip probe',
+  content: 'probe body',
+}, project, 'project');
 
 // The behavior page has no exported helper. Rather than copy how the route spells the path, this
 // joins onto the same constant the route joins onto, so the two cannot drift apart.

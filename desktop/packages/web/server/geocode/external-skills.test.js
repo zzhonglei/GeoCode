@@ -11,9 +11,12 @@
  * Claude Code skill named `foo`, recursively, from their home directory. Asserting that a file we
  * did not create is still there afterwards is the only form of that check worth having. --- */
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+import { KERNEL_PROJECT_DIR } from './kernel-roots.js';
 
 let fakeHome;
 let configHome;
@@ -108,5 +111,47 @@ describe('external skill libraries', () => {
     expect(fs.existsSync(path.join(fakeHome, '.agents', 'skills', name, 'SKILL.md'))).toBe(false);
     const found = skills.discoverSkills(null).find((skill) => skill.name === name);
     expect(found?.source).toBe('opencode');
+  });
+
+  it('installs from the catalog into our own project directory even when asked for .agents', async () => {
+    // git's URL rewriting points the GitHub address at a local repository, so the install runs
+    // end to end, clone included, without the network.
+    const repository = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-catalog-repository-'));
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-catalog-project-'));
+    const gitConfig = path.join(fakeHome, 'catalog.gitconfig');
+    fs.writeFileSync(gitConfig, `[url "${repository}"]\n\tinsteadOf = https://github.com/geocode-probe/skills.git\n`);
+    const previous = { GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM: process.env.GIT_CONFIG_NOSYSTEM };
+    process.env.GIT_CONFIG_GLOBAL = gitConfig;
+    process.env.GIT_CONFIG_NOSYSTEM = '1';
+    const git = (...args) => execFileSync('git', args, { cwd: repository, stdio: 'pipe' });
+
+    try {
+      writeSkill(path.join(repository, 'skills', 'catalog-probe'), 'catalog-probe');
+      git('init', '-q');
+      git('add', '.');
+      git('-c', 'user.name=probe', '-c', 'user.email=probe@example.invalid', 'commit', '-qm', 'probe');
+
+      const { installSkillsFromRepository } = await import('../lib/skills-catalog/install.js');
+      const result = await installSkillsFromRepository({
+        source: 'geocode-probe/skills',
+        scope: 'project',
+        targetSource: 'agents',
+        workingDirectory: project,
+        userSkillDir: path.join(configHome, 'skills'),
+        selections: [{ skillDir: 'skills/catalog-probe' }],
+      });
+
+      expect(result).toMatchObject({ ok: true });
+      expect(fs.existsSync(path.join(project, KERNEL_PROJECT_DIR, 'skills', 'catalog-probe', 'SKILL.md'))).toBe(true);
+      for (const foreign of ['.agents', '.opencode']) {
+        expect([foreign, fs.existsSync(path.join(project, foreign))]).toEqual([foreign, false]);
+      }
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      for (const dir of [repository, project]) fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

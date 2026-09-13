@@ -1,5 +1,5 @@
-// Answers "would the Agent Kernel see this?" for one config root, using the kernel's own
-// loaders, constants and schema rather than a hand-copy of them. Reads only.
+// Answers "would the Agent Kernel see this?" for one config root and one project directory, using
+// the kernel's own loaders, constants and schema rather than a hand-copy of them. Reads only.
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -15,7 +15,10 @@ import { ConfigPlugin } from "../../kernel/packages/opencode/src/config/plugin"
 
 // Importing `Global` creates its roots, so refuse to run against the real home.
 if (!process.env.XDG_CONFIG_HOME) throw new Error("set XDG_CONFIG_HOME before running this")
+const project = process.argv[2]
+if (!project) throw new Error("pass the project directory the shell wrote into")
 const { Global } = await import("../../kernel/packages/core/src/global")
+const { findUp } = await import("../../kernel/packages/opencode/src/util/filesystem")
 
 const root = Global.Path.config
 
@@ -51,6 +54,10 @@ const layers = ["config.json", Brand.configJson, Brand.configJsonc].map((name) =
   }
 })
 
+// Project config is found by walking up for the project directory, and each one found is loaded
+// with the same loaders as the global root (`config/paths.ts`, `config/config.ts`).
+const projectDirs = await findUp(Brand.projectDir, project)
+
 console.log(
   JSON.stringify(
     {
@@ -64,6 +71,17 @@ console.log(
         path.basename(path.dirname(p)),
       ),
       agentsMd: fs.existsSync(path.join(root, "AGENTS.md")),
+      project: {
+        agents: (await Promise.all(projectDirs.map((dir) => ConfigAgent.load(dir)))).flatMap((loaded) =>
+          Object.keys(loaded),
+        ),
+        commands: (await Promise.all(projectDirs.map((dir) => ConfigCommand.load(dir)))).flatMap((loaded) =>
+          Object.keys(loaded),
+        ),
+        skills: (await Promise.all(projectDirs.map((dir) => Glob.scan(skillPattern, { cwd: dir, absolute: true }))))
+          .flat()
+          .map((p) => path.basename(path.dirname(p))),
+      },
     },
     null,
     2,

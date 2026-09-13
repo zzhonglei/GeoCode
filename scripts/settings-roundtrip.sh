@@ -12,10 +12,11 @@ STATUS=0
 
 run_scenario() {
   local label="$1" seed="$2"
-  local scratch config
+  local scratch config project
   scratch="$(mktemp -d "${TMPDIR:-/tmp}/geocode-roundtrip.XXXXXX")"
   config="$scratch/config/GeoCode"
-  mkdir -p "$config"
+  project="$scratch/project"
+  mkdir -p "$config" "$project"
   if [ -n "$seed" ]; then
     printf '{\n  "$schema": "https://opencode.ai/config.json"\n}\n' > "$config/$seed"
   fi
@@ -31,9 +32,9 @@ run_scenario() {
   )
 
   env "${env_vars[@]}" bun run "$ROOT_DIR/scripts/roundtrip/write-shell.mjs" \
-    "$scratch/wrote.json" > /dev/null
+    "$scratch/wrote.json" "$project" > /dev/null
 
-  if ! env "${env_vars[@]}" bun run "$ROOT_DIR/scripts/roundtrip/read-kernel.ts" \
+  if ! env "${env_vars[@]}" bun run "$ROOT_DIR/scripts/roundtrip/read-kernel.ts" "$project" \
     | bun run "$ROOT_DIR/scripts/roundtrip/assert.mjs" "$config" "$scratch/wrote.json"; then
     STATUS=1
   fi

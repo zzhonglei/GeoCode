@@ -43,7 +43,7 @@ describe('desktop identity', () => {
 
   it('publishes to, and announces from, the release repository it names', () => {
     // package.json cannot import the identity; the renderer cannot import the electron package.
-    // Both carry a copy, and each copy is pinned here so neither can drift back to upstream's.
+    // Both carry copies, and each copy is pinned here so none can drift back to upstream's.
     const { build } = JSON.parse(readElectronFile('package.json'));
     expect(`${build.publish.owner}/${build.publish.repo}`).toBe(DesktopIdentity.releaseRepository);
     expect(DesktopIdentity.releasesUrl).toBe(`https://github.com/${DesktopIdentity.releaseRepository}/releases`);
@@ -53,6 +53,17 @@ describe('desktop identity', () => {
     );
     const copied = dialog.match(/const GITHUB_RELEASES_URL = '([^']+)'/)?.[1];
     expect(copied).toBe(DesktopIdentity.releasesUrl);
+    const about = fs.readFileSync(path.resolve(electronRoot, '../ui/src/geocode/GeoCodeAboutDialog.tsx'), 'utf8');
+    expect(about.match(/const GEOCODE_REPOSITORY_URL = '([^']+)'/)?.[1])
+      .toBe(`https://github.com/${DesktopIdentity.releaseRepository}`);
+  });
+
+  it('names the directories the kernel brands', () => {
+    // A copy of `core/src/brand.ts`, which this package cannot import. The credential guard builds
+    // the path of the kernel's auth.json from it, so a drift leaves that file readable.
+    const brand = fs.readFileSync(path.resolve(electronRoot, '../../../kernel/packages/core/src/brand.ts'), 'utf8');
+    expect(DesktopIdentity.dirName).toBe(brand.match(/const dirName = "([^"]+)"/)?.[1]);
+    expect(DesktopIdentity.name).toBe(brand.match(/const name = "([^"]+)"/)?.[1]);
   });
 
   it('rewrites the Windows install directory, which comes from name and not productName', () => {
