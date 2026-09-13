@@ -1,19 +1,18 @@
-/* --- GeoCode: a worktree branch the caller did not name carries our name, not upstream's
+/* --- GeoCode: a worktree the shell creates uses the kernel's places and names, not upstream's
  * (docs/PATHS.md §3.2, geocode/kernel-roots.js).
  *
- * The worktree directory sits under our own data root, but the branch is created in the user's
- * repository — `git branch` lists it and a push publishes it — so it is the one half of this
- * feature that writes another product's name into their data. The line had no coverage at all:
- * every existing test passes `branchName` explicitly, which is also why the entry points in the
- * app never reach it. A real repository is used because the name only appears once git has
- * created the branch. --- */
+ * Each of the three guarded here goes wrong silently if upstream's spelling comes back: the branch
+ * carries OpenChamber's name into the user's repository, where a push publishes it; the project id
+ * goes into OpenCode's marker file inside their `.git`; the worktree directory lands in OpenCode's
+ * data root, where the kernel never finds it. A real repository is used because none of them
+ * exists until git has run. --- */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { WORKTREE_BRANCH_PREFIX } from './kernel-roots.js';
+import { KERNEL_PROJECT_MARKER, WORKTREE_BRANCH_PREFIX, kernelDataRoot } from './kernel-roots.js';
 
 const tempDirs = [];
 const saved = {};
@@ -67,5 +66,21 @@ describe('worktree branch prefix', () => {
       .filter(Boolean);
     expect(branches).toContain(`${WORKTREE_BRANCH_PREFIX}side-task`);
     expect(branches.filter((branch) => branch.startsWith('openchamber/'))).toEqual([]);
+  });
+});
+
+describe('worktree placement', () => {
+  it('follows the kernel: its marker inside .git, its data root for the directory', async () => {
+    const dataHome = createTempDir();
+    for (const key of ['XDG_DATA_HOME']) saved[key] = process.env[key];
+    process.env.XDG_DATA_HOME = dataHome;
+
+    const repository = createRepository();
+    const { createWorktree } = await import('../lib/git/service.js');
+    await createWorktree(repository, { mode: 'new', worktreeName: 'side-task' });
+
+    const projectID = fs.readFileSync(path.join(repository, '.git', KERNEL_PROJECT_MARKER), 'utf8').trim();
+    expect(fs.existsSync(path.join(repository, '.git', 'opencode'))).toBe(false);
+    expect(fs.existsSync(path.join(kernelDataRoot(), 'worktree', projectID, 'side-task'))).toBe(true);
   });
 });

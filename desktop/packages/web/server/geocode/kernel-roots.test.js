@@ -25,7 +25,6 @@ import { CONFIG_BACKUP_SUFFIX } from './config-backup.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.dirname(here);
 const BRAND_SOURCE = path.resolve(here, '../../../../../kernel/packages/core/src/brand.ts');
-const PATCHED = ['lib/opencode/auth.js', 'lib/quota/utils/auth.js', 'lib/git/service.js'];
 
 const brand = () => {
   const source = fs.readFileSync(BRAND_SOURCE, 'utf8');
@@ -159,11 +158,11 @@ describe('kernel roots', () => {
     }
   });
 
-  it('leaves no call site computing an OpenCode path', () => {
-    // Guards the merge that restores one of the three literals. They are separate files with
-    // no shared symbol upstream, so nothing but this notices when one comes back.
-    for (const file of PATCHED) {
-      expect(fs.readFileSync(path.join(serverRoot, file), 'utf8')).not.toContain("'opencode'");
+  it('looks for antigravity accounts only under the kernel roots', async () => {
+    const { ANTIGRAVITY_ACCOUNTS_PATHS } = await import('../lib/quota/utils/auth.js');
+    const roots = [kernelConfigRoot(), kernelDataRoot()];
+    for (const file of ANTIGRAVITY_ACCOUNTS_PATHS) {
+      expect([file, roots.some((root) => file.startsWith(root + path.sep))]).toEqual([file, true]);
     }
   });
 });
