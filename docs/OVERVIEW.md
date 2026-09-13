@@ -288,7 +288,7 @@ GeoCode 不直接调用 QGIS 的 API。QGIS 携带独立的 Python 解释器、�
 | 两个子代理:osmfetch 与 explore | 已完成 | `config/geocode.ts` 中的定义、出口锁与地理读取权 |
 | 凭据脱敏的三处出口:状态事件 / 诊断包 / 日志 | 未开始 | `NetRedact` 全仓无生产调用方 |
 | React 界面(OpenChamber) | 身份、存储路径与关闭入口的界面侧已改;地理适配未开始 | `desktop/packages/ui`,自有部分在 `src/geocode/` |
-| 桌面壳:Kernel Host | 启动与退出时的终止已完成;§5.2 的重启委托未做 | `desktop/packages/electron/geocode/` |
+| 桌面壳:Kernel Host | 启动、退出时的终止与运行中死亡的失败屏已完成;不做原地重拉,恢复靠重开应用(`DESKTOP.md` §5.2) | `desktop/packages/electron/geocode/` |
 | 桌面壳:身份隔离与配置面收口 | 已完成 | appId 为 `ai.geocode.desktop`,壳数据在 `~/.config/GeoCode/desktop`;面向内核的七类设置由 `scripts/settings-roundtrip.sh` 逐类往返 |
 | Shell Runtime(OpenChamber) | 靠上游 skip-start 接入内嵌 Kernel;数据根、内核根、配置链与关闭的入口已收口 | `desktop/packages/web`,自有部分在 `server/geocode/` |
 | 技能商店 | 未开始 | 地理内核中无对应模块 |

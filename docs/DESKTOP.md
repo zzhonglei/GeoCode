@@ -308,7 +308,7 @@ Kernel 起来了,进主界面;Kernel 没起来,`spawnLocalServer` 记下失败(�
 日志路径,`electron/geocode/kernel-failure.mjs`)并且不启动 Shell Runtime,窗口照常打开,渲染进程
 把任何非主界面的启动结果都交给 GeoCode 自己的失败屏(`ui/src/geocode/GeoCodeKernelFailureScreen.tsx`),
 它经 `geocode_kernel_failure` 读那份记录,提供「在文件夹中显示」日志与重试(重新启动应用)。
-上游的选择页、安装页与恢复页在桌面壳下没有到达路径。运行中 Kernel 死亡的处理见 §5.2 第二部分。
+上游的选择页、安装页与恢复页在桌面壳下没有到达路径。运行中 Kernel 死亡进同一个失败屏,见 §5.2。
 
 ### 5.2 配置生效与 Kernel 重启
 
@@ -345,19 +345,19 @@ Kernel 起来了,进主界面;Kernel 没起来,`spawnLocalServer` 记下失败(�
 `config.json`),否则目录里多一份遗留文件时两边写进不同的文件;壳写全局配置是整文件覆盖,注释不保留,
 这是上游形态。
 
-**Kernel 重启只用于崩溃恢复与显式重启**,由 Shell Runtime 请求 Electron main 执行:
+**运行中的 Kernel 死了,恢复靠重开应用,不在原地重拉,也不自动重试**(2026-09-13 定)。main 在 Kernel 报 ready
+之后盯住它的退出:句柄仍是当前那个、应用也没有在退出,就按启动失败的形状记一份记录(`phase: 'running'`、退出码、
+最后几十行输出、日志路径,`electron/geocode/kernel-failure.mjs`)并通知所有窗口。窗口收到通知,或打开时读到这份记录,
+就换成同一个失败屏(`ui/src/geocode/kernel-lost.ts`),标题改为「意外退出」。重试一律重开应用:上游的启动处理函数在壳
+还活着时只刷新页面,刷新后读到的仍是这份记录,会原地回到失败屏。不自动重试,是因为 Kernel 反复崩溃时自动重开会变成
+死循环。正在进行的那一轮随 Kernel 一起中断,已落盘的会话不受影响。
 
-1. UI 发起明确的 apply / restart 动作;
-2. main 将 Shell Runtime 的上游状态置为 restarting;
-3. main 停止旧 Kernel,确认端口释放;
-4. main 启动新 Kernel并完成健康检查;
-5. main 将新的 URL / 认证注入 Shell Runtime;
-6. Shell Runtime 重绑代理与事件流;
-7. UI 从快照重新建立状态。
+原先设计的原地重拉不做:换端口、复用口令、壳侧重绑代理与事件流,还必须沿用同一枚浏览器工具令牌,换来的只是窗口不关,
+代价是一整套每次合并上游都要维护的重连链路。Shell Runtime 仍不得自行 spawn 第二个 Kernel。
 
-Shell Runtime 不得自行 spawn 第二个 Kernel;renderer 也不得持有旧 Kernel 地址并尝试直连。重启后端口
-重新分配、口令复用;壳侧只需更新 Kernel 基址与端口并重绑事件流,代理按请求解析目标,不重挂。
-这一部分尚未实现:main 目前只有停止与强制结束,Kernel 崩溃后壳也不会把状态翻为不可用。
+**2026-09-13 真实会话验过**:主界面里 `kill -9` 掉 Kernel,窗口切到失败屏,记录为「exited while running, with code 9」;
+点重试后应用重开并进入主界面;Cmd+Q 退出不产生记录。另把 `kernel-sidecar.mjs` 挪走起一次,启动失败屏照旧,挪回后重试
+进入主界面。三轮写入检测都干净。
 
 ### 5.3 正常退出
 
@@ -1136,7 +1136,7 @@ macOS arm64 与 Windows x64 分别完成:
 
 - 默认且唯一主 Agent 是 GeoAgent;
 - 会话、消息、事件、权限、Question 与 interrupt 全链路可用;
-- Kernel 重启后 UI 自动恢复快照与事件流;
+- Kernel 运行中死亡时 UI 切到可归因的失败屏,重试重开应用后恢复快照与事件流;
 - Kernel 不可用时 UI 显示可归因状态,不表现为空会话或空 provider;
 - 应用退出后无 Kernel 与地理子进程残留。
 
@@ -1186,7 +1186,7 @@ macOS arm64 与 Windows x64 分别完成:
    判断」,而不是「已经对齐」**;
 3. Shell 补丁的注入表:已定,不建。§9.4 改为「清单由定位 grep 给出,理由写在补丁旁」;
 4. Shell Runtime 凭据的具体 token 形状与过期策略;
-5. utility process 异常退出后的自动重启次数与退避;
+5. utility process 异常退出后的自动重启次数与退避:已定,不自动重启,见 §5.2;
 6. GeoCode 应用更新通知的检查间隔和发布清单格式:已定,见 §7.2。清单就是 GitHub Release 本身,
    不另生成 `latest.yml` 一类文件。
 
