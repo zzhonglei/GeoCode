@@ -3033,7 +3033,7 @@ export const dict: Record<I18nKey, string> = {
   'onboarding.desktopRecovery.actions.retrying': '重试中…',
   'onboarding.desktopRecovery.actions.retryConnection': '重试连接',
   'startup.initRecovery.title': '启动失败',
-  'startup.initRecovery.description': 'OpenChamber 未能完成初始化。请检查服务器是否正在运行，然后重试。',
+  'startup.initRecovery.description': 'GeoCode 未能完成初始化。请检查服务器是否正在运行，然后重试。',
   'startup.initRecovery.retry': '重试',
   'startup.initRecovery.retrying': '重试中…',
   'onboarding.desktopRecovery.placeholders.remoteServer': '远程服务器',

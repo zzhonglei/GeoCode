@@ -16,6 +16,7 @@
 // natively (show-main-window, quit).
 
 import { Tray, Menu, nativeImage } from 'electron';
+import { DesktopIdentity } from './geocode/desktop-identity.mjs'; // GeoCode: own module
 
 const isMac = process.platform === 'darwin';
 const isLinux = process.platform === 'linux';
@@ -76,14 +77,14 @@ const computeIconState = (counts) => {
 };
 
 const computeTooltip = (counts, sessionCount) => {
-  if (sessionCount === 0) return 'OpenChamber — no active sessions';
+  if (sessionCount === 0) return `${DesktopIdentity.productName} — no active sessions`; // GeoCode: product name
   const bits = [];
   if (counts.approvals > 0) bits.push(`${counts.approvals} awaiting approval`);
   if (counts.error > 0) bits.push(`${counts.error} with errors`);
   if (counts.busy > 0) bits.push(`${counts.busy} working`);
   if (counts.unseen > 0) bits.push(`${counts.unseen} unread`);
   const suffix = bits.length ? ` · ${bits.join(', ')}` : ' · idle';
-  return `OpenChamber — ${sessionCount} session${sessionCount === 1 ? '' : 's'}${suffix}`;
+  return `${DesktopIdentity.productName} — ${sessionCount} session${sessionCount === 1 ? '' : 's'}${suffix}`; // GeoCode: product name
 };
 
 // Frame cadence for the "breathing" busy animation. With the eased frame set
@@ -190,7 +191,7 @@ export const createTrayController = ({ idleIconPath, unseenIconPath, breathIconP
     const approvals = Array.isArray(snapshot.approvals) ? snapshot.approvals : [];
     const header = typeof snapshot.instanceName === 'string' && snapshot.instanceName.trim()
       ? snapshot.instanceName.trim()
-      : 'OpenChamber';
+      : DesktopIdentity.productName; // GeoCode: product name
 
     const template = [
       { label: header, enabled: false },
@@ -301,9 +302,9 @@ export const createTrayController = ({ idleIconPath, unseenIconPath, breathIconP
       );
     } else {
       template.push(
-        { label: 'Show OpenChamber', click: () => onAction({ type: 'show-main-window' }) },
+        { label: `Show ${DesktopIdentity.productName}`, click: () => onAction({ type: 'show-main-window' }) }, // GeoCode: product name
         { type: 'separator' },
-        { label: 'Quit OpenChamber', click: () => onAction({ type: 'quit' }) },
+        { label: `Quit ${DesktopIdentity.productName}`, click: () => onAction({ type: 'quit' }) },
       );
     }
 
