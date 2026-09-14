@@ -1,3 +1,5 @@
+import { refuseSurfaceUnderElectron } from '../../geocode/closed-surface.js'; // GeoCode: own module
+
 export const createTunnelRoutesRuntime = (dependencies) => {
   const {
     crypto,
@@ -214,7 +216,7 @@ export const createTunnelRoutesRuntime = (dependencies) => {
     // settings page is gone too (ui/src/lib/settings/metadata.ts); this is the half that holds
     // when a client bypasses the page. The tunnel service object stays, so the relay and the
     // system-info route still read the port from it; its public URL is simply never set. ---
-    if (process.versions.electron) return;
+    if (refuseSurfaceUnderElectron(app, '/api/openchamber/tunnel')) return;
     // --- /GeoCode ---
     app.get('/api/openchamber/tunnel/check', async (req, res) => {
       try {

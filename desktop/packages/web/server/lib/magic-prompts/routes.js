@@ -1,12 +1,13 @@
 import { createMagicPromptRuntime } from './runtime.js';
+import { refuseSurfaceUnderElectron } from '../../geocode/closed-surface.js'; // GeoCode: own module
 
 export const registerMagicPromptRoutes = (app, dependencies) => {
   // --- GeoCode: these are the prompts behind the product's own one-click actions, not something a
   // user writes; GeoCode owns them rather than exposing them for editing (docs/DESKTOP.md §7.3). The
-  // settings page is gone too (ui/src/lib/settings/metadata.ts); this is the half that holds when a
-  // client bypasses it. Callers already fall back to the built-in template when the fetch fails
-  // (ui/src/lib/magicPrompts.ts getEffectiveMagicPromptTemplate), so every action keeps working. ---
-  if (process.versions.electron) return;
+  // settings page is gone too (ui/src/lib/settings/metadata.ts). Every action still reads overrides
+  // here first, and the 404 is what sends it to the built-in template
+  // (ui/src/lib/magicPrompts.ts getEffectiveMagicPromptTemplate). ---
+  if (refuseSurfaceUnderElectron(app, '/api/magic-prompts')) return;
   // --- /GeoCode ---
   const {
     fsPromises,

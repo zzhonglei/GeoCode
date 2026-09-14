@@ -4,6 +4,7 @@ import os from 'os';
 import { getNpmInfo as defaultGetNpmInfo } from './npm-registry.js';
 import { isExactSemver as defaultIsExactSemver, isPathSpec as defaultIsPathSpec, parseNpmSpec as defaultParseNpmSpec, parsePathSpec as defaultParsePathSpec } from './plugin-spec.js';
 import { buildDeferredRestartResponse } from './config-mutation-response.js';
+import { refuseSurfaceUnderElectron } from '../../geocode/closed-surface.js'; // GeoCode: own module
 
 const ENTRY_EXISTS_CODES = new Set(['ENTRY_EXISTS', 'EEXIST']);
 const FILE_EXISTS_CODES = new Set(['FILE_EXISTS', 'EEXIST']);
@@ -13,9 +14,9 @@ const BAD_REQUEST_CODES = new Set(['INVALID_FILENAME', 'INVALID_SCOPE', 'INVALID
 export const registerPluginRoutes = (app, dependencies) => {
   // --- GeoCode: the kernel loads no external plugin, so this surface manages nothing (KERNEL.md §6
   // item 1). The settings page is gone too (ui/src/lib/settings/metadata.ts); this is the half that
-  // holds when a client bypasses the page, and it also stops the registry route from reaching npm
+  // holds when a client bypasses the page, and it also keeps the registry route from reaching npm
   // (docs/DESKTOP.md §7.3). ---
-  if (process.versions.electron) return;
+  if (refuseSurfaceUnderElectron(app, '/api/config/plugins')) return;
   // --- /GeoCode ---
   const {
     resolveOptionalProjectDirectory,

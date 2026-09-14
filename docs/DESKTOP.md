@@ -511,6 +511,16 @@ plan 拿到的理由与它的 `geodata: "allow"` 一致——读网页是研究,
 上游源码中的这些模块可以保留,但 GeoCode profile 下不得注册路由、启动定时器、建立网络连接
 或显示入口。此约束需用运行时测试验证,不能从「构建命令没有点名它」推断。
 
+**不注册不等于关上,关掉的路由要由壳自己答 404。** 壳的通用代理注册在所有路由之后,把谁都没接住的 `/api/*`
+转给 Kernel;Kernel 的兜底路由再把它不认识的路径原样转发到 `https://app.opencode.ai`,请求头里带着 Kernel 口令
+(`server/shared/ui.ts`,打包的 Kernel 没有内嵌网页界面,所以走的正是这条)。2026-09-13 查实:每个一键动作都先读一次
+魔法提示词的覆盖值,而那组路由当时只是不注册,这一读就经 Kernel 发到了上游,沙箱里同样的请求实测出网。现在魔法提示词、
+插件、隧道三组在 Electron 下按整个前缀抢先答 404(`server/geocode/closed-surface.js`),上游日后在组内加的路由一并被拦。
+绊线 `server/geocode/closed-surface.test.js` 先记下每组在非 Electron 下挂的全部路由,再在 Electron 下逐条请求,其后挂一个
+代理替身,断言都是 404、替身一条没收到。代码片段与配对路由本来就是这个形状。2026-09-13 真实会话验过:向壳请求三组各一条,都是这句 404,
+前后 Kernel 进程的连接没有变化。Kernel 那一侧的兜底转发没有改,待定
+(`.artifacts/OPEN.md`)。
+
 **2026-09-12 与 09-13 新判(合并 v1.23.1 及其收尾):仓库共享的项目配置、仓库计划、项目操作与 worktree
 初始化命令都不进入产品。**前两项 09-12 定,后两项 09-13 定。用户给的理由是同一条:GeoCode 面向地理从业者,
 他们的代码需求很轻,基本不涉及团队项目开发。四项各有落点。
@@ -576,11 +586,10 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   所以旧版本或手工写进 settings.json 的值也只会得到回环绑定与无口令的本机窗口,§6.1 不依赖界面是否显示。
   绊线在 `electron/geocode/loopback-settings.test.mjs` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
 - **Tunnel**:设置里「External Tunnel」整页在桌面壳不可用(`ui/src/lib/settings/metadata.ts` 的页面可用性判断,
-  导航、直达路由与搜索都读它);壳在 Electron 下不注册 `/api/openchamber/tunnel/*` 任何一条路由
-  (`lib/tunnels/routes.js` 首行早退),所以 cloudflared 与 ngrok 没有任何入口能被拉起。隧道服务对象保留,
+  导航、直达路由与搜索都读它);壳在 Electron 下不注册 `/api/openchamber/tunnel/*` 的任何一个处理器,整个前缀
+  答 404(`lib/tunnels/routes.js` 首行),所以 cloudflared 与 ngrok 没有任何入口能被拉起。隧道服务对象保留,
   relay 与系统信息接口从它读当前端口,公网地址恒为空。它本就不在启动时做任何事,没有自动恢复与定时器。
-  绊线在 `server/geocode/tunnel-surface.test.js`(记录式桩应用,Electron 下零挂载,对照组挂满)与
-  `ui/src/geocode/desktop-settings-surface.test.ts`。
+  绊线在 `server/geocode/closed-surface.test.js` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
 - **SSH host、Remote Instance、Relay 与设备配对**:「远程实例」页在桌面壳不可用(与 Tunnel 同一个页面可用性谓词);
   顶栏的服务菜单就是主机切换器,在桌面壳不渲染(`Header.tsx`)。壳在 Electron 下由 `createRelayService` 返回惰性对象
   (`server/geocode/inert-relay.js`):不注册路由、不建宿主客户端、不生成写进 settings.json 的身份密钥,serverId 恒为 null;
@@ -605,24 +614,25 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   `server/geocode/snippet-surface.test.js`(真实 Express,拒绝必须先于记录式 handler 命中;`config-entity-routes.js`
   里那行调用必须排在第一条片段路由之前)与
   `ui/src/geocode/desktop-settings-surface.test.ts`(页面可用性与包装的存在)。
-- **魔法提示词**:「魔法提示词」页在桌面壳不可用,`registerMagicPromptRoutes` 在 Electron 下首行早退,四条路由
-  一条不注册。这一页管的不是用户写的咒语,而是**产品自己那些一键动作背后的提示词**——生成提交信息、会话摘要、
+- **魔法提示词**:「魔法提示词」页在桌面壳不可用,`registerMagicPromptRoutes` 在 Electron 下首行把整个前缀答成 404,
+  四条路由一条不注册。这一页管的不是用户写的咒语,而是**产品自己那些一键动作背后的提示词**——生成提交信息、会话摘要、
   追进度、起草目标、多路合并等二十五对,共五十条。判据:这些提示词是 GeoCode 该自己写的东西,不是设置项
-  (2026-09-07 用户决定)。关掉不影响任何功能,因为取覆盖值的那一步本就带 `catch` 回落到内置模板
-  (`ui/src/lib/magicPrompts.ts` 的 `getEffectiveMagicPromptTemplate`),路由消失后一律用默认值。
+  (2026-09-07 用户决定)。关掉不影响任何功能:每个一键动作仍先取一次覆盖值,拿到 404 就回落到内置模板
+  (`ui/src/lib/magicPrompts.ts` 的 `getEffectiveMagicPromptTemplate`)。⚠️ 这里原先只是不注册,那一次读取因此经 Kernel
+  发到了上游,见本节开头「不注册不等于关上」。
   ⚠️ **随之而来的欠账**:那五十条是给编程助手写的,全文点名代码、仓库、提交、分支处逾百,例如「探索」开头就是
   「get oriented in this codebase」;而它们驱动的正是我们保留的功能(起草目标、创建定时任务、多路合并)。
   屏蔽这一页把改写它们的口子关上了,所以改写从此是我们的活,归改牌那一批,记在 `.artifacts/OPEN.md`。
-  绊线在 `server/geocode/magic-prompts-surface.test.js` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
+  绊线在 `server/geocode/closed-surface.test.js` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
 - **外部插件管理**:「插件」页在桌面壳不可用(与 Tunnel 同一个页面可用性谓词),壳在 Electron 下
-  `registerPluginRoutes` 首行早退,十条路由一条都不注册。判据不是「这个功能不好」,而是**内核保证不加载**:
+  `registerPluginRoutes` 首行把整个前缀答成 404,十条路由一条都不注册。判据不是「这个功能不好」,而是**内核保证不加载**:
   `loadExternal` 对配置声明与目录扫描一律返回空(KERNEL.md §6 第 1 项),所以这一页写下的配置与文件
-  全部落盘、全部被丢弃,界面却报成功并催用户点「应用」。早退顺带切断 `/api/config/plugins/registry`
+  全部落盘、全部被丢弃,界面却报成功并催用户点「应用」。这一行顺带切断 `/api/config/plugins/registry`
   对 npm 官方 registry 的调用,那条出网 §7.3 本就不允许。用户扩展 GeoCode 的路是 MCP:进程外、按服务器
   逐个授权、界面完整。「集成」页(第三方订阅 Claude 与 Cursor)走同一条管道因而同样无效,但**暂不屏蔽**:
   上游后续版本把 GitHub 与 Linear 做成了这一页的内置集成,那两项不经插件管道,等同步新基线时一并判
-  (2026-09-07 用户决定)。绊线在 `server/geocode/plugin-surface.test.js`(记录式桩应用,Electron 下零挂载,
-  对照组挂满十条并点名那条出网路由)与 `ui/src/geocode/desktop-settings-surface.test.ts`。
+  (2026-09-07 用户决定)。绊线在 `server/geocode/closed-surface.test.js`(对照组挂满十条并点名那条出网路由)与
+  `ui/src/geocode/desktop-settings-surface.test.ts`。
 - **agent-tool 注入的三个开关、以及 system-prompt optimizer**:上游把控制工具、Web 工具、记忆工具做成三个开关,
   都靠「壳把一个插件写到磁盘,再让壳自己 spawn 的 OpenCode 加载它」这条管道,而桌面壳不 spawn 任何 OpenCode
   (四层断口见 `.artifacts/DECISIONS.md` 09-04)。GeoCode 里它们不是开关:控制工具(让智能体建会话、派提示、管计划任务)

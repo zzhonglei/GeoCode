@@ -97,7 +97,7 @@ describe('desktop settings surface', () => {
 
   test('the Plugins page is unavailable in the desktop shell only', () => {
     // The kernel loads no plugin a configuration declares, so everything this page writes would be
-    // discarded; the shell half is server/geocode/plugin-surface.test.js.
+    // discarded; the shell half is server/geocode/closed-surface.test.js.
     const plugins = getSettingsPageMeta('plugins');
     const base = { isVSCode: false, isWeb: false, isMobile: false };
     expect(plugins?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
@@ -106,7 +106,7 @@ describe('desktop settings surface', () => {
 
   test('the Magic Prompts page is unavailable in the desktop shell only', () => {
     // Its VS Code exclusion is upstream's; the desktop half is ours. Server side is
-    // server/geocode/magic-prompts-surface.test.js.
+    // server/geocode/closed-surface.test.js.
     const prompts = getSettingsPageMeta('magic-prompts');
     const base = { isVSCode: false, isWeb: false, isMobile: false };
     expect(prompts?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
