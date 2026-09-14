@@ -658,11 +658,10 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
 Shell Runtime 不得沿用 OpenChamber 的 `~/.config/openchamber`,也不得直接读写
 `~/.config/opencode`、`~/.local/share/opencode`、`.opencode/` 或 `opencode.json`。
 
-保留功能优先通过 Agent Kernel API 操作配置与认证。确实没有 API 的壳侧偏好留在壳的数据根;
-不能为了复用 OpenChamber 一段读文件代码而重新引入第二套 Agent 配置事实。
-OpenChamber Settings 的逐页调查、Kernel API 缺口、目标请求流与实施门,在阶段 2 开工时对着当时的
-代码做,结论落在本节与 `KERNEL.md`(`CONVENTIONS.md` §10「新知识先找主题文档」)。真撑不下再另起
-专文,而不是先承诺一篇。
+面向内核的设置照上游的形态:壳自己读写内核的配置与凭据文件,只是根换成了内核的(`PATHS.md` §5);
+登录供应商(API key 与 OAuth)经代理调 Kernel。磁盘上因此只有一份事实,要防的是两个读写方对不上——
+壳写的根、文件名与层级顺序必须正是内核读的那一份,由门里的设置往返逐类比对(`CONVENTIONS.md` §7);
+写完之后怎样让 Kernel 看见,见 §5.2。
 
 ### 8.2 环境变量边界
 
@@ -851,10 +850,10 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
 
 ### 阶段 2:建立产品 profile
 
-- 对着已落地的 vendor 代码调查 Settings 各页的所有权与 Kernel API 缺口,再定实施批次;结论并入
-  §8.1 与 `KERNEL.md`,与阶段 6 的路径批次同样处理,不预先承诺专文。⚠️ codex 有一份底稿
-  (`git show codex/desktop-init:docs/DESKTOP-CONFIG-MIGRATION.md`),基线是 **v1.18.4**,与当前树
-  隔着 345 个提交、772 个文件,路由名与模块名不可直接采信,只能当「要覆盖哪些面」的提纲;
+- 对着已落地的 vendor 代码判 Settings 各页的去留与对接,没有另起专文:各页去留见 §7.3,壳怎样读写
+  内核配置见 §8.1,逐批做法见阶段 6 下归阶段 2 的各条。codex 的早期底稿
+  (`git show codex/desktop-init:docs/DESKTOP-CONFIG-MIGRATION.md`,基线 v1.18.4)主张壳只经 Kernel API
+  操作配置、由 Kernel 另定一套配置变更契约,这条路没有走,底稿不再作为提纲;
 - 集中定义 GeoCode 品牌、appId、协议、平台和 capability;
 - 发布命令只选择 Desktop 闭包;
 - 禁止 Web / Mobile / VS Code / CLI 入口;
