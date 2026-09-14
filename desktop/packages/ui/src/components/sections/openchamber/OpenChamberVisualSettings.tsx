@@ -1879,6 +1879,8 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     settingsItem="chat.session-assistance"
                                     contentClassName={SETTINGS_OPTION_STACK_CLASS}
                                 >
+                                    {/* --- GeoCode: the switch for a row the desktop shell never shows (DraftPresetChips.tsx) --- */}
+                                    {!isDesktopShell() && (
                                     <SettingsCheckboxRow
                                         checked={draftStartersVisible}
                                         onChange={handleDraftStartersVisibleChange}
@@ -1886,6 +1888,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         ariaLabel={t('settings.openchamber.visual.field.draftStartersVisibleAria')}
                                         settingsItem="chat.draft-starters-visible"
                                     />
+                                    )}
                                         {shouldShow('sessionAssist') && (
                                             <>
                                                 <SettingsCheckboxRow

@@ -40,6 +40,7 @@ import {
     type PinnableSection,
 } from './useDraftStarters';
 import { REPOSITORY_SHARING_OFFERED } from '@/geocode/repository-sharing-surface'; // GeoCode: own module
+import { isDesktopShell } from '@/lib/desktop'; // GeoCode: see DraftPresetChips at the end of this file
 
 type DraftPresetChipsProps = {
     /** Called with the resolved starter invocation when a chip is clicked. */
@@ -359,5 +360,6 @@ const DraftPresetChipsContent: React.FC<DraftPresetChipsProps> = ({ onSubmit, cl
 
 export const DraftPresetChips: React.FC<DraftPresetChipsProps> = (props) => {
     const visible = useUIStore((state) => state.draftStartersVisible);
+    if (isDesktopShell()) return null; // GeoCode: no starter row in the desktop shell, whatever the setting says (docs/DESKTOP.md §7.3)
     return visible ? <DraftPresetChipsContent {...props} /> : null;
 };

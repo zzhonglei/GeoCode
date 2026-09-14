@@ -33,6 +33,7 @@ describe('desktop settings surface', () => {
       'sessions.agent-web-tool',
       'sessions.agent-memory-tool',
       'behavior.system-prompt-optimization',
+      'chat.draft-starters-visible',
     ]) {
       expect(HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS.has(id)).toBe(true);
     }
@@ -128,6 +129,22 @@ describe('desktop settings surface', () => {
     const source = read('components/chat/SnippetAutocomplete.tsx');
     expect(source).toContain('const SnippetAutocompleteUpstream = React.forwardRef');
     expect(source).toContain('isDesktopShell() ? null :');
+  });
+
+  test('no starter row under a new session in the desktop shell, and no switch for it', () => {
+    // Both composers mount DraftPresetChips, so its guard is the one place that covers them.
+    const chips = read('components/chat/DraftPresetChips.tsx');
+    const component = chips.indexOf('export const DraftPresetChips:');
+    const guard = chips.indexOf('if (isDesktopShell()) return null;', component);
+    expect(component).toBeGreaterThan(-1);
+    expect(guard).toBeGreaterThan(component);
+    expect(chips.indexOf('<DraftPresetChipsContent', component)).toBeGreaterThan(guard);
+    const visual = read('components/sections/openchamber/OpenChamberVisualSettings.tsx');
+    const row = visual.indexOf('settingsItem="chat.draft-starters-visible"');
+    const rowGuard = visual.lastIndexOf('{!isDesktopShell() && (', row);
+    expect(rowGuard).toBeGreaterThan(-1);
+    expect(visual.slice(rowGuard, row).match(/<SettingsCheckboxRow/g)?.length).toBe(1);
+    expect(visual.slice(visual.indexOf('/>', row) + 2).trimStart().startsWith(')}')).toBe(true);
   });
 
   test('the Remote Instances page is unavailable in the desktop shell only', () => {
