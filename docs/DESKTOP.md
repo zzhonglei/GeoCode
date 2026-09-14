@@ -505,6 +505,7 @@ plan 拿到的理由与它的 `geodata: "allow"` 一致——读网页是研究,
 - 会话分享(内核侧的截断见 `KERNEL.md` §6 第 5 项,这里关的是界面入口);
 - 仓库共享的项目配置(`<repo>/.openchamber/project.json`)与它带的仓库计划目录;
 - 项目操作(把 shell 命令绑到侧边栏按钮)与 worktree 的初始化命令;
+- 写给程序员的斜杠命令(内核内置的 `/init`、`/review` 与界面自带的八条);
 - OpenChamber 的外部插件管理、system-prompt optimizer 与 agent-tool 注入;
 - GitHub 发布流与 PR 面:**挂起**,见下方说明。
 
@@ -616,19 +617,32 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   `ui/src/geocode/desktop-settings-surface.test.ts`(页面可用性与包装的存在)。
 - **魔法提示词**:「魔法提示词」页在桌面壳不可用,`registerMagicPromptRoutes` 在 Electron 下首行把整个前缀答成 404,
   四条路由一条不注册。这一页管的不是用户写的咒语,而是**产品自己那些一键动作背后的提示词**——生成提交信息、会话摘要、
-  追进度、起草目标、多路合并等二十五对,共五十条。判据:这些提示词是 GeoCode 该自己写的东西,不是设置项
+  追进度、起草目标、多路合并等,v1.23.1 上共 52 条。判据:这些提示词是 GeoCode 该自己写的东西,不是设置项
   (2026-09-07 用户决定)。关掉不影响任何功能:每个一键动作仍先取一次覆盖值,拿到 404 就回落到内置模板
   (`ui/src/lib/magicPrompts.ts` 的 `getEffectiveMagicPromptTemplate`)。⚠️ 这里原先只是不注册,那一次读取因此经 Kernel
   发到了上游,见本节开头「不注册不等于关上」。
-  ⚠️ **随之而来的欠账**:那五十条是给编程助手写的,全文点名代码、仓库、提交、分支处逾百,例如「探索」开头就是
+  ⚠️ **随之而来的欠账**:这些提示词是给编程助手写的,全文点名代码、仓库、提交、分支处逾百,例如「探索」开头就是
   「get oriented in this codebase」;而它们驱动的正是我们保留的功能(起草目标、创建定时任务、多路合并)。
   屏蔽这一页把改写它们的口子关上了,所以改写从此是我们的活,归改牌那一批,记在 `.artifacts/OPEN.md`。
   绊线在 `server/geocode/closed-surface.test.js` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
 - **新会话下方的起手按钮**:整排不显示,设置里控制它的开关与对应搜索条目一并不列(2026-09-13 用户决定)。那一排是八个内置
   按钮加用户自己固定的命令与技能;内置的八个点下去就是 `/explore`、`/debug` 这类斜杠命令,由魔法提示词驱动、措辞写给程序员。
   收口做在 `DraftPresetChips` 的包装上,两个渲染点都经它;不改 `draftStartersVisible` 的存值,所以旧设置里的 `true` 也打不开它。
-  斜杠命令本身仍在,输入 `/` 照样可用。当天真实会话里确认新会话下方与设置里都不再出现。
+  斜杠命令本身不随这一排关闭,其中写给程序员的几条 09-14 另行关掉(见下条)。当天真实会话里确认新会话下方与设置里都不再出现。
   绊线在 `ui/src/geocode/desktop-settings-surface.test.ts`。
+- **写给程序员的斜杠命令**:输入 `/` 时不再列出、手打也不当命令执行的共十条,内核内置的 `/init`、`/review`,
+  以及界面自带的 `/summary`、`/workspace-review`、`/handoff-review`、`/plan-feature`、`/catch-up`、`/debug`、`/weigh`、`/explore`
+  (2026-09-14 用户决定)。判据:这些命令只替用户包一段提示词、背后不连保留的功能,提示词又是写给程序员的
+  (`/summary` 的提示词基本通用,用户仍定关掉)。留下的是会话操作
+  `/undo`、`/redo`、`/compact`、`/timeline`、`/btw`,以及连着保留功能的 `/craft-goal`、`/schedule-task`;GeoCode 另带一条内核命令 `/set`(`KERNEL.md` §5.5)。关掉不损失能力,用户直接说要做什么即可。
+  内核那两条在内核里就不注册(`KERNEL.md` §6 第 8 项),所以菜单、手打、设置里的命令页、Goal 目标展开与计划任务看到的都一样;界面自带的
+  八条由 `ui/src/geocode/slash-command-surface.ts` 的名单拦在两处:菜单把它们与用户命令合并之前,和输入框的本地命令计划里。手打的关闭命令
+  照上游对待未知命令的方式当普通文字发出;用户在配置里写的同名命令照常出现、照常执行。
+  Diff 视图工具栏的「Review」按钮开的是与 `/handoff-review` 同一个另开审查会话的流程,**保留**(同日用户定,理由是在 Diff 视图里审查改动
+  不违背 GeoCode 的业务逻辑),于是这套流程只剩这一个入口;它背后的几条提示词仍是写给程序员的,归改牌那一批改写。
+  当天真实会话验过:运行中的内核产物带着那两行删除,经壳取到的命令列表里没有 `init` 与 `review`,设置的命令页里也不再出现这两条。用户输入
+  `/debug` 时菜单仍有一条显示,按真实菜单数据算过是 `/customize-opencode`:菜单搜索连描述一起模糊匹配,那条技能的英文描述被判为相近,不是 `/debug` 漏关。
+  上游 `slashCommands.test.ts` 里用 `/summary` 断言本地执行的那条按设计转红。绊线在 `ui/src/geocode/slash-command-surface.test.ts`。
 - **外部插件管理**:「插件」页在桌面壳不可用(与 Tunnel 同一个页面可用性谓词),壳在 Electron 下
   `registerPluginRoutes` 首行把整个前缀答成 404,十条路由一条都不注册。判据不是「这个功能不好」,而是**内核保证不加载**:
   `loadExternal` 对配置声明与目录扫描一律返回空(KERNEL.md §6 第 1 项),所以这一页写下的配置与文件

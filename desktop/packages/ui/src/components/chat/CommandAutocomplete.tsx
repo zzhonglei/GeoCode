@@ -11,6 +11,7 @@ import { useUIStore } from '@/stores/useUIStore';
 import { isVSCodeRuntime } from '@/lib/desktop';
 import { useMobileAutocompleteMaxHeight } from './useMobileAutocompleteMaxHeight';
 import { commandMatchesSearch, mergeCommandAutocompleteItems } from './commandAutocompleteItems';
+import { CLOSED_SLASH_COMMANDS, SHIPPED_SLASH_COMMANDS } from '@/geocode/slash-command-surface'; // GeoCode: own module
 import { AutocompleteRowTooltip } from './composer/ui/AutocompleteRowTooltip';
 
 type CommandSource = 'openchamber' | 'opencode' | 'skill';
@@ -130,7 +131,7 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
           description: cmd.description,
           agent: cmd.agent ?? undefined,
           model: cmd.model ?? undefined,
-          isBuiltIn: cmd.name === 'init' || cmd.name === 'review',
+          isBuiltIn: cmd.name === 'init' || cmd.name === 'review' || SHIPPED_SLASH_COMMANDS.has(cmd.name), // GeoCode: and the commands config/geocode.ts ships
           isSkill: cmd.source === 'skill' || skillNames.has(cmd.name),
           scope: cmd.scope,
         }));
@@ -202,7 +203,7 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
             : []
           ),
         ];
-        const allCommands = mergeCommandAutocompleteItems(builtInCommands, customCommands, skillCommands);
+        const allCommands = mergeCommandAutocompleteItems(builtInCommands.filter((cmd) => !CLOSED_SLASH_COMMANDS.has(cmd.name)), customCommands, skillCommands); // GeoCode: before the merge, so a user command of the same name stays
 
         const filtered = searchQuery
           ? allCommands.filter(cmd => commandMatchesSearch(cmd, searchQuery))
@@ -286,7 +287,7 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
             )
           : builtInCommands;
 
-        setCommands(filtered);
+        setCommands(filtered.filter((cmd) => !CLOSED_SLASH_COMMANDS.has(cmd.name))); // GeoCode: not offered (geocode/slash-command-surface.ts)
       } finally {
         setLoading(false);
       }

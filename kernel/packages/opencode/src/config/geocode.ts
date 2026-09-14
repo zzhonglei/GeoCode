@@ -2,6 +2,7 @@ export * as GeoCodeConfig from "./geocode"
 
 import type { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import OSMFETCH_PROMPT from "../session/prompt/osmfetch.txt"
+import SET_COMMAND_TEMPLATE from "../command/template/set.txt"
 
 /* --- GeoCode: the agents this product ships, as opposed to ones a user wrote. `agent.ts` marks
  * everything it builds from `cfg.agent` as `native: false`, which is right for a user's own agent and
@@ -27,6 +28,10 @@ export function base(): ConfigV1.Info {
     // The module is off in share/share-next.ts; saying so on the config surface too makes share/session.ts
     // refuse first, naming the configuration rather than the env var the gate below it names.
     share: "disabled",
+    // The desktop shell files these under built-in commands by name (ui/src/geocode/slash-command-surface.ts).
+    command: {
+      set: { template: SET_COMMAND_TEMPLATE },
+    },
     /* Closed here, opened per agent below; the same four names appear in permission/index.ts, which maps tool
      * ids onto them so visibility and execution agree. None may be omitted: every agent's ruleset starts from
      * the engine's `"*": "allow"` (agent/agent.ts) and `findLast` always reaches it, so a missing deny is a

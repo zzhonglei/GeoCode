@@ -13,6 +13,7 @@ import { useProjectsStore } from "@/stores/useProjectsStore";
 import { runtimeFetch } from "@/lib/runtime-fetch";
 import { runBackgroundNetworkTask } from '@/lib/background-network';
 import { noteDeferredRestartFromPayload } from "@/lib/opencode/deferredRestart";
+import { SHIPPED_SLASH_COMMANDS } from "@/geocode/slash-command-surface"; // GeoCode: own module
 
 
 export type CommandScope = 'user' | 'project';
@@ -32,7 +33,7 @@ export interface Command extends CommandConfig {
 }
 
 // Built-in commands provided by OpenCode (not defined in user config directories)
-const BUILTIN_COMMAND_NAMES = new Set(['init', 'review']);
+const BUILTIN_COMMAND_NAMES = new Set(['init', 'review', ...SHIPPED_SLASH_COMMANDS]); // GeoCode: and the commands config/geocode.ts ships
 
 export const isCommandBuiltIn = (command: Command): boolean => {
   return BUILTIN_COMMAND_NAMES.has(command.name);

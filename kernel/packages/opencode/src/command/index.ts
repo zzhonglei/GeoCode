@@ -86,6 +86,11 @@ const layer = Layer.effect(
         subtask: true,
         hints: hints(PROMPT_REVIEW),
       }
+      // --- GeoCode: no built-in init or review, both prompts written for programmers; a command configured under
+      // either name still registers below (docs/KERNEL.md §6). ---
+      delete commands[Default.INIT]
+      delete commands[Default.REVIEW]
+      // --- /GeoCode ---
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
         commands[name] = {

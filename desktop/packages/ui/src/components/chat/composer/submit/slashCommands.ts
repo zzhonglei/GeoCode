@@ -15,6 +15,7 @@
 
 import type { I18nKey } from '@/lib/i18n';
 import type { MagicPromptId } from '@/lib/magicPrompts';
+import { CLOSED_SLASH_COMMANDS } from '@/geocode/slash-command-surface'; // GeoCode: own module
 
 /** What a command needs before it can run. */
 export type CommandRequirement = 'session' | 'session-or-draft';
@@ -182,6 +183,7 @@ export function planLocalSlashCommand(
     if (inputMode !== 'normal') return null;
     const command = parseSlashCommand(text);
     if (!command) return null;
+    if (CLOSED_SLASH_COMMANDS.has(command.name)) return null; // GeoCode: not offered, so it goes out as typed or to a command the user configured
 
     if (LOCAL_ACTION_COMMANDS.has(command.name)) {
         if (!hasSession) return null;
