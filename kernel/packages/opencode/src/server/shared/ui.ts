@@ -85,6 +85,11 @@ export function serveUIEffect(
 
     if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI)
 
+    // --- GeoCode: GeoCode ships its own UI and the build embeds none, so fetching one from app.opencode.ai
+    // would send any request nothing else answered there, kernel credential included (docs/KERNEL.md §6). ---
+    return notFound()
+    // --- /GeoCode ---
+
     const response = yield* services.client.execute(
       HttpClientRequest.make(request.method)(upstreamURL(path), {
         headers: ProxyUtil.headers(request.headers, { host: UI_UPSTREAM.host }),
