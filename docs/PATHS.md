@@ -211,6 +211,7 @@ id 按三档推导:**远端 URL 的哈希** → **本文件记的值** → **首
 | mDNS 默认域名 | `opencode.local` | `geocode.local` | 用户可在配置中覆盖 |
 | macOS MDM plist 域 | `ai.opencode.managed` | `ai.geocode.managed` | `/Library/Managed Preferences/` 下的策略文件名 |
 | 系统托管配置目录 | `/Library/Application Support/opencode`(macOS)/ `%ProgramData%\opencode`(Windows) | 同构,`GeoCode` | 目录内的配置文件同样按 `geocode.json(c)` 命名 |
+| MCP 客户端标识 | 握手 `opencode`;OAuth 动态注册 `OpenCode` 与 `https://opencode.ai` | 握手 `geocode`(`Brand.name`);注册 `GeoCode` 与 `https://github.com/zzhonglei/GeoCode-Release`(由 `Brand.dirName` 派生,与桌面端检查更新用的是同一个仓库) | 握手名每次连接任何 MCP 服务器都会发出;注册信息只在服务器要求 OAuth 且尚未注册时发出,显示在授权页上。已注册过的服务器按地址复用存下的客户端信息,改名不触发重新授权。它不属模型请求、不在冻结区,所以换(2026-09-14 用户定);握手里的版本号仍是内核构建版本 |
 | 环境变量(内核内部) | `OPENCODE_*` | **原样保留** | 降格为壳与内核之间的内部 ABI,人类不再直接书写;产品没有公开的环境变量面(§3.6) |
 | npm 包名 / User-Agent / config schema URL / 模型目录 URL | 上游值 | **原样保留** | 同上。模型目录取自 `https://models.opencode.ai`,请求头是 `opencode/<通道>/<版本>/<客户端>`——两者是同一条链路的两半。**刻意不换**:产品小众,借上游已有的商标身份接入各家 LLM 供应商更现实,而用户体感没有差别(2026-09-09 用户定)。这一行同时是启动期出站连接清单里 `models.opencode.ai` 的判决 |
 
