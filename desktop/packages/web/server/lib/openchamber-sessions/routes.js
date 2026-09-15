@@ -605,7 +605,7 @@ export const createOpenChamberSessionService = (dependencies) => {
           variant,
           promptDispatched: false,
           dispatchedAsCommand: false,
-          promptError: 'OpenCode accepted the prompt but it never appeared in the session',
+          promptError: 'GeoCode accepted the prompt but it never appeared in the session', // GeoCode: the product it names is GeoCode (docs/DESKTOP.md §7.2)
         };
       }
     }

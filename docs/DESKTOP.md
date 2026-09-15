@@ -470,6 +470,7 @@ KERNEL.md §6 第 1 项)。这个文件里还写着下文的控制工具,回调�
 各自的动作:持令牌也调不到记忆动作,一个工具也调不到另一个的动作,省略前缀的动作名只在发起调用的工具自己的动作里解析
 (`server/geocode/agent-tools.js`)。解析不出来的动作名同样由这道关卡回话,只列发起调用的那个工具自己的动作,措辞与工具其余
 两条错误一致都以 GeoCode 起头——上游原本会把它知道的二十八个动作全列出来,那既带商标,又等于把关掉的记忆功能广告给模型。
+壳里浏览器代理那句「没有能操作页面的客户端」也送进模型,只把两处 OpenChamber 换成 GeoCode,其余照上游。
 
 权限在 `config/geocode.ts`:GeoAgent 与 plan 是 `browser: "allow"`,其余 agent 落在全局的 `browser: "deny"` 上。
 这里不设询问,理由是询问在这条链上不区分风险:上游根本不接权限系统(生成的插件里没有 `ask`),而 GeoAgent 的
@@ -498,6 +499,8 @@ plan 拿到的理由与它的 `geodata: "allow"` 一致——读网页是研究,
 两处 OpenChamber;模板的三句报错;`agent` 参数说明——上游写「OpenCode agent name; new sessions default to the build agent」,
 GeoCode 禁用了 `build`,不指定 agent 的新会话按 `default_agent` 落到 GeoAgent,所以换成「Agent name; new sessions use the
 default agent」。其余措辞照上游,替换表逐个工具钉在 `browser-tool.test.mjs` 上,上游再添一处品牌字样会转红。
+服务端回给它的结果里,「提示词没出现在会话里」那句的 OpenCode 同样换成 GeoCode;这句与上文浏览器代理那句由
+`web/server/geocode/agent-visible-brand.test.js` 钉住。
 
 权限与上游一致:GeoAgent 是 `geocode: "allow"`,其余 agent 落在全局的 `geocode: "deny"` 上,工具列表里看不到它。`plan`
 拿到浏览器工具却拿不到这个,因为它会建会话、删定时任务,而 `plan` 只读。放行的理由与浏览器工具同一条:本机不带令牌、
@@ -586,7 +589,9 @@ geodata、qgis、osm、gee 与 browser,新 agent 继承这些关闭状态,除非
 Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着「You audit progress of a **coding** agent」,
 而评估模型是唯一有权判定目标达成的角色(干活的 agent 没有渠道结束自己的目标),它把什么当作证据就决定循环
 何时停止。判据与 KERNEL.md §5.2 的压缩提示词同形——那一处也只改一个词。绊线在
-`web/server/geocode/session-goal-prompt.test.js`。
+`web/server/geocode/session-goal-prompt.test.js`。会话辅助(每轮回复结束后的回顾与下一步建议,由小模型生成)同理只去掉
+一个词:上游要它「Only suggest work the **coding** agent can perform」,照字面地理工作就不在可建议之列。绊线在
+`web/server/geocode/session-assist-prompt.test.js`。
 
 **GitHub 发布流与 PR 面:挂起,不做判断也不做改动。** 能力本身该留,GeoAgent 也做代码工作。挂起的理由是
 上游正在重构这块表面:新版把 GitHub 账号连接从 Git 页搬到了「集成」页,与 Linear 并列成内置集成。现在动手

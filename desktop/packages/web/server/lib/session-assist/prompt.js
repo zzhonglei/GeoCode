@@ -15,7 +15,8 @@ export function buildAssistSystemPrompt({ recap, suggestion }) {
     suggestion ? 'A request to analyze, explain, or recommend is satisfied by that analysis, explanation, or recommendation unless the user also asked for execution. An optional offer, an implementation plan, a caveat about untested platforms, or uncommitted work is not permission for a new task. Do not revive old requests after the user changes topic.' : '',
     'Language: all requested fields follow the latest user-authored communication, including the user\'s comments on quotes. Ignore the language of the quoted material, code, logs, assistant responses, and these instructions. For a language-neutral acknowledgment use recent user-authored communication. Keep technical names unchanged where useful.',
     recap && suggestion ? 'Keep recap and suggestion independent: recap may carry earlier substantive work forward, while suggestion must be justified by the current request, not by that earlier work.' : '',
-    suggestion ? 'Only suggest work the coding agent can perform in the session. If the next action belongs to the user, such as checking their phone, choosing a design, or approving a change, return "". A suggestion is a message sent TO the agent, never a reminder addressed to the user.' : '',
+    // GeoCode: the agent it suggests work for is GeoAgent, not a coding agent (docs/DESKTOP.md §7.3)
+    suggestion ? 'Only suggest work the agent can perform in the session. If the next action belongs to the user, such as checking their phone, choosing a design, or approving a change, return "". A suggestion is a message sent TO the agent, never a reminder addressed to the user.' : '',
   ].filter(Boolean).join('\n');
 }
 
