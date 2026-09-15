@@ -874,7 +874,7 @@ Respond in the same language the user uses.`,
     template: `Help me set up a scheduled task.{{idea_block}}`,
   },
   {
-    // GeoCode: the product and the tool it names are GeoCode's (docs/DESKTOP.md §7.3)
+    // GeoCode: GeoCode's names, and the approvals an unattended run waits at (docs/DESKTOP.md §7.3)
     id: 'session.scheduleTask.instructions',
     title: 'Scheduled Task Instructions',
     group: 'Session',
@@ -899,7 +899,7 @@ Use the \`question\` tool only for clarifying decisions that have a small set of
 
 5. Do not perform the task's work in this session. The deliverable is the scheduled task definition.
 
-6. When everything is settled, present the final task definition clearly. If the \`geocode\` tool is available, offer to create the task yourself and, only after the user explicitly confirms, create it and report the result. If the tool is unavailable, present the definition so the user can add it in GeoCode's scheduled tasks UI.
+6. When everything is settled, present the final task definition clearly. If the \`geocode\` tool is available, offer to create the task yourself and, only after the user explicitly confirms, create it and report the result. If the tool is unavailable, present the definition so the user can add it in GeoCode's scheduled tasks UI. If the task runs QGIS algorithms or Earth Engine scripts, tell the user that those steps ask for approval, so an unattended run waits at them unless they turn on Auto-accept permissions for the task in GeoCode's scheduled tasks UI.
 
 Respond in the same language the user uses.`,
   },

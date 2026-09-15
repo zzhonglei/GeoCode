@@ -652,6 +652,12 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   2026-09-15 先只换商标(用户定,措辞另议):送进模型的六处产品名与工具名改成 GeoCode 的,落在 `/craft-goal`、`/schedule-task`
   与 Diff「Review」的审查交接三条提示词里,工具名随控制工具改为 `geocode`(§7.2)。关掉的命令背后的提示词不改,只在已关设置页
   显示的 `description` 字段也不改。绊线在 `ui/src/geocode/magic-prompt-brand.test.ts`。
+  同日按「能照上游就照上游,只改为 GeoCode 适配的部分」(用户定,`.artifacts/PROMPTS.md`)只加了一句:`/schedule-task` 第 6 步提醒用户,
+  任务要跑 QGIS 算法或 Earth Engine 脚本时,这些步骤会请求批准,无人值守的运行会停在那里,除非在定时任务页面给该任务打开
+  「自动接受权限」。上游写代码的 agent 默认放行 bash 与编辑,很少遇到询问;GeoAgent 运行 QGIS 算法与 GEE 脚本要问,而 `geocode`
+  工具建任务时设不了这个开关。只告知不劝开:打开后那次运行里的权限请求都会被自动批准一次。`/craft-goal` 除工具名外全部照上游,
+  包括「粘进 Goal 对话框」那处上游原有的错误(新建目标的对话框没有入口),同步上游新版本时再看。绊线在
+  `ui/src/geocode/schedule-task-prompt.test.ts`,断言提示词里的开关名与编辑器显示的一致。
 - **新会话下方的起手按钮**:整排不显示,设置里控制它的开关与对应搜索条目一并不列(2026-09-13 用户决定)。那一排是八个内置
   按钮加用户自己固定的命令与技能;内置的八个点下去就是 `/explore`、`/debug` 这类斜杠命令,由魔法提示词驱动、措辞写给程序员。
   收口做在 `DraftPresetChips` 的包装上,两个渲染点都经它;不改 `draftStartersVisible` 的存值,所以旧设置里的 `true` 也打不开它。
