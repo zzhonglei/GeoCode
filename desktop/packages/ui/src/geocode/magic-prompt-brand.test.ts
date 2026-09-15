@@ -47,4 +47,15 @@ describe('magic prompt brand', () => {
       expect([id, getDefaultMagicPromptTemplate(id).includes('`geocode` tool')]).toEqual([id, true]);
     }
   });
+
+  test('the note that stands in for a missing plan file names GeoCode', () => {
+    // A plan saved as project knowledge has no file, so the plan view sends its contents behind a note of its own
+    // that tells the agent where the plan lives; it is written in the component, not among the prompts above.
+    const planView = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../components/views/PlanView.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    const note = planView.match(/'[^'\n]*project knowledge[^'\n]*'/)?.[0] ?? '';
+    expect(note).toContain('GeoCode');
+    expect(note).not.toContain('OpenChamber');
+  });
 });
