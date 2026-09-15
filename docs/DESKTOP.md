@@ -649,6 +649,9 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   「get oriented in this codebase」;而它们驱动的正是我们保留的功能(起草目标、创建定时任务、多路合并)。
   屏蔽这一页把改写它们的口子关上了,所以改写从此是我们的活,归改牌那一批,记在 `.artifacts/OPEN.md`。
   绊线在 `server/geocode/closed-surface.test.js` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
+  2026-09-15 先只换商标(用户定,措辞另议):送进模型的六处产品名与工具名改成 GeoCode 的,落在 `/craft-goal`、`/schedule-task`
+  与 Diff「Review」的审查交接三条提示词里,工具名随控制工具改为 `geocode`(§7.2)。关掉的命令背后的提示词不改,只在已关设置页
+  显示的 `description` 字段也不改。绊线在 `ui/src/geocode/magic-prompt-brand.test.ts`。
 - **新会话下方的起手按钮**:整排不显示,设置里控制它的开关与对应搜索条目一并不列(2026-09-13 用户决定)。那一排是八个内置
   按钮加用户自己固定的命令与技能;内置的八个点下去就是 `/explore`、`/debug` 这类斜杠命令,由魔法提示词驱动、措辞写给程序员。
   收口做在 `DraftPresetChips` 的包装上,两个渲染点都经它;不改 `draftStartersVisible` 的存值,所以旧设置里的 `true` 也打不开它。

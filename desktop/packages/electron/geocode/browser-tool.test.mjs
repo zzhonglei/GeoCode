@@ -209,6 +209,8 @@ describe('the chat surface knows the tools by their GeoCode names', () => {
     }
     // A name the renderer does not list is shown capitalized, which would spell the product Geocode.
     expect(read('lib/toolHelpers.ts')).toMatch(new RegExp(`\\n\\s*${GEOCODE_TOOL_NAME}: \\{\\s*displayName: 'GeoCode',`));
+    // The one-click prompts offer to create what they define through the tool, so they must call it by this name.
+    expect(read('lib/magicPrompts.ts')).toContain(`\\\`${GEOCODE_TOOL_NAME}\\\` tool`);
   });
 });
 
