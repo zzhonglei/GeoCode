@@ -1,0 +1,67 @@
+/* --- GeoCode: text the renderer shows the user, or attaches for the model, names GeoCode where upstream named
+ * OpenChamber or OpenCode (docs/PATHS.md §3.4). Each message is found by the words around the name, so a reworded
+ * one turns this red instead of slipping past it. --- */
+import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+
+// The file, a pattern capturing the product name inside the message, and how many times the message appears.
+type Message = [file: string, pattern: RegExp, count: number];
+
+const READ_BY_THE_MODEL: Message[] = [
+  ['sync/document-attachments.ts', /\[Document text truncated by (\w+)\]/g, 1],
+  ['sync/attachment-files.ts', /\[OMITTED BY (\w+)\]/g, 1],
+];
+
+const SEEN_BY_THE_USER: Message[] = [
+  ['components/chat/CommandAutocomplete.tsx', /isOpenChamberBadge \? \(\s*<span className=\{NEUTRAL_BADGE_CLASS\}>\s*(?:\{\/\*[^*]*\*\/\}\s*)?(\w+)/g, 1],
+  ['components/layout/Header.tsx', /activeProjectLabel \?\? '(\w+)'/g, 1],
+  ['components/mini-chat/MiniChatLayout.tsx', /directoryLabel \|\| '(\w+)'/g, 1],
+  ['components/chat/ChatMessage.tsx', /(\w+) failed to send (?:a )?message/g, 2],
+  ['components/chat/ChatMessage.tsx', /before (\w+) could send the next message/g, 1],
+  ['stores/useAgentsStore.ts', /Waiting for (\w+)…/g, 1],
+  ['stores/useAgentsStore.ts', /"(\w+) refresh failed/g, 1],
+  ['stores/useAgentsStore.ts', /Reloading (\w+) configuration/g, 1],
+  // Rethrown to the settings footer and provider save, which toast the message as it is.
+  ['stores/useAgentsStore.ts', /"(\w+) health check reported not ready"/g, 1],
+  ['stores/useAgentsStore.ts', /"(\w+) did not become ready in time"/g, 1],
+  ['stores/useSkillsStore.ts', /Waiting for (\w+)…/g, 1],
+  ['stores/useSkillsStore.ts', /"(\w+) refresh failed/g, 1],
+  ['lib/configUpdate.ts', /Updating (\w+) configuration/g, 1],
+  ['components/sections/mcp/McpSidebar.tsx', /deleted, but (\w+) reload failed/g, 1],
+  ['components/sections/mcp/McpOAuthCallbackPage.tsx', /[Rr]eturn to (\w+)/g, 3],
+  ['components/sections/mcp/McpOAuthCallbackPage.tsx', /code into (\w+) manually/g, 2],
+  ['lib/worktreeSessionCreator.ts', /not registered in (\w+)/g, 1],
+  ['sync/session-ui-store.ts', /not registered in (\w+)/g, 1],
+  ['lib/opencode/client.ts', /(\w+) request timed out/g, 1],
+  ['lib/opencode/client.ts', /'Failed to update (\w+) working directory'/g, 1],
+  ['sync/bootstrap.ts', /"(\w+) process is not running"/g, 1],
+  ['hooks/useMenuActions.ts', /Failed to collect (\w+) status/g, 1],
+];
+
+const IN_THE_DIAGNOSTICS_REPORT: Message[] = [
+  ['lib/openCodeStatus.ts', /`(\w+) version:/g, 1],
+  ['lib/openCodeStatus.ts', /`(\w+) SDK base:/g, 1],
+  ['lib/openCodeStatus.ts', /`(\w+) runtime (?:port|running):/g, 2],
+  ['lib/openCodeStatus.ts', /`Secure (\w+) connection:/g, 1],
+  ['lib/openCodeStatus.ts', /`(\w+) auth source:/g, 1],
+  ['lib/openCodeStatus.ts', /'(\w+) process:'/g, 1],
+  ['lib/openCodeStatus.ts', /Recent (\w+) session errors:/g, 1],
+  ['lib/openCodeStatus.ts', /'(\w+) CLI resolution:'/g, 1],
+  ['lib/openCodeStatus.ts', /'(\w+) API probes:/g, 2],
+  ['lib/openCodeStatus.ts', /`- (\w+): \$\{opencodeHome/g, 1],
+  ['lib/openCodeStatus.ts', /`- (\w+) desktop: /g, 1],
+];
+
+const expectGeoCode = (messages: Message[]) => {
+  for (const [file, pattern, count] of messages) {
+    const source = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+    const names = [...source.matchAll(pattern)].map((match) => match[1].toLowerCase());
+    expect([file, String(pattern), names]).toEqual([file, String(pattern), Array(count).fill('geocode')]);
+  }
+};
+
+describe('the product name in renderer text', () => {
+  test('notes attached for the model', () => expectGeoCode(READ_BY_THE_MODEL));
+  test('messages the user sees', () => expectGeoCode(SEEN_BY_THE_USER));
+  test('the diagnostics report', () => expectGeoCode(IN_THE_DIAGNOSTICS_REPORT));
+});

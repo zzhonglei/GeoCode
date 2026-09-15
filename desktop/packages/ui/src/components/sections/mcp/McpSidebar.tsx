@@ -156,7 +156,7 @@ export const McpSidebar: React.FC<McpSidebarProps> = ({ onItemSelect }) => {
     const result = await deleteMcp(deleteTarget.name, settingsDirectory);
     if (result.ok) {
       if (result.reloadFailed) {
-        toast.warning(result.message || `MCP server "${deleteTarget.name}" deleted, but OpenCode reload failed`, {
+        toast.warning(result.message || `MCP server "${deleteTarget.name}" deleted, but GeoCode reload failed`, { // GeoCode: product name
           description: result.warning || t('settings.mcp.sidebar.toast.refreshListIfStale'),
         });
       } else {
@@ -364,7 +364,8 @@ export const McpSidebar: React.FC<McpSidebarProps> = ({ onItemSelect }) => {
               <DialogTitle>{t('settings.mcp.sidebar.deleteDialog.title')}</DialogTitle>
               <DialogDescription>
                 {t('settings.mcp.sidebar.deleteDialog.descriptionPrefix', { name: deleteTarget?.name || '' })}{' '}
-                <code className="text-foreground">opencode.json</code>.
+                {/* --- GeoCode: the kernel's config file (docs/PATHS.md §3.2) --- */}
+                <code className="text-foreground">geocode.json</code>.
               </DialogDescription>
             </DialogHeader>
           <DialogFooter>

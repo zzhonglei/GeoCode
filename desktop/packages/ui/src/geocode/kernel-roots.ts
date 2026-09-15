@@ -13,6 +13,9 @@
 /** `Brand.projectDir`. */
 export const KERNEL_PROJECT_DIR = '.geocode';
 
+/** `Brand.dirName`: the kernel's directory under each XDG root, its log directory among them. */
+export const KERNEL_DIR_NAME = 'GeoCode';
+
 /**
  * `Brand.plansSegments`. An array on the kernel side because two call sites must agree — one
  * writes the plan file under the worktree, the other spreads the same array into the glob that

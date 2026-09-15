@@ -105,7 +105,7 @@ export async function bootstrapGlobal(
         if (health.lastOpenCodeError) {
           message = health.lastOpenCodeError
         } else if (!health.openCodeRunning) {
-          message = "OpenCode process is not running"
+          message = "GeoCode process is not running" // GeoCode: product name
         }
       }
     } catch {

@@ -744,7 +744,7 @@ async function waitForOpenCodeConnection(delayMs?: number) {
 
   while (Date.now() - start < MAX_HEALTH_WAIT_MS) {
     attempt += 1;
-    updateConfigUpdateMessage(`Waiting for OpenCode… (attempt ${attempt})`);
+    updateConfigUpdateMessage(`Waiting for GeoCode… (attempt ${attempt})`); // GeoCode: product name
 
     try {
       const isHealthy = await opencodeClient.checkHealth();
@@ -790,7 +790,7 @@ export async function refreshSkillsAfterOpenCodeRestart(options?: { message?: st
       emitConfigChange("skills", { source: CONFIG_EVENT_SOURCE });
     }
   } catch (error) {
-    updateConfigUpdateMessage("OpenCode refresh failed. Please retry.");
+    updateConfigUpdateMessage("GeoCode refresh failed. Please retry."); // GeoCode: product name
     await sleep(1500);
     throw error;
   } finally {

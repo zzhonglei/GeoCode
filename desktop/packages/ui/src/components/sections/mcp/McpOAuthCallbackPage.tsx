@@ -39,7 +39,7 @@ const parseQueryParam = (params: URLSearchParams, key: string): string | null =>
 const normalizeMcpAuthErrorMessage = (error: unknown, fallback: string): string => {
   const message = error instanceof Error ? error.message : fallback;
   if (/oauth state required/i.test(message)) {
-    return 'Authorization session expired or was cleared during reload. Return to OpenChamber and click Authorize again.';
+    return 'Authorization session expired or was cleared during reload. Return to GeoCode and click Authorize again.'; // GeoCode: product name
   }
   return message;
 };
@@ -76,7 +76,7 @@ export const McpOAuthCallbackPage: React.FC = () => {
     void (async () => {
       try {
         if (!code) {
-          throw new Error('Missing OAuth authorization code. Start authorization again from MCP Settings or paste the returned code into OpenChamber manually.');
+          throw new Error('Missing OAuth authorization code. Start authorization again from MCP Settings or paste the returned code into GeoCode manually.'); // GeoCode: product name
         }
 
         let pendingContext = callbackContext;
@@ -104,7 +104,7 @@ export const McpOAuthCallbackPage: React.FC = () => {
         }
 
         if (!pendingContext?.name) {
-          throw new Error('Authorization session details were not available. Start authorization again from MCP Settings or paste the returned code into OpenChamber manually.');
+          throw new Error('Authorization session details were not available. Start authorization again from MCP Settings or paste the returned code into GeoCode manually.'); // GeoCode: product name
         }
 
         await completeAuth(pendingContext.name, code, pendingContext.directory);
@@ -118,7 +118,7 @@ export const McpOAuthCallbackPage: React.FC = () => {
         if (startedFromDesktop) {
           returnToApp(true);
         }
-        setMessage('Authorization completed. You can close this tab and return to OpenChamber.');
+        setMessage('Authorization completed. You can close this tab and return to GeoCode.'); // GeoCode: product name
       } catch (authError) {
         if (callbackStateKey) {
           await runtimeFetch(`/api/mcp/auth/pending?state=${encodeURIComponent(callbackStateKey)}`, { method: 'DELETE' }).catch(() => undefined);
@@ -156,7 +156,8 @@ export const McpOAuthCallbackPage: React.FC = () => {
               type="button"
               onClick={() => returnToApp(returnToDesktop)}
             >
-              Return to OpenChamber
+              {/* --- GeoCode: product name --- */}
+              Return to GeoCode
             </Button>
           </div>
         )}

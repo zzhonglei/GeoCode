@@ -467,7 +467,8 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
                       )}
                       {isOpenChamberBadge ? (
                         <span className={NEUTRAL_BADGE_CLASS}>
-                          OpenChamber
+                          {/* --- GeoCode: product name --- */}
+                          GeoCode
                         </span>
                       ) : isSystem ? (
                         <span className={NEUTRAL_BADGE_CLASS}>

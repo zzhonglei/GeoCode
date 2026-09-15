@@ -2082,7 +2082,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
         sourceDirectory,
       )
       if (!project?.path) {
-        throw new Error("Project is not registered in OpenChamber")
+        throw new Error("Project is not registered in GeoCode") // GeoCode: product name
       }
 
       const [branchNameModule, configModule, trustModule, createModule] = await Promise.all([

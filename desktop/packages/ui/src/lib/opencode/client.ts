@@ -262,7 +262,7 @@ export const createRuntimeOpencodeClient = (config: RuntimeOpencodeClientConfig)
         return await runtimeFetch(input, { ...init, signal });
       } catch (error) {
         if (timeout.signal.aborted && !callerSignal?.aborted) {
-          throw new Error(`OpenCode request timed out after ${requestTimeoutMs}ms`);
+          throw new Error(`GeoCode request timed out after ${requestTimeoutMs}ms`); // GeoCode: product name
         }
         throw error;
       } finally {
@@ -1987,7 +1987,7 @@ class OpencodeService {
         const message =
           typeof error.error === 'string' && error.error.length > 0
             ? error.error
-            : 'Failed to update OpenCode working directory';
+            : 'Failed to update GeoCode working directory'; // GeoCode: product name
         throw new Error(message);
       }
 

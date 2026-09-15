@@ -140,6 +140,21 @@ describe('desktop identity', () => {
     expect(host).not.toContain('openchamber-ui');
   });
 
+  it('names the log directory the diagnostics report sends the user to', () => {
+    // A hand-copy as well: electron-log takes the directory from the product name, and the report
+    // the renderer builds is where a user finds out where to look.
+    const status = fs.readFileSync(
+      path.resolve(electronRoot, '../ui/src/lib/openCodeStatus.ts'),
+      'utf8',
+    );
+    expect(status.match(/const DESKTOP_DIR_NAME = '([^']+)'/)?.[1]).toBe(DesktopIdentity.dirName);
+    expect(status).toContain('Logs/${DESKTOP_DIR_NAME}/main.log');
+    expect(status).not.toContain('Logs/OpenChamber');
+    expect(status).not.toContain('OpenChamber\\\\logs');
+    // The line is gated on being the desktop shell; upstream's scheme never matches GeoCode's window.
+    expect(status).not.toContain('openchamber-ui');
+  });
+
   it('leaves no upstream identity literal in the files the installer ships', () => {
     // Guards the merge that quietly restores one. The file list comes from build.files rather
     // than from a list kept here, because a per-file list cannot see a file it does not name —

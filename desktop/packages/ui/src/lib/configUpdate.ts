@@ -1,4 +1,4 @@
-const DEFAULT_MESSAGE = "Updating OpenCode configuration...";
+const DEFAULT_MESSAGE = "Updating GeoCode configuration..."; // GeoCode: product name
 
 type ConfigUpdateListener = (state: {
   isUpdating: boolean;

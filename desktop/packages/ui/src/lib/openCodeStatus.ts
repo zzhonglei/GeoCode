@@ -4,10 +4,15 @@ import { useUIStore } from '@/stores/useUIStore';
 import { getRuntimeUrlResolver } from './runtime-url';
 import { opencodeClient } from './opencode/client';
 import { runtimeFetch } from './runtime-fetch';
+import { isDesktopShell } from './desktop'; // GeoCode: where the desktop log line shows
+import { KERNEL_DIR_NAME } from '@/geocode/kernel-roots'; // GeoCode: own module
 import { getRecentSendFailures } from '@/sync/send-failure-log';
 import { getRecentSessionErrors } from '@/sync/session-error-log';
 
 declare const __APP_VERSION__: string | undefined;
+
+// GeoCode: the desktop's product name, which names its log directory; a hand-copy pinned by desktop-identity.test.mjs
+const DESKTOP_DIR_NAME = 'GeoCode';
 
 type ProbeResult = {
   ok: boolean;
@@ -294,23 +299,23 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
 
   const lines: string[] = [];
   lines.push(`Time: ${now.toISOString()}`);
-  lines.push(`OpenChamber version: ${appVersion}`);
+  lines.push(`GeoCode version: ${appVersion}`); // GeoCode: product name
   lines.push(`Runtime: ${origin || '(unknown)'} (api=${apiBase || '(unknown)'})`);
-  lines.push(`OpenCode SDK base: ${opencodeClient.getBaseUrl()}`);
+  lines.push(`GeoCode SDK base: ${opencodeClient.getBaseUrl()}`); // GeoCode: product name
   lines.push(`Event stream: ${eventStreamStatus}`);
   lines.push(`Directory: ${directory || '(none)'}`);
   lines.push(`Platform: ${platform}`);
 
   const runtimeOpenCodePort = normalizePort(openChamberHealth?.openCodePort);
-  lines.push(`OpenCode runtime port: ${runtimeOpenCodePort ?? '(unknown)'}`);
+  lines.push(`GeoCode runtime port: ${runtimeOpenCodePort ?? '(unknown)'}`); // GeoCode: product name
   if (typeof openChamberHealth?.openCodeRunning === 'boolean') {
-    lines.push(`OpenCode runtime running: ${openChamberHealth.openCodeRunning ? 'yes' : 'no'}`);
+    lines.push(`GeoCode runtime running: ${openChamberHealth.openCodeRunning ? 'yes' : 'no'}`); // GeoCode: product name
   }
   if (typeof openChamberHealth?.openCodeSecureConnection === 'boolean') {
-    lines.push(`Secure OpenCode connection: ${openChamberHealth.openCodeSecureConnection ? 'true' : 'false'}`);
+    lines.push(`Secure GeoCode connection: ${openChamberHealth.openCodeSecureConnection ? 'true' : 'false'}`); // GeoCode: product name
   }
   if (typeof openChamberHealth?.openCodeAuthSource === 'string' && openChamberHealth.openCodeAuthSource.trim()) {
-    lines.push(`OpenCode auth source: ${openChamberHealth.openCodeAuthSource}`);
+    lines.push(`GeoCode auth source: ${openChamberHealth.openCodeAuthSource}`); // GeoCode: product name
   }
 
   // What the managed OpenCode process last said for itself. A turn that stops
@@ -325,7 +330,7 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
     : '';
   if (lastOpenCodeError || managedProcess) {
     lines.push('');
-    lines.push('OpenCode process:');
+    lines.push('GeoCode process:'); // GeoCode: product name
     if (lastOpenCodeError) lines.push(`- last error: ${lastOpenCodeError}`);
     if (managedProcess) {
       lines.push(`- pid: ${formatUnknown(managedProcess.pid, '(none)')} exit=${formatUnknown(managedProcess.exitCode, '(running)')} signal=${formatUnknown(managedProcess.signalCode, '(none)')}`);
@@ -339,7 +344,7 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
 
   const sessionErrors = getRecentSessionErrors();
   lines.push('');
-  lines.push(`Recent OpenCode session errors: ${sessionErrors.length === 0 ? '(none this app session)' : ''}`.trimEnd());
+  lines.push(`Recent GeoCode session errors: ${sessionErrors.length === 0 ? '(none this app session)' : ''}`.trimEnd()); // GeoCode: product name
   for (const record of sessionErrors.slice(0, RECENT_RECORD_LINES)) {
     const detail = record.message ?? '(no message)';
     lines.push(`- ${formatIso(record.at)} session=${record.sessionId.slice(0, 16)} ${record.name ? `${record.name}: ` : ''}${detail}`);
@@ -358,18 +363,22 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
   // including OpenCode lifecycle lines, through electron-log.
   const opencodeHome = typeof pathInfo?.home === 'string' ? pathInfo.home : '';
   const isWindows = /Windows NT/.test(platform);
-  const isDesktop = origin.startsWith('openchamber-ui://');
+  // --- GeoCode: both logs where GeoCode writes them, and the desktop one whenever GeoCode's shell is the host
+  // (docs/PATHS.md §3.3) ---
+  const isDesktop = isDesktopShell();
+  const kernelLog = `.local/share/${KERNEL_DIR_NAME}/log`;
   lines.push('');
   lines.push('Log files:');
-  lines.push(`- OpenCode: ${opencodeHome ? joinPath(opencodeHome, '.local/share/opencode/log', isWindows) : '<home>/.local/share/opencode/log'} (or $XDG_DATA_HOME/opencode/log when set)`);
+  lines.push(`- GeoCode: ${opencodeHome ? joinPath(opencodeHome, kernelLog, isWindows) : `<home>/${kernelLog}`} (or $XDG_DATA_HOME/${KERNEL_DIR_NAME}/log when set)`);
   if (isDesktop) {
     const isMacDesktop = /Mac OS X|Macintosh/.test(platform);
-    lines.push(`- OpenChamber desktop: ${isWindows
-      ? '%APPDATA%\\OpenChamber\\logs\\main.log'
+    lines.push(`- GeoCode desktop: ${isWindows
+      ? `%APPDATA%\\${DESKTOP_DIR_NAME}\\logs\\main.log`
       : isMacDesktop
-        ? '~/Library/Logs/OpenChamber/main.log'
-        : '~/.config/OpenChamber/logs/main.log'}`);
+        ? `~/Library/Logs/${DESKTOP_DIR_NAME}/main.log`
+        : `~/.config/${DESKTOP_DIR_NAME}/logs/main.log`}`);
   }
+  // --- /GeoCode ---
 
   if (typeof window !== 'undefined') {
     const injected = (window as unknown as { __OPENCHAMBER_MACOS_MAJOR__?: unknown }).__OPENCHAMBER_MACOS_MAJOR__;
@@ -381,7 +390,7 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
   const isLikelyMac = /Mac OS X|Macintosh/.test(platform);
   if (isLikelyMac) {
     lines.push('');
-    lines.push('OpenCode CLI resolution:');
+    lines.push('GeoCode CLI resolution:'); // GeoCode: product name
 
     const launchDiagnostics = isRecord(openChamberHealth?.lastOpenCodeLaunchDiagnostics)
       ? openChamberHealth.lastOpenCodeLaunchDiagnostics
@@ -474,7 +483,7 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
 
   lines.push('');
   if (probes.length) {
-    lines.push('OpenCode API probes:');
+    lines.push('GeoCode API probes:'); // GeoCode: product name
     for (const probe of probes) {
       if (!probe.result) {
         lines.push(`- ${probe.label}: (no url)`);
@@ -485,7 +494,7 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
       lines.push(`- ${probe.label}: ${ok ? 'ok' : 'fail'} status=${status} time=${elapsedMs}ms ${summary}${suffix}`);
     }
   } else {
-    lines.push('OpenCode API probes: (skipped)');
+    lines.push('GeoCode API probes: (skipped)'); // GeoCode: product name
   }
 
   lines.push('');
