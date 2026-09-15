@@ -392,3 +392,26 @@ describe("the browser tool's verdicts", () => {
     }),
   )
 })
+
+/* The geocode tool is upstream's control tool, shipped in the same plugin file and allowed the way upstream
+ * ships it. It creates and deletes things, so unlike the browser tool plan is not offered it. Docs/DESKTOP.md §7.2. */
+describe("the geocode tool's verdicts", () => {
+  it.instance("GeoAgent may use every action, the writes included", () =>
+    Effect.gen(function* () {
+      const actions = ["projects.list", "session.create", "session.send", "session.fork", "schedule.create", "schedule.run", "schedule.delete"]
+      for (const pattern of actions) {
+        expect([pattern, yield* verdict("GeoAgent", "geocode", pattern)]).toEqual([pattern, "allow"])
+      }
+      expect(yield* offered("GeoAgent", "geocode")).toBe(true)
+    }),
+  )
+
+  it.instance("no other agent has it, plan included, and the deny hides it rather than failing at the call", () =>
+    Effect.gen(function* () {
+      for (const agent of ["plan", "osmfetch", "summary", "explore"]) {
+        expect([agent, yield* verdict(agent, "geocode", "session.create")]).toEqual([agent, "deny"])
+        expect([agent, yield* offered(agent, "geocode")]).toEqual([agent, false])
+      }
+    }),
+  )
+})

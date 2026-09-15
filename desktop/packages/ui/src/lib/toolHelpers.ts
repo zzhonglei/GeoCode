@@ -194,6 +194,14 @@ const TOOL_METADATA: Record<string, ToolMetadata> = {
       inputFields: []
     },
 
+    // GeoCode: upstream's control tool, renamed (electron/geocode/browser-tool.mjs GEOCODE_TOOL_NAME)
+    geocode: {
+      displayName: 'GeoCode',
+      category: 'system',
+      outputLanguage: 'json',
+      inputFields: []
+    },
+
     openchamber_web: {
       displayName: 'OpenChamber Web',
       category: 'system',

@@ -42,8 +42,9 @@ export function base(): ConfigV1.Info {
       qgis: "deny",
       osm: "deny",
       gee: "deny",
-      // The browser tool's id and key are the same word, so it needs no row in permission/index.ts.
+      // The browser and geocode tools' ids and keys are the same word, so neither needs a row in permission/index.ts.
       browser: "deny",
+      geocode: "deny",
     },
     agent: {
       GeoAgent: {
@@ -69,6 +70,8 @@ export function base(): ConfigV1.Info {
           /* Allowed outright, the way upstream ships it: a click reaches nothing this agent could not already
            * reach, since `bash` is unnamed here and falls through to the engine's allow (docs/DESKTOP.md §7.2). */
           browser: "allow",
+          // Upstream's control tool, allowed outright the same way (docs/DESKTOP.md §7.2).
+          geocode: "allow",
           // No `osm`: downloads go through the osmfetch subagent, and the wildcard deny above also keeps the
           // four OSM tools out of GeoAgent's tool list (docs/TOOLS.md §4.2 ①).
         },

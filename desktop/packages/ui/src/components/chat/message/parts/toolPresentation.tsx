@@ -67,6 +67,10 @@ export const getToolIcon = (toolName: string) => {
     if (tool === 'browser') {
         return <Icon name="global" className={iconClass} />;
     }
+    // GeoCode: and its control tool renamed `geocode`, keeping the product glyph (GEOCODE_TOOL_NAME there)
+    if (tool === 'geocode') {
+        return <Icon name="openchamber" className={iconClass} />;
+    }
     if (tool === 'openchamber_memory') {
         return <Icon name="brain-4" className={iconClass} />;
     }

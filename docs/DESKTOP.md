@@ -466,9 +466,10 @@ Release 页面地址交给上游的更新对话框,「下载」按钮打开 Rele
 插件文件地址、回调地址、令牌;壳启动后从主进程环境采纳同一枚令牌(`agent-tool/runtime.js`),之后主进程删掉它。
 内核侧**不开放插件**:`loadExternal` 仍对配置声明与目录扫描一律返回空,唯一的例外是「主进程点名、且解析路径恰为
 `<配置根>/desktop/agent-tool/geocode-browser-plugin.js`」的那一个文件,仅限 server 形态(`plugin/geocode-trusted.ts`,
-KERNEL.md §6 第 1 项)。回调路由 `/api/openchamber/agent-tool` 在 Electron 下只接受 Web 动作,持令牌也调不到控制与记忆动作;
-解析不出来的动作名同样由这道关卡回话,只列十个浏览器动作,措辞与工具其余两条错误一致都以 GeoCode 起头——
-上游原本会把它知道的二十八个动作全列出来,那既带商标,又等于把我们关掉的那套能力广告给模型。
+KERNEL.md §6 第 1 项)。这个文件里还写着下文的控制工具,回调路由 `/api/openchamber/agent-tool` 在 Electron 下只接受两个工具
+各自的动作:持令牌也调不到记忆动作,一个工具也调不到另一个的动作,省略前缀的动作名只在发起调用的工具自己的动作里解析
+(`server/geocode/agent-tools.js`)。解析不出来的动作名同样由这道关卡回话,只列发起调用的那个工具自己的动作,措辞与工具其余
+两条错误一致都以 GeoCode 起头——上游原本会把它知道的二十八个动作全列出来,那既带商标,又等于把关掉的记忆功能广告给模型。
 
 权限在 `config/geocode.ts`:GeoAgent 与 plan 是 `browser: "allow"`,其余 agent 落在全局的 `browser: "deny"` 上。
 这里不设询问,理由是询问在这条链上不区分风险:上游根本不接权限系统(生成的插件里没有 `ask`),而 GeoAgent 的
@@ -487,10 +488,33 @@ plan 拿到的理由与它的 `geodata: "allow"` 一致——读网页是研究,
 照上游处理:上游与 GeoCode 都没有 `will-download` 处理器,Electron 走默认流程,弹出系统的另存为对话框由用户选位置。
 截图与下载这两点是 2026-09-13 读 v1.23.1 代码得出的,未真机验证。
 
-绊线:`kernel/test/geocode-trusted-plugin.test.ts`(四个方向)、`geocode-geo-permissions.test.ts`(裁决)、
-`electron/geocode/browser-tool.test.mjs`(文件、覆盖变量、生成源码可导入且无品牌字样、裸动作名归一后再问、两侧路径一致、主进程顺序)、
+**控制工具:智能体能替用户建会话、给会话发提示词、管定时任务,同样强制开启,没有开关。** 它是上游的 `openchamber` 工具,
+在 GeoCode 里叫 `geocode`,动作是上游给智能体的十三个:列项目、看模型偏好、列会话、查会话状态、读会话消息、新建会话
+(可作为目标运行)、给会话发提示词、分叉会话,以及定时任务的列出、创建、立即运行、删除、启用停用;`schedule.status` 上游
+也只给命令行。它让 `/craft-goal`、`/schedule-task` 最后那步「替用户创建」做得成,也让用户在聊天里直接管理会话与定时任务。
+09-06 判为不提供,2026-09-15 用户改判全开。
+
+它与浏览器工具写在同一个插件文件里,走同一枚令牌、同一条回调,内核那条窄路不变。对上游只做改牌:工具名;工具说明里的
+两处 OpenChamber;模板的三句报错;`agent` 参数说明——上游写「OpenCode agent name; new sessions default to the build agent」,
+GeoCode 禁用了 `build`,不指定 agent 的新会话按 `default_agent` 落到 GeoAgent,所以换成「Agent name; new sessions use the
+default agent」。其余措辞照上游,替换表逐个工具钉在 `browser-tool.test.mjs` 上,上游再添一处品牌字样会转红。
+
+权限与上游一致:GeoAgent 是 `geocode: "allow"`,其余 agent 落在全局的 `geocode: "deny"` 上,工具列表里看不到它。`plan`
+拿到浏览器工具却拿不到这个,因为它会建会话、删定时任务,而 `plan` 只读。放行的理由与浏览器工具同一条:本机不带令牌、
+只带受信任的 `Origin` 头就能调通壳的 `/api/openchamber/control`(2026-09-15 实测),GeoAgent 的 `bash` 本来就做得到;插件
+照样每次调用都 `ask`,将来要收紧改一行配置。聊天里它沿用上游控制工具的呈现:隐藏原始输入,图标是图标精灵里 `openchamber`
+那枚产品图形(随改牌的图标一批换),显示名 GeoCode。插件文件、环境变量与 `prepareBrowserTool` 这些名字早于这个工具,是内部名,
+没有跟着改。
+
+2026-09-15 真实会话验过:主进程写出的插件文件里两个工具都在,没有 OpenChamber 与 OpenCode 字样;内核工具清单里有 `geocode`;
+GeoAgent 在临时会话里调 `projects.list` 成功(工具状态 completed,返回 `ok: true`)。写操作走同一条回调与上游同一个服务,
+没有在用户的项目里建真实的定时任务。
+
+绊线:`kernel/test/geocode-trusted-plugin.test.ts`(四个方向)、`geocode-geo-permissions.test.ts`(两个工具的裁决)、
+`electron/geocode/browser-tool.test.mjs`(文件、覆盖变量、生成源码可导入、两个工具各自的动作、调用前询问、裸动作名归一后再问、
+逐个工具的替换表且无品牌字样、界面三处按名匹配、两侧路径一致、主进程顺序)、
 `electron/geocode/desktop-identity.test.mjs`(渲染端的面板 partition)、
-`web/server/geocode/browser-tool-callback.test.js`(令牌、动作限制、解析不出时不泄露关掉的动作)。
+`web/server/geocode/browser-tool-callback.test.js`(令牌、每个工具只到自己的动作、裸动作名在工具内解析、解析不出时只列自己的动作)。
 
 ### 7.3 不进入 GeoCode 产品
 
@@ -506,7 +530,7 @@ plan 拿到的理由与它的 `geodata: "allow"` 一致——读网页是研究,
 - 仓库共享的项目配置(`<repo>/.openchamber/project.json`)与它带的仓库计划目录;
 - 项目操作(把 shell 命令绑到侧边栏按钮)与 worktree 的初始化命令;
 - 写给程序员的斜杠命令(内核内置的 `/init`、`/review` 与界面自带的八条);
-- OpenChamber 的外部插件管理、system-prompt optimizer 与 agent-tool 注入;
+- OpenChamber 的外部插件管理、system-prompt optimizer,以及上游那条 agent-tool 注入管道(浏览器工具与控制工具改由 GeoCode 自己注入,见 §7.2;记忆工具不注入);
 - GitHub 发布流与 PR 面:**挂起**,见下方说明。
 
 上游源码中的这些模块可以保留,但 GeoCode profile 下不得注册路由、启动定时器、建立网络连接
@@ -654,9 +678,9 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   `ui/src/geocode/desktop-settings-surface.test.ts`。
 - **agent-tool 注入的三个开关、以及 system-prompt optimizer**:上游把控制工具、Web 工具、记忆工具做成三个开关,
   都靠「壳把一个插件写到磁盘,再让壳自己 spawn 的 OpenCode 加载它」这条管道,而桌面壳不 spawn 任何 OpenCode
-  (四层断口见 `.artifacts/DECISIONS.md` 09-04)。GeoCode 里它们不是开关:控制工具(让智能体建会话、派提示、管计划任务)
-  不提供;**浏览器工具是产品能力,强制开启、无法关闭**,由 GeoCode 自己注入,做法见 §7.2「浏览器工具」,
-  不读 `agentWebToolEnabled`;
+  (四层断口见 `.artifacts/DECISIONS.md` 09-04)。GeoCode 里它们不是开关:**浏览器工具与控制工具是产品能力,强制开启、
+  无法关闭**,由 GeoCode 自己注入,做法见 §7.2「浏览器工具」「控制工具」,不读 `agentWebToolEnabled` 与
+  `agentControlToolEnabled`(控制工具 09-06 判为不提供,2026-09-15 用户改判全开);
   记忆工具是上游未发布的功能,等它发布再判。所以设置里「工具」一节在桌面壳整节不渲染,三个搜索条目不列。
   optimizer 走的也是这条管道,这是它不渲染的理由;它重写 `build` 与 `plan` 的提示词,前者 GeoCode 禁用,
   后者保留上游原文(禁用的是 `build` 与 `general`,`plan` 是活的)。Behavior 页的那一节不渲染,搜索条目不列。

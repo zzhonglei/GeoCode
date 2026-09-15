@@ -86,16 +86,16 @@ v2 路径会主动扫三个兄弟产品的 appData 目录复用已在跑的守�
 | `OPENCHAMBER_UI_PASSWORD` | 同上 | `index.js:1573`,启动时 | 界面无口令;开了局域网访问时被 `bind-host.js` 拒绝启动 |
 | `OPENCHAMBER_SKIP_API_COMPRESSION` | 同上 | `index.js:220`,每次请求 | 压缩打开,性能 |
 | `OPENCHAMBER_SKIP_OPENCODE_START` | `startEmbeddedKernel` → `applyKernelConnectionToShellEnvironment` | `index.js:623`,**导入时** | **壳改走托管启动**,被 §5.6 的早退拒绝,界面报内核不可用 |
-| `GEOCODE_BROWSER_PLUGIN` | `browser-tool.mjs` → `startEmbeddedKernel` 的 `overrides` | 内核 `plugin/geocode-trusted.ts`,`loadExternal` 时 | 内核不加载浏览器工具;它只认这一个路径 |
+| `GEOCODE_BROWSER_PLUGIN` | `browser-tool.mjs` → `startEmbeddedKernel` 的 `overrides` | 内核 `plugin/geocode-trusted.ts`,`loadExternal` 时 | 内核不加载浏览器工具与控制工具;它只认这一个路径 |
 | `OPENCHAMBER_AGENT_TOOL_URL` / `_TOKEN` | 同上,注入内核;`_TOKEN` 另放进主进程环境供壳采纳,壳起来后删除 | 插件源码在每次调用时读;壳 `agent-tool/runtime.js` 创建时读 | 工具回调无门,或壳的令牌为空恒 401。带商标是因为沿用上游模板读的名字,它们是我们注入的 ABI,不是继承的配置 |
 | `OPENCODE_HOST` | `applyKernelConnectionToShellEnvironment` | `env-config.js:41`,**导入时** | 同 `OPENCHAMBER_SKIP_OPENCODE_START`,它是那一对变量的另一半 |
 | `OPENCODE_SERVER_PASSWORD` | 同上 | `auth-state-runtime.js:48`,每次向内核的请求 | 壳对内核每个请求 401 |
 
 内核那一半**不需要**任何继承来的带商标名字:`OPENCODE_SERVER_USERNAME`/`_PASSWORD` 由 sidecar 收到 IPC 后在自己
 进程里设;将来要给内核的(比如上游桌面端设的 `OPENCODE_CLIENT`)
-一律走 `startEmbeddedKernel` 的 `overrides`,它叠在过滤之后。浏览器工具的三个变量就是这样给的(§4.1 表中
-`GEOCODE_BROWSER_PLUGIN` 与 `OPENCHAMBER_AGENT_TOOL_URL`/`_TOKEN` 两行,`DESKTOP.md` §7.2);上游 agent-tool 的控制工具与
-记忆工具不注入(`DESKTOP.md` §7.3)。
+一律走 `startEmbeddedKernel` 的 `overrides`,它叠在过滤之后。浏览器工具与控制工具共用的三个变量就是这样给的(§4.1 表中
+`GEOCODE_BROWSER_PLUGIN` 与 `OPENCHAMBER_AGENT_TOOL_URL`/`_TOKEN` 两行,`DESKTOP.md` §7.2);上游 agent-tool 的记忆工具不注入
+(`DESKTOP.md` §7.3)。
 
 三个带商标、树里**没有任何脚本设置**、只在测试里出现的名字——`OPENCHAMBER_MEMORY_ENABLE`、`OPENCHAMBER_STARTUP_PERF`、
 `OPENCHAMBER_ELECTRON_LOAD_SERVER_UI`——剥掉与默认无异,不进白名单。开发脚本还设 `OPENCHAMBER_PORT`、

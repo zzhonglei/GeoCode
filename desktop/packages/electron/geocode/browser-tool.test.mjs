@@ -1,10 +1,10 @@
-/* --- GeoCode: the main process hands the kernel its browser tool (docs/DESKTOP.md §7.2).
+/* --- GeoCode: the main process hands the kernel its agent tools (docs/DESKTOP.md §7.2).
  *
  * The plugin file, the token and the three overrides are pinned against a scratch data root with
  * a stub template; the generated source is then built with upstream's real template and imported,
- * so a change to the template that breaks the wrapper or leaks the old name fails here. The
- * main.mjs wiring is pinned by source: the tool is prepared before the kernel starts and the token
- * leaves main's own environment once the shell has it. --- */
+ * so a change to the template that breaks the wrapper or leaks the old names fails here. The
+ * main.mjs wiring is pinned by source: the tools are prepared before the kernel starts and the
+ * token leaves main's own environment once the shell has it. --- */
 import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -15,6 +15,7 @@ import {
   BROWSER_PLUGIN_ENV,
   BROWSER_PLUGIN_RELATIVE_PATH,
   BROWSER_TOOL_NAME,
+  GEOCODE_TOOL_NAME,
   UPSTREAM_STRINGS,
   createBrowserPluginSource,
   prepareBrowserTool,
@@ -29,9 +30,17 @@ const trustedSource = fs.readFileSync(
 
 const stubTemplate = async () => ({
   createToolEntry: ({ name }) => `    ${name}: { description: "stub", args: {}, async execute() { return "stub" } },\n`,
-  actions: ['browser.open'],
-  definitions: [{ action: 'browser.open', title: 'Open', description: 'Open' }],
-  parameters: {},
+  browser: {
+    actions: ['browser.open'],
+    definitions: [{ action: 'browser.open', title: 'Open', description: 'Open' }],
+    parameters: {},
+  },
+  geocode: {
+    description: 'stub',
+    actions: ['session.create'],
+    definitions: [{ action: 'session.create', title: 'Create', description: 'Create' }],
+    parameters: {},
+  },
 });
 
 const realTemplate = async () => {
@@ -41,9 +50,17 @@ const realTemplate = async () => {
   ]);
   return {
     createToolEntry: runtime.createToolEntry,
-    parameters: runtime.WEB_PARAMETER_PROPERTIES,
-    actions: actions.OPENCHAMBER_WEB_ACTIONS,
-    definitions: actions.OPENCHAMBER_WEB_ACTION_DEFINITIONS,
+    browser: {
+      parameters: runtime.WEB_PARAMETER_PROPERTIES,
+      actions: actions.OPENCHAMBER_WEB_ACTIONS,
+      definitions: actions.OPENCHAMBER_WEB_ACTION_DEFINITIONS,
+    },
+    geocode: {
+      description: runtime.CONTROL_TOOL_DESCRIPTION,
+      parameters: runtime.CONTROL_PARAMETER_PROPERTIES,
+      actions: actions.OPENCHAMBER_AGENT_TOOL_ACTIONS,
+      definitions: actions.OPENCHAMBER_AGENT_TOOL_ACTION_DEFINITIONS,
+    },
   };
 };
 
@@ -58,6 +75,18 @@ const importSource = async (source) => {
     fs.rmSync(directory, { recursive: true, force: true });
   }
 };
+
+const loadTools = async () => {
+  const mod = await importSource(createBrowserPluginSource(await realTemplate()));
+  return (await mod.GeoCodeBrowserPlugin()).tool;
+};
+
+const recordingContext = (asked) => ({
+  ask: async (request) => { asked.push(request); },
+  metadata: () => {},
+  directory: '/work',
+  abort: undefined,
+});
 
 describe('prepareBrowserTool', () => {
   it('writes the plugin under the data root and hands the kernel the file, the address and the token', async () => {
@@ -89,53 +118,68 @@ describe('prepareBrowserTool', () => {
 });
 
 describe('the generated plugin', () => {
-  it('is one tool named browser, with the web actions only, asking before it acts', async () => {
-    const source = createBrowserPluginSource(await realTemplate());
-    const mod = await importSource(source);
-    const plugin = await mod.GeoCodeBrowserPlugin();
-    expect(Object.keys(plugin.tool)).toEqual([BROWSER_TOOL_NAME]);
-    const tool = plugin.tool[BROWSER_TOOL_NAME];
-    expect(tool.args.action.enum.every((action) => action.startsWith('browser.'))).toBe(true);
-    expect(tool.args.action.enum.length).toBeGreaterThanOrEqual(10);
+  it('is browser with the web actions and geocode with the control actions, each asking before it acts', async () => {
+    const tools = await loadTools();
+    expect(Object.keys(tools)).toEqual([BROWSER_TOOL_NAME, GEOCODE_TOOL_NAME]);
+    const browserActions = tools[BROWSER_TOOL_NAME].args.action.enum;
+    expect(browserActions.every((action) => action.startsWith('browser.'))).toBe(true);
+    expect(browserActions.length).toBeGreaterThanOrEqual(10);
+    const geocodeActions = tools[GEOCODE_TOOL_NAME].args.action.enum;
+    for (const action of ['session.create', 'session.send', 'schedule.create', 'schedule.delete']) {
+      expect([action, geocodeActions.includes(action)]).toEqual([action, true]);
+    }
+    expect(geocodeActions.filter((action) => /^(browser|memory)\./.test(action))).toEqual([]);
 
     const asked = [];
-    const context = {
-      ask: async (request) => { asked.push(request); },
-      metadata: () => {},
-      directory: '/work',
-      abort: undefined,
-    };
+    const context = recordingContext(asked);
     // No endpoint in this process, so the upstream body answers with its own failure; what is
     // asserted is that the permission request came first and named the action.
-    const result = await tool.execute({ action: 'browser.click', parameters: { selector: '#go' } }, context);
-    expect(asked).toEqual([{ permission: BROWSER_TOOL_NAME, patterns: ['browser.click'], always: ['*'], metadata: { action: 'browser.click', url: undefined } }]);
-    expect(JSON.parse(result.output).ok).toBe(false);
+    const browserResult = await tools[BROWSER_TOOL_NAME].execute({ action: 'browser.click', parameters: { selector: '#go' } }, context);
+    const geocodeResult = await tools[GEOCODE_TOOL_NAME].execute({ action: 'schedule.create', parameters: { name: 'x' } }, context);
+    expect(asked).toEqual([
+      { permission: BROWSER_TOOL_NAME, patterns: ['browser.click'], always: ['*'], metadata: { action: 'browser.click', url: undefined } },
+      { permission: GEOCODE_TOOL_NAME, patterns: ['schedule.create'], always: ['*'], metadata: { action: 'schedule.create' } },
+    ]);
+    expect(JSON.parse(browserResult.output).ok).toBe(false);
+    expect(JSON.parse(geocodeResult.output).ok).toBe(false);
   });
 
   it('asks with the canonical action when the model drops the namespace, the way the shell resolves it', async () => {
-    const source = createBrowserPluginSource(await realTemplate());
-    const mod = await importSource(source);
-    const tool = (await mod.GeoCodeBrowserPlugin()).tool[BROWSER_TOOL_NAME];
+    const tools = await loadTools();
     const asked = [];
-    const context = { ask: async (request) => { asked.push(request); }, metadata: () => {}, directory: '/work', abort: undefined };
-    await tool.execute({ action: 'click', selector: '#go' }, context);
-    expect(asked[0].patterns).toEqual(['browser.click']);
-    asked.length = 0;
-    await tool.execute({ action: ' browser.type ' }, context);
-    expect(asked[0].patterns).toEqual(['browser.type']);
-    asked.length = 0;
-    await tool.execute({ action: 'nonsense' }, context);
-    expect(asked[0].patterns).toEqual(['nonsense']);
+    const context = recordingContext(asked);
+    const patternFor = async (tool, action) => {
+      asked.length = 0;
+      await tools[tool].execute({ action }, context);
+      return asked[0].patterns[0];
+    };
+    expect(await patternFor(BROWSER_TOOL_NAME, 'click')).toBe('browser.click');
+    expect(await patternFor(BROWSER_TOOL_NAME, ' browser.type ')).toBe('browser.type');
+    expect(await patternFor(BROWSER_TOOL_NAME, 'nonsense')).toBe('nonsense');
+    // Memory has a delete as well; within geocode it can only be the schedule one.
+    expect(await patternFor(GEOCODE_TOOL_NAME, 'delete')).toBe('schedule.delete');
+    // Sessions and schedules both create, so the name stays as sent and the shell refuses it.
+    expect(await patternFor(GEOCODE_TOOL_NAME, 'create')).toBe('create');
   });
 
-  it('carries no OpenChamber wording, and the three rebranded strings are the ones the template has', async () => {
+  it('carries no OpenChamber or OpenCode wording, and the rebranded strings are the ones upstream has', async () => {
     const template = await realTemplate();
-    const raw = template.createToolEntry({ name: 'x', description: 'x', actions: template.actions, definitions: template.definitions, parameters: template.parameters });
-    for (const upstream of Object.keys(UPSTREAM_STRINGS)) {
-      expect(raw).toContain(upstream);
+    const upstreamEntries = {
+      [BROWSER_TOOL_NAME]: template.createToolEntry({ name: 'x', description: 'x', ...template.browser }),
+      [GEOCODE_TOOL_NAME]: template.createToolEntry({ name: 'x', ...template.geocode }),
+    };
+    for (const [tool, raw] of Object.entries(upstreamEntries)) {
+      const strings = Object.keys(UPSTREAM_STRINGS[tool]);
+      for (const upstream of strings) {
+        expect([tool, upstream, raw.includes(upstream)]).toEqual([tool, upstream, true]);
+      }
+      // Each replaced string holds one brand name, so one left unreplaced shows as a count that differs.
+      expect([tool, (raw.match(/OpenChamber|OpenCode/g) ?? []).length]).toEqual([tool, strings.length]);
     }
-    expect((raw.match(/OpenChamber/g) ?? []).length).toBe(Object.keys(UPSTREAM_STRINGS).length);
-    expect(createBrowserPluginSource(template)).not.toContain('OpenChamber');
+    const source = createBrowserPluginSource(template);
+    expect(source).not.toMatch(/OpenChamber|OpenCode/);
+    // `build` is disabled in GeoCode, so nothing may tell the model a new session gets it.
+    expect(source).not.toMatch(/build agent/);
   });
 });
 
@@ -151,16 +195,20 @@ describe('the two sides agree on the file', () => {
   });
 });
 
-describe('the chat surface knows the tool by its GeoCode name', () => {
-  it('keeps the upstream icon and hides the raw input, under the new name', () => {
-    // Both are keyed by tool name in the renderer, which cannot import this module. Renaming the
-    // tool without them leaves every browser call rendered as a generic wrench plus a dump of the
-    // call arguments, while the curated card upstream wrote for it goes unused.
-    const read = (file) => fs.readFileSync(path.resolve(electronRoot, '../ui/src/components/chat/message/parts', file), 'utf8');
-    for (const file of ['toolPresentation.tsx', 'ToolPart.tsx']) {
+describe('the chat surface knows the tools by their GeoCode names', () => {
+  it('keeps the upstream icons, hides the raw input and names the tool, under the new names', () => {
+    // All keyed by tool name in the renderer, which cannot import this module. Renaming a tool
+    // without them leaves its calls rendered as a generic wrench plus a dump of the call arguments,
+    // while the curated card upstream wrote for it goes unused.
+    const read = (file) => fs.readFileSync(path.resolve(electronRoot, '../ui/src', file), 'utf8');
+    for (const file of ['components/chat/message/parts/toolPresentation.tsx', 'components/chat/message/parts/ToolPart.tsx']) {
       const source = read(file);
-      expect([file, source.includes(`'${BROWSER_TOOL_NAME}'`)]).toEqual([file, true]);
+      for (const tool of [BROWSER_TOOL_NAME, GEOCODE_TOOL_NAME]) {
+        expect([file, tool, source.includes(`'${tool}'`)]).toEqual([file, tool, true]);
+      }
     }
+    // A name the renderer does not list is shown capitalized, which would spell the product Geocode.
+    expect(read('lib/toolHelpers.ts')).toMatch(new RegExp(`\\n\\s*${GEOCODE_TOOL_NAME}: \\{\\s*displayName: 'GeoCode',`));
   });
 });
 

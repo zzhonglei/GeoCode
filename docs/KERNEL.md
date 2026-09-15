@@ -121,7 +121,7 @@ GeoCode 的一切内核定制,按下面的优先级实现,只允许用尽可能�
 | **屏蔽清单** | 见 §6 的清单 | 每项书面回答「为什么装配做不到」 |
 | 地理内核注入 | GEOKERNEL.md §10.1 的清单,外加 2 处上游测试 | 逐项列举、逐项配绊线,**不是零散生长而是一份可对账的表**。那 2 处是数据面并入根 API(#2)的连带:`RootHttpApi` 从此建不起来,除非测试自己的层图也提供 `GeoHandler` 与它读的两个服务 |
 | 上游测试的夹具 | 少数几处 | 让夹具写「加载器会读的名字」;改名后一处共享夹具就救回约 230 个测试 |
-| 浏览器工具的例外 | `plugin/loader.ts` 一处早退块 + 自有 `plugin/geocode-trusted.ts` + `config/geocode.ts` 两条规则 | 外部插件屏蔽不变,只多一个由进程拥有者点名、路径固定的文件;为何装配做不到:插件加载没有配置开关,而这个文件必须在内核进程内注册工具(DESKTOP.md §7.2) |
+| 浏览器工具与控制工具的例外 | `plugin/loader.ts` 一处早退块 + 自有 `plugin/geocode-trusted.ts` + `config/geocode.ts` 里两个工具各一对规则(全局拒绝、GeoAgent 放行,浏览器工具另给 `plan`) | 外部插件屏蔽不变,只多一个由进程拥有者点名、路径固定的文件,两个工具都写在里面;为何装配做不到:插件加载没有配置开关,而这个文件必须在内核进程内注册工具(DESKTOP.md §7.2) |
 
 早期版本在这里写过「个位数文件」的目标,那是在地理内核注入之前定的,已被有计划的执行超过。**判据因此不再是数量,也不是「在不在某张清单上」**——GeoCode 是在上游代码上改出来的,注入多是常态,而按清单点名注入点的做法自己就会漂:那份清单曾把六处健康的补丁判成欠账,其中还有一处根本不存在。
 
@@ -322,7 +322,7 @@ GeoCode 保留整套机制,只做适配。上游多处假设「主 agent 永远�
 
 | # | 屏蔽项 | 为什么前四层做不到 | 截断点 |
 |---|---|---|---|
-| 1 | 外部插件(配置里声明的 + `{plugin,plugins}/` 自动发现) | 配置里**没有**「关闭插件加载」这个键。而且加载有两条独立路径,其中 `core` 侧那条(内置的 `config-plugin`)不受任何开关约束——实测在 `OPENCODE_DISABLE_PROJECT_CONFIG=1` 下仍然执行了项目里的插件 | `plugin/loader.ts` 的 `loadExternal`(两个调用点的唯一必经处)+ `core/plugin/internal.ts` 摘掉 `ConfigExternalPlugin` 的注册。**唯一例外**:桌面主进程启动内核时点名的浏览器工具文件,且解析路径必须恰为 `<配置根>/desktop/agent-tool/geocode-browser-plugin.js`,仅 server 形态(`plugin/geocode-trusted.ts`,DESKTOP.md §7.2);这不是「支持白名单插件」,配置声明与目录扫描照旧返回空,`geocode-trusted-plugin.test.ts` 四个方向都钉着 |
+| 1 | 外部插件(配置里声明的 + `{plugin,plugins}/` 自动发现) | 配置里**没有**「关闭插件加载」这个键。而且加载有两条独立路径,其中 `core` 侧那条(内置的 `config-plugin`)不受任何开关约束——实测在 `OPENCODE_DISABLE_PROJECT_CONFIG=1` 下仍然执行了项目里的插件 | `plugin/loader.ts` 的 `loadExternal`(两个调用点的唯一必经处)+ `core/plugin/internal.ts` 摘掉 `ConfigExternalPlugin` 的注册。**唯一例外**:桌面主进程启动内核时点名的那个插件文件(装着浏览器工具与控制工具),且解析路径必须恰为 `<配置根>/desktop/agent-tool/geocode-browser-plugin.js`,仅 server 形态(`plugin/geocode-trusted.ts`,DESKTOP.md §7.2);这不是「支持白名单插件」,配置声明与目录扫描照旧返回空,`geocode-trusted-plugin.test.ts` 四个方向都钉着 |
 | 2 | 文件式工具 `{tool,tools}/*.{js,ts}` | 扫描写死在工具注册表的构建里,没有开关;它与 `plugin` 是**不同的扩展点**,关掉插件并不能关掉它 | `tool/registry.ts` 的发现处 |
 | 3 | Claude Code 的 `CLAUDE.md` 提示词 | 上游有 env 开关,但**默认是开的**。靠启动方设 env 会静默失败,而且失败方向是开放的——桌面壳与测试台各是一条启动路径,漏一条就恢复读取 | `effect/runtime-flags.ts` 的两个默认值(env 仍可反向打开) |
 | 4 | `~/.opencode` 家目录扫描 | 上游**没有任何开关**能挡它——`OPENCODE_DISABLE_PROJECT_CONFIG` 只管项目级 | `config/paths.ts` 整段删除。我们只有一个全局根,没有 `~/.geocode` 可改名 |

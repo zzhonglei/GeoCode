@@ -9,6 +9,7 @@ import {
   OPENCHAMBER_WEB_ACTION_DEFINITIONS,
   OPENCHAMBER_WEB_ACTIONS,
 } from '../openchamber-control/actions.js';
+import { routeGeoCodeToolCall } from '../../geocode/agent-tools.js'; // GeoCode: the desktop's two tools (docs/DESKTOP.md §7.2)
 
 const TOOL_SCHEMA_VERSION = 1;
 // Everything either managed tool may ask for; the agent allowlist stays
@@ -97,7 +98,7 @@ const pickParameters = (names) => Object.fromEntries(
   Object.entries(ALL_PARAMETER_PROPERTIES).filter(([name]) => names.includes(name)),
 );
 
-const CONTROL_PARAMETER_PROPERTIES = pickParameters(
+export const CONTROL_PARAMETER_PROPERTIES = pickParameters( // GeoCode: read by electron/geocode/browser-tool.mjs
   Object.keys(ALL_PARAMETER_PROPERTIES).filter((name) => (
     !WEB_PARAMETER_NAMES.includes(name) && !MEMORY_ONLY_PARAMETER_NAMES.includes(name)
   )),
@@ -108,7 +109,8 @@ const MEMORY_PARAMETER_PROPERTIES = {
   ...MEMORY_PARAMETER_OVERRIDES,
 };
 
-const CONTROL_TOOL_DESCRIPTION = "Control OpenChamber projects, sessions, and scheduled tasks on the user's behalf. Sessions and scheduled tasks you create are for the user to follow and interact with; never use this tool to delegate parts of your own current task. Use one action per call. Scope with projectId or directory; omit both to use the current session directory. Session dispatches return immediately by default and you receive no notification when a dispatched session finishes, so never promise to report back on it; the user follows it in OpenChamber; a dispatched session needs no follow-up from you. If the user later asks how it went, use session.messages (add wait to block until it is idle, lastAssistant for just the final answer) — session.send always sends a NEW prompt and never just waits. Set wait only when the user asks or the next step requires the completed result. Session and worktree deletion are unavailable.";
+// GeoCode: exported, read by electron/geocode/browser-tool.mjs
+export const CONTROL_TOOL_DESCRIPTION = "Control OpenChamber projects, sessions, and scheduled tasks on the user's behalf. Sessions and scheduled tasks you create are for the user to follow and interact with; never use this tool to delegate parts of your own current task. Use one action per call. Scope with projectId or directory; omit both to use the current session directory. Session dispatches return immediately by default and you receive no notification when a dispatched session finishes, so never promise to report back on it; the user follows it in OpenChamber; a dispatched session needs no follow-up from you. If the user later asks how it went, use session.messages (add wait to block until it is idle, lastAssistant for just the final answer) — session.send always sends a NEW prompt and never just waits. Set wait only when the user asks or the next step requires the completed result. Session and worktree deletion are unavailable.";
 
 const WEB_TOOL_DESCRIPTION = "Look at and interact with a web page in OpenChamber's browser panel, so you can check your own work rather than describing what you expect. Use one action per call. Open a page, snapshot it to read its text and its interactive elements, then click, type or scroll using the selectors the snapshot returned; snapshots also report any errors the page logged. Pass a selector to browser.snapshot to read one part of a long page. browser.inspect returns computed styles when the question is how something renders. Set viewport to check a layout at mobile, tablet or desktop size. The page runs with the user's real logins, so treat what you see as their live session.";
 
@@ -304,24 +306,20 @@ export const createAgentToolRuntime = (dependencies) => {
 
   const execute = async (payload = {}, options = {}) => {
     const requested = asNonEmptyString(payload.input?.action);
+    // --- GeoCode: the desktop injects `browser` and `geocode` and nothing else; a call stays within the
+    // calling tool's own actions and resolves under upstream's name for them (docs/DESKTOP.md §7.2) ---
+    if (process.versions.electron) {
+      const call = routeGeoCodeToolCall(asNonEmptyString(payload.tool), requested);
+      if (call.refusal) {
+        return createResult({ ok: false, action: call.refusal.action, error: { message: call.refusal.message, kind: 'usage' } });
+      }
+      payload = { ...payload, tool: call.upstreamTool };
+    }
+    // --- /GeoCode ---
     // Resolved against the calling tool's own actions: models drop the
     // namespace that the tool's name already implies, and answering "read" with
     // a bare "unsupported" leaves them to guess a second wrong name.
     const resolution = resolveAgentToolAction(requested, asNonEmptyString(payload.tool));
-    // --- GeoCode: the desktop shell injects the browser tool and nothing else, so both refusals here
-    // name its own actions: a caller holding the token reaches no control or memory action, and a name
-    // that resolved to none must not advertise the surface we closed (docs/DESKTOP.md §7.2) ---
-    if (process.versions.electron && (resolution.error || !OPENCHAMBER_WEB_ACTIONS.includes(resolution.action))) {
-      return createResult({
-        ok: false,
-        action: resolution.action ?? requested,
-        error: {
-          message: `Unsupported GeoCode browser action: ${requested || 'missing'}. Use one of: ${OPENCHAMBER_WEB_ACTIONS.join(', ')}`,
-          kind: 'usage',
-        },
-      });
-    }
-    // --- /GeoCode ---
     if (resolution.error) {
       return createResult({ ok: false, action: requested, error: { message: resolution.error, kind: 'usage' } });
     }

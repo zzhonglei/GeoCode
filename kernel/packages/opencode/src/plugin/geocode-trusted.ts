@@ -1,8 +1,8 @@
 /* --- GeoCode: the one file the kernel loads as a plugin (docs/KERNEL.md §6 item 1, docs/DESKTOP.md §7.2).
  *
  * External plugins stay off: nothing a configuration declares and nothing found in a project directory is
- * loaded. The single exception is the browser tool, which the desktop's main process writes into the
- * shell data root and names in the kernel's environment when it starts the kernel. Two conditions, both
+ * loaded. The single exception is the file holding the desktop's agent tools, which its main process writes
+ * into the shell data root and names in the kernel's environment when it starts the kernel. Two conditions, both
  * required: the variable is set, which only the process owner can do because the inherited environment
  * is stripped before the kernel starts, and the named file resolves to exactly this path under the
  * kernel's own config root, so a variable pointing anywhere else loads nothing. Server kind only; the
