@@ -29,6 +29,7 @@ import { usePwaDetection } from '@/hooks/usePwaDetection';
 import { loadDesktopSettings, updateDesktopSettings } from '@/lib/persistence';
 import { CODE_FONT_OPTIONS, DEFAULT_MONO_FONT, DEFAULT_UI_FONT, UI_FONT_OPTIONS, type MonoFontOption, type UiFontOption } from '@/lib/fontOptions';
 import { useI18n, type Locale } from '@/lib/i18n';
+import { isOfferedLocale } from '@/geocode/locale-surface'; // GeoCode: own module
 import { useConfigStore } from '@/stores/useConfigStore';
 import { normalizeMobileKeyboardMode, supportsMobileKeyboardResizeContent, type MobileKeyboardMode } from '@/lib/mobileKeyboardMode';
 import {
@@ -1073,7 +1074,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                                 <SelectValue>{label(locale)}</SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {locales.map((availableLocale) => (
+                                                {locales.filter(isOfferedLocale).map((availableLocale) => ( // GeoCode: the product languages (docs/DESKTOP.md §7.3)
                                                     <SelectItem key={availableLocale} value={availableLocale}>
                                                         {label(availableLocale)}
                                                     </SelectItem>

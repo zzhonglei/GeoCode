@@ -656,6 +656,15 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   说明里的 OpenChamber 字样,改牌那一批因此不含它们。绊线在 `server/geocode/skill-catalog-surface.test.js`(真实 Express,
   拒绝必须先于记录式 handler 命中,`skill-routes.js` 里那行调用必须排在第一条目录路由之前)与
   `ui/src/geocode/desktop-settings-surface.test.ts`(页面可用性)。
+- **上游其余九种语言**:设置「外观」里的语言选择器只列 GeoCode 的三种产品语言(英文、简体、繁体);存过的语言若在其外
+  (早先的构建能存十二种里的任何一种),启动时经 `setLocale` 落回英文。九份上游译文从未改牌(每份约两百处
+  OpenChamber / OpenCode),还写着 `.opencode`、`opencode.json`、`~/.config/openchamber/` 这些 GeoCode 没有的路径,
+  而两条语言绊线只扫产品语言那三份——既没改也没人看。判据:产品只发布这三种语言(2026-09-16 用户定,核心用户是
+  台湾、大陆与英文学术圈)。桌面壳不注入系统语言(上游只有 VS Code 插件注入),没存过语言的机器本来就从英文起。
+  Walkthrough 里选讲解语言的菜单不收窄:它选的是模型写讲解用的语言,不是界面语言。九份字典原样留着;上游测试里切到
+  西语、法语、乌克兰语的三条(`lib/i18n/store.test.ts` 两条、`LiveTurnActivity.test.tsx` 一条)因此按设计变红
+  (上游套件不在门里)。绊线在 `ui/src/geocode/locale-surface.test.ts`(选择器只列这三种;存过的德文等落回英文;
+  产品语言正是语言绊线扫描的那三份)。
 - **魔法提示词**:「魔法提示词」页在桌面壳不可用,`registerMagicPromptRoutes` 在 Electron 下首行把整个前缀答成 404,
   四条路由一条不注册。这一页管的不是用户写的咒语,而是**产品自己那些一键动作背后的提示词**——生成提交信息、会话摘要、
   追进度、起草目标、多路合并等,v1.23.1 上共 52 条。判据:这些提示词是 GeoCode 该自己写的东西,不是设置项

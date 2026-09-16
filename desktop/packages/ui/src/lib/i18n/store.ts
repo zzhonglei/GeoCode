@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { dict as enDict, type I18nKey } from './messages/en';
 import { DEFAULT_LOCALE, detectInitialLocale, type Locale, writeStoredLocale } from './runtime';
+import { coerceOfferedLocale } from '@/geocode/locale-surface'; // GeoCode: own module
 
 export type I18nParams = Record<string, string | number | boolean | null | undefined>;
 export type I18nDictionary = Record<I18nKey, string>;
@@ -57,7 +58,9 @@ export const useI18nStore = create<I18nState>()((set, get) => ({
   locale: DEFAULT_LOCALE,
   dictionary: enDict,
   loadingLocale: null,
-  setLocale: (locale) => {
+  setLocale: (requested) => {
+    // GeoCode: a stored language outside the product languages starts English (docs/DESKTOP.md §7.3)
+    const locale = coerceOfferedLocale(requested);
     const current = get();
     const cached = dictionaries.get(locale);
     if (current.locale === locale && current.loadingLocale !== locale && cached) {
