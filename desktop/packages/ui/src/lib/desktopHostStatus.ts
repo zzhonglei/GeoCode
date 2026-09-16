@@ -177,6 +177,10 @@ let warmUpStarted = false;
  * traffic — but the machine's network is still busiest right at launch.
  */
 export const warmDesktopHostStatuses = async (): Promise<void> => {
+  // --- GeoCode: the desktop shell has no host switcher to warm, and the main process refuses the probe
+  // (docs/DESKTOP.md §7.3) ---
+  if (isDesktopShell()) return;
+  // --- /GeoCode ---
   if (warmUpStarted || !isDesktopShell()) return;
   warmUpStarted = true;
   const config = await desktopHostsGet().catch(() => null);

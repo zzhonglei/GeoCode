@@ -339,7 +339,7 @@ export const SessionAuthGate: React.FC<SessionAuthGateProps> = ({
   const { t } = useI18n();
   const vscodeRuntime = React.useMemo(() => isVSCodeRuntime(), []);
   const skipAuth = vscodeRuntime;
-  const showHostSwitcher = React.useMemo(() => isDesktopShell() && !vscodeRuntime, [vscodeRuntime]);
+  const showHostSwitcher = false; // GeoCode: the desktop shell has one host (docs/DESKTOP.md §7.3)
   const [state, setState] = React.useState<GateState>(() => (skipAuth ? 'authenticated' : 'pending'));
   const [password, setPassword] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);

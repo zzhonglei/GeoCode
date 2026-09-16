@@ -621,15 +621,17 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   relay 与系统信息接口从它读当前端口,公网地址恒为空。它本就不在启动时做任何事,没有自动恢复与定时器。
   绊线在 `server/geocode/closed-surface.test.js` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
 - **SSH host、Remote Instance、Relay 与设备配对**:「远程实例」页在桌面壳不可用(与 Tunnel 同一个页面可用性谓词);
-  顶栏的服务菜单就是主机切换器,在桌面壳不渲染(`Header.tsx`)。壳在 Electron 下由 `createRelayService` 返回惰性对象
+  主机切换器在桌面壳不渲染,它的两个挂载点是顶栏的服务菜单(`Header.tsx`)与登录门出错屏、锁定屏上的「切换实例」
+  (`SessionAuthGate.tsx`);上游启动三秒后替它预热各实例连通性,在桌面壳也不做(`lib/desktopHostStatus.ts`),
+  否则每次启动都探一次本机、被下文的主进程拒绝,留一条错误日志并把本机记成「无法连接」。壳在 Electron 下由 `createRelayService` 返回惰性对象
   (`server/geocode/inert-relay.js`):不注册路由、不建宿主客户端、不生成写进 settings.json 的身份密钥,serverId 恒为 null;
   配对的五条路由(会话、传输候选、兑换)先于上游 handler 注册 404(`server/geocode/remote-access-surface.js`),
   已配对设备的列表路由保留,只读且恒空。主进程在命令分发前拒绝 11 个远程命令(8 个 `desktop_ssh_*`、远程口令登录、
   主机探测、主机写入;`electron/geocode/remote-ipc.mjs`),`desktop_hosts_get` 保留给顶栏与恢复页判断「当前是本机」;
   `connect` 深链在分发前丢弃;早期构建写进 settings.json 的 `privateRelay`、`relaySigningKey`、`relayEncryptionKey`
   在启动时清理一次。`dev-tunnel` 不动:它只在 API 地址是远程时启用,主机切换没了它不可达。
-  绊线在 `server/geocode/remote-access-surface.test.js`、`electron/geocode/remote-ipc.test.mjs` 与
-  `ui/src/geocode/desktop-settings-surface.test.ts`。
+  绊线在 `server/geocode/remote-access-surface.test.js`、`electron/geocode/remote-ipc.test.mjs`、
+  `ui/src/geocode/desktop-settings-surface.test.ts` 与 `ui/src/geocode/host-switcher-surface.test.ts`。
 - **首次启动选择页、「安装 OpenCode」页与恢复页**:按 §5.1「启动只有两种结果」处理,三页在桌面壳下没有到达路径。
   绊线在 `electron/geocode/kernel-failure.test.mjs` 与 `ui/src/geocode/kernel-failure-screen.test.ts`。
 - **代码片段(Snippets)**:「代码片段」页在桌面壳不可用,六条管理路由在 Electron 下先于上游的 handler 注册 404
