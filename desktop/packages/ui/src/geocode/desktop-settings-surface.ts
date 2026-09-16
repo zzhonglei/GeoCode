@@ -22,6 +22,12 @@ export const HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS: ReadonlySet<string> = new Set([
   'sessions.agent-memory-tool',
   'behavior.system-prompt-optimization',
   'chat.draft-starters-visible',
+  // Repository sharing is not offered (repository-sharing-surface.ts).
+  'projects.shared',
+  'projects.shared.plansDir',
+  // Nor the worktree setup-command block (advanced-project-surface.ts).
+  'projects.worktree.setup.wait',
+  'projects.worktree.setup.replace',
 ]);
 
 export const isSettingsSearchItemHiddenOnDesktop = (id: string, desktopShell: boolean): boolean =>

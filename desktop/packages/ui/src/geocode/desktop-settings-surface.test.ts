@@ -34,6 +34,10 @@ describe('desktop settings surface', () => {
       'sessions.agent-memory-tool',
       'behavior.system-prompt-optimization',
       'chat.draft-starters-visible',
+      'projects.shared',
+      'projects.shared.plansDir',
+      'projects.worktree.setup.wait',
+      'projects.worktree.setup.replace',
     ]) {
       expect(HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS.has(id)).toBe(true);
     }
