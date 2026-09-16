@@ -646,6 +646,16 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   `server/geocode/snippet-surface.test.js`(真实 Express,拒绝必须先于记录式 handler 命中;`config-entity-routes.js`
   里那行调用必须排在第一条片段路由之前)与
   `ui/src/geocode/desktop-settings-surface.test.ts`(页面可用性与包装的存在)。
+- **技能目录(Skills Catalog)**:「技能目录」页在桌面壳不可用,四条路由(目录、目录来源、扫描仓库、安装)在 Electron 下
+  先于上游的 handler 注册 404(`server/geocode/skill-catalog-surface.js`,与片段同形:这四条与技能自身的增删改共用一个
+  注册函数,且 `/api/config/skills/:name` 会先匹配到 `catalog`,所以靠 Express 的匹配顺序解决)。拒绝按上游注册的方法
+  逐条挂,名叫 `scan`、`install` 的技能用其余方法仍走技能自身的路由。判据:上游的目录装的是它自己策划的 git 仓库,
+  GeoCode 之后要做自己的技能库(2026-09-16 用户决定)。技能本身不受影响:新建、编辑、删除、读写支持文件走另外几条
+  路由。打开「技能」页时,以及每次应用改动后重载技能时,上游仍顺带请求目录,得到 404 后只在目录的状态里记一条错误,
+  不弹提示,能显示它的只有已关的目录页。连带两处文字从此没有到达路径——安装冲突对话框里的来源标签 `opencode`,与「添加目录」
+  说明里的 OpenChamber 字样,改牌那一批因此不含它们。绊线在 `server/geocode/skill-catalog-surface.test.js`(真实 Express,
+  拒绝必须先于记录式 handler 命中,`skill-routes.js` 里那行调用必须排在第一条目录路由之前)与
+  `ui/src/geocode/desktop-settings-surface.test.ts`(页面可用性)。
 - **魔法提示词**:「魔法提示词」页在桌面壳不可用,`registerMagicPromptRoutes` 在 Electron 下首行把整个前缀答成 404,
   四条路由一条不注册。这一页管的不是用户写的咒语,而是**产品自己那些一键动作背后的提示词**——生成提交信息、会话摘要、
   追进度、起草目标、多路合并等,v1.23.1 上共 52 条。判据:这些提示词是 GeoCode 该自己写的东西,不是设置项

@@ -123,6 +123,14 @@ describe('desktop settings surface', () => {
     expect(snippets?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
   });
 
+  test('the Skills Catalog page is unavailable in the desktop shell only', () => {
+    // The four catalog routes are the other half (server/geocode/skill-catalog-surface.test.js).
+    const catalog = getSettingsPageMeta('skills.catalog');
+    const base = { isVSCode: false, isWeb: false, isMobile: false };
+    expect(catalog?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
+    expect(catalog?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
+  });
+
   test('the composer offers no snippet popup in the desktop shell', () => {
     // Pinned by source: three composers mount it, so the wrapper is the one place that covers
     // them all, and a merge that reinstates upstream's direct export must fail here.

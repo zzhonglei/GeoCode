@@ -146,6 +146,8 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
     group: 'content',
     kind: 'single',
     keywords: ['install', 'catalog', 'external', 'repository', 'skills catalog'],
+    // GeoCode: installing skills from upstream's catalogs is not a surface GeoCode offers (docs/DESKTOP.md §7.3)
+    isAvailable: (ctx) => !ctx.isDesktop,
   },
   {
     slug: 'git',

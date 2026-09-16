@@ -2,6 +2,7 @@ import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 import { buildDeferredRestartResponse } from './config-mutation-response.js';
 import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: see the blocks below
 import { OPENCODE_CONFIG_DIR } from './shared.js';
+import { refuseSkillCatalogRoutesUnderElectron } from '../../geocode/skill-catalog-surface.js'; // GeoCode: own module
 
 /**
  * Matches how OpenCode reads its own boolean env flags: any value other than
@@ -14,6 +15,8 @@ const isEnvFlagEnabled = (value) => {
 };
 
 export const registerSkillRoutes = (app, dependencies) => {
+  // GeoCode: 404 ahead of the four catalog routes below (docs/DESKTOP.md §7.3)
+  refuseSkillCatalogRoutesUnderElectron(app);
   const {
     fs,
     path,
