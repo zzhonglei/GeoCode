@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { useProjectContextStore } from '@/stores/useProjectContextStore';
 import { useUIStore } from '@/stores/useUIStore';
+import { REPOSITORY_SHARING_OFFERED } from '@/geocode/repository-sharing-surface'; // GeoCode: own module
 
 /**
  * Saved plan markdown for the project.
@@ -253,6 +254,9 @@ export const PlansSection: React.FC<{
                     {new Date(plan.createdAt).toLocaleDateString(getCurrentIntlLocale())}
                   </span>
                 </button>
+                {/* --- GeoCode: moving a plan into the checkout is repository sharing, which GeoCode does not offer
+                    (repository-sharing-surface.ts) --- */}
+                {!REPOSITORY_SHARING_OFFERED ? null : (
                 <button
                   type="button"
                   onClick={() => void handleMovePlan(plan)}
@@ -267,6 +271,8 @@ export const PlansSection: React.FC<{
                 >
                   <Icon name={plan.source === 'shared' ? 'user' : 'team'} className="h-3.5 w-3.5" />
                 </button>
+                )}
+                {/* --- /GeoCode --- */}
                 <button
                   type="button"
                   onClick={() => void handleTogglePinned(plan.id, !pinnedPlanIds.has(plan.id))}

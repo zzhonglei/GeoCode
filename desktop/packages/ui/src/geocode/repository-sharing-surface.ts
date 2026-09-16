@@ -10,7 +10,8 @@
  * The entrances stayed open, and they promise something that cannot happen: the tooltip reads
  * "everyone who pulls the repository gets it", the click reaches the refused route, and the user
  * gets a failure toast for an action the product does not have. One entrance did not even fail
- * out loud — the draft starter chip swallows the null return. This constant closes all three.
+ * out loud — the draft starter chip swallows the null return. This constant closes all three, and
+ * the move button on each plan in the plans list, which the server refuses for want of a shared folder.
  *
  * It does not read the runtime, because the server's refusal does not either: the surface is
  * equally absent under Electron and under a plain web build. --- */

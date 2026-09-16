@@ -1,9 +1,9 @@
-/* --- GeoCode: the three entrances into the repository file must stay closed, including one
- * upstream adds later (geocode/repository-sharing-surface.ts, docs/DESKTOP.md §7.3).
+/* --- GeoCode: the entrances into the repository file and the repository plans folder must stay
+ * closed, including one upstream adds later (geocode/repository-sharing-surface.ts, docs/DESKTOP.md §7.3).
  *
- * Pinning the three files edited here would not see a fourth one arrive. So the first test walks
- * the renderer sources and holds a closure instead: a file that renders one of the two entrance
- * labels must also carry the guard. The labels reach the screen only through those translation
+ * Pinning the files edited here would not see another one arrive. So the first test walks the
+ * renderer sources and holds a closure instead: a file that renders one of the entrance labels
+ * must also carry the guard. The labels reach the screen only through those translation
  * keys, and the dictionaries are excluded, which is what makes the set exact.
  *
  * The closure alone would pass on a file that imports the guard and never uses it, so the rest
@@ -21,7 +21,7 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const I18N = path.join(SRC, 'lib', 'i18n');
 
 // The trailing quote keeps `shareTitle`, `shareAfterSave` and the toast keys out of the set.
-const ENTRANCES = ["settings.projects.shared.actions.share'", "chat.draftStarters.share'"];
+const ENTRANCES = ["settings.projects.shared.actions.share'", "chat.draftStarters.share'", "rightSidebar.contextNotesTodo.plans.share'"];
 const GUARD = 'REPOSITORY_SHARING_OFFERED';
 
 const read = (relative: string) => readFileSync(path.join(SRC, relative), 'utf8');
@@ -63,6 +63,14 @@ describe('repository sharing is not offered', () => {
       expect([file, guard]).not.toEqual([file, -1]);
       expect([file, guard < label]).toEqual([file, true]);
     }
+  });
+
+  test('the move button on each plan in the plans list sits behind the guard', () => {
+    const text = read('components/session/project-context/PlansSection.tsx');
+    const guard = text.indexOf(`!${GUARD} ? null : (`);
+    const label = text.indexOf(ENTRANCES[2]);
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(label);
   });
 
   test('every mount of the shared-file section sits behind the guard', () => {
