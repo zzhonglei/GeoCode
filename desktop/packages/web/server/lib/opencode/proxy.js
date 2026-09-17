@@ -435,7 +435,7 @@ export const registerOpenCodeProxy = (app, deps) => {
     if (!res || res.headersSent || res.writableEnded || typeof res.status !== 'function') {
       return false;
     }
-    res.status(statusCode).json({ error: statusCode === 504 ? 'OpenCode upstream timed out' : 'OpenCode service unavailable' });
+    res.status(statusCode).json({ error: statusCode === 504 ? 'GeoCode upstream timed out' : 'GeoCode service unavailable' }); // GeoCode: product name
     return true;
   };
 
@@ -590,7 +590,7 @@ export const registerOpenCodeProxy = (app, deps) => {
       }
       console.error('[proxy] OpenCode SSE proxy error:', error?.message ?? error);
       if (!res.headersSent) {
-        res.status(503).json({ error: 'OpenCode service unavailable' });
+        res.status(503).json({ error: 'GeoCode service unavailable' }); // GeoCode: product name
       } else {
         res.end();
       }
@@ -685,7 +685,7 @@ export const registerOpenCodeProxy = (app, deps) => {
       }
       console.error(`[proxy] OpenCode ${logLabel} proxy error:`, error?.message ?? error);
       if (!res.headersSent) {
-        res.status(503).json({ error: 'OpenCode service unavailable' });
+        res.status(503).json({ error: 'GeoCode service unavailable' }); // GeoCode: product name
         return;
       }
       next(error);
@@ -772,7 +772,7 @@ export const registerOpenCodeProxy = (app, deps) => {
     });
     if (!res.headersSent) {
       res.status(503).json({
-        error: 'OpenCode is restarting',
+        error: 'GeoCode is restarting', // GeoCode: product name
         restarting: true,
       });
     }
@@ -878,7 +878,7 @@ export const registerOpenCodeProxy = (app, deps) => {
         }
 
         if (!globalSessions && successfulProjectReads === 0) {
-          return res.status(504).json({ error: 'OpenCode session list timed out' });
+          return res.status(504).json({ error: 'GeoCode session list timed out' }); // GeoCode: product name
         }
 
         const merged = [...(globalSessions || []), ...extraSessions];

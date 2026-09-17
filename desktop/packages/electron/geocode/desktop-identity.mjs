@@ -8,8 +8,9 @@
  * Wire fingerprints stay upstream and must NOT move here: the `OPENCHAMBER_*` variables the
  * shell runtime reads, the `@openchamber/electron` package name other workspace packages
  * import, the `openchamber:` IPC channel names the renderer listens on, and the upstream
- * repository URLs behind the changelog and issue links. Those identify the code, not the
- * product, and changing them breaks things without making the app any more ours.
+ * repository URL behind the changelog. Those identify the code, not the product, and changing
+ * them breaks things without making the app any more ours. The Help menu's issue links are not
+ * among them: they send the user somewhere, so they point at GeoCode's release repository.
  *
  * `package.json` cannot import this: it is JSON, one of the two file kinds that carry no
  * patch marker (CONVENTIONS.md §5). Its build fields are therefore written out, and
@@ -51,4 +52,6 @@ export const DesktopIdentity = {
   releaseRepository: `zzhonglei/${dirName}-Release`,
   releasesUrl: `https://github.com/zzhonglei/${dirName}-Release/releases`,
   releasesApiUrl: `https://api.github.com/repos/zzhonglei/${dirName}-Release/releases/latest`,
+  /** Where Help → Report a Bug and Request a Feature send the user; the repository has no issue templates. */
+  newIssueUrl: `https://github.com/zzhonglei/${dirName}-Release/issues/new`,
 };

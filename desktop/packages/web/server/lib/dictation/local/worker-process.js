@@ -24,7 +24,7 @@ import { getLocalSttModelDir, getLocalSttModelSpec } from './model-catalog.js';
 import { pcm16ToWav } from '../audio.js';
 import path from 'path';
 
-process.title = 'OpenChamber Dictation';
+process.title = 'GeoCode Dictation'; // GeoCode: product name
 
 const engines = new Map();
 const ttsEngines = new Map();

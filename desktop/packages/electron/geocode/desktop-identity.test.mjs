@@ -155,6 +155,31 @@ describe('desktop identity', () => {
     expect(status).not.toContain('openchamber-ui');
   });
 
+  it('sends Help feedback to the repository it names, and offers no Discord', () => {
+    // Upstream's Help menu opened its own issue templates and its Discord server.
+    expect(DesktopIdentity.newIssueUrl).toBe(`https://github.com/${DesktopIdentity.releaseRepository}/issues/new`);
+    const main = readElectronFile('main.mjs');
+    const lines = main.split('\n');
+    // Inside a GeoCode shield: the nearest whole `/*` line above comes after the nearest whole `*/` line.
+    const shielded = (at) => {
+      const above = lines.slice(0, at).map((line) => line.trim());
+      return above.lastIndexOf('/*') > above.lastIndexOf('*/');
+    };
+    const menus = lines.flatMap((line, at) => (/^\s*label: 'Help',$/.test(line) ? [at] : []));
+    expect(menus.length).toBe(2);
+    for (const start of menus) {
+      const end = lines.findIndex((line, at) => at > start && /^\s*\],$/.test(line));
+      const live = lines.slice(start, end).map((line, offset) => [line, start + offset]).filter(([, at]) => !shielded(at));
+      const opened = live.flatMap(([line]) => [...line.matchAll(/shell\.openExternal\(([^)]*)\)/g)].map((match) => match[1]));
+      expect(opened).toEqual(['GITHUB_BUG_REPORT_URL', 'GITHUB_FEATURE_REQUEST_URL']);
+      expect(live.some(([line]) => line.includes("label: 'Join Discord'"))).toBe(false);
+    }
+    for (const name of ['GITHUB_BUG_REPORT_URL', 'GITHUB_FEATURE_REQUEST_URL']) {
+      expect([name, main.match(new RegExp(`^const ${name} = ([^;\\n]+);`, 'm'))?.[1]])
+        .toEqual([name, 'DesktopIdentity.newIssueUrl']);
+    }
+  });
+
   it('leaves no upstream identity literal in the files the installer ships', () => {
     // Guards the merge that quietly restores one. The file list comes from build.files rather
     // than from a list kept here, because a per-file list cannot see a file it does not name —

@@ -1023,7 +1023,7 @@ const formatWorktreePopulateError = (message) => {
   return [
     text,
     'The worktree checkout path exceeds this system\'s path-length limit.',
-    'OpenChamber enables Git `core.longpaths` for worktree population; if this still fails on Windows, enable OS long paths (LongPathsEnabled) or open the repository from a shorter absolute path.',
+    'GeoCode enables Git `core.longpaths` for worktree population; if this still fails on Windows, enable OS long paths (LongPathsEnabled) or open the repository from a shorter absolute path.', // GeoCode: product name
   ].join('\n');
 };
 
@@ -1575,7 +1575,7 @@ const ensureOpenCodeProjectId = async (primaryWorktree) => {
 
   const projectId = roots[0] || '';
   if (!projectId) {
-    throw new Error('Failed to derive OpenCode project ID');
+    throw new Error('Failed to derive GeoCode project ID'); // GeoCode: product name
   }
 
   await fsp.mkdir(gitDir, { recursive: true }).catch(() => undefined);
@@ -3287,7 +3287,7 @@ export async function stashPush(directory, options = {}) {
   const { git } = await createRepositoryGitContext(directory);
   const message = typeof options.message === 'string' && options.message.trim()
     ? options.message.trim()
-    : `OpenChamber stash ${new Date().toISOString()}`;
+    : `GeoCode stash ${new Date().toISOString()}`; // GeoCode: product name
   const output = await git.raw(['stash', 'push', '--include-untracked', '-m', message]);
   return {
     success: true,

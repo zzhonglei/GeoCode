@@ -748,7 +748,7 @@ export async function callSmallModel({ auth, catalog, workingDirectory, sessionI
     : entry.type === 'wellknown' ? entry.token
       : entry.access;
   if (!apiKey) {
-    throw new Error(`OpenCode login for "${providerID}" has no usable credential`);
+    throw new Error(`GeoCode login for "${providerID}" has no usable credential`); // GeoCode: product name
   }
 
   if (providerID === 'anthropic') {

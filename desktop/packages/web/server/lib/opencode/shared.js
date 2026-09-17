@@ -203,7 +203,7 @@ function formatJsoncParseError(filePath, errors) {
   const location = first && Number.isFinite(first.offset)
     ? ` (${printParseErrorCode(first.error)} at offset ${first.offset})`
     : '';
-  return `OpenCode configuration at ${filePath} contains invalid JSONC and cannot be loaded safely${location}`;
+  return `GeoCode configuration at ${filePath} contains invalid JSONC and cannot be loaded safely${location}`; // GeoCode: product name
 }
 
 function isCommentOnlyParse(parsed, errors) {
@@ -246,7 +246,7 @@ function readConfigFile(filePath) {
       throw error;
     }
     console.error(`Failed to read config file: ${filePath}`, error);
-    throw new Error('Failed to read OpenCode configuration');
+    throw new Error('Failed to read GeoCode configuration'); // GeoCode: product name
   }
 }
 
@@ -357,7 +357,7 @@ function writeConfig(config, filePath = CONFIG_FILE) {
       throw error;
     }
     console.error(`Failed to write config file: ${filePath}`, error);
-    throw new Error('Failed to write OpenCode configuration');
+    throw new Error('Failed to write GeoCode configuration'); // GeoCode: product name
   }
 }
 

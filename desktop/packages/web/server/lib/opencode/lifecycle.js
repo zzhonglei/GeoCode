@@ -851,7 +851,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
           state.openCodeNotReadySince = 0;
           syncToHmrState();
         } else {
-          state.lastOpenCodeError = `External OpenCode server on port ${probePort} is not responding`;
+          state.lastOpenCodeError = `External GeoCode server on port ${probePort} is not responding`; // GeoCode: product name
           console.error(state.lastOpenCodeError);
           throw new Error(state.lastOpenCodeError);
         }
@@ -939,7 +939,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
 
   const waitForOpenCodeReady = async (timeoutMs = 20000, intervalMs = 400) => {
     if (!state.openCodePort) {
-      throw new Error('OpenCode port is not available');
+      throw new Error('GeoCode port is not available'); // GeoCode: product name
     }
 
     const deadline = Date.now() + timeoutMs;
@@ -959,14 +959,14 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
         timeout = null;
 
         if (!response.ok) {
-          lastError = new Error(`OpenCode health endpoint responded with status ${response.status}`);
+          lastError = new Error(`GeoCode health endpoint responded with status ${response.status}`); // GeoCode: product name
           await new Promise((resolve) => setTimeout(resolve, intervalMs));
           continue;
         }
 
         const body = await response.json().catch(() => null);
         if (body?.healthy !== true) {
-          lastError = new Error('OpenCode health endpoint returned unhealthy response');
+          lastError = new Error('GeoCode health endpoint returned unhealthy response'); // GeoCode: product name
           await new Promise((resolve) => setTimeout(resolve, intervalMs));
           continue;
         }
@@ -990,14 +990,14 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
       throw lastError;
     }
 
-    const timeoutError = new Error('Timed out waiting for OpenCode to become ready');
+    const timeoutError = new Error('Timed out waiting for GeoCode to become ready'); // GeoCode: product name
     state.lastOpenCodeError = timeoutError.message;
     throw timeoutError;
   };
 
   const waitForAgentPresence = async (agentName, timeoutMs = 15000, intervalMs = 300) => {
     if (!state.openCodePort) {
-      throw new Error('OpenCode port is not available');
+      throw new Error('GeoCode port is not available'); // GeoCode: product name
     }
 
     const deadline = Date.now() + timeoutMs;
