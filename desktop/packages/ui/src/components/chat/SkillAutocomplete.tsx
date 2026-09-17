@@ -130,6 +130,7 @@ export const SkillAutocomplete = React.forwardRef<SkillAutocompleteHandle, Skill
   const renderSkill = (skill: SkillInfo, index: number) => {
     const isProject = skill.scope === 'project';
     const source = skill.source || 'opencode';
+    const sourceLabel = source === 'opencode' ? 'GeoCode' : source; // GeoCode: the kernel's own skills carry the wire value 'opencode'
     return (
       <AutocompleteRowTooltip description={skill.description} active={!isMobile && index === selectedIndex}>
       <div
@@ -160,7 +161,8 @@ export const SkillAutocomplete = React.forwardRef<SkillAutocompleteHandle, Skill
               {skill.scope}
             </span>
             <span className="text-[10px] leading-none uppercase font-bold tracking-tight px-1.5 py-1 rounded border flex-shrink-0 bg-[var(--surface-muted)] text-muted-foreground border-[var(--interactive-border)]/60">
-              {source}
+              {/* --- GeoCode: product name --- */}
+              {sourceLabel}
             </span>
           </div>
         </div>

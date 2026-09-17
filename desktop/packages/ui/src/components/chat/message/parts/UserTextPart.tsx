@@ -14,6 +14,7 @@ import {
     parseSkillHref,
 } from '@/lib/messages/inlineMessageLinks';
 import { prepareUserMarkdownContent, SKILL_TOKEN_PATTERN } from './userTextPartContent';
+import { AGENT_MENTION_LINKS_OFFERED } from '@/geocode/agent-mention-surface'; // GeoCode: own module
 import { extractTerminalContexts } from '@/lib/messages/terminalContext';
 import { readContextPart } from '@/lib/messages/contextParts';
 import UserContextPart from './UserContextPart';
@@ -228,6 +229,15 @@ const UserTextPart: React.FC<UserTextPartProps> = ({ part, messageId, agentMenti
             const idx = node.indexOf(agentMention.token);
             if (idx === -1) return node;
             agentMentionUsed = true;
+            // --- GeoCode: plain text, see agent-mention-surface.ts ---
+            if (!AGENT_MENTION_LINKS_OFFERED) {
+                return [
+                    node.slice(0, idx),
+                    <span key={`agent-${index}`} className="text-primary">{agentMention.token}</span>,
+                    node.slice(idx + agentMention.token.length),
+                ];
+            }
+            // --- /GeoCode ---
             return [
                 node.slice(0, idx),
                 <a

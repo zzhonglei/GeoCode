@@ -950,6 +950,10 @@ export const McpPage: React.FC = () => {
         toast.warning(result.message || t('settings.mcp.page.toast.serverDeletedReloadFailed', { name: selectedMcpName }), {
           description: result.warning || t('settings.mcp.page.toast.refreshListIfStale'),
         });
+      // --- GeoCode: the server's message says to restart, and applying is all a deletion needs (docs/PATHS.md §3.4) ---
+      } else if (result.restartDeferred) {
+        toast.success(t('settings.view.pendingRestart.saved'));
+      // --- /GeoCode ---
       } else {
         toast.success(result.message || t('settings.mcp.page.toast.serverDeleted', { name: selectedMcpName }));
       }

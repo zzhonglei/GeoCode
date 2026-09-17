@@ -452,9 +452,9 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
 
     if (resolved) {
       const dir = resolvedDir || (resolved.includes('/') ? resolved.split('/').slice(0, -1).join('/') || '/' : '');
-      lines.push(`- opencode: ${resolved}${dir ? ` (dir=${dir})` : ''}`);
+      lines.push(`- geocode: ${resolved}${dir ? ` (dir=${dir})` : ''}`); // GeoCode: product name
     } else {
-      lines.push('- opencode: (n/a)');
+      lines.push('- geocode: (n/a)'); // GeoCode: product name
     }
 
     lines.push(`- source: ${source || '(n/a)'}`);

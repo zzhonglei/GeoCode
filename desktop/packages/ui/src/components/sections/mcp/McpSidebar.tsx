@@ -159,6 +159,10 @@ export const McpSidebar: React.FC<McpSidebarProps> = ({ onItemSelect }) => {
         toast.warning(result.message || `MCP server "${deleteTarget.name}" deleted, but GeoCode reload failed`, { // GeoCode: product name
           description: result.warning || t('settings.mcp.sidebar.toast.refreshListIfStale'),
         });
+      // --- GeoCode: the server's message says to restart, and applying is all a deletion needs (docs/PATHS.md §3.4) ---
+      } else if (result.restartDeferred) {
+        toast.success(t('settings.view.pendingRestart.saved'));
+      // --- /GeoCode ---
       } else {
         toast.success(result.message || t('settings.mcp.sidebar.toast.serverDeleted', { name: deleteTarget.name }));
       }

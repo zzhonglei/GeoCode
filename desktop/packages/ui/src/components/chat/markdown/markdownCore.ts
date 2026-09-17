@@ -9,6 +9,7 @@ import { isVSCodeRuntime } from '@/lib/desktop';
 import { contentFingerprint, HighlightResultCache, utf16Bytes } from './highlightResultCache';
 import { highlightCodeInWorker } from './markdown-worker';
 import { escapeRawMarkdownHtml, isLocalFileUrl, MARKDOWN_FORBIDDEN_TAGS } from './markdownSecurity';
+import { AGENT_MENTION_LINKS_OFFERED } from '@/geocode/agent-mention-surface'; // GeoCode: own module
 
 const escapeAttr = (value: string): string =>
   value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -430,6 +431,7 @@ const createParser = (imageMode: MarkdownImageMode) => new Marked().use(
       const target = href ?? '';
       const agentName = parseAgentHref(target);
       if (agentName) {
+        if (!AGENT_MENTION_LINKS_OFFERED) return `<span class="text-primary">${text}</span>`; // GeoCode: see agent-mention-surface.ts
         return `<a href="${escapeAttr(buildAgentMentionUrl(agentName))}" data-openchamber-agent-mention="true" class="text-primary hover:underline" target="_blank" rel="noopener noreferrer">${text}</a>`;
       }
       const skillName = parseSkillHref(target);

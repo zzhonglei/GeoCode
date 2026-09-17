@@ -58,6 +58,7 @@ const SCOPES: WalkthroughWorkingTreeScope[] = ['all', 'staged', 'working'];
 // review findings. The guide answers that, so it is reachable from the surface
 // itself rather than only from the release announcement.
 const WALKTHROUGH_GUIDE_URL = 'https://docs.openchamber.dev/walkthrough/';
+const WALKTHROUGH_GUIDE_SHOWN = false; // GeoCode: the guide is OpenChamber's site, and GeoCode has none
 
 // DropdownMenuLabel defaults to the same size and weight as its items, which
 // makes a heading read as another choice. This matches SelectLabel, the
@@ -617,6 +618,8 @@ export const WalkthroughView = ({ directory: rootDirectory, visible = true }: Wa
             <Icon name="arrow-left-right" className="size-4" />
             {!compactHeader && t('contextPanel.mode.diff')}
           </Button>}
+          {/* --- GeoCode: the guide button opened OpenChamber's docs site (docs/PATHS.md §3.4) --- */}
+          {WALKTHROUGH_GUIDE_SHOWN && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -635,6 +638,8 @@ export const WalkthroughView = ({ directory: rootDirectory, visible = true }: Wa
               <p className="typography-micro leading-tight">{t('walkthrough.help.guide')}</p>
             </TooltipContent>
           </Tooltip>
+          )}
+          {/* --- /GeoCode --- */}
 
           {/* A walkthrough nobody can read is worth nothing, so the prose
               language is a per-review choice like the model — defaulting to the
