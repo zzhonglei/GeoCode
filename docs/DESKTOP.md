@@ -709,7 +709,7 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   Diff 视图工具栏的「Review」按钮开的是与 `/handoff-review` 同一个另开审查会话的流程,**保留**(同日用户定,理由是在 Diff 视图里审查改动
   不违背 GeoCode 的业务逻辑),于是这套流程只剩这一个入口;它背后的几条提示词仍是写给程序员的,归改牌那一批改写。
   当天真实会话验过:运行中的内核产物带着那两行删除,经壳取到的命令列表里没有 `init` 与 `review`,设置的命令页里也不再出现这两条。用户输入
-  `/debug` 时菜单仍有一条显示,按真实菜单数据算过是 `/customize-opencode`:菜单搜索连描述一起模糊匹配,那条技能的英文描述被判为相近,不是 `/debug` 漏关。
+  `/debug` 时菜单仍有一条显示,按真实菜单数据算过是 `/customize-opencode`(2026-09-17 起改名 `/customize-geocode`):菜单搜索连描述一起模糊匹配,那条技能的英文描述被判为相近,不是 `/debug` 漏关。
   上游 `slashCommands.test.ts` 里用 `/summary` 断言本地执行的那条按设计转红。绊线在 `ui/src/geocode/slash-command-surface.test.ts`。
 - **外部插件管理**:「插件」页在桌面壳不可用(与 Tunnel 同一个页面可用性谓词),壳在 Electron 下
   `registerPluginRoutes` 首行把整个前缀答成 404,十条路由一条都不注册。判据不是「这个功能不好」,而是**内核保证不加载**:
@@ -1139,7 +1139,7 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
 
 - **归阶段 3「特性修缮」**:外部二进制发现的
   十三处与 `electron:dev` 的分叉、`gitlab-ai-provider` 的 vendor 泄漏、内置技能
-  `customize-opencode` 的正文、以及品牌与 i18n。**另有 `packages/vscode/` 整包**:`opencodeConfig.ts`
+  `customize-geocode`(原名 `customize-opencode`)的描述与正文、以及品牌与 i18n。**另有 `packages/vscode/` 整包**:`opencodeConfig.ts`
   是 `server/lib/opencode/` 的一份近乎逐行的副本,项目目录、配置文件名、技能根、外部二进制发现全都
   还是上游的名字(约三十处)。它是独立交付物,不随桌面端启动,所以不拦这一批;但它与壳共用的是同一
   份逻辑,壳侧每改一处,那边就多欠一处,单独成批而不是逐条跟着改。

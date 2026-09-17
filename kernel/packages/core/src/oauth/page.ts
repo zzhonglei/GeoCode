@@ -25,7 +25,7 @@ export function success(options?: CallbackPageOptions) {
     body: renderCard({
       status: "success",
       headline: "Authorization successful",
-      message: provider ? `OpenCode is now connected to ${escapeHtml(provider)}.` : "OpenCode is now authorized.",
+      message: provider ? `GeoCode is now connected to ${escapeHtml(provider)}.` : "GeoCode is now authorized.", // GeoCode: product name
       footnote: "You can close this window.",
     }),
     script: options?.autoClose === false ? undefined : AUTO_CLOSE_SCRIPT,
@@ -40,10 +40,10 @@ export function error(detail: string, options?: CallbackPageOptions) {
       status: "error",
       headline: "Authorization failed",
       message: provider
-        ? `OpenCode couldn't finish connecting to ${escapeHtml(provider)}.`
-        : "OpenCode couldn't complete authorization.",
+        ? `GeoCode couldn't finish connecting to ${escapeHtml(provider)}.` // GeoCode: product name
+        : "GeoCode couldn't complete authorization.", // GeoCode: product name
       detail,
-      footnote: "Close this window and try again from OpenCode.",
+      footnote: "Close this window and try again from GeoCode.", // GeoCode: product name
     }),
   })
 }
@@ -93,6 +93,7 @@ function renderCard(input: { status: Status; headline: string; message: string; 
     </main>`
 }
 
+// GeoCode: product name in the page title below (docs/PATHS.md §3.4)
 function renderDocument(input: { title: string; body: string; script?: string }) {
   return `<!doctype html>
 <html lang="en">
@@ -100,7 +101,7 @@ function renderDocument(input: { title: string; body: string; script?: string })
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
-    <title>${escapeHtml(input.title)} · OpenCode</title>
+    <title>${escapeHtml(input.title)} · GeoCode</title>
     <style>${STYLES}</style>
   </head>
   <body>
@@ -111,13 +112,14 @@ function renderDocument(input: { title: string; body: string; script?: string })
 
 const AUTO_CLOSE_SCRIPT = `setTimeout(function(){try{window.close()}catch(e){}},2500)`
 
+// GeoCode: product name in the page text the script below writes (docs/PATHS.md §3.4)
 function bootstrapScript(options: BootstrapOptions) {
   return `var PROVIDER=${scriptString(options.provider ?? "")};
 var TOKEN_URL=new URL(${scriptString(options.tokenPath)},window.location.origin).href;
 (function(){
   var card=document.getElementById("oc-card"),headline=document.getElementById("oc-headline"),message=document.getElementById("oc-message"),detail=document.getElementById("oc-detail"),footnote=document.getElementById("oc-footnote");
-  function fail(text){card.dataset.status="error";headline.textContent="Authorization failed";message.textContent=PROVIDER?("OpenCode couldn't finish connecting to "+PROVIDER+"."):"OpenCode couldn't complete authorization.";if(text){detail.textContent=text;detail.hidden=false}footnote.textContent="Close this window and try again from OpenCode."}
-  function ok(){card.dataset.status="success";headline.textContent="Authorization successful";message.textContent=PROVIDER?("OpenCode is now connected to "+PROVIDER+"."):"OpenCode is now authorized.";detail.hidden=true;footnote.textContent="You can close this window.";setTimeout(function(){try{window.close()}catch(e){}},2500)}
+  function fail(text){card.dataset.status="error";headline.textContent="Authorization failed";message.textContent=PROVIDER?("GeoCode couldn't finish connecting to "+PROVIDER+"."):"GeoCode couldn't complete authorization.";if(text){detail.textContent=text;detail.hidden=false}footnote.textContent="Close this window and try again from GeoCode."}
+  function ok(){card.dataset.status="success";headline.textContent="Authorization successful";message.textContent=PROVIDER?("GeoCode is now connected to "+PROVIDER+"."):"GeoCode is now authorized.";detail.hidden=true;footnote.textContent="You can close this window.";setTimeout(function(){try{window.close()}catch(e){}},2500)}
   try{
     var hash=new URLSearchParams((window.location.hash||"").slice(1));
     var search=new URLSearchParams(window.location.search||"");

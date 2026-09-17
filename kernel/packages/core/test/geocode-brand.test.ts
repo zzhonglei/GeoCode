@@ -1,5 +1,6 @@
-/* --- GeoCode: tripwires for the Brand path patches (docs/PATHS.md). Two layers a typecheck cannot reach: the live
- * read paths resolving to branded names, and no patched file having regressed to an upstream literal. --- */
+/* --- GeoCode: tripwires for the Brand path patches (docs/PATHS.md). Layers a typecheck cannot reach: the live
+ * read paths resolving to branded names, no patched file having regressed to an upstream literal, and the product
+ * name in text users and the model read (docs/PATHS.md §3.4). --- */
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { readFileSync } from "fs"
@@ -236,5 +237,72 @@ describe("brand literal scan", () => {
     expect(/^\s*PoeAuthPlugin,/m.test(content)).toBe(false)
     expect(/^\s*import .* from "opencode-gitlab-auth"/m.test(content)).toBe(false)
     expect(/^\s*import .* from "opencode-poe-auth"/m.test(content)).toBe(false)
+  })
+})
+
+describe("the product name people see", () => {
+  test("the OAuth callback pages name GeoCode, with the wordmark left for the icon batch", async () => {
+    // Served in the browser after MCP and provider sign-in; frozen-zone text a user reads (docs/KERNEL.md §3).
+    const { OauthCallbackPage } = await import("../src/oauth/page")
+    const pages = [
+      OauthCallbackPage.success({ provider: "MCP" }),
+      OauthCallbackPage.success(),
+      OauthCallbackPage.error("denied", { provider: "MCP" }),
+      OauthCallbackPage.error("denied"),
+      OauthCallbackPage.bootstrap({ tokenPath: "/callback", provider: "xAI" }),
+    ]
+    for (const page of pages) {
+      const text = page.replace(/<svg class="wordmark"[\s\S]*?<\/svg>/g, "")
+      expect(text).toContain("· GeoCode</title>")
+      expect(text).not.toMatch(/opencode/i)
+    }
+  })
+
+  test("sign-in instructions and credential errors name GeoCode and point at its settings", () => {
+    const opencode = path.join(import.meta.dir, "..", "..", "opencode", "src")
+    const read = (...parts: string[]) => readFileSync(path.join(opencode, ...parts), "utf8")
+    for (const file of ["digitalocean.ts", "snowflake-cortex.ts"]) {
+      const instructions = [...read("plugin", file).matchAll(/instructions:\s*"([^"]*in your browser[^"]*)"/g)].map(
+        (match) => match[1],
+      )
+      expect([file, instructions.length]).toEqual([file, 1])
+      expect(instructions[0]).toContain("GeoCode")
+      expect(instructions[0]).not.toMatch(/opencode/i)
+      expect(instructions[0]).not.toMatch(/\/connect\b/)
+    }
+    // GeoCode ships no CLI, so a hint to run one names a command that does not exist.
+    for (const [file, hints] of [
+      ["provider.ts", 2],
+      ["error.ts", 1],
+    ] as const) {
+      const code = read("provider", file).replace(/\s\/\/ GeoCode:.*$/gm, "")
+      expect(code).not.toMatch(/opencode auth/)
+      expect([file, code.match(/Providers settings/g)?.length]).toEqual([file, hints])
+    }
+  })
+
+  test("bash prints GeoCode's name before its own errors in shell mode", async () => {
+    // `$0` of `<shell> -l -c <script> $0 <cwd>` prefixes bash's own errors,
+    // e.g. "geocode: gdalinfo: command not found"; zsh does not print it but runs under the same name.
+    const { Shell } = await import("../src/shell")
+    for (const shell of ["/bin/bash", "/bin/zsh"]) {
+      const args = Shell.args(shell, "true", "/tmp")
+      expect([shell, args.at(-2)]).toEqual([shell, Brand.name])
+    }
+  })
+
+  test("the built-in configuration skill is listed under GeoCode's name", () => {
+    // Only the name moved; its description and body are the user's to rewrite.
+    const sources = [
+      [path.join(import.meta.dir, "..", "src", "plugin", "skill.ts"), /name: "(customize-\w+)"/g],
+      [
+        path.join(import.meta.dir, "..", "..", "opencode", "src", "skill", "index.ts"),
+        /CUSTOMIZE_OPENCODE_SKILL_NAME = "(customize-\w+)"/g,
+      ],
+    ] as const
+    for (const [file, pattern] of sources) {
+      const names = [...readFileSync(file, "utf8").matchAll(pattern)].map((match) => match[1])
+      expect([file, names]).toEqual([file, [`customize-${Brand.name}`]])
+    }
   })
 })

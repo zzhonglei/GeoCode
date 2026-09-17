@@ -222,7 +222,7 @@ Windows 上的 shell 应当只允许 cmd / powershell / pwsh:GIS 工具链装在
 - **渲染进程零特权**,凭据经 preload 下发;
 - **权限在内核层强制**,界面过滤只是体验;
 - **应用退出必须回收全部子进程**;崩溃与强制结束留下的地理子进程不补救,理由见 `GEOKERNEL.md` §12;
-- **冻结区永久逐字保留**:内核的 provider / auth / account 区,以及 wire 指纹(`@opencode-ai/*` 包名、`OPENCODE_*` 环境变量、User-Agent、Referer)。用户与上游生态共用同一套 OAuth 通道,这些是通道的身份凭据。
+- **冻结区永久逐字保留**:内核的 provider / auth / account 区里模型厂商及其 OAuth 通道收得到的一切(请求头、User-Agent、Referer、授权地址参数、客户端身份)与认证逻辑本身,以及 wire 指纹(`@opencode-ai/*` 包名、`OPENCODE_*` 环境变量)。用户与上游生态共用同一套 OAuth 通道,这些是通道的身份凭据。区内**只给用户看的文字**(授权完成页、授权说明、报错提示)可以换商标,逐处加标记并配绊线(2026-09-17 用户定)。
 
 ## 10. 文档
 

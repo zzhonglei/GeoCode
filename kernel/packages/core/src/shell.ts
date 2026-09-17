@@ -176,7 +176,7 @@ export function args(file: string, command: string, cwd: string) {
         cd -- "$1"
         eval ${JSON.stringify(command)}
       `,
-      "opencode",
+      "geocode", // GeoCode: $0, the name the script runs under
       cwd,
     ]
   }
@@ -190,7 +190,7 @@ export function args(file: string, command: string, cwd: string) {
         cd -- "$1"
         eval ${JSON.stringify(command)}
       `,
-      "opencode",
+      "geocode", // GeoCode: $0, which bash prints before its own errors
       cwd,
     ]
   }
