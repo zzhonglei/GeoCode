@@ -95,14 +95,45 @@ describe('createKernelProcessEnvironment', () => {
     expect(rootRewrite).toBeLessThan(functionEnd);
   });
 
-  it('never merges the login shell again once the kernel connection has been written', () => {
-    // Invariant 2: the strip now rides inside the merge, so a merge placed after
-    // startEmbeddedKernel would take OPENCODE_HOST and the password with it.
+  it('never merges the login shell again once the shell and kernel connection have been written', () => {
+    // Invariant 2: the strip rides inside the merge, so a second merge would take everything written
+    // since. The background start reaches it again through shouldSkipLocalServer(), so this runs the
+    // function main.mjs actually has instead of looking for call sites (docs/ENVIRONMENT.md §5.2).
     const main = readMain();
-    const kernelStartAt = main.indexOf('startEmbeddedKernel({');
-    const calls = [...main.matchAll(/inheritUserShellEnv\(\);/g)].map((match) => match.index);
-    expect(calls.length).toBeGreaterThan(0);
-    for (const at of calls) expect(at).toBeLessThan(kernelStartAt);
+    const sliceStart = main.indexOf('let userShellEnvInherited = false;');
+    const functionStart = main.indexOf('const inheritUserShellEnv = () => {');
+    const functionEnd = main.indexOf('\n};', functionStart) + '\n};'.length;
+    expect(sliceStart).toBeGreaterThan(-1);
+    expect(sliceStart).toBeLessThan(functionStart);
+
+    const environment = { PATH: '/usr/bin:/bin' };
+    const loginShell = { PATH: '/usr/bin:/bin', OPENCODE_CONFIG: '/probe/opencode.json', LANG: 'zh_TW.UTF-8' };
+    const inheritUserShellEnv = new Function(
+      'process', 'os', 'loadShellEnv', 'clearAppImageArgv0FromProcessEnv', 'pathLooksUserConfigured',
+      'mergePathValues', 'stripInheritedForeignVariables', 'inheritedKeep', 'applyShellDataRoot',
+      `${main.slice(sliceStart, functionEnd)}\nreturn inheritUserShellEnv;`,
+    )(
+      { env: environment, platform: 'darwin' },
+      { homedir: () => '/Users/geo' },
+      () => loginShell,
+      () => {},
+      () => true,
+      (first) => first,
+      stripInheritedForeignVariables,
+      [],
+      ({ environment: target }) => { target.OPENCHAMBER_DATA_DIR = '/Users/geo/data'; },
+    );
+
+    inheritUserShellEnv();
+    expect(environment.LANG).toBe('zh_TW.UTF-8');
+    expect(environment).not.toHaveProperty('OPENCODE_CONFIG');
+
+    environment.OPENCHAMBER_RUNTIME = 'desktop';
+    environment.OPENCODE_HOST = 'http://127.0.0.1:4096';
+    inheritUserShellEnv();
+    expect(environment.OPENCHAMBER_RUNTIME).toBe('desktop');
+    expect(environment.OPENCODE_HOST).toBe('http://127.0.0.1:4096');
+    expect(environment).not.toHaveProperty('OPENCODE_CONFIG');
   });
 
   it('keeps the UI password out of the child by prefix, with no override needed', () => {

@@ -131,12 +131,13 @@ import './geocode/environment-boundary.mjs'   ← **第一条 import**:模块加
 applyShellDataRoot(process.env)               ← 模块顶层、紧跟身份设置:注入数据根(类 E)
 ...
 inheritUserShellEnv() {
+  **进程内第二次起直接返回                                   ← 只合并一次(不变量 2)**
   probe → 合并(undefined 才填)→ 合并 PATH
   **stripInheritedForeignVariables(process.env, { keep })   ← 与合并同一函数体,原子**
   **applyShellDataRoot(process.env)                          ← 数据根被剥后立即重写,幂等**
 }
 shouldSkipLocalServer()  → 调 inheritUserShellEnv()   ┐ 两个上游调用点,
-spawnLocalServer()       → 调 inheritUserShellEnv()   ┘ 都自动带上剥离
+spawnLocalServer()       → 调 inheritUserShellEnv()   ┘ 真正合并的是先到的那次
   process.env.OPENCHAMBER_HOST = ... 等          ← 我们的注入(类 E),在最后一次剥离之后
   startEmbeddedKernel({ environment: process.env })   ← createKernelProcessEnvironment:前缀 + 黑名单
     applyKernelConnectionToShellEnvironment          ← OPENCODE_HOST / _SERVER_PASSWORD / SKIP
@@ -150,7 +151,11 @@ spawnLocalServer()       → 调 inheritUserShellEnv()   ┘ 都自动带上剥�
 1. **合并之后立刻剥离,同一函数体内。** 剥离不再是一个可以被隔开的独立语句。上游若新增第三个
    `inheritUserShellEnv()` 调用点,自动带上。
 2. **所有注入都在最后一次剥离之后。** `spawnLocalServer` 里的注入与 kernel-boot 的连接写入都在其后;
-   数据根在模块顶层就写了,所以在剥离函数里重写一次。
+   数据根在模块顶层就写了,所以在剥离函数里重写一次。保证它的不是调用点的位置,而是 `inheritUserShellEnv`
+   开头那句「已合并过就返回」:开机登录的后台启动在内核与壳都起来之后还会经 `shouldSkipLocalServer()`
+   再调一次,上游那里是「undefined 才填」的合并、无害,带上剥离就会删掉之前注入的全部 `OPENCHAMBER_*` 与
+   `OPENCODE_*`。2026-09-17 真实会话复现过:后台启动后 API 响应开始压缩、设置接口少了桌面形态的字段,
+   正常启动没有;加了这句之后两种启动一致。
 3. **壳内不做第二次合并。** 主进程已经把同一个登录 shell 并进同一份 `process.env`,服务器再并一次只会
    把剥掉的填回来。判据 `process.versions.electron` 是进程的固有事实,不是变量,丢不了;`openchamber
    serve` 单独跑时它为空,上游行为不变。实测 `ELECTRON_RUN_AS_NODE=1` 下它仍为 `43.3.0`,所以
@@ -271,8 +276,9 @@ bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 
 - `stripInheritedForeignVariables` 的调用出现在 `inheritUserShellEnv` 函数体内、`for` 合并循环之后;
 - `index.js` 里存在 `/* applyLoginShellEnvSnapshot(); */` 且其前一行是带 `process.versions.electron`
   的条件调用;
-- `inheritUserShellEnv();` 的每一处调用都在 `startEmbeddedKernel({` 之前(不变量 2:剥离现在随合并走,
-  一次晚于内核连接写入的合并会把 `OPENCODE_HOST` 与口令一并剥掉);
+- 不变量 2 不看调用点:截出 `main.mjs` 里真实的 `inheritUserShellEnv` 配桩运行,合并一次、写入
+  `OPENCHAMBER_RUNTIME` 与 `OPENCODE_HOST`、再调一次,两者都得还在。原先这条按文本位置找 `inheritUserShellEnv();`,
+  看不到经 `shouldSkipLocalServer()` 的间接调用,后台启动那次正是从这里漏过去的;
 - 「剥离早于 kernel start 与 server import」。
 - 反证:各删一行,各应变红。
 

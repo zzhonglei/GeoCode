@@ -1446,7 +1446,14 @@ import { clearAppImageArgv0FromProcessEnv } from '@openchamber/web/server/lib/in
 // import/start the server in-process. The server and its children (opencode
 // CLI, git, etc.) inherit process.env directly now — there is no sidecar
 // subprocess to hand a custom env to.
+let userShellEnvInherited = false; // GeoCode: see the guard below
 const inheritUserShellEnv = () => {
+  // --- GeoCode: merge once per process. The strip at the end removes every branded name written
+  // since, and the background start calls this again after the kernel and the shell are up
+  // (docs/ENVIRONMENT.md §5.2). ---
+  if (userShellEnvInherited) return;
+  userShellEnvInherited = true;
+  // --- /GeoCode ---
   // Clear before probing/merging so login-shell snapshots and children never
   // inherit the AppImage path as argv[0] via zsh's ARGV0 parameter (#2588).
   clearAppImageArgv0FromProcessEnv();
