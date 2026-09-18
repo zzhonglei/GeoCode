@@ -531,7 +531,7 @@ GeoAgent 在临时会话里调 `projects.list` 成功(工具状态 completed,返
 - OpenCode 自升级;
 - 会话分享(内核侧的截断见 `KERNEL.md` §6 第 5 项,这里关的是界面入口);
 - 仓库共享的项目配置(`<repo>/.openchamber/project.json`)与它带的仓库计划目录;
-- 项目操作(把 shell 命令绑到侧边栏按钮)与 worktree 的初始化命令;
+- 项目操作(把 shell 命令绑到顶栏按钮)与 worktree 的初始化命令;
 - 写给程序员的斜杠命令(内核内置的 `/init`、`/review` 与界面自带的八条);
 - OpenChamber 的外部插件管理、system-prompt optimizer,以及上游那条 agent-tool 注入管道(浏览器工具与控制工具改由 GeoCode 自己注入,见 §7.2;记忆工具不注入);
 - GitHub 发布流与 PR 面:**挂起**,见下方说明。
@@ -569,7 +569,11 @@ GeoAgent 在临时会话里调 `projects.list` 成功(工具状态 completed,返
 
 项目操作与 worktree 初始化命令一并关掉:两者都是「把一条 shell 命令绑到界面上」,上游自己拿前者跑
 `bun run dev:web:hmr`,是开发者的便利。设置搜索里指向初始化命令那一块的两条条目(「创建或发送会话前等待初始化命令完成」
-「仅使用我的设置命令」)同样隐藏(09-16 补)。
+「仅使用我的设置命令」)同样隐藏(09-16 补)。09-17 补关三处:顶栏的项目操作按钮(它的「Auto-discover」会跑项目的
+dev 脚本或起一个静态服务器);Multi-Run 启动器里的初始化命令一栏(它会预填已存的命令,还会把命令存回项目设置);
+壳这一侧,Electron 下新建 worktree 不执行任何初始化命令,之前存下的也不执行(`git/service.js` 的 `runWorktreeStartScripts`)。
+界面的守卫在 `geocode/advanced-project-surface.ts`,绊线 `advanced-project-surface.test.ts` 按挂载点扫描;壳的绊线
+`server/geocode/worktree-setup-commands.test.js` 带一个不标 Electron 的对照,证明命令确实走到了执行处。
 
 **没有关掉的是 worktree 本身。** 它是两个会话改同一个项目而不打架的机制,创建入口在聊天输入区而不在设置页;
 「现有工作树」列表照旧显示,因为那是工作树唯一能被看到和删掉的地方——关掉它会让工作树只增不减。

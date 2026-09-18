@@ -30,6 +30,7 @@ import { PROJECT_ICON_MAP, PROJECT_COLOR_MAP, ProjectIconImage } from '@/lib/pro
 import type { ProjectEntry } from '@/lib/api/types';
 import { startDesktopWindowDrag } from '@/lib/desktopNative';
 import { useI18n } from '@/lib/i18n';
+import { WORKTREE_SETUP_COMMANDS_OFFERED } from '@/geocode/advanced-project-surface'; // GeoCode: own module
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -276,6 +277,7 @@ export const MultiRunLauncher: React.FC<MultiRunLauncherProps> = ({
 
   React.useEffect(() => {
     if (!projectRef) return;
+    if (!WORKTREE_SETUP_COMMANDS_OFFERED) return; // GeoCode: saved commands are neither shown nor sent
     let cancelled = false;
     setIsLoadingSetupCommands(true);
     (async () => {
@@ -520,6 +522,8 @@ export const MultiRunLauncher: React.FC<MultiRunLauncherProps> = ({
               </div>
             </div>
 
+            {/* --- GeoCode: worktree setup commands are not offered (docs/DESKTOP.md §7.3) --- */}
+            {!WORKTREE_SETUP_COMMANDS_OFFERED ? null : (
             <Collapsible open={isSetupCommandsOpen} onOpenChange={setIsSetupCommandsOpen}>
               <CollapsibleTrigger className="w-full flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-lg hover:bg-[var(--interactive-hover)]/50 transition-colors group">
                 <Icon name="terminal" className="h-3.5 w-3.5 text-muted-foreground/70" />
@@ -585,6 +589,8 @@ export const MultiRunLauncher: React.FC<MultiRunLauncherProps> = ({
                 </div>
               </CollapsibleContent>
             </Collapsible>
+            )}
+            {/* --- /GeoCode --- */}
 
             <div className="flex flex-col gap-1.5">
               <FieldLabel htmlFor="prompt" required>{t('multirun.launcher.attachments.label')}</FieldLabel>

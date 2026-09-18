@@ -1,5 +1,6 @@
-/* --- GeoCode: the narrowed project settings panel (geocode/advanced-project-surface.ts,
- * docs/DESKTOP.md §7.3).
+/* --- GeoCode: project actions and worktree setup commands stay closed in the renderer
+ * (geocode/advanced-project-surface.ts, docs/DESKTOP.md §7.3). The shell's half is
+ * web/server/geocode/worktree-setup-commands.test.js.
  *
  * Both halves are closed at the mount, not inside the components, so what a merge can undo is a
  * mount: upstream adds a second one, or rewrites the panel and drops the prop. Each test
@@ -13,7 +14,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { PROJECT_ACTIONS_OFFERED } from './advanced-project-surface';
+import { PROJECT_ACTIONS_OFFERED, WORKTREE_SETUP_COMMANDS_OFFERED } from './advanced-project-surface';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -35,6 +36,21 @@ const mounts = (component: string) => sources(SRC)
   .map((file) => ({ file: path.relative(SRC, file), text: readFileSync(file, 'utf8') }))
   .filter((entry) => countMounts(entry.text, component) > 0);
 
+// Each place `needle` appears must follow `guard` inside the same JSX expression: a closing line
+// between the two would mean the guard ended before the thing it was meant to hold.
+const unguardedUses = (needle: string, guard: string) => sources(SRC).flatMap((file) => {
+  const text = readFileSync(file, 'utf8');
+  return [...text.matchAll(new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))]
+    .filter((match) => {
+      const at = match.index ?? 0;
+      const start = text.lastIndexOf(guard, at);
+      if (start < 0) return true;
+      const between = text.slice(start, at);
+      return between.includes('{/* --- /GeoCode --- */}') || /^\s*\)(\s*:\s*null)?\}\s*$/m.test(between);
+    })
+    .map(() => path.relative(SRC, file));
+});
+
 describe('the project settings panel stays narrow', () => {
   test('project actions are not offered', () => {
     expect(PROJECT_ACTIONS_OFFERED).toBe(false);
@@ -46,6 +62,27 @@ describe('the project settings panel stays narrow', () => {
         !== occurrences(text, '!PROJECT_ACTIONS_OFFERED ? null : <ProjectActionsSection'))
       .map(({ file }) => file);
     expect(unguarded).toEqual([]);
+  });
+
+  test('every mount of the actions button sits behind the guard', () => {
+    // The button runs a project's actions and auto-discovers a dev server to run.
+    expect(mounts('ProjectActionsButton').length).toBeGreaterThan(0);
+    expect(unguardedUses('<ProjectActionsButton', '!PROJECT_ACTIONS_OFFERED ? null :')).toEqual([]);
+  });
+
+  test('worktree setup commands are not offered', () => {
+    expect(WORKTREE_SETUP_COMMANDS_OFFERED).toBe(false);
+  });
+
+  test('the Multi-Run launcher neither edits nor loads setup commands', () => {
+    const editors = sources(SRC).filter((file) => readFileSync(file, 'utf8').includes("t('multirun.launcher.setupCommands.label')"));
+    expect(editors.length).toBeGreaterThan(0);
+    expect(unguardedUses("t('multirun.launcher.setupCommands.label')", '!WORKTREE_SETUP_COMMANDS_OFFERED ? null : (')).toEqual([]);
+    const launcher = readFileSync(path.join(SRC, 'components/multirun/MultiRunLauncher.tsx'), 'utf8');
+    const load = launcher.indexOf('await resolveWorktreeSetupCommands(');
+    expect(load).toBeGreaterThan(-1);
+    const effect = launcher.lastIndexOf('React.useEffect(', load);
+    expect(launcher.slice(effect, load)).toContain('if (!WORKTREE_SETUP_COMMANDS_OFFERED) return;');
   });
 
   test('no mount of the worktree section asks for the setup commands', () => {

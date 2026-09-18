@@ -74,6 +74,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { buildSessionTreeMoveMessages, requestSessionTreeMove, useIsSessionWorktreeMovePending } from '@/lib/worktrees/sessionWorktreeMove';
 import { SESSION_SHARING_OFFERED } from '@/geocode/session-share-surface'; // GeoCode: own module
+import { PROJECT_ACTIONS_OFFERED } from '@/geocode/advanced-project-surface'; // GeoCode: own module
 
 const DESKTOP_HEADER_ICON_BUTTON_CLASS = 'app-region-no-drag inline-flex h-8 w-8 items-center justify-center gap-2 rounded-md typography-ui-label font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50 hover:bg-interactive-hover transition-colors';
 
@@ -1274,7 +1275,8 @@ export const Header: React.FC = () => {
 
   const desktopSidebarActions = (
     <>
-      {projectActionsContext ? (
+      {/* GeoCode: project actions are not offered (docs/DESKTOP.md §7.3) */}
+      {!PROJECT_ACTIONS_OFFERED ? null : projectActionsContext ? (
         <ProjectActionsButton
           projectRef={projectActionsContext.projectRef}
           directory={projectActionsContext.directory}

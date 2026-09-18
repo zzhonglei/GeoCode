@@ -1809,6 +1809,10 @@ const cleanupFailedFastWorktreeCreate = async (context, candidate) => {
 };
 
 const runWorktreeStartScripts = async (directory, projectID, startCommand) => {
+  // --- GeoCode: a new worktree runs no setup commands, whoever sends them and however old
+  // (docs/DESKTOP.md §7.3). ---
+  if (process.versions.electron) return;
+  // --- /GeoCode ---
   const projectStart = await loadProjectStartCommand(projectID);
   if (projectStart) {
     const projectResult = await runWorktreeStartCommand(directory, projectStart);
