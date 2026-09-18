@@ -723,9 +723,19 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   全部落盘、全部被丢弃,界面却报成功并催用户点「应用」。这一行顺带切断 `/api/config/plugins/registry`
   对 npm 官方 registry 的调用,那条出网 §7.3 本就不允许。用户扩展 GeoCode 的路是 MCP:进程外、按服务器
   逐个授权、界面完整。「集成」页(第三方订阅 Claude 与 Cursor)走同一条管道因而同样无效,但**暂不屏蔽**:
-  上游后续版本把 GitHub 与 Linear 做成了这一页的内置集成,那两项不经插件管道,等同步新基线时一并判
-  (2026-09-07 用户决定)。绊线在 `server/geocode/closed-surface.test.js`(对照组挂满十条并点名那条出网路由)与
+  上游后续版本把 GitHub 与 Linear 做成了这一页的内置集成,那两项不经插件管道(2026-09-07 用户决定)。
+  其中 **Linear 已于 09-18 关闭**(见下一条),**GitHub 仍挂起**,等同步新基线时再判。绊线在
+  `server/geocode/closed-surface.test.js`(对照组挂满十条并点名那条出网路由)与
   `ui/src/geocode/desktop-settings-surface.test.ts`。
+- **Linear**:GeoCode 不提供这个集成(2026-09-18 用户定)。壳在 Electron 下 `registerLinearRoutes` 首行把
+  `/api/linear` 整个前缀答成 404,14 条路由一条都不注册;OAuth 回调虽在 `/api` 之外,但静态兜底的三条正则
+  本来就排除 `/linear`,没人接管,不需要第二道拒绝。⚠️ **只关路由关不干净**:会话状态运行时不是路由,它直接
+  挂在会话事件总线上、会话一结束就往工单发评论,所以同时 `stop()` 掉。渲染端六个入口各挂在 `LINEAR_OFFERED`
+  上(集成页那一节、聊天框的工单链接、新建 worktree 的按钮、右侧栏表面注册表、**Rail 配置对话框**——它故意渲染
+  全量注册表,运行时过滤器够不到它——以及已链接工单那一行),并且不再拿到 Linear 的运行时 API,所以启动时那次
+  状态请求也不再发出。**关的是入口不是机器**:组件、三份字典与 `contextPanelMode` 里的 `'linear'` 一律留着随上游
+  合并,`LinkedIssue` 那套与回形针菜单更不能动——GitHub 的工单与 PR 和它共用。授权本走 `api.openchamber.dev` 代理,
+  随之一并消失。绊线:`server/geocode/closed-surface.test.js`、`linear-runtime.test.js`、`ui/src/geocode/linear-surface.test.ts`。
 - **agent-tool 注入的三个开关、以及 system-prompt optimizer**:上游把控制工具、Web 工具、记忆工具做成三个开关,
   都靠「壳把一个插件写到磁盘,再让壳自己 spawn 的 OpenCode 加载它」这条管道,而桌面壳不 spawn 任何 OpenCode
   (四层断口见 `.artifacts/DECISIONS.md` 09-04)。GeoCode 里它们不是开关:**浏览器工具与控制工具是产品能力,强制开启、
