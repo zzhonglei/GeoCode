@@ -169,17 +169,8 @@ const walkLoopMdFiles = (rootDir) => {
  * worktree root (project scope).
  */
 export const discoverLoopFiles = (projectPath) => {
-  // --- GeoCode: `.agents` holds what a user writes for any agent tool, not for GeoAgent, and by
-  // ownership that is not ours to run (docs/PATHS.md). A loop is heavier than a skill there: a
-  // skill is only offered, a loop runs on a schedule of its own.
-  //
-  // This is also the single gate in front of both writes into that directory. `findLoopTask`
-  // syncs before it looks, so with nothing discovered no task carries a `loopFile`, and the two
-  // callers behind it — the delete that unlinks the markdown file and the enable toggle that
-  // rewrites its frontmatter — can no longer reach a user's file.
-  //
-  // Tasks created in the UI are unaffected: they carry no `loopFile` and reconciliation never
-  // removes those. ---
+  // --- GeoCode: `.agents` loops are written for other agent tools; this is also the only gate in front of the
+  // delete and toggle that modify those files (docs/DESKTOP.md §10) ---
   return [];
   /*
   const files = [];

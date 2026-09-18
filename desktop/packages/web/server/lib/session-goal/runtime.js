@@ -24,7 +24,7 @@ import { readMergedSettingsSync } from '../opencode/settings-files.js';
 const OPENCHAMBER_SETTINGS_FILE = path.join(
   process.env.OPENCHAMBER_DATA_DIR
     ? path.resolve(process.env.OPENCHAMBER_DATA_DIR)
-    : path.join(os.homedir(), '.config', 'GeoCode', 'desktop'), // GeoCode: GeoCode's own shell data root (docs/PATHS.md §3.3)
+    : path.join(os.homedir(), '.config', 'GeoCode', 'desktop'), // GeoCode: own shell data root (docs/PATHS.md §3.3)
   'settings.json',
 );
 
@@ -98,6 +98,7 @@ const buildContinuationPrompt = (goal) => {
 };
 
 const buildAuditSystemPrompt = () => [
+  // GeoCode: the auditor judges GeoAgent's work, not a coding agent's (docs/DESKTOP.md §7.3)
   'You audit progress of an agent working toward a user-defined goal. Based on the objective and the latest exchange, return exactly one JSON object and nothing else — no prose, no markdown, no code fences.',
   'Shape: {"verdict": "continue" | "complete" | "blocked", "note": string}',
   'verdict rules:',

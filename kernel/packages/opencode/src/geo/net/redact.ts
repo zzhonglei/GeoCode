@@ -1,15 +1,11 @@
 export * as NetRedact from "./redact"
 
-/* --- GeoCode: credential stripping for the Net module (docs/GEOKERNEL.md §3.3).
- *
- * Strips `user:password@` and keeps host and port, so a proxy failure stays diagnosable. Its own module because
- * all three planned exits — status events, diagnostics, logs — have to reach for it, and missing one is the same
- * as not doing it at all (§3.3, §11). --- */
+/* --- GeoCode: strips `user:password@` from proxy addresses but keeps host and port, so a proxy failure stays
+ * diagnosable (docs/GEOKERNEL.md §3.3). --- */
 
 /** A list, not a pattern: `scheme:` and `username:` are the same shape, so `alice:hunter2@host` would keep `alice`. */
 const PROXY_SCHEMES = new Set(["http", "https", "socks", "socks4", "socks4a", "socks5", "socks5h"])
 
-/** Cuts from the scheme prefix to the last `@`, or from the start of the value when the prefix is not a proxy scheme. */
 function withoutUserinfo(value: string): string {
   // A query or fragment can hold an `@` of its own and is not authority.
   const boundary = value.search(/[?#]/)
@@ -24,10 +20,8 @@ function withoutUserinfo(value: string): string {
 }
 
 /**
- * `new URL` clears userinfo only on a well-formed `scheme://user:pass@host:port`: a `/` in the password throws, one
- * in the username parses the wrong host, and a missing `//` leaves the credential in place. So its answer is used
- * only when no `@` survives it, and everything else goes through `withoutUserinfo`, which over-removes rather than
- * under — `http://host/path@v2` becomes `http://v2`, preferred to a password in a screenshot.
+ * `new URL` misreads credentials in malformed values, so its answer is used only when no `@` survives it; the rest go
+ * through `withoutUserinfo`, which over-removes rather than under: `http://host/path@v2` becomes `http://v2`.
  */
 export function url(value: string): string
 export function url(value: undefined): undefined

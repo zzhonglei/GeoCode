@@ -172,9 +172,7 @@ const registry = {
   }
 };
 
-// --- GeoCode: Claude is removed rather than left to report "not configured", because `isConfigured`
-// answers by loading the credential — it shells out to `security find-generic-password -w` for Claude
-// Code's login Keychain entry. Keyed off the module's own id so a rename takes this with it. ---
+// --- GeoCode: removed, not left unconfigured, because Claude's `isConfigured` reads Claude Code's Keychain entry ---
 delete registry[claude.providerId];
 // --- /GeoCode ---
 

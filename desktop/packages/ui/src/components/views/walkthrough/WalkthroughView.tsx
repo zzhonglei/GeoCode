@@ -618,7 +618,7 @@ export const WalkthroughView = ({ directory: rootDirectory, visible = true }: Wa
             <Icon name="arrow-left-right" className="size-4" />
             {!compactHeader && t('contextPanel.mode.diff')}
           </Button>}
-          {/* --- GeoCode: the guide button opened OpenChamber's docs site (docs/PATHS.md §3.4) --- */}
+          {/* --- GeoCode: the guide button opens OpenChamber's docs site (docs/PATHS.md §3.4) --- */}
           {WALKTHROUGH_GUIDE_SHOWN && (
           <Tooltip>
             <TooltipTrigger asChild>

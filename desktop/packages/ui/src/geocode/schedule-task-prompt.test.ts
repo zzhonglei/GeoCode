@@ -7,8 +7,6 @@ import { getDefaultMagicPromptTemplate } from '../lib/magicPrompts';
 
 describe('the scheduled task prompt', () => {
   test('names the auto-accept switch by the label the task editor shows', () => {
-    // GeoAgent asks before running QGIS algorithms and Earth Engine scripts, so a run nobody watches stops there,
-    // and a name the editor does not show sends the user looking for a switch that is not there.
     expect(getDefaultMagicPromptTemplate('session.scheduleTask.instructions'))
       .toContain(en['sessions.scheduledTasks.editor.permissionAutoAccept.label']);
   });

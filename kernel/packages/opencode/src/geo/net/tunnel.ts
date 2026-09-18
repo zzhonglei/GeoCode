@@ -2,10 +2,8 @@ export * as NetTunnel from "./tunnel"
 
 import net from "node:net"
 
-/* --- GeoCode: the CONNECT handshake, in one place (docs/GEOKERNEL.md §3.3).
- *
- * The probe and the in-process route share it, so a candidate cannot pass verification and then tunnel differently
- * once it carries real traffic. --- */
+/* --- GeoCode: the one CONNECT handshake, shared by the probe and the in-process route so a candidate cannot pass
+ * verification and then tunnel differently under real traffic (docs/GEOKERNEL.md §3.3). --- */
 
 export type Stage = "connect" | "tunnel"
 
@@ -25,7 +23,7 @@ function reasonOf(err: unknown): string {
   return String(err)
 }
 
-/** Ask a proxy to open a tunnel to `authority` (`host:port`). On failure the socket is destroyed here. */
+/** `authority` is `host:port`. On failure the socket is already destroyed; on success it is the caller's. */
 export function open(proxyUrl: string, authority: string, timeoutMs: number): Promise<Result> {
   let parsed: URL
   try {
@@ -52,10 +50,8 @@ export function open(proxyUrl: string, authority: string, timeoutMs: number): Pr
       if (settled) return
       settled = true
       clearTimeout(deadline)
-      // Leftover listeners of ours would keep firing into a promise that has already settled.
       socket.removeListener("error", onError)
-      // Removing the reader does not stop the flow: bytes arriving before the caller starts TLS
-      // would be emitted to nobody.
+      // Removing the reader does not stop the flow: bytes arriving before the caller starts TLS would reach nobody.
       socket.pause()
       if (leftover.length > 0) socket.unshift(leftover)
       resolve({ ok: true, socket })

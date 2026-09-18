@@ -55,10 +55,8 @@ export const ProjectSettingsPanel: React.FC<ProjectSettingsPanelProps> = ({
       {!PROJECT_ACTIONS_OFFERED ? null : <ProjectActionsSection projectRef={projectRef} />}
       {/* GeoCode: upstream's own list-only mode, which drops the worktree setup commands and keeps the list */}
       {showWorktrees ? <WorktreeSectionContent projectRef={projectRef} sections="list-only" /> : null}
-      {/* --- GeoCode: this block is the team's shared file and nothing else — where it is,
-          whether it parsed, and the shared plans folder. The server reports it missing and
-          refuses the write (lib/projects/routes.js), so all it could show here is a file that
-          never appears and a folder setting that never saves. --- */}
+      {/* --- GeoCode: the server reports the team's shared file missing and refuses its writes
+          (geocode/repository-sharing-surface.ts) --- */}
       {!REPOSITORY_SHARING_OFFERED ? null : <SharedProjectConfigSection projectRef={projectRef} />}
     </div>
   );

@@ -1,13 +1,11 @@
-/* --- GeoCode: whether the kernel went away after this window opened (docs/DESKTOP.md §5.2).
- *
- * The main process records it and announces it (electron/geocode/kernel-failure.mjs). Asking once
- * as well covers a kernel that died before this window was listening. --- */
+/* --- GeoCode: whether the kernel exited after it came up; the main process's record is read as well as its event,
+ * which may have been sent before this window listened (docs/DESKTOP.md §5.2). --- */
 import * as React from 'react';
 
 import { invokeDesktop } from '@/lib/desktop';
 import type { KernelFailure } from './GeoCodeKernelFailureScreen';
 
-/** Mirrors `KERNEL_LOST_EVENT` in electron/geocode/kernel-failure.mjs, which pins the copy. */
+/** Mirrors `KERNEL_LOST_EVENT` in electron/geocode/kernel-failure.mjs; kernel-failure.test.mjs pins the copy. */
 export const KERNEL_LOST_EVENT = 'geocode:kernel-lost';
 
 export const useKernelLost = (enabled: boolean): boolean => {

@@ -1,6 +1,5 @@
-/* --- GeoCode: the project-scope rename, checked through the loader rather than by reading the source
- * (docs/PATHS.md §5). The scan in core/test/geocode-brand.test.ts sees that the patches are still in the source,
- * not that a read actually lands on the branded names. --- */
+/* --- GeoCode: the source scan in core/test/geocode-brand.test.ts can pass while a read still misses the branded
+ * names (docs/PATHS.md §5). --- */
 import { describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
@@ -133,9 +132,8 @@ describe("GeoCode project config scope", () => {
   )
 })
 
-/* --- GeoCode: opening a folder must not run its code (docs/PATHS.md §7). Upstream imports `{plugin,plugins}/*.ts`
- * from every config directory through two independent paths, and `{tool,tools}/*.ts` through the tool registry, so
- * the witness modules make the assertions below evidence rather than inference. --- */
+/* --- GeoCode: a merge restoring any of upstream's plugin or tool loaders runs code from a folder the user only
+ * opened (docs/KERNEL.md §6 items 1-2). --- */
 describe("GeoCode does not run code from a project directory", () => {
   it.live("ignores declared plugins, discovered plugins and file tools", () =>
     Effect.gen(function* () {
@@ -205,8 +203,7 @@ describe("GeoCode session sharing", () => {
   )
 
   it.live("and the gate at the network boundary answers for itself", () =>
-    /* Sharing is off in two places and only one reads config, so a user setting `share` re-exposes upstream's
-     * empty `{ id, url, secret }` unless this gate refuses on its own. */
+    /* Only share/session.ts reads config, so if a user sets share this gate must refuse, not return an empty share. */
     Effect.gen(function* () {
       const result = yield* Effect.exit(ShareNext.use.create(SessionID.make("ses_gate_probe")))
       expect(Exit.isFailure(result)).toBe(true)
@@ -227,7 +224,7 @@ describe("GeoCode plan file scope", () => {
 
       expect(written.startsWith(path.join(worktree, Brand.projectDir, "plans") + path.sep)).toBe(true)
 
-      // The glob shape the plan agent's edit permission is built from (agent.ts), spread from the same array.
+      // Mirrors the plan agent's edit permission in agent/agent.ts.
       const pattern = path.join(...Brand.plansSegments, "*.md")
       expect(Wildcard.match(path.relative(worktree, written), pattern)).toBe(true)
     }),

@@ -12,47 +12,37 @@ import { QgisBootstrap } from "./bootstrap"
 import { RASTER_PREVIEW_PY, RASTER_READ_PY, VECTOR_READ_PY } from "./scripts.generated"
 import type { Environment } from "./types"
 
-/* --- GeoCode: the data-reading pipeline (docs/GEOKERNEL.md §4.13).
- *
- * Pure functions over an environment the gate verified (§4.9, §9.1), stateless between calls. The scripts travel as
- * generated constants and run MATERIALIZED, never inline: the vector script alone is 23KB, about three quarters of
- * the Windows command-line limit (§4.13 校准量). --- */
+/* --- GeoCode: the data-reading pipeline (docs/GEOKERNEL.md §4.13). The scripts run materialized, never inline: the
+ * vector script alone takes about three quarters of the Windows command-line limit. --- */
 
-/** One marker for the whole family; each script embeds the same string. */
+/** Each read script embeds this same string. */
 export const MARKER = "__GEOCODE_READ_JSON__"
 
-/**
- * Total clocks, not idle: no script here emits progress, so a full-table
- * statistics scan is silent for its whole runtime (§8.4 — these are the kernel-known tier).
- */
+/** Total, not idle: no script here emits progress, so a full-table statistics scan is silent throughout (§8.4). */
 const VECTOR_TOTAL = "120 seconds" // twice the raster bound: GeoJSON/GML drivers parse the whole file at open
 const RASTER_TOTAL = "60 seconds"
 const PREVIEW_TOTAL = "120 seconds"
 
-/** Metadata reads: the same bound as the catalog export. */
 const METADATA_LIMIT = 32 * 1024 * 1024
 
 /**
- * Sized well above the preview's upper bound — ~22MB at the script's MAX_SIDE of 2048 — because the two failures
- * are not symmetrical: an oversized ceiling allocates nothing, while an undersized one truncates the payload into
- * an unattributable "no marker" failure instead of a loud one (§4.13 校准量).
+ * Well above the preview's upper bound, about 22MB at the script's MAX_SIDE of 2048: an oversized ceiling allocates
+ * nothing, while an undersized one truncates the payload into an unattributable failure instead of a loud one.
  */
 const PREVIEW_LIMIT = 128 * 1024 * 1024
 
 /**
- * Reading must not write: GDAL saves computed statistics as a `.aux.xml` beside the user's data when the dataset
- * closes, and opening read-only does not stop it (§7.6, §4.13). On the READER ONLY — an algorithm that writes a
- * raster may need PAM to persist a coordinate system its output format cannot hold.
+ * GDAL saves computed statistics as a `.aux.xml` beside the user's data when the dataset closes, even when opened
+ * read-only. Reader only: an algorithm that writes a raster may need PAM to persist a coordinate system its output
+ * format cannot hold (§4.13).
  */
 const NO_SIDECARS = { GDAL_PAM_ENABLED: "NO" } as const
 
 export interface VectorOptions {
   readonly file: string
-  /** Features to sample; the script defaults to 3. */
   readonly maxFeatures?: number
-  /** 1-based feature start position; the script defaults to 1. */
+  /** 1-based. */
   readonly offset?: number
-  /** Layer to read in multi-layer sources; the script defaults to 0. */
   readonly layerIndex?: number
   readonly abort?: AbortSignal
 }
@@ -81,10 +71,7 @@ export type PreviewOutcome =
   | { readonly ok: true; readonly meta: PreviewMeta; readonly base64: string }
   | { readonly ok: false; readonly detail: string }
 
-/**
- * Materialize a script constant as a file in the application cache, named by content hash: a changed script lands
- * under a new name, and a file already bearing the name is by construction the right content.
- */
+/** Named by content hash, so a file already bearing the name holds exactly this content. */
 export function materialize(
   name: string,
   content: string,
@@ -108,11 +95,10 @@ export function materialize(
   return target
 }
 
-/* Windows Python stdio can interleave U+FEFF anywhere in the stream, including inside the marker line. JSON.parse
- * rejects it as non-whitespace and trim() only reaches the edges, so every occurrence goes up-front. */
+/* Windows Python stdio can interleave U+FEFF anywhere in the stream, including inside the marker line, where
+ * JSON.parse rejects it and trim() cannot reach it. */
 const stripBom = (text: string) => text.replace(/\uFEFF/g, "")
 
-/** Read vector metadata, statistics and sampled features. */
 export function readVector(
   runtime: GeoRuntime.Interface,
   environment: Environment,
@@ -131,7 +117,6 @@ export function readVector(
   }).pipe(Effect.map(parseMetadata))
 }
 
-/** Read raster metadata and band statistics. */
 export function readRaster(
   runtime: GeoRuntime.Interface,
   environment: Environment,
@@ -148,7 +133,6 @@ export function readRaster(
   }).pipe(Effect.map(parseMetadata))
 }
 
-/** Render a raster preview: marker-tagged metadata line, then base64 PNG. */
 export function renderPreview(
   runtime: GeoRuntime.Interface,
   environment: Environment,
@@ -192,8 +176,6 @@ function runRead(
     Effect.flatMap((scriptPath) =>
       runtime.run({
         command: environment.python,
-        // wrapScript preserves direct-execution semantics under the manual Windows track's DLL bootstrap, and is
-        // the identity where there is nothing to register (§4.5).
         args: QgisBootstrap.wrapScript(scriptPath, spec.args, environment.dllDirectories),
         env: { ...environment.env, ...NO_SIDECARS },
         delivery: { mode: "collect", limit: spec.limit },
@@ -205,7 +187,6 @@ function runRead(
   )
 }
 
-/** Failure grading shared with the probe (§4.6): the ending leads, the raw tail follows. */
 function failed(result: GeoRuntime.Result, why: string): { ok: false; detail: string } {
   const ending =
     result.reason !== "exit" || result.code !== 0
@@ -229,8 +210,8 @@ function parseMetadata(result: GeoRuntime.Result): MetadataOutcome {
 function parsePreview(result: GeoRuntime.Result): PreviewOutcome {
   const stdout = stripBom(result.stdout)
   const lines = stdout.split("\n")
-  // Last occurrence, same rule as extractMarked — and CONTAINS, not starts-with: unterminated C-level chatter can
-  // end up glued to the front of the marker's own line.
+  // Last occurrence, as in extractMarked, and contains rather than starts-with: unterminated C-level output can end
+  // up glued to the front of the marker's own line.
   let markerLine = -1
   for (let i = lines.length - 1; i >= 0; i--) {
     if (lines[i]!.includes(MARKER)) {
@@ -261,13 +242,11 @@ function parsePreview(result: GeoRuntime.Result): PreviewOutcome {
     .map((line) => line.trim())
     .find((line) => line.length > 0)
   if (!base64) {
-    // The classic undersized-cap signature: metadata arrived, image did not.
     return failed(result, "preview produced metadata but no image payload followed the marker line")
   }
 
-  // The image gets the completeness check JSON.parse gave the metadata for free. The script writes the marker line
-  // before the image, so a clock expiring — or the output cap tripping — mid-transfer leaves a valid marker line
-  // above a half-written payload; base64 length follows exactly from the byte count the script reports.
+  // The marker line precedes the image, so a clock or the output cap cutting the transfer short leaves valid metadata
+  // above a partial payload; base64 length follows exactly from the byte count the script reports.
   if (typeof record.bytes === "number") {
     const expected = 4 * Math.ceil(record.bytes / 3)
     if (base64.length !== expected) {

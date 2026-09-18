@@ -1,10 +1,5 @@
-/* --- GeoCode: the magic prompt, plugin and tunnel surfaces answer 404 under Electron
- * (docs/DESKTOP.md §7.3).
- *
- * Guarded is where a request ends: a stand-in for the generic kernel proxy is mounted after each
- * registrar, as the startup pipeline does, and it must never see one. The routes requested are the
- * ones the same registrar mounts outside Electron, recorded first, so a route upstream adds or a
- * prefix it renames fails here instead of slipping past a hand-kept list. --- */
+/* --- GeoCode: the magic prompt, plugin and tunnel surfaces answer 404 under Electron, and none of their
+ * requests, including routes upstream adds later, reaches the kernel proxy (docs/DESKTOP.md §7.3). --- */
 import { afterEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import request from 'supertest';
@@ -27,7 +22,6 @@ const SURFACES = [
     name: 'magic prompt',
     prefix: '/api/magic-prompts',
     minimum: 4,
-    // Every one-click action reads this before it renders its prompt.
     named: { method: 'get', path: '/api/magic-prompts' },
     register: (app) => registerMagicPromptRoutes(app, {
       fsPromises: {},
@@ -39,7 +33,6 @@ const SURFACES = [
     name: 'plugin',
     prefix: '/api/config/plugins',
     minimum: 10,
-    // The one that reaches npm when it is answered.
     named: { method: 'get', path: '/api/config/plugins/registry' },
     register: (app) => registerPluginRoutes(app, {
       resolveOptionalProjectDirectory: inert,

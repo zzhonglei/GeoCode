@@ -578,7 +578,7 @@ dev 脚本或起一个静态服务器);Multi-Run 启动器里的初始化命令�
 `server/geocode/worktree-setup-commands.test.js` 带一个不标 Electron 的对照,证明命令确实走到了执行处。
 
 **没有关掉的是 worktree 本身。** 它是两个会话改同一个项目而不打架的机制,创建入口在聊天输入区而不在设置页;
-「现有工作树」列表照旧显示,因为那是工作树唯一能被看到和删掉的地方——关掉它会让工作树只增不减。
+「现有工作树」列表照旧显示,它是工作树的完整清单,也是删掉它们的入口之一(侧栏的工作树分组也能删)。
 
 **2026-09-07 重判:计划任务、Session Goals、Multi-run / Fusion 与 agent / command 管理表面保留。** 前三样原先和 GitHub 写在同一句里,归类为
 「面向编程工作的」;agent 与 command 管理表面是另一条,归类为「面向编程项目的」。两条都是照抄 OpenChamber

@@ -22,10 +22,8 @@ import { authorizationLayer } from "@/server/routes/instance/httpapi/middleware/
 import { schemaErrorLayer } from "@/server/routes/instance/httpapi/middleware/schema-error"
 import { testEffect } from "./lib/effect"
 
-/* GeoCode: a shell that edited the global config file on disk applies it through
- * `POST /global/dispose` (docs/DESKTOP.md §5.2). The global config layer caches forever, so
- * the dispose has to drop it before the instances go, or the rebuilt instances read the old
- * snapshot back. Harness mirrors test/geo/status-endpoint.test.ts. */
+/* GeoCode: the global config layer caches forever, so a dispose that does not drop it first rebuilds the instances
+ * on the config from before the shell edited the file (docs/DESKTOP.md §5.2). */
 
 const calls: string[] = []
 

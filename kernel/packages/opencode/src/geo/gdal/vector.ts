@@ -8,10 +8,8 @@ import { GdalCache } from "./cache"
 import { GdalInspector } from "./inspector"
 import type { GdalTypes } from "./types"
 
-/* --- GeoCode: producing vector data for the interface (docs/GEOKERNEL.md §7.4).
- *
- * Content and pages arrive in web mercator whatever the source was, so the front end performs no projection
- * arithmetic at all. --- */
+/* --- GeoCode: vector data for the interface, always in web mercator so the front end does no projection arithmetic
+ * (docs/GEOKERNEL.md §7.4). --- */
 
 /**
  * The interface's own rendering limit; both ends must carry the same number (§11). Checked here and not only in
@@ -54,7 +52,6 @@ export class GdalVectorError extends Error {
   }
 }
 
-/** Features out of a GeoJSON document, or undefined when it is not one. */
 export function parseFeatures(document: string): unknown[] | undefined {
   try {
     const parsed = JSON.parse(document)
@@ -66,7 +63,6 @@ export function parseFeatures(document: string): unknown[] | undefined {
   }
 }
 
-/** For the fallback path, where the summary failed and the facts have to come from the features themselves. */
 export function metaFromContent(name: string, document: string): Meta {
   const features = parseFeatures(document) ?? []
   const geometryTypes = new Set<string>()
@@ -108,7 +104,6 @@ interface Layers {
   ) => Effect.Effect<Page, Error, GeoRuntime.Service>
 }
 
-/** Holds the memory layer its page path reads from, so the parsed features outlive the call that produced them. */
 export const make = (): Effect.Effect<Layers, never, never> =>
   Effect.sync(() => {
     // Insertion order is the recency order: re-inserting on read moves an entry to the end, so the first key is oldest.

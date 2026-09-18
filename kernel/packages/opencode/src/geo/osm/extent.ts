@@ -5,13 +5,10 @@ import path from "node:path"
 import { OsmIntersect } from "./intersect"
 import { OsmQuery } from "./query"
 
-/* --- GeoCode: the spatial extent contract (docs/GEOKERNEL.md §6.4).
- *
- * One string, one explicit kind prefix — area, bbox, around, file — and every reduction of a boundary below errs
- * outward, which is the superset rule: too much comes back and can be clipped afterwards, too little is a strip of
- * features near the edge that nobody can see is missing. --- */
+/* --- GeoCode: the spatial extent contract, where every reduction of a boundary errs outward, since too much can be
+ * clipped afterwards and too little is missing without trace (docs/GEOKERNEL.md §6.4). --- */
 
-/** Above this a ring degrades to its convex hull; 300 sits under the server's vertex budget with margin (§6.4). */
+/** Above this a ring degrades to its convex hull; 300 sits under the server's vertex budget with margin. */
 const MAX_POLY_VERTICES = 300
 /** Rings queried individually before falling back to one bounding box over all. */
 const MAX_RINGS = 8
@@ -20,15 +17,10 @@ export type Point = readonly [number, number]
 
 export interface Resolved {
   readonly spatial: OsmQuery.Spatial
-  /** Human-readable, for the caller's report. */
   readonly label: string
   /** True when the query is the boundary asked for, holes aside; false means it covers more ground, never less. */
   readonly exact: boolean
-  /**
-   * The real boundary, so `intersect.ts` can repeat the test the server could not run — `file:` alone today, since
-   * `area:` names a relation whose shape only the server holds, and one extent without a boundary makes the whole
-   * call unfilterable (§6.4).
-   */
+  /** The real boundary for `intersect.ts` to retest against; only `file:` extents carry one. */
   readonly boundary?: readonly OsmIntersect.Polygon[]
 }
 
@@ -117,8 +109,7 @@ function fromFile(value: string, readFile: (file: string) => string): Resolved {
   }
   let document: unknown
   try {
-    // An escape rather than the mark itself, which is invisible in source and would be dropped by anything that
-    // normalizes the file. `JSON.parse` throws on a leading mark.
+    // `JSON.parse` throws on a leading byte order mark, written as an escape because the literal one is invisible.
     document = JSON.parse(raw.replace(/^\uFEFF/, ""))
   } catch {
     throw new Error(`the boundary file is not valid JSON: ${value}`)
@@ -149,8 +140,7 @@ function fromFile(value: string, readFile: (file: string) => string): Resolved {
       filters.push(polygonFilter(deduped))
       continue
     }
-    // A hull, never a line simplifier: simplifiers cut inward, and every metre cut is features that vanish without
-    // trace (§6.4 不使用常规的线简化算法).
+    // A hull, never a line simplifier: simplifiers cut inward, and features near a cut edge vanish without trace.
     approximated = true
     const hull = convexHull(deduped)
     filters.push(hull.length <= MAX_POLY_VERTICES ? polygonFilter(hull) : boundingFilter([ring]))
@@ -193,10 +183,7 @@ function clean(ring: unknown): Point[] {
   )
 }
 
-/**
- * Every polygon in the document, most vertices first, holes included: a study area in separated parts is ordinary,
- * and a hole read as solid ground returns the features of an enclave that was deliberately excluded (§6.4).
- */
+/** Every polygon, holes included: a hole read as solid ground returns an enclave's features deliberately excluded. */
 export function polygons(document: unknown): OsmIntersect.Polygon[] {
   const found: OsmIntersect.Polygon[] = []
   const take = (rings: unknown) => {
@@ -252,7 +239,7 @@ function dropRepeats(ring: readonly Point[]): Point[] {
   return out
 }
 
-/** Andrew's monotone chain, returned as a closed ring that contains every input point by construction (§6.4). */
+/** Andrew's monotone chain, returned as a closed ring that contains every input point by construction. */
 export function convexHull(points: readonly Point[]): Point[] {
   const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1])
   const unique: Point[] = []
@@ -280,7 +267,7 @@ export function convexHull(points: readonly Point[]): Point[] {
   return hull
 }
 
-/** Whether every point lies inside or on the ring — how the tests check the superset rule instead of asserting it. */
+/** Inside or on the ring; the tests check the superset rule with it. */
 export function containsAll(ring: readonly Point[], points: readonly Point[]): boolean {
   return points.every((point) => inside(ring, point))
 }

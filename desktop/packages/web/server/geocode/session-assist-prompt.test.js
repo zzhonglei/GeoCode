@@ -1,5 +1,5 @@
-/* --- GeoCode: the prompt behind a session's recap and suggested next step reaches a model, and the agent it
- * suggests work for is GeoAgent (docs/DESKTOP.md §7.3). --- */
+/* --- GeoCode: the prompt behind a session's recap and suggested next step does not frame the agent as a coding
+ * agent (docs/DESKTOP.md §7.3). --- */
 import { describe, expect, it } from 'vitest';
 
 import { buildAssistSystemPrompt } from '../lib/session-assist/prompt.js';

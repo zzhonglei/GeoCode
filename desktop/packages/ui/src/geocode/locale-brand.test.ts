@@ -1,10 +1,6 @@
-/* --- GeoCode: the product languages name GeoCode wherever the desktop shell shows the text
- * (docs/PATHS.md §3.4, docs/DESKTOP.md §7.3).
- *
- * Dictionaries carry no patch marker and an upstream merge rewrites them silently, so this binds
- * the consequence: any value naming OpenChamber or OpenCode must belong to a key the shell never
- * shows, or to one kept by decision. Whole surfaces are exempt by prefix; the rest are named one by
- * one, so a new upstream string anywhere else fails here until someone decides what it is. --- */
+/* --- GeoCode: a merge that takes upstream's side of the unmarked dictionaries must not name OpenChamber or OpenCode
+ * in text the desktop shell shows; a new such string fails until it is exempted by decision
+ * (docs/PATHS.md §3.4, docs/DESKTOP.md §7.3). --- */
 import { describe, expect, test } from 'bun:test';
 
 import { dict as en } from '../lib/i18n/messages/en';

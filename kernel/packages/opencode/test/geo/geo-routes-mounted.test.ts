@@ -9,9 +9,8 @@ const context = Context.empty() as Context.Context<unknown>
 
 describe("geo routes reach the kernel", () => {
   test("the status face answers through the assembled application", async () => {
-    // Deliberately overlaps status-endpoint.test.ts, which hand-builds its own layer stack and so
-    // says nothing about whether the SERVER can reach the node — it could not once, and every geo
-    // route answered 500 with that test still green.
+    // Deliberately overlaps status-endpoint.test.ts, whose hand-built layer stack stays green when the server
+    // cannot reach the node and every geo route answers 500.
     const response = await HttpApiApp.webHandler().handler(
       new Request(new URL(`http://localhost${GeoPaths.status}`)),
       context,

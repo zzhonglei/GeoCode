@@ -108,9 +108,7 @@ async function cloneRepo({ cloneUrl, identity, tempDir }) {
 }
 
 function getTargetSkillDir({ scope, targetSource, workingDirectory, userSkillDir, skillName }) {
-  // --- GeoCode: the catalog installs into GeoCode's own directories only. Same decision as
-  // `skills.js` `createSkill`, made here too because this is a separate entry point — the
-  // `agents` branches below stay verbatim and are simply never chosen. ---
+  // --- GeoCode: installs only into GeoCode's own directories, a separate entry point from skills.js createSkill ---
   const source = 'opencode';
   /* const source = targetSource === 'agents' ? 'agents' : 'opencode'; */
   // --- /GeoCode ---

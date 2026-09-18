@@ -113,8 +113,7 @@ describe("RuntimeFlags", () => {
       // GeoCode: default flipped to ON, see the block below.
       expect(flags.disableExternalSkills).toBe(true)
       expect(flags.disableLspDownload).toBe(false)
-      // GeoCode: omitted overrides fall through to the Config defaults, which
-      // for the two Claude Code flags are ON.
+      // GeoCode: omitted overrides read the Config defaults, ON for both Claude Code flags.
       expect(flags.disableClaudeCodePrompt).toBe(true)
       expect(flags.disableClaudeCodeSkills).toBe(true)
       expect(flags.enableExa).toBe(false)
@@ -168,10 +167,8 @@ describe("RuntimeFlags", () => {
     }),
   )
 
-  /* --- GeoCode: upstream defaults these OFF; GeoCode defaults them ON so a
-   * launch path that forgets an env var still stays isolated from Claude Code
-   * (src/effect/runtime-flags.ts, docs/PATHS.md §7). The four cases below pin
-   * both the default and the two ways of turning the scanning back on. --- */
+  /* --- GeoCode: red if Claude Code scanning stops being off by default, or if its env vars stop turning it back
+   * on (docs/KERNEL.md §6). --- */
   it.effect("disableClaudeCodePrompt defaults to true", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
@@ -378,8 +375,7 @@ describe("RuntimeFlags", () => {
       // GeoCode: default flipped to ON, same as the two below.
       expect(flags.disableExternalSkills).toBe(true)
       expect(flags.disableLspDownload).toBe(false)
-      // GeoCode: the ignored provider carries no Claude Code keys anyway; these
-      // two read the Config defaults, which are ON.
+      // GeoCode: these two read the Config defaults, which are ON.
       expect(flags.disableClaudeCodePrompt).toBe(true)
       expect(flags.disableClaudeCodeSkills).toBe(true)
       expect(flags.enableExa).toBe(false)

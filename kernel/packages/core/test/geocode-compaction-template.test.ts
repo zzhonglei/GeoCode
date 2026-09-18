@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test"
 import { SessionCompaction } from "../src/session/compaction"
 
-/* GeoCode's `Plan and Rules` section, in a template that reaches the model verbatim and so carries no `GeoCode:`
- * marker of its own (GEOKERNEL.md §10.1 #11, KERNEL.md §5.3). Both branches of `buildPrompt` are exercised: the
- * one with a prior summary is the path every compaction after the first takes. */
+// Guards the Plan and Rules section, which sits inside a template string the model reads verbatim, where no marker
+// can go (GEOKERNEL.md §10.1 #11).
 
 const BRANCHES = [
   ["first compaction", { context: ["[User]: reproject dem.tif to 3826"] }],
@@ -17,8 +16,7 @@ for (const [name, input] of BRANCHES) {
     expect(text).toMatch(/agreed sequence of work.+such as projection.+known to be incomplete/)
     expect(text.indexOf("## Important Details")).toBeLessThan(text.indexOf("## Plan and Rules"))
     expect(text.indexOf("## Plan and Rules")).toBeLessThan(text.indexOf("## Work State"))
-    // The instructions wrapped around the template must not frame the summary as a handover to a coding agent
-    // either — the same consequence opencode/test/geocode-compaction-prompt.test.ts guards for the system prompt.
+    // Nor may the instructions around the template frame the summary as a handover to a coding agent.
     expect(text.toLowerCase()).not.toContain("coding")
   })
 }

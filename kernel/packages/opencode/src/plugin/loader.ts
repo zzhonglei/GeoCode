@@ -13,14 +13,8 @@ import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { trustedPluginSpec } from "./geocode-trusted" // GeoCode: own module
 
-/* --- GeoCode: GeoCode does not load external plugins. Users extend it through MCP, which runs out of process
- * and is authorized per server; a plugin runs inside the kernel with its credentials and file access.
- * `loadExternal` is the single gate both callers pass through, and cutting there rather than in the config
- * layer leaves `plugin` parsing exactly as upstream documents it — the setting is simply inert
- * (docs/PATHS.md §7).
- *
- * Annotated `boolean` on purpose: as a `false` literal the typechecker would treat the rest of `loadExternal`
- * as unreachable and stop narrowing inside it. --- */
+/* --- GeoCode: no external plugins, cut in `loadExternal`, which both callers pass, so `plugin` config still parses
+ * (docs/KERNEL.md §6); typed `boolean` so the code after the cut still typechecks as reachable. --- */
 const EXTERNAL_PLUGINS_ENABLED: boolean = false
 
 export namespace PluginLoader {
@@ -217,9 +211,8 @@ export namespace PluginLoader {
   // once after the caller finishes preparing dependencies. Once dynamic import runs, failures are
   // treated as permanent for this process because Bun caches failed module resolution.
   export async function loadExternal<R = Loaded>(input: Input<R>): Promise<R[]> {
-    // --- GeoCode: external plugins stay off. The one exception is the browser tool file the desktop's
-    // main process writes and names at start-up, and only that exact path (plugin/geocode-trusted.ts);
-    // it goes through the same resolve, import and finish steps as any plugin would. ---
+    // --- GeoCode: the one plugin loaded is the desktop's agent tool file at its exact path
+    // (plugin/geocode-trusted.ts), through the same steps as any other plugin ---
     if (!EXTERNAL_PLUGINS_ENABLED) {
       const trusted = trustedPluginSpec({ kind: input.kind })
       if (!trusted) return []

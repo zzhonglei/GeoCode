@@ -20,10 +20,8 @@ export { OsmIntersect } from "./intersect"
 export { OsmQuery } from "./query"
 export { OsmSearch } from "./search"
 
-/* --- GeoCode: the four OSM capabilities, as one workflow — find, count, then download (docs/GEOKERNEL.md §6.8).
- *
- * No status slot and no gate: nothing here has an environment to be ready, so each call solves its own reliability
- * and reports what degraded in its own result (§6.2). --- */
+/* --- GeoCode: the OSM capabilities, with no status slot and no gate: each call solves its own reliability and
+ * reports what degraded in its own result (docs/GEOKERNEL.md §6.2). --- */
 
 const MAX_EXTENTS = 12
 /** Also what `tool/geo-osm-report.ts` caps a lost-id list at, since re-fetching that list is one call to here. */
@@ -32,12 +30,7 @@ const TAG_STATS_SAMPLE_LIMIT = 10_000
 /** Not tunable, and not small: the sample cap bounds what comes BACK, not the work the server does to find it. */
 const RECON_TIMEOUT_SEC = 90
 
-/**
- * How long the SERVER may spend on one extent, caller-controlled because only the caller knows the area.
- *
- * An over-budget query answers with a normal response carrying a remark, not with an error (§6.3 第四种失败), so
- * retrying it unchanged returns the same partial answer, and the floor keeps a caller from asking for one outright.
- */
+/** Server seconds per extent; the floor exists because an over-budget query answers partially, not with an error. */
 const DEFAULT_TIMEOUT_SEC = 120
 const MIN_TIMEOUT_SEC = 30
 
@@ -52,10 +45,7 @@ function serverBudget(requested: number | undefined): number {
 
 export interface SearchResult {
   readonly candidates: readonly OsmSearch.Candidate[]
-  /**
-   * Raw hits per engine, counted before the merge and before the ones with no usable identity were discarded —
-   * zero from one beside a full list from the other is what makes half an answer visible (§6.8 任一单独使用都会漏).
-   */
+  /** Raw hits per engine before the merge, so zero from one beside a full list from the other shows half an answer. */
   readonly engines: { readonly geocoder: number; readonly features: number }
   /** What degraded, in the caller's words. Never fatal on its own. */
   readonly notes: readonly string[]
@@ -73,10 +63,7 @@ export interface Failure {
   readonly reason: string
 }
 
-/**
- * An extent whose answer arrived complete-looking but is not, carrying the service's own words: they are the
- * difference between "raise the budget" and "this query is too broad to ask at all" (§6.3 第四种失败).
- */
+/** The service's own words, which tell "raise the budget" apart from "this query is too broad to ask at all". */
 export interface Incomplete {
   readonly extent: string
   readonly remark: string
@@ -100,15 +87,9 @@ export interface DistributionResult {
   readonly truncated: boolean
   readonly failed: readonly Failure[]
   readonly incomplete: readonly Incomplete[]
-  /**
-   * Not `asked - failed.length`: a cancelled run leaves the extents it never reached in neither list. `count`
-   * reads it off `perExtent`; an aggregate answer has to carry it.
-   */
+  /** Not `asked - failed.length`: a cancelled run leaves the extents it never reached in neither list. */
   readonly answered: number
-  /**
-   * False when an extent was widened, and unlike a download this cannot be narrowed back afterwards: `out tags`
-   * returns no geometry to retest against the real boundary, so the values found only in the hull stay (§6.4).
-   */
+  /** False when an extent was widened: `out tags` returns no geometry to narrow back against the real boundary. */
   readonly exact: boolean
 }
 
@@ -132,22 +113,14 @@ export interface DownloadResult {
   readonly duplicates: number
   /** Features collapsed from an area or line to a point, in centroid mode. */
   readonly centroidConverted: number
-  /**
-   * False only on a call MIXING boundary files with other extent kinds: with every boundary in hand the download
-   * narrows itself back (`intersect.ts`), while an `area:` among them makes narrowing wrong, since the features
-   * that extent legitimately holds outside the files would be the ones deleted (§6.4).
-   */
+  /** False only when widened boundary files are mixed with other extent kinds, which narrowing would cut into. */
   readonly exact: boolean
   /** Empty whenever `exact`. Named, because asking for that one boundary on its own is the route back to exact. */
   readonly widened: readonly string[]
   readonly notes: readonly string[]
 }
 
-/**
- * Runs even when extents failed — partial results beat discarding everything on a multi-area download (§6.7) — and
- * as a FAILURE rather than a defect: `OsmOutput.write` throws on a full disk or an unwritable path, and a throw
- * inside `Effect.gen` lands outside the error type every caller of this module handles.
- */
+/** Writes even when extents failed, through `checked` because `OsmOutput.write` throws on a disk or path error. */
 function writeIfAny(
   output: string,
   features: readonly OsmConvert.Feature[],
@@ -162,10 +135,7 @@ function writeIfAny(
   })
 }
 
-/**
- * The query builders refuse malformed input by throwing, which is right for pure functions and a defect inside
- * `Effect.gen` — a mistyped type list would crash the caller rather than come back as the sentence naming the fix.
- */
+/** A throw inside `Effect.gen` is a defect outside every caller's error type; this makes it a failure instead. */
 function checked<A>(thunk: () => A): Effect.Effect<A, Error> {
   return Effect.try({
     try: thunk,
@@ -181,10 +151,7 @@ function keptFieldsOf(policy: OsmConvert.FieldPolicy): string[] {
   ]
 }
 
-/**
- * Called as a download settles each unit it can count — an extent, or an object. `settled` is not `extentsDone`:
- * it counts failures too, so a run whose extents are all timing out does not sit at 0 of 5 while working (§6.2).
- */
+/** `settled` counts failures too, unlike `extentsDone`, so a run of timeouts does not sit at 0 while working. */
 export type OnProgress = (settled: number, total: number) => Effect.Effect<void>
 
 export interface Interface {
@@ -198,7 +165,7 @@ export interface Interface {
     readonly extents: readonly string[]
     readonly tags: readonly string[]
     readonly types?: string
-    /** Server-side seconds per extent. Raise it for dense areas (§6.3). */
+    /** Server-side seconds per extent. */
     readonly timeoutSec?: number
     readonly abort?: AbortSignal
   }) => Effect.Effect<CountResult, Error>
@@ -221,9 +188,8 @@ export interface Interface {
     readonly output: string
     readonly types?: string
     readonly fields?: readonly string[]
-    /** "original" keeps geometry as mapped; "centroid" collapses to points. */
     readonly geometry?: "original" | "centroid"
-    /** Server-side seconds per extent. Raise it for dense areas (§6.3). */
+    /** Server-side seconds per extent. */
     readonly timeoutSec?: number
     readonly abort?: AbortSignal
     readonly onProgress?: OnProgress
@@ -257,8 +223,7 @@ const layer = Layer.effect(
         const notes: string[] = []
         const candidates = new Map<string, OsmSearch.Candidate>()
 
-        // Both at once: `client.ts` keeps a separate throttle clock per service, so a search costs the slower of
-        // the two rather than their sum. Neither may fail the call — their recall sets barely overlap (§6.8).
+        // Both at once, since `client.ts` throttles each service on its own clock; neither may fail the call.
         const [geocoded, literal] = yield* Effect.all(
           [
             Effect.result(
@@ -294,8 +259,7 @@ const layer = Layer.effect(
           if (literal.success.remark) notes.push(`the feature service reported: ${literal.success.remark}`)
           elements = (literal.success.json as any).elements ?? []
         } else if (input.category) {
-          // A category-constrained global name search can exhaust the server's own budget, so the retry drops the
-          // constraint — and filters on the KEY alone, so a `category` of `k=v` comes back wider (§6.8 降级路径).
+          // The retry drops the category from the query and filters on its key alone, so a `k=v` comes back wider.
           const retry = yield* Effect.result(
             client.overpass(OsmQuery.nameSearch({ query: input.query, timeoutSec: 60 }), {
               abort: input.abort,
@@ -337,7 +301,7 @@ const layer = Layer.effect(
           }
         }
 
-        // Nothing area-like came back, so the geocoder's canonical name is tried as a better literal query (§6.8).
+        // Nothing area-like came back, so the geocoder's canonical name is tried as a better literal query.
         if (!OsmSearch.hasArea(candidates.values()) && hits.length > 0) {
           const names = [...new Set(hits.map(OsmSearch.canonicalName).filter((n): n is string => !!n))].slice(0, 3)
           if (names.length > 0) {
@@ -359,7 +323,6 @@ const layer = Layer.effect(
               }
               notes.push(`recovered area candidates through the canonical name: ${names.join(" / ")}`)
             }
-            // Best effort throughout: a failed recovery changes nothing.
           }
         }
 
@@ -462,8 +425,7 @@ const layer = Layer.effect(
           answered += 1
           if (outcome.success.remark) incomplete.push({ extent: spec, remark: outcome.success.remark })
           const elements: any[] = (outcome.success.json as any).elements ?? []
-          // The cap is applied per query, so truncation is per-extent: against the summed `sampled` below, three
-          // complete answers of four thousand would read as one partial answer.
+          // Per extent, as the cap is per query: testing the summed `sampled` would flag complete answers as truncated.
           if (elements.length >= TAG_STATS_SAMPLE_LIMIT) truncated = true
           for (const element of elements) {
             const value = element.tags?.[input.key]
@@ -515,14 +477,12 @@ const layer = Layer.effect(
         const droppedFields = new Map<string, number>()
         let missing = [...refs]
 
-        // One batched query with geometry inlined. The per-object loop below is the fallback and stitches across
-        // sibling elements, the form that goes partial on large relations — so its output is checked below (§6.6).
+        // Batched with geometry inlined; the per-object fallback stitches sibling elements, so it checks its relations.
         const batched = yield* Effect.result(
           client.overpass(OsmQuery.objects({ refs, timeoutSec: 120 }), { abort: input.abort, timeoutMs: 150_000 }),
         )
         if (batched._tag === "Success") {
-          // A batch of large boundaries is exactly the query that exhausts the server's budget, and the objects it
-          // then drops fall through to the fallback — whose troubles must not read as a problem with the objects.
+          // Recorded against the batch, not the objects: whatever it dropped falls through to the fallback below.
           if (batched.success.remark) {
             incomplete.push({ extent: "the batched fetch", remark: batched.success.remark })
           }
@@ -540,15 +500,13 @@ const layer = Layer.effect(
           notes.push(`the batched fetch failed (${batched.failure.message}); falling back to one request per object`)
         }
 
-        // Progress opens at whatever the batch already settled, over what the caller asked for — ids that never
-        // parsed included, so the denominator here and `extentsAsked` below stay the same number.
+        // Over every id asked for, unparsed ones included, so this denominator and `extentsAsked` stay equal.
         const settleable = input.ids.length
         let settled = settleable - missing.length
         if (input.onProgress) yield* input.onProgress(settled, settleable)
 
         for (const ref of [...missing]) {
-          // Stop rather than let every remaining object add its own "cancelled" entry — a failure list that long
-          // reads as a service problem instead of a user pressing stop.
+          // Stop, or every remaining object adds a "cancelled" failure that reads as a service problem.
           if (input.abort?.aborted) break
           const single = yield* Effect.result(client.osmApi(ref.type, ref.id, { abort: input.abort }))
           // Before the four branches below, every one of which leaves this object settled.
@@ -624,8 +582,7 @@ const layer = Layer.effect(
         const droppedFields = new Map<string, number>()
         let exact = true
         let done = 0
-        // Seeded from the extents that never parsed, and announced before the first request: a one-extent download
-        // would otherwise report nothing at all until it was already over.
+        // Announced before the first request, or a one-extent download reports nothing until it is already over.
         let settled = failed.length
         if (input.onProgress) yield* input.onProgress(settled, input.extents.length)
 
@@ -642,8 +599,7 @@ const layer = Layer.effect(
               { abort: input.abort, timeoutMs: clientBudgetMs(budget) },
             ),
           )
-          // Before the `continue` below: an extent that failed is one nobody waits on, and skipping it here would
-          // stall the count on exactly the runs that take longest.
+          // Before the `continue` below, or failed extents stall the count on exactly the runs that take longest.
           settled += 1
           if (input.onProgress) yield* input.onProgress(settled, input.extents.length)
           if (outcome._tag === "Failure") {
@@ -662,14 +618,10 @@ const layer = Layer.effect(
         let features = OsmConvert.dedupe(collected)
         const duplicates = collected.length - features.length
 
-        /* The boundary test the server could not run, run here (§6.4). Before the centroid collapse, and not
-         * cosmetically: a road crossing the city line is judged by its whole geometry here, where judged by the
-         * point it is about to become it would take its inside half with it. All extents or none — one `area:`
-         * among them and the answer legitimately holds features outside every boundary we hold — and the filter
-         * is their UNION, since an exact extent left out of it loses its features to its neighbours' boundaries.
-         */
+        // Before the centroid collapse, so a feature crossing the boundary is judged by its whole geometry.
         const boundaries = resolved.map(({ extent }) => extent.boundary)
         if (!exact && boundaries.every((boundary) => boundary !== undefined)) {
+          // The union of every boundary, exact ones included, or an exact extent loses features to its neighbours.
           const idx = OsmIntersect.index(boundaries.flatMap((boundary) => boundary!))
           features = features.filter((feature) => OsmIntersect.intersects(feature.geometry, idx))
           exact = true
@@ -680,8 +632,6 @@ const layer = Layer.effect(
           const normalized = OsmCentroid.normalize(features)
           unassembled.push(...normalized.dropped)
           features = normalized.features
-          // How many were areas or lines before this — i.e. how much of the answer asking for `node` alone would
-          // have missed (§6.8 几何归一化).
           centroidConverted = features.filter((feature) => feature.properties.original_geometry).length
         }
 

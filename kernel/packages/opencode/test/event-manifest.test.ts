@@ -15,9 +15,7 @@ describe("public event manifest", () => {
     expect(EventManifest.Latest.has("ide.installed")).toBe(false)
     expect(EventManifest.Latest.has("server.connected")).toBe(true)
     expect(EventManifest.Latest.has("global.disposed")).toBe(true)
-    // GeoCode: tripwire for injection point 1 (docs/GEOKERNEL.md §10.1). An
-    // upstream merge that drops the geo registration fails here rather than at
-    // runtime, where it would look like a silently dead status indicator.
+    // GeoCode: a merge that drops the geo events otherwise shows only as a status indicator that never updates.
     expect(EventManifest.Latest.has("geo.qgis.status")).toBe(true)
     expect(EventManifest.Latest.has("geo.gee.status")).toBe(true)
     expect(EventManifest.Latest.has("geo.gdal.status")).toBe(true)

@@ -8,10 +8,8 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 import { OsmReport } from "./geo-osm-report"
 import DESCRIPTION from "./geo-osm-features.txt"
 
-/* --- GeoCode: OsmGetFeatures, the bulk download (docs/TOOLS.md §3, GEOKERNEL §6.4, §6.7, §6.8). A file of the
- * wrong features looks exactly like a file of the right ones, so two of the report's lines are data contracts: a
- * widened boundary leaves the result a superset of what was asked for (§6.4), and the centroid count measures what
- * a point-only query would have missed (§6.8). --- */
+/* --- GeoCode: OsmGetFeatures, the bulk download (docs/TOOLS.md §3). A file of the wrong features looks like one of
+ * the right ones, so the widening caveat and the centroid count are data contracts (GEOKERNEL §6.4, §6.8). --- */
 
 export const Parameters = Schema.Struct({
   extents: Schema.Array(Schema.String).annotate({
@@ -45,10 +43,8 @@ export const Parameters = Schema.Struct({
 })
 
 /**
- * Setting `truncated` at all skips upstream's truncation (tool.ts), and false is honest: the features go to disk,
- * so the output follows the extent count and the dropped tag keys, never the feature count (docs/TOOLS.md §5.2).
- * Failures are `error_code`, never `error: true`, which means an environment is not ready and this group has none
- * to be (§6.2).
+ * Setting `truncated` skips upstream's truncation, and false holds because the features go to disk (docs/TOOLS.md
+ * §5.2). Failures use `error_code`, never `error: true`, which means an environment is not ready.
  */
 type Metadata = {
   [key: string]: unknown
@@ -64,8 +60,7 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context<Metadata>,
     ) {
-      // Resolved here rather than left to the kernel: `osm/output.ts` hands the path straight to `mkdirSync`, so a
-      // relative one would land against the process cwd instead of the instance directory (§4.3).
+      // Resolved here: the kernel would resolve a relative path against the process cwd, not the instance directory.
       const instance = yield* InstanceState.context
       let filepath = params.output
       if (!path.isAbsolute(filepath)) filepath = path.resolve(instance.directory, filepath)
@@ -78,9 +73,7 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
         metadata: { truncated: false, error_code: "InvalidParameters", failed: true } as Metadata,
       })
 
-      // Both refused rather than answered, because the kernel would answer them: it bounds the extent count and
-      // nothing else, so an empty extent list loops zero times and an empty tag list builds an empty union — either
-      // way zero features come back, which is what an area holding none of this category looks like.
+      // Refused here: the kernel would return zero features, which reads as an area holding none of this category.
       if (params.extents.length === 0) {
         return refuse('"extents" is empty — name at least one area to download from.')
       }
@@ -88,9 +81,7 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
         return refuse('"tags" is empty — name at least one tag filter, e.g. ["amenity=hospital"].')
       }
 
-      // Before the call, because the call is what writes: `downloadFeatures` creates directories and files, and a
-      // "file:" extent reads a boundary off disk on the way there. The pattern is worktree-relative, the form every
-      // path rule in this product is written against (§4.3).
+      // Asked before the call, which writes files and can read a boundary file; the pattern is worktree-relative.
       yield* ctx.ask({
         permission: "osm",
         patterns: [title],
@@ -98,8 +89,7 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
         metadata: { extents: params.extents, tags: params.tags, output: filepath },
       })
 
-      // Then the boundary — after the capability and after the refusals above, so neither a malformed call nor one
-      // from an agent without `osm` ever raises a prompt about a directory (the order OsmGetObjects explains).
+      // The boundary guard after the capability, so an agent denied `osm` is never asked about a directory.
       yield* assertExternalDirectoryEffect(ctx, filepath)
 
       const outcome = yield* Effect.result(
@@ -112,7 +102,7 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
           geometry: params.geometry,
           timeoutSec: params.timeout,
           abort: ctx.abort,
-          // The reserved per-unit channel (§6.2). `extents_settled` counts failures too; `extents_done` does not.
+          // `extents_settled` counts failures too; `extents_done` does not.
           onProgress: (settled, total) =>
             ctx.metadata({
               title,
@@ -120,17 +110,14 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
             }),
         }),
       )
-      // Whole-call mistakes only — more extents than one call takes, a tag or type list the builder cannot parse.
-      // Per-extent trouble arrives as `failed`, beside a file holding everything else.
+      // The error channel carries whole-call mistakes only; per-extent trouble arrives in `failed`.
       if (outcome._tag === "Failure") return refuse(outcome.failure.message)
 
-      // No clipping here: where a widened boundary can be narrowed back the kernel does it before writing and
-      // before counting (§6.4, `osm/intersect.ts`), and where it cannot, `exact` below says so.
+      // No clipping here: the kernel narrows what it can before writing, and `exact` reports what it could not.
       const result = outcome.success
 
       const lines = OsmReport.caveats(result, {
         lostNoun: "element",
-        // Named because this caller can act on it: an agent holding the `osm` key holds OsmGetObjects too.
         lostRemedy: "Fetch the ones that matter with OsmGetObjects.",
         cancelled: ctx.abort.aborted
           ? "cancelled — extents not reached before it stopped were neither downloaded nor listed above."
@@ -140,8 +127,7 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
 
       const asked = result.extentsAsked
       if (result.outputs.length === 0) {
-        // Two cases the kernel's "no file was written" note cannot separate, and they ask for opposite responses:
-        // a service that never answered is retried, a service that answered with nothing means the tags are wrong.
+        // Split because the fixes are opposite: retry extents that never answered, change tags when all answered empty.
         lines.push(
           result.extentsDone === asked
             ? `All ${asked} extent(s) answered, and nothing in them matched these tags.`
@@ -162,8 +148,6 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
       }
 
       lines.push(...OsmReport.files(result, `${result.features} feature(s)`), ...OsmReport.fields(result))
-      // With the facts rather than the caveats — the extents that did not finish are already named above — and only
-      // above one extent, since a single one makes this restate the line before it.
       if (asked > 1) {
         lines.push(
           `Extents: ${result.extentsDone} of ${asked} completed` +
@@ -171,15 +155,13 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
         )
       }
       if (result.centroidConverted > 0) {
-        // What a point-only query would have missed — often most of the answer (§6.8).
         lines.push(
           `Centroid mode: ${result.centroidConverted} area or line feature(s) collapsed to a representative point` +
             ' (their original type is in "original_geometry").',
         )
       }
 
-      // `incomplete` counts: the kernel raises `extentsDone` for an extent that answered early and leaves it out of
-      // `failed`, so without this a short answer reads as a whole one (§6.3).
+      // `incomplete` counts: an extent that answered early is in `extentsDone` and not in `failed`.
       const partial =
         result.extentsDone < asked ||
         result.unassembled.length > 0 ||
@@ -203,8 +185,6 @@ export const OsmGetFeaturesTool = Tool.define<typeof Parameters, Metadata, GeoOs
           unassembled: result.unassembled,
           duplicates: result.duplicates,
           centroid_converted: result.centroidConverted,
-          // False means the file covers more ground than the extents asked for; the caveat above names which
-          // boundary was widened.
           exact: result.exact,
           ...(partial ? { partial: true } : {}),
         } as Metadata,

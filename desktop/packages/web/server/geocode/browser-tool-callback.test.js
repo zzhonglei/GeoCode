@@ -1,10 +1,5 @@
 /* --- GeoCode: the callback route accepts the token the main process minted, for the two tools the
- * desktop injects and each one's own actions (docs/DESKTOP.md §7.2).
- *
- * Driven over a real loopback socket, because `authorize` checks the peer address as well as the
- * bearer token. Under Electron the runtime adopts the token from its environment; a call carrying
- * that token still reaches only the calling tool's actions. The control run without the Electron
- * mark keeps upstream's behaviour: no token was ever issued, so the route answers 401. --- */
+ * desktop injects and each one's own actions (docs/DESKTOP.md §7.2). --- */
 import { afterEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import request from 'supertest';
@@ -85,8 +80,7 @@ describe('agent tool callback under Electron', () => {
   it('answers a name it cannot resolve with the actions of the calling tool alone', async () => {
     process.versions.electron = '0.0.0-test';
     const { app, executed } = createApp({ OPENCHAMBER_AGENT_TOOL_TOKEN: TOKEN });
-    // Upstream answers an unresolved name by listing every action it knows, which here would
-    // advertise the memory surface the desktop leaves closed, and the other tool's actions.
+    // Upstream would list every action it knows, the closed memory actions and the other tool's included.
     const cases = [
       { tool: 'browser', listed: 'browser.click', absent: ['session.', 'schedule.', 'memory.', 'projects.', 'models.'] },
       { tool: 'geocode', listed: 'session.create', absent: ['browser.', 'memory.'] },

@@ -1,13 +1,5 @@
-/* --- GeoCode: strings that describe a behaviour the shell changed must not describe
- * upstream's (docs/DESKTOP.md §5.2, §7.2, §7.3).
- *
- * Each binding below is a behaviour that differs from upstream, with the strings that name it:
- * applying settings refreshes the embedded kernel instead of restarting a process; the update
- * button opens the release page instead of downloading; GeoCode is a desktop app with no web page,
- * phone or server; and a few features upstream mentions are closed. The
- * dictionaries carry no patch marker, so a merge that takes upstream's side reverts the strings
- * silently and every other test stays green. This asserts the consequence, never the wording:
- * a string may say anything except the thing the shell no longer does. --- */
+/* --- GeoCode: a merge that takes upstream's side of the unmarked dictionaries must not bring back strings that
+ * promise what the shell does not do (docs/DESKTOP.md §5.2, §7.2, §7.3). --- */
 import { describe, expect, test } from 'bun:test';
 
 import { dict as en } from '../lib/i18n/messages/en';

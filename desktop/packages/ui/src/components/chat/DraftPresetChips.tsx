@@ -342,7 +342,6 @@ const DraftPresetChipsContent: React.FC<DraftPresetChipsProps> = ({ onSubmit, cl
                         onRemove={(item) => removeStarter('project', item.ref)}
                         onToggleShared={
                             // GeoCode: the entrance to the repository file, closed (geocode/repository-sharing-surface.ts).
-                            // Passing nothing is what drops the chip's hover button; StarterGroup takes the prop as optional.
                             !REPOSITORY_SHARING_OFFERED ? undefined : (item) => (item.shared ? unshareStarter(item.ref) : shareStarter(item.ref))
                         }
                         hideRemove={isMobile}

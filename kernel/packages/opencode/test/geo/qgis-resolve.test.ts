@@ -10,8 +10,7 @@ import { QgisProbe } from "@/geo/qgis/probe"
 import { QgisResolve } from "@/geo/qgis/resolve"
 import { QgisWindows } from "@/geo/qgis/windows"
 
-/* QGIS environment resolution (docs/GEOKERNEL.md §4.3–§4.6, §4.10), on a synthetic bundle carrying the traps of a
- * real 3.44 install and on `path.win32` for the Windows logic, which is pure. */
+/* QGIS environment resolution (docs/GEOKERNEL.md §4.3–§4.6, §4.10). */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-qgis-"))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
@@ -110,7 +109,6 @@ describe("qgis macos resolution", () => {
     const second = QgisMacOS.ensurePythonHome(interpreter, stdlib)
     expect(second).toBe(first!)
 
-    // The user reinstalls somewhere else: the link must follow, not linger.
     const moved = makeBundle("QGIS-LTR.app")
     const movedStdlib = path.join(moved, "Contents", "Resources", "python3.11")
     QgisMacOS.ensurePythonHome(interpreter, movedStdlib)
@@ -175,7 +173,6 @@ describe("qgis windows pure logic", () => {
     const adopted = QgisWindows.adoptBridgeDump(base, "C:\\OSGeo4W")!
     // The launcher is the authority on the interpreter; the hint stops mattering.
     expect(adopted.interpreter).toBe("C:\\OSGeo4W\\apps\\Python312\\python.exe")
-    // The prefix comes back in native separators for our own bookkeeping.
     expect(adopted.prefix).toBe("C:\\OSGeo4W\\apps\\qgis-ltr")
     // Overlay 1: the encoding trio a launcher built for interactive use never sets.
     expect(adopted.env.PYTHONUTF8).toBe("1")
@@ -188,7 +185,6 @@ describe("qgis windows pure logic", () => {
 })
 
 describe("qgis probe grading", () => {
-  /** A runtime whose subprocess "runs" are scripted per call. */
   function stubRuntime(results: Partial<GeoRuntime.Result>[]): GeoRuntime.Interface {
     let call = 0
     return {
@@ -266,7 +262,6 @@ describe("qgis probe grading", () => {
     if (!outcome.ok) {
       expect(outcome.failure).toBe("probe-failed")
       expect(outcome.startupCrash).toBe(true)
-      // §4.6: the script never reached its emit, so what the interpreter printed is the only evidence there is.
       expect(outcome.detail).toContain("platform independent libraries")
       expect(outcome.detail).toContain("init_fs_encoding")
     }
@@ -274,7 +269,7 @@ describe("qgis probe grading", () => {
 
   test("a marker that will not parse is not called a startup crash", async () => {
     // Grading this as a startup crash drops the parse error and trips resolve.ts's unknown-layout retry, which is
-    // keyed on exactly that flag (§4.6 keeps 无标记 and 标记内容非法 apart).
+    // keyed on exactly that flag (§4.6).
     const runtime = stubRuntime([{ stdout: `${QgisProbe.MARKER}{definitely not json` }])
     const outcome = await Effect.runPromise(QgisProbe.run(runtime, "python", {}, []))
     expect(outcome.ok).toBe(false)
@@ -295,7 +290,6 @@ describe("qgis probe grading", () => {
 })
 
 describe("qgis resolve orchestration", () => {
-  /** A runtime that scripts each probe call and records the env it was given. */
   function recordingRuntime(results: Partial<GeoRuntime.Result>[]) {
     const seen: Record<string, string>[] = []
     const runtime: GeoRuntime.Interface = {
@@ -332,8 +326,8 @@ describe("qgis resolve orchestration", () => {
   test.skipIf(process.platform === "win32")(
     "an unknown layout is rescued by the deep search and one retry",
     async () => {
-      // The standard library sits deeper than Resources/python3.NN, so layout detection misses it, assembly sets
-      // no PYTHONHOME and the first probe dies at startup — the only road left is the §4.6 fallback.
+      // The standard library sits deeper than Resources/python3.NN, so layout detection misses it and only the
+      // §4.6 fallback can rescue the probe.
       const bundle = path.join(root, "QGIS-Unknown.app")
       const macos = path.join(bundle, "Contents", "MacOS")
       fs.mkdirSync(macos, { recursive: true })
@@ -397,7 +391,6 @@ describe("qgis resolve orchestration", () => {
     expect(resolution.ok).toBe(false)
     if (!resolution.ok) {
       expect(resolution.failure).toBe("probe-failed")
-      // §4.6: the script never spoke, so `diagnostics.output` carries the interpreter's own complaint intact.
       expect(resolution.diagnostics.output).toContain("init_fs_encoding")
     }
   })

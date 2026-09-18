@@ -55,7 +55,6 @@ describe("machine.json config", () => {
       yield* config.reload()
       const before = yield* config.snapshot()
 
-      // What format-on-save produces: same values, reordered keys, new whitespace, an editor comment.
       yield* write(`{
   // reordered and commented by the editor
   "qgis": "/Applications/QGIS-LTR.app",
@@ -198,8 +197,7 @@ describe("machine.json config", () => {
       yield* write(JSON.stringify({ qgis: "/old.app" }))
       yield* config.reload()
 
-      // Two reloads in flight over a file that changed between them. This pins the invariant — the record ends
-      // up agreeing with the file whichever way they interleave — not the ordering, which nothing here can force.
+      // Nothing here can force the interleaving, so this pins only that the record ends up agreeing with the file.
       const first = yield* Effect.forkScoped(config.reload())
       yield* write(JSON.stringify({ qgis: "/new.app" }))
       const second = yield* Effect.forkScoped(config.reload())

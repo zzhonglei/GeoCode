@@ -8,12 +8,7 @@ import { HttpApiApp } from "@/server/routes/instance/httpapi/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
-/* The preview endpoints, through the real route tree (docs/GEOKERNEL.md §7.7, §7.8).
- *
- * The toolchain is deliberately absent — the test data directory is isolated,
- * so no `machine.json` names a GDAL — which is what makes the ordering visible:
- * a request that never should have been allowed must be refused BEFORE the
- * environment gets a say. */
+/* The preview endpoints, through the real route tree (docs/GEOKERNEL.md §7.7, §7.8). */
 
 const context = Context.empty() as Context.Context<unknown>
 

@@ -17,7 +17,6 @@ export function allExisting(candidates: readonly (string | undefined)[]): string
   return unique(candidates).filter((candidate) => existsSync(candidate))
 }
 
-/** Directory entries, or nothing when the directory is unreadable. */
 export function entries(directory: string) {
   try {
     return readdirSync(directory, { withFileTypes: true })
@@ -26,23 +25,19 @@ export function entries(directory: string) {
   }
 }
 
-/** Subdirectories of `directory`, as full paths. */
 export function subdirectories(directory: string): string[] {
   return entries(directory)
     .filter((entry) => entry.isDirectory())
     .map((entry) => path.join(directory, entry.name))
 }
 
-/** §4.3 principle 4 — validate the payload, not the container: a projection directory needs its database. */
 export function hasProjectionDatabase(directory: string): boolean {
   return existsSync(path.join(directory, "proj.db"))
 }
 
 /**
- * Offer `accept` every prefix of `hint`, and answer with the first value it returns.
- *
- * Left to right, so the outermost prefix `accept` takes wins: a `.app` inside an accepted one never gets a turn.
- * The first call on an absolute path carries an empty prefix and an empty segment.
+ * The first value `accept` returns over the prefixes of `hint`, outermost first, so a `.app` inside an accepted one
+ * never gets a turn. A leading separator makes the first call's prefix and segment both empty.
  */
 export function scanSegments(hint: string, accept: (prefix: string, segment: string) => string | undefined) {
   const normalized = path.normalize(hint)

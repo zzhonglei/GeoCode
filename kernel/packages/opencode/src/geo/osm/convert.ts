@@ -3,8 +3,8 @@ export * as OsmConvert from "./convert"
 import osm2geojson from "osm2geojson-lite"
 import { OsmQuery } from "./query"
 
-/* --- GeoCode: OSM elements into features (docs/GEOKERNEL.md §6.6). Assembly is the library's; what is here is
- * picking out the feature that was asked for, the field set, and the check for a partial assembly. --- */
+/* --- GeoCode: OSM elements into features; assembly is the library's, the field set and its checks are ours
+ * (docs/GEOKERNEL.md §6.6). --- */
 
 /** Classification keys in priority order — a category is the first one present. */
 const CLASS_KEYS = [
@@ -130,8 +130,8 @@ function tally(target: Map<string, number>, keys: readonly string[]) {
 }
 
 /**
- * One element per call, which `out geom` allows because each carries its geometry inline. Handed the whole set, the
- * library lets elements consume one another, and a relation that will not assemble takes its members with it (§6.6).
+ * One element per call, which `out geom` allows because each carries its geometry inline: handed the whole set,
+ * the library lets a relation that will not assemble take its members with it.
  */
 export function convertElements(raw: unknown, policy: FieldPolicy): Converted {
   const elements: any[] = (raw as any)?.elements ?? []
@@ -164,10 +164,7 @@ export function convertElements(raw: unknown, policy: FieldPolicy): Converted {
   return { features, unassembled, droppedFields }
 }
 
-/**
- * Only ever for one object, because the interference above applies to any batch. Used on the OSM API's `/full`
- * response, where a relation's geometry sits in sibling elements and element-by-element assembles nothing at all.
- */
+/** Only for one object's `/full` response, whose geometry sits in sibling elements `convertElements` cannot join. */
 export function convertBatch(
   raw: unknown,
   policy: FieldPolicy,
@@ -199,11 +196,7 @@ export function countVertices(geometry: any): number {
   return walk(geometry?.coordinates)
 }
 
-/**
- * A partial boundary is still a shape nothing downstream can question, so a large one is checked against the nodes
- * it was built from. Small objects are exempt and the ratio is generous because the two counts never line up
- * exactly — only a shortfall big enough to mean whole segments went missing counts (§6.6 大型关系的装配校验).
- */
+/** Loose on purpose: vertex and node counts never line up exactly, so only a shortfall of whole segments fails. */
 export function assemblyLooksComplete(geometry: any, rawNodeCount: number): boolean {
   if (rawNodeCount <= 50) return true
   return countVertices(geometry) >= rawNodeCount * 0.5

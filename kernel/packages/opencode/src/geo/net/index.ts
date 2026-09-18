@@ -16,18 +16,15 @@ export { NetRedact } from "./redact"
 export { NetRoute } from "./route"
 export * from "./types"
 
-/* --- GeoCode: the Net module of GeoKernel's infrastructure layer (docs/GEOKERNEL.md §3.3), the only place network
- * reachability is decided — capability modules read the conclusion and reproduce none of it (§8.3). --- */
+/* --- GeoCode: the only place network reachability is decided; capability modules read the conclusion and reproduce
+ * none of it (docs/GEOKERNEL.md §3.3). --- */
 
 export interface Change {
   readonly target: string
   readonly state: Reachability
 }
 
-/**
- * Both failure sites build their verdict here, so neither can omit `tried` or `skipped` — the two optional fields,
- * whose absence nothing else would report.
- */
+/** One builder for the probe failures, since nothing flags an omitted `tried` or `skipped`: both are optional. */
 export function failed(reason: string, tried: readonly string[]): NetMonitor.Verdict {
   return {
     ok: false,
@@ -39,21 +36,12 @@ export function failed(reason: string, tried: readonly string[]): NetMonitor.Ver
 }
 
 export interface Interface {
-  /** Declare a target whose connectivity matters. */
   readonly register: (target: Target) => Effect.Effect<void>
-  /** Current connectivity of a target. */
   readonly status: (id: string) => Effect.Effect<Reachability>
-  /**
-   * Current connectivity followed by every change. Subscribing is what starts the monitoring and the last
-   * unsubscribe stops it (§3.3 按需驱动).
-   */
+  /** Subscribing is what starts the monitoring, and the last unsubscribe stops it. */
   readonly watch: (id: string) => Stream.Stream<Reachability>
-  /** The route in use for a target, if it currently has one. */
   readonly route: (id: string) => Effect.Effect<Route | undefined>
-  /**
-   * A usable proxy on this machine, if there is one — verified rather than assumed, and saying nothing about which
-   * server a consumer should ask or in what order (§3.3).
-   */
+  /** The first candidate proxy that accepts a CONNECT to `target`, not merely one that is declared. */
   readonly proxy: (target: Target) => Effect.Effect<string | undefined>
 }
 
@@ -85,14 +73,13 @@ const layer = Layer.effect(
     /** Returns the route beside the verdict so the caller never resolves twice — resolving is real handshakes. */
     const probeOnce = (entry: Entry) =>
       Effect.promise(async (): Promise<{ verdict: NetMonitor.Verdict; route?: Route }> => {
-        // First because it costs no traffic at all, and it is the unambiguous signal that skips hysteresis (§3.3).
+        // First because it costs no traffic at all, and it is the unambiguous signal that skips hysteresis.
         if (!NetClassifier.hasNetworkInterface()) {
-          // Neither `tried` nor `skipped`: an empty `tried` would read as "we looked and found nowhere to go", and
-          // a machine with its radio off does not have a proxy problem.
+          // Not `failed`: an empty `tried` would read as "found nowhere to go", and being offline is no proxy problem.
           return { verdict: { ok: false, kind: "offline", detail: "no network interface is up" } }
         }
 
-        // Route-aware re-verification, so a lost connection and a closed proxy fail on the same path (§3.3).
+        // A held route is re-verified as itself, so a lost connection and a closed proxy fail on the same path.
         const held = entry.route
         if (!NetMonitor.shouldRediscover(entry.machine) && held) {
           const result =
@@ -113,7 +100,7 @@ const layer = Layer.effect(
         const before = entry.machine.state
         entry.machine = NetMonitor.step(entry.machine, verdict)
         if (!verdict.ok) entry.route = entry.machine.state.state === "reachable" ? entry.route : undefined
-        // Publishing only on real change keeps a steady network silent (§3.4).
+        // Publishing only on real change keeps a steady network silent.
         if (!isDeepStrictEqual(before, entry.machine.state)) yield* publish(entry)
       })
 
@@ -176,15 +163,14 @@ const layer = Layer.effect(
 
     const proxy = (target: Target) =>
       Effect.promise(async () => (await NetDiscovery.candidates(target))[0]).pipe(
-        // Discovery opens sockets, and a raise there is outside the error type: it would take the caller down over
-        // a question whose honest answer is "then we know of no proxy".
+        // A defect in discovery means no proxy is known, not a reason to take the caller down.
         Effect.catchDefect(() => Effect.succeed(undefined)),
       )
 
     const watch = (id: string): Stream.Stream<Reachability> =>
       Stream.unwrap(
         Effect.gen(function* () {
-          // Subscribe before reading (§9.2): the reverse loses any change landing between the two calls.
+          // Subscribe before reading: the reverse loses any change landing between the two calls.
           const subscription = yield* PubSub.subscribe(pubsub)
           yield* Effect.acquireRelease(acquire(id), () => release(id))
           const current = entries.get(id)?.machine.state ?? { state: "idle" as const }

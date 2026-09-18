@@ -1,22 +1,12 @@
 /* --- GeoCode: the shell runtime never starts a kernel of its own under Electron
- * (docs/ENVIRONMENT.md §5.6).
- *
- * Upstream's managed start looks for an opencode binary on disk, and on a GeoCode machine
- * that can only be the user's own OpenCode. The Electron build reaches this runtime with
- * its kernel connection already in the environment, so the branch is refused outright
- * rather than left behind a pair of variables that fails open when either is missing.
- *
- * The control run is the same runtime without the Electron mark: it has to reach spawn,
- * or the refusal above proves nothing about the path it guards. Harness mirrors
- * lib/opencode/lifecycle.test.js. --- */
+ * (docs/ENVIRONMENT.md §5.6). --- */
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 
-// The control run below registers its fake child in the managed-process registry, whose
-// default location is the user's real data root; point it at a scratch directory first.
+// The control run registers its fake child in the managed-process registry, which defaults to the real home.
 const registryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-managed-kernel-test-'));
 const originalRegistry = process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY;
 process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY = registryDir;
@@ -27,7 +17,7 @@ afterAll(() => {
 });
 
 const spawnMock = vi.fn();
-// execFile: promisified at module scope by managed-process-registry.js (see kernel-refresh.test.js).
+// execFile too: managed-process-registry.js promisifies it at import.
 vi.mock('node:child_process', () => ({ spawn: spawnMock, spawnSync: vi.fn(), execFile: vi.fn() }));
 vi.mock('../lib/opencode/startup-performance.js', () => ({ recordStartupPerformance: vi.fn() }));
 

@@ -1,11 +1,5 @@
-/* --- GeoCode: what app.relaunch() needs to come back in a development launch.
- *
- * app.relaunch() reuses the original command line and the current working directory. main.mjs
- * changes its working directory to the home directory at import, and the development launcher
- * starts Electron with a relative entry (`./main.mjs`), so the relaunched instance looks for
- * `~/main.mjs`, finds nothing, and Electron shows its own "unable to find app" dialog instead
- * of the app. A packaged build carries no entry argument and is not affected. Both relaunch
- * sites in main.mjs pass these options; in a packaged build they are empty. --- */
+/* --- GeoCode: app.relaunch() reuses argv and the working directory, and main.mjs moves to the home directory at
+ * import, so a development launch's relative entry has to be made absolute. --- */
 
 import path from 'node:path';
 

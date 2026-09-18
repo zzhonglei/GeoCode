@@ -1,14 +1,4 @@
-/* --- GeoCode: the message contract between Electron main and the kernel utility process
- * (docs/DESKTOP.md §5.1).
- *
- * Both ends are ours, but the wire between them is a process boundary. A message that
- * arrives malformed — from a kernel that died mid-handshake, or one still replaying an
- * older exchange — must be rejected here rather than destructured by the caller, so a
- * broken child cannot take the host down with it.
- *
- * The kernel reports the port it actually bound rather than echoing the requested one:
- * asking the host to probe a free port and then trusting that probe is a race, and it
- * also forecloses passing 0 to let the OS choose. --- */
+/* --- GeoCode: the messages between main and the kernel utility process (docs/DESKTOP.md §5.1). --- */
 
 export const KERNEL_COMMAND = {
   START: 'start',
@@ -40,8 +30,7 @@ export const createStartCommand = ({ hostname, port, password }) => {
   if (!isNonEmptyString(hostname)) throw new Error('Kernel start command requires a hostname');
   if (!isBindablePort(port)) throw new Error(`Kernel start command requires a port in 0-65535, got: ${port}`);
   const command = { type: KERNEL_COMMAND.START, hostname: hostname.trim(), port };
-  // Absent password means an unsecured kernel, which is a decision for the caller to make
-  // explicitly; an empty string here must not be forwarded as if it were one.
+  // No password means an unsecured kernel, so an empty string must not pass for one.
   if (isNonEmptyString(password)) command.password = password;
   return command;
 };

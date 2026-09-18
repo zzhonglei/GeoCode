@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: the kernel's project directory, which it scans for `{command,commands}/**/*.md`
+import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: the kernel's project directory
 import {
   CONFIG_FILE,
   OPENCODE_CONFIG_DIR,

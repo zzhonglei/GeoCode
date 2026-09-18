@@ -8,7 +8,8 @@ import tls from "node:tls"
 import { NetTunnel } from "./tunnel"
 import type { Route } from "./types"
 
-/* --- GeoCode: the two shapes a resolved path takes (docs/GEOKERNEL.md §3.3 路由形态). --- */
+/* --- GeoCode: the two shapes a resolved path takes, subprocess environment and in-process agent
+ * (docs/GEOKERNEL.md §3.3). --- */
 
 /** Loopback stays off the proxy, or a subprocess's local callback never arrives. */
 const NO_PROXY_LOCAL = "localhost,127.0.0.1,::1"
@@ -16,10 +17,7 @@ const NO_PROXY_LOCAL = "localhost,127.0.0.1,::1"
 /** Both cases: the runtimes we launch disagree about which one they read. */
 export const PROXY_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"] as const
 
-/**
- * Inherited proxy variables are blanked rather than left alone, or they keep routing the subprocess through a proxy
- * the resolver has just decided against (§3.3, 直连需显式清除).
- */
+/** Direct blanks inherited proxy variables, or the subprocess keeps a proxy the resolver decided against. */
 export function subprocessEnv(route: Route, inherited: NodeJS.ProcessEnv = process.env): Record<string, string> {
   if (route.kind === "proxy") {
     const env: Record<string, string> = {}
@@ -68,10 +66,7 @@ class TunnelAgent extends https.Agent {
   }
 }
 
-/**
- * Carried per request, and a Node agent rather than a fetch dispatcher (§3.3, §10.3) — so consumers of this form
- * issue their requests through `node:https`.
- */
+/** A Node agent rather than a fetch dispatcher, so consumers of this form issue their requests through `node:https`. */
 export function agent(route: Route, timeoutMs = 30_000): https.Agent | undefined {
   if (route.kind === "direct") return undefined
   return new TunnelAgent(route.url, timeoutMs)

@@ -1,6 +1,5 @@
-/* --- GeoCode: the desktop shell shows its own About dialog (docs/DESKTOP.md §4.6). The swap
- * lives in App.tsx and is pinned by source; the dialog's GitHub link is the release
- * repository, the same one the update check reads. --- */
+/* --- GeoCode: a merge must not bring upstream's About dialog back into the desktop shell
+ * (docs/DESKTOP.md §4.6). --- */
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

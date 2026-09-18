@@ -1,15 +1,5 @@
-/* --- GeoCode: `.claude/skills` and `.agents/skills` belong to other agent tools (docs/PATHS.md §7).
- *
- * The kernel already refuses to load them — `runtime-flags.ts` turns both isolation flags ON — so
- * the shell listing them told the user about capability GeoAgent does not have. Closing that is
- * four things at once, and an earlier attempt proved they cannot be done one at a time: dropping
- * only the managed-roots list left a skill that could be created into `.agents` and then not
- * renamed, which is worse than either end state.
- *
- * The delete case is the one that matters most. `deleteSkill` takes no source and removed the
- * skill from EVERY root it knew, so deleting a GeoCode skill named `foo` also deleted the user's
- * Claude Code skill named `foo`, recursively, from their home directory. Asserting that a file we
- * did not create is still there afterwards is the only form of that check worth having. --- */
+/* --- GeoCode: guards against the shell listing skills from, writing skills into or deleting skills from
+ * `.claude/skills` and `.agents/skills`, which belong to other agent tools (docs/PATHS.md §7). --- */
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -68,9 +58,7 @@ describe('external skill libraries', () => {
   });
 
   it('never deletes a skill it did not create', () => {
-    // The destructive case. Same name in all three places, which is the collision that made this
-    // dangerous: `.claude/skills` entries are commonly symlinks into `.agents/skills`, so a user
-    // with a skill called `review` had it in both.
+    // Same name in all three roots, or the delete has nothing of theirs to reach.
     const name = 'review';
     const claudeSkill = writeSkill(path.join(fakeHome, '.claude', 'skills', name), name);
     const agentsSkill = writeSkill(path.join(fakeHome, '.agents', 'skills', name), name);
@@ -80,12 +68,11 @@ describe('external skill libraries', () => {
 
     expect(fs.existsSync(claudeSkill)).toBe(true);
     expect(fs.existsSync(agentsSkill)).toBe(true);
-    // Ours is gone, so the delete did happen and this is not passing by doing nothing.
+    // Ours is gone, so this cannot pass by deleting nothing.
     expect(skills.discoverSkills(null).map((skill) => skill.name)).not.toContain(name);
   });
 
   it('never deletes a project skill it did not create', () => {
-    // The same collision inside the user's repository, which is where the project halves reach.
     const name = 'lint';
     const project = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-external-skills-project-'));
     try {
@@ -114,8 +101,7 @@ describe('external skill libraries', () => {
   });
 
   it('installs from the catalog into our own project directory even when asked for .agents', async () => {
-    // git's URL rewriting points the GitHub address at a local repository, so the install runs
-    // end to end, clone included, without the network.
+    // `insteadOf` points the GitHub address at a local repository, so the clone needs no network.
     const repository = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-catalog-repository-'));
     const project = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-catalog-project-'));
     const gitConfig = path.join(fakeHome, 'catalog.gitconfig');

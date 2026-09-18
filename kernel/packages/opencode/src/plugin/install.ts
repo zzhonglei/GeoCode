@@ -32,7 +32,7 @@ export type PatchDeps = {
   readText: (file: string) => Promise<string>
   write: (file: string, text: string) => Promise<void>
   exists: (file: string) => Promise<boolean>
-  files: (dir: string, name: string) => string[] // GeoCode: widened, the server name is derived now
+  files: (dir: string, name: string) => string[] // GeoCode: widened, the server name comes from Brand
 }
 
 export type PatchInput = {
@@ -335,8 +335,7 @@ function patchDir(input: PatchInput) {
   if (input.global) return input.config ?? Global.Path.config
   const git = input.vcs === "git" && input.worktree !== "/"
   const root = git ? input.worktree : input.directory
-  // GeoCode: the kernel's project directory — writing the old name put a config in the user's
-  // repo that the loader then never reads back (core/src/brand.ts).
+  // GeoCode: the project directory the loader reads, or the patched config lands where nothing reads it back
   return path.join(root, Brand.projectDir)
 }
 

@@ -4,11 +4,8 @@ import { GdalInspector } from "@/geo/gdal/inspector"
 import { GdalRaster } from "@/geo/gdal/raster"
 import { RASTER_PREVIEW_PY } from "@/geo/qgis/scripts.generated"
 
-/* One list of cases answered by both faces of the raster preview (§7.9 dual engines): band selection and stretch
- * exist twice, in TypeScript for the interface and in Python for ReadGeoData, and nothing else holds them level.
- * fixtures/raster-rule-answer.py lifts the two rule functions out of the shipping `raster_preview.py` and runs
- * them against a faked GDAL, so what answers below is that code and not a copy of it; with no Python on the
- * machine that half skips. */
+/* One list of cases answered by both faces of the raster preview (docs/GEOKERNEL.md §7.9): band selection and
+ * stretch exist in TypeScript and in Python, and nothing else holds them level. */
 
 /** A band is `colour` or `colour:description`; a raster is bands, space-separated. */
 const BANDS = [

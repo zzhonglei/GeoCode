@@ -276,9 +276,8 @@ export const BehaviorPage: React.FC = () => {
       description={t('settings.page.behavior.description')}
       showSaveStatus
     >
-      {/* --- GeoCode: the optimizer is injected through the same plugin pipeline as the agent
-          tools, which the desktop shell does not have. It rewrites the prompts of `build` and
-          `plan`; `build` is disabled here and `plan` keeps upstream's (docs/DESKTOP.md §7.3) --- */}
+      {/* --- GeoCode: the optimizer is injected through the agent-tool plugin pipeline, which the desktop
+          shell does not have (docs/DESKTOP.md §7.3) --- */}
       {!isVSCode && !isDesktopShell() && (
         <SettingsSection
           title={t('settings.behavior.page.section.systemPromptOptimization')}

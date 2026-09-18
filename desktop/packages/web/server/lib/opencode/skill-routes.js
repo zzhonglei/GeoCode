@@ -103,9 +103,7 @@ export const registerSkillRoutes = (app, dependencies) => {
     const projectAncestors = getSkillProjectAncestors(workingDirectory);
     const isProjectScoped = projectAncestors.some((ancestor) => {
       const candidates = [
-        // --- GeoCode: the kernel's project directory. Without it a skill under `.geocode`
-        // matches neither list here and falls through to the USER default below, so a project
-        // skill the user just created would be reported as a global one. ---
+        // --- GeoCode: the kernel's project directory, or a project skill falls through to USER scope ---
         path.join(ancestor, KERNEL_PROJECT_DIR),
         // --- /GeoCode ---
         path.join(ancestor, '.claude', 'skills'),
@@ -277,9 +275,7 @@ export const registerSkillRoutes = (app, dependencies) => {
       res.json({
         skills: enrichedSkills,
         externalSkills: {
-          // --- GeoCode: constants, because `discoverSkills` walks neither `.claude` nor `.agents`
-          // and the kernel loads neither; saying so keeps an older or cached client filtering too
-          // (docs/DESKTOP.md §10). ---
+          // --- GeoCode: constants, since neither `discoverSkills` nor the kernel reads `.claude` or `.agents` ---
           claudeDisabled: true,
           allDisabled: true,
           /*

@@ -1,7 +1,5 @@
-/* --- GeoCode: the interface speaks three languages (docs/DESKTOP.md §7.3).
- *
- * Upstream's other nine dictionaries were never rebranded and name paths GeoCode does not have.
- * The Appearance picker offers only these, and `setLocale` coerces a stored one outside them. --- */
+/* --- GeoCode: the interface offers three languages; the Appearance picker lists only these and `setLocale` turns
+ * any other into the default (docs/DESKTOP.md §7.3). --- */
 import { DEFAULT_LOCALE, type Locale } from '@/lib/i18n/runtime';
 
 /** The product languages: the ones GeoCode translates and the locale tripwires scan. */

@@ -790,10 +790,8 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
   };
 
   const startOpenCode = async () => {
-    // --- GeoCode: Electron main owns the kernel and hands this runtime its connection before
-    // the import. A managed start here would go looking for an opencode on disk, and on this
-    // machine that can only be another product's; every caller lands here, so the refusal
-    // does too (docs/ENVIRONMENT.md §5.6). Standalone serve keeps the upstream path. ---
+    // --- GeoCode: under Electron main owns the kernel; a managed start would launch whatever opencode is on disk
+    // (docs/ENVIRONMENT.md §5.6) ---
     if (process.versions.electron) {
       throw new Error('GeoCode owns its kernel; the shell runtime does not start one');
     }
@@ -1040,9 +1038,8 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
     // honestly so callers don't claim the change is live.
     const external = state.isExternalOpenCode === true;
 
-    // --- GeoCode: under Electron the external server is the embedded kernel, and a saved
-    // configuration is applied by dropping its caches, not by restarting a process
-    // (docs/DESKTOP.md §5.2). The drop would cut running chats off, so they block it. ---
+    // --- GeoCode: under Electron config is applied by dropping the kernel's instances and its cached config, which
+    // would cut off running chats (docs/DESKTOP.md §5.2) ---
     let geocodeKernelRefreshed = false;
     if (external && process.versions.electron) {
       const busy = getActiveSessionCount();
@@ -1074,8 +1071,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
       throw error;
     }
 
-    // --- GeoCode: the caches are gone and the kernel is healthy again; report a reload so the
-    // upstream route and the UI take their success path. ---
+    // --- GeoCode: report a reload so the upstream route and the UI take their success path ---
     if (geocodeKernelRefreshed) {
       try {
         onOpenCodeRestarted?.();

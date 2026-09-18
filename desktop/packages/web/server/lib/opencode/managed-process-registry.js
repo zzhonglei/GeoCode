@@ -56,9 +56,7 @@ const defaultExecFileAsync = promisify(execFile);
 const resolveRegistryDir = () => {
   const override = process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY;
   if (override && override.trim()) return override.trim();
-  // --- GeoCode: GeoCode's own root. This one matters more than the rest: `reapOrphanedProcesses`
-  // runs unconditionally at startup and kills the pids it finds here, so sharing the directory with
-  // a user's own OpenChamber makes their kernel a reap candidate (docs/PATHS.md §3.3). ---
+  // --- GeoCode: never OpenChamber's: `reapOrphanedProcesses` reaps the pids registered here (docs/DESKTOP.md §10) ---
   return path.join(os.homedir(), '.config', 'GeoCode', 'desktop', 'managed-opencode');
   // --- /GeoCode ---
 };

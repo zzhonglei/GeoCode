@@ -1,9 +1,5 @@
-/* --- GeoCode: external plugins stay off; the browser tool file is the one exception
- * (docs/KERNEL.md §6 item 1, src/plugin/geocode-trusted.ts).
- *
- * The predicate is pinned directly, then `loadExternal` is driven for real with the config root
- * pointed at a scratch directory: the named file under `desktop/agent-tool/` loads, a neighbour
- * does not, a configuration-declared plugin still yields nothing, and the TUI gets nothing. --- */
+/* --- GeoCode: the browser tool's exception to the plugin shield must not widen past one named file loaded by the
+ * server (docs/KERNEL.md §6 item 1). --- */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import fs from "fs"
 import os from "os"
@@ -52,8 +48,7 @@ describe("the trusted plugin predicate", () => {
     expect(trustedPluginSpec({ kind: "server", env: { [GEOCODE_BROWSER_PLUGIN_ENV]: neighbour }, configDir })).toBeUndefined()
     const elsewhere = pathToFileURL(path.join(os.tmpdir(), ...GEOCODE_BROWSER_PLUGIN_SEGMENTS)).href
     expect(trustedPluginSpec({ kind: "server", env: { [GEOCODE_BROWSER_PLUGIN_ENV]: elsewhere }, configDir })).toBeUndefined()
-    // A file URL the conversion itself rejects, so the catch is the branch under test; a plain
-    // string that is not a URL never reaches it and is covered by the path comparison above.
+    // A file URL fileURLToPath rejects, so only the catch branch refuses it.
     expect(trustedPluginSpec({ kind: "server", env: { [GEOCODE_BROWSER_PLUGIN_ENV]: "file://example.com/x" }, configDir })).toBeUndefined()
   })
 })
@@ -75,8 +70,7 @@ describe("loadExternal", () => {
     process.env[GEOCODE_BROWSER_PLUGIN_ENV] = writePlugin(trustedPath())
     expect(await PluginLoader.loadExternal({ items: [], kind: "tui" })).toEqual([])
 
-    // A configuration-declared plugin, the path this shield was built for, still yields nothing
-    // even while the browser tool is named.
+    // Only the named browser tool loads, never the configuration-declared plugin beside it.
     const declared = writePlugin(path.join(configDir, "plugin", "declared.js"))
     const loaded = await PluginLoader.loadExternal({
       items: [{ spec: declared, source: "test", scope: "global" }],

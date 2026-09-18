@@ -4,26 +4,16 @@ import { GeoQgis, GeoStatus } from "@/geo"
 import { GeoTool } from "./geo-tool"
 import DESCRIPTION from "./geo-qgis-doc.txt"
 
-/* --- GeoCode: QgisDoc, the algorithm catalog's reading face (docs/TOOLS.md §3, GEOKERNEL §4.11).
- *
- * Every action is a query against the in-memory catalog, so nothing is spawned and no output grows with user data —
- * the catalog is a property of the QGIS install (measured on a real 3.44 install: 34 groups in 774 bytes, largest
- * group 4220, largest help text 7218), which is what makes `truncated: false` a statement of fact. Only
- * `search` bounds its answer, by asking the model to narrow rather than dropping the tail (§5.2 there). --- */
+/* --- GeoCode: QgisDoc, queries against the in-memory algorithm catalog (docs/TOOLS.md §3). Output is bounded by
+ * the QGIS install rather than by user data, which is what makes `truncated: false` true. --- */
 
 const QGIS_PROCESSING_DOCS = "https://docs.qgis.org/latest/en/docs/user_manual/processing_algs"
 
-/** How many search hits to show before asking the model to narrow instead. */
 const SEARCH_LIMIT = 10
 
-/** Structural rather than the catalog's Algorithm, so the tripwire can call `docsUrl` with a bare literal. */
 type Named = { readonly id: string; readonly name: string; readonly group: string }
 
-/**
- * The deep link into the official QGIS documentation, by the rule archived in GEOKERNEL §4.11: the anchor is the
- * dash-slug of the DISPLAY NAME, because that is what the documentation's own table of contents resolves to. An
- * id-derived anchor has no dashes and is a broken link for every multi-word name.
- */
+/** The anchor slugs the DISPLAY NAME, never the id, which breaks every multi-word name (GEOKERNEL §4.11). */
 export function docsUrl(algorithm: Named): string {
   const provider = algorithm.id.startsWith("gdal:")
     ? "gdal"
@@ -33,8 +23,7 @@ export function docsUrl(algorithm: Named): string {
   if (!provider) return `${QGIS_PROCESSING_DOCS}/index.html`
   // The page slug deletes non-alphanumerics where the anchor below dashes them; not the same rule.
   const page = algorithm.group.toLowerCase().replace(/[^a-z0-9]/g, "")
-  // An algorithm declaring no group has no page; without this the URL reads ".../qgis/.html#name", a 404 dressed
-  // up as a citation.
+  // An algorithm declaring no group has no page to link to.
   if (!page) return `${QGIS_PROCESSING_DOCS}/index.html`
   const anchor = algorithm.name
     .toLowerCase()
@@ -45,11 +34,8 @@ export function docsUrl(algorithm: Named): string {
 }
 
 /**
- * One algorithm as documentation text. The help text QGIS exports is reproduced VERBATIM (GEOKERNEL §4.11): it is
- * the authoritative description and a shorter but subtly wrong one costs more than the tokens it saves. Only the two
- * facts it does not carry — which parameters are required, which have defaults — are added above it.
- *
- * The structured listing on the other branch is the fallback for the algorithms that export no help text at all.
+ * QGIS's help text goes out VERBATIM, with only the required and defaulted parameters added above it; the structured
+ * listing is for algorithms that export no help text (GEOKERNEL §4.11).
  */
 export function formatAlgorithm(algorithm: GeoQgis.QgisCatalog.Algorithm): string {
   const required = algorithm.parameters.filter((param) => !param.optional)
@@ -57,8 +43,7 @@ export function formatAlgorithm(algorithm: GeoQgis.QgisCatalog.Algorithm): strin
   const lines: string[] = []
   lines.push(`Algorithm: ${algorithm.id}`)
   lines.push(`Name: ${algorithm.name}`)
-  // The same fallback groups() lists by, so the group printed here is one list_algorithms answers to; the raw empty
-  // string would be an unusable value in front of the model.
+  // The name groups() lists ungrouped algorithms under, so list_algorithms accepts what is printed here.
   lines.push(`Group: ${algorithm.group || GeoQgis.QgisCatalog.UNGROUPED}`)
   lines.push("")
 
@@ -134,7 +119,7 @@ export const Parameters = Schema.Struct({
 
 type Metadata = {
   [key: string]: unknown
-  /** Always set, so the generic head truncation never runs (docs/TOOLS.md §5). */
+  /** Always set, so the generic head truncation never runs (docs/TOOLS.md §5.1). */
   truncated: boolean
 }
 
@@ -153,14 +138,7 @@ export const QgisDocTool = Tool.define<
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context<Metadata>,
     ) {
-      /* --- The pattern names the object this call is about, namespaced by action and prefixed `doc:` so a rule can
-       * tell this tool from RunQgisAlgorithm, which shares the `qgis` key (docs/TOOLS.md §4.3).
-       *
-       * `always` is the half that matters: replying "always" writes a rule using EXACTLY these patterns
-       * (permission/index.ts), so `["*"]` would turn one approved documentation lookup into a standing grant to run
-       * algorithms. --- */
-      /* The environment, before the prompt — a user is never asked about an operation the environment cannot run,
-       * and a rule with an exception in one of three places is one someone later "fixes" in the wrong direction. */
+      // Before the prompt, as in the other QGIS tools, so no one approves a lookup the environment cannot serve.
       const deadEnd = yield* GeoTool.qgisLocalDeadEnd(status)
       if (deadEnd) {
         return {
@@ -171,6 +149,8 @@ export const QgisDocTool = Tool.define<
       }
 
       const target = params.algorithm ?? params.group ?? params.query
+      // `doc:` tells this tool from RunQgisAlgorithm under the shared `qgis` key (docs/TOOLS.md §4.3). Replying
+      // "always" adds allow rules with exactly the `always` patterns, so `["*"]` would also grant running algorithms.
       yield* ctx.ask({
         permission: "qgis",
         patterns: [target ? `doc:${params.action}:${target}` : `doc:${params.action}`],
@@ -178,13 +158,11 @@ export const QgisDocTool = Tool.define<
         metadata: { action: params.action, ...(target === undefined ? {} : { target }) },
       })
 
-      // Taken before the gate so a refusal still carries the environment line, and again after it (§11 环境头快照).
+      // Taken before the gate for a refusal, and again after it, since the gate can wait out a new round.
       const entryHeader = yield* GeoTool.qgisHeader(status)
 
       const gate = yield* GeoTool.settledQgisGate(qgis, ctx.abort)
       if (!gate.ok) {
-        // The catalog is only populated behind a passing gate, and the guidance is the kernel's so all three QGIS
-        // tools say the same words (GEOKERNEL §8.6).
         return {
           title: "QGIS algorithm catalog unavailable",
           output: [
@@ -197,8 +175,7 @@ export const QgisDocTool = Tool.define<
           metadata: { truncated: false, error: true, geoStatus: GeoTool.gateStatus(gate.status) },
         }
       }
-      // Which install these docs describe is part of the answer: algorithm availability and parameter sets move
-      // between QGIS versions.
+      // The header is part of the answer: which algorithms and parameters exist depends on the QGIS version.
       const header = yield* GeoTool.qgisHeader(status)
       const framed = (body: string) => [header, body].filter(Boolean).join("\n")
 
@@ -210,9 +187,7 @@ export const QgisDocTool = Tool.define<
             output: framed(
               groups.length > 0
                 ? groups.map((group, index) => `${index + 1}. ${group.name} (${group.count})`).join("\n")
-                : // Not "this install has no algorithms": the gate passed a moment ago, so an empty catalog means
-                  // it was dropped between the two, and naming a cause we cannot see would send the Agent off
-                  // diagnosing an install that is fine.
+                : // Right after a passing gate, empty means the catalog was dropped in between, so no cause is named.
                   "The algorithm catalog has nothing to list right now. Call the tool again.",
             ),
             metadata: { truncated: false, count: groups.length },
@@ -243,8 +218,7 @@ export const QgisDocTool = Tool.define<
               metadata: { truncated: false, group: params.group, count: 0 },
             }
           }
-          // The group the CATALOG calls it, not the caller's spelling: `inGroup` matches folded (§4.11), so echoing
-          // the input would put "VECTOR GEOMETRY" in front of the user as if that were the group's name.
+          // The catalog's spelling, not the caller's: `inGroup` matches folded names.
           const canonical = algorithms[0]!.group || GeoQgis.QgisCatalog.UNGROUPED
           return {
             title: `QGIS algorithms: ${canonical}`,
@@ -267,9 +241,7 @@ export const QgisDocTool = Tool.define<
             }
           }
           const resolution = yield* catalog.resolve(params.algorithm)
-          // Ambiguity and absence need opposite advice: "not found" for a name the catalog holds several of sends
-          // the model searching when all it has to do is choose. The candidates are the set the lookup declined to
-          // pick between, not fuzzy neighbours re-guessed afterwards (GEOKERNEL §4.11).
+          // Ambiguity gets the candidates the lookup declined to choose between, not "not found" and a search.
           if (resolution.kind === "ambiguous") {
             return {
               title: `QGIS algorithm: ${params.algorithm}`,
@@ -313,9 +285,7 @@ export const QgisDocTool = Tool.define<
               metadata: { truncated: false },
             }
           }
-          // One over the limit, to tell "exactly ten hits" from "at least eleven": the bound is presented as advice
-          // to narrow the query, which the model can act on where it cannot even see a silent cut (docs/TOOLS.md
-          // §5.2).
+          // One over the limit, to tell "exactly ten hits" from "more than ten".
           const hits = yield* catalog.search(params.query, SEARCH_LIMIT + 1)
           if (hits.length === 0) {
             return {
@@ -334,16 +304,13 @@ export const QgisDocTool = Tool.define<
           return {
             title: `Search: ${params.query}`,
             output: framed(lines.join("\n")),
-            // `more` rides here too, or a frontend reading only the fields renders "10 results" for a query that
-            // has fifty; both channels have to agree (GEOKERNEL §9.1).
+            // `more` goes here too, for a frontend that reads only the fields.
             metadata: { truncated: false, query: params.query, count: shown.length, ...(more ? { more: true } : {}) },
           }
         }
 
         default: {
-          // Unreachable while the schema's literal union holds. Returning rather than throwing keeps the promise
-          // the whole tool makes: every outcome is an answer the model can act on, never a tool error it can only
-          // report (docs/TOOLS.md §3).
+          // Unreachable while the schema holds; returned rather than thrown, like every other outcome here.
           const action: string = (params as { action: string }).action
           return {
             title: "Invalid action",

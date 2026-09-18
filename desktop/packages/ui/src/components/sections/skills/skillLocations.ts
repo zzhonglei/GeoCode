@@ -23,12 +23,8 @@ export const SKILL_LOCATION_OPTIONS: Array<{
     label: 'Project / OpenCode',
     description: 'Current project .opencode location',
   },
-  // --- GeoCode: the two `.agents` options are gone. They wrote a skill into another agent
-  // tool's library, which the kernel then refused to load — the option offered the user a
-  // location where nothing they created would ever run. The server refuses the same target in
-  // `skills.js` and `skills-catalog/install.js`; both ends move together, because closing only
-  // one of them is what made an earlier attempt worse than leaving it alone: the skill could
-  // still be created and then could not be edited. ---
+  // --- GeoCode: the kernel does not load `.agents` skills, and `skills.js` and `skills-catalog/install.js` never
+  // write there either, so these options stay closed together with those two. ---
   /*
   {
     value: 'user-agents',

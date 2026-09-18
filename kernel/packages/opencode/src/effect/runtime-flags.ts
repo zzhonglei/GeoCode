@@ -13,30 +13,16 @@ const enabledByExperimental = (name: string) =>
     Config.map((flags) => Option.getOrElse(flags.enabled, () => flags.experimental)),
   )
 
-/* --- GeoCode: Claude Code's instruction file and skill library belong to another product, and a coding
- * assistant's conventions are not GeoAgent's, so both isolation flags default to ON here where upstream
- * defaults them OFF. This covers CLAUDE.md (project and ~/.claude) and .claude/skills (docs/PATHS.md §7).
- *
- * The default lives here rather than in an env var exported by whatever launches the kernel: an env that some
- * launch path forgets to set fails silently, and fails open. Both env vars keep their upstream names, and the
- * specific flag wins over the broad one — mirroring `enabledByExperimental` above — so either can be turned
- * back on its own. --- */
+/* --- GeoCode: CLAUDE.md and .claude/skills stay unread unless an env var turns them back on, defaulted here because an
+ * env var a launch path forgets fails open; the specific var wins over the broad one (docs/KERNEL.md §6). --- */
 const isolatedFromClaudeCode = (direct: string) =>
   Config.all({
     broad: Config.boolean("OPENCODE_DISABLE_CLAUDE_CODE").pipe(Config.option),
     direct: Config.boolean(direct).pipe(Config.option),
   }).pipe(Config.map((flags) => Option.getOrElse(flags.direct, () => Option.getOrElse(flags.broad, () => true))))
 
-/* --- GeoCode: `.claude/skills` and `.agents/skills` are the same kind of thing — skill libraries a user
- * writes for whatever agent tool happens to read them, not for GeoAgent. GeoCode is a geographic assistant,
- * not a general one, so its behaviour should not change because another tool's skills are on disk. Upstream
- * defaults this OFF; here it is ON, which covers both directories at both scopes (home and project).
- *
- * Custom skills are NOT disabled by this. The config directories are scanned separately below it, so a user
- * still adds skills under `~/.config/GeoCode/skill/` globally, `<project>/.geocode/skill/` per project, or any
- * path named in `skills.paths`. What this closes is only the channel where a directory written for other tools
- * injects capability into GeoAgent. `AGENTS.md` is unaffected — it is instruction, not capability, and is read
- * through session/instruction.ts (docs/PATHS.md §7). --- */
+/* --- GeoCode: `.claude/skills` and `.agents/skills`, at home and project scope, are off by default; skills in the
+ * config directories and `skills.paths` still load, scanned separately in skill/index.ts (docs/KERNEL.md §6). --- */
 const disabledByDefault = (name: string) => Config.boolean(name).pipe(Config.withDefault(true))
 
 export class Service extends ConfigService.Service<Service>()("@opencode/RuntimeFlags", {

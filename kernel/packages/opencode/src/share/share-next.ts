@@ -20,11 +20,8 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { EventV2 } from "@opencode-ai/core/event"
 
-/* --- GeoCode: sharing uploads a whole session — messages, tool calls, file paths — to a service GeoCode neither
- * runs nor can vouch for, and a GeoCode session can carry unpublished research data. Off by default here, where
- * upstream is on: every entry point in this module is already gated on this one constant (docs/PATHS.md §7).
- *
- * The env var keeps its upstream name and works in reverse: `false` or `0` restores upstream's behaviour. --- */
+/* --- GeoCode: sharing uploads whole sessions to a service GeoCode does not run, so it is off unless the env var is
+ * `false` or `0`; the module's upload and sync paths all check this constant (docs/KERNEL.md §6). --- */
 const disabled = !["false", "0"].includes(process.env["OPENCODE_DISABLE_SHARE"] ?? "")
 
 export type Api = {
@@ -313,15 +310,8 @@ const layer = Layer.effect(
     })
 
     const create = Effect.fn("ShareNext.create")(function* (sessionID: SessionID) {
-      /* --- GeoCode: refuse, rather than hand back a share that is not one.
-       *
-       * Upstream's line below returns an empty record, which its own caller writes onto the session as
-       * `share: { url: "" }` — a session that reports itself shared, at nothing. Upstream only reaches that with
-       * the env var deliberately set; GeoCode reaches it by default.
-       *
-       * `config/geocode.ts` ships `share: "disabled"` so the caller refuses first, but that is a factory default a
-       * user may change, and changing it re-exposes exactly the empty record it was added to hide. The message names
-       * the env var because the `share` option is read by the caller and never reaches here (docs/PATHS.md §7). --- */
+      /* --- GeoCode: fail rather than return upstream's empty record below, which the caller stores as a share with
+       * an empty URL; the config default stops the caller first, but a user can change that default. --- */
       if (disabled)
         return yield* Effect.fail(
           new Error(

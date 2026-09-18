@@ -32,8 +32,7 @@ if (process.platform === 'linux' && !builderArgs.some((argument) => (
   builderArgs.push(`--${targetArchitecture.electronBuilder}`);
 }
 
-// --- GeoCode: package.json keeps upstream's version; the artifact carries GeoCode's
-// (docs/DESKTOP.md §4.6), through the same extraMetadata channel as the Windows name. ---
+// --- GeoCode: package.json keeps upstream's version; the artifact carries GeoCode's (docs/DESKTOP.md §4.6) ---
 builderArgs.push(`--config.extraMetadata.version=${GEOCODE_VERSION}`);
 // --- /GeoCode ---
 

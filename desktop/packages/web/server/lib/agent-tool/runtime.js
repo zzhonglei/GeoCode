@@ -9,7 +9,7 @@ import {
   OPENCHAMBER_WEB_ACTION_DEFINITIONS,
   OPENCHAMBER_WEB_ACTIONS,
 } from '../openchamber-control/actions.js';
-import { routeGeoCodeToolCall } from '../../geocode/agent-tools.js'; // GeoCode: the desktop's two tools (docs/DESKTOP.md §7.2)
+import { routeGeoCodeToolCall } from '../../geocode/agent-tools.js'; // GeoCode: the desktop's two tools
 
 const TOOL_SCHEMA_VERSION = 1;
 // Everything either managed tool may ask for; the agent allowlist stays
@@ -268,9 +268,8 @@ export const createAgentToolRuntime = (dependencies) => {
   const pluginDirectory = path.join(dataDir, 'agent-tool');
   const pluginPath = path.join(pluginDirectory, 'openchamber-plugin.js');
   let activeToken = null;
-  // --- GeoCode: under Electron the desktop's main process starts the kernel with the browser tool
-  // plugin and issues the token itself, before this runtime exists; it arrives in the environment
-  // and prepareManagedOpenCodeEnv below is never reached (docs/DESKTOP.md §7.2). ---
+  // --- GeoCode: under Electron main issues the token before this runtime exists and passes it in the environment;
+  // prepareManagedOpenCodeEnv below is never reached (docs/DESKTOP.md §7.2) ---
   if (process.versions.electron && asNonEmptyString(env.OPENCHAMBER_AGENT_TOOL_TOKEN)) {
     activeToken = env.OPENCHAMBER_AGENT_TOOL_TOKEN;
   }
@@ -306,8 +305,7 @@ export const createAgentToolRuntime = (dependencies) => {
 
   const execute = async (payload = {}, options = {}) => {
     const requested = asNonEmptyString(payload.input?.action);
-    // --- GeoCode: the desktop injects `browser` and `geocode` and nothing else; a call stays within the
-    // calling tool's own actions and resolves under upstream's name for them (docs/DESKTOP.md §7.2) ---
+    // --- GeoCode: a call from `browser` or `geocode` reaches only that tool's own actions (docs/DESKTOP.md §7.2) ---
     if (process.versions.electron) {
       const call = routeGeoCodeToolCall(asNonEmptyString(payload.tool), requested);
       if (call.refusal) {

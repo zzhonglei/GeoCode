@@ -12,13 +12,10 @@ import { GdalService } from "@/geo/gdal"
 import { GeoStatus } from "@/geo/status"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-/* The GDAL lifecycle (docs/GEOKERNEL.md §7.3). One transition and no intermediate state, so what is pinned here
- * is not the machinery but the shape of the answer: the gate is per track, and an install with half the binaries
- * is told which half it has. */
+/* The GDAL lifecycle (docs/GEOKERNEL.md §7.3). */
 
 const FILE = path.join(Global.Path.config, "machine.json")
 const write = (value: object) => Effect.promise(() => fs.promises.writeFile(FILE, JSON.stringify(value), "utf-8"))
-/** Deliberately unparsable, the way a hand-edited file goes wrong. */
 const writeBroken = () => Effect.promise(() => fs.promises.writeFile(FILE, '{ "gdal": "/opt", }}', "utf-8"))
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-gdal-lc-"))
@@ -27,7 +24,6 @@ afterAll(() => {
   fs.rmSync(FILE, { force: true })
 })
 
-/** A tool directory holding exactly the named binaries. */
 function toolDir(name: string, tools: readonly string[]): string {
   const dir = path.join(root, name)
   fs.mkdirSync(dir, { recursive: true })
@@ -65,7 +61,6 @@ describe("gdal lifecycle", () => {
         yield* write({ gdal: full })
         yield* waitForStatus((s) => s.status === "ready", "never reached ready")
 
-        // No intermediate state on the way: the probe is file existence, so there is nothing to wait for (§7.3).
         yield* write({ gdal: path.join(root, "nowhere") })
         const missing = yield* waitForStatus((s) => s.status === "dir-missing", "never reported the missing directory")
         expect(missing).toEqual({ status: "dir-missing", directory: path.join(root, "nowhere") })
@@ -118,8 +113,7 @@ describe("gdal lifecycle", () => {
         const status = yield* waitForStatus((s) => s.status === "config-error", "never reported the parse failure")
 
         expect(status).toMatchObject({ status: "config-error", file: FILE })
-        // A position is the least that is actionable, and the parser's fallback message is a bare class name
-        // (config/loader.ts).
+        // Guards against the loader's fallback message, a bare class name with no position (geo/config/loader.ts).
         if (status.status === "config-error") expect(status.message).toMatch(/line \d+, column \d+/)
 
         for (const track of ["raster", "vector"] as const) {

@@ -5,7 +5,6 @@ import net from 'node:net';
 import { KERNEL_COMMAND } from './kernel-protocol.mjs';
 import { createKernelPassword, pickFreePort, startKernelHost } from './kernel-host.mjs';
 
-/** A utility process stand-in: same surface main.mjs would hand us, none of the Electron. */
 const createFakeChild = ({ onStart } = {}) => {
   const listeners = new Map();
   const child = {
@@ -43,11 +42,7 @@ const createFakeChild = ({ onStart } = {}) => {
   return child;
 };
 
-/**
- * Waits for a condition instead of for a number of microtasks. The host awaits a port
- * probe before it schedules anything, so any test that assumes "the timer exists by now"
- * silently stops testing the moment an await moves upstream of it.
- */
+/** Polls rather than counting microtasks, because the host awaits a port probe before it schedules anything. */
 const waitUntil = async (predicate, description) => {
   for (let attempt = 0; attempt < 1000; attempt += 1) {
     if (predicate()) return;
@@ -56,7 +51,6 @@ const waitUntil = async (predicate, description) => {
   throw new Error(`Timed out waiting for ${description}`);
 };
 
-/** Timers the test advances by hand, so a 60s deadline costs no wall clock. */
 const createControlledTimers = () => {
   const pending = new Map();
   let nextId = 0;
@@ -79,7 +73,6 @@ const createControlledTimers = () => {
         entry.fn();
       }
     },
-    /** Fires only once the code under test has actually scheduled it. */
     fireWhenScheduled: async (ms) => {
       await waitUntil(() => timers.has(ms), `a ${ms}ms timer to be scheduled`);
       timers.fire(ms);
@@ -184,7 +177,6 @@ describe('startKernelHost handshake', () => {
     const pending = startWith(child, { timers, startTimeoutMs: 60_000 });
     await waitUntil(() => timers.counts.created === 1, 'the start deadline to be armed');
 
-    // A message the protocol does not know is still evidence the child is alive.
     child.emit('message', { type: 'loading', progress: 0.5 });
     expect(timers.counts).toEqual({ created: 2, cleared: 1 });
 
@@ -247,9 +239,7 @@ describe('startKernelHost health', () => {
   it('keeps probing until the kernel answers, not merely until it reported ready', async () => {
     const child = createFakeChild({ onStart: readyOnStart('127.0.0.1', 51234) });
     let answers = 0;
-    // Real timers on a 1ms interval rather than controlled ones: driving this by hand
-    // would mean firing a retry the poll may not have scheduled yet, and a test that
-    // depends on counting microtasks breaks whenever an await moves upstream of it.
+    // Real timers: a controlled one would have to fire a retry the poll may not have scheduled yet.
     const host = await startWith(child, { healthIntervalMs: 1, health: async () => ++answers >= 3 });
 
     await host.health.wait;
@@ -324,7 +314,6 @@ describe('startKernelHost terminate', () => {
 
     host.terminate();
     expect(child.killed).toBe(1);
-    // No stop command: this path is the forcible one, and the kernel sweeps on exit.
     expect(child.sent.filter((m) => m.type === KERNEL_COMMAND.STOP)).toHaveLength(0);
   });
 

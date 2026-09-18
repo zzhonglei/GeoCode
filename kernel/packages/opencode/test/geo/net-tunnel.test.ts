@@ -34,9 +34,8 @@ const readFirst = (socket: net.Socket, timeoutMs: number) =>
     attempt()
   })
 
-/* The caller starts TLS over this socket a turn after `open` resolves. Both cases below are ways the
- * first record can be gone by then, and a handshake that never sees it waits out the probe timeout
- * rather than failing — which reads as an unreliable proxy instead of a bug here. */
+// Each case is a way the first record can be gone before the caller starts TLS, and a handshake that never sees it
+// waits out the probe timeout, which reads as an unreliable proxy instead of a bug here.
 describe("CONNECT tunnel", () => {
   test("keeps bytes the proxy sent in the same packet as the 200", async () => {
     const port = await proxy("SERVER-HELLO", true)

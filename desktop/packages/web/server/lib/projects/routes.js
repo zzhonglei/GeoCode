@@ -34,9 +34,7 @@ export const registerProjectSetupRoutes = (app, dependencies) => {
     }
   });
 
-  // --- GeoCode: the team's shared file is not a GeoCode surface, for the reason on
-  // `readSharedProjectConfig` in project-config.js, which is where reads are refused.
-  // Registered ahead of upstream's handler below, the one it shadows. ---
+  // --- GeoCode: the shared-file write, refused ahead of upstream's handler below (see project-config.js) ---
   app.put('/api/projects/:projectId/config/shared', (_req, res) => {
     res.status(404).json({ error: 'Not available in GeoCode' });
   });

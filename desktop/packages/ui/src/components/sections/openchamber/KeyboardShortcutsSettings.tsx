@@ -32,7 +32,8 @@ export const KeyboardShortcutsSettings: React.FC = () => {
 
   const actions = React.useMemo(() => {
     const all = getCustomizableShortcutActions()
-      .filter((action) => !isShortcutHiddenOnDesktop(action.id, isDesktopShell())); // GeoCode: own module
+      // GeoCode: the desktop shell has no services menu for its shortcut to toggle
+      .filter((action) => !isShortcutHiddenOnDesktop(action.id, isDesktopShell()));
     return isVSCodeRuntime() ? all.filter((action) => action.id !== 'toggle_prompt_navigator') : all;
   }, []);
   const persist = (nextOverrides: Record<string, ShortcutCombo>) => {

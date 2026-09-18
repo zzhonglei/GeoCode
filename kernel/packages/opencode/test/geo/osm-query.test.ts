@@ -2,9 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { OsmExtent } from "@/geo/osm/extent"
 import { OsmQuery } from "@/geo/osm/query"
 
-/* Query building and the extent contract (docs/GEOKERNEL.md §6.4, §6.5). Pure functions throughout, so every rule
- * is pinned exactly — including the one the module exists for: a reduced boundary is never smaller than the
- * boundary it reduces. */
+/* Query building and the extent contract (docs/GEOKERNEL.md §6.4, §6.5), including the rule the module exists for:
+ * a reduced boundary is never smaller than the boundary it reduces. */
 
 describe("osm identifiers", () => {
   test("reads the three prefixes and refuses the rest", () => {
@@ -158,7 +157,7 @@ describe("osm boundary files and the superset rule", () => {
   })
 
   test("an oversized ring becomes its hull, and the hull CONTAINS it", () => {
-    // Past the 300-vertex budget, with the shape real boundaries have: local wiggle on one edge, four corners of
+    // Past `MAX_POLY_VERTICES`, with the shape real boundaries have: local wiggle on one edge, four corners of
     // actual extent.
     const comb: [number, number][] = [[113.5, 29.5]]
     for (let i = 0; i <= 400; i++) {

@@ -4,10 +4,8 @@ import { Global } from "@opencode-ai/core/global"
 import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { GeeDeps } from "./deps"
 
-/* --- GeoCode: the guidance shown when Earth Engine is not ready (docs/GEOKERNEL.md §5.11).
- *
- * `facing` has already chosen the layer (§5.6); choosing it again here would put one rule in two places free to
- * disagree, and the point of the short-circuit is that the user faces exactly one problem at a time. --- */
+/* --- GeoCode: the guidance shown when Earth Engine is not ready, for the layer `facing` has already chosen
+ * (docs/GEOKERNEL.md §5.11). --- */
 
 const machineJson = () => path.join(Global.Path.config, "machine.json")
 
@@ -16,20 +14,15 @@ function quote(target: string): string {
 }
 
 /**
- * `conda-meta/`, which every conda environment has, rather than a substring match on "miniconda" or "miniforge" —
- * those are directory names and a directory can be renamed. The environment root is two levels above a Unix
- * interpreter (`<env>/bin/python`) and one above a Windows one (`<env>/python.exe`).
+ * `conda-meta/` rather than a name like "miniforge" in the path, which can be renamed; the environment root is two
+ * levels above a Unix interpreter (`<env>/bin/python`) and one above a Windows one (`<env>/python.exe`).
  */
 function isConda(python: string): boolean {
   const root = process.platform === "win32" ? path.dirname(python) : path.dirname(path.dirname(python))
   return existsSync(path.join(root, "conda-meta"))
 }
 
-/**
- * Derived from the interpreter, never assumed to be on PATH: the configured environment may not be the active one
- * (§5.11 认证命令的定位). Windows is probed because its two layouts disagree — a venv interpreter already sits in
- * `Scripts/` beside the command, a conda one sits a directory above it.
- */
+/** Derived from the interpreter, never assumed to be on PATH: the configured environment may not be the active one. */
 function authCommand(python: string): string {
   const directory = path.dirname(python)
   if (process.platform !== "win32") return quote(path.join(directory, "earthengine"))
@@ -47,7 +40,6 @@ const STEPS = [
   "Configure your Google Cloud project ID",
 ] as const
 
-/** The whole ladder, not just the current rung, so a reader sees how far the chain runs (§5.11 分步推进模型). */
 function progress(current: 1 | 2 | 3 | 4): string[] {
   return [
     `Step ${current} of ${STEPS.length}: ${STEPS[current - 1]}.`,
@@ -60,7 +52,6 @@ function progress(current: 1 | 2 | 3 | 4): string[] {
   ]
 }
 
-/** Indent is a parameter because one caller renders this inside a numbered list, seven columns in. */
 const smokeTest = (indent = "  ") => [
   `${indent}from geocode import init_gee`,
   `${indent}init_gee()`,
@@ -68,9 +59,8 @@ const smokeTest = (indent = "  ") => [
 ]
 
 /**
- * The loop-closing fact (§3.1), and only where the fix is a changed `gee` value: Config drops an unchanged block.
- * (`config/index.ts`), so this holds where the fix is a changed `gee` value; the probe states pair it with the
- * tool retry, which re-probes them.
+ * Only where the fix changes the `gee` block, because Config drops an unchanged one (`config/index.ts`); the probe
+ * states pair it with the tool retry, which re-probes them.
  */
 const WATCHED = "GeoCode watches machine.json and re-probes the moment it is saved — no restart."
 
@@ -80,8 +70,6 @@ const PERMISSION = [
   "creating one, installing into one, replacing a package. Ask, and wait for",
   "the answer. It is their machine and their environment.",
 ]
-
-// Step 1 — the interpreter. Agent's to complete. --------------------------------
 
 function unconfigured(): string {
   const windows = process.platform === "win32"
@@ -180,8 +168,6 @@ function pythonMissing(python: string): string {
     WATCHED,
   ].join("\n")
 }
-
-// Step 2 — the packages. Agent's to complete. -----------------------------------
 
 function packagesMissing(python: string, missing: readonly string[]): string {
   // The schema allows an empty list though the probe never sends one (`setup.ts` guards on length); an empty
@@ -299,12 +285,7 @@ function packagesBroken(python: string, pkg: string, error: string): string {
   ].join("\n")
 }
 
-// Step 3 — the sign-in. The agent guides; the user performs. --------------------
-
-/**
- * The one step the agent cannot finish: the command waits at a browser for a person, and the service process
- * cannot drive one (§5.11 硬边界 1) — hence the two-beat wait rather than an authorization flow inside the app.
- */
+/** The agent cannot finish this step: the command waits at a browser for a person, and the service cannot drive one. */
 function credentialsMissing(python: string): string {
   const command = `${authCommand(python)} authenticate`
   return [
@@ -344,8 +325,6 @@ function credentialsMissing(python: string): string {
     "Do NOT just print the command and wait passively. Take initiative.",
   ].join("\n")
 }
-
-// Step 4 — the project. The user's alone. ---------------------------------------
 
 function projectMissing(): string {
   return [
@@ -394,8 +373,6 @@ function projectMissing(): string {
   ].join("\n")
 }
 
-// The probe itself failed — not a rung on the chain. ---------------------------
-
 /** The check did not get to answer, so no step is claimed — and neither state carries the interpreter to echo. */
 function probeBroken(symptom: string, error?: string): string {
   return [
@@ -427,8 +404,6 @@ function probeBroken(symptom: string, error?: string): string {
     WATCHED,
   ].join("\n")
 }
-
-// The three layers. -------------------------------------------------------------
 
 function setupGuidance(setup: GeoEvent.GeeSetup): string {
   switch (setup.status) {
@@ -464,9 +439,8 @@ function setupGuidance(setup: GeoEvent.GeeSetup): string {
 }
 
 /**
- * Nothing about routes or proxies (§5.11 硬边界 3): an agent cannot reconfigure the user's proxy software, and
- * the vocabulary only invites a diagnosis it cannot make. The prohibitions are the substance instead: the four
- * local steps are verified by the time anyone reads this, so each repair either breaks one or cannot complete.
+ * Nothing about routes or proxies: an agent cannot reconfigure the user's proxy software, and the vocabulary only
+ * invites a diagnosis it cannot make.
  */
 function networkGuidance(python: string, project: string, checking: boolean): string {
   if (checking) {
@@ -494,7 +468,7 @@ function networkGuidance(python: string, project: string, checking: boolean): st
   ].join("\n")
 }
 
-/** Google's own words travel beside our attribution, because our reading of them can be wrong (§5.5 归因). */
+/** Google's own words travel beside our attribution, because our reading of them can be wrong (§5.5). */
 function runtimeGuidance(python: string, project: string, runtime: GeoEvent.GeeRuntime): string {
   if (runtime.status === "checking") {
     return "Earth Engine authorization is being verified. Try again shortly."
@@ -586,9 +560,8 @@ function runtimeGuidance(python: string, project: string, runtime: GeoEvent.GeeR
 }
 
 /**
- * One voice for every not-ready state; a usable Earth Engine returns "". `facing` decides which layer speaks
- * (§5.6), and the second disjunct is not redundant with it: it keeps a contradictory status on the local story,
- * and narrows `setup` so the branches below can read its two fields.
+ * A usable Earth Engine returns "". The second disjunct is not redundant with `facing`: it keeps a contradictory
+ * status on the local story, and narrows `setup` so the branches below can read its two fields.
  */
 export function render(status: GeoEvent.GeeStatus): string {
   if (status.facing === "setup" || status.setup.status !== "ready") return setupGuidance(status.setup)

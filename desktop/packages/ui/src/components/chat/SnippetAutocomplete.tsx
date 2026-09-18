@@ -164,11 +164,8 @@ const SnippetAutocompleteUpstream = React.forwardRef<SnippetAutocompleteHandle, 
   );
 });
 
-/* --- GeoCode: `#name` substitution is not a surface GeoCode offers (docs/DESKTOP.md §7.3). Three
- * composers mount this — chat, multi-run, the scheduled task editor — so the one wrapper covers
- * them all, including one upstream adds later. Rendering nothing leaves the parents' ref null, and
- * they route keys only when it is set (ChatInput.tsx), so `#` falls back to an ordinary character
- * instead of opening a popup whose only remaining action leads to a settings page that is gone. --- */
+/* --- GeoCode: `#name` substitution is not offered (docs/DESKTOP.md §7.3). Wrapping the export covers every composer
+ * that mounts it, and since they route keys only while its ref is set, rendering nothing leaves `#` plain text. --- */
 SnippetAutocompleteUpstream.displayName = 'SnippetAutocomplete';
 
 export const SnippetAutocomplete = React.forwardRef<SnippetAutocompleteHandle, SnippetAutocompleteProps>(

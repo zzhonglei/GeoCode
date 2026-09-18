@@ -19,9 +19,8 @@ import READ_DESCRIPTION from "../src/tool/geo-read.txt"
 import { testEffect } from "./lib/effect"
 import { QGIS_READY, statusHolding } from "./lib/geocode-status"
 
-/* Tripwires for ReadGeoData (GEOKERNEL §10.1 #9; docs/TOOLS.md §7). The permission tests run the real `execute`
- * under the ruleset the assembly layer built, because a key the tool asks with that no rule names never matches
- * and never complains (docs/KERNEL.md §4.1). */
+// The permission tests run the real execute, because a key no rule names never matches and never complains
+// (docs/TOOLS.md §7).
 
 const it = testEffect(
   LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
@@ -33,7 +32,6 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-/** The tool's real execute, run under a given agent's ruleset. */
 const executeAs = Effect.fnUntraced(function* (agentName: string, filePath: string) {
   const registry = yield* ToolRegistry.Service
   const permission = yield* Permission.Service
@@ -58,8 +56,7 @@ const executeAs = Effect.fnUntraced(function* (agentName: string, filePath: stri
             .pipe(Effect.orDie),
       },
     )
-    // Bounded because `ask` reaches the real permission service with nobody to answer it, so a ruleset that
-    // resolves to `ask` instead of `allow` would hang here rather than fail.
+    // Nobody answers the real ask, so a ruleset resolving to ask instead of allow would hang here rather than fail.
     .pipe(Effect.timeout(5_000), Effect.exit)
 })
 
@@ -71,8 +68,6 @@ describe("geo tool registration", () => {
     }),
   )
 
-  /* A READY environment, because `qgisLocalDeadEnd` runs above the prompt: on a machine without QGIS the call
-   * returns the guidance and never reaches the grant the next test is about. */
   const itReady = testEffect(
     LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node, GeoKernel.node]), [
       [RuntimeFlags.node, RuntimeFlags.layer()],
@@ -85,8 +80,7 @@ describe("geo tool registration", () => {
       const ctx = yield* InstanceState.context
       const target = path.join(ctx.directory, "no-such-scene.tif")
 
-      // The shape of the failure is the proof: dying at the missing file means the ask was passed, which is what
-      // tells a matched grant from one written under a key nothing consults.
+      // Dying at the missing file is the proof that the ask was passed.
       for (const agent of ["GeoAgent", "plan"]) {
         const missed = yield* executeAs(agent, target)
         expect(Exit.isFailure(missed)).toBe(true)
@@ -101,8 +95,7 @@ describe("geo tool registration", () => {
 
   it.instance("an unconfigured environment answers with the kernel's guidance", () =>
     Effect.gen(function* () {
-      // The precondition is made rather than assumed: other files in this process write real machine.json hints
-      // into the same process-global kernel, so leaning on bun's file ordering would make this hostage to it.
+      // Other test files in this process write machine.json into the same process-global kernel.
       fs.rmSync(path.join(Global.Path.config, "machine.json"), { force: true })
       const qgis = yield* GeoQgis.Service
       const deadline = Date.now() + 10_000
@@ -129,8 +122,7 @@ describe("geo tool registration", () => {
   )
 
   test("the description prepares the Agent for the two endings it can produce", () => {
-    // Upstream completes an aborted call with whatever the tool returned, so a model that reads the cancellation
-    // banner as a failure restarts what the user just stopped.
+    // A model that reads the cancellation banner as a failure restarts what the user just stopped.
     expect(READ_DESCRIPTION).toContain("cancelled was stopped by the user")
     expect(READ_DESCRIPTION).toContain("do not restart it on your own")
   })
@@ -143,12 +135,10 @@ describe("geo tool registration", () => {
       layer: { feature_count: 10_000, features: Array.from({ length: count }, (_, i) => feature(i)) },
     })
 
-    // Under budget: untouched.
     const small = build(2)
     expect(fitVectorPayload(small, 50_000)).toEqual({ dropped: 0, fits: true })
     expect((small.layer.features as unknown[]).length).toBe(2)
 
-    // Over budget: a smaller sample, and still parseable JSON.
     const big = build(50)
     const fit = fitVectorPayload(big, 20_000)
     expect(fit.dropped).toBeGreaterThan(0)
@@ -156,7 +146,6 @@ describe("geo tool registration", () => {
     expect((big.layer.features as unknown[]).length).toBeGreaterThan(0)
     expect(JSON.stringify(big).length).toBeLessThanOrEqual(20_000)
 
-    // Over budget with nothing left to drop — a very wide schema's statistics — so `fits: false` and no cut.
     const wide = {
       layer: { field_stats: "s".repeat(30_000), features: [feature(1)] },
     }
@@ -164,8 +153,7 @@ describe("geo tool registration", () => {
     expect(wideFit.dropped).toBe(1)
     expect(wideFit.fits).toBe(false)
 
-    // Bytes, not UTF-16 code units: 4000 CJK characters are ~12000 bytes, which `String.length` would call
-    // comfortably under a 10KB budget and drop nothing.
+    // Bytes, not UTF-16 code units, which would put this under budget and drop nothing.
     const cjk = {
       layer: { feature_count: 2, features: [{ name: "漢".repeat(4_000) }, { name: "字".repeat(10) }] },
     }
@@ -176,16 +164,14 @@ describe("geo tool registration", () => {
 
   it.instance("the supported formats stay a subset of the shared taxonomy", () =>
     Effect.gen(function* () {
-      // A format this tool opens but the taxonomy omits is one the snapshot exclude never names, so scenes the
-      // Agent reads would go into the checkpoint repository (GEOKERNEL §10.1 #6).
+      // A format the taxonomy omits is one the snapshot exclude never names, so its scenes enter the checkpoint
+      // repository.
       for (const ext of VECTOR_SUPPORTED) expect(VECTOR_MAIN).toContain(ext)
       for (const ext of RASTER_SUPPORTED) expect(RASTER_MAIN).toContain(ext)
     }),
   )
 })
 
-/* Upstream completes a cancelled call with whatever the tool returned (session/tools.ts), so what these two pin is
- * what the user and the model see after their own Esc. */
 describe("ReadGeoData, cancelled", () => {
   const cancelledRuntime = Layer.mock(GeoRuntime.Service)({
     run: () =>
@@ -229,8 +215,7 @@ describe("ReadGeoData, cancelled", () => {
 
   it.instance("a data failure is attributed as one, not as an environment event", () =>
     Effect.gen(function* () {
-      // `error: true` is the shut gate's signal and travels with `geoStatus`; reusing it for a file that would
-      // not parse renders a bad GeoJSON as an environment card, with no field left to tell the two apart.
+      // error: true is the shut gate's signal, so reusing it here would render a bad GeoJSON as an environment card.
       const registry = yield* ToolRegistry.Service
       const permission = yield* Permission.Service
       const agent = yield* Agent.Service.use((svc) => svc.get("GeoAgent"))
@@ -307,12 +292,9 @@ describe("ReadGeoData, cancelled", () => {
   )
 })
 
-/* The two decisions the tool makes on top of a payload — which formats may select a layer, and whether paging
- * advice applies — need a payload in hand, so the reader's subprocess is stood in for. */
 describe("ReadGeoData, shaping a payload", () => {
   const spawned: { args: readonly string[] } = { args: [] }
 
-  /** stdout the reader will accept: its marker followed by one JSON object. */
   const readerReturning = (payload: Record<string, unknown>) =>
     Layer.mock(GeoRuntime.Service)({
       run: (options) =>
@@ -331,7 +313,6 @@ describe("ReadGeoData, shaping a payload", () => {
       killAllSync: () => {},
     })
 
-  /** Mixed geometry: sampled per type across the whole layer, offset ignored. */
   const MIXED = {
     driver: "GPX",
     layer_index: 0,
@@ -396,12 +377,11 @@ describe("ReadGeoData, shaping a payload", () => {
         },
       )
 
-      // vector_read.py emits an overview whenever layer_count > 1, so gating selection on .gpkg would list a
-      // .gpx's layers with no way past the first.
+      // vector_read.py lists layers for any multi-layer source, so gating selection on .gpkg strands a .gpx.
       expect(spawned.args).toContain("2")
 
-      // MIXED carries `geometry_types`, which is the reader saying it sampled per type across the whole layer and
-      // ignored offset — so offset advice would send the caller back for the features it already has.
+      // geometry_types means the reader sampled the whole layer per type and ignored offset, so offset advice
+      // would send the caller back for features it already has.
       expect(result.metadata.truncated).toBe(true)
       expect(result.output).toContain("mixes geometry types")
       expect(result.output).not.toContain("Continue with offset=")
@@ -428,9 +408,9 @@ describe("ReadGeoData, and a raster that is only a picture", () => {
     }),
   )
 
-  /** Nothing anywhere: the identity transform is GDAL's way of saying "none". */
+  /** The identity transform is GDAL's way of saying there is none. */
   const NOTHING = { transform: [0, 1, 0, 0, 0, 1], projection: false, gcp_count: 0, rpc: false, geolocation: false }
-  /** A raw satellite scene: no transform and no CRS, yet geographic on the strength of its RPC coefficients. */
+  /** No transform and no CRS, yet geographic on the strength of its RPC coefficients. */
   const RAW_SCENE = { ...NOTHING, rpc: true }
 
   const runtimeSaying = (stdout: string) =>
@@ -487,7 +467,7 @@ describe("ReadGeoData, and a raster that is only a picture", () => {
   }
 
   const marked = (payload: object) => `${QgisReader.MARKER}${JSON.stringify(payload)}\n`
-  /** The preview protocol: marker line, then the image. Four characters encode three bytes. */
+  /** Marker line, then the base64 image, where four characters encode three bytes. */
   const rendered = (meta: object) => `${marked({ width: 10, height: 10, bytes: 3, ...meta })}AAAA\n`
 
   {
@@ -517,13 +497,11 @@ describe("ReadGeoData, and a raster that is only a picture", () => {
       Effect.gen(function* () {
         const result = yield* body()
         expect(result.metadata.error_code).toBe("NotGeographic")
-        // The same five places and the same conclusion as the mode above, so one file cannot get two accounts.
         for (const place of ["transform", "control points", "RPC", "geolocation", "coordinate system"]) {
           expect(result.output).toContain(place)
         }
         expect(result.output).toContain("an image, not geographic data")
         expect(result.output).not.toContain("Preview failed")
-        // And no picture, which a refusal that still attached one would not be.
         expect(result.attachments).toBeUndefined()
       }),
     )
@@ -540,8 +518,7 @@ describe("ReadGeoData, and a raster that is only a picture", () => {
         const result = yield* body()
         expect(result.metadata.error_code).toBeUndefined()
         expect(result.metadata.georeference).toBe("rpc")
-        // Replaced by what the five fields add up to: `rpc` means no usable transform, so any extent the payload
-        // reports is still in pixel indices.
+        // rpc means no usable transform, so any extent the payload reports is still in pixel indices.
         expect(result.output).toContain('"georeferencing":"rpc"')
         expect(result.output).not.toContain("gcp_count")
       }),

@@ -21,10 +21,8 @@ const exists = async (fsPromises, target) => fsPromises.access(target).then(() =
  * server keeps starting, reading the (empty) new location.
  */
 export const migrateLegacyUserDirs = async ({ fsPromises, path, dataDir, legacyRoot, warn = () => {}, entries = USER_DIR_ENTRIES }) => {
-  // --- GeoCode: `legacyRoot` is OpenChamber's own configuration directory (server/index.js,
-  // OPENCHAMBER_DEFAULT_CONFIG_ROOT). GeoCode has never written there, so the copy below can
-  // only carry another product's projects, themes and speech models into ours — the project
-  // files alone hold shell commands bound to buttons. The upstream body is kept verbatim. ---
+  // --- GeoCode: `legacyRoot` is OpenChamber's own directory, so the copy would import another product's
+  // projects, whose files carry shell commands ---
   return [];
   // --- /GeoCode ---
   if (path.resolve(dataDir) === path.resolve(legacyRoot)) return [];

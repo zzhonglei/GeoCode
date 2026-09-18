@@ -826,10 +826,8 @@ export const registerOpenCodeProxy = (app, deps) => {
           return null;
         });
 
-        // --- GeoCode: read the shell data root, which Electron main injects (docs/PATHS.md §3.3).
-        // The fallback is GeoCode's own — nothing here may write into an OpenChamber directory. It
-        // carries the `desktop/` segment because `.config/GeoCode` alone is the kernel's config root,
-        // and on a case-insensitive filesystem `geocode` would land in it too. ---
+        // --- GeoCode: the shell data root Electron main injects, else our own fallback, under `desktop/`
+        // because `.config/GeoCode` is the kernel's (docs/PATHS.md §5) ---
         const settingsRoot = process.env.OPENCHAMBER_DATA_DIR
           ? path.resolve(process.env.OPENCHAMBER_DATA_DIR)
           : path.join(os.homedir(), '.config', 'GeoCode', 'desktop');

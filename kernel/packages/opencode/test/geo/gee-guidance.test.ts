@@ -7,8 +7,7 @@ import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { GeeDeps } from "@/geo/gee/deps"
 import { GeeGuidance } from "@/geo/gee/guidance"
 
-/* The GEE group's one voice (docs/GEOKERNEL.md §5.11): every not-ready state answers, on the step the probe
- * stopped at, naming who performs it and the file the kernel actually reads. */
+/* The GEE group's one voice (docs/GEOKERNEL.md §5.11). */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-gee-guidance-"))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
@@ -18,7 +17,6 @@ const PYTHON = path.join(root, "envs", "demo", "bin", "python3")
 fs.mkdirSync(path.dirname(PYTHON), { recursive: true })
 fs.writeFileSync(PYTHON, "")
 
-/** A second environment, conda-shaped: `conda-meta/` beside the bin directory. */
 const CONDA_PYTHON = path.join(root, "conda-env", "bin", "python3")
 fs.mkdirSync(path.dirname(CONDA_PYTHON), { recursive: true })
 fs.writeFileSync(CONDA_PYTHON, "")
@@ -28,7 +26,6 @@ const MACHINE = path.join(Global.Path.config, "machine.json")
 
 const READY = { status: "ready", python: PYTHON, project: "ee-demo" } as const
 
-/** A setup-layer status, composed the way the module composes one. */
 const setup = (state: GeoEvent.GeeSetup): GeoEvent.GeeStatus => ({
   facing: "setup",
   setup: state,
@@ -121,8 +118,6 @@ describe("GeeGuidance", () => {
     }
   })
 
-  // Step 2 — the install --------------------------------------------------------
-
   test("packages install one at a time, through the configured interpreter", () => {
     const missing = ["earthengine-api", "geemap", "geedim"]
     const text = GeeGuidance.render(setup({ status: "packages-missing", python: PYTHON, missing }))
@@ -130,8 +125,7 @@ describe("GeeGuidance", () => {
     const commands = text.match(/-m pip install \S+/g) ?? []
     expect(commands).toHaveLength(missing.length)
     for (const pkg of missing) {
-      // The quoted interpreter immediately before `-m pip install` is what makes a bare `pip install`, or one off
-      // PATH, fail this.
+      // The quoted interpreter before `-m pip install` is what fails a bare `pip install`, or one off PATH.
       expect(text).toMatch(
         new RegExp(`["']${PYTHON.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'] -m pip install ${pkg}(\\s|$)`),
       )
@@ -152,13 +146,11 @@ describe("GeeGuidance", () => {
     expect(both).toContain("conda install -c conda-forge geopandas")
     expect(both).toContain("ABI-mismatch")
 
-    // conda environment, but nothing GDAL-bound is missing.
     const noGeopandas = GeeGuidance.render(
       setup({ status: "packages-missing", python: CONDA_PYTHON, missing: ["geemap"] }),
     )
     expect(noGeopandas).not.toContain("conda-forge")
 
-    // geopandas missing, but this is not a conda environment.
     const noConda = GeeGuidance.render(setup({ status: "packages-missing", python: PYTHON, missing: ["geopandas"] }))
     expect(noConda).not.toContain("conda-forge")
     expect(noConda).toContain("-m pip install geopandas")
@@ -177,7 +169,6 @@ describe("GeeGuidance", () => {
     expect(text).toMatch(/Installing it again will not fix this/)
     expect(text).toMatch(/Do NOT tell the user the package is missing/)
     expect(text).toContain("--force-reinstall")
-    // Still step 2: the chain stopped in the same place, for a different reason.
     expect(text).toContain("Step 2 of 4")
 
     const inConda = GeeGuidance.render(
@@ -188,7 +179,6 @@ describe("GeeGuidance", () => {
   })
 
   test("the conda alternative is one solve, not one command per package", () => {
-    // conda solves the whole environment per invocation, so the split that the pip lines beside it need is wrong here.
     const text = GeeGuidance.render(
       setup({ status: "packages-missing", python: CONDA_PYTHON, missing: ["geopandas", "geemap"] }),
     )
@@ -198,7 +188,6 @@ describe("GeeGuidance", () => {
   })
 
   test("a rejected project is looked up in both places it can exist", () => {
-    // A project created in the Cloud console and never opened in the editor is not shown at the top of the editor.
     // Scoped to the attributed fix, since the closing paragraph names the Cloud console too and would answer for it.
     const text = GeeGuidance.render(remote({ status: "failed", reason: "project-invalid", message: "no such project" }))
     const fix = text.split("Most likely fix:")[1]?.split("\n\n")[0] ?? ""
@@ -207,12 +196,10 @@ describe("GeeGuidance", () => {
   })
 
   test("the remote refusal names the file it tells the agent to edit", () => {
-    // It tells the agent to correct gee.project in machine.json, and a bare filename leaves it guessing where.
+    // A bare filename would leave the agent guessing where machine.json is.
     const text = GeeGuidance.render(remote({ status: "failed", reason: "project-invalid", message: "no such project" }))
     expect(text).toContain(MACHINE)
   })
-
-  // Step 3 — the sign-in --------------------------------------------------------
 
   test("the authentication command is located from the interpreter", () => {
     const text = GeeGuidance.render(setup({ status: "credentials-missing", python: PYTHON }))
@@ -225,16 +212,13 @@ describe("GeeGuidance", () => {
   })
 
   test("the sign-in waits for the user twice", () => {
-    // Ask, wait, run, wait again — the command opens a browser and waits for a person.
     const text = GeeGuidance.render(setup({ status: "credentials-missing", python: PYTHON }))
     expect(text).toMatch(/Do NOT run the command until/)
     expect(text).toContain("have their Google account ready")
     expect(text).toContain("tell me it's done")
-    // And never a claim that the app itself opens that browser (§5.11 硬边界 1).
+    // Never a claim that the app itself opens that browser (§5.11).
     expect(text).not.toMatch(/open (a|the) browser for you/i)
   })
-
-  // Step 4 — the project --------------------------------------------------------
 
   test("the project is the user's to give, and never invented", () => {
     const text = GeeGuidance.render(setup({ status: "project-missing" }))
@@ -243,8 +227,6 @@ describe("GeeGuidance", () => {
     expect(text).toContain('"gee"')
     expect(text).toContain("Step 4 of 4")
   })
-
-  // The probe itself ------------------------------------------------------------
 
   test("a failed probe is diagnosed before anything is changed", () => {
     const failed = GeeGuidance.render(setup({ status: "probe-failed", error: "Segmentation fault" }))
@@ -257,10 +239,7 @@ describe("GeeGuidance", () => {
     expect(failed.split("\n")[0]).not.toBe(timeout.split("\n")[0])
   })
 
-  // The network layer -----------------------------------------------------------
-
   test("a network failure forbids every local repair", () => {
-    // All four local steps passed to get here, so every repair an agent would reach for damages a working part.
     const text = GeeGuidance.render(network({ status: "unreachable" }))
     expect(text).toContain("do NOT reinstall Python packages")
     expect(text).toContain("do NOT edit")
@@ -274,8 +253,6 @@ describe("GeeGuidance", () => {
   })
 
   test("the network branch says the network is the problem, and nothing about proxies", () => {
-    // An agent cannot reconfigure the user's proxy software, so the vocabulary only invites a diagnosis it cannot
-    // make (§5.11 硬边界 3).
     const text = GeeGuidance.render(network({ status: "unreachable" }))
     // The temp directory is echoed in the interpreter path, and its random name can spell any of these.
     expect(text.replaceAll(root, "")).not.toMatch(/proxy|VPN|SOCKS|tunnel/i)
@@ -285,7 +262,6 @@ describe("GeeGuidance", () => {
   })
 
   test("every state that installs anything asks permission first", () => {
-    // On all three states that change an environment, since the response templates only demonstrate asking.
     const installers: GeoEvent.GeeSetup[] = [
       { status: "unconfigured" },
       { status: "packages-missing", python: PYTHON, missing: ["geemap"] },
@@ -299,7 +275,6 @@ describe("GeeGuidance", () => {
   })
 
   test("using conda is fine; installing it is not ours to do", () => {
-    // The copy offers a conda command; putting conda itself on the user's machine is not the agent's to do.
     const text = GeeGuidance.render(setup({ status: "unconfigured" }))
     expect(text).toContain("conda create -n <name> python=3.12 -y")
     expect(text).toMatch(/Do NOT install conda or miniforge yourself/)
@@ -307,8 +282,7 @@ describe("GeeGuidance", () => {
   })
 
   test("writing the configuration names the tool that edits in place", () => {
-    // machine.json holds the qgis and gdal blocks too, and "write gee.python to the file" invites a whole-file
-    // redirect that takes them with it.
+    // machine.json holds the qgis and gdal blocks too, which a whole-file write would take with it.
     const writers: GeoEvent.GeeSetup[] = [
       { status: "unconfigured" },
       { status: "python-missing", python: PYTHON },
@@ -322,10 +296,7 @@ describe("GeeGuidance", () => {
     expect(GeeGuidance.render(setup({ status: "unconfigured" }))).toMatch(/QGIS and GDAL/)
   })
 
-  // The remote layer ------------------------------------------------------------
-
   test("each attribution leads somewhere different", () => {
-    // Five reasons collapsing onto one paragraph would leave the attribution as decoration.
     const reasons: GeoEvent.GeeRejection[] = [
       "api-disabled",
       "permission-denied",
@@ -337,7 +308,7 @@ describe("GeeGuidance", () => {
     for (const reason of reasons) {
       const text = GeeGuidance.render(remote({ status: "failed", reason, message: "Google said no" }))
       expect(text).toContain(reason)
-      // Google's own words beside our reading of them, which can be wrong (§5.5 归因).
+      // Google's own words beside our reading of them, which can be wrong (§5.5).
       expect(text).toContain("Google said no")
       const fix = text.split("Most likely fix:")[1]?.split("\n\n")[0] ?? ""
       expect(fix.length).toBeGreaterThan(0)
@@ -356,11 +327,8 @@ describe("GeeGuidance", () => {
     expect(text).toContain("not enabled")
   })
 
-  // The routing itself ----------------------------------------------------------
-
   test("facing decides which layer speaks", () => {
-    // A hand-built contradiction, since `compose` cannot produce one: a network story told over a broken local
-    // setup is the misattribution the priority exists to prevent (§5.6).
+    // Hand-built, since `compose` cannot produce it: a network story over a broken setup, which the priority prevents.
     const contradiction: GeoEvent.GeeStatus = {
       facing: "network",
       setup: { status: "packages-missing", python: PYTHON, missing: ["geemap"] },

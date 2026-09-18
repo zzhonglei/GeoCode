@@ -22,14 +22,9 @@ import { useI18n } from '@/lib/i18n';
 import { subscribeRuntimeEndpointChanged } from '@/lib/runtime-switch';
 import type { OpenChamberSection } from './types';
 
-// --- GeoCode: the kernel is embedded; choosing or upgrading a system OpenCode is not a product
-// surface, so the desktop shell renders nothing here (docs/DESKTOP.md §7.3,
-// geocode/desktop-settings-surface.ts hides the matching search entries). ---
+// --- GeoCode: the desktop shell has no system OpenCode, LAN access or agent tool switches (docs/DESKTOP.md §7.3) ---
 const OpenCodeCliSettings: React.FC = () => (isDesktopShell() ? null : <UpstreamOpenCodeCliSettings />);
-// The desktop section without LAN access and the UI password (docs/DESKTOP.md §6.1).
 const DesktopNetworkSettings: React.FC = () => (isDesktopShell() ? <GeoCodeDesktopSettings /> : <UpstreamDesktopNetworkSettings />);
-// The agent tools are not switches in GeoCode: the browser and control tools are always on (§7.2),
-// so the section is gone.
 const OpenChamberToolsSettings: React.FC = () => (isDesktopShell() ? null : <UpstreamOpenChamberToolsSettings />);
 // --- /GeoCode ---
 

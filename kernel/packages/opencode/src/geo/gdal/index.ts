@@ -19,10 +19,7 @@ export { GdalRaster } from "./raster"
 export { GdalVector } from "./vector"
 export type { Environment, Track } from "./types"
 
-/* --- GeoCode: the GDAL lifecycle (docs/GEOKERNEL.md §7.3).
- *
- * Owns the `gdal` status slot and is its only writer. The probe is file-existence checks, so there is one transition
- * and no intermediate state: the configuration changed, so look again. --- */
+/* --- GeoCode: the GDAL lifecycle, sole writer of the `gdal` status slot (docs/GEOKERNEL.md §7.3). --- */
 
 /** The refusal carries the whole status, not a sentence: the data plane's errors have to be structured (§7.7). */
 export type Gate =

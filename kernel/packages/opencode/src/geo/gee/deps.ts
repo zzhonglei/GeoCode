@@ -1,10 +1,7 @@
 export * as GeeDeps from "./deps"
 
-/* --- GeoCode: the Python packages a GEE run needs end to end (docs/GEOKERNEL.md §5.3 依赖清单是单一真相源).
- *
- * Wider than the Earth Engine client, because the runtime library (§5.10) reads local vector files and downloads
- * imagery: what `pylib/geocode.py` imports is what the user was promised, and a gap here reports the environment
- * ready and then fails halfway through their script. --- */
+/* --- GeoCode: the Python packages a GEE run needs end to end, covering what `pylib/geocode.py` imports, or setup
+ * reports ready and the script fails halfway (docs/GEOKERNEL.md §5.3). --- */
 
 export interface Dep {
   readonly pkg: string

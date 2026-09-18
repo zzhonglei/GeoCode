@@ -8,10 +8,8 @@ import { GeoOutput } from "../runtime/output"
 import { QgisBootstrap } from "./bootstrap"
 import type { Environment } from "./types"
 
-/* --- GeoCode: the algorithm catalog (docs/GEOKERNEL.md §4.11).
- *
- * Exported by a script running inside the verified environment and held in memory only. The lifecycle owns WHEN —
- * build after each verification, invalidate at the start of every round — and this module owns HOW. --- */
+/* --- GeoCode: the algorithm catalog, held in memory only; the lifecycle in ./index.ts decides when to build and
+ * invalidate it (docs/GEOKERNEL.md §4.11). --- */
 
 export interface Param {
   readonly name: string
@@ -33,7 +31,7 @@ export interface Algorithm {
   readonly name: string
   readonly group: string
   readonly description: string
-  /** Verbatim from QGIS — never trimmed, never rewritten (§4.11). */
+  /** Verbatim from QGIS; never trim or rewrite it (§4.11). */
   readonly helpText: string
   readonly parameters: readonly Param[]
   readonly outputs: readonly Output[]
@@ -57,12 +55,9 @@ export interface GroupInfo {
 
 export const MARKER = "__GEOCODE_REGISTRY_JSON__"
 
-/** Stand-in group for algorithms that declare none; shared with the export script so a listed group is lookupable. */
 export const UNGROUPED = "Ungrouped"
 
 /**
- * The export script — §4.11 for what it covers, §4.13 for the constraints every QGIS script shares.
- *
  * The bare application built here installs no interface translation, so the framework's text falls through to its
  * English source strings; routing this through full application startup would localise the whole catalog instead.
  */
@@ -150,8 +145,8 @@ const TOTAL = "120 seconds"
 export type BuildOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string }
 
 /**
- * What a lookup key turned out to name (§4.11 查找的宽容度). `ambiguous` carries the candidates the tolerance
- * declined to choose between; folding it into `missing` throws that set away and leaves the caller to re-guess it.
+ * `ambiguous` carries the candidates the lookup declined to choose between; folding it into `missing` throws that set
+ * away and leaves the caller to re-guess it (§4.11).
  */
 export type Resolution =
   | { readonly kind: "found"; readonly algorithm: Algorithm }
@@ -159,24 +154,15 @@ export type Resolution =
   | { readonly kind: "missing" }
 
 export interface Interface {
-  /**
-   * Export the catalog for a verified environment and keep it in memory. Runs in the round fiber under the round's
-   * token, so a new round interrupts the build and Status discards any late commit (§4.8).
-   */
   readonly build: (environment: Environment) => Effect.Effect<BuildOutcome>
-  /** Drop whatever is held; the catalog belongs to the verification that produced it (§4.8). */
   readonly invalidate: () => Effect.Effect<void>
-  /** Deduplicated groups across providers, with counts, in stable order. */
   readonly groups: () => Effect.Effect<readonly GroupInfo[]>
-  /** Every algorithm in a group, across providers, in stable order. The group name is matched folded (§4.11). */
   readonly inGroup: (group: string) => Effect.Effect<readonly Algorithm[]>
-  /** Exact id, then folded id with or without prefix, then folded display name — each answers only if it names one. */
+  /** Exact id, then folded id with or without prefix, then folded name; a tier matching several is ambiguous. */
   readonly resolve: (id: string) => Effect.Effect<Resolution>
   /** `resolve` for callers that only act on a hit; ambiguity reads as absence. */
   readonly get: (id: string) => Effect.Effect<Algorithm | undefined>
-  /** Fuzzy search over ids and display names, by relevance. */
   readonly search: (query: string, limit?: number) => Effect.Effect<readonly Algorithm[]>
-  /** Nearest candidates for an input that failed to match (§4.11). */
   readonly suggest: (input: string, kind: "group" | "algorithm", limit?: number) => Effect.Effect<readonly string[]>
 }
 
@@ -187,11 +173,7 @@ function stripPrefix(id: string): string {
   return index >= 0 ? id.slice(index + 1) : id
 }
 
-/**
- * The comparison form of a lookup key: lowercased, everything but letters and digits removed (§4.11 查找的宽容度).
- * Applied to both sides, so the catalog accepts back what it printed; Latin-only, which holds only because the
- * export is English.
- */
+/** Applied to both sides of a lookup. Latin-only, which holds only because the export is English. */
 function fold(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "")
 }
@@ -209,8 +191,8 @@ const layer = Layer.effect(
             command: environment.python,
             args: ["-c", QgisBootstrap.wrapInline(EXPORT_SCRIPT, environment.dllDirectories)],
             env: environment.env,
-            // The dump is 1.4MB of help text on a 3.44 install and grows with each release; past the cap the run is
-            // usually not killed: it lands in one burst, so the marker is dropped and it surfaces as "no marker".
+            // Help text grows with each release. Past the cap the run is usually not killed: the dump lands in one
+            // burst, the marker at its front is dropped, and it surfaces as "no marker".
             delivery: { mode: "collect", limit: 32 * 1024 * 1024 },
             clocks: { total: TOTAL },
             label: "qgis:catalog",
@@ -246,7 +228,7 @@ const layer = Layer.effect(
 
     const invalidate = () => Ref.set(held, undefined)
 
-    // Queries never trigger a build; an empty answer pairs with the shut gate (§4.9) callers consult first.
+    // Queries never trigger a build; callers consult the gate first (§4.9).
     const groups = () =>
       Effect.gen(function* () {
         const registry = yield* Ref.get(held)
@@ -269,8 +251,7 @@ const layer = Layer.effect(
         if (!registry) return []
         const wanted = fold(group)
         if (!wanted) return []
-        // Folded on both sides and through the same `|| UNGROUPED` fallback groups() lists by, so every name that
-        // query prints is a name this one answers for (§4.11).
+        // The same `|| UNGROUPED` fallback as groups(), so every group it lists is found here.
         return registry.providers
           .flatMap((provider) =>
             provider.algorithms.filter((algorithm) => fold(algorithm.group || UNGROUPED) === wanted),
@@ -283,9 +264,8 @@ const layer = Layer.effect(
         const registry = yield* Ref.get(held)
         if (!registry) return { kind: "missing" as const }
         const all = registry.providers.flatMap((provider) => provider.algorithms)
-        // The full id is the only unambiguous key; everything below it is a tolerance, and a tolerance never guesses
-        // (§4.11). On a 3.44 install 11 short ids and 8 display names each name several algorithms with unrelated
-        // parameter sets, so returning the first match would run one the caller never asked for.
+        // Below the full id a tier never picks among several matches: short ids and display names are shared by
+        // algorithms with unrelated parameter sets, and the first match would run one the caller never asked for.
         const exact = all.find((algorithm) => algorithm.id === id)
         if (exact) return { kind: "found" as const, algorithm: exact }
 
@@ -298,13 +278,11 @@ const layer = Layer.effect(
           return undefined
         }
 
-        // One tier for both spellings: a bare short-form match is a folded match that needed no folding.
         const byId = tier(
           all.filter((algorithm) => wanted.has(fold(algorithm.id)) || wanted.has(fold(stripPrefix(algorithm.id)))),
         )
         if (byId) return byId
 
-        // Display names last: they are labels, not identifiers.
         return tier(all.filter((algorithm) => wanted.has(fold(algorithm.name)))) ?? { kind: "missing" }
       })
 

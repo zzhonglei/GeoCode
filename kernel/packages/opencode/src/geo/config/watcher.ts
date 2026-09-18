@@ -4,8 +4,8 @@ import fs from "fs"
 import { Effect } from "effect"
 import { MachineLoader } from "./loader"
 
-/* --- GeoCode: watching `machine.json` for edits (docs/GEOKERNEL.md §3.1). The config DIRECTORY, not the file:
- * editors save by renaming a temp file over the target, which detaches a watch bound to the original inode. --- */
+/* --- GeoCode: watching the config directory rather than `machine.json` itself, since editors that save by renaming
+ * a temp file over the target detach a watch on the file (docs/GEOKERNEL.md §3.1). --- */
 
 /** One save reaches the callback more than once, and a read landing mid-write sees a file the user never saved. */
 const DEBOUNCE_MS = 100
@@ -14,10 +14,7 @@ export interface Handle {
   readonly close: () => void
 }
 
-/**
- * Invoke `onChange` when either form of the config file is touched. A watch that cannot be established is reported
- * rather than thrown: the machine still runs, and `POST /geo/reload` is the pull escape hatch §3.1 requires for it.
- */
+/** A watch that cannot be established is reported, not thrown: `POST /geo/reload` still works without it. */
 export function watch(onChange: () => void, onError: (cause: unknown) => void): Handle {
   let timer: NodeJS.Timeout | undefined
   let watcher: fs.FSWatcher | undefined

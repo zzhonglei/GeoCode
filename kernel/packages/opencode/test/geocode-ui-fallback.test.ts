@@ -12,9 +12,8 @@ import { HttpApiApp } from "@/server/routes/instance/httpapi/server"
 import { serveUIEffect } from "@/server/shared/ui"
 import { testEffect } from "./lib/effect"
 
-/* GeoCode: the HTTP API's catch-all answers 404 instead of fetching the web UI from
- * https://app.opencode.ai (docs/KERNEL.md §6 item 7). The recording client stands in for the
- * network, so one request reaching it is the failure. */
+/* GeoCode: a merge can bring back the catch-all that fetches the web UI from app.opencode.ai (docs/KERNEL.md §6
+ * item 7). */
 
 const fsUtilLayer = AppNodeBuilder.build(FSUtil.node)
 const it = testEffect(Layer.mergeAll(fsUtilLayer, RuntimeFlags.layer()))

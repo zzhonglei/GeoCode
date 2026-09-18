@@ -1,13 +1,8 @@
 /* --- GeoCode: applying configuration under Electron refreshes the embedded kernel instead of
- * ending in "restart your server yourself" (docs/DESKTOP.md §5.2).
- *
- * The control run is the same external-mode runtime without the Electron mark: it has to
- * keep upstream's honest `{ reloaded: false, external: true }`, or the branch above proves
- * nothing about what it changed. Harness mirrors geocode/managed-kernel.test.js. --- */
+ * answering with upstream's manual-restart result (docs/DESKTOP.md §5.2). --- */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// execFile: managed-process-registry.js promisifies it at module scope, so the mock has to
-// carry it even though nothing here calls it.
+// execFile too: managed-process-registry.js promisifies it at import.
 vi.mock('node:child_process', () => ({ spawn: vi.fn(), spawnSync: vi.fn(), execFile: vi.fn() }));
 vi.mock('../lib/opencode/startup-performance.js', () => ({ recordStartupPerformance: vi.fn() }));
 

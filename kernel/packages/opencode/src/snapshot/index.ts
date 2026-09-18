@@ -22,12 +22,8 @@ export type Patch = typeof Patch.Type
 export const FileDiff = Info
 export type FileDiff = typeof FileDiff.Type
 
-/* --- GeoCode: geodata never enters the checkpoint repository (docs/GEOKERNEL.md §10.1 #6).
- *
- * One scene is hundreds of megabytes and a project holds many, so without this a checkpoint costs more than the
- * work it protects. The extensions come from the shared taxonomy so this cannot drift from the watcher's ignore
- * list, and only the unambiguous ones: this becomes an unconditional `*.ext` rule, so the generics
- * `SNAPSHOT_BLANKET_SIDECARS` has dropped (`.dat`, `.hdr`, `.qml`) would swallow a user's own files. --- */
+/* --- GeoCode: geodata stays out of the checkpoint repository; each entry becomes an unconditional `*.ext` rule, so
+ * only unambiguous extensions qualify, never the generic sidecars (docs/GEOKERNEL.md §10.1 #6). --- */
 const geoSection = (header: string, extensions: string[]) => [
   `# GeoCode: ${header}`,
   ...extensions.map((extension) => `*.${extension}`),
@@ -42,13 +38,8 @@ const GEO_EXCLUDE = [
   ...geoSection("Container-dataset folders", GeoExtensions.CONTAINER_DIRS),
   ...geoSection("Dataset sidecars", GeoExtensions.SNAPSHOT_BLANKET_SIDECARS),
   ...geoSection("Transient churn (SQLite WAL / QGIS locks)", GeoExtensions.TRANSIENT_SUFFIXES),
-  /* Snapshot-only, and too aggressive for any other consumer: a checkpoint has no use for these, while a file
-   * tree that hid them would be hiding the metadata a GIS user reads.
-   *
-   * Qualified by what they sit beside, NOT a bare `*.xml`, which matches ordinary config at any depth.
-   * `.aux.xml` is GDAL's PAM sidecar — rewritten whenever a read computes statistics, and load-bearing besides,
-   * since formats that cannot store a CRS themselves keep it there (§4.13). Not derived over the whole taxonomy
-   * on purpose: ArcGIS's `<name>.<ext>.xml` beside other formats is small and not rewritten on open. */
+  // Snapshot-only, since a file tree must still show this metadata; never a bare `*.xml`, which matches ordinary
+  // config, and not derived over the taxonomy, since `<name>.<ext>.xml` beside other formats is small and stable.
   "# GeoCode: GIS metadata",
   "*.aux.xml",
   "*.shp.xml",
@@ -71,14 +62,9 @@ interface GitResult {
 
 type State = Omit<Interface, "init">
 
-/* --- GeoCode: which candidates may be staged, as a named rule rather than an inline filter
- * (docs/GEOKERNEL.md §10.1 #6).
- *
- * Two exclusions answering to different rule sets: `ignored` is the SOURCE repo's, `geoIgnored` is the snapshot
- * repo's own `info/exclude`, where GEO_EXCLUDE lives. Dropping the second does NOT let geodata into the store —
- * `git add` refuses a path its exclude file covers — but it makes git exit non-zero, which `stage()` reports as
- * "failed to add snapshot files" although every other file went in, permanently, on every geographic project.
- * Extracted because that is invisible from outside: patch, store and disk come out identical either way. --- */
+/* --- GeoCode: `ignored` holds the source repo's rules and `geoIgnored` the snapshot's own exclude; without the
+ * latter `git add` exits non-zero and `stage()` logs a failed add on every geographic project
+ * (docs/GEOKERNEL.md §10.1 #6). --- */
 export function stageable(
   all: readonly string[],
   ignored: ReadonlySet<string>,
@@ -156,9 +142,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
         const ignore = Effect.fnUntraced(function* (
           files: string[],
-          // GeoCode: by default this asks the SOURCE repo's rules. Pass the
-          // snapshot's own gitdir to ask ITS `info/exclude` instead, which is
-          // where GEO_EXCLUDE lives (§10.1 #6).
+          // GeoCode: the source repo's rules by default; pass the snapshot's gitdir to check GEO_EXCLUDE instead
           gitDir: string = path.join(state.worktree, ".git"),
         ) {
           if (!files.length) return new Set<string>()
@@ -253,7 +237,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           const text = [
             file ? (yield* read(file)).trimEnd() : "",
             ...list.map((item) => `/${item.replaceAll("\\", "/")}`),
-            GEO_EXCLUDE, // GeoCode: geodata never belongs in a checkpoint (§10.1 #6).
+            GEO_EXCLUDE, // GeoCode: geodata never belongs in a checkpoint
           ]
             .filter(Boolean)
             .join("\n")
@@ -328,16 +312,9 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           const untracked = other.text.split("\0").filter(Boolean)
           const all = Array.from(new Set([...tracked, ...untracked]))
 
-          /* --- GeoCode: geodata ALREADY TRACKED in the snapshot index has to go too
-           * (docs/GEOKERNEL.md §10.1 #6).
-           *
-           * The source-repo check below never sees GEO_EXCLUDE — that lives in the snapshot repo's own `info/exclude`
-           * — and a gitignore rule has no effect on an already-tracked file anyway, so a `.tif` committed in the
-           * user's repo would be re-hashed into the object store on every single checkpoint.
-           *
-           * Before the early return, and that is the whole subtlety: seeded geodata is unchanged when it is tracked,
-           * so it appears in no candidate list and is reachable only through `ls-files`. Placed after the return it
-           * would ride into the first tree and be removed by the next call, as a phantom deletion. --- */
+          /* --- GeoCode: also drop geodata the snapshot index already tracks, which no exclude rule removes; before the
+           * early return, because unchanged seeded geodata is reachable only through `ls-files` and would otherwise
+           * enter the first tree and vanish from the next (docs/GEOKERNEL.md §10.1 #6). --- */
           const geoIgnored = yield* ignore(Array.from(new Set([...all, ...(yield* lsFiles())])), state.gitdir)
           if (geoIgnored.size > 0) {
             yield* Effect.logInfo("removing geodata from snapshot", { count: geoIgnored.size })
@@ -357,7 +334,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
             yield* drop(ignoredFiles)
           }
 
-          const allow = stageable(all, ignored, geoIgnored) // GeoCode: named above, and tested there
+          const allow = stageable(all, ignored, geoIgnored) // GeoCode: see stageable above
           if (!allow.length) return
 
           const large = new Set(

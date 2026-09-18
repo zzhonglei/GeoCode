@@ -1,15 +1,5 @@
-/* --- GeoCode: the shell runtime's own login-shell merge stays off under Electron
- * (docs/ENVIRONMENT.md §5.2 invariant 3).
- *
- * The merge copies every name the login shell exports that is empty in process.env. Under
- * Electron, main.mjs has already merged that shell and then removed the other products'
- * prefixes, so those names are empty on purpose, and this merge would put them straight back.
- * A source-text check in packages/electron pins the shield's shape; this drives the real module
- * in a real process, with a stub shell that exports the two probe names, and reads what arrived.
- *
- * Two runs, not one. The plain run is the control: it proves the stub shell is honoured and the
- * merge does bring the names in, so a green electron run means the shield worked, not that the
- * harness went quiet. --- */
+/* --- GeoCode: the shell runtime's own login-shell merge stays off under Electron, so it cannot put back the
+ * names main.mjs removed (docs/ENVIRONMENT.md §5.2 invariant 3). --- */
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';

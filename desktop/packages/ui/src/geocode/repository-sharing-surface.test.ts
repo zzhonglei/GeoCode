@@ -1,15 +1,5 @@
 /* --- GeoCode: the entrances into the repository file and the repository plans folder must stay
- * closed, including one upstream adds later (geocode/repository-sharing-surface.ts, docs/DESKTOP.md §7.3).
- *
- * Pinning the files edited here would not see another one arrive. So the first test walks the
- * renderer sources and holds a closure instead: a file that renders one of the entrance labels
- * must also carry the guard. The labels reach the screen only through those translation
- * keys, and the dictionaries are excluded, which is what makes the set exact.
- *
- * The closure alone would pass on a file that imports the guard and never uses it, so the rest
- * pin where each guard sits. The chip is the odd one out: its label lives in the child component
- * and the guard in the parent that hands down the callback, so position says nothing there and
- * what is pinned instead is that no callback is handed down. --- */
+ * closed, including one upstream adds later (geocode/repository-sharing-surface.ts, docs/DESKTOP.md §7.3). --- */
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -20,7 +10,7 @@ import { REPOSITORY_SHARING_OFFERED } from './repository-sharing-surface';
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const I18N = path.join(SRC, 'lib', 'i18n');
 
-// The trailing quote keeps `shareTitle`, `shareAfterSave` and the toast keys out of the set.
+// The trailing quote keeps longer keys such as `shareTitle` and `shareAfterSave` out of the set.
 const ENTRANCES = ["settings.projects.shared.actions.share'", "chat.draftStarters.share'", "rightSidebar.contextNotesTodo.plans.share'"];
 const GUARD = 'REPOSITORY_SHARING_OFFERED';
 
@@ -74,8 +64,7 @@ describe('repository sharing is not offered', () => {
   });
 
   test('every mount of the shared-file section sits behind the guard', () => {
-    // That section is nothing but the shared file: where it is, whether it parsed, and the
-    // plans folder. A mount pattern, not a substring, or `React.FC<...Props>` counts as one.
+    // A mount pattern, not a substring, or `React.FC<...Props>` counts as one.
     const mount = /<SharedProjectConfigSection[\s/>]/g;
     const unguarded = sources(SRC)
       .map((file) => ({ file: path.relative(SRC, file), text: readFileSync(file, 'utf8') }))
@@ -88,9 +77,8 @@ describe('repository sharing is not offered', () => {
 
   test('the draft starter chip is handed no callback, so its button never renders', () => {
     const chips = read('components/chat/DraftPresetChips.tsx');
-    // The hand-down, guarded. `[^}]*` stops at the first brace, which is the one closing it.
+    // `[^}]*` keeps the guard inside the prop's own braces.
     expect(/onToggleShared=\{[^}]*REPOSITORY_SHARING_OFFERED \? undefined :/.test(chips)).toBe(true);
-    // And the child renders its button only when the callback arrives.
     expect(chips).toContain('{onToggleShared && !hideRemove ?');
   });
 });

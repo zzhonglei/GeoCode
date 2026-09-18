@@ -5,8 +5,7 @@ import path from "node:path"
 import { OsmConvert } from "@/geo/osm/convert"
 import { OsmOutput } from "@/geo/osm/output"
 
-/* Writing results to disk (docs/GEOKERNEL.md §6.7). The rule the file exists for: nothing here ever overwrites —
- * the same output path is asked for again all the time, and a name that is taken is numbered instead. */
+/* Writing results to disk (docs/GEOKERNEL.md §6.7): a name that is taken is numbered, never overwritten. */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-osm-out-"))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))

@@ -34,10 +34,8 @@ export const registerOpenChamberRoutes = (app, dependencies) => {
 
   let desktopRestartError = null;
 
-  // --- GeoCode: the shell does not ask OpenChamber's update service, which would also report
-  // an install id; the desktop shell checks GitHub Releases from Electron main instead
-  // (docs/DESKTOP.md §7.2). Registered first, so these answer before the handlers below.
-  // `process` here is an injected dependency; the runtime fact is read from the real one. ---
+  // --- GeoCode: no OpenChamber update service, answered ahead of the handlers below (docs/DESKTOP.md §7.2).
+  // `process` here is an injected dependency, so the runtime is read from globalThis. ---
   if (globalThis.process.versions.electron) {
     app.get('/api/openchamber/update-check', (_req, res) => {
       res.json({ available: false });

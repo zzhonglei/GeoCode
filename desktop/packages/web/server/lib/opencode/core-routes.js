@@ -792,8 +792,7 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
     });
   });
 
-  // --- GeoCode: device pairing is not a desktop-shell surface (docs/DESKTOP.md §7.3). Registered
-  // first, so under Electron these answer before the upstream handlers below. ---
+  // --- GeoCode: no device pairing, answered ahead of the upstream handlers below (docs/DESKTOP.md §7.3) ---
   refusePairingRoutesUnderElectron(app);
   // --- /GeoCode ---
   app.post('/api/client-auth/pairing/sessions', express.json({ limit: '64kb' }), async (req, res, next) => {

@@ -3,9 +3,7 @@ import * as Tool from "./tool"
 import { GeoOsm } from "@/geo"
 import DESCRIPTION from "./geo-osm-search.txt"
 
-/* --- GeoCode: OsmSearch, the first step of the OSM workflow (docs/TOOLS.md §3, GEOKERNEL §6.8). No configuration,
- * environment probe, status slot or gate (§6.2), so what is left here is presentation — and the one thing it must
- * not do is let an answer built from one engine read like an answer from two. --- */
+/* --- GeoCode: OsmSearch (docs/TOOLS.md §3); an answer built from one engine must not read like one from both. --- */
 
 function reference(candidate: GeoOsm.OsmSearch.Candidate): string {
   const prefix = candidate.type === "relation" ? "R" : candidate.type === "way" ? "W" : "N"
@@ -16,8 +14,7 @@ function formatCandidate(candidate: GeoOsm.OsmSearch.Candidate): string {
   const category = candidate.className
     ? `${candidate.className}=${candidate.classValue}${candidate.adminLevel ? ` L${candidate.adminLevel}` : ""}`
     : "-"
-  // Every label that matched, not a "both" flag: three of the four — features, site, canonical — come off the
-  // feature service and one off the geocoder (osm/index.ts), so a lone `geocoder` means the literal search missed it.
+  // Every source label, not a "both" flag: a lone `geocoder` means the feature service's name search missed it.
   const sources = `[${[...candidate.sources].join("+")}]`
   const importance = candidate.importance !== undefined ? `  imp=${candidate.importance.toFixed(3)}` : ""
   const center = candidate.center
@@ -44,10 +41,7 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-/**
- * Setting `truncated` at all skips upstream's truncation (tool.ts), which keeps the head and drops the tail — here
- * the advice for when nothing matched. False is honest: `OsmSearch.rank` caps the list at 25 (docs/TOOLS.md §5.2).
- */
+/** Setting `truncated` skips upstream's truncation, and false holds: `OsmSearch.rank` caps the list at 25. */
 type Metadata = {
   [key: string]: unknown
   truncated: boolean
@@ -62,8 +56,7 @@ export const OsmSearchTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Ser
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context<Metadata>,
     ) {
-      // Refused before the ask, since there is nothing for a user to authorize: an empty query is not a no-op but
-      // `rel["name"~""]` (osm/query.ts `nameSearch`), which matches every named element on the planet.
+      // Refused before the ask: an empty query becomes `rel["name"~""]`, which matches every named element.
       if (params.query.trim() === "") {
         return {
           title: params.query,
@@ -87,8 +80,6 @@ export const OsmSearchTool = Tool.define<typeof Parameters, Metadata, GeoOsm.Ser
       })
 
       const lines: string[] = []
-      // Notes first, never folded into the candidate list: they qualify the answer as a whole. Cancellation is said
-      // here rather than left to the kernel's notes, which describe an engine that answered badly, not a stopped run.
       const cancelled = ctx.abort.aborted
       if (result.notes.length > 0 || cancelled) {
         lines.push(...result.notes.map((note) => `NOTE: ${note}`))

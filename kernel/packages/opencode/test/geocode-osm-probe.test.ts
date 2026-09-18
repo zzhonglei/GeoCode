@@ -11,10 +11,7 @@ import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
 
-/* Tripwires for OsmProbe (docs/TOOLS.md §3; GEOKERNEL §6.3, §6.4, §6.8). Most guard the ways a number can be
- * true and misleading at once — counted over a widened boundary, counted from an answer the service cut short,
- * summed over extents one of which never replied — each of which has to reach the caller before the figure it
- * qualifies. */
+// A count can be true and misleading at once, so what qualifies it has to reach the caller before the figure.
 
 const COUNT = (over: Partial<GeoOsm.CountResult> = {}): GeoOsm.CountResult => ({
   perExtent: [{ extent: "area:R10717504", nodes: 210, ways: 128, relations: 4, total: 342 }],
@@ -42,7 +39,6 @@ const DISTRIBUTION = (over: Partial<GeoOsm.DistributionResult> = {}): GeoOsm.Dis
   ...over,
 })
 
-/** An OSM service under the test's control — no network, no endpoints. */
 function osmService(over: {
   count?: (input: { readonly extents: readonly string[] }) => Effect.Effect<GeoOsm.CountResult, Error>
   distribution?: (input: { readonly extents: readonly string[] }) => Effect.Effect<GeoOsm.DistributionResult, Error>
@@ -83,7 +79,7 @@ const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, ag
     .pipe(Effect.timeout(10_000), Effect.exit)
 })
 
-/** Runs the tool with the capability boundary lifted, since everything below is about what it prints. */
+/** Runs the tool with the capability boundary lifted. */
 const succeed = Effect.fnUntraced(function* (
   params: Record<string, unknown>,
   abort: AbortSignal = AbortSignal.any([]),
@@ -114,8 +110,7 @@ describe("OsmProbe, the capability boundary", () => {
         const registry = yield* ToolRegistry.Service
         expect(yield* registry.ids()).toContain("OsmProbe")
 
-        // Neither writes an `osm` rule of its own, so the global deny stands and the group is reached only
-        // through the osmfetch subagent (docs/TOOLS.md §4.3).
+        // Reaching the public OSM services is osmfetch's alone (docs/TOOLS.md §4.3).
         for (const agent of ["GeoAgent", "plan"]) {
           const denied = yield* execute({ extents: ["area:R1"], tags: ["amenity"] }, agent)
           expect(Exit.isFailure(denied)).toBe(true)
@@ -133,8 +128,7 @@ describe("OsmProbe, what it refuses to answer", () => {
     "an empty extent list is refused, not answered with zero",
     () =>
       Effect.gen(function* () {
-        // The kernel would answer it: with nothing to iterate every figure sums to zero and comes back a
-        // success, which is exactly what an area holding no hospitals looks like.
+        // The kernel would sum nothing to zero and succeed, which is what an area holding no hospitals looks like.
         const result = yield* succeed({ extents: [], tags: ["amenity=hospital"] })
         expect(result.metadata.error_code).toBe("InvalidParameters")
         expect(result.metadata.failed).toBe(true)
@@ -156,8 +150,6 @@ describe("OsmProbe, what it refuses to answer", () => {
         expect(neither.metadata.error_code).toBe("InvalidParameters")
         expect(neither.output).toContain("neither")
 
-        // Both sentences name both options, since either mistake is made by someone who does not know there are
-        // two.
         for (const outcome of [both, neither]) {
           expect(outcome.output).toContain("tags")
           expect(outcome.output).toContain("key")
@@ -169,8 +161,7 @@ describe("OsmProbe, what it refuses to answer", () => {
   harness(
     osmService({
       count: (input: any) => {
-        // Reaching the kernel is the point: filtered out here, the rest would be counted and nothing would say
-        // what went missing.
+        // Filtered out here, the rest would be counted and nothing would say what went missing.
         expect(input.tags).toEqual(["amenity=hospital", ""])
         return Effect.fail(new Error("a tag filter cannot be empty"))
       },
@@ -194,8 +185,6 @@ describe("OsmProbe, what it refuses to answer", () => {
     "a whole-call mistake comes back as a sentence, not a defect",
     () =>
       Effect.gen(function* () {
-        // The kernel's error channel carries whole-call mistakes only, and letting one die turns a typo into a
-        // crashed tool call.
         const result = yield* succeed({ extents: ["area:R1"], tags: ["amenity"] })
         expect(result.metadata.error_code).toBe("InvalidParameters")
         expect(result.output).toContain("more than the 12 allowed")
@@ -212,7 +201,6 @@ describe("OsmProbe, counting", () => {
         const result = yield* succeed({ extents: ["area:R10717504"], tags: ["amenity=hospital", "healthcare"] })
         expect(result.output).toContain("area:R10717504")
         expect(result.output).toContain("total 342")
-        // The split says why a total is large: many nodes and many relations ask for different decisions.
         expect(result.output).toContain("nodes 210, ways 128, relations 4")
         expect(result.output).toContain("[amenity=hospital, healthcare]")
         expect(result.output).not.toContain("SUM")
@@ -266,17 +254,13 @@ describe("OsmProbe, counting", () => {
       Effect.gen(function* () {
         const result = yield* succeed({ extents: ["area:R1", "bbox:9,9,9,9"], tags: ["amenity"] })
 
-        // A widened boundary rescales every number at once: the count covers more ground than was asked for.
         expect(result.output).toMatch(/widened outward/)
         expect(result.output).toMatch(/upper bound/)
-        // The service's OWN words rather than a summary — "timed out" and "too broad" ask for opposite moves,
-        // and only the service knows which happened (§6.3 第四种失败).
+        // The service's own words, since "timed out" and "too broad" ask for opposite moves.
         expect(result.output).toContain("runtime error: Query timed out in 'query' after 90 seconds.")
-        // A failed extent contributed nothing; the rest still did.
         expect(result.output).toContain("bbox:9,9,9,9")
         expect(result.output).toContain("all 8 Overpass endpoints failed")
 
-        // Before the figures, because a reader who meets a caveat afterwards has already read them as complete.
         expect(result.output.indexOf("NOTE:")).toBeLessThan(result.output.indexOf("total 342"))
 
         expect(result.metadata.exact).toBe(false)
@@ -312,8 +296,7 @@ describe("OsmProbe, counting", () => {
         expect(result.metadata.failed).toBe(true)
         expect(result.output).not.toContain("Counted [")
         expect(result.output).not.toContain("total 0")
-        // Both reasons survive, and they are different kinds of wrong — a busy service and a typo — which only
-        // the reason string tells apart.
+        // A busy service and a typo are told apart only by the reason string.
         expect(result.output).toContain("all 8 Overpass endpoints failed")
         expect(result.output).toContain("is not a bounding box")
       }),
@@ -356,15 +339,13 @@ describe("OsmProbe, the value distribution", () => {
         const result = yield* succeed({ extents: ["area:R1"], key: "amenity" })
         expect(result.output).toContain("v0")
         expect(result.output).toContain("v29")
-        // Cut at thirty with the remainder counted, since a list that simply stops reads as the whole vocabulary.
         expect(result.output).not.toContain("v30 ")
         expect(result.output).toContain("and 33 more value(s)")
-        // The cap bounds what came BACK, so a value can be missing from the list altogether — a footnote below
-        // it would arrive after the reader has taken the list at face value.
+        // Before the list, since a capped sample can miss a value altogether.
         expect(result.output).toMatch(/lower bound/)
         expect(result.output.indexOf("lower bound")).toBeLessThan(result.output.indexOf("v0"))
         expect(result.metadata.sample_capped).toBe(true)
-        // Not the same field as the §5.2 escape hatch, which must stay false.
+        // metadata.truncated is the output escape hatch in tool.ts, not the sample cap, and stays false.
         expect(result.metadata.truncated).toBe(false)
       }),
     { timeout: 20_000 },
@@ -401,8 +382,7 @@ describe("OsmProbe, the value distribution", () => {
     "but a key nobody could ask about is a failure, not an answer",
     () =>
       Effect.gen(function* () {
-        // The same empty distribution as the case above, and only the failure list separates them — the wrong
-        // reading, "this key is not used here", is the one that stops the caller looking.
+        // The same empty distribution as above, where reading "this key is not used here" stops the caller looking.
         const result = yield* succeed({ extents: ["area:R1"], key: "aerialway" })
         expect(result.metadata.error_code).toBe("AllExtentsFailed")
         expect(result.output).not.toContain("No element")
@@ -425,8 +405,6 @@ describe("OsmProbe, the description", () => {
   })
 
   test("it never points the model at metadata, which the model cannot see", () => {
-    // The double-channel contract (GEOKERNEL §9.1): `state.output` is what reaches a model message, `metadata`
-    // goes to the frontend (session/message-v2.ts), so a description naming it points at nothing readable.
     expect(PROBE_DESCRIPTION).not.toMatch(/metadata/i)
   })
 })
@@ -436,9 +414,7 @@ describe("OsmProbe, what qualifies the numbers", () => {
     "distribution mode reports a widened boundary too, which it used to swallow",
     () =>
       Effect.gen(function* () {
-        // Without `exact` on the distribution result the check is unreachable, so a distribution taken over a
-        // convex hull describes the hull without saying so — and the description file promises the note for
-        // whatever numbers appear.
+        // Without exact on the result, a distribution taken over a convex hull describes the hull without saying so.
         const result = yield* succeed({ extents: ["file:/study.geojson"], key: "amenity" })
         expect(result.output).toContain("widened outward")
         expect(result.output).toContain("upper bound")
@@ -456,7 +432,6 @@ describe("OsmProbe, what qualifies the numbers", () => {
     "the coverage it claims is the coverage it got",
     () =>
       Effect.gen(function* () {
-        // Printing the number ASKED for instead reads as an answer about four areas when only two replied.
         const result = yield* succeed({ extents: ["area:R1", "area:R9", "area:R3", "area:R4"], key: "amenity" })
         expect(result.output).toContain("2 of 4 extent(s)")
         expect(result.output).not.toMatch(/across 4 extent/)
@@ -469,8 +444,6 @@ describe("OsmProbe, what qualifies the numbers", () => {
     "a run stopped partway says so, even though it has numbers to show",
     () =>
       Effect.gen(function* () {
-        // Said only when nothing came back, the note would miss the dangerous case: figures that look complete
-        // and are not.
         const stopped = new AbortController()
         stopped.abort()
         const result = yield* succeed({ extents: ["area:R1", "area:R2", "area:R3"], key: "amenity" }, stopped.signal)

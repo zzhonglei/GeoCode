@@ -13,11 +13,7 @@ import { parse as parseJsonc, printParseErrorCode } from 'jsonc-parser';
 
 // ============== PATH CONSTANTS ==============
 
-// --- GeoCode: the kernel's own config root, not the user's OpenCode installation
-// (geocode/kernel-roots.js). Everything in this file hangs off it — the three global config
-// layers, the agent/command/skill directories, and `writeConfig`, which copies the file it is
-// about to overwrite aside first (geocode/config-backup.js). Pointed at OpenCode's directory
-// that read the user's real provider keys and left a copy of them behind. ---
+// --- GeoCode: the kernel's own config root, not the user's OpenCode installation (geocode/kernel-roots.js) ---
 const OPENCODE_CONFIG_DIR = kernelConfigRoot();
 // --- /GeoCode ---
 const AGENT_DIR = path.join(OPENCODE_CONFIG_DIR, 'agents');
@@ -135,9 +131,7 @@ function writeMdFile(filePath, frontmatter, body) {
 function getProjectConfigCandidates(workingDirectory) {
   if (!workingDirectory) return [];
   return [
-    // --- GeoCode: the names the kernel actually loads (geocode/kernel-roots.js). It walks up
-    // for a directory named `.geocode` and reads the two branded files in it, so a config
-    // written under the old names is one the kernel never sees. ---
+    // --- GeoCode: the project config names the kernel loads (geocode/kernel-roots.js) ---
     path.join(workingDirectory, KERNEL_CONFIG_JSON),
     path.join(workingDirectory, KERNEL_CONFIG_JSONC),
     path.join(workingDirectory, KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSON),
@@ -163,9 +157,7 @@ function getProjectConfigPath(workingDirectory) {
 function getConfigPaths(workingDirectory) {
   return {
     userPaths: [
-      // --- GeoCode: the kernel's candidates in the kernel's order (`config/config.ts`
-      // globalConfigFile), so the first that exists is the file both sides write.
-      // `config.json` keeps its unbranded name there too. ---
+      // --- GeoCode: the kernel's globalConfigFile order, so the first that exists is the file both sides write ---
       path.join(OPENCODE_CONFIG_DIR, KERNEL_CONFIG_JSONC),
       path.join(OPENCODE_CONFIG_DIR, KERNEL_CONFIG_JSON),
       path.join(OPENCODE_CONFIG_DIR, 'config.json'),
@@ -570,10 +562,7 @@ function resolveSkillSearchDirectories(workingDirectory) {
     projectDirs.forEach(pushDir);
   }
 
-  // --- GeoCode: `~/.opencode` is a second global root upstream kept from before the XDG
-  // move, and the kernel deletes that scan rather than renaming it — GeoCode has exactly one
-  // global root, so there is no `~/.geocode` to look in (KERNEL.md §6 item 4). Shielded, not
-  // deleted, so a conflict on the line shows it was switched off on purpose. ---
+  // --- GeoCode: the kernel has one global root and no `~/.opencode` scan to mirror (docs/KERNEL.md §6 item 4) ---
   /* pushDir(path.join(os.homedir(), '.opencode')); */
   // --- /GeoCode ---
 

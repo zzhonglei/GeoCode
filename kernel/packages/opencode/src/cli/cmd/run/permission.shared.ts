@@ -55,9 +55,8 @@ function text(v: unknown): string {
   return typeof v === "string" ? v : ""
 }
 
-/* --- GeoCode: one parameter value as one line of a dialog. The cut is at a terminal line, not the 256
- * `geo-qgis-run.ts` uses for the same values — that one keeps a PATTERN from exploding, this one keeps a DIALOG
- * readable — and the full value stays in the tool's metadata either way. --- */
+/* --- GeoCode: one parameter value on one dialog line, cut shorter than geo-qgis-run.ts cuts pattern values; the full
+ * value stays in the request metadata. --- */
 function render(value: unknown): string {
   const raw =
     typeof value === "string"
@@ -129,20 +128,11 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
     }
   }
 
-  /* --- GeoCode: the four geographic permission keys (docs/TOOLS.md §4).
-   *
-   * Here rather than in tool.ts's TOOL_RULES for the same reason `external_directory` and `doom_loop` are here:
-   * that table is keyed by TOOL NAME and demands a `view` and a `run`, while these are PERMISSION KEYS — `qgis`
-   * covers two tools, `osm` covers four, and no tool is named after any of them.
-   *
-   * Without this the fallback at the bottom renders `Call tool qgis` over `Tool: qgis`, containing none of what
-   * the user is being asked to judge — and for `qgis` that judgement is the ONLY guard left (TOOLS.md §4.3: the
-   * destination check cannot see 56 of 422 algorithms). --- */
+  /* --- GeoCode: dialogs for the four geographic permission keys, here and not in tool.ts's TOOL_RULES, which is
+   * keyed by tool name; the fallback below would show none of what the user is judging (docs/TOOLS.md §4). --- */
   if (request.permission === "qgis") {
     const algorithm = text(input.algorithm)
-    /* Two tools share this key. No second line on purpose: which algorithm's documentation is being read changes
-     * nothing a user would decide on, and the raw `doc:read:native:buffer` pattern is rule-matching syntax rather
-     * than something to put in front of them. */
+    // A documentation lookup changes nothing a user would decide on, so it gets no detail line.
     if (!algorithm) {
       return { icon: "#", title: "Look up QGIS documentation", lines: [] }
     }
@@ -151,24 +141,18 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
     return {
       icon: "#",
       title: `Run QGIS algorithm ${algorithm}`,
-      // One parameter per line rather than `patterns`' single-line form: an atlas export takes seventeen, and the one
-      // that matters — a path outside the working directory — is the one that would wrap off the end of a terminal.
+      // One line per parameter, so an output path outside the working directory does not wrap out of view.
       lines: Object.entries(parameters).map(([key, value]) => `${key.padEnd(width)} = ${render(value)}`),
     }
   }
 
   if (request.permission === "gee") {
-    /* The title and nothing else — not the body, and not the script's path. A script is arbitrary Python nobody
-     * would read in a dialog, and naming the path suggests the user is judging THIS script when all they can judge
-     * is whether Earth Engine may run at all, against their credentials and quota. */
+    // No body or path: the user can only judge whether Earth Engine may run at all, not the script itself.
     return { icon: "#", title: "Run an Earth Engine script", lines: [] }
   }
 
   if (request.permission === "geodata") {
-    /* `permRead`'s shape: `ReadGeoData` already matches upstream's `read` on the input side, so the dialog has the
-     * same data to work with. `toolPath` is what upstream runs the pattern through, and it is why a file outside
-     * the workspace reads as `~/thesis/data/scene.tif` rather than as a run of `../`. Unlike the documentation
-     * dialog above this one keeps the detail: WHICH file is read is the only thing the user is judging. */
+    // Which file is read is the whole judgement, so it is shown the way upstream's read dialog shows a path.
     const file = pats[0] || ""
     return {
       icon: "→",
@@ -178,9 +162,7 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
   }
 
   if (request.permission === "osm") {
-    // Four tools with four different pattern meanings — a query, a set of
-    // extents, an output path — so the patterns are listed as they are rather
-    // than given a shape that would be wrong for three of them.
+    // Listed raw: the four OSM tools give their patterns four different meanings.
     return { icon: "#", title: "OpenStreetMap", lines: pats.map((item) => `- ${item}`) }
   }
 

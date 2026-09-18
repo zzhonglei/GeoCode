@@ -83,11 +83,8 @@ export const LegacyContent = Schema.Struct({
   ),
   encoding: Schema.optional(Schema.Literal("base64")),
   mimeType: Schema.optional(Schema.String),
-  /* --- GeoCode: why the content was not delivered (docs/GEOKERNEL.md §10.1 #8).
-   *
-   * `content` stays a readable English sentence so a bare API consumer still
-   * gets an explanation; the interface keys off this field instead and renders
-   * a localized card. Absent means the content is the content. --- */
+  /* --- GeoCode: why the content was withheld, for callers that branch on it; `content` then holds an English
+   * explanation, and absent means `content` is the file (docs/GEOKERNEL.md §10.1 #8). --- */
   notice: Schema.optional(Schema.Literals(["oversized", "oversized-raster"])),
   size: Schema.optional(NonNegativeInt),
 }).annotate({ identifier: "FileContent" })

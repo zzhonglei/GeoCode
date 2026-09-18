@@ -1,9 +1,5 @@
-/* --- GeoCode: a development launch runs the kernel that is checked out, not one staged days ago.
- *
- * The staged bundle carries a stamp of the kernel tree it came from; the staging script reuses it
- * only while that stamp matches the checkout, and both development scripts run the staging before
- * Electron. Pinned by source because the script runs on import. Found the hard way: every real
- * session from 08-30 to 09-06 ran a bundle from 08-30 while the kernel source moved on. --- */
+/* --- GeoCode: guards a development launch running a staged kernel bundle older than the checked-out kernel source.
+ * Pinned by source because the staging script runs on import. --- */
 import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';

@@ -17,8 +17,7 @@ describe("GeoExtensions taxonomy", () => {
   })
 
   test("taxonomy still covers every extension the legacy snapshot exclude listed (no silent removal)", () => {
-    // Snapshot's own literals (*.aux.xml, *.shp.xml, *.osm.pbf, .DS_Store) are absent: they live in
-    // snapshot/index.ts rather than in the taxonomy.
+    // The snapshot's own literals (*.aux.xml, *.shp.xml, *.osm.pbf, .DS_Store) live in snapshot/index.ts, not here.
     const legacy = [
       "shp",
       "geojson",

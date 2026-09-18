@@ -15,9 +15,8 @@ import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
 
-/* Tripwires for the `read` → ReadGeoData handoff (GEOKERNEL §10.1 #10; docs/TOOLS.md §7), a source patch on an
- * upstream tool that a merge can quietly undo. The behavioural tests call `read` for real, because what the patch
- * prevents is not an exception but a plausible-looking answer. */
+// A merge can quietly undo the read → ReadGeoData handoff patch, and read then gives a plausible-looking answer
+// rather than an error (GEOKERNEL §10.1 #10).
 
 const it = testEffect(
   LayerNode.compile(LayerNode.group([ToolRegistry.node, Agent.node, Permission.node]), [
@@ -55,8 +54,7 @@ const readFile = Effect.fnUntraced(function* (filepath: string) {
 describe("read hands geographic data to ReadGeoData", () => {
   it.instance("a text geo format is redirected instead of paged through", () =>
     Effect.gen(function* () {
-      // The dangerous half: GeoJSON passes every check `read` makes, so without the handoff it comes back as a
-      // fragment of a coordinate array inviting the model to page on for the rest.
+      // Without the handoff GeoJSON passes every check read makes and comes back as coordinates to page through.
       const ctx = yield* InstanceState.context
       const target = path.join(ctx.directory, "scene.geojson")
       fs.writeFileSync(
@@ -82,7 +80,7 @@ describe("read hands geographic data to ReadGeoData", () => {
 
   it.instance("a binary geo format is redirected instead of dead-ending", () =>
     Effect.gen(function* () {
-      // The other half: without the handoff this is "Cannot read binary file", true and naming no way forward.
+      // Without the handoff this is "Cannot read binary file", which names no way forward.
       const ctx = yield* InstanceState.context
       const target = path.join(ctx.directory, "layer.shp")
       fs.writeFileSync(target, Buffer.from([0x00, 0x00, 0x27, 0x0a, 0x00, 0x00, 0x00, 0x00]))
@@ -113,8 +111,6 @@ describe("read hands geographic data to ReadGeoData", () => {
   )
 
   test("the redirect and the acceptance are one judgement", () => {
-    // `read` redirects on `geoHandoff` and ReadGeoData picks its reader with `geoKind`, so what the last loop
-    // pins is that the two cannot come apart into predicates kept in agreement by hand.
     expect(geoKind("/tmp/a.geojson")).toBe("vector")
     expect(geoKind("/tmp/a.SHP")).toBe("vector")
     expect(geoKind("/tmp/a.tif")).toBe("raster")
@@ -123,14 +119,15 @@ describe("read hands geographic data to ReadGeoData", () => {
     expect(geoKind("/tmp/a.nc")).toBeUndefined()
     for (const ext of VECTOR_SUPPORTED) expect(geoKind(`/tmp/a.${ext}`)).toBe("vector")
     for (const ext of RASTER_SUPPORTED) expect(geoKind(`/tmp/a.${ext}`)).toBe("raster")
+    // The last loop is the one that matters: read redirects on geoHandoff while ReadGeoData picks its reader with
+    // geoKind, so the two cannot come apart into predicates kept in step by hand.
     for (const ext of [...VECTOR_SUPPORTED, ...RASTER_SUPPORTED, "prj", "nc", "md"]) {
       expect(Boolean(geoHandoff(`/tmp/a.${ext}`))).toBe(geoKind(`/tmp/a.${ext}`) !== undefined)
     }
   })
 
   test("the redirect covers exactly what ReadGeoData accepts", () => {
-    // A literal rather than a derivation, so widening the arrays has to edit this line — and what to check when
-    // editing it is that vector_read.py or raster_read.py really opens the new format.
+    // A literal, so widening the arrays edits this line: check first that vector_read.py or raster_read.py opens it.
     expect([...VECTOR_SUPPORTED, ...RASTER_SUPPORTED].sort()).toEqual([
       "asc",
       "dem",
@@ -151,22 +148,17 @@ describe("read hands geographic data to ReadGeoData", () => {
       expect(geoHandoff(`/tmp/FILE.${ext.toUpperCase()}`)).toContain("ReadGeoData")
     }
 
-    // Two things the redirect must not say. Calling the file geographic data is a claim only ReadGeoData can make,
-    // from the file itself — a scan saved as .tif comes back `NotGeographic`. Offering `preview` promises a mode
-    // that exists for rasters only, so a caller doing as it was told earns a refusal.
+    // Only ReadGeoData can tell whether the file is geographic data, and preview exists for rasters only.
     const message = geoHandoff("/tmp/file.shp")!
     expect(message).not.toContain("geographic data")
     expect(message.toLowerCase()).not.toContain("preview")
-    // One sentence for every format, since an extension is all this function has to tell them apart by.
     expect(geoHandoff("/tmp/file.tif")).toBe(message)
 
-    // A format the taxonomy calls geographic but no reader script opens must stay out: `read` would hand it off
-    // and ReadGeoData would refuse it as unsupported, leaving the file with no reader at all.
+    // A geographic format no reader script opens stays out, or read hands it to a tool that refuses it.
     for (const ext of ["nc", "jp2", "tab", "mif", "osm", "kmz", "las", "dxf"]) {
       expect([...VECTOR_MAIN, ...RASTER_MAIN, "las", "dxf"]).toContain(ext)
       expect(geoHandoff(`/tmp/file.${ext}`)).toBeUndefined()
     }
-    // Sidecars and ordinary files.
     for (const ext of ["prj", "cpg", "dbf", "shx", "qmd", "ts", "md", "json", "csv"]) {
       expect(geoHandoff(`/tmp/file.${ext}`)).toBeUndefined()
     }
@@ -174,9 +166,7 @@ describe("read hands geographic data to ReadGeoData", () => {
   })
 
   test("the list the model reads is the list the code uses", () => {
-    /* The third side, which sharing one array does not cover: geo-read.txt spells the formats out for the model,
-     * so widening the array alone leaves the model refusing a file the tool would open, naming the shorter list
-     * as if it were the whole truth. */
+    // geo-read.txt spells the formats out for the model by hand, so widening an array alone leaves it a shorter list.
     const listed = (label: string) =>
       READ_DESCRIPTION.split("\n")
         .find((line) => line.startsWith(`- ${label}:`))!

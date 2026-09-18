@@ -11,7 +11,7 @@ import type { GdalTypes } from "./types"
 
 export const ROOT = path.join(Global.Path.cache, "geo", "preview")
 
-/** A shapefile's attributes and coordinate system live in these, so the `.shp` alone is not its identity (§7.6). */
+/** A shapefile's attributes and coordinate system live in these, so the `.shp` alone is not its identity. */
 const SIDECARS = [".dbf", ".shx", ".prj", ".cpg"] as const
 
 export interface Stamp {
@@ -58,14 +58,9 @@ export function directory(track: GdalTypes.Track, key: string): string {
   return path.join(ROOT, track, key)
 }
 
-/** The only removal there is: nothing evicts an artifact between one startup and the next (§7.6). */
 export const clear = Effect.sync(() => rmSync(ROOT, { recursive: true, force: true }))
 
-/**
- * Runs `produce` once per key for as long as callers overlap. The work is forked into the scope this merger was
- * created in and every caller, the first included, only awaits it, so one caller being interrupted cannot take the
- * others down (§7.6).
- */
+/** `produce` runs in the merger's scope and callers only await it, so one interrupted caller cannot stop the rest. */
 export const merger = <A, E>() =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope

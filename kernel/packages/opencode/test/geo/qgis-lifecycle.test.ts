@@ -14,8 +14,7 @@ import { GeoRuntime } from "@/geo/runtime"
 import { GeoStatus } from "@/geo/status"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-/* The QGIS lifecycle (docs/GEOKERNEL.md §4.8–§4.10): a machine.json edit travelling Config → lifecycle →
- * resolution → Status → typed event, and what a new round does to the one still in flight. */
+/* The QGIS lifecycle (docs/GEOKERNEL.md §4.8–§4.10). */
 
 const FILE = path.join(Global.Path.config, "machine.json")
 const write = (value: object) => Effect.promise(() => fs.promises.writeFile(FILE, JSON.stringify(value), "utf-8"))
@@ -266,7 +265,7 @@ describe("qgis lifecycle", () => {
           yield* waitForStatus((s) => s.status === "ready" && s.catalog === "ready", "round two never completed")
           expect(yield* Ref.get(catalog.calls)).toBe(2)
 
-          // Long enough for a straggler from round one to try: its token died with the round (§4.8 代际守卫).
+          // Long enough for a straggler from round one to try: its token died with the round (§4.8).
           yield* Effect.sleep("300 millis")
           const status = yield* GeoStatus.Service
           const final = yield* status.current("qgis")

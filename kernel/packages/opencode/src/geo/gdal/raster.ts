@@ -9,26 +9,17 @@ import { GdalCache } from "./cache"
 import { GdalInspector } from "./inspector"
 import type { GdalTypes } from "./types"
 
-/* --- GeoCode: turning a raster into something a web map can draw (docs/GEOKERNEL.md §7.5).
- *
- * Nothing here writes beside the source data — every tool call carries `NO_SIDECARS` — and nothing here builds
- * overviews (§7.5, §12). Every intermediate is a virtual dataset, XML describing what to compute rather than a
- * copy of the pixels, so the encode at the end is the only full read. --- */
+/* --- GeoCode: turning a raster into something a web map can draw (docs/GEOKERNEL.md §7.5). --- */
 
 const TARGET_CRS = "EPSG:3857"
 
-/**
- * Both caps, applied together and only ever downwards. `MAX_PIXELS` is `MAX_SIDE` squared, so with these values
- * the side cap always binds first: width × height can never exceed the longer side squared. The pair is still
- * the contract (§7.5) — raise `MAX_SIDE` alone and the pixel cap starts binding.
- */
+/** The side cap binds first at these values; the pixel cap stays because raising `MAX_SIDE` alone would let it bind. */
 const MAX_SIDE = 4096
 const MAX_PIXELS = 16_777_216
 
 const STRETCH_SIGMA = 1.8
 
-/** `value R G B` per line over the 0–255 the grey step produces; `gdaldem` interpolates between the stops. Data
- * plane only — the tool face hands the model a grey image on purpose, so colour is not a shared rule (§7.9). */
+/** `value R G B` per line over the 0–255 the grey step produces; `gdaldem` interpolates between the stops. */
 const COLORMAP = ["0 18 38 86", "64 34 94 168", "128 55 148 110", "192 215 155 78", "255 246 236 189"].join("\n") + "\n"
 
 const QUALITY = "QUALITY=75"
@@ -77,9 +68,8 @@ export interface Selection {
 }
 
 /**
- * Which bands become red, green and blue, and which one is transparency. The same four rules exist again in
- * `qgis/scripts/raster_preview.py`; `test/geo/raster-rules.test.ts` runs both faces over one list of cases so
- * they cannot drift (§7.9).
+ * The same four rules exist again in `qgis/scripts/raster_preview.py`; `test/geo/raster-rules.test.ts` runs both
+ * faces over one list of cases so they cannot drift (§7.9).
  */
 export function selectBands(info: GdalInspector.RasterInfo): Selection {
   const declared = info.bands.find((band) => band.color === "alpha")?.index
@@ -107,9 +97,8 @@ export function selectBands(info: GdalInspector.RasterInfo): Selection {
 }
 
 /**
- * The window that becomes 0–255: a few sigma around the mean rather than the full range, so one outlier cannot
- * flatten the rest of the scale into the bottom of it. No `isfinite` guard where the Python twin has one —
- * everything reaching here came through the inspector's `num()` and is finite already (§7.9).
+ * No `isfinite` guard where the Python twin has one — everything reaching here came through the inspector's `num()`
+ * and is finite already.
  */
 export function stretch(band: GdalInspector.Band | undefined): readonly [number, number] {
   const minimum = band?.minimum
@@ -137,9 +126,9 @@ function escapeXml(value: string): string {
 }
 
 /**
- * Four bands: colour from one dataset, transparency from another. `gdaldem color-relief` emits three bands and
- * drops the warp's alpha with them, so nodata would come back as the ramp's bottom stop painted over every part
- * of the scene that holds none; band 4 is that mask, read back off the warped dataset.
+ * `gdaldem color-relief` emits three bands and drops the warp's alpha with them, so nodata would come back as the
+ * ramp's bottom stop painted over every part of the scene that holds none; band 4 is that mask, read back off the
+ * warped dataset.
  */
 export function rgbaVrt(width: number, height: number, colour: string, mask: string, maskBand: number): string {
   const rect = `<SrcRect xOff="0" yOff="0" xSize="${width}" ySize="${height}"/><DstRect xOff="0" yOff="0" xSize="${width}" ySize="${height}"/>`
@@ -404,9 +393,8 @@ export const make = (): Effect.Effect<Rasters, never, Scope.Scope> =>
   })
 
 /**
- * A finished preview from an earlier request, or nothing. The extent is the field checked because its loss is
- * the silent one: an image placed by a missing box lands somewhere plausible and wrong, where a missing size
- * shows immediately.
+ * The extent is the field checked because its loss is the silent one: an image placed by a missing box lands
+ * somewhere plausible and wrong, where a missing size shows immediately.
  */
 function kept(places: { image: string; record: string }): Preview | undefined {
   if (!existsSync(places.image) || !existsSync(places.record)) return undefined

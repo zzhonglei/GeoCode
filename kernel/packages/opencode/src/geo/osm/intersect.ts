@@ -1,23 +1,16 @@
 export * as OsmIntersect from "./intersect"
 
-/* --- GeoCode: replaying the boundary test Overpass could not run (docs/GEOKERNEL.md §6.4).
- *
- * A boundary that cannot be sent as-is is widened before querying (`extent.ts`); this narrows the answer back, and
- * must select what the server would have selected from the real boundary. Nothing here cuts a feature: a clipped way
- * would keep an `osm_id` its geometry no longer describes. --- */
+/* --- GeoCode: narrowing a widened query's answer back to the real boundary; nothing here cuts a feature, since a
+ * clipped way would keep an `osm_id` its geometry no longer describes (docs/GEOKERNEL.md §6.4). --- */
 
 export type Point = readonly [number, number]
 
-/** One polygon of the boundary: an outer ring, and the holes cut out of it. */
 export interface Polygon {
   readonly outer: readonly Point[]
   readonly holes: readonly (readonly Point[])[]
 }
 
-/**
- * Ray casting to the right, with the half-open `>` comparison that stops a vertex lying exactly on the ray from
- * being counted twice — boundaries drawn on a graticule produce such vertices constantly.
- */
+/** The half-open `>` comparison stops a vertex lying exactly on the ray from being counted twice. */
 function inRing(point: Point, ring: readonly Point[]): boolean {
   let inside = false
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -30,7 +23,6 @@ function inRing(point: Point, ring: readonly Point[]): boolean {
   return inside
 }
 
-/** Inside the outer ring and outside every hole. */
 export function inPolygon(point: Point, polygon: Polygon): boolean {
   if (!inRing(point, polygon.outer)) return false
   for (const hole of polygon.holes) if (inRing(point, hole)) return false
@@ -52,10 +44,7 @@ function within(a: Point, b: Point, c: Point): boolean {
   )
 }
 
-/**
- * Do two segments touch at all? The collinear cases are not a formality: administrative boundaries are routinely
- * drawn along a road or a river, and the sign test alone reports a way lying on the line as missing it.
- */
+/** Touching counts: boundaries run along roads and rivers, and the sign test alone misses a way lying on the line. */
 export function segmentsCross(a: Point, b: Point, c: Point, d: Point): boolean {
   const abc = orient(a, b, c)
   const abd = orient(a, b, d)
@@ -96,8 +85,7 @@ export function index(polygons: readonly Polygon[]): Index {
   for (const polygon of polygons) {
     for (const ring of [polygon.outer, ...polygon.holes]) {
       for (let i = 0; i < ring.length; i++) {
-        // Walked as a cycle with the zero-length edge dropped, so a ring that omits GeoJSON's repeated last vertex
-        // still closes.
+        // Walked as a cycle minus zero-length edges, so a ring without GeoJSON's repeated last vertex still closes.
         const a = ring[i]!
         const b = ring[(i + 1) % ring.length]!
         if (a[0] === b[0] && a[1] === b[1]) continue
@@ -109,8 +97,7 @@ export function index(polygons: readonly Polygon[]): Index {
       }
     }
   }
-  // A zero span divides by zero, and `cell` answers NaN for a value on the origin: `crosses` would then loop from
-  // NaN to NaN, touch no bucket, and report every segment as missing the boundary.
+  // A zero span would make `cell` answer NaN, and `crosses` would then silently miss every segment.
   const stepX = (maxX - minX) / CELLS || 1e-9
   const stepY = (maxY - minY) / CELLS || 1e-9
   const buckets = new Map<number, Edge[]>()
@@ -136,20 +123,17 @@ function cell(value: number, origin: number, step: number): number {
   return Math.max(0, Math.min(CELLS, Math.floor((value - origin) / step)))
 }
 
-/** Is this point inside the boundary — any of its polygons, none of their holes? */
 export function contains(idx: Index, point: Point): boolean {
   for (const polygon of idx.polygons) if (inPolygon(point, polygon)) return true
   return false
 }
 
-/** Does this segment touch the boundary anywhere? */
 export function crosses(idx: Index, a: Point, b: Point): boolean {
   const x0 = cell(Math.min(a[0], b[0]), idx.minX, idx.stepX)
   const x1 = cell(Math.max(a[0], b[0]), idx.minX, idx.stepX)
   const y0 = cell(Math.min(a[1], b[1]), idx.minY, idx.stepY)
   const y1 = cell(Math.max(a[1], b[1]), idx.minY, idx.stepY)
-  // An edge spanning several cells is stored in each, so one can be tested twice — cheaper than the set that would
-  // prevent it.
+  // An edge spanning several cells is stored in each, so one can be tested twice, which is cheaper than deduplicating.
   for (let x = x0; x <= x1; x++) {
     for (let y = y0; y <= y1; y++) {
       for (const edge of idx.buckets.get(x * (CELLS + 1) + y) ?? []) {
@@ -178,12 +162,11 @@ function area(coordinates: unknown, idx: Index): boolean {
   const outer = Array.isArray(coordinates[0]) ? coordinates[0].filter(isPoint) : []
   if (outer.length === 0) return true
   if (line(outer, idx)) return true
-  // A province-sized feature may contain the whole study area: no vertex inside it, no edge crossing it, and still
-  // an answer to the query.
+  // A feature can contain the whole study area with no vertex inside it and no edge crossing it.
   return idx.polygons.some((polygon) => polygon.outer[0] !== undefined && inRing(polygon.outer[0], outer))
 }
 
-/** Does this GeoJSON geometry meet the boundary? Unreadable ones answer `true`: unread is not ruled out (§6.4). */
+/** Unreadable geometry answers `true`: unread is not ruled out. */
 export function intersects(geometry: unknown, idx: Index): boolean {
   const shape = geometry as { type?: unknown; coordinates?: unknown; geometries?: unknown }
   switch (shape?.type) {

@@ -275,11 +275,8 @@ const sanitizeProjects = (...args) => settingsNormalizationRuntime.sanitizeProje
 // root once at startup (`migrateLegacyUserDirs`), because they used to ignore
 // the variable.
 const OPENCHAMBER_DEFAULT_CONFIG_ROOT = path.join(os.homedir(), '.config', 'openchamber');
-// --- GeoCode: read the shell data root, which Electron main injects (docs/PATHS.md §3.3).
-// The fallback is GeoCode's own — nothing here may write into an OpenChamber directory. It
-// carries the `desktop/` segment because `.config/GeoCode` alone is the kernel's config root,
-// and on a case-insensitive filesystem `geocode` would land in it too. The copy described
-// above is switched off in data-dir-migration.js, so the default root above is never read. ---
+// --- GeoCode: our own fallback, under `desktop/` because `.config/GeoCode` is the kernel's (docs/PATHS.md §5).
+// The legacy copy described above is switched off in data-dir-migration.js. ---
 const OPENCHAMBER_USER_CONFIG_ROOT = process.env.OPENCHAMBER_DATA_DIR
   ? path.resolve(process.env.OPENCHAMBER_DATA_DIR)
   : path.join(os.homedir(), '.config', 'GeoCode', 'desktop');
@@ -777,10 +774,8 @@ const openCodeResolutionRuntime = createOpenCodeResolutionRuntime({
 const getOpenCodeResolutionSnapshot = (...args) =>
   openCodeResolutionRuntime.getOpenCodeResolutionSnapshot(...args);
 
-// --- GeoCode: under Electron, main.mjs has already merged this same login shell into this same
-// process.env and then removed the other products' prefixes; a second merge here would only put
-// them back (docs/ENVIRONMENT.md §5.2). ARGV0 is cleared by that merge too. Standalone
-// `openchamber serve` still merges. ---
+// --- GeoCode: under Electron main.mjs already merged the login shell, clearing ARGV0, and stripped the
+// branded names; a second merge would put them back (docs/ENVIRONMENT.md §5.2) ---
 if (!process.versions.electron) applyLoginShellEnvSnapshot();
 /* applyLoginShellEnvSnapshot(); */
 // --- /GeoCode ---

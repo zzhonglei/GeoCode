@@ -66,9 +66,8 @@ describe("QgisGuidance", () => {
   })
 
   test("a broken install forbids the agent from installing anything itself", () => {
-    // `broken()` ends in "reinstall QGIS" and is a branch `fixable()` — where the prohibition also lives — never
-    // reaches, so leaving it to that one would tell an agent to recommend a reinstall with nothing forbidding it
-    // from running the installer itself.
+    // `broken()` advises a reinstall and is a branch `fixable()` never reaches, so the prohibition there does not
+    // stop an agent from running the installer itself.
     for (const status of ["gdal-missing", "proj-broken", "core-missing"] as const) {
       const text = QgisGuidance.render({ status, diagnostics: DIAG })
       expect(text).toContain("DO NOT run any install")
@@ -96,9 +95,8 @@ describe("QgisGuidance", () => {
   })
 
   test("a ready environment the gate still refuses gets an answer, not silence", () => {
-    // The gate needs ready AND processing AND catalog "ready" (§4.9), so `render` owes all three refused shapes an
-    // answer — one it misses falls out of its ready branch as "", and the tool prints its generic "settled
-    // while this call was checking it" fallback instead.
+    // The gate needs ready AND processing AND catalog "ready" (§4.9); a refused shape `render` misses comes out as "",
+    // and the tool prints its generic fallback instead.
     const building = QgisGuidance.render({ status: "ready", processing: true, catalog: "building" } as never)
     expect(building).toContain("Try again shortly")
     const noProcessing = QgisGuidance.render({ status: "ready", processing: false, catalog: "skipped" } as never)
@@ -124,26 +122,22 @@ describe("QgisGuidance", () => {
     expect(text).toMatch(/restarted/i)
     expect(text).toMatch(/different path/i)
 
-    // And the contrast holds: in the configure branch the agent is writing a value that differs, so saving does
-    // re-probe there — one sentence true in one branch and false in the other is how this survived.
+    // In the configure branch the agent writes a value that differs, so saving does re-probe there.
     expect(QgisGuidance.render({ status: "unconfigured" })).toContain("re-probes automatically after save")
   })
 
   test("a skipped catalog answers even if it ever arrives without its cause", () => {
-    // The kernel only ever commits `catalog: "skipped"` alongside `processing: false` (qgis/index.ts), but that
-    // pairing is a convention rather than a type, and `gateStatus` already reads the two apart — so the orphan
-    // shape is built by hand here.
+    // Built by hand: the kernel pairs `catalog: "skipped"` with `processing: false` (qgis/index.ts) by convention,
+    // not by type.
     const orphan = QgisGuidance.render({ status: "ready", processing: true, catalog: "skipped" } as never)
     expect(orphan).not.toBe("")
     expect(orphan).toContain("Processing framework is not available")
   })
 
   test("the Windows locate step does not stop at the system drive", () => {
-    // An agent handed C:-only probes concludes "not installed" and sends the user to download software they
-    // already have, since `where qgis` finds only an install that landed on PATH.
-    //
-    // `process.platform` is swapped rather than the test skipped off Windows, or nothing would check this branch
-    // on the machines that run this suite.
+    // An agent handed C:-only probes concludes "not installed" and sends the user to download software they have.
+    // `process.platform` is swapped rather than the test skipped off Windows, or no machine running this suite
+    // would check this branch.
     const real = Object.getOwnPropertyDescriptor(process, "platform")!
     try {
       Object.defineProperty(process, "platform", { value: "win32", configurable: true })

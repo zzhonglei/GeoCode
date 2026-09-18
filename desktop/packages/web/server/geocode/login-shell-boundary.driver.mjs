@@ -1,8 +1,5 @@
-/* --- GeoCode: runs in a child process for login-shell-boundary.test.js. It stands in for
- * Electron main: puts a stub login shell in place, writes what main writes before importing the
- * shell runtime, imports it, and reports which probe names reached process.env. The `electron`
- * argument marks the process the way a real Electron build is marked; `plain` is standalone
- * serve, where the merge must still happen. --- */
+/* --- GeoCode: child process for login-shell-boundary.test.js; imports the shell runtime behind a stub login
+ * shell and prints which probe names reached process.env. --- */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

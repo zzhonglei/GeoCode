@@ -1,9 +1,4 @@
-/* --- GeoCode: the six snippet routes answer 404 under Electron (docs/DESKTOP.md §7.3).
- *
- * Driven over a real Express app with the refusal registered ahead of stand-in handlers that
- * record a hit, which is what upstream's own registrations are: if the refusal ever stops
- * winning the match, the stand-in records and the test fails. The control run without the
- * Electron mark must reach every handler, or the guard proves nothing. --- */
+/* --- GeoCode: the six snippet routes answer 404 under Electron (docs/DESKTOP.md §7.3). --- */
 import { afterEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import fs from 'node:fs';

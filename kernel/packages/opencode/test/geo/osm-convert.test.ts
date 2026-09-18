@@ -7,8 +7,7 @@ import { OsmConvert } from "@/geo/osm/convert"
 import { OsmOutput } from "@/geo/osm/output"
 import { OsmQuery } from "@/geo/osm/query"
 
-/* Conversion, normalization and output (docs/GEOKERNEL.md §6.6–§6.8): which feature is the one that was asked for,
- * what the field set is, and the checks that keep a partial assembly from passing as a whole one. */
+/* Conversion, normalization and output (docs/GEOKERNEL.md §6.6–§6.8). */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-osm-"))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
@@ -89,7 +88,7 @@ describe("osm field contract", () => {
     const policy = OsmConvert.fieldPolicy(["amenity=hospital", "emergency"])
     const { properties, dropped } = OsmConvert.buildProperties("way", 7, tags, policy)
     expect(properties.emergency).toBe("yes")
-    // By key, so the caller can ask again naming exactly what it lost (§6.6 丢弃但按键计数上报).
+    // By key, so the caller can ask again naming exactly what it lost (§6.6).
     expect(dropped.sort()).toEqual(["addr:street", "name:en", "operator"])
     expect(properties["addr:street"]).toBeUndefined()
   })
@@ -186,8 +185,8 @@ describe("osm representative points", () => {
   })
 
   test("a small ring far from the origin still resolves inside itself", () => {
-    // A real 40 m car park in Wuhan: small and far from the origin, where cross products taken on raw coordinates
-    // cancel enough significant digits to put the answer outside the ring's own bounding box.
+    // Small and far from the origin, where cross products taken on raw coordinates cancel enough significant digits
+    // to put the answer outside the ring's own bounding box.
     const ring: [number, number][] = [
       [114.3604117, 30.5337849],
       [114.3603763, 30.5336521],
@@ -286,9 +285,7 @@ describe("osm representative points", () => {
       { type: "Feature", properties: { osm_type: "way", osm_id: 9 }, geometry: null },
     ])
     expect(features).toEqual([])
-    // Named rather than counted because the caller is told to fetch it on its own, so the name has to be one
-    // `OsmGetObjects` accepts — which the literal alone cannot say, since it cannot tell an accepted spelling
-    // from one `parseRef` throws on.
+    // The caller is told to fetch it by this name, and only `parseRef` can say the spelling is one it accepts.
     expect(dropped).toEqual(["W9"])
     expect(OsmQuery.parseRef(dropped[0]!)).toEqual({ type: "way", id: 9 })
   })
@@ -347,8 +344,7 @@ describe("osm output files", () => {
     OsmOutput.write(base, [feature(1, "Point"), feature(2, "LineString")])
     expect(fs.existsSync(points) && fs.existsSync(lines)).toBe(true)
 
-    // …then a run producing only points, which still takes the next number: `taken` counts the siblings, so a
-    // base with nothing at it is occupied all the same, and one split run cannot land on another's names.
+    // Then a run producing only points, which still takes the next number (`taken` in output.ts).
     const second = OsmOutput.write(base, [feature(1, "Point")])
     expect(second.outputs[0]!.path).toBe(path.join(root, "rerun", "out (1).geojson"))
     expect(fs.existsSync(points) && fs.existsSync(lines)).toBe(true)
@@ -363,8 +359,7 @@ describe("osm output files", () => {
   })
 
   test("an empty list still produces a file rather than throwing", () => {
-    // Unreachable through the service, which stops at zero features in `writeIfAny`; the tolerance is what keeps
-    // a direct call from falling off the end of an empty family map.
+    // Unreachable through the service, which stops at zero features in `writeIfAny`; this covers a direct call.
     const base = path.join(root, "empty", "out.geojson")
     const { outputs } = OsmOutput.write(base, [])
     expect(outputs[0]!.family).toBe("empty")
@@ -372,8 +367,8 @@ describe("osm output files", () => {
   })
 
   test("a base that is not named .geojson still gets three distinct files", () => {
-    // The family goes in before the extension, whatever the extension is: a sibling name derived by rewriting a
-    // ".geojson" suffix comes back equal to the base, and every family then overwrites the same file.
+    // A sibling name derived by rewriting a ".geojson" suffix comes back equal to this base, and every family then
+    // overwrites the same file.
     const base = path.join(root, "ext", "out.json")
     const { outputs } = OsmOutput.write(base, [feature(1, "Point"), feature(2, "LineString")])
     expect(new Set(outputs.map((o) => o.path)).size).toBe(2)

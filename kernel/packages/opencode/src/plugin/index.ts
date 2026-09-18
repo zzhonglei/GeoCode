@@ -14,12 +14,8 @@ import { Session } from "@/session/session"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
 import { ModalPlugin } from "./modal/modal"
-/* --- GeoCode: GitLab Duo and Poe login are not part of GeoCode. Their npm
- * bundles embed a published copy of core whose import mkdirs opencode-branded
- * XDG dirs on the user's disk — a brand leak our source patches can never
- * reach (docs/PATHS.md §5). Dropping the imports is enough: the leak happens
- * at import time, so the package.json deps stay untouched to keep the lockfile
- * (and its merge surface) identical to upstream. Other login flows unaffected. ---
+/* --- GeoCode: no GitLab Duo or Poe login; their npm bundles create opencode-branded directories on import, out of
+ * reach of source patches, so the imports go and package.json keeps the deps to match upstream (docs/PATHS.md §5). ---
  * import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
  * import { PoeAuthPlugin } from "opencode-poe-auth"
  * --- /GeoCode --- */

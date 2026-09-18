@@ -2,8 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { GdalInspector } from "@/geo/gdal/inspector"
 
-/* Reading what a file is (docs/GEOKERNEL.md §7.4, §7.5). The fixtures are real `gdalinfo -json` and
- * `ogrinfo -json -so` output, awkward parts included. */
+/* Reading what a file is (docs/GEOKERNEL.md §7.4, §7.5). */
 
 /** China DEM, 1 km: one band, its own overviews, and no authority code in its coordinate system. */
 const DEM = JSON.stringify({
@@ -70,8 +69,6 @@ describe("gdal raster metadata", () => {
     const plain = GdalInspector.parseRaster(raster({ bands: [{ colorInterpretation: "Red" }] }))
     expect(plain.georeference).toBe("none")
 
-    // GDAL hands the identity transform back for a file that has none, so a file carrying it literally has to read
-    // the same as one carrying nothing.
     const identity = GdalInspector.parseRaster(raster({ geoTransform: [0, 1, 0, 0, 0, 1] }))
     expect(identity.georeference).toBe("none")
 
@@ -168,10 +165,8 @@ describe("gdal metadata failures reach the caller", () => {
 
 describe("gdal version capability", () => {
   test("band selection is read off the binary, not guessed from a version", () => {
-    // One line of real `gdalwarp --help` from GDAL 3.13.3, which spells the flag `-srcband` and prints no bare `-b`.
+    // Each spelling must count on its own; a check tuned to one answers "no" for the other.
     expect(GdalInspector.warpSelectsBands("[-if <format>]... [-srcband <band>]... [-dstband <band>]...")).toBe(true)
-    // The same flag under its other spelling (3.13.3's long usage lists `-b, -srcband`); a check tuned to one
-    // spelling answers "no" for the other.
     expect(GdalInspector.warpSelectsBands("Usage: gdalwarp [-b <band>] src dst")).toBe(true)
     expect(GdalInspector.warpSelectsBands("gdalwarp [-r <method>] [-of <format>] src dst")).toBe(false)
   })

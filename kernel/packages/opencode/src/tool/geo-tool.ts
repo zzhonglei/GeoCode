@@ -3,18 +3,14 @@ import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { GeoOutput } from "@/geo/runtime"
 import type { GeeService, GeoQgis, GeoRuntime, GeoStatus } from "@/geo"
 
-/* --- GeoCode: the parts the QGIS and GEE tools share (docs/TOOLS.md §6).
- *
- * Every helper takes a service interface as an argument rather than yielding it: `Tool.Def.execute` has no
- * requirement channel, so each tool captures its services once at init (docs/TOOLS.md §2 #5). --- */
+/* --- GeoCode: the parts the QGIS and GEE tools share (docs/TOOLS.md §6). Helpers take service interfaces as
+ * arguments, since `Tool.Def.execute` has no requirement channel to yield them from. --- */
 
-/** The gate returns intermediate states rather than blocking (GEOKERNEL §8.2), so waiting them out is the tool
- * layer's job — bounded, or a cold start would hang instead of answering. */
+/** The gates answer with intermediate states rather than blocking, so the tools wait them out, bounded. */
 const SETTLE_LIMIT_MS = 60_000
 const SETTLE_POLL_MS = 500
 
-// A ready environment whose catalog is still building is the third intermediate shape: the gate wants the
-// catalog too (§4.9), so `status === "ready"` on its own does not mean settled.
+// `ready` with the catalog still building is not settled either: the gate also wants the catalog.
 const settling = (status: GeoEvent.QgisStatus) =>
   status.status === "probing" ||
   status.status === "resolving" ||
@@ -33,11 +29,7 @@ export const settledQgisGate = Effect.fn("GeoTool.settledQgisGate")(function* (
   return gate
 })
 
-/**
- * Rendered from the status face rather than from the environment object, which never leaves the kernel
- * (GEOKERNEL §9.1). A prefix for the tool's RETURN VALUE only — `ctx.metadata()` broadcasts live
- * (docs/TOOLS.md §2 #2).
- */
+/** A prefix for the tool's RETURN VALUE only, never `ctx.metadata()`, which broadcasts live (docs/TOOLS.md §2 #2). */
 export const qgisHeader = Effect.fn("GeoTool.qgisHeader")(function* (status: GeoStatus.Interface) {
   const current = yield* status.current("qgis")
   if (!current || current.status !== "ready") return undefined
@@ -51,20 +43,13 @@ export const qgisHeader = Effect.fn("GeoTool.qgisHeader")(function* (status: Geo
   return `<geo_env>${parts.join(" · ")}</geo_env>`
 })
 
-/* No qgisUnavailable here: the not-ready copy is authored in the kernel (GeoQgis.QgisGuidance) so the whole QGIS
- * group speaks with one voice, and this layer only renders it. */
-
-/* Narrower than QGIS's because a remote check in flight needs no waiting: `gate` calls `validate`, which is
- * serialized, so the caller is already blocked until there is a conclusion. What is left to wait out is a setup
- * probe still running and a network verdict that has not yet come back `unreachable`. */
+// A remote check in flight needs no waiting here: `gate` runs the serialized `validate` and returns with its answer.
 const settlingGee = (status: GeoEvent.GeeStatus) =>
   status.setup.status === "checking" || (status.facing === "network" && status.network.status !== "unreachable")
 
 /**
- * Asks the layers below to look again before waiting (§5.8 自愈重探): the fixes for the self-healing setup states
- * are actions in a terminal that never touch machine.json, so the config watcher cannot notice them and a tool
- * retry is the only signal there is. `recheck` answers whether it actually started a round — it debounces, and
- * declines states a re-probe cannot fix — and that round is forked, hence one poll before reading the gate again.
+ * Rechecks before waiting: fixes such as installing packages never touch machine.json, so a tool retry is the only
+ * signal a re-probe is due (GEOKERNEL §5.8). The round `recheck` starts is forked, hence one poll before the gate.
  */
 export const settledGeeGate = Effect.fn("GeoTool.settledGeeGate")(function* (
   gee: GeeService.Interface,
@@ -85,9 +70,8 @@ export const settledGeeGate = Effect.fn("GeoTool.settledGeeGate")(function* (
   return gate
 })
 
-/* An already-settled failure — probing and resolving excluded — so a tool can refuse before the permission
- * prompt (docs/TOOLS.md §3). No re-probe, unlike the GEE twin below: QGIS deliberately has none, because one
- * drags a full catalog rebuild with it and nearly every QGIS fix goes through machine.json (GEOKERNEL §4.8). */
+// A settled failure, so tools can refuse before the permission prompt (docs/TOOLS.md §3). No re-probe, unlike GEE:
+// one would void and rebuild the catalog (GEOKERNEL §4.8).
 const qgisStopped = (status: GeoEvent.QgisStatus) =>
   status.status !== "ready" && status.status !== "probing" && status.status !== "resolving"
 
@@ -96,13 +80,10 @@ export const qgisLocalDeadEnd = Effect.fn("GeoTool.qgisLocalDeadEnd")(function* 
   return current && qgisStopped(current) ? current : undefined
 })
 
-/* The GEE twin, and the re-probe is why it is a helper rather than a status read at the call site: this path
- * returns before `settledGeeGate` — the other place that re-probes — is ever reached, so without it a user who
- * has just installed the packages gets the stale verdict back forever (§5.8).
- *
- * `checking` is not a dead end: it is the state `settledGeeGate` exists to wait out. Nor is a missing status. */
+// `checking` is not a dead end: `settledGeeGate` waits it out.
 const geeStopped = (status: GeoEvent.GeeStatus) => status.setup.status !== "ready" && status.setup.status !== "checking"
 
+// Rechecks too: a refusal here returns before `settledGeeGate` is reached, so a just-fixed setup would stay refused.
 export const geeLocalDeadEnd = Effect.fn("GeoTool.geeLocalDeadEnd")(function* (
   gee: GeeService.Interface,
   status: GeoStatus.Interface,
@@ -116,19 +97,12 @@ export const geeLocalDeadEnd = Effect.fn("GeoTool.geeLocalDeadEnd")(function* (
   return current && geeStopped(current) ? current : undefined
 })
 
-/**
- * Only for an environment that is entirely usable: on the post-setup blockers the GEE guidance already carries the
- * interpreter, project and reason itself, so a header above it would be a second copy. What is left is a run that
- * reached the interpreter and then failed on its own terms, where nothing else says which environment it was in.
- */
+/** Only when fully usable: guidance for a network or authorization failure already names interpreter and project. */
 export const geeHeader = Effect.fn("GeoTool.geeHeader")(function* (status: GeoStatus.Interface) {
   const current = yield* status.current("gee")
   if (!current || current.setup.status !== "ready") return undefined
   if (current.facing !== "runtime" || current.runtime.status !== "valid") return undefined
-  /* The route is deliberately absent. A `RouteId` holds no credential, so it was never a leak, but it would put
-   * "this machine is behind a proxy, on this port" into every return — and the model must not start reasoning
-   * toward the proxy when the network fails. Diagnosis keeps it: the status plane is read by the interface, not
-   * by the model. */
+  // No route: it would tell the model about a proxy, which it must not reason toward when the network fails.
   const parts = [
     current.setup.version ? `GEE ${current.setup.version}` : "GEE ready",
     `project ${current.setup.project}`,
@@ -137,11 +111,7 @@ export const geeHeader = Effect.fn("GeoTool.geeHeader")(function* (status: GeoSt
   return `<geo_env>${parts.join(" · ")}</geo_env>`
 })
 
-/**
- * Why the gate is shut, in one field. The gate wants ready AND processing AND a built catalog (§4.9), so it
- * refuses several shapes whose status name is nonetheless `ready`, and the name alone would put `error: true`
- * next to `geoStatus: "ready"` in metadata — a contradiction naming no cause.
- */
+/** The gate also refuses `ready` statuses, so those get a suffix rather than `error: true` beside a bare "ready". */
 export function gateStatus(status: GeoEvent.QgisStatus): string {
   if (status.status !== "ready") return status.status
   if (!status.processing) return "ready:no-processing"
@@ -151,8 +121,7 @@ export function gateStatus(status: GeoEvent.QgisStatus): string {
   return "ready"
 }
 
-/** Two parts, because `facing` alone says only which layer is in the way: `setup` covers both "no interpreter
- * configured" and "not signed in", which need different things from the user. */
+/** Two parts, because one `facing` covers states that need different things from the user. */
 export function geeGateStatus(status: GeoEvent.GeeStatus): string {
   switch (status.facing) {
     case "setup":
@@ -165,10 +134,8 @@ export function geeGateStatus(status: GeoEvent.GeeStatus): string {
 }
 
 /**
- * The five terminations, rendered once for the whole geo group (GEOKERNEL §11 五种终止路径的横幅). `abort` needs
- * saying out loud: upstream does not interrupt a cancelled tool, it completes the call with whatever the tool
- * returned (session/tools.ts), so silence would file the user's own cancellation under "it failed" — `shell`
- * answers the same event with a plain sentence in the output.
+ * `abort` is said out loud: upstream completes a cancelled call with whatever the tool returned (session/tools.ts),
+ * so silence would read as a failure.
  */
 export function terminationBanner(reason: GeoRuntime.Reason, detail?: string): string {
   const body = detail?.trim()
@@ -185,8 +152,7 @@ export function terminationBanner(reason: GeoRuntime.Reason, detail?: string): s
       return [
         "--- crashed ---",
         body,
-        // Not "the QGIS interpreter": this renderer is shared, and GEE runs its own Python, so naming one
-        // capability would have the other's crashes blaming software the user never invoked.
+        // Names no capability: QGIS and GEE crashes share this text.
         "The Python interpreter exited unexpectedly — typically a segfault inside a native library, which is",
         "below the Python level and cannot be caught by try/except in a script. On macOS the system may show",
         'a "python3 unexpectedly quit" dialog; that is the OS crash reporter and is safe to dismiss. This tool',
@@ -199,8 +165,7 @@ export function terminationBanner(reason: GeoRuntime.Reason, detail?: string): s
   }
 }
 
-/** Only for paths that actually spawned something (§11 耗时页脚): a synthetic 0ms on a call that never got that
- * far would tell the Agent the work ran and finished instantly. */
+/** Only for paths that spawned something: on a refusal it would tell the Agent the work ran. */
 export function elapsedFooter(milliseconds: number): string {
   return `Elapsed: ${GeoOutput.formatDuration(milliseconds)}`
 }

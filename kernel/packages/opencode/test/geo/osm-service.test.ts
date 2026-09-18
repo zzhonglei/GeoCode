@@ -12,15 +12,14 @@ import { OsmSearch } from "@/geo/osm/search"
 import type { NetTypes } from "@/geo/net/types"
 import { testEffect } from "../lib/effect"
 
-/* The four capabilities (docs/GEOKERNEL.md §6.8), over a scripted HTTP layer: what the caller is told, and which
- * degradations stay visible instead of arriving looking like a clean answer. */
+/* The four capabilities (docs/GEOKERNEL.md §6.8): degradations stay visible instead of arriving looking like a clean
+ * answer. */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-osm-svc-"))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
 
 type Reply = { readonly status: number; readonly body: string } | { readonly error: Error }
 
-/** An HTTP layer answering by request shape, recording the bodies it was sent. */
 function scriptedHttp(reply: (url: string, body: string | undefined) => Reply) {
   const sent = Ref.makeUnsafe<string[]>([])
   const layer = Layer.succeed(
@@ -126,8 +125,6 @@ describe("osm search degradation", () => {
       Effect.gen(function* () {
         const osm = yield* GeoOsm.Service
         const result = yield* osm.search({ query: "武汉大学" })
-        // Their recall barely overlaps, so half an answer is worth having as long as the caller is told it is
-        // half (§6.8).
         expect(result.candidates).toHaveLength(1)
         expect(result.notes.some((note) => note.includes("geocoder"))).toBe(true)
         // Which the merged candidates cannot show: a zero beside a full list is only visible per engine.
@@ -179,8 +176,6 @@ describe("osm reconnaissance", () => {
       Effect.gen(function* () {
         const osm = yield* GeoOsm.Service
         const result = yield* osm.count({ extents: ["bbox:30,114,31,115"], tags: ["amenity"] })
-        // A hundred thousand nodes and a hundred relations call for different decisions from the caller, and the
-        // response carries the split for free.
         expect(result.totals).toEqual({ nodes: 120, ways: 40, relations: 3, total: 163 })
         expect(result.perExtent[0]!.relations).toBe(3)
       }),
@@ -221,8 +216,8 @@ describe("osm reconnaissance", () => {
       Effect.gen(function* () {
         const osm = yield* GeoOsm.Service
         const result = yield* osm.count({ extents: ["bbox:30,114,31,115"], tags: ["amenity"] })
-        // A normal status and a well-formed body whose numbers are simply short (§6.3 第四种失败), carrying the
-        // service's own words: "timed out" and "too broad to run" ask opposite things of the caller.
+        // A normal status and a well-formed body whose numbers are simply short (§6.3), carrying the service's own
+        // words: "timed out" and "too broad to run" ask opposite things of the caller.
         expect(result.incomplete).toEqual([{ extent: "bbox:30,114,31,115", remark: "runtime error: Query timed out" }])
 
         // A distribution goes the same way, where saying nothing presents a partial vocabulary as the complete one.
@@ -233,7 +228,7 @@ describe("osm reconnaissance", () => {
   }
 
   {
-    // Over the 300-vertex budget, so the extent degrades to its convex hull — a superset (§6.4).
+    // Over the vertex budget in extent.ts, so the extent degrades to its convex hull, a superset (§6.4).
     const boundary = path.join(root, "detailed.geojson")
     const ring = Array.from({ length: 600 }, (_, i) => {
       const angle = (i / 600) * Math.PI * 2
@@ -254,8 +249,7 @@ describe("osm reconnaissance", () => {
       Effect.gen(function* () {
         const osm = yield* GeoOsm.Service
         const result = yield* osm.count({ extents: [`file:${boundary}`], tags: ["amenity"] })
-        // A count is never narrowed back the way a download is, so the number is the hull's — and the flag is the
-        // only thing that says so, since the total looks like any other total.
+        // A count is never narrowed back the way a download is, so the number is the hull's and only the flag says so.
         expect(result.totals.total).toBe(12)
         expect(result.exact).toBe(false)
       }),
@@ -277,8 +271,7 @@ describe("osm reconnaissance", () => {
           extents: ["bbox:30,114,31,115", "bbox:31,114,32,115"],
           key: "amenity",
         })
-        // The cap is applied per query, so twelve thousand across two complete answers is not a truncated
-        // distribution — calling it one sends the caller subdividing an area that needs no subdividing.
+        // Calling this truncated would send the caller subdividing an area that needs no subdividing.
         expect(result.sampled).toBe(12_000)
         expect(result.truncated).toBe(false)
       }),
@@ -323,8 +316,7 @@ describe("osm download", () => {
           onProgress: (settled, total) => Effect.sync(() => void ticks.push([settled, total])),
         })
 
-        // The opening tick is not decoration: most downloads ask for ONE extent, and without it that download
-        // reports nothing at all until it is already over.
+        // Without the opening tick, a download of one extent reports nothing until it is already over.
         expect(ticks[0]).toEqual([0, 3])
         expect(ticks).toEqual([
           [0, 3],
@@ -333,8 +325,7 @@ describe("osm download", () => {
           [3, 3],
         ])
 
-        // The middle extent failed and still advanced the count: a run whose extents are timing out is the one
-        // that takes longest, and the one that must not look frozen.
+        // A run whose extents are timing out is the one that takes longest, and the one that must not look frozen.
         expect(result.failed).toHaveLength(1)
         expect(result.extentsDone).toBe(2)
         // Which is why `settled` and `extentsDone` are two words: here they disagree, and both are right.
@@ -344,10 +335,8 @@ describe("osm download", () => {
 
     it.live("an extent that never parsed is settled before the first request goes out", () =>
       Effect.gen(function* () {
-        /* The only way into `failed` that is already there before the loop, and the only case in this suite that
-         * watches the ticks while one is: everywhere else `failed` is empty when the opening tick goes out, so
-         * seeding `settled` from it and seeding it from zero produce the same numbers. Seeded from zero, a
-         * download of these two opens at 0/2 and finishes at 1/2. */
+        // The only case here with `failed` non-empty before the loop, so the only one where seeding `settled` from
+        // zero shows: it would open at 0/2 and finish at 1/2.
         const osm = yield* GeoOsm.Service
         const ticks: [number, number][] = []
         const result = yield* osm.downloadFeatures({
@@ -379,8 +368,6 @@ describe("osm download", () => {
         })
         expect(result.outputs.map((o) => o.family).sort()).toEqual(["points", "polygons"])
         expect(result.bytes).toBeGreaterThan(0)
-        // Both halves of it: `keptFields` names the columns the policy would keep, which `droppedFields` alone
-        // leaves the caller to work out from a query it no longer has.
         expect(result.keptFields).toContain("osm_id")
         expect(result.keptFields).toContain("amenity")
         expect(result.droppedFields).toContain("cuisine(1)")
@@ -396,9 +383,8 @@ describe("osm download", () => {
 
     it.live("a write that cannot happen comes back as a failure, not a defect", () =>
       Effect.gen(function* () {
-        // `OsmOutput.write` throws on a full disk or an unwritable path, and a throw inside `Effect.gen` is a
-        // defect: outside the error type, past `Effect.result`, and surfacing as an unattributable crash after a
-        // download that had already succeeded. Forced with a parent that is a file, ENOTDIR on both platforms.
+        // `OsmOutput.write` throws on a full disk or an unwritable path, which inside `Effect.gen` would be a defect
+        // past `Effect.result`; a parent that is a file forces the throw.
         const blocker = path.join(root, "blocker")
         fs.writeFileSync(blocker, "not a directory")
         const osm = yield* GeoOsm.Service
@@ -428,7 +414,7 @@ describe("osm download", () => {
           geometry: "centroid",
         })
         expect(result.geometry).toEqual({ Point: 2 })
-        // How much of the answer asking for `node` alone would have missed — here half of it (§6.8).
+        // How much of the answer asking for `node` alone would have missed (§6.8).
         expect(result.centroidConverted).toBe(1)
       }),
     )
@@ -456,7 +442,7 @@ describe("osm download", () => {
           timeoutSec: 1,
         })
         // Below the floor an ordinary query comes back over budget, and a partial answer reads to the caller as
-        // "there is nothing here" (§6.3 第四种失败).
+        // "there is nothing here" (§6.3).
         expect((yield* Ref.get(http.sent)).at(-1)).toContain("[timeout:30]")
       }),
     )
@@ -474,8 +460,6 @@ describe("osm download", () => {
           tags: ["amenity"],
           output: path.join(root, "partial.geojson"),
         })
-        // On a multi-area download, partial results beat discarding everything, provided the shortfall is stated
-        // in the same result (§6.7).
         expect(result.features).toBe(2)
         expect(result.failed.map((f) => f.extent)).toEqual(["nonsense"])
         expect(result.extentsDone).toBe(1)
@@ -508,8 +492,7 @@ describe("osm download", () => {
           const points = path.join(root, "keep", "out-points.geojson")
           expect(fs.existsSync(points)).toBe(true)
 
-          // Same download, network gone. An empty run writes no file, and the earlier run's files are not this
-          // run's to touch (§6.7 — nothing overwrites).
+          // Same download, network gone (§6.7).
           const second = yield* osm.downloadFeatures({
             extents: ["bbox:31.5,114,32,115"],
             tags: ["amenity"],
@@ -537,8 +520,6 @@ describe("osm download", () => {
         const first = yield* osm.downloadFeatures({ extents: ["bbox:30,114,31,115"], tags: ["amenity"], output })
         const second = yield* osm.downloadFeatures({ extents: ["bbox:30,114,31,115"], tags: ["amenity"], output })
 
-        // The same path again is the ordinary case rather than a mistake — refreshing, recovering a dropped
-        // field, retrying a short result — and undo does not reach geographic data (§10.1 #6).
         const firstPaths = first.outputs.map((entry) => entry.path)
         const secondPaths = second.outputs.map((entry) => entry.path)
         expect(secondPaths).not.toEqual(firstPaths)
@@ -584,7 +565,6 @@ describe("osm download", () => {
           }),
         )
         expect(outcome._tag).toBe("Failure")
-        // Refusing is half of it: at this size the request wants a different shape, and naming it is the rest.
         if (outcome._tag === "Failure") expect(outcome.failure.message).toContain("tag filter")
         expect(yield* Ref.get(http.sent)).toHaveLength(0)
       }),
@@ -603,8 +583,8 @@ describe("osm download", () => {
           ids: ["W2"],
           output: path.join(root, "truncated.geojson"),
         })
-        // The objects the batch dropped fall through to the per-object fallback, the form that goes partial on
-        // large relations — so without this note the caller reads its troubles as a problem with the objects.
+        // The dropped objects fall through to the per-object fallback, which goes partial on large relations, so
+        // without this note the caller reads its troubles as a problem with the objects.
         expect(result.incomplete).toEqual([{ extent: "the batched fetch", remark: "runtime error: Query timed out" }])
         expect(result.features).toBe(1)
       }),
@@ -643,8 +623,7 @@ describe("osm download", () => {
     it.live("an id that never parsed is counted in the denominator, the way the result counts it", () =>
       Effect.gen(function* () {
         // The live channel and the final metadata publish this under one name, `objects_asked`
-        // (tool/geo-osm-objects.ts), so counting only the parseable ids here gives that name two meanings — on
-        // calls with a typo in them and nowhere else.
+        // (tool/geo-osm-objects.ts), so counting only the parseable ids here gives that name two meanings.
         const osm = yield* GeoOsm.Service
         const ticks: [number, number][] = []
         const result = yield* osm.downloadObjects({
@@ -670,7 +649,6 @@ describe("osm download", () => {
           ids: ["W2", "not-an-id"],
           output: path.join(root, "objects.geojson"),
         })
-        // The unparsed id belongs in the denominator and in `failed`, never in the count of what was obtained.
         expect(result.extentsAsked).toBe(2)
         expect(result.extentsDone).toBe(1)
         expect(result.failed.map((f) => f.extent)).toEqual(["not-an-id"])
@@ -685,9 +663,7 @@ describe("osm download", () => {
     it.live("a malformed type list or tag filter comes back as a failure, not a crash", () =>
       Effect.gen(function* () {
         const osm = yield* GeoOsm.Service
-        // The query builders refuse malformed input by throwing, which is right for pure functions and a defect
-        // inside `Effect.gen` — outside the error type every caller handles, so it takes the caller down instead
-        // of coming back as the sentence naming the fix.
+        // The query builders throw on malformed input, which inside `Effect.gen` would be a defect every caller misses.
         const types = yield* Effect.result(
           osm.downloadFeatures({
             extents: ["bbox:30,114,31,115"],
@@ -731,8 +707,7 @@ describe("osm download", () => {
 })
 
 describe("a widened boundary is narrowed back before anything is counted", () => {
-  /* Every figure has to describe the file the narrowing left on disk rather than the state before it, so the
-   * assertions below read the file back: a report agreeing with the number it was handed proves nothing. */
+  // The assertions read the file back: a report agreeing with the number it was handed proves nothing.
 
   // 400 vertices with deep notches: over the budget, and a convex hull covering far more than the star itself.
   const star: [number, number][] = []
@@ -796,9 +771,7 @@ describe("a widened boundary is narrowed back before anything is counted", () =>
   )
 
   {
-    /* A road reaching into the study area and running far out of it has its midpoint outside: judged by its whole
-     * geometry it survives, judged by the point it is about to become it disappears, taking the length inside the
-     * boundary with it and leaving nothing behind to notice. */
+    // Its midpoint is outside the boundary, so filtering after the collapse would drop it silently.
     const road = {
       elements: [
         {

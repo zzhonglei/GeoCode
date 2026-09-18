@@ -1,7 +1,6 @@
 export * as OsmQuery from "./query"
 
-/* --- GeoCode: building Overpass QL (docs/GEOKERNEL.md §6.5). Pure functions, no network, so the rules below are
- * pinned by test/geo/osm-query.test.ts rather than against a live service. --- */
+/* --- GeoCode: building Overpass QL, in pure functions with no network (docs/GEOKERNEL.md §6.5). --- */
 
 export type OsmType = "relation" | "way" | "node"
 
@@ -29,7 +28,7 @@ export function formatRef(ref: { readonly type: string; readonly id: number }): 
 
 /**
  * Relations only: the public instances no longer materialize way-derived area ids, so returning one would build a
- * filter that matches nothing and a download that reports success over an empty set (§6.5 已知限制).
+ * filter that matches nothing and a download that reports success over an empty set.
  */
 export function areaId(ref: OsmRef): number {
   if (ref.type === "relation") return 3_600_000_000 + ref.id
@@ -39,12 +38,11 @@ export function areaId(ref: OsmRef): number {
   )
 }
 
-/** Escape for a double-quoted QL literal. */
 export function escapeLiteral(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
 }
 
-/** Official names carry metacharacters — a branch written `成都(高新)店` — and unescaped they match something else. */
+/** Official names carry metacharacters, such as a branch in parentheses, and unescaped they match something else. */
 export function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -115,7 +113,6 @@ export interface UnionInput {
   readonly timeoutSec: number
 }
 
-/** Download: every matching element with its geometry inlined. */
 export function download(input: UnionInput): string {
   return assemble([
     `[out:json][timeout:${input.timeoutSec}];`,
@@ -127,7 +124,6 @@ export function download(input: UnionInput): string {
   ])
 }
 
-/** Reconnaissance: how many, without moving any geometry. */
 export function count(input: UnionInput): string {
   return assemble([
     `[out:json][timeout:${input.timeoutSec}];`,
@@ -139,7 +135,6 @@ export function count(input: UnionInput): string {
   ])
 }
 
-/** Reconnaissance: which values a key actually takes here, tags only. */
 export function tagStats(input: {
   readonly spatial: Spatial
   readonly key: string
@@ -157,7 +152,6 @@ export function tagStats(input: {
   ])
 }
 
-/** Per-type caps for a name search. */
 export interface Caps {
   readonly relation: number
   readonly way: number
@@ -167,9 +161,8 @@ export interface Caps {
 const DEFAULT_CAPS: Caps = { relation: 15, way: 15, node: 10 }
 
 /**
- * Unanchored, since official names carry campus and branch suffixes nobody types. Case folding costs server-side
- * time and CJK has no case, so it is added only for a pattern with latin letters; each type gets its own cap and
- * relations are asked for first, because a shared cap is spent on nodes before a relation appears (§6.5 类型配额).
+ * Unanchored for campus and branch suffixes nobody types, case-folded only for latin letters, and capped per type
+ * with relations first, because a shared cap is spent on nodes before a relation appears (docs/GEOKERNEL.md §6.5).
  */
 export function nameSearch(input: {
   readonly query: string
@@ -208,10 +201,7 @@ export function siteExpansion(input: { readonly query: string; readonly timeoutS
   ])
 }
 
-/**
- * One query for the whole set, with `out geom` rather than stitching sibling elements afterwards: the cross-element
- * form silently produces partial boundaries on large relations, and a partial boundary looks like a boundary (§6.8).
- */
+/** `out geom` rather than stitching sibling elements, which silently yields partial boundaries on large relations. */
 export function objects(input: { readonly refs: readonly OsmRef[]; readonly timeoutSec: number }): string {
   const groups = new Map<OsmType, number[]>()
   for (const ref of input.refs) {

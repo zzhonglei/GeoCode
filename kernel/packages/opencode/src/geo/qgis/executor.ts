@@ -6,23 +6,19 @@ import { QgisBootstrap } from "./bootstrap"
 import type { Algorithm } from "./catalog"
 import type { Environment } from "./types"
 
-/* --- GeoCode: the execution pipeline (docs/GEOKERNEL.md §4.12).
- *
- * Two call kinds, one pipeline, both taking a VERIFIED environment object handed in by the gate rather than a
- * status they look up themselves (§4.9, §9.1). --- */
+/* --- GeoCode: the execution pipeline (docs/GEOKERNEL.md §4.12). --- */
 
 /**
- * The idle-clock floor and default, in seconds. Only the caller knows the data size, so only the caller can pick
- * the number (§8.4 third-party tier); the floor keeps a tiny value from turning every quiet algorithm into a
- * "timeout".
+ * The idle clock is the caller's to pick, since only the caller knows the data size (§8.4); the floor keeps a tiny
+ * value from turning every quiet algorithm into a "timeout".
  */
 export const IDLE_FLOOR_SECONDS = 10
 export const IDLE_DEFAULT_SECONDS = 60
 
 /**
- * The runner. Three things it may not stop doing: enable the fault handler before any geo import (§4.13 constraint
- * 4 — a broken install segfaults in native library load, where no except-block can see it), print progress every
- * ten percent (§4.12's contract, and the heartbeat the idle clock reads), and warn without ever blocking the run.
+ * Three things the runner may not stop doing: enable the fault handler before any geo import, since a broken install
+ * segfaults in native library load where no except-block can see it; print progress, the heartbeat the idle clock
+ * reads; and warn without ever blocking the run.
  */
 export const RUNNER_SCRIPT = `
 import sys, faulthandler
@@ -154,9 +150,8 @@ finally:
 `
 
 /**
- * A pre-flight finding: advice, never a veto. `defaults-applied` is a statement rather than a warning, and merging
- * it into `missing-required` is what §4.12 bans — 869 of 1858 non-optional parameters ship a default, so a correct
- * call would raise a dozen alarms and teach the reader to skip the channel.
+ * `defaults-applied` is a statement, never merged into `missing-required`: so many non-optional parameters ship a
+ * default that a correct call would raise alarms and teach the reader to skip the channel (§4.12).
  */
 export interface Hint {
   readonly kind: "unknown-algorithm" | "unknown-parameter" | "missing-required" | "invalid-choice" | "defaults-applied"
@@ -164,10 +159,8 @@ export interface Hint {
 }
 
 /**
- * Millisecond-scale pre-flight against catalog metadata (§4.12), answering before any interpreter starts.
- *
- * ADVISES only: the exported metadata cannot express every constraint, so blocking on it would turn its gaps into
- * "the user cannot run this". The in-script check covers what needs the live registry.
+ * Advises only: the exported metadata cannot express every constraint, so blocking on it would turn its gaps into
+ * "the user cannot run this".
  */
 export function precheck(
   requestedId: string,
@@ -191,8 +184,6 @@ export function precheck(
     }
   }
 
-  // An absent non-optional parameter splits two ways and `defaultValue` in the same record decides which: a
-  // default means QGIS has something to run with, `null` means it does not (§4.12).
   const defaulted: string[] = []
   for (const parameter of algorithm.parameters) {
     if (!(parameter.name in parameters)) {
@@ -207,11 +198,9 @@ export function precheck(
       }
       continue
     }
-    // The one value judgment the metadata CAN make: an enum given a value outside its options. Everything subtler
-    // belongs to QGIS at run time.
     const value = parameters[parameter.name]
-    // An option index counts as a number or as the string of one — parameters arrive as generated JSON, where
-    // quoting a number is routine, and QGIS accepts both (checkValueIsAcceptable on 3.44 takes 1 and "1").
+    // An option index counts as a number or as the string of one: generated JSON quotes numbers routinely, and QGIS
+    // accepts both.
     const index =
       typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : undefined
     if (
@@ -227,8 +216,7 @@ export function precheck(
     }
   }
 
-  // One line, last, carrying the VALUES: what QGIS is about to run with is a fact the caller may want to override,
-  // and the catalog is the only place those values are already known.
+  // With the values, since what QGIS is about to run with is a fact the caller may want to override.
   if (defaulted.length > 0) {
     hints.push({
       kind: "defaults-applied",
@@ -238,7 +226,6 @@ export function precheck(
   return hints
 }
 
-/** The display name the runner prints early, for labelling a live run. */
 export function displayName(output: string): string | undefined {
   return /^Algorithm name:\s*(.+)$/m.exec(output)?.[1]?.trim()
 }
@@ -246,7 +233,6 @@ export function displayName(output: string): string | undefined {
 export interface AlgorithmOptions {
   readonly algorithm: string
   readonly parameters: Record<string, unknown>
-  /** Idle limit in seconds — the §8.4 caller-given tier. Clamped to the floor; defaulted when absent. */
   readonly idleSeconds?: number
   readonly onChunk: (chunk: string) => Effect.Effect<void>
   readonly abort?: AbortSignal
@@ -263,10 +249,6 @@ export interface ScriptOptions {
   readonly cwd?: string
 }
 
-/**
- * Run one algorithm in a verified environment. Termination is Runtime's: every ending — exit, idle, abort, crash —
- * comes back as a Result carrying its reason, and presenting that is the tool layer's job (§4.12).
- */
 export function runAlgorithm(
   runtime: GeoRuntime.Interface,
   environment: Environment,
@@ -274,8 +256,6 @@ export function runAlgorithm(
 ): Effect.Effect<GeoRuntime.Result, Error> {
   return runScript(runtime, environment, {
     script: RUNNER_SCRIPT,
-    // Parameters travel as an argument: the runner reads them off argv, which the bootstrap preamble leaves
-    // untouched because it only prepends lines to the script itself (§4.5).
     args: [options.algorithm, JSON.stringify(options.parameters)],
     idleSeconds: options.idleSeconds,
     onChunk: options.onChunk,
@@ -284,7 +264,6 @@ export function runAlgorithm(
   })
 }
 
-/** Run an inline script in a verified environment — the same single pipeline. */
 export function runScript(
   runtime: GeoRuntime.Interface,
   environment: Environment,

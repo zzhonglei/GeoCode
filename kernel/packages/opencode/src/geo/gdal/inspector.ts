@@ -5,13 +5,9 @@ import { Georeference } from "../georeference"
 import { GeoRuntime } from "../runtime"
 import type { GdalTypes } from "./types"
 
-/* --- GeoCode: reading what a file is, before deciding what to do with it (docs/GEOKERNEL.md §7.4, §7.5).
- *
- * Both pipelines start here and both need it cheap — this is the light half of the light/heavy split (§7.2), so
- * everything below reads headers and samples and nothing walks a full raster. The parsing is kept out of the
- * subprocess so it can be pinned against real captured output, with no toolchain (gdal-inspector.test.ts). --- */
+/* --- GeoCode: the metadata read both pipelines start with, kept to headers and samples so it never walks a full
+ * raster (docs/GEOKERNEL.md §7.4, §7.5). --- */
 
-/** Per-band facts the preview needs: which channel it is, and how to stretch it. */
 export interface Band {
   readonly index: number
   /** GDAL's colour interpretation, lowercased: `red`, `gray` (not `grey`), `alpha`, `undefined`. */
@@ -32,7 +28,6 @@ export interface RasterInfo {
   readonly bandCount: number
   /** True when the data is one measured quantity, so the preview colourizes it. */
   readonly singleBand: boolean
-  /** Reported and so far unread: the preview passes `-ovr AUTO` and lets GDAL decide (§7.5). */
   readonly hasOverview: boolean
   readonly georeference: Georeference.Kind
   readonly bands: readonly Band[]
@@ -57,11 +52,7 @@ export class GdalInspectError extends Error {
   }
 }
 
-/**
- * Carried by every GDAL subprocess that opens a dataset, here and in `raster.ts`, which is why it is exported
- * rather than copied: `GDAL_PAM_ENABLED NO` stops the library writing computed statistics as a sidecar next to
- * the source data, turning a read-only metadata request into a write to the user's directory (§7.5, §7.6).
- */
+/** Every dataset-opening call here and in `raster.ts` carries this, or GDAL writes statistics beside the source. */
 export const NO_SIDECARS = ["--config", "GDAL_PAM_ENABLED", "NO"] as const
 
 /** Sampled rather than walked: exact statistics would make this step scale with file size (§7.2, §7.5). */
@@ -97,7 +88,6 @@ export function projectionOf(coordinateSystem: unknown): string | undefined {
   return undefined
 }
 
-/** The six affine coefficients, or undefined for anything that is not them. */
 function coefficients(value: unknown): number[] | undefined {
   if (!Array.isArray(value) || value.length !== 6) return undefined
   const parsed = value.map(num)
@@ -116,9 +106,8 @@ function populated(metadata: unknown, name: string): boolean {
 }
 
 /**
- * Read a raster's metadata out of `gdalinfo -json` output. The RPC and GEOLOCATION domains arrive alongside the
- * default one without being asked for, and asking anyway is not the safe extra it looks: `-mdd` takes one domain
- * and errors on a repeat, so a call naming both fails outright.
+ * The RPC and GEOLOCATION domains arrive alongside the default one without being asked for, and asking anyway is not
+ * the safe extra it looks: `-mdd` takes one domain and errors on a repeat, so a call naming both fails outright.
  */
 export function parseRaster(stdout: string): RasterInfo {
   const raw = json(stdout, "gdalinfo")
@@ -173,7 +162,6 @@ export function parseRaster(stdout: string): RasterInfo {
   return { width, height, extent, projection, bandCount, singleBand, hasOverview, georeference, bands }
 }
 
-/** Read a vector layer's metadata out of `ogrinfo -json -so` output. */
 export function parseVector(stdout: string): VectorInfo {
   const raw = json(stdout, "ogrinfo")
   const layers = Array.isArray(raw.layers) ? (raw.layers as Record<string, unknown>[]) : []
@@ -196,11 +184,7 @@ export function parseVector(stdout: string): VectorInfo {
   }
 }
 
-/**
- * A pure reader, lifted into the error channel: the parsers throw the way ordinary functions do, and a throw
- * left alone inside an Effect is a defect — outside the declared error type, so no caller handling the error
- * channel will see it.
- */
+/** `Effect.try`, not `map`: a parser's throw left inside an Effect is a defect that no error-channel handler sees. */
 const parsed = <A>(reader: (stdout: string) => A) =>
   Effect.fnUntraced(function* (stdout: string) {
     return yield* Effect.try({
@@ -242,11 +226,7 @@ export const inspectRaster = (environment: GdalTypes.Environment, file: string) 
     "gdal:inspect-raster",
   ).pipe(Effect.flatMap(parsed(parseRaster)))
 
-/**
- * The same shape without `APPROXIMATE_STATS`, for reading back an intermediate the pipeline just produced. Its
- * one caller hands it a virtual dataset, so sampling here would not be a cheap extra — it would run the
- * reprojection early, on top of running it again at encode time.
- */
+/** No `APPROXIMATE_STATS`: sampling the warped VRT its caller reads back would run the reprojection an extra time. */
 export const inspectLayout = (environment: GdalTypes.Environment, file: string) =>
   run(environment, environment.tools.gdalinfo, [...NO_SIDECARS, "-json", file], "gdal:inspect-layout").pipe(
     Effect.flatMap(parsed(parseRaster)),
@@ -257,11 +237,6 @@ export const inspectVector = (environment: GdalTypes.Environment, file: string) 
     Effect.flatMap(parsed(parseVector)),
   )
 
-/**
- * Whether this build of `gdalwarp` can select bands itself; older ones cannot, and `raster.ts` inserts a separate
- * band-selection step for them. Asked of the binary, because a version-to-feature mapping is a second thing to
- * get wrong and users install whatever their platform ships.
- */
 export function warpSelectsBands(help: string): boolean {
   // A token boundary rather than a fixed spelling: GDAL 3.13.3 prints `[-srcband <band>]...`, and builds that
   // spell the same flag `-b` put it in brackets; a check tuned to one answers "no" for the other.

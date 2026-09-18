@@ -11,10 +11,6 @@ import { MessageID, SessionID } from "../src/session/schema"
 import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
 
-/* Tripwires for OsmSearch (docs/TOOLS.md §3; GEOKERNEL §6.2, §6.8). With no environment there is no gate and no
- * guidance, leaving the capability boundary and one presentation rule: an answer assembled from one engine instead
- * of two must not read like a complete one. */
-
 const CANDIDATE = (over: Partial<GeoOsm.OsmSearch.Candidate> = {}): GeoOsm.OsmSearch.Candidate => ({
   type: "relation",
   id: 10717504,
@@ -28,7 +24,6 @@ const CANDIDATE = (over: Partial<GeoOsm.OsmSearch.Candidate> = {}): GeoOsm.OsmSe
   ...over,
 })
 
-/** An OSM service under the test's control — no network, no endpoints. */
 function osmService(result: Partial<GeoOsm.SearchResult>) {
   return Layer.mock(GeoOsm.Service)({
     search: () =>
@@ -71,7 +66,7 @@ const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, ag
     .pipe(Effect.timeout(10_000), Effect.exit)
 })
 
-/** Runs the tool with the capability boundary lifted, since everything below is about what it prints. */
+/** Runs the tool with the capability boundary lifted. */
 const succeed = Effect.fnUntraced(function* (
   params: Record<string, unknown>,
   abort: AbortSignal = AbortSignal.any([]),
@@ -104,15 +99,13 @@ describe("OsmSearch, the capability boundary", () => {
         const registry = yield* ToolRegistry.Service
         expect(yield* registry.ids()).toContain("OsmSearch")
 
-        // Neither ruleset carries `osm`: reaching the public services is osmfetch's alone, and the wildcard deny
-        // above it keeps the four OSM tools out of these two agents' tool lists (docs/TOOLS.md §4.2 ①, §4.3).
+        // Reaching the public OSM services is osmfetch's alone (docs/TOOLS.md §4.3).
         for (const agent of ["GeoAgent", "plan"]) {
           const denied = yield* execute({ query: "武汉大学" }, agent)
           expect(Exit.isFailure(denied)).toBe(true)
           if (Exit.isFailure(denied)) expect(Cause.pretty(denied.cause)).toContain("rule which prevents")
         }
       }),
-    // bun's 5s default is not enough to build a registry for a fresh instance on a machine running the whole gate.
     { timeout: 20_000 },
   )
 })
@@ -141,14 +134,12 @@ describe("OsmSearch, reading the answer", () => {
     () =>
       Effect.gen(function* () {
         const result = yield* succeed({ query: "武汉大学" })
-        // The id in the form the next tool takes it: OsmGetObjects wants "R10717504", and "area:R<id>" is built
-        // from the same prefix.
+        // In the form OsmGetObjects takes, and the prefix "area:R<id>" is built from.
         expect(result.output).toContain("R10717504")
         expect(result.output).toContain("W42")
         expect(result.output).toContain("amenity=university")
         expect(result.output).toContain("[geocoder+features]")
         expect(result.output).toContain("[features]")
-        // Transit hits are downweighted noise in a place search, kept but marked (§6.8).
         expect(result.output).toContain("(transit)")
         expect(result.output).toContain("imp=0.531")
         expect(result.output).toContain("center=30.5395,114.3672")
@@ -171,12 +162,11 @@ describe("OsmSearch, reading the answer", () => {
     "half an answer says so, and still hands back what it has",
     () =>
       Effect.gen(function* () {
-        // One engine silent is a materially smaller answer, and nothing about the candidate list would reveal it.
         const result = yield* succeed({ query: "武汉大学" })
         expect(result.output).toContain("NOTE: the feature service did not answer")
         expect(result.output).toContain("R10717504")
         expect(result.metadata.degraded).toBe(true)
-        // And before the list, which a reader who meets the note afterwards has already taken as complete.
+        // Before the list, which a reader meeting the note afterwards has already taken as complete.
         expect(result.output.indexOf("NOTE:")).toBeLessThan(result.output.indexOf("R10717504"))
       }),
     { timeout: 20_000 },
@@ -206,8 +196,7 @@ describe("OsmSearch, the description", () => {
   })
 
   test("it never teaches a bracket marker the code does not print", () => {
-    // Inverted on purpose: the description need name no marker at all, but a marker it names has to be one
-    // `formatCandidate` can print.
+    // Passes when the description names no marker; any marker it does name must be one formatCandidate prints.
     const EMITTED = ["geocoder", "features", "site", "canonical"]
     for (const [, marker] of SEARCH_DESCRIPTION.matchAll(/\[([a-z]+)\]/g)) {
       expect(EMITTED).toContain(marker)
@@ -238,8 +227,6 @@ describe("OsmSearch, the two things it never said", () => {
     "a cancelled search says so, and still hands over what it found",
     () =>
       Effect.gen(function* () {
-        // Cancelled is partial, not failed, and the engine notes cannot carry it: they describe an engine that
-        // answered badly, not a run that stopped.
         const stopped = new AbortController()
         stopped.abort()
         const result = yield* succeed({ query: "武汉大学" }, stopped.signal)

@@ -6,10 +6,8 @@ import { Global } from "@opencode-ai/core/global"
 import { QgisPaths } from "./paths"
 import type { Choice } from "./types"
 
-/* --- GeoCode: resolving a QGIS environment on macOS (docs/GEOKERNEL.md §4.4).
- *
- * Two install shapes, and within the app bundle two generations of layout differing in where the interpreter lives,
- * where its standard library lives, and whether the interpreter can start at all without help. --- */
+/* --- GeoCode: resolving a QGIS environment on macOS, where app bundles come in two layout generations
+ * (docs/GEOKERNEL.md §4.4). --- */
 
 /** Every bundle has an executable directory, so without a marker an unrelated application passes as a prefix. */
 export function isQgisBundle(executableDir: string): boolean {
@@ -19,27 +17,21 @@ export function isQgisBundle(executableDir: string): boolean {
 export interface PrefixResolution {
   readonly prefix?: string
   /**
-   * The hint runs through a bundle carrying no QGIS marker — a definite answer, but read off the path's shape, so
-   * it is also what a bundle that is not on disk at all produces.
+   * The hint runs through a bundle carrying no QGIS marker. Read off the path's shape, so a bundle that is not on disk
+   * at all also produces it.
    */
   readonly notQgis: boolean
-  /**
-   * Where the executable directory would be, kept alongside a not-qgis verdict: `resolve.ts` runs its escape hatch
-   * under this prefix when the hint is a real interpreter, so a missing marker cannot veto the probe (§4.3
-   * principle 10).
-   */
+  /** Kept with a not-qgis verdict, so `resolve.ts` can still probe a hint that is a real interpreter. */
   readonly fallbackPrefix?: string
   /**
-   * True only after a marker check (levels 1 and 2). The reachability precheck refuses level 3's answer on this
-   * flag; without it a hint naming nothing at all would pass and come back as a probe spawn error (§4.3 可达性预检).
+   * True only after a marker check. The reachability precheck refuses level 3's answer on this flag; without it a
+   * hint naming nothing at all would pass and come back as a probe spawn error.
    */
   readonly verified: boolean
 }
 
-/** The prefix behind a hint of any shape, in three levels; only the first two verify a marker (§4.4). */
 export function resolvePrefix(hint: string): PrefixResolution {
-  // Level 1: up through a bundle's executable directory, which covers a hint that is the interpreter itself. A
-  // marker hit is a verified answer, a miss is not a verdict — the directory is remembered and level 2 gets a turn.
+  // Level 1: up through a bundle's executable directory. A marker miss is not a verdict; level 2 still gets a turn.
   let executableDir: string | undefined
   let walking = path.dirname(hint)
   while (walking && walking !== path.dirname(walking)) {
@@ -64,8 +56,7 @@ export function resolvePrefix(hint: string): PrefixResolution {
     return { notQgis: true, verified: false, fallbackPrefix: executableDir ?? path.resolve(hint, "../..") }
   }
 
-  // Level 3: not a bundle. Best effort for package-manager and source installs, and unverified by construction —
-  // there is no marker outside a bundle, so the probe is the only judge (§4.4).
+  // Level 3: package-manager and source installs, unverified because there is no marker outside a bundle.
   return { prefix: path.resolve(hint, "../.."), notQgis: false, verified: false }
 }
 
@@ -83,9 +74,8 @@ export function findInterpreter(prefix: string): Choice {
 }
 
 /**
- * By content: a versioned-Python directory holding the encodings module, which is what the interpreter reaches for
- * first. The version in the name cannot be trusted — a 3.44 bundle ships a `python3.12` interpreter whose standard
- * library sits in `python3.11` — and neither can the type, since some bundles share the library through a symlink.
+ * By content: the version in the directory name need not match the interpreter's, and the entry need not be a
+ * directory, since some bundles share the library through a symlink.
  */
 export function findStandardLibrary(resources: string): string | undefined {
   for (const entry of QgisPaths.entries(resources)) {
@@ -97,9 +87,8 @@ export function findStandardLibrary(resources: string): string | undefined {
 }
 
 /**
- * The one link a newer bundle's interpreter needs, `<home>/lib/<interpreter name>`, and the home to point it at
- * (§4.4 解释器根修复). That interpreter does not find its own standard library and dies initialising the filesystem
- * encoding, before any user code runs, so the fix has to be a layout on disk (§4.3 principle 9).
+ * Links `<home>/lib/<interpreter name>` to the standard library and returns the home. A newer bundle's interpreter
+ * dies initialising the filesystem encoding without it, before any user code runs, so the fix has to be on disk.
  */
 export function ensurePythonHome(interpreter: string, standardLibrary: string): string | undefined {
   // Lowercased: on a case-insensitive volume a hint written `.../Python3.12` names the same binary, and the link
@@ -154,11 +143,10 @@ export function assemble(prefix: string, interpreter: string): Assembly {
     path.join(resources, "qgis", "proj"),
     path.join(prefix, "share", "proj"),
   ]
-  // Validate the payload, never the container (§4.3 principle 4).
   const projection = projectionCandidates.find(QgisPaths.hasProjectionDatabase)
   choices.projection = { selected: projection, candidates: projectionCandidates }
   if (projection) {
-    // Both names for one directory: which one an install reads depends on the projection library version it bundles.
+    // Both names: which one is read depends on the projection library version the install bundles.
     env.PROJ_LIB = projection
     env.PROJ_DATA = projection
   }
@@ -174,7 +162,7 @@ export function assemble(prefix: string, interpreter: string): Assembly {
 
   const standardLibrary = findStandardLibrary(resources)
 
-  // A path list, so every existing candidate is collected rather than the first taken — coexisting is normal (§4.4).
+  // Every existing candidate rather than the first: several coexisting is normal.
   const moduleCandidates = [
     path.join(resources, "python"),
     path.join(resources, "qgis", "python"),
@@ -184,8 +172,8 @@ export function assemble(prefix: string, interpreter: string): Assembly {
   const modulePaths: string[] = []
   for (const candidate of QgisPaths.allExisting(moduleCandidates)) {
     modulePaths.push(candidate)
-    // The plugins directory carries the processing module, and QGIS adds it during its own initialisation — after
-    // the algorithm framework needs it, so it goes on the path here (§4.5 overlay 2 applies to this track too).
+    // The plugins directory carries processing, and QGIS adds it only during its own initialisation, after the
+    // algorithm framework needs it.
     const plugins = path.join(candidate, "plugins")
     if (existsSync(plugins)) modulePaths.push(plugins)
   }
@@ -204,8 +192,8 @@ export function assemble(prefix: string, interpreter: string): Assembly {
   const qtPlugins = path.join(path.resolve(prefix, ".."), "PlugIns")
   if (existsSync(qtPlugins)) env.QT_PLUGIN_PATH = qtPlugins
 
-  // Every assembly track sets these: the read scripts emit non-escaped structured text, so an encoding fault
-  // corrupts the body and not just a diagnostic message (§4.13 constraint 2).
+  // Every assembly track must set these: the read scripts emit unescaped text, so an encoding fault corrupts the
+  // payload and not just a diagnostic message (§4.13).
   env.PYTHONUTF8 = "1"
   env.PYTHONIOENCODING = "UTF-8"
   env.GDAL_FILENAME_IS_UTF8 = "YES"

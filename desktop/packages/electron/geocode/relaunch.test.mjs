@@ -1,7 +1,5 @@
-/* --- GeoCode: a relaunch comes back in a development launch too (geocode/relaunch.mjs).
- *
- * The option builder is pinned directly; main.mjs is pinned by source so that no relaunch
- * call is left with the default arguments, which is the form that fails. --- */
+/* --- GeoCode: guards a development relaunch that looks for its relative entry in the home directory
+ * (geocode/relaunch.mjs). --- */
 import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';

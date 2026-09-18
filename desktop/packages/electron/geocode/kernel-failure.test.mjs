@@ -1,11 +1,5 @@
-/* --- GeoCode: a boot has two outcomes, and the second one reaches the window; so does a kernel
- * that dies later (docs/DESKTOP.md §5.1, §5.2).
- *
- * The record and the output tail are pinned directly; startEmbeddedKernel is driven with a
- * kernel that writes then dies, so the tail is proven to travel with the error. main.mjs is
- * pinned by source: the hosts config collapses to the local host before anything reads it,
- * the kernel start is caught rather than allowed to end the process, a started kernel is
- * watched, and the window can ask for the record. --- */
+/* --- GeoCode: guards a kernel that fails to start or dies later leaving the window without the failure record or
+ * the kernel's last output (docs/DESKTOP.md §5.1). --- */
 import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -114,7 +108,6 @@ describe('kernel lost while running', () => {
   });
 
   it('is announced under the name the renderer listens for', () => {
-    // The renderer cannot import this module, so it keeps a copy of the event name.
     const source = fs.readFileSync(path.resolve(electronRoot, '../ui/src/geocode/kernel-lost.ts'), 'utf8');
     expect(source.match(/export const KERNEL_LOST_EVENT = '([^']+)'/)?.[1]).toBe(KERNEL_LOST_EVENT);
   });

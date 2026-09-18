@@ -1,18 +1,6 @@
-/* --- GeoCode: the shell reaches the kernel's files, never OpenCode's (docs/PATHS.md §3.1).
- *
- * Two different failures need two different shapes here.
- *
- * The base strings in `kernel-roots.js` are a hand-copy of `core/src/brand.ts`, which the
- * shell cannot import: `web` is a dependency of `electron` and not the reverse, and the
- * kernel is a separate install root. Nothing conflicts and nothing fails when a copy drifts
- * from its original — CONVENTIONS.md §5 calls that the case a tripwire exists for — so
- * brand.ts is read as text and compared.
- *
- * The rest is a round trip. A computed path asserted against a literal would still pass with
- * both the writing and the reading side left pointing into OpenCode's directory; only writing
- * a file and finding it under the root we configured shows the two agree. It also exercises
- * the timing: `auth.js` resolves its path once at import, so the environment has to be in
- * place before the module is loaded, exactly as it is in the product. --- */
+/* --- GeoCode: the shell reaches the kernel's files, never OpenCode's (docs/PATHS.md §5). Guards against the
+ * hand-copied base names drifting from `core/src/brand.ts`, and against a reader and a writer disagreeing on a
+ * path. Consumers are imported inside the tests, after the redirect, as they resolve their paths at import. --- */
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -40,9 +28,7 @@ const saved = {};
 beforeAll(() => {
   dataHome = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-kernel-data-'));
   configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-kernel-config-'));
-  // Redirected as well, so a regression that falls back to the home directory writes into a
-  // temporary one instead of the developer's real `~/.local/share` — measured on this suite's
-  // predecessor, which left a directory behind while being mutation-tested.
+  // HOME too, so a regression that falls back to the home directory writes into a temporary one.
   fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-kernel-home-'));
   for (const key of ['XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'HOME']) saved[key] = process.env[key];
   process.env.XDG_DATA_HOME = dataHome;
@@ -68,8 +54,6 @@ describe('kernel roots', () => {
   });
 
   it('follows XDG, so the shell and the kernel cannot resolve different files', () => {
-    // The kernel takes its roots from `xdg-basedir`. Two of the call sites patched here read
-    // the home directory instead, which agrees with the kernel only while these are unset.
     expect(kernelDataRoot().startsWith(dataHome)).toBe(true);
     expect(kernelDataRoot().startsWith(fakeHome)).toBe(false);
   });
@@ -81,9 +65,7 @@ describe('kernel roots', () => {
     writeAuthFile({ 'geocode-test-provider': entry });
     expect(readAuthFile()).toMatchObject({ 'geocode-test-provider': entry });
 
-    // Written twice on purpose: the second write is the one that copies the previous file
-    // aside. That backup is the sharpest form of the harm — before this patch it duplicated
-    // the user's real OpenCode credentials into a file OpenCode never made.
+    // A second write, because only overwriting leaves the backup copy.
     writeAuthFile({ 'geocode-test-provider': entry, other: entry });
 
     const root = path.join(dataHome, brand().dirName);
@@ -92,8 +74,6 @@ describe('kernel roots', () => {
   });
 
   it('writes config where the kernel reads it', async () => {
-    // The layer this guards is the one that read the user's real provider keys, and whose
-    // `writeConfig` copied the file it was overwriting to `<name>.openchamber.backup` first.
     const shared = await import('../lib/opencode/shared.js');
     shared.writeConfig({ model: 'geocode/round-trip' });
 
@@ -102,15 +82,7 @@ describe('kernel roots', () => {
   });
 
   it('saves the global behaviour prompt where the kernel loads instructions from', async () => {
-    // Both ends, because only the pair is the invariant. `routes.js` wrote
-    // `~/.config/opencode/AGENTS.md` while `session/instruction.ts` read `<config root>/AGENTS.md`,
-    // so the Behavior page reported success and the agent never saw a word of it — and the PUT
-    // creates the parent directory, so saving one also created OpenCode's config root.
-    //
-    // The route joins onto `shared.js`'s OPENCODE_CONFIG_DIR, the single constant upstream now
-    // routes every reader of the config root through and the one GeoCode patches. Assert its
-    // value rather than how the route spells it: standing the whole route up needs the
-    // dependency object the server assembles, but the root the route lands in is a value.
+    // Both ends, because only the pair is the invariant.
     const { OPENCODE_CONFIG_DIR } = await import('../lib/opencode/shared.js');
     expect(path.join(OPENCODE_CONFIG_DIR, 'AGENTS.md'))
       .toBe(path.join(configHome, brand().dirName, 'AGENTS.md'));
@@ -125,10 +97,7 @@ describe('kernel roots', () => {
   });
 
   it('adds a project MCP server to the file the config loader reads back', async () => {
-    // The accident PATHS.md §5 records by name: `mcp add` wrote one file name while the loader
-    // read another, so the command reported success and the server never appeared. `mcp.js`
-    // builds its project path itself instead of taking it from the layers, so renaming the
-    // reader alone recreates it — measured, while reviewing this very batch.
+    // `mcp.js` builds its project path itself rather than from the config layers, so the two can name different files.
     const mcp = await import('../lib/opencode/mcp.js');
     const shared = await import('../lib/opencode/shared.js');
     const project = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-mcp-round-trip-'));
@@ -142,9 +111,6 @@ describe('kernel roots', () => {
   });
 
   it('manages skills in the kernel\'s directories and not in OpenCode\'s', async () => {
-    // `~/.opencode` is the second global root the kernel deletes rather than renames, so
-    // nothing there is ours to rename either. `.claude` and `.agents` are other tools' libraries
-    // rather than a root of ours, and have their own tests in external-skills.test.js.
     const { isManagedSkillPath } = await import('../lib/opencode/skills.js');
     const { KERNEL_PROJECT_DIR } = await import('./kernel-roots.js');
     const project = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-managed-roots-'));

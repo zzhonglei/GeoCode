@@ -2,10 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { OsmReport } from "../src/tool/geo-osm-report"
 import { GeoOsm } from "../src/geo"
 
-/* The report both download tools write (docs/TOOLS.md §6). Both declare `truncated: false`, which switches off
- * upstream's 50 KB output cap (tool.ts), so every line here has to be bounded by construction — and the one that
- * follows the size of the download, the identities of elements that produced no geometry, is capped at what
- * OsmGetObjects takes in one call (§5.2). */
+// Both download tools declare truncated: false, which bypasses the output cap in tool.ts, so a report line that grows
+// with the download reaches the model whole (docs/TOOLS.md §5).
 
 const RESULT = (unassembled: string[]): any => ({
   outputs: [],

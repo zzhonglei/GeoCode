@@ -9,7 +9,7 @@ import { DEFAULT_DARK_THEME_ID, DEFAULT_LIGHT_THEME_ID, themes } from '../lib/th
 import { AGENT_MENTION_LINKS_OFFERED } from './agent-mention-surface';
 import { dict as en } from '../lib/i18n/messages/en';
 
-// The file, a pattern capturing the product name inside the message, and how many times the message appears.
+// The pattern's first group captures the product name inside the message.
 type Message = [file: string, pattern: RegExp, count: number];
 
 const READ_BY_THE_MODEL: Message[] = [
@@ -80,7 +80,6 @@ describe('the product name in renderer text', () => {
 
 describe('a server message the renderer would show as it is', () => {
   test('deleting an MCP server shows the apply note, not "Restart OpenCode to apply."', () => {
-    // Create and update already take this branch; applying refreshes the kernel and restarts nothing.
     for (const file of ['components/sections/mcp/McpPage.tsx', 'components/sections/mcp/McpSidebar.tsx']) {
       const source = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
       const handler = source.slice(source.indexOf('const handleDelete = async'));

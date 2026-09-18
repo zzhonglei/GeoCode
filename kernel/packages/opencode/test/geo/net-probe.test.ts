@@ -9,8 +9,7 @@ import { NetProbe } from "@/geo/net/probe"
 import { fakeProxy } from "./fake-proxy"
 import type { Target } from "@/geo/net/types"
 
-/* The three probe stages and certificate verification, against servers this file starts
- * (docs/GEOKERNEL.md §3.3 探针规格). */
+/* The three probe stages and certificate verification, against servers this file starts (docs/GEOKERNEL.md §3.3). */
 
 /** Generated at module load, not in a hook: the `test.skipIf` conditions below are evaluated as the tests register. */
 const material = (() => {

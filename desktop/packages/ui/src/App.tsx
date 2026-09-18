@@ -46,8 +46,8 @@ import { SyncProvider } from '@/sync/sync-context';
 import { useSync } from '@/sync/use-sync';
 import { ConfigUpdateOverlay } from '@/components/ui/ConfigUpdateOverlay';
 import { AboutDialog as UpstreamAboutDialog } from '@/components/ui/AboutDialog'; // GeoCode: wrapped below
-import { GeoCodeAboutDialog } from '@/geocode/GeoCodeAboutDialog';
-import { GeoCodeKernelFailureScreen } from '@/geocode/GeoCodeKernelFailureScreen';
+import { GeoCodeAboutDialog } from '@/geocode/GeoCodeAboutDialog'; // GeoCode: own module
+import { GeoCodeKernelFailureScreen } from '@/geocode/GeoCodeKernelFailureScreen'; // GeoCode: own module
 import { useKernelLost } from '@/geocode/kernel-lost'; // GeoCode: own module
 import { RuntimeAPIProvider } from '@/contexts/RuntimeAPIProvider';
 import { registerRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
@@ -78,8 +78,7 @@ const OnboardingScreen = lazyWithChunkRecovery(() =>
   import('@/components/onboarding/OnboardingScreen').then((m) => ({ default: m.OnboardingScreen })),
 );
 
-// --- GeoCode: the About dialog is the product's identity screen; the desktop shell shows
-// its own (geocode/GeoCodeAboutDialog.tsx, docs/DESKTOP.md §4.6). ---
+// --- GeoCode: the desktop shell shows its own About dialog (docs/DESKTOP.md §4.6) ---
 const AboutDialog: React.FC<React.ComponentProps<typeof UpstreamAboutDialog>> = (props) => (
   isDesktopShell() ? <GeoCodeAboutDialog {...props} /> : <UpstreamAboutDialog {...props} />
 );
@@ -869,10 +868,8 @@ function App({ apis }: AppProps) {
   // Desktop boot view routing.
   // When the boot outcome resolves to a non-main screen (chooser, recovery),
   // render OnboardingScreen with appropriate mode/variant.
-  // --- GeoCode: the desktop shell has one host, this machine, so a boot view that is not the
-  // main view has one meaning: the embedded kernel did not come up (docs/DESKTOP.md §5.1). A
-  // kernel that dies after boot lands here too (§5.2). The upstream chooser and recovery screens
-  // below are never reached in the desktop shell. ---
+  // --- GeoCode: with one host, a non-main boot view means the embedded kernel did not come up, so the upstream
+  // chooser and recovery screens below are never reached in the desktop shell (docs/DESKTOP.md §5.1) ---
   if (isDesktopRuntime && (kernelLost || (bootView && bootView.screen !== 'main'))) {
     return (
       <ErrorBoundary>

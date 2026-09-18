@@ -10,8 +10,7 @@ import { GeeDeps } from "@/geo/gee/deps"
 import { GeeSetup } from "@/geo/gee/setup"
 import { testEffect } from "../lib/effect"
 
-/* The local dependency chain (docs/GEOKERNEL.md §5.3): it short-circuits in dependency order so the guidance starts
- * where it stopped, the manifest travels as data, and the probe reaches nothing over the network. */
+/* The local dependency chain (docs/GEOKERNEL.md §5.3). */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-gee-"))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
@@ -72,7 +71,6 @@ describe("gee dependency manifest", () => {
         expect(dep.role.length).toBeGreaterThan(0)
       }
       expect(GeeDeps.PACKAGES).toEqual(GeeDeps.DEPS.map((dep) => dep.pkg))
-      // What the runtime library imports, not just the client: geemap needs geedim and does not install it.
       expect(GeeDeps.PACKAGES).toContain("geedim")
       expect(GeeDeps.byPackage("geedim")?.module).toBe("geedim")
       expect(GeeDeps.byPackage("nothing-like-this")).toBeUndefined()
@@ -86,7 +84,6 @@ describe("gee setup chain", () => {
       Effect.gen(function* () {
         expect(yield* GeeSetup.probe(runtime, undefined)).toEqual({ status: "unconfigured" })
         expect(yield* GeeSetup.probe(runtime, {})).toEqual({ status: "unconfigured" })
-        // Whitespace is not a configuration.
         expect(yield* GeeSetup.probe(runtime, { python: "   " })).toEqual({ status: "unconfigured" })
         expect(calls).toHaveLength(0)
       }),
@@ -204,8 +201,7 @@ describe("gee setup chain", () => {
         yield* GeeSetup.probe(runtime, { python, project: "my-project" })
         const env = calls[0]!.options.env!
 
-        // Blanked, not merely unset: the spawn inherits our environment, so an ambient proxy from the user's shell
-        // would otherwise arrive and turn one import that dials out into a probe timeout (§3.3 直连需显式清除).
+        // Blanked, not merely unset: the spawn inherits our environment (§3.3).
         for (const key of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"]) {
           expect(env[key]).toBe("")
         }
@@ -233,7 +229,6 @@ describe("gee setup chain", () => {
           const state = yield* GeeSetup.probe(runtime, { python, project: "p" })
           expect(state.status).toBe("probe-failed")
           if (state.status === "probe-failed") {
-            // No marker, so the raw output is the whole diagnosis, led by how the process ended.
             expect(state.error).toContain("no report")
             expect(state.error).toContain("[process crash]")
             expect(state.error).toContain("something native died")

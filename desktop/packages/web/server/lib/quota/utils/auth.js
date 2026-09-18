@@ -4,10 +4,7 @@ import os from 'os';
 import { OPENCODE_CONFIG_DIR } from '../../opencode/shared.js';
 import { kernelDataRoot } from '../../../geocode/kernel-roots.js'; // GeoCode: see the block below
 
-// --- GeoCode: the kernel's own data root, not the user's OpenCode installation
-// (geocode/kernel-roots.js). It feeds the second antigravity account path below, which is read
-// whenever the quota panel enumerates providers — so before this, opening that panel read a
-// file out of a separate product's directory. ---
+// --- GeoCode: the kernel's own data root, not the user's OpenCode installation (geocode/kernel-roots.js) ---
 const OPENCODE_DATA_DIR = kernelDataRoot();
 // --- /GeoCode ---
 

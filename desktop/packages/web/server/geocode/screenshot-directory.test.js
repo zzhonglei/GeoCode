@@ -1,13 +1,5 @@
-/* --- GeoCode: the agent writes screenshots into the user's own repository.
- *
- * `browser.capture` is the one action in the control module that touches disk, and writing the
- * image beside the code it documents is upstream's design — it survives the chat and can be
- * committed. The directory it used was `.openchamber`, so every capture put a second product's
- * directory into the user's working tree and their next commit.
- *
- * They land outside `.geocode` on purpose: that directory holds configuration a team writes by
- * hand, while these are generated and accumulate, and the two should not have to be told apart
- * in a diff. The check is on where the bytes go, not on how the constant is spelled. --- */
+/* --- GeoCode: guards against agent screenshots, which land in the user's own repository, going into another
+ * product's directory or into `.geocode`. --- */
 import { describe, expect, it } from 'vitest';
 import path from 'node:path';
 

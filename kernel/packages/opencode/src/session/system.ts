@@ -26,15 +26,8 @@ import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 
 export function provider(model: Provider.Model) {
-  /* --- GeoCode: one base system prompt for every model. Upstream picks a per-model-family prompt below
-   * (anthropic/beast/gpt/gemini/kimi/codex/trinity/meta/default), all written for a coding agent and all
-   * opening with "You are OpenCode"; GeoCode ships a single geo-focused base, so every agent without its own
-   * prompt speaks as GeoAgent.
-   *
-   * One added line rather than a replaced function body. Upstream works this selector actively — v1.18.18
-   * alone added the Meta and Kimi branches — and a rewritten body conflicts on every one of those edits.
-   * Returning early leaves every upstream line byte-identical (docs/KERNEL.md §5.2, docs/CONVENTIONS.md §5).
-   * Restoring per-model selection is deleting this one return. --- */
+  /* --- GeoCode: every model gets the GeoAgent base prompt; upstream's per-family prompts below all introduce
+   * themselves as OpenCode, and stay byte-identical behind this return (docs/KERNEL.md §5.2). --- */
   return [PROMPT_GEOCODE]
   // --- /GeoCode ---
   if (model.api.id.includes("muse")) {

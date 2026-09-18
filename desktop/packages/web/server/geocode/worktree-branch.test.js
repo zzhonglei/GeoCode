@@ -1,11 +1,5 @@
 /* --- GeoCode: a worktree the shell creates uses the kernel's places and names, not upstream's
- * (docs/PATHS.md §3.2, geocode/kernel-roots.js).
- *
- * Each of the three guarded here goes wrong silently if upstream's spelling comes back: the branch
- * carries OpenChamber's name into the user's repository, where a push publishes it; the project id
- * goes into OpenCode's marker file inside their `.git`; the worktree directory lands in OpenCode's
- * data root, where the kernel never finds it. A real repository is used because none of them
- * exists until git has run. --- */
+ * (docs/PATHS.md §3.2): our branch prefix, the kernel's marker inside `.git`, the kernel's data root. --- */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -56,8 +50,7 @@ describe('worktree branch prefix', () => {
 
     const repository = createRepository();
     const { createWorktree } = await import('../lib/git/service.js');
-    // Not `returnAfterDirectoryCreated`: that returns before git has attached the worktree,
-    // and the branch is what this asserts.
+    // Not `returnAfterDirectoryCreated`: that returns before git attaches the worktree and creates the branch.
     await createWorktree(repository, { mode: 'new', worktreeName: 'side-task' });
 
     const branches = runGit(repository, ['branch', '--list', '--format=%(refname:short)'])

@@ -78,9 +78,8 @@ export const createRelayService = ({
   allowPassiveHost = true,
   logger = console,
 }) => {
-  // --- GeoCode: under Electron nothing below may run: no routes, no host client, no identity
-  // written to settings.json (docs/DESKTOP.md §6.1, §7.3). geocode/inert-relay.js keeps the
-  // interface so index.js and core-routes.js stay byte-identical. ---
+  // --- GeoCode: under Electron no relay routes, host client or settings identity; the inert service keeps the
+  // interface its callers use (docs/DESKTOP.md §7.3) ---
   if (process.versions.electron) return createInertRelayService();
   // --- /GeoCode ---
   const identityRuntime = createRelayIdentityRuntime({ crypto, readSettingsFromDiskMigrated, writeSettingsToDisk, readSettingsStrict });

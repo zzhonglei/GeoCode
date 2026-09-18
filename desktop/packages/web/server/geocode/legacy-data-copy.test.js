@@ -1,10 +1,5 @@
-/* --- GeoCode: nothing is copied out of an OpenChamber directory (docs/PATHS.md §3.3).
- *
- * Upstream added `migrateLegacyUserDirs` for its own users: an instance already running with
- * a custom data directory finds `projects/`, `themes/` and `speech-models/` in the old default
- * root, so it copies them over once at startup. On a machine that also runs OpenChamber, the
- * old default root is that product's, and the project files alone hold shell commands bound to
- * buttons. The control run proves the copy is real code that the shield stops. --- */
+/* --- GeoCode: nothing is copied at startup out of an OpenChamber directory, whose project files hold shell
+ * commands bound to buttons (docs/PATHS.md §3.3). --- */
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
@@ -37,7 +32,7 @@ describe('legacy data copy', () => {
   it('control: the upstream body it shields does copy them', async () => {
     const { base, legacyRoot, dataDir } = seed();
     try {
-      // The shielded body, run directly: same arguments, minus the early return.
+      // A reduced copy of the shielded upstream loop, run on the same seed.
       const moved = [];
       for (const entry of ['projects', 'themes']) {
         const from = path.join(legacyRoot, entry);

@@ -4,11 +4,9 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 
-/* --- GeoCode: the GDAL toolchain — what is available, and what a subprocess needs to use it (docs/GEOKERNEL.md §7.3).
- * Pure and synchronous throughout, file existence and string building only, so the probe can run on every config
- * change. --- */
+/* --- GeoCode: GDAL toolchain discovery, kept to file checks and string building so it can run on every config change
+ * (docs/GEOKERNEL.md §7.3). --- */
 
-/** The two tracks are disjoint, which is why the status has six states and not two. */
 const RASTER_TOOLS = ["gdalinfo", "gdalwarp", "gdal_translate", "gdaldem"] as const
 const VECTOR_TOOLS = ["ogrinfo", "ogr2ogr"] as const
 
@@ -40,7 +38,6 @@ export function toolPaths(directory: string, platform: Platform = process.platfo
   }
 }
 
-/** `missing` names the broken track's tools, not the working one's. */
 export function classify(
   directory: string | undefined,
   options: { readonly platform?: Platform; readonly exists?: Exists } = {},

@@ -1,40 +1,7 @@
 #!/usr/bin/env node
-/* --- GeoCode: stages the embedded Agent Kernel into resources/ (docs/DESKTOP.md §4.1).
- *
- * This replaces upstream's `prepare-opencode-cli.mjs`, and the difference is the whole
- * point of the product: that script downloads a released opencode binary pinned by an SDK
- * version, while this one stages OUR kernel from the sibling vendor root. Nothing is
- * fetched from the network, and no component exists that a self-upgrade could replace.
- *
- * What the staged directory has to contain is set by how the bundle was built
- * (`kernel/packages/opencode/script/build-node.ts`), not by preference:
- *
- *   - the four `.wasm` files are named by content hash and resolved beside the bundle,
- *     against `import.meta.url` rather than the working directory;
- *   - `jsonc-parser` and `@lydell/node-pty` are declared external, so they are static
- *     ESM imports the bundle cannot satisfy alone;
- *   - `@lydell/node-pty` is a dispatcher whose real code lives in a per-platform optional
- *     package, so the TARGET platform's package is staged, not the host's;
- *   - `package.json` declaring `"type": "module"` is required for a bundle named `.js`
- *     that is ESM;
- *   - the 53 MB sourcemap is deliberately not copied. It is a build artifact, not a
- *     runtime one, and larger than everything else here combined.
- *
- * ## Why the dependencies are not in a `node_modules`
- *
- * electron-builder drops `node_modules` from `extraResources` unconditionally — a `filter`
- * of `**\/*` does not override it — so a kernel staged the obvious way loads fine from the
- * source tree and then dies at `ERR_MODULE_NOT_FOUND` inside the packaged app. Measured,
- * not assumed: the first `--dir` build produced a `kernel/` with every wasm and no `deps`.
- *
- * So the packages are flattened into `deps/`, which electron-builder has no opinion about,
- * and the bare specifiers are rewritten to relative paths that need no resolution
- * algorithm at all. Every rewrite is asserted below: a bundle whose import shape changed
- * fails the build here rather than shipping an app that cannot start.
- *
- * The sidecar and the protocol module are copied in rather than imported across the asar
- * boundary, which is what lets the staged directory be run and verified on its own. Their
- * single source stays in `geocode/`. --- */
+/* --- GeoCode: stages the kernel built from kernel/ into resources/kernel, in place of upstream's download of a
+ * released opencode (docs/DESKTOP.md §4.1). The layout follows kernel/packages/opencode/script/build-node.ts, and
+ * each rewrite throws when it matches nothing, so a changed bundle fails here rather than at launch. --- */
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -55,9 +22,9 @@ const bundleDir = path.join(kernelPackage, 'dist', 'node');
 const outputDir = path.join(electronRoot, 'resources', 'kernel');
 const sourceDir = path.join(electronRoot, 'geocode');
 
-const STAGED_SOURCES = ['kernel-sidecar.mjs', 'kernel-protocol.mjs'];
+const STAGED_SOURCES = ['kernel-sidecar.mjs', 'kernel-protocol.mjs']; // copied from geocode/, their only source
 const BUNDLE_FILENAME = 'node.js';
-const DEPS_DIRECTORY = 'deps';
+const DEPS_DIRECTORY = 'deps'; // not node_modules, which electron-builder drops from extraResources
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
@@ -81,9 +48,8 @@ const stampPath = path.join(outputDir, 'kernel-stamp.json');
 const currentKernelTree = () => capture('git', ['rev-parse', 'HEAD:kernel'], { cwd: repoRoot }) || null;
 const kernelTreeDirty = () => capture('git', ['status', '--porcelain', 'kernel'], { cwd: repoRoot }).length > 0;
 
-// A staged bundle is reused only when it came from exactly the kernel tree that is checked out
-// now, with no uncommitted kernel changes then or now; anything else rebuilds. Returns the reason
-// a rebuild is due, or null when the stage is fresh.
+// Null only when the stage came from the checked-out kernel tree with no uncommitted kernel changes then or now;
+// otherwise the reason to rebuild.
 const staleReason = () => {
   let stamp;
   try {
@@ -117,11 +83,7 @@ const ensureBundle = () => {
   return bundlePath;
 };
 
-/**
- * Walks up from a resolved entry point to the package directory itself. Bun's store keeps
- * real packages under versioned `.bun/` paths reached through symlinks, so the directory
- * name cannot be assumed from the workspace layout.
- */
+/** Walks up from the resolved entry, because bun's store keeps packages under versioned `.bun/` paths. */
 const resolvePackage = (name, fromPaths) => {
   const suffix = path.join('node_modules', ...name.split('/'));
   let entry;
@@ -143,13 +105,11 @@ const stageDependency = (name, directory, fromPaths) => {
   const { root, entry } = resolvePackage(name, fromPaths);
   const to = path.join(outputDir, DEPS_DIRECTORY, directory);
   fs.mkdirSync(path.dirname(to), { recursive: true });
-  // dereference: the source is reached through a symlink into bun's store, and an
-  // installer copying a dangling link into the app produces a kernel that dies at import.
+  // Dereferenced: the source is a symlink into bun's store, and a dangling link in the app kills the kernel at import.
   fs.cpSync(root, to, { recursive: true, dereference: true });
   return { root, specifier: `./${DEPS_DIRECTORY}/${directory}/${entry.split(path.sep).join('/')}` };
 };
 
-/** Replaces every occurrence and refuses to continue when there were none. */
 const rewrite = (source, from, to, what) => {
   const parts = source.split(from);
   if (parts.length === 1) {
@@ -188,13 +148,9 @@ const main = () => {
   bundle = rewrite(bundle, '"@lydell/node-pty"', `"${nodePty.specifier}"`, 'the node-pty specifier');
   fs.writeFileSync(path.join(outputDir, BUNDLE_FILENAME), bundle);
 
-  // The dispatcher builds its platform package name at runtime and `require`s it as a bare
-  // specifier, which would need the very node_modules this layout avoids. Point it at the
-  // sibling directory instead — by file, because `exports` does not apply to relative
-  // requires and the platform package has no `main`.
+  // The dispatcher `require`s its platform package by a bare name, which needs a node_modules; point it at the
+  // sibling by file, because `exports` does not apply to relative requires.
   const dispatcherPath = path.join(outputDir, DEPS_DIRECTORY, 'node-pty', 'index.js');
-  // Both live under deps/, so the dispatcher reaches its sibling by replacing the bundle's
-  // `./deps/` prefix with one level up.
   const platformEntry = nodePtyPlatform.specifier.replace(`./${DEPS_DIRECTORY}/`, '../');
   fs.writeFileSync(
     dispatcherPath,
@@ -211,13 +167,10 @@ const main = () => {
     `${JSON.stringify({ name: 'geocode-kernel', private: true, type: 'module' }, null, 2)}\n`,
   );
 
-  // Records what this staging came from, so a stale stage can be recognised without
-  // rebuilding to compare.
   fs.writeFileSync(
     stampPath,
     `${JSON.stringify({
-      // The same two readings the reuse check makes, so what is written and what is compared
-      // cannot drift apart.
+      // The same two readings staleReason compares against.
       kernelTree: currentKernelTree(),
       kernelDirty: kernelTreeDirty(),
       platform,

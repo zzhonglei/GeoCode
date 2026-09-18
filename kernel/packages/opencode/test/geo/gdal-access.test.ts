@@ -4,10 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { GdalAccess } from "@/geo/gdal/access"
 
-/* The data face's path precondition (docs/GEOKERNEL.md §7.8).
- *
- * Built out of real symlinks rather than crafted strings, because the escape that matters keeps the name inside the
- * project the whole way and only resolving it shows where the bytes come from. */
+/* The data face's path precondition (docs/GEOKERNEL.md §7.8). */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-access-"))
 const project = path.join(root, "project")

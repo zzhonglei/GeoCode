@@ -2,11 +2,8 @@ export * as QgisBootstrap from "./bootstrap"
 
 import path from "node:path"
 
-/* --- GeoCode: dynamic-library bootstrap for QGIS subprocesses (docs/GEOKERNEL.md §4.5).
- *
- * Windows manual track only, by construction: macOS and the bridge track hand over an empty directory list, and
- * every function here leaves its input alone on one. Registration runs inside the interpreter because it must take
- * effect before the target's first import. --- */
+/* --- GeoCode: DLL directory registration for QGIS subprocesses, Windows manual track only (docs/GEOKERNEL.md §4.5).
+ * macOS and the bridge track pass an empty list, which leaves every input unchanged. --- */
 
 export function preamble(dllDirectories: readonly string[]): string {
   if (dllDirectories.length === 0) return ""
@@ -19,9 +16,8 @@ export function wrapInline(script: string, dllDirectories: readonly string[]): s
 }
 
 /**
- * Running the file directly would put its first import ahead of the registration, so it is rewritten as an inline
- * one. Argv, the script's own directory at the front of the module search path, and `__main__` are what make the
- * rewrite indistinguishable from direct execution (§4.5).
+ * Rewritten as `-c` so the registration precedes the script's first import; argv, the script's directory first on
+ * `sys.path` and `__main__` keep it indistinguishable from running the file directly.
  */
 export function wrapScript(scriptPath: string, args: readonly string[], dllDirectories: readonly string[]): string[] {
   if (dllDirectories.length === 0) return [scriptPath, ...args]

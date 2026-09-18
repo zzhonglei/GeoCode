@@ -236,7 +236,8 @@ export const HelpDialog: React.FC = () => {
                 <div className="space-y-1">
                   {section.items
                     .filter((shortcut) => !(isVSCode && shortcut.id === 'toggle_prompt_navigator'))
-                    .filter((shortcut) => !isShortcutHiddenOnDesktop(shortcut.id, isDesktopShell())) // GeoCode: own module
+                    // GeoCode: the desktop shell has no services menu for its shortcut to toggle
+                    .filter((shortcut) => !isShortcutHiddenOnDesktop(shortcut.id, isDesktopShell()))
                     .map((shortcut) => {
                       const action = shortcut.id ? getShortcutAction(shortcut.id) : undefined;
                       const descriptionKey = shortcut.descriptionKey

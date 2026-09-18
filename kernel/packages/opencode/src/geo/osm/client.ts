@@ -7,30 +7,23 @@ import { GeoNet } from "../net"
 import type { NetTypes } from "../net/types"
 import { OsmHttp } from "./http"
 
-/* --- GeoCode: the reliability layer over three public OSM services (docs/GEOKERNEL.md §6.3).
- *
- * Net is asked one question — has this machine got a proxy — and which server to ask, in what order and when to
- * give up on one are settled here from what the services are, never from a measurement. --- */
+/* --- GeoCode: the reliability layer over three public OSM services, asking Net only whether the machine has a proxy;
+ * endpoint order is fixed by what the services are, never measured (docs/GEOKERNEL.md §6.3). --- */
 
-/** Tier one: the reference deployment, plus its two named backends. */
+/** Tier one: the reference deployment, plus its two named backends, so a sick backend behind the main name can be
+ * asked around. */
 const OFFICIAL_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
-  // The main name has been observed to round-robin over these two, so a sick backend behind it can be stepped past
-  // by asking for the other by name.
   "https://lz4.overpass-api.de/api/interpreter",
   "https://z.overpass-api.de/api/interpreter",
 ] as const
 
-/**
- * Tier two, and full-planet instances only: a region-limited one answers a query about anywhere else with success
- * and no data, which nothing in the response distinguishes from an area that really is empty (§6.3).
- */
+/** Tier two, full-planet instances only: a region-limited one answers anywhere else with an empty success. */
 const MIRROR_ENDPOINTS = [
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
   "https://overpass.openstreetmap.fr/api/interpreter",
   "https://overpass.osm.jp/api/interpreter",
-  // Checked full-planet by asking it for an object in China and comparing with the official answer.
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ] as const
 
@@ -42,27 +35,17 @@ const AUTHORITY = { id: "osm", host: "overpass-api.de", port: 443 }
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 const OSM_API_BASE = "https://api.openstreetmap.org/api/0.6"
 
-/**
- * The public services throttle a caller who goes faster. A clock each, so a
- * Nominatim call does not wait behind an Overpass one.
- */
+/** The public services throttle a caller who goes faster. A clock each, so Nominatim does not wait behind Overpass. */
 const MIN_INTERVAL_MS = { overpass: 1_100, nominatim: 1_100, api: 1_000 }
 
-/**
- * One retry over the pool and no more: eight endpoints are themselves the redundancy, so a further pass repeats a
- * verdict the first one reached, at the price of the full timeout of every endpoint that connects and then says
- * nothing (§6.3 轮间退避).
- */
+/** One retry over the pool and no more: each further pass re-waits the full timeout of every silent endpoint. */
 const MAX_ROUNDS = 2
 const RETRY_BACKOFF_MS = 3_000
 
 export interface OverpassResult {
   readonly json: unknown
   readonly endpoint: string
-  /**
-   * The server's own words for a result it reports incomplete, carried in a normal status code and a well-formed
-   * body — so a status-and-parse check alone reads this as a clean success (§6.3 第四种失败).
-   */
+  /** The server's own words for an incomplete result, which a status-and-parse check alone reads as success. */
   readonly remark?: string
 }
 
@@ -102,9 +85,8 @@ const layer = Layer.effect(
     const net = yield* GeoNet.Service
     const http = yield* OsmHttp.Service
 
-    /** Where the last success was, so a healthy endpoint keeps being used (§6.3 粘性端点). */
+    /** Where the last success was, so a healthy endpoint keeps being used. */
     let sticky = 0
-    // Undefined rather than zero: there is nothing to space the first request of a session away from.
     const lastAt: Partial<Record<keyof typeof MIN_INTERVAL_MS, number>> = {}
     /** One request at a time per service, so the spacing below cannot be raced past. */
     const turns = {
@@ -126,11 +108,7 @@ const layer = Layer.effect(
         }),
       )
 
-    /**
-     * One decision for all three services, because needing a proxy is a fact about the machine rather than about
-     * which public host is asked. Serialized because a search asks two of the services at once (index.ts), and the
-     * two would otherwise open a discovery sweep each to learn the same thing.
-     */
+    /** One route for every service, serialized since a search asks two at once and each would sweep for a proxy. */
     let known: NetTypes.Route | undefined
     const asking = Semaphore.makeUnsafe(1)
     const currentRoute = asking.withPermits(1)(
@@ -204,8 +182,7 @@ const layer = Layer.effect(
           }
         }
 
-        // Everything failed, which is the one moment worth doubting the route rather than the servers: a proxy may
-        // have started, stopped or moved since Net was asked.
+        // Only total failure doubts the route: a proxy may have started, stopped or moved since Net was asked.
         yield* forgetRoute
         return yield* Effect.fail(
           new OsmError(

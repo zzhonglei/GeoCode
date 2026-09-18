@@ -100,7 +100,7 @@ export default defineConfig({
   define: {
     'process.env': {},
     global: 'globalThis',
-    __APP_VERSION__: JSON.stringify(GEOCODE_VERSION), // GeoCode: not packageJson.version, which is the OpenChamber baseline
+    __APP_VERSION__: JSON.stringify(GEOCODE_VERSION), // GeoCode: packageJson.version is the OpenChamber baseline
   },
   optimizeDeps: {
     include: ['@opencode-ai/sdk/v2'],

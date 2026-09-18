@@ -1,10 +1,6 @@
-/* --- GeoCode: the desktop shell shows its own screen when the kernel did not come up, or went
- * away later (docs/DESKTOP.md §5.1, §5.2).
- *
- * The swap in App.tsx is pinned by source: the GeoCode branch has to sit in front of the
- * upstream chooser and recovery routing, or those screens are reachable again with nothing
- * turning red. The screen itself is pinned for what it must not say and for the main process
- * commands it depends on. --- */
+/* --- GeoCode: a kernel that did not come up or went away later must land on GeoCode's failure screen, never on
+ * upstream's chooser or recovery screens, and that screen must not offer another server
+ * (docs/DESKTOP.md §5.1, §5.2). --- */
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -31,7 +27,6 @@ describe('kernel failure screen', () => {
   });
 
   test('a kernel lost after boot is taken from the record as well as from the announcement', () => {
-    // The record covers a kernel that died before the window was listening.
     const hook = read('geocode/kernel-lost.ts');
     expect(hook).toContain('window.addEventListener(KERNEL_LOST_EVENT, markLost);');
     expect(hook).toContain("if (record?.phase === 'running') markLost();");
@@ -53,7 +48,6 @@ describe('kernel failure screen', () => {
   });
 
   test('the descriptions promise no details the screen may not have', () => {
-    // With nothing recorded the error box says so and no log line is shown.
     const screen = read('geocode/GeoCodeKernelFailureScreen.tsx');
     const strings = screen.slice(screen.indexOf('const STRINGS'), screen.indexOf('const stringsFor'));
     for (const promise of ['below', '下面', '下方']) {

@@ -271,9 +271,8 @@ const app = LayerNode.group([
   ProjectV2.node,
   ProjectCopy.node,
   PtyTicket.node,
-  // GeoCode: the service graph behind the data face (docs/GEOKERNEL.md §10.1 #4).
-  // The application runtime mounts this node too, and both build through the
-  // shared memo map — so this is the same instance, not a second one.
+  // GeoCode: the data face's services; app-runtime.ts mounts this node too, and the shared memo map keeps it one
+  // instance (docs/GEOKERNEL.md §10.1 #4).
   GeoKernel.node,
 ])
 

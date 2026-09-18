@@ -3,15 +3,13 @@ export * as Georeference from "./georeference"
 /* --- GeoCode: the one verdict both raster pipelines reach from the five facts each of them reports separately
  * (docs/GEOKERNEL.md §7.9). --- */
 
-/** Where a raster's georeferencing comes from; `none` is an ordinary image with none of the five facts. */
+/** Also the HTTP schema's literal list, so the type and the schema cannot come apart. */
 export const KINDS = ["transform", "gcp", "rpc", "geolocation", "crs-only", "none"] as const
 
-/** Named once so the type and the HTTP schema cannot come apart. */
 export type Kind = (typeof KINDS)[number]
 
 export interface Evidence {
   readonly transform?: readonly number[]
-  /** Only whether there is one: the verdict never asks which. */
   readonly projection?: boolean
   readonly gcpCount?: number
   readonly rpc?: boolean
@@ -42,7 +40,7 @@ export function of(evidence: Evidence): Kind {
   return "none"
 }
 
-/** The snake_case shape both raster scripts report under `georeferencing`; the GDAL face builds `Evidence` itself. */
+/** The snake_case shape both QGIS raster scripts report under `georeferencing`; GDAL builds `Evidence` itself. */
 export function reported(source: unknown): Evidence {
   const facts = (source ?? {}) as Record<string, unknown>
   return {

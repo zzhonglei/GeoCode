@@ -22,10 +22,7 @@ function getSpawnSyncBaseOptions() {
 const UPDATE_CHECK_URL = process.env.OPENCHAMBER_UPDATE_API_URL || 'https://api.openchamber.dev/v1/update/check';
 
 function getOpenChamberConfigDir() {
-  // --- GeoCode: the shell data root Electron main injects, then GeoCode's own fallback
-  // (docs/PATHS.md §3.3). These two returns shield the upstream resolution below rather than
-  // replacing it: those lines stay byte-identical so an upstream change to them still merges,
-  // they are simply never reached. Nothing here may resolve to an OpenChamber directory. ---
+  // --- GeoCode: the shell data root or GeoCode's own fallback, never OpenChamber's (docs/PATHS.md §3.3) ---
   if (process.env.OPENCHAMBER_DATA_DIR) return path.resolve(process.env.OPENCHAMBER_DATA_DIR);
   return path.join(os.homedir(), '.config', 'GeoCode', 'desktop');
   // --- /GeoCode ---

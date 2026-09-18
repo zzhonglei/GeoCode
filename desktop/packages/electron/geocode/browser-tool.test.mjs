@@ -1,10 +1,5 @@
-/* --- GeoCode: the main process hands the kernel its agent tools (docs/DESKTOP.md §7.2).
- *
- * The plugin file, the token and the three overrides are pinned against a scratch data root with
- * a stub template; the generated source is then built with upstream's real template and imported,
- * so a change to the template that breaks the wrapper or leaks the old names fails here. The
- * main.mjs wiring is pinned by source: the tools are prepared before the kernel starts and the
- * token leaves main's own environment once the shell has it. --- */
+/* --- GeoCode: the plugin is built from upstream's real template, so an upstream change that breaks the wrapper or
+ * brings back its brand names fails here (docs/DESKTOP.md §7.2). --- */
 import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -132,8 +127,7 @@ describe('the generated plugin', () => {
 
     const asked = [];
     const context = recordingContext(asked);
-    // No endpoint in this process, so the upstream body answers with its own failure; what is
-    // asserted is that the permission request came first and named the action.
+    // No callback address is set in this process, so upstream's body answers with its own failure.
     const browserResult = await tools[BROWSER_TOOL_NAME].execute({ action: 'browser.click', parameters: { selector: '#go' } }, context);
     const geocodeResult = await tools[GEOCODE_TOOL_NAME].execute({ action: 'schedule.create', parameters: { name: 'x' } }, context);
     expect(asked).toEqual([
@@ -185,8 +179,7 @@ describe('the generated plugin', () => {
 
 describe('the two sides agree on the file', () => {
   it('names the same relative path as the kernel expects under its config root', () => {
-    // The kernel spells `desktop/agent-tool/geocode-browser-plugin.js` under the config root; the
-    // shell data root is `<config root>/desktop`, so the shell's relative path is the tail of it.
+    // The shell data root is `<config root>/desktop`, so the kernel's segments minus the first are the shell's path.
     const segments = trustedSource.match(/GEOCODE_BROWSER_PLUGIN_SEGMENTS = \[([^\]]+)\]/)?.[1]
       ?.split(',').map((part) => part.trim().replace(/^"|"$/g, '')) ?? [];
     expect(segments[0]).toBe('desktop');
@@ -197,9 +190,7 @@ describe('the two sides agree on the file', () => {
 
 describe('the chat surface knows the tools by their GeoCode names', () => {
   it('keeps the upstream icons, hides the raw input and names the tool, under the new names', () => {
-    // All keyed by tool name in the renderer, which cannot import this module. Renaming a tool
-    // without them leaves its calls rendered as a generic wrench plus a dump of the call arguments,
-    // while the curated card upstream wrote for it goes unused.
+    // The renderer cannot import this module; a tool name it does not list gets the generic icon and its raw input.
     const read = (file) => fs.readFileSync(path.resolve(electronRoot, '../ui/src', file), 'utf8');
     for (const file of ['components/chat/message/parts/toolPresentation.tsx', 'components/chat/message/parts/ToolPart.tsx']) {
       const source = read(file);

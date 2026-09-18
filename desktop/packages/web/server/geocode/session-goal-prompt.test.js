@@ -1,13 +1,5 @@
-/* --- GeoCode: the goal auditor's system prompt reaches the model verbatim and so carries no marker of
- * its own; this file is the marker (CONVENTIONS.md §5).
- *
- * It catches the word, not the intent. The auditor is the only authority that can settle a goal —
- * the working agent has no channel to declare its own objective met — so what that prompt treats as
- * evidence decides when the loop stops spending. Framed as judging a coding agent, it looks for
- * code-shaped proof; a GeoCode goal is met by reprojected files, coordinate systems and verified
- * outputs. Same shape and same reasoning as the compaction prompt (KERNEL.md §5.2), which is the
- * other place one word decided what counts. Asserted against the source text because the builder is
- * upstream's own local function: exporting it would rewrite an upstream line for nothing. --- */
+/* --- GeoCode: guards against the goal auditor's system prompt, which decides what counts as evidence that a
+ * goal is met, framing the work as a coding agent's again (docs/DESKTOP.md §7.3). --- */
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';

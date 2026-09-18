@@ -1,10 +1,6 @@
 import net from "node:net"
 
-/* --- GeoCode: one CONNECT proxy stub for the net suites.
- *
- * It was two, and both carried the same defect: `once("data")` leaves the socket flowing, so the
- * ClientHello the client sends on seeing the 200 was lost whenever it beat the upstream connect,
- * and the handshake then waited out the probe timeout. Fixing one copy left the other flaking. --- */
+/* --- GeoCode: the only CONNECT proxy stub; a second copy would drift from its fixes (docs/CONVENTIONS.md §7). --- */
 
 export interface FakeProxyOptions {
   /** Pipe the tunnel to this port. Omit to answer the CONNECT and then stay silent. */

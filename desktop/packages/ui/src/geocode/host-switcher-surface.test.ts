@@ -1,9 +1,5 @@
-/* --- GeoCode: the desktop shell has no host switcher, so nothing mounts one, nothing warms its
- * statuses and no shortcut list offers its toggle (docs/DESKTOP.md §7.3).
- *
- * The warm-up runs unprompted after every launch, so it is run here against a stand-in for the
- * desktop bridge. The mount sites are pinned by source, as the header menu is in
- * desktop-settings-surface.test.ts. --- */
+/* --- GeoCode: the desktop shell has no host switcher, so a merge must not mount one, probe hosts for it after launch
+ * or list its toggle shortcut (docs/DESKTOP.md §7.3). --- */
 import { afterAll, describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -68,7 +64,6 @@ describe('host switcher surface', () => {
   });
 
   test('the shortcut that toggles the switcher is not listed in the desktop shell', () => {
-    // Pressing it only flips the state of a menu the desktop shell never mounts.
     expect(getCustomizableShortcutActions().some((action) => action.id === 'toggle_services_menu')).toBe(true);
     expect(isShortcutHiddenOnDesktop('toggle_services_menu', true)).toBe(true);
     expect(isShortcutHiddenOnDesktop('toggle_services_menu', false)).toBe(false);

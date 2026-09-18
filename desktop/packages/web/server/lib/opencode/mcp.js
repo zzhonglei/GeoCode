@@ -34,10 +34,7 @@ function resolveMcpScopeFromPath(layers, sourcePath) {
 }
 
 function ensureProjectMcpConfigPath(workingDirectory) {
-  // --- GeoCode: the file `shared.js` reads back (geocode/kernel-roots.js). This is the one
-  // path in the tree that PATHS.md §5 records an actual accident for: `mcp add` wrote one name
-  // while the loader read another, so the command reported success and the server never
-  // appeared. Renaming the reader without this would recreate it exactly. ---
+  // --- GeoCode: must match the project config file `shared.js` reads back (docs/PATHS.md §5) ---
   const configDir = path.join(workingDirectory, KERNEL_PROJECT_DIR);
   if (!fs.existsSync(configDir)) {
     fs.mkdirSync(configDir, { recursive: true });

@@ -79,9 +79,7 @@ function getActiveUserConfigPaths() {
   const configDir = getActiveOpencodeConfigDir();
   return [
     path.join(configDir, 'config.json'),
-    // --- GeoCode: the global layer's file names, which the earlier pass renamed the directory
-    // and the project layer of this file but not these two — leaving plugin toggles writing
-    // `<config root>/opencode.json`, a file the kernel never loads (geocode/kernel-roots.js). ---
+    // --- GeoCode: the global config names the kernel loads (geocode/kernel-roots.js) ---
     path.join(configDir, KERNEL_CONFIG_JSON),
     path.join(configDir, KERNEL_CONFIG_JSONC),
     // --- /GeoCode ---
@@ -105,8 +103,7 @@ function getPrimaryUserConfigPath() {
 function getProjectConfigPath(workingDirectory) {
   if (!workingDirectory) return null;
   const candidates = [
-    // --- GeoCode: this file carries its own copy of shared.js's candidate list, so it has to
-    // be renamed in step — otherwise a plugin toggle writes a file the config loader skips. ---
+    // --- GeoCode: a copy of shared.js getProjectConfigCandidates; the two must name the same files ---
     path.join(workingDirectory, KERNEL_CONFIG_JSON),
     path.join(workingDirectory, KERNEL_CONFIG_JSONC),
     path.join(workingDirectory, KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSON),

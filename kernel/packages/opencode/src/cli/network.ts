@@ -22,9 +22,7 @@ const options = {
   },
   "mdns-domain": {
     type: "string" as const,
-    // --- GeoCode: the branded host. `mdns.ts` already falls back to `Brand.mdnsHost`, but yargs
-    // supplies this default so `domain` is never undefined and that fallback is dead code — the
-    // patch there was correct and unreachable, and GeoCode advertised `opencode.local` anyway. ---
+    // --- GeoCode: the branded host; yargs always supplies this default, so mdns.ts never reaches its fallback ---
     describe: `custom domain name for mDNS service (default: ${Brand.mdnsHost})`,
     default: Brand.mdnsHost,
     // --- /GeoCode ---

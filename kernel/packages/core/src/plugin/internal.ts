@@ -116,10 +116,8 @@ const layer = Layer.effectDiscard(
         yield* add(ConfigCommandPlugin.Plugin)
         yield* add(ConfigSkillPlugin.Plugin)
         for (const item of ProviderPlugins) yield* add(item)
-        /* --- GeoCode: ConfigExternalPlugin is the second path that loads
-         * external plugins — it globs `{plugin,plugins}/` under every config
-         * directory and imports what it finds, and no flag gates it. Not
-         * registered here, so it never runs (docs/PATHS.md §7). --- */
+        /* --- GeoCode: ConfigExternalPlugin is not registered — it imports plugins from every config directory
+         * and no flag gates it (docs/KERNEL.md §6). --- */
         yield* add(ConfigProviderPlugin.Plugin)
         yield* add(VariantPlugin.Plugin)
       }),

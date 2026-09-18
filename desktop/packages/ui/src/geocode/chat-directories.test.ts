@@ -1,13 +1,5 @@
-/* --- GeoCode: the renderer's own chats root (docs/PATHS.md §5).
- *
- * Upstream v1.23 moved the configured root to the server, which answers `/api/fs/home` with it,
- * and kept one literal on this side: the fallback the module uses when that answer omits it —
- * and which every classifier here also accepts as a root of ours. Upstream spells that fallback
- * `.config/openchamber/chats`, so leaving it would both put new chats in another product's
- * directory whenever the server stays quiet and make that product's chats read as GeoCode's.
- *
- * The fallback is what the first case reads directly; the rest drive the module through the
- * server answer that triggers it. --- */
+/* --- GeoCode: the renderer's fallback chats root must not be upstream's `.config/openchamber/chats`, which would put
+ * new chats in another product's directory and read that product's chats as GeoCode's (docs/PATHS.md §5). --- */
 import { afterEach, describe, expect, test } from 'bun:test';
 
 import { opencodeClient } from '@/lib/opencode/client';

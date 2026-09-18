@@ -17,9 +17,8 @@ import fs from "fs/promises"
 const node = LayerNode.compile(CrossSpawnSpawner.node)
 
 const it = testEffect(Layer.mergeAll(LayerNode.compile(Skill.node), node, testInstanceStoreLayer))
-/* --- GeoCode: `.agents/skills` is off by default here (docs/KERNEL.md §6 #6). The upstream cases that
- * exercise that directory opt back in explicitly, the same way the Claude Code ones do below — the scan
- * itself is unchanged, so their coverage is worth keeping. --- */
+/* --- GeoCode: upstream's `.agents/skills` cases opt back in, since GeoCode changed only the default
+ * (docs/KERNEL.md §6). --- */
 const itWithExternalSkills = testEffect(
   Layer.mergeAll(
     LayerNode.compile(Skill.node, [[RuntimeFlags.node, RuntimeFlags.layer({ disableExternalSkills: false })]]),
@@ -45,11 +44,8 @@ const itWithoutExternalSkills = testEffect(
     testInstanceStoreLayer,
   ),
 )
-/* --- GeoCode: GeoCode disables external skill libraries by default — both the Claude Code one and the
- * shared `.agents` one (src/effect/runtime-flags.ts, docs/KERNEL.md §6 #6). The scanning mechanism is
- * unchanged, only the defaults are, so the upstream cases that exercise it opt back in explicitly here
- * instead of losing their coverage. Both flags are needed: the broad one gates the whole external block,
- * and the Claude-specific one gates `.claude` inside it. --- */
+/* --- GeoCode: upstream's `.claude/skills` cases opt back in with both flags, since the broad one gates every
+ * external library and the Claude one gates `.claude` within them. --- */
 const itWithClaudeCodeSkills = testEffect(
   Layer.mergeAll(
     LayerNode.compile(Skill.node, [
@@ -298,10 +294,7 @@ description: A skill in the .claude/skills directory.
     ),
   )
 
-  /* --- GeoCode: the tripwire for the flipped default. The case above proves
-   * the scan still works when asked; this one proves GeoCode does not ask.
-   * It takes no flag override on purpose — flip the default back and this
-   * goes red. --- */
+  /* --- GeoCode: no flag override, so restoring upstream's default turns this red. --- */
   it.live("GeoCode: skips .claude/skills by default", () =>
     provideTmpdirInstance(
       (dir) =>
@@ -328,9 +321,7 @@ description: A skill in the .claude/skills directory.
     ),
   )
 
-  /* --- GeoCode: same tripwire for the other external library. `.agents/skills` is a shared
-   * convention, not a GeoCode location, so it is off by the same default (docs/KERNEL.md §6 #6).
-   * No flag override here either — restore the upstream default and this goes red. --- */
+  /* --- GeoCode: no flag override either, so restoring upstream's default turns this red. --- */
   it.live("GeoCode: skips .agents/skills by default", () =>
     provideTmpdirInstance(
       (dir) =>
@@ -357,11 +348,8 @@ description: A skill in the shared .agents/skills directory.
     ),
   )
 
-  /* --- GeoCode: the other half of the contract. Turning the external libraries off must not
-   * take the user's own skills with it — they still arrive through the config directories
-   * (`~/.config/GeoCode/{skill,skills}` globally, `.geocode/{skill,skills}` per project). Without
-   * this, a future broadening of the disable would pass every test above while silently removing
-   * the only channel a user has left. --- */
+  /* --- GeoCode: red if disabling the external libraries also drops the user's own skills, which would pass every
+   * case above. --- */
   it.live("GeoCode: still discovers skills under the project config directory", () =>
     provideTmpdirInstance(
       (dir) =>

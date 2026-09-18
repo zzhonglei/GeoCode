@@ -13,9 +13,9 @@ import { QgisWindows } from "./windows"
 import type { Choice, Environment, Resolution, Track } from "./types"
 
 /* --- GeoCode: environment resolution, end to end (docs/GEOKERNEL.md §4.3–§4.6). No state and no status writes
- * here: the lifecycle in ./index.ts is the slot's only writer and decides when to resolve (§4.10). --- */
+ * here: the lifecycle in ./index.ts is the slot's only writer. --- */
 
-/** A relative hint is a typo; an imprecise absolute one goes on to resolution, which recovers (§4.3 可达性预检). */
+/** A relative hint is a typo; an imprecise absolute one goes on to resolution, which can recover from it (§4.3). */
 function precheck(hint: string): "ok" | "path-missing" {
   if (!path.isAbsolute(hint)) return "path-missing"
   if (process.platform === "win32") {
@@ -30,7 +30,6 @@ function precheck(hint: string): "ok" | "path-missing" {
 }
 
 export interface Hooks {
-  /** Fired immediately before the first probe run; the lifecycle shows `probing` from here on (§4.7). */
   readonly onProbing?: Effect.Effect<void>
 }
 
@@ -56,8 +55,6 @@ export function resolve(hint: string, runtime: GeoRuntime.Interface, hooks: Hook
   })
 }
 
-// --- macOS ------------------------------------------------------------------
-
 function resolveMacOS(
   hint: string,
   runtime: GeoRuntime.Interface,
@@ -69,8 +66,8 @@ function resolveMacOS(
     if (located.prefix) {
       prefix = located.prefix
     } else if (located.fallbackPrefix && /^python(3(\.\d+)?)?$/i.test(path.basename(hint)) && existsSync(hint)) {
-      // The escape hatch (§4.4): a missing marker must not veto a real interpreter, because derived and pruned
-      // builds exist and the probe is the only judge of them. Anything else still gets the clean not-qgis below.
+      // A missing marker must not veto a real interpreter: derived and pruned builds exist, and the probe is the only
+      // judge of them (§4.4).
       prefix = located.fallbackPrefix
     } else {
       return {
@@ -80,8 +77,8 @@ function resolveMacOS(
       }
     }
 
-    // Name AND existence, not either (§4.4 预解析纪律): an older-layout path given on a newer install has the right
-    // shape and no file behind it, so trusting the name alone spawns nothing and blames a path the user got right.
+    // Name and existence: an older-layout path given on a newer install has the right shape and no file behind it,
+    // so trusting the name alone spawns nothing and blames a path the user got right.
     const interpreterChoice = QgisMacOS.findInterpreter(prefix)
     const name = path.basename(hint)
     const interpreter =
@@ -94,8 +91,8 @@ function resolveMacOS(
     const first = yield* QgisProbe.run(runtime, interpreter, assembly.env, [])
     if (first.ok) return succeed(interpreter, prefix, assembly.env, [], undefined, first.report)
 
-    // The one macOS retry (§4.6 回退): startup crash plus no standard library from layout detection — an unknown
-    // layout, so search by content, build the link structure and try once.
+    // A startup crash with no standard library from layout detection means an unknown layout: search by content,
+    // build the link and retry once.
     if (first.startupCrash && !assembly.env.PYTHONHOME) {
       const contents = path.resolve(prefix, "..")
       const found = deepFindStandardLibrary(contents)
@@ -120,10 +117,7 @@ function resolveMacOS(
   })
 }
 
-/**
- * A directory holding the encodings module, found by content — unlike `findStandardLibrary`, which is keyed on the
- * `python3.NN` naming that an unknown layout is free to abandon.
- */
+/** Unlike `findStandardLibrary`, not keyed on the `python3.NN` naming that an unknown layout is free to abandon. */
 function deepFindStandardLibrary(contents: string): string | undefined {
   const pending: { dir: string; depth: number }[] = [{ dir: contents, depth: 0 }]
   const skip = new Set(["__pycache__", "site-packages", "plugins", "frameworks"])
@@ -142,16 +136,13 @@ function deepFindStandardLibrary(contents: string): string | undefined {
   return undefined
 }
 
-// --- Windows ----------------------------------------------------------------
-
 function resolveWindows(
   hint: string,
   runtime: GeoRuntime.Interface,
   onProbing: Effect.Effect<void>,
 ): Effect.Effect<Resolution> {
   return Effect.gen(function* () {
-    // Two root strategies (§4.5), deduplicated because both can land on the same root. Only the mid-layer correction
-    // reaches an install with no launcher — the segment scan accepts a candidate only when it carries one.
+    // Only the mid-layer correction yields a root without a launcher, which the manual track can still use.
     const rootCandidates = QgisPaths.unique([QgisWindows.correctMidLayer(hint), QgisWindows.findRootFromHint(hint)])
 
     let launcher: string | undefined
@@ -167,7 +158,7 @@ function resolveWindows(
 
     const attempted: Track[] = []
 
-    // Track one, the bridge: adopt the launcher's own answer rather than rebuild it (§4.3 principle 2).
+    // The bridge track adopts the launcher's own answer rather than rebuilding it (§4.3 principle 2).
     const launcherChoice: Record<string, Choice> =
       launcher && resolvedRoot
         ? {
@@ -181,7 +172,7 @@ function resolveWindows(
       const dump = yield* dumpLauncherEnv(runtime, launcher)
       if (!dump.ok) {
         // Byte counts, never the output: the launcher runs with our environment and dumps exactly that, secrets
-        // included. The warning is also the only record of why an install with a launcher ended on the manual track.
+        // included. The warning is the only record of why an install with a launcher fell to the manual track.
         yield* Effect.logWarning("qgis launcher env dump failed; falling back to manual assembly", {
           launcher,
           reason: dump.reason,
@@ -207,8 +198,7 @@ function resolveWindows(
           if (outcome.ok) {
             return succeed(adopted.interpreter, adopted.prefix, adopted.env, [], "bridge", outcome.report)
           }
-          // Bridge probe failed → manual retry, once (§4.6 回退). The manual outcome replaces this one in the
-          // diagnostics; `attempted` is what still shows the bridge was tried.
+          // One manual retry; its outcome replaces this one in the diagnostics, and `attempted` still shows the bridge.
           return yield* manualAttempt(hint, resolvedRoot, rootCandidates, runtime, attempted, choices, onProbing)
         }
       }
@@ -229,8 +219,7 @@ function manualAttempt(
 ): Effect.Effect<Resolution> {
   return Effect.gen(function* () {
     attempted.push("manual")
-    // Falling preference, ending in a guess rather than a failure: a wrong root yields candidates that do not exist,
-    // and listing missing candidates is exactly what the diagnostics are for (§4.10).
+    // Ends in a guess rather than a failure: a wrong root yields missing candidates, which the diagnostics then list.
     const root =
       resolvedRoot ??
       rootCandidates.find(Boolean) ??
@@ -238,8 +227,8 @@ function manualAttempt(
       QgisWindows.findRootByContent(hint) ??
       path.win32.dirname(hint)
 
-    // Derived from the root, not trusted from the hint (§4.3 principle 1); falling back to the hint keeps the user's
-    // own path in the diagnostics.
+    // Derived from the root, not trusted from the hint (§4.3 principle 1); the hint fallback keeps the user's own
+    // path in the diagnostics.
     const interpreter = QgisWindows.findInterpreterUnderRoot(root) ?? hint
 
     const assembly = QgisWindows.assembleManual(interpreter, root, hint)
@@ -257,15 +246,15 @@ function manualAttempt(
       dllDirectories: assembly.dllDirectories,
       choices,
       attempted,
-      // The manual attempt always runs last, so its assembly is what these diagnostics describe (§4.10 来源标记).
+      // The manual attempt always runs last, so its assembly is what these diagnostics describe.
       track: "manual",
     })
   })
 }
 
 /**
- * Run the launcher's environment dump (§4.5 track one). The result is the host environment plus the launcher's own
- * additions, so it is adopted whole and never logged or shown unfiltered (§4.3 principle 8).
+ * The result is the host environment plus the launcher's own additions, so it is adopted whole and never logged or
+ * shown unfiltered (§4.3 principle 8).
  */
 function dumpLauncherEnv(
   runtime: GeoRuntime.Interface,
@@ -311,8 +300,6 @@ function dumpLauncherEnv(
     return { ok: true as const, env: extracted.value as Record<string, string> }
   })
 }
-
-// --- shared -----------------------------------------------------------------
 
 function succeed(
   python: string,
@@ -360,7 +347,7 @@ function fail(
       dllDirectories: context.dllDirectories,
       choices: context.choices,
       track: context.track,
-      // Raw output only for a startup crash, which is when it IS the diagnosis (§4.6 失败分级).
+      // Raw output only for a startup crash, which is when it is the diagnosis.
       output: outcome.startupCrash ? outcome.detail : undefined,
       error: outcome.startupCrash ? undefined : outcome.detail,
       attempted: context.attempted,

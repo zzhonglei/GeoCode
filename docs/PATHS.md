@@ -276,8 +276,8 @@ mDNS 主机与服务名、macOS 托管配置域、项目 id 标记文件、技�
 两种取值方式在同一文件里并存,**不能靠看一眼判断,读取方要逐个查**。
 
 **这个根挂在 HOME 下,不挂在 Electron 的 userData 下,`.config` 也是写死的而不是读
-`XDG_CONFIG_HOME`。** 两条都是被渲染进程逼出来的:它自己拼两条存储路径——chats 根与每项目配置
-目录——而它**读不到环境变量**,也没有任何路由会把根告诉它。**渲染进程算不出来的根,就是两半迟早会
+`XDG_CONFIG_HOME`。** 两条都是被渲染进程逼出来的:它按 HOME 自己拼一份 chats 根,在 `/api/fs/home` 的回答到达之前
+或缺字段时拿它兜底,并据它判断一个目录是不是 chat——而它**读不到环境变量**。**渲染进程算不出来的根,就是两半迟早会
 各说各话的根。** 曾经就是:一次改动把注入端搬到 userData,而 `chatDirectories.ts` 还在按 HOME 拼
 OpenChamber 的目录,于是 GeoCode 在别人的配置目录里建 chats,而服务端的 `managedProjectRoots`
 ——决定一个 chat 会话的记忆算哪个项目——指着一个那些 chats 从不出现的地方。上游把这个根挂在 HOME

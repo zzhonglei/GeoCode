@@ -13,11 +13,9 @@ const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const SUMMARY_OUTPUT_TOKENS = 4_096
-/* --- GeoCode: adds `Plan and Rules` (GEOKERNEL §10.1 #11). Upstream's sections
- * were written for programming and hold no place for a settled convention or a
- * dataset known to be partial — the latter being neither a rule nor a blocker.
- * No marker inside the string: it reaches the model verbatim (KERNEL.md §5.3),
- * so the tripwire carries the audit. --- */
+/* --- GeoCode: the `Plan and Rules` section is ours, for settled conventions and partial datasets that upstream's
+ * coding sections have no place for; unmarked because the string reaches the model verbatim
+ * (docs/GEOKERNEL.md §10.1 #11). --- */
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Objective
@@ -170,8 +168,7 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
   if (!input.previousSummary)
     return [
       conversation,
-      // GeoCode: "coding agent" → "agent". The summary is what the next turns
-      // reason from, and this fork's agent does geographic work.
+      // GeoCode: not "another coding agent", since the turns that continue from this summary do geographic work
       "Create a new anchored summary from the conversation history in the <conversation> tags above so another agent can continue the work.",
       SUMMARY_TEMPLATE,
     ].join("\n\n")

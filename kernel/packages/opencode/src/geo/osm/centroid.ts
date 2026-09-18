@@ -3,18 +3,12 @@ export * as OsmCentroid from "./centroid"
 import type { OsmConvert } from "./convert"
 import { OsmQuery } from "./query"
 
-/* --- GeoCode: collapsing features to representative points (docs/GEOKERNEL.md §6.8 几何归一化).
- *
- * A correctness rule rather than a convenience: a point dataset of facilities is built by collecting every type and
- * normalizing here, because requesting `node` alone drops everything mapped as an area and reports success. --- */
+/* --- GeoCode: collapsing features to representative points, so a point dataset collects every type rather than
+ * `node` alone, which drops everything mapped as an area (docs/GEOKERNEL.md §6.8). --- */
 
 type Position = [number, number]
 
-/**
- * Area-weighted centroid of a ring, or the vertex mean when degenerate. Relative to the first vertex, and the shift
- * is not optional: on raw longitude and latitude the cross products of a building-sized ring cancel five significant
- * digits, enough to put the answer outside the ring's own bounding box.
- */
+/** Relative to the first vertex, without which a small ring far from the origin can land outside its own bbox. */
 export function ringCentroid(ring: readonly Position[]): Position {
   const [ox, oy] = ring[0] ?? [0, 0]
   let area = 0
@@ -103,20 +97,13 @@ function pointOf(geometry: any): Position | undefined {
   }
 }
 
-/**
- * A point that can be plotted, or nothing. An empty ring divides by zero, so `ringCentroid` answers `[NaN, NaN]` —
- * an array, therefore truthy, and `JSON.stringify` writes it as `[null, null]`: invalid GeoJSON on the user's disk,
- * missing from the dropped list. Every branch above can go degenerate the same way, so the check is here.
- */
+/** Finite or nothing: an empty ring yields a truthy `[NaN, NaN]`, which `JSON.stringify` writes as invalid GeoJSON. */
 function representativePoint(geometry: any): Position | undefined {
   const point = pointOf(geometry)
   return point && Number.isFinite(point[0]) && Number.isFinite(point[1]) ? point : undefined
 }
 
-/**
- * Collapse every feature to one point. A feature already a point passes through untouched, so `original_geometry`
- * marks exactly the ones that were converted.
- */
+/** A feature already a point passes through untouched, so `original_geometry` marks exactly the converted ones. */
 export function normalize(features: readonly OsmConvert.Feature[]): {
   features: OsmConvert.Feature[]
   dropped: string[]

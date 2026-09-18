@@ -7,10 +7,7 @@ import { HttpApiApp } from "@/server/routes/instance/httpapi/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
-/* The generic content endpoint's size gate (docs/GEOKERNEL.md §10.1 #8).
- *
- * The fixtures below are sparse files: the gate reads a size, never bytes, so
- * a test for it does not need to write hundreds of megabytes. */
+// Without its size gate the content endpoint reads a file of any size into the renderer (docs/GEOKERNEL.md §10.1 #8).
 
 const context = Context.empty() as Context.Context<unknown>
 

@@ -3,13 +3,11 @@ import { Ignore } from "../src/filesystem/ignore"
 import { GeoExtensions } from "../src/filesystem/geo-extensions"
 import { Glob } from "../src/util/glob"
 
-/* The watcher's GIS ignore list (docs/GEOKERNEL.md §10.1 #7). A tripwire, not a unit test: the patterns are
- * trivially correct, and an upstream refactor can cut them off from the running watcher with no type error. */
+// An upstream refactor can cut the GIS ignore patterns off from the list filesystem/watcher.ts subscribes with, and
+// no type error follows (docs/GEOKERNEL.md §10.1 #7).
 
 describe("geo watcher ignore", () => {
   test("the transient patterns are actually in the list the watcher subscribes with", () => {
-    // `filesystem/watcher.ts` spreads `Ignore.PATTERNS` into the subscribe call, so a pattern missing from it
-    // exists and does nothing.
     expect(Ignore.GEOCODE_WATCHER_IGNORE_PATTERNS.length).toBeGreaterThan(0)
     for (const pattern of Ignore.GEOCODE_WATCHER_IGNORE_PATTERNS) {
       expect(Ignore.PATTERNS).toContain(pattern)

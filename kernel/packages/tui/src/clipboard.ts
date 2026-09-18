@@ -30,8 +30,7 @@ function writeOsc52(text: string) {
 
 export async function read() {
   if (platform() === "darwin") {
-    // GeoCode: this is the shared OS temp dir, not our own tmp root, so the name is all that
-    // distinguishes it — an `opencode-` file appeared in /tmp on every image paste.
+    // GeoCode: branded, since in the shared OS temp dir the file name alone says whose file it is
     const file = path.join(tmpdir(), Brand.tempPrefix("clipboard.png"))
     try {
       await exec("osascript", [

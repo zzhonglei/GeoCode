@@ -1,9 +1,4 @@
-/* --- GeoCode: the four skills catalog routes answer 404 under Electron (docs/DESKTOP.md §7.3).
- *
- * Driven over a real Express app with the refusal registered ahead of stand-in handlers that
- * record a hit: if the refusal ever stops winning the match, a stand-in records and this fails.
- * The control run without the Electron mark must reach every handler, or the guard proves
- * nothing. --- */
+/* --- GeoCode: the four skills catalog routes answer 404 under Electron (docs/DESKTOP.md §7.3). --- */
 import { afterEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import fs from 'node:fs';
@@ -28,7 +23,6 @@ const createApp = () => {
   for (const [method, routePath] of SKILL_CATALOG_ROUTES) {
     app[method](routePath, (_req, res) => { reached.push(routePath); res.json({ ok: true }); });
   }
-  // The skill routes registered further down, which a name like `catalog` or `scan` also matches.
   for (const method of ['get', 'patch', 'delete']) {
     app[method]('/api/config/skills/:name', (req, res) => { reached.push(`${req.method} :name`); res.json({ ok: true }); });
   }
@@ -78,7 +72,6 @@ describe('skill catalog surface', () => {
       .map(([, method, routePath]) => [method, routePath]);
     expect(fixedRoutes).toEqual(SKILL_CATALOG_ROUTES.map(([method, routePath]) => [method, routePath]));
     for (const [method, routePath] of SKILL_CATALOG_ROUTES) {
-      // Upstream's handler for each refused pair, with the same method, registered after the refusal.
       const handler = source.indexOf(`app.${method}('${routePath}'`);
       expect([method, routePath, handler > refusal]).toEqual([method, routePath, true]);
     }

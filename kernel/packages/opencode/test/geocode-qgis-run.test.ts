@@ -22,10 +22,6 @@ import { disposeAllInstances } from "./fixture/fixture"
 import { testEffect } from "./lib/effect"
 import { statusHolding } from "./lib/geocode-status"
 
-/* Tripwires for RunQgisAlgorithm (docs/TOOLS.md §3; GEOKERNEL §4.12, §11). Every return path is reachable with
- * no QGIS installed: the executor takes a `GeoRuntime.Interface`, so a scripted runtime and an open gate put any
- * ending under test. */
-
 const ALGORITHM: QgisCatalog.Algorithm = {
   id: "native:buffer",
   name: "Buffer",
@@ -34,8 +30,7 @@ const ALGORITHM: QgisCatalog.Algorithm = {
   helpText: "help",
   parameters: [
     { name: "INPUT", description: "in", type: "source", defaultValue: null, options: [], optional: false },
-    // Non-optional and defaulted, the shape that turns a correct call into one alarm per parameter if pre-flight
-    // files it under missing-required (executor.ts).
+    // Non-optional yet defaulted, the shape pre-flight must not report as missing.
     { name: "SEGMENTS", description: "s", type: "number", defaultValue: "5", options: [], optional: false },
     { name: "DISSOLVE", description: "x", type: "boolean", defaultValue: "False", options: [], optional: false },
     { name: "DISTANCE", description: "d", type: "distance", defaultValue: "10", options: [], optional: true },
@@ -61,8 +56,7 @@ const openGate = Layer.succeed(
   }),
 )
 
-/* An algorithm that writes, which the buffer fixture above deliberately is not: its OUTPUT is non-optional,
- * defaults to `TEMPORARY_OUTPUT`, and carries one of the six types `destination.ts` re-points on (§4.12). */
+/* Writes: OUTPUT is non-optional, defaults to TEMPORARY_OUTPUT, and has a type destination.ts re-points on. */
 const WRITER: QgisCatalog.Algorithm = {
   id: "native:writeout",
   name: "Write Out",
@@ -83,8 +77,8 @@ const WRITER: QgisCatalog.Algorithm = {
   outputs: [],
 }
 
-/* The shape of `native:package` and `native:savefeatures`: a destination plus the algorithm's own parameter for a
- * file that is already there, which earns it no exemption from numbering (§4.12). */
+/* Like native:package: a destination plus the algorithm's own parameter for an existing file, which earns no
+ * exemption from numbering. */
 const PACKAGER: QgisCatalog.Algorithm = {
   ...WRITER,
   id: "native:packager",
@@ -103,8 +97,7 @@ const PACKAGER: QgisCatalog.Algorithm = {
   ],
 }
 
-/* No folder destination among them: this layer treats one like any other output, and the rule that spares it from
- * numbering is `qgis/destination.ts`'s, tested in geo/qgis-destination.test.ts. */
+// No folder destination: the rule that spares one from numbering is tested in geo/qgis-destination.test.ts.
 const CATALOG = [ALGORITHM, WRITER, PACKAGER]
 
 const known = (id: string) => (id === "Buffer" ? ALGORITHM : CATALOG.find((algorithm) => algorithm.id === id))
@@ -126,10 +119,8 @@ const stubCatalog = Layer.succeed(
   }),
 )
 
-/** What the last scripted run was actually asked to execute. */
 const spawned: { args: readonly string[] } = { args: [] }
 
-/** A runtime whose single run() reports whatever ending the test asks for. */
 function runtimeEnding(result: Partial<GeoRuntime.Result>, chunks: readonly string[] = []) {
   return Layer.mock(GeoRuntime.Service)({
     run: (options) =>
@@ -153,10 +144,7 @@ function runtimeEnding(result: Partial<GeoRuntime.Result>, chunks: readonly stri
   })
 }
 
-/**
- * A runtime that leaves files behind, the way a real algorithm does. The mock above answers only what was sent,
- * and what is on disk is what tells a reserved path from the file QGIS named for itself.
- */
+/** Leaves files behind, since what is on disk tells a reserved path from the file QGIS named for itself. */
 function runtimeWriting(files: () => readonly string[]) {
   return Layer.mock(GeoRuntime.Service)({
     run: (options) =>
@@ -187,11 +175,7 @@ const harness = (runtime: Layer.Layer<GeoRuntime.Service>) =>
     ]),
   )
 
-/**
- * A user who has already answered "always", standing in: `qgis` is `ask` for GeoAgent, so without this every test
- * below parks at an unanswered prompt. Appended last because `evaluate` takes the last matching rule, which is
- * where a real approval lands too (permission/index.ts).
- */
+/** An "always" answer, since `qgis` is `ask` for GeoAgent; last, because `evaluate` takes the last match. */
 const GRANTED = { permission: "qgis", pattern: "*", action: "allow" } as const
 
 const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, agentName = "GeoAgent") {
@@ -216,10 +200,7 @@ const execute = Effect.fnUntraced(function* (params: Record<string, unknown>, ag
     .pipe(Effect.timeout(5_000), Effect.exit)
 })
 
-/**
- * Run the tool with every ask granted, recording what it asked for: the engine's verdict for a key is pinned in
- * geocode-geo-permissions.test.ts, and a grant nobody requests looks the same from there as one that works.
- */
+/** Records what the tool asks for: a grant nobody requests has the same verdict as one that works. */
 const asksOf = Effect.fnUntraced(function* (params: Record<string, unknown>) {
   const registry = yield* ToolRegistry.Service
   const tool = (yield* registry.all()).find((item) => item.id === "RunQgisAlgorithm")
@@ -262,8 +243,6 @@ describe("RunQgisAlgorithm, pre-spawn refusals", () => {
       const registry = yield* ToolRegistry.Service
       expect(yield* registry.ids()).toContain("RunQgisAlgorithm")
 
-      // Running it is the only way to tell a grant that matched from one written under a key nothing asks with
-      // (docs/KERNEL.md §4.1).
       const allowed = yield* execute({ algorithm: "native:buffer", parameters: "{}" })
       expect(Exit.isSuccess(allowed)).toBe(true)
     }),
@@ -273,7 +252,6 @@ describe("RunQgisAlgorithm, pre-spawn refusals", () => {
     "a malformed tool call is blamed on the tool call, and never on QGIS",
     () =>
       Effect.gen(function* () {
-        // A bare "Invalid parameters" reads as "QGIS rejected me" and sends the model hunting a bug in the data.
         for (const parameters of ["not json", "[1,2]", '"a string"', "null"]) {
           const result = yield* succeed({ algorithm: "native:buffer", parameters })
           expect(result.output).toContain("QGIS was NOT invoked")
@@ -284,14 +262,12 @@ describe("RunQgisAlgorithm, pre-spawn refusals", () => {
           expect(result.metadata.elapsed_ms).toBeUndefined()
         }
       }),
-    // Four executions behind a full kernel build, which lands close enough to bun's five-second default to flake.
     { timeout: 20_000 },
   )
 
   it.instance("an over-long parameter string is refused where the cause is still known", () =>
     Effect.gen(function* () {
-      // Past the OS command-line cap the spawn fails with nothing to attribute it to, and the limit is enforced
-      // on every platform rather than the one that has the cap.
+      // Past the OS command-line cap the spawn fails with nothing to attribute it to.
       const parameters = JSON.stringify({ INPUT: "x".repeat(PARAMETERS_LIMIT) })
       expect(parameters.length).toBeGreaterThan(PARAMETERS_LIMIT)
       const result = yield* succeed({ algorithm: "native:buffer", parameters })
@@ -320,8 +296,6 @@ describe("RunQgisAlgorithm, endings", () => {
     }),
   ).instance("a launch that never happened is not reported as a crash", () =>
     Effect.gen(function* () {
-      // Filed as `crash` this would read out as a native library segfaulting below the Python level, with an
-      // elapsed footer for a process that never existed.
       const result = yield* succeed({ algorithm: "native:buffer", parameters: '{"INPUT":"/a.shp"}' })
       expect(result.output).toContain("never ran")
       expect(result.output).toContain("ENOENT")
@@ -371,7 +345,6 @@ describe("RunQgisAlgorithm, endings", () => {
 
   ending({ code: null, reason: "idle" }).instance("an idle timeout names the number it hit", () =>
     Effect.gen(function* () {
-      // The fix for this ending is a number, so a banner that omits it leaves the caller nothing to raise.
       const result = yield* succeed({
         algorithm: "native:buffer",
         parameters: '{"INPUT":"/a.shp"}',
@@ -388,12 +361,11 @@ describe("RunQgisAlgorithm, endings", () => {
 
   ending({ code: 0, reason: "exit" }).instance("a parameter finding says where to look it up", () =>
     Effect.gen(function* () {
-      // The runner script names no tools itself (§11), so the pointer to the schema comes from this layer.
       const result = yield* succeed({ algorithm: "native:buffer", parameters: '{"NOPE":1}' })
       expect(result.output).toContain("is not defined for")
       expect(result.output).toContain('QgisDoc with action="read", algorithm="native:buffer"')
 
-      // And nothing wrong gets no pointer: a line that fires on every run is what makes pre-flight ignorable.
+      // A line that fires on every run is what makes pre-flight ignorable.
       const clean = yield* succeed({
         algorithm: "native:buffer",
         parameters: '{"INPUT":"/a.shp","SEGMENTS":5,"DISSOLVE":false,"DISTANCE":1}',
@@ -406,8 +378,6 @@ describe("RunQgisAlgorithm, endings", () => {
     "a trimmed live view says it was trimmed",
     () =>
       Effect.gen(function* () {
-        // The live push keeps the tail, where a running algorithm says anything new, and marks the drop so a
-        // watcher cannot read a partial log as the whole one.
         const pushes: { truncated: unknown; output: unknown }[] = []
         const registry = yield* ToolRegistry.Service
         const permission = yield* Permission.Service
@@ -444,13 +414,10 @@ describe("RunQgisAlgorithm, endings", () => {
     "a crash carries the native trace and explains the OS dialog",
     () =>
       Effect.gen(function* () {
-        // The macOS crash reporter puts a dialog in front of the user after the tool has already returned, and
-        // this sentence is how the agent can tell them to dismiss it.
         const result = yield* succeed({ algorithm: "native:buffer", parameters: '{"INPUT":"/a.shp"}' })
         expect(result.output).toContain("Segmentation fault")
         expect(result.output).toContain("safe to dismiss")
-        // The renderer is shared with GEE, which runs its own Python, so naming one capability would have the
-        // other's crashes blame software the user never invoked.
+        // terminationBanner is shared with GEE, which runs its own Python.
         expect(result.output).not.toContain("QGIS interpreter")
         expect(result.metadata.error_code).toBe("Crashed")
       }),
@@ -469,8 +436,7 @@ describe("RunQgisAlgorithm, endings", () => {
 
   ending({ code: 0, reason: "exit" }).instance("an unknown algorithm is advised, never blocked", () =>
     Effect.gen(function* () {
-      // Pre-flight advises and never vetoes: the exported metadata cannot express every constraint, so blocking
-      // on its gaps would turn them into "the user cannot run this" (§4.12).
+      // The exported metadata cannot express every constraint, so blocking on its gaps would stop runs that work.
       const result = yield* succeed({ algorithm: "native:nosuch", parameters: '{"INPUT":"/a.shp"}' })
       expect(result.output).toContain("is not in the catalog")
       expect(result.output).toContain("native:buffer") // the nearest, wired by this layer
@@ -490,14 +456,11 @@ describe("RunQgisAlgorithm, endings", () => {
 
   ending({ code: 0, reason: "exit" }).instance("a correct call is told what defaults apply, and not warned", () =>
     Effect.gen(function* () {
-      // Supplying exactly the parameters that have no default is a correct call, and one alarm per defaulted
-      // parameter is what teaches a reader to skip the channel that guards the user's disk.
       const result = yield* succeed({ algorithm: "native:buffer", parameters: '{"INPUT":"/a.shp"}' })
       const kinds = (result.metadata.precheck as { kind: string }[]).map((hint) => hint.kind)
       expect(kinds).toEqual(["defaults-applied"])
       expect(result.output).not.toContain("is missing")
 
-      // One line, carrying the values the run will use — which are the ones a caller may want to override.
       const lines = result.output.split("\n").filter((line) => line.startsWith("Pre-flight:"))
       expect(lines).toHaveLength(1)
       expect(lines[0]).toContain("SEGMENTS=5")
@@ -507,8 +470,7 @@ describe("RunQgisAlgorithm, endings", () => {
 
   ending({ code: 0, reason: "exit" }).instance("QGIS is handed the canonical id, not the caller's spelling", () =>
     Effect.gen(function* () {
-      // Lookup tolerates display names and short forms (§4.11) where QGIS resolves full ids only, so the raw key
-      // would clear pre-flight and then fail inside the interpreter with nothing to explain it.
+      // Lookup tolerates display names where QGIS resolves full ids only, so the raw key would fail in the interpreter.
       const result = yield* succeed({ algorithm: "Buffer", parameters: '{"INPUT":"/a.shp"}' })
       expect(spawned.args).toContain("native:buffer")
       expect(spawned.args).not.toContain("Buffer")
@@ -521,8 +483,7 @@ describe("RunQgisAlgorithm, endings", () => {
     "the tool always answers for its own size, so nothing upstream cuts the tail",
     () =>
       Effect.gen(function* () {
-        // Setting `truncated` at all is what stops tool.ts running its generic truncation, which keeps the head
-        // and drops the tail — where the ending, the error and the elapsed footer live.
+        // Setting truncated at all stops tool.ts's head truncation, which would drop the ending, error and footer.
         const result = yield* succeed({ algorithm: "native:buffer", parameters: '{"INPUT":"/a.shp"}' })
         expect(result.metadata.truncated).toBe(false)
         expect(result.metadata.truncated).toBeDefined()
@@ -552,29 +513,24 @@ describe("RunQgisAlgorithm, shapes", () => {
   })
 
   test("the QGIS group speaks with one voice about its environment", () => {
-    // Three descriptions, one gate behind them: edit one and the agent's behaviour starts depending on which
-    // tool it happened to call first.
+    // Three descriptions share one gate, and an edit to one leaves the others stale.
     const shared =
       "This tool needs the user's QGIS environment. When that environment is not ready, the output says exactly what is missing and who can fix it — relay that to the user instead of retrying."
     for (const description of [READ_DESCRIPTION, DOC_DESCRIPTION, RUN_DESCRIPTION]) {
       expect(description).toContain(shared)
     }
 
-    // A run in the wrong coordinate system succeeds and writes a wrong answer, so losing these lines costs
-    // nothing visible.
+    // A run in the wrong coordinate system succeeds with a wrong answer, so losing these lines shows nowhere.
     expect(RUN_DESCRIPTION).toContain("a 500m buffer becomes 500 degrees")
     expect(RUN_DESCRIPTION).toContain("MUST use QgisDoc")
     expect(RUN_DESCRIPTION).toContain("GeoJSON output MUST be in WGS-84")
 
-    // An agent that does not know the tool may answer with another path chains its next step onto the name it
-    // asked for, and reads a file that was never written.
+    // An agent unaware of renaming chains its next step onto the path it asked for, which was never written.
     expect(RUN_DESCRIPTION).toContain('"out.shp" becomes "out (1).shp"')
     expect(RUN_DESCRIPTION).toContain("Use that path for the next step")
 
-    /* The limits of that promise, asserted as consequences rather than wording so the text can keep improving
-     * (docs/TOOLS.md §8): an unconditional "never overwritten" overstates a guarantee that yields to a folder
-     * destination, and the two parameters stay named so a model reaching for `OVERWRITE` to add a layer to an
-     * existing GeoPackage reads here that it gets a new file instead. */
+    // An unconditional "never overwritten" overstates the guarantee, and a model reaching for OVERWRITE to add a
+    // layer to an existing GeoPackage has to read that it gets a new file.
     expect(RUN_DESCRIPTION).not.toContain("never overwritten")
     expect(RUN_DESCRIPTION).not.toMatch(/in the algorithm's hands|left to honour/i)
     expect(RUN_DESCRIPTION).toContain("OVERWRITE")
@@ -606,8 +562,6 @@ describe("the QGIS group's shut-gate answer", () => {
     "carries the same fields from all three tools",
     () =>
       Effect.gen(function* () {
-        // A shut gate is one event, and a caller made to learn three field sets ends up handling whichever tool
-        // it met first.
         const registry = yield* ToolRegistry.Service
         const permission = yield* Permission.Service
         const agent = yield* Agent.Service.use((svc) => svc.get("GeoAgent"))
@@ -642,12 +596,9 @@ describe("the QGIS group's shut-gate answer", () => {
         ]
 
         for (const answer of answers) {
-          // The shared trio; a tool may add its own subject on top, but recognising the event may not depend on
-          // which one produced it.
           expect(answer.metadata.error).toBe(true)
           expect(answer.metadata.geoStatus).toBe("unconfigured")
           expect(answer.metadata.truncated).toBe(false)
-          // The guidance is the kernel's, so all three say the same thing about the same state.
           expect(answer.output).toContain("machine.json")
           // No synonym for `error`: a second flag meaning the same thing is how the three drift apart.
           expect("env_error" in answer.metadata).toBe(false)
@@ -657,8 +608,7 @@ describe("the QGIS group's shut-gate answer", () => {
   )
 
   test("a shut gate on a READY environment still names its cause", () => {
-    // The gate wants ready and processing and a built catalog (§4.9), so the bare status name would put
-    // `error: true` next to `geoStatus: "ready"` and leave the cause readable only in the prose.
+    // The gate also wants processing and a built catalog, so a READY status can still be shut.
     expect(GeoTool.gateStatus({ status: "unconfigured" })).toBe("unconfigured")
     expect(GeoTool.gateStatus({ status: "ready", processing: true, catalog: "ready" } as never)).toBe("ready")
     const refused = [
@@ -668,17 +618,16 @@ describe("the QGIS group's shut-gate answer", () => {
     ] as const
     const labels = refused.map((status) => GeoTool.gateStatus(status as never))
     for (const label of labels) expect(label).not.toBe("ready")
-    // Three refusals, three labels: one shared label moves the ambiguity rather than removing it.
     expect(new Set(labels).size).toBe(refused.length)
   })
 })
 
 describe("RunQgisAlgorithm, where the output lands", () => {
-  /* `qgis/destination.ts` owns the rule and is tested on its own; what is asserted here is the wiring, since a
-   * correct rule that is computed and then not passed on protects nothing. */
+  // The rule is tested in geo/qgis-destination.test.ts; this pins the wiring, since a rule computed and not passed
+  // on protects nothing.
   const it = harness(runtimeEnding({}))
 
-  /** `runScript` puts the parameters last (executor.ts); read from the end, since the wrapper's shape is its own. */
+  /** runScript puts the parameters last (executor.ts). */
   const sentParameters = (): Record<string, unknown> => JSON.parse(spawned.args.at(-1)!)
 
   it.instance("a taken output is re-pointed BEFORE the run, not merely reported after", () =>
@@ -716,7 +665,6 @@ describe("RunQgisAlgorithm, where the output lands", () => {
 
       expect(result.output).toContain(path.join(instance.directory, "scene (1).tif"))
       expect(result.output).toContain("untouched")
-      // A frontend offering "open the result" reads this channel and never the prose (§9.1).
       expect(result.metadata.destinations).toEqual([
         { parameter: "OUTPUT", path: path.join(instance.directory, "scene (1).tif") },
       ])
@@ -725,7 +673,6 @@ describe("RunQgisAlgorithm, where the output lands", () => {
 
   it.instance("an untaken output is passed through and never mentioned", () =>
     Effect.gen(function* () {
-      // A note that fires on every run is what gets the channel skipped on the run that matters.
       const instance = yield* InstanceState.context
       const asked = path.join(instance.directory, "fresh.shp")
 
@@ -741,8 +688,7 @@ describe("RunQgisAlgorithm, where the output lands", () => {
 
   it.instance("an INPUT that happens to name an existing file is never re-pointed", () =>
     Effect.gen(function* () {
-      // Renaming an input sends the algorithm to read a file that is not there — a correct call broken by the
-      // thing meant to protect it — so re-pointing is fenced on the catalog calling the parameter a destination.
+      // Renaming an input sends the algorithm to read a file that is not there.
       const instance = yield* InstanceState.context
       const input = path.join(instance.directory, "in.shp")
       fs.writeFileSync(input, "source data")
@@ -758,9 +704,7 @@ describe("RunQgisAlgorithm, where the output lands", () => {
 
   it.instance("one prompt, wherever the output goes", () =>
     Effect.gen(function* () {
-      /* No second `external_directory` ask for a target outside the working directory, the way `read`, `write`
-       * and `bash` each raise one (docs/TOOLS.md §4.3). Both placements in one test on purpose: split apart, a
-       * change that re-introduced the second ask for outside targets alone leaves the inside case green. */
+      // No external_directory ask for an outside target, unlike read, write and bash (docs/TOOLS.md §4.3).
       const instance = yield* InstanceState.context
       const outside = fs.mkdtempSync(path.join(os.tmpdir(), "geocode-outside-"))
       try {
@@ -779,10 +723,8 @@ describe("RunQgisAlgorithm, where the output lands", () => {
 
   it.instance("the prompt names the algorithm AND every path it was given", () =>
     Effect.gen(function* () {
-      /* With no second boundary ask, this string is all the user gets to judge, and each assertion below is one
-       * way to hollow it out: the algorithm alone says nothing about what it writes to, a worktree-relative path
-       * hides that the target is outside the workspace, and dropping non-path values hides the `DISTANCE=100`
-       * this one turns on. */
+      // With no boundary ask this string is all the user judges, so it keeps the algorithm, the absolute paths and the
+      // non-path values.
       const outside = fs.mkdtempSync(path.join(os.tmpdir(), "geocode-outside-"))
       try {
         const target = path.join(outside, "out.shp")
@@ -792,7 +734,6 @@ describe("RunQgisAlgorithm, where the output lands", () => {
         })
         const pattern = asked[0]!.patterns![0]!
         expect(pattern).toContain("native:writeout")
-        // Absolute and verbatim: `toContain` on the full path fails for any relative form.
         expect(pattern).toContain(target)
         expect(path.isAbsolute(target)).toBe(true)
         expect(pattern).toContain("/data/in.shp")
@@ -805,8 +746,6 @@ describe("RunQgisAlgorithm, where the output lands", () => {
 
   it.instance("an algorithm the catalog does not know has every parameter left alone", () =>
     Effect.gen(function* () {
-      // Without catalog metadata a destination cannot be told from any other string, and guessing would re-point
-      // a parameter that was never an output; the call still runs (§4.12).
       const instance = yield* InstanceState.context
       const asked = path.join(instance.directory, "unknown.shp")
       fs.writeFileSync(asked, "existing")
@@ -826,8 +765,6 @@ describe("RunQgisAlgorithm, a run that failed points at no file", () => {
 
   it.instance("no path is claimed for a run that wrote nothing", () =>
     Effect.gen(function* () {
-      // The re-point happens before the spawn, so the sentence is available either way; printing it for a
-      // failure sends the caller looking for a file that was never created.
       const instance = yield* InstanceState.context
       const asked = path.join(instance.directory, "out.shp")
       fs.writeFileSync(asked, "the earlier result")
@@ -849,8 +786,6 @@ describe("RunQgisAlgorithm, a run that failed points at no file", () => {
 })
 
 describe("RunQgisAlgorithm, the path the caller is sent to", () => {
-  /* The cases where the reserved path is not the answer. Both are computed in `qgis/destination.ts` and tested
-   * there, and both need a runtime that writes, since the question is what is on disk when the run is over. */
   let writes: readonly string[] = []
   const it = harness(runtimeWriting(() => writes))
   const sentParameters = (): Record<string, unknown> => JSON.parse(spawned.args.at(-1)!)
@@ -866,9 +801,8 @@ describe("RunQgisAlgorithm, the path the caller is sent to", () => {
         parameters: JSON.stringify({ INPUT: "/data/in.shp", OUTPUT: asked }),
       })
 
-      // What was sent is untouched, since predicting the format is QGIS's business and not this tool's.
+      // Sent untouched: predicting the format is QGIS's business.
       expect(sentParameters().OUTPUT).toBe(asked)
-      // What is reported is what exists: the caller is told to use this path next, and `/…/result` is not there.
       expect(result.metadata.destinations).toEqual([
         { parameter: "OUTPUT", path: path.join(instance.directory, "result.gpkg") },
       ])
@@ -878,9 +812,8 @@ describe("RunQgisAlgorithm, the path the caller is sent to", () => {
 
   it.instance("the directory an output is going into is made before the run, not after it", () =>
     Effect.gen(function* () {
-      /* qgis-destination.test.ts passes whether or not this tool ever calls `ensureParents`, and it has to happen
-       * before the spawn: QGIS handed a path whose directory does not exist fails with a driver message about
-       * the file. */
+      // qgis-destination.test.ts passes whether or not this tool calls ensureParents before the spawn, and QGIS fails
+      // on a path whose directory does not exist.
       const instance = yield* InstanceState.context
       const deep = path.join(instance.directory, "results", "2026", "out.shp")
       writes = [deep]
@@ -913,8 +846,6 @@ describe("RunQgisAlgorithm, the path the caller is sent to", () => {
 
   it.instance("an algorithm that claims to own the question is numbered anyway", () =>
     Effect.gen(function* () {
-      // An `OVERWRITE` parameter earns no exemption (geo/qgis/destination.ts), and what is pinned here is that
-      // the numbered path reaches QGIS and the report rather than only being computed.
       const instance = yield* InstanceState.context
       const asked = path.join(instance.directory, "atlas.gpkg")
       const numbered = path.join(instance.directory, "atlas (1).gpkg")
@@ -936,9 +867,7 @@ describe("RunQgisAlgorithm, the path the caller is sent to", () => {
 })
 
 describe("the environment comes before the prompt", () => {
-  /* Every install passes through "not configured yet", and reaching it through a permission dialog spends the
-   * one approval this tool relies on — `always` would record it — on a call that was never going to run. Pinned
-   * across the settled failure states, and the other way for the in-flight ones. */
+  // Prompting for a call that cannot run spends the one approval this tool relies on, and always would record it.
   const STOPPED: GeoEvent.QgisStatus[] = [
     { status: "unconfigured" },
     { status: "config-error", file: "/x/machine.json", message: "bad" },
@@ -1006,8 +935,7 @@ describe("the environment comes before the prompt", () => {
 })
 
 describe("the string the user is asked to approve", () => {
-  /* `describeCall` on its own, because the tool-level tests pass ordinary paths: a value limit set too low stays
-   * green there and surfaces only in front of a user, on the one prompt they are meant to judge. */
+  // The tool-level tests pass ordinary paths, where a value limit set too low stays green.
 
   test("a path is never the thing that gets abbreviated", () => {
     // 249 characters, under a value limit that is sized against Windows' 260-character path cap.
@@ -1017,8 +945,6 @@ describe("the string the user is asked to approve", () => {
   })
 
   test("an inlined value is abbreviated, and says how much it dropped", () => {
-    // A pasted geometry runs to thousands of characters and tells the user nothing the parameter name did not;
-    // cutting it silently would leave a prompt that hides half its content reading as a complete one.
     const huge = "0".repeat(5_000)
     const shown = describeCall("native:buffer", { GEOMETRY: huge })
     expect(shown).not.toContain(huge)
@@ -1027,8 +953,6 @@ describe("the string the user is asked to approve", () => {
   })
 
   test("non-string values survive, because they are what makes a call dangerous", () => {
-    // `gdal:rasterize_over_fixed_value` burns BURN into an existing raster, and rendering only the paths would
-    // show a call that looks like every other one.
     const shown = describeCall("gdal:rasterize_over_fixed_value", { INPUT_RASTER: "/data/dem.tif", BURN: 99, ADD: false })
     expect(shown).toBe("gdal:rasterize_over_fixed_value(INPUT_RASTER=/data/dem.tif, BURN=99, ADD=false)")
   })

@@ -8,17 +8,12 @@ import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { NetRoute } from "../net/route"
 import type { NetTypes } from "../net/types"
 
-/* --- GeoCode: the HTTP floor of the OSM module (docs/GEOKERNEL.md §6.3).
- *
- * `node:https` rather than `fetch`, because Net hands its route out as a Node agent (§3.3) and it is worn per
- * request; which endpoint to use and what to do when one fails belong to the client above. --- */
+/* --- GeoCode: the HTTP floor of the OSM module, on `node:https` rather than `fetch` because Net hands its route out
+ * as a Node agent (docs/GEOKERNEL.md §6.3). --- */
 
 export const USER_AGENT = "GeoCode-osm/1.0"
 
-/**
- * The ceiling on one response body, counted while receiving rather than read from a header: the public instances
- * answer chunked and send no length at all, so a header check would be no guard whatsoever (§6.3 流式字节护栏).
- */
+/** Counted while receiving rather than read from a header: the public instances answer chunked and send no length. */
 export const MAX_RESPONSE_BYTES = 200 * 1024 * 1024
 
 export class OsmHttpError extends Error {
@@ -48,10 +43,7 @@ export interface Response {
   readonly body: string
 }
 
-/**
- * One request over one route, with the ceiling enforced as bytes arrive. An abort surfaces as `DOMException` and
- * everything else as `OsmHttpError`, which is how the caller tells a cancelled call from a failed endpoint.
- */
+/** An abort surfaces as `DOMException` and everything else as `OsmHttpError`, so cancellation is not failover. */
 export function request(input: Request): Effect.Effect<Response, OsmHttpError | DOMException> {
   return Effect.callback<Response, OsmHttpError | DOMException>((resume) => {
     if (input.abort?.aborted) {

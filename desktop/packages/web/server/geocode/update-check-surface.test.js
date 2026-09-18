@@ -1,9 +1,4 @@
-/* --- GeoCode: the shell does not ask OpenChamber's update service (docs/DESKTOP.md §7.2).
- *
- * Upstream's route posts the version and a persistent install id to api.openchamber.dev,
- * and the renderer calls it three seconds after start and hourly after that. Under Electron
- * the route answers "no update" locally and the web self-install route is gone. The control
- * run without the Electron mark must reach the network call, or the guard proves nothing. --- */
+/* --- GeoCode: the shell does not ask OpenChamber's update service (docs/DESKTOP.md §7.2). --- */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';

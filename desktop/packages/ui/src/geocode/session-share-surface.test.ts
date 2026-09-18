@@ -1,11 +1,5 @@
 /* --- GeoCode: the session share entries must stay closed, including one upstream adds later
- * (geocode/session-share-surface.ts, docs/DESKTOP.md §7.3).
- *
- * Pinning the two files edited here would not see an entry that arrives in a third one, and a
- * per-file allow list that never runs looks exactly like one that passes. So this walks the
- * renderer sources and holds a single invariant: in every file, the share menu entry appears as
- * often as the guard that hides it. Both menus render the entry through the same translation key,
- * which is what makes the count comparable. --- */
+ * (geocode/session-share-surface.ts, docs/DESKTOP.md §7.3). --- */
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -16,7 +10,7 @@ import { SESSION_SHARING_OFFERED } from './session-share-surface';
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const I18N = path.join(SRC, 'lib', 'i18n');
 
-// The trailing quote keeps `menu.unshare` and the `share.*` toast keys out of the count.
+// The trailing quote keeps any longer key that starts with this one out of the count.
 const SHARE_ENTRY = "sessions.sidebar.session.menu.share'";
 const GUARD = '!SESSION_SHARING_OFFERED ? null :';
 

@@ -1,17 +1,5 @@
-/* --- GeoCode: `.agents/loops/*.md` defines a task that runs on a schedule of its own.
- *
- * The directory belongs to no one product — it is where a user keeps definitions written for any
- * agent tool — so by the same ownership rule that closed `.agents/skills`, GeoCode does not run
- * what it finds there. A loop is the heavier case of the two: a skill is only offered to the user,
- * a loop starts by itself on a cron.
- *
- * Discovery is also the single gate in front of both writes into that directory: the delete that
- * unlinks the file, and the enable toggle that rewrites its frontmatter. Both look their task up
- * through a sync first, so no task carrying a loop file means neither can reach one.
- *
- * Two of the three below turn red when the shield is lifted. The third — the files coming back
- * byte for byte — does not, because discovery only reads either way; it is here for the change
- * that makes discovery write, and states the guarantee a user of another agent tool is owed. --- */
+/* --- GeoCode: guards against the shell scheduling, deleting or rewriting loop definitions another agent tool
+ * keeps under `.agents/loops` (docs/PATHS.md §7). --- */
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -19,8 +7,7 @@ import fsPromises from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-// A definition the parser actually accepts: an incomplete one is dropped before discovery is
-// even reached, and every assertion below would pass without exercising anything.
+// Must parse as a valid loop, or reconciliation creates no loop task even with discovery reopened.
 const LOOP = [
   '---',
   'name: Nightly digest',
@@ -78,6 +65,7 @@ describe('agent loops', () => {
   });
 
   it('leaves the definition files exactly as it found them', () => {
+    // Stays green with discovery reopened, since discovery only reads; it guards a discovery that starts writing.
     const userFile = writeLoop(path.join(home, '.agents', 'loops'));
     const projectFile = writeLoop(path.join(project, '.agents', 'loops'));
     const before = [digest(userFile), digest(projectFile)];
@@ -107,8 +95,7 @@ describe('agent loops', () => {
 
     const reconciled = await runtime.reconcileLoopTasks('proj', loops.discoverLoops(project));
 
-    // Closing loops must not take the scheduler away, and the delete and the enable toggle both
-    // start by looking a task up by its loop file.
+    // Closing loops must not remove tasks made in the UI.
     expect(reconciled.map((task) => task.name)).toEqual(['Made in the UI']);
     expect(reconciled.filter((task) => task.loopFile)).toEqual([]);
   });

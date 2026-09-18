@@ -6,34 +6,23 @@ import { GeoTool } from "./geo-tool"
 import { InstanceState } from "@/effect/instance-state"
 import DESCRIPTION from "./geo-qgis-run.txt"
 
-/* --- GeoCode: RunQgisAlgorithm, the acting face of the QGIS group (docs/TOOLS.md §3, GEOKERNEL §4.12, §11).
- *
- * Running the subprocess is the kernel's job; what this layer owns is attribution. A bare "Invalid parameters" reads
- * as "QGIS rejected me", so every pre-spawn refusal says QGIS was never invoked, whose fault it is and what to
- * change. --- */
+/* --- GeoCode: RunQgisAlgorithm (docs/TOOLS.md §3). Every refusal before the spawn says QGIS was not invoked, whose
+ * fault it is and what to change, since a bare "Invalid parameters" reads as QGIS rejecting the call. --- */
 
-/** Characters of live output the metadata channel carries while the algorithm runs (§11). */
 const STREAM_BUDGET = 30_000
 
 /**
- * Parameters ride an argv entry alongside the runner script itself (§4.12), and Windows caps a whole command line at
- * 32767 characters; past that the spawn fails in a way nothing downstream can attribute. Enforced on both platforms,
- * so a call cannot pass on the developer's Mac and break on a user's Windows box.
+ * The parameters travel in argv and Windows caps a whole command line at 32767 characters. Enforced on every
+ * platform, so a call cannot pass on macOS and fail on Windows.
  */
 export const PARAMETERS_LIMIT = 24_000
 
-/**
- * The longest a single parameter value may be before the prompt abbreviates it, sized against Windows' 260-character
- * path cap so that what gets cut is an inlined geometry rather than a path the user is being asked to judge. The
- * remainder is counted into the text, never dropped silently.
- */
+/** Just under Windows' 260-character path limit, so abbreviation usually falls on inlined geometries, not paths. */
 const VALUE_LIMIT = 256
 
 /**
- * The call as the user will be asked about it — the algorithm and every argument, the way upstream's `bash` puts the
- * command itself in the pattern rather than a category (docs/TOOLS.md §4.3). Paths stay absolute and verbatim:
- * whether one sits outside the working directory is the single thing this prompt exists to let the user judge, and
- * a relative form is exactly what would hide it.
+ * The permission pattern: the algorithm and every argument, with paths absolute and verbatim so the user can see one
+ * outside the working directory (docs/TOOLS.md §4.3).
  */
 export function describeCall(algorithm: string, parameters: Record<string, unknown>): string {
   const rendered = Object.entries(parameters).map(([key, value]) => {
@@ -58,9 +47,8 @@ export const Parameters = Schema.Struct({
     description:
       'JSON string of algorithm parameters. Example: \'{"Parameter 0": "/path/to/input.shp", "Parameter 1": 100, "Parameter 2": "/path/to/output.shp"}\'',
   }),
-  // Presented as a total duration but enforced as an IDLE clock (§8.4, §11): an algorithm that keeps reporting
-  // progress may run far longer than this, which is what makes long jobs possible at all. The floor and the default
-  // are the executor's own `IDLE_FLOOR_SECONDS` and `IDLE_DEFAULT_SECONDS`.
+  // Enforced as an IDLE clock, not a total; the floor and default mirror the executor's `IDLE_FLOOR_SECONDS` and
+  // `IDLE_DEFAULT_SECONDS`.
   timeout: Schema.Int.check(Schema.isGreaterThanOrEqualTo(10))
     .pipe(Schema.withDecodingDefault(Effect.succeed(60)))
     .annotate({
@@ -70,10 +58,8 @@ export const Parameters = Schema.Struct({
 })
 
 /**
- * One shape for every return path; the frontend reads these fields and never parses the output text (GEOKERNEL
- * §9.1). `truncated` is always present and always false, which is a statement rather than a placeholder: setting
- * the field at all is what stops tool.ts's generic truncation, and that one keeps the head and drops the tail —
- * where the ending, the error and the elapsed footer live (docs/TOOLS.md §5).
+ * `truncated` is set, and false, on every result: setting it stops tool.ts's head truncation, which would cut the
+ * ending, the error and the elapsed footer off the tail (docs/TOOLS.md §5).
  */
 type Metadata = {
   [key: string]: unknown
@@ -98,11 +84,9 @@ export const RunQgisAlgorithmTool = Tool.define<
     ) {
       const instance = yield* InstanceState.context
 
-      // Snapshotted at entry so the refusals below still carry the environment line, and taken again after the gate
-      // because a round can land while ctx.ask is waiting on the user (§11 环境头快照).
+      // Taken at entry for the refusals, and again after the gate, since a round can land while the user is asked.
       const entryHeader = yield* GeoTool.qgisHeader(status)
 
-      /** A refusal from before any subprocess existed: never an elapsed footer. */
       const refuse = (heading: string, lines: readonly string[], metadata: Metadata) => ({
         title: heading,
         output: [entryHeader, lines.join("\n")].filter(Boolean).join("\n\n"),
@@ -169,8 +153,7 @@ export const RunQgisAlgorithmTool = Tool.define<
         )
       }
 
-      // The environment, before the prompt: a user is never asked to approve an operation that was never going to
-      // run either way (docs/TOOLS.md §3). Reading the settled verdict starts no probe; only the gate below waits.
+      // Before the prompt, so no one approves a call the environment cannot run (docs/TOOLS.md §3).
       const deadEnd = yield* GeoTool.qgisLocalDeadEnd(status)
       if (deadEnd) {
         return refuse("QGIS environment unavailable", [GeoQgis.QgisGuidance.render(deadEnd)], {
@@ -181,17 +164,13 @@ export const RunQgisAlgorithmTool = Tool.define<
         })
       }
 
-      /* The only prompt this tool raises, and deliberately no second `external_directory` ask the way `read`,
-       * `write` and `bash` each have one: a boundary prompt reports a directory where this reports the algorithm and
-       * every path it was given, and it could only ever see what `QgisDestination.reserve` sees, which is nothing
-       * for the algorithms that write through a parameter the catalog does not call a destination (docs/TOOLS.md
-       * §4.3). `always: ["*"]` keeps it to once per app run — upstream holds approvals in InstanceState, in memory.
-       */
+      // Deliberately no `external_directory` ask: this prompt already shows every path, and a boundary guard would see
+      // only the ones `QgisDestination.reserve` recognises (docs/TOOLS.md §4.3). Upstream keeps approvals in memory,
+      // so `always: ["*"]` lasts until restart.
       yield* ctx.ask({
         permission: "qgis",
         patterns: [describeCall(params.algorithm, parsed as Record<string, unknown>)],
         always: ["*"],
-        // What a frontend renders the request from; the prose channel is never parsed (§9.1).
         metadata: { algorithm: params.algorithm, parameters: parsed },
       })
 
@@ -204,8 +183,6 @@ export const RunQgisAlgorithmTool = Tool.define<
               "The QGIS environment settled while this call was checking it — call the tool again.",
           ],
           {
-            // The field set ReadGeoData and QgisDoc also return for a shut gate: `error` plus the status name, so a
-            // third flag meaning the same thing cannot let the three drift apart.
             truncated: false,
             algorithm: params.algorithm,
             error: true,
@@ -214,19 +191,17 @@ export const RunQgisAlgorithmTool = Tool.define<
         )
       }
 
-      // Read before the run rather than after: the catalog is a live reference, and a configuration change empties
-      // it (§4.8 阶段依附).
+      // Read before the run: a configuration change empties the catalog.
       const known = yield* catalog.get(params.algorithm)
       const header = yield* GeoTool.qgisHeader(status)
 
       const nearest = known ? [] : yield* catalog.suggest(params.algorithm, "algorithm")
       const hints = GeoQgis.QgisExecutor.precheck(params.algorithm, known, parsed as Record<string, unknown>, nearest)
-      // The runner script names no tools itself (§11), so the pointer comes from this layer: search when the
-      // algorithm is unknown, the schema when the algorithm is known but its parameters are not.
       const parameterTrouble = hints.some(
         (hint) =>
           hint.kind === "unknown-parameter" || hint.kind === "missing-required" || hint.kind === "invalid-choice",
       )
+      // Authored here: the runner script names no tools (docs/GEOKERNEL.md §11).
       const pointer = !known
         ? `Pre-flight: use QgisDoc with action="search" to find the algorithm you mean.`
         : parameterTrouble
@@ -237,9 +212,8 @@ export const RunQgisAlgorithmTool = Tool.define<
           ? [...hints.map((hint) => `Pre-flight: ${hint.message}`), ...(pointer ? [pointer] : [])].join("\n")
           : undefined
 
-      /* Settle where the outputs go before anything is spawned (§4.12): undo does not reach what this tool writes,
-       * since geographic data is kept out of the snapshot repository by design (§10.1 #6), so an overwritten scene
-       * is gone with nothing to restore it from. The kernel numbers a taken name rather than refusing. */
+      // Reserved before the spawn: undo does not reach geographic data, so a taken output name is numbered, never
+      // overwritten (docs/GEOKERNEL.md §12).
       const reservation = yield* Effect.result(
         Effect.try({
           try: () => GeoQgis.QgisDestination.reserve(known, parsed as Record<string, unknown>),
@@ -270,10 +244,9 @@ export const RunQgisAlgorithmTool = Tool.define<
       const startedAt = Date.now()
 
       const result = yield* GeoQgis.QgisExecutor.runAlgorithm(runtime, gate.environment, {
-        // The canonical id, not what the caller typed: lookup tolerates short forms and display names (§4.11) but
-        // QGIS resolves full ids only, so the raw key would clear pre-flight and then fail inside the interpreter.
+        // The canonical id: lookup accepts short forms and display names, but QGIS resolves full ids only.
         algorithm: known?.id ?? params.algorithm,
-        // Already re-pointed, so the path in the report and the path on disk cannot come apart.
+        // The re-pointed parameters, never `parsed`, whose output names may already be taken.
         parameters: destinations,
         idleSeconds: params.timeout,
         abort: ctx.abort,
@@ -282,9 +255,7 @@ export const RunQgisAlgorithmTool = Tool.define<
           Effect.gen(function* () {
             streamed += chunk
             label = label ?? GeoQgis.QgisExecutor.displayName(streamed)
-            // The live view keeps the TAIL, where a running algorithm says anything new, and marks the drop so a
-            // watcher cannot read a partial log as the whole one. `truncated` here describes this payload, not the
-            // final result.
+            // `truncated` here describes this live payload, not the result.
             const live = GeoOutput.truncate(streamed, STREAM_BUDGET)
             yield* ctx.metadata({
               title: label ?? params.algorithm,
@@ -297,9 +268,7 @@ export const RunQgisAlgorithmTool = Tool.define<
             })
           }),
       }).pipe(
-        /* A launch that never happened is not one of the endings: filing it as `crash` would read out as a native
-         * segfault below the Python level, with an elapsed footer for a process that never existed. Every ending the
-         * runtime knows arrives as a Result and its reason; the error channel is the spawn not happening. */
+        // The error channel means no process ran, so it gets neither the crash banner nor an elapsed footer.
         Effect.catch((error) => Effect.succeed({ launchFailure: error.message })),
       )
 
@@ -328,15 +297,11 @@ export const RunQgisAlgorithmTool = Tool.define<
       label = label ?? GeoQgis.QgisExecutor.displayName(streamed)
       const succeeded = result.reason === "exit" && result.code === 0
 
-      // Where the outputs really are, which is only knowable now: QGIS writes `result.gpkg` for an OUTPUT of
-      // `result`. A failed run is left as reserved — nothing was written, so resolving would only invent a file.
       const settled = succeeded ? GeoQgis.QgisDestination.settle(reserved) : reserved
       const relocated = GeoQgis.QgisDestination.report(settled)
 
-      // The script's own error sentence when it wrote one, in place of the traceback around it.
       const structured = result.stderr.trim() ? GeoOutput.structuredError(result.stderr) : undefined
       const raw = structured ?? result.stderr.trim()
-      // An idle stop is the one ending whose fix is a number, so the number has to be in the answer.
       const idleNote =
         result.reason === "idle"
           ? `The limit was ${params.timeout}s of silence; raise \`timeout\` for large datasets or slow algorithms.`
@@ -354,12 +319,9 @@ export const RunQgisAlgorithmTool = Tool.define<
         ...(known ? { resolved_algorithm: known.id } : {}),
         elapsed_ms: elapsedMs,
         idle_limit_seconds: params.timeout,
-        // Present whenever pre-flight ran, even as an empty array: an absent field is the only way to say "never
-        // got that far".
+        // Present even when empty, so an empty array says pre-flight ran and found nothing.
         precheck: hints,
-        // Every recognised output, where the prose below names only the ones worth a sentence (§9.1). `landed`
-        // first, because the reserved path is what QGIS was TOLD and it may have appended its own extension on the
-        // way to disk — this is the channel a frontend opens files from.
+        // `landed` first: QGIS may have appended its own extension to the path it was given.
         ...(settled.length > 0
           ? { destinations: settled.map((item) => ({ parameter: item.parameter, path: item.landed ?? item.actual })) }
           : {}),
@@ -395,8 +357,6 @@ export const RunQgisAlgorithmTool = Tool.define<
           break
       }
 
-      // Where the data landed joins the parts only on success: a run that ended any other way wrote nothing to
-      // point at, and naming a path for it would send the caller looking for a file that is not there.
       const output = [
         header,
         precheck,

@@ -5,8 +5,8 @@ import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import type { GeoRuntime } from "../runtime"
 import { GeoOutput } from "../runtime/output"
 
-/* --- GeoCode: the remote authorization check — one real initialization and one minimal result
- * (docs/GEOKERNEL.md §5.5). Scheduling and caching are the lifecycle's; here it is only asked and read. --- */
+/* --- GeoCode: the remote authorization check; scheduling and caching are the lifecycle's
+ * (docs/GEOKERNEL.md §5.5). --- */
 
 export const MARKER = "__GEOCODE_GEE_RUNTIME_JSON__"
 
@@ -61,11 +61,7 @@ export function classify(message: string): GeoEvent.GeeRejection {
 const EARTH_ENGINE_ORIGIN =
   /\bEEException\b|ee\.ee_exception|googleapiclient|google\.auth\b|google\.api_core|oauth2client|[/\\]ee[/\\][a-z_]+\.py/i
 
-/**
- * The guard on §5.5's loop: origin before attribution, because `classify` keys on ordinary Python words — five of
- * the seven local tracebacks in gee-validate.test.ts come back as authorization problems, and a false positive
- * caches a failed conclusion, which shuts the gate for the whole backoff.
- */
+/** Origin first: `classify` keys on ordinary words, and a false positive shuts the gate for the whole backoff. */
 export function isRemoteRefusal(stderr: string): boolean {
   if (!EARTH_ENGINE_ORIGIN.test(stderr)) return false
   return classify(stderr) !== "unknown"

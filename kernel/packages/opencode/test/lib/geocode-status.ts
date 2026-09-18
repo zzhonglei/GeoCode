@@ -1,15 +1,5 @@
-/* --- GeoCode: a status plane holding fixed answers, for tests about tools.
- *
- * New file rather than an addition to test/lib/effect.ts, which is upstream's —
- * the patch surface only counts files we modify (docs/KERNEL.md §4.1).
- *
- * A geographic tool checks the environment before it raises a prompt
- * (docs/TOOLS.md §3), so on a machine with no QGIS nothing downstream of that
- * check is reachable without a status plane like this one.
- *
- * A stub, not a fake kernel: `current` is the only method with behaviour, and
- * `register` merely has to work, because the kernel claims its slots while the
- * layer is coming up. --- */
+/* --- GeoCode: a geographic tool checks the environment before it prompts, so on a machine without QGIS nothing
+ * past that check is reachable without fixed status answers (docs/TOOLS.md §3). --- */
 import { Effect, Layer, Stream } from "effect"
 import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 import { GeoStatus } from "../../src/geo"
@@ -29,10 +19,7 @@ export const GEE_READY: GeoEvent.GeeStatus = {
   runtime: { status: "valid", route: "direct" },
 }
 
-/**
- * A status plane answering exactly what it is given, and `undefined` elsewhere — which reads as "nothing has
- * probed yet" and no tool treats as a failure, so a slot left out here cannot turn into a refusal.
- */
+/** Answers `undefined` for a slot it is not given, which tools read as not yet probed rather than as a refusal. */
 export function statusHolding(values: { qgis?: GeoEvent.QgisStatus; gee?: GeoEvent.GeeStatus }) {
   return Layer.succeed(
     GeoStatus.Service,

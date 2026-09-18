@@ -1,6 +1,5 @@
-/* --- GeoCode: the product version is one number in two hand-copies, read by main, the
- * renderer build and the installer (docs/DESKTOP.md §4.6). Each reader is pinned by source,
- * because none of them fails when it quietly falls back to package.json's OpenChamber number. --- */
+/* --- GeoCode: guards a hand-copy left behind by a bump, and a reader quietly falling back to package.json's
+ * OpenChamber number (docs/DESKTOP.md §4.6). --- */
 import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';

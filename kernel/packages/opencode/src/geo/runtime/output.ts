@@ -1,10 +1,9 @@
 export * as GeoOutput from "./output"
 
-/* --- GeoCode: output utilities shared across GeoKernel (docs/GEOKERNEL.md §3.2 输出通用件). --- */
+/* --- GeoCode: output utilities shared across GeoKernel (docs/GEOKERNEL.md §3.2). --- */
 
 export interface Truncated {
   readonly text: string
-  /** True when the text was cut. Callers surface this rather than pretending completeness. */
   readonly truncated: boolean
 }
 
@@ -28,16 +27,11 @@ export function formatDuration(milliseconds: number): string {
 
 export type Extracted =
   | { readonly ok: true; readonly value: unknown }
-  /** The script never reached its output point, so the raw output is itself the diagnosis (§4.6 失败分级). */
+  /** The script never reached its output point, so the raw output is itself the diagnosis. */
   | { readonly ok: false; readonly kind: "missing"; readonly raw: string }
-  /** The marker appeared but its payload would not parse. */
   | { readonly ok: false; readonly kind: "invalid"; readonly raw: string; readonly error: string }
 
-/**
- * Pulls the result line out of the stdout QGIS and its dependencies also write to (§4.3 principle 7).
- *
- * Reads the LAST occurrence — the marker can appear earlier in echoed arguments or a dependency's own logging.
- */
+/** Reads the LAST occurrence: the marker can appear earlier in echoed arguments or a dependency's own logging. */
 export function extractMarked(output: string, marker: string): Extracted {
   const index = output.lastIndexOf(marker)
   if (index < 0) return { ok: false, kind: "missing", raw: output }
@@ -54,15 +48,10 @@ export function extractMarked(output: string, marker: string): Extracted {
 export interface BoundedBuffer {
   readonly push: (chunk: string) => void
   readonly text: () => string
-  /** True once anything has been discarded to stay within the bound. */
   readonly dropped: () => boolean
 }
 
-/**
- * Bounded as it fills, not only when read: Runtime accumulates stderr for a whole execution even when stdout is
- * streamed away, so a process that chatters on stderr forever would otherwise grow this without limit (§3.2).
- * A single chunk larger than `cap` is kept whole; `truncate` trims that remaining case when the text is read out.
- */
+/** Bounded as it fills, since stderr is kept for a whole execution; a single chunk larger than `cap` is kept whole. */
 export function boundedBuffer(cap: number): BoundedBuffer {
   const parts: string[] = []
   let size = 0
@@ -81,10 +70,7 @@ export function boundedBuffer(cap: number): BoundedBuffer {
   }
 }
 
-/**
- * A script that fails deliberately emits one JSON object with an `error` field, and that sentence beats the
- * traceback around it. Undefined when absent or unparsable, which is why callers fall back to the raw stream.
- */
+/** The `error` field of a JSON object in stderr, shown instead of the traceback around it; undefined if none. */
 export function structuredError(stderr: string): string | undefined {
   const match = /\{.*"error"\s*:.*\}/s.exec(stderr)
   if (!match) return undefined

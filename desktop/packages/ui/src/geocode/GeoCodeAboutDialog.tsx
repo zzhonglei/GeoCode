@@ -1,10 +1,5 @@
-/* --- GeoCode: the About dialog of the desktop shell (docs/DESKTOP.md §4.6).
- *
- * Upstream's dialog is OpenChamber's identity screen: its name, its version, its community
- * links. This one keeps the same look and the same logo component (the icon changes with the
- * rest of the branding, later) and shows only what identifies GeoCode: the mark, the name, the
- * product version and the release repository, where downloads live. App.tsx mounts it in
- * place of the upstream component in the desktop shell. --- */
+/* --- GeoCode: the desktop shell's About dialog, which App.tsx mounts in place of upstream's
+ * (docs/DESKTOP.md §4.6). --- */
 import React from 'react';
 
 import { Dialog, DialogContent } from '@/components/ui/dialog';

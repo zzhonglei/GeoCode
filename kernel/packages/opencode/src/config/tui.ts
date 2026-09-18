@@ -232,9 +232,8 @@ const layer = Layer.effect(
     const directory = yield* CurrentWorkingDirectory
     const npm = yield* Npm.Service
     const data = yield* loadState({ directory })
-    /* --- GeoCode: same as the instance loader — the plugin SDK is installed only so a user's own plugin file can
-     * import it, and GeoCode loads none (docs/PATHS.md §7). Upstream's block is commented out rather than deleted,
-     * byte-identical, so it merges straight in (docs/CONVENTIONS.md §5). --- */
+    /* --- GeoCode: no plugin SDK install, as in the instance loader; only user plugin files need it and none load
+     * (docs/KERNEL.md §6). --- */
     /*
     const deps = yield* Effect.forEach(
       data.dirs,

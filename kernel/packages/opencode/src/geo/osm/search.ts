@@ -1,8 +1,7 @@
 export * as OsmSearch from "./search"
 
-/* --- GeoCode: finding an object by name (docs/GEOKERNEL.md §6.8 检索是双引擎). The geocoder is forgiving about word
- * order and address context, the feature service matches official names literally, and their recall differs enough
- * that either alone misses — so this file is the merge and the one ranking over both. --- */
+/* --- GeoCode: finding an object by name, merging and ranking the geocoder and the feature service together because
+ * either alone misses (docs/GEOKERNEL.md §6.8). --- */
 
 export type OsmType = "relation" | "way" | "node"
 
@@ -25,10 +24,7 @@ export interface Candidate {
 /** Relation types that mean "a transport route", not "a place". */
 const TRANSIT_RELATION_TYPES = new Set(["route", "route_master", "public_transport"])
 
-/**
- * A stop named after a landmark is noise in a place search, and one landmark has many — the station, its entrances,
- * the bus stops outside — so by count they bury what was asked for unless `score` pushes them down (§6.8 降权).
- */
+/** Stops named after a landmark outnumber it in a place search, so `score` pushes them down. */
 export function isTransit(tags: Record<string, string>): boolean {
   if (tags.public_transport) return true
   if (tags.highway === "bus_stop") return true
@@ -126,10 +122,7 @@ export function fromGeocoder(hit: GeocoderHit): Candidate | undefined {
   }
 }
 
-/**
- * The four signals of §6.8, weighted so that importance outruns the dual-source bonus: a well-known place must beat
- * an obscure namesake that both engines merely happened to match on the same string.
- */
+/** Importance outweighs the dual-source bonus, so a well-known place beats an obscure namesake both engines matched. */
 export function score(candidate: Candidate): number {
   let value = 0
   if (candidate.sources.size > 1) value += 1.5

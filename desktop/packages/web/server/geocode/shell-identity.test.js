@@ -1,10 +1,4 @@
-/* --- GeoCode: the server trusts the renderer's own origin (shell-identity.js).
- *
- * Two shapes again. The origin check is driven for real, because a literal that merely
- * exists in a set proves nothing about which code path consults it. The CORS middleware in
- * index.js cannot be driven without starting the whole server, so its set literal is read
- * as text instead; `desktop-identity.test.mjs` on the electron side pins the value itself
- * against the identity module. --- */
+/* --- GeoCode: the server trusts the renderer's own origin (shell-identity.js). --- */
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';

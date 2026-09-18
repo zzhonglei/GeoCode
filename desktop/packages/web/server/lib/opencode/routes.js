@@ -30,9 +30,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     fsPromises = fs.promises,
   } = dependencies;
 
-  // --- GeoCode: choosing or upgrading a system OpenCode is not a product surface; under
-  // Electron the kernel is embedded (docs/DESKTOP.md §7.3). Registered first, so these answer
-  // before the upstream handlers further down. ---
+  // --- GeoCode: no system OpenCode to choose or upgrade; registered first (docs/DESKTOP.md §7.3) ---
   if (process.versions.electron) {
     app.all(['/api/config/opencode-resolution', '/api/opencode/upgrade'], (_req, res) => {
       res.status(404).json({ error: 'Not available in GeoCode' });

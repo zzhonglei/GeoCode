@@ -628,9 +628,7 @@ const OPENCODE_NOUNS = [
 const OPENCODE_WORKTREE_ATTEMPTS = 26;
 
 const getOpenCodeDataPath = () => {
-  // --- GeoCode: the kernel's own data root, not the user's OpenCode installation
-  // (geocode/kernel-roots.js). It feeds `worktreeRoot` below, which has to name the same
-  // directory the kernel creates worktrees in — `Global.Path.data` + `worktree/<projectID>`. ---
+  // --- GeoCode: the kernel's data root, not OpenCode's, so `worktreeRoot` matches the kernel's worktrees ---
   return kernelDataRoot();
   // --- /GeoCode ---
 };
@@ -1323,10 +1321,8 @@ export async function computeIntegratePlan(input = {}) {
 }
 
 const createIntegrateTempWorktree = async (repoRoot, targetBranch) => {
-  // --- GeoCode: read the shell data root, which Electron main injects (docs/PATHS.md §3.3).
-  // The fallback is GeoCode's own — nothing here may write into an OpenChamber directory. It
-  // carries the `desktop/` segment because `.config/GeoCode` alone is the kernel's config root,
-  // and on a case-insensitive filesystem `geocode` would land in it too. ---
+  // --- GeoCode: the shell data root Electron main injects, else our own fallback, under `desktop/`
+  // because `.config/GeoCode` is the kernel's (docs/PATHS.md §5) ---
   const dataRoot = process.env.OPENCHAMBER_DATA_DIR
     ? path.resolve(process.env.OPENCHAMBER_DATA_DIR)
     : path.join(os.homedir(), '.config', 'GeoCode', 'desktop');
@@ -1549,11 +1545,8 @@ export async function continueIntegrate(stateInput = {}) {
 
 const ensureOpenCodeProjectId = async (primaryWorktree) => {
   const gitDir = path.join(primaryWorktree, '.git');
-  // --- GeoCode: the marker file the kernel writes, not OpenCode's
-  // (geocode/kernel-roots.js). Sharing one file with the kernel is safe in both directions:
-  // the kernel resolves `remote ?? previous ?? root`, so a value written here can never
-  // displace the remote hash it prefers, and where a repo has no remote both sides derive the
-  // same root commit. Writing OpenCode's name instead put our id in another product's file. ---
+  // --- GeoCode: the project marker the kernel writes, not OpenCode's; the kernel prefers the remote hash, so our
+  // write never displaces it (docs/PATHS.md §5) ---
   const idFile = path.join(gitDir, KERNEL_PROJECT_MARKER);
   // --- /GeoCode ---
   const existing = await fsp.readFile(idFile, 'utf8').then((value) => value.trim()).catch(() => '');
@@ -1809,8 +1802,7 @@ const cleanupFailedFastWorktreeCreate = async (context, candidate) => {
 };
 
 const runWorktreeStartScripts = async (directory, projectID, startCommand) => {
-  // --- GeoCode: a new worktree runs no setup commands, whoever sends them and however old
-  // (docs/DESKTOP.md §7.3). ---
+  // --- GeoCode: a new worktree runs no setup commands, whoever sends them (docs/DESKTOP.md §7.3) ---
   if (process.versions.electron) return;
   // --- /GeoCode ---
   const projectStart = await loadProjectStartCommand(projectID);

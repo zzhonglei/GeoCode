@@ -1,18 +1,5 @@
-/* --- GeoCode: the agent tools the desktop hands its kernel (docs/DESKTOP.md §7.2).
- *
- * Upstream gives the agent its tools through a plugin it writes to disk and injects into an
- * OpenCode it spawns itself. GeoCode's kernel is started by the main process before the shell
- * exists, so the main process does the writing and the naming: it materializes the plugin file
- * under the shell data root, mints the token the shell will accept, and hands the kernel the
- * file, the callback address and the token as environment overrides. The kernel loads exactly
- * that file and nothing else (kernel plugin/geocode-trusted.ts); the shell adopts the token from
- * its environment (agent-tool/runtime.js).
- *
- * The plugin source is upstream's own tool entries, wrapped: `browser` carries the web actions
- * under GeoCode's description, `geocode` carries the control actions under upstream's description
- * with the brand replaced, and both ask the kernel's permission system before every action so a
- * rule in config/geocode.ts can gate them. The two environment names the entries read are
- * upstream's; they are injected ABI, not inherited configuration. --- */
+/* --- GeoCode: the agent tools main writes into a plugin file for its kernel, which starts before the shell exists
+ * (docs/DESKTOP.md §7.2). --- */
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -53,8 +40,6 @@ const loadUpstreamTemplate = async () => {
   };
 };
 
-// The strings each upstream entry shows the model or the user. Pinned by test against upstream's
-// output, so another one cannot arrive unnoticed.
 export const UPSTREAM_STRINGS = Object.freeze({
   [BROWSER_TOOL_NAME]: Object.freeze({
     'OpenChamber action to perform': 'Browser action to perform',
@@ -75,9 +60,6 @@ export const UPSTREAM_STRINGS = Object.freeze({
 const rebrand = (source, strings) =>
   Object.entries(strings).reduce((text, [from, to]) => text.split(from).join(to), source);
 
-// Upstream's entries do the schema, the callback and the result shape; the wrapper adds the names,
-// the descriptions and the permission request. `always: ["*"]` lets one approval cover the rest of
-// the session, the way the GEE tool does it.
 export const createBrowserPluginSource = ({ createToolEntry, browser, geocode }) => {
   const entries = [
     rebrand(
@@ -148,6 +130,7 @@ export const prepareBrowserTool = async ({
     token,
     overrides: {
       [BROWSER_PLUGIN_ENV]: pathToFileURL(pluginPath).href,
+      // Upstream's names, read by its generated entries inside the kernel.
       OPENCHAMBER_AGENT_TOOL_URL: `http://127.0.0.1:${shellPort}/api/openchamber/agent-tool`,
       OPENCHAMBER_AGENT_TOOL_TOKEN: token,
     },

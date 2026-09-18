@@ -5,13 +5,8 @@ import path from "node:path"
 import { GeoNaming } from "../naming"
 import { OsmConvert } from "./convert"
 
-/* --- GeoCode: writing results to disk (docs/GEOKERNEL.md §6.7).
- *
- * Two rules: a result spanning more than one geometry family is split into single-family siblings, because GIS
- * readers work a family at a time and format conversion fails on a mixed file; and nothing here overwrites, so a
- * taken name is numbered through `geo/naming.ts`. Repeated runs accumulate files rather than replace them: the
- * conditional guard it replaced — never write an empty result over a good one — was defeated by cancellation,
- * which left no failure behind (§12). --- */
+/* --- GeoCode: writing results to disk, split into single-family siblings when geometry families mix, and numbered
+ * rather than overwritten (docs/GEOKERNEL.md §6.7). --- */
 
 const FAMILIES: OsmConvert.Family[] = ["points", "lines", "polygons"]
 
@@ -21,10 +16,7 @@ export interface Written {
   readonly family: string
 }
 
-/**
- * What is written is GeoJSON, so a path that does not say so is told to. Not cosmetic: `siblingPath` inserts the
- * family before the extension, and a base without one yields `out-points`, which no reader can dispatch on.
- */
+/** Not cosmetic: `siblingPath` inserts the family before the extension, and a base without one yields `out-points`. */
 function normalizeBase(base: string): string {
   const extension = path.extname(base).toLowerCase()
   return extension === ".geojson" || extension === ".json" ? base : `${base}.geojson`
@@ -35,10 +27,7 @@ function siblingPath(base: string, family: OsmConvert.Family): string {
   return path.join(path.dirname(base), `${path.basename(base, extension)}-${family}${extension}`)
 }
 
-/**
- * The siblings count too: whether this run splits is unknown until its features are grouped, so a base whose
- * `-points` sibling exists is taken even with nothing at the base — otherwise one split run overwrites another.
- */
+/** Siblings count too, since whether this run splits is unknown until its features are grouped. */
 function taken(base: string): boolean {
   return existsSync(base) || FAMILIES.some((family) => existsSync(siblingPath(base, family)))
 }

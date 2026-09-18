@@ -5,17 +5,15 @@ import type { GeoRuntime } from "../runtime"
 import { GeoOutput } from "../runtime/output"
 import { QgisBootstrap } from "./bootstrap"
 
-/* --- GeoCode: the environment probe (docs/GEOKERNEL.md §4.6, §4.13).
- *
- * Four steps, each failing into its own class of install problem; step 2 transforms a coordinate rather than
- * importing the projection library, which imports fine with its database missing (§4.3 principle 6). --- */
+/* --- GeoCode: the environment probe (docs/GEOKERNEL.md §4.6). Step 2 transforms a coordinate rather than importing
+ * the projection library, which imports fine with its database missing. --- */
 
 export const MARKER = "__GEOCODE_PROBE_JSON__"
 
 /**
- * The probe script (§4.13). Fault handler first, because a segfault during native library load is invisible to
- * except; the result on one marked line; hard exit after flushing it, which is also why a successful probe always
- * reports exit code zero. Step 2 checks for finite results — some broken projection setups return NaN, not an error.
+ * Fault handler first, because a segfault during native library load is invisible to except; hard exit after the
+ * marked line, which is why a probe that reports always exits zero. Step 2 checks for finite results, since some
+ * broken projection setups return NaN rather than an error.
  */
 export const SCRIPT = `
 import faulthandler
@@ -102,7 +100,6 @@ export type Outcome =
   | {
       readonly ok: false
       readonly failure: "gdal-missing" | "proj-broken" | "core-missing" | "probe-timeout" | "probe-failed"
-      /** The step's own words, or the raw output when the script never spoke. */
       readonly detail: string
       /** No marker, and no timeout: the interpreter never got that far. Keys the macOS unknown-layout retry. */
       readonly startupCrash: boolean
@@ -130,8 +127,7 @@ export function run(
       })
       .pipe(
         Effect.catch((error) =>
-          // The interpreter path is derived, not verified: a spawn that fails outright is a normal outcome graded like
-          // any other probe failure, not a defect.
+          // The interpreter path is derived, not verified, so a spawn that fails outright is an ordinary probe failure.
           Effect.succeed<GeoRuntime.Result>({
             code: null,
             reason: "crash",
@@ -157,8 +153,8 @@ export function run(
           startupCrash: false,
         } satisfies Outcome
       }
-      // Its own grade (§4.6 失败分级), not a startup crash: the interpreter reached its emit, and startupCrash is
-      // what would send resolution off into the macOS stdlib search.
+      // Not a startup crash: the interpreter reached its emit, and startupCrash would send resolution off into the
+      // macOS stdlib search.
       if (extracted.kind === "invalid") {
         return {
           ok: false,
@@ -167,8 +163,7 @@ export function run(
           startupCrash: false,
         } satisfies Outcome
       }
-      // No marker: the raw output is the diagnosis (§4.6 失败分级) — for a segfault it is the native stack the fault
-      // handler wrote to stderr — and how the process ended is part of it, so it leads.
+      // No marker: the raw output is the diagnosis, and how the process ended is part of it, so it leads.
       const ending =
         result.reason !== "exit" || result.code !== 0
           ? `[process ${result.reason}${result.code !== null ? `, exit code ${result.code}` : ""}]\n`

@@ -35,7 +35,6 @@ describe('offered locales', () => {
   });
 
   test('the Appearance picker offers only them', () => {
-    // Asserted over the source: the store above cannot see a picker that stopped filtering.
     const visual = read('components/sections/openchamber/OpenChamberVisualSettings.tsx');
     expect(visual).toContain('{locales.filter(isOfferedLocale).map((availableLocale) => (');
     expect(visual).not.toContain('{locales.map((availableLocale) => (');

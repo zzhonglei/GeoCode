@@ -7,11 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { pickFreePort } from './kernel-host.mjs';
 import { KERNEL_MESSAGE, createStartCommand, parseKernelMessage } from './kernel-protocol.mjs';
 
-/* Geographic processes go down with the kernel on quit (docs/GEOKERNEL.md §10.1 #8b).
- *
- * The sidecar runs as staged, against the kernel's source rather than its bundle, because the fact
- * spans both files: the sidecar turns the signal into an exit, and only an exit runs the sweep.
- * Electron is not in the loop here; the real session that covers it is DESKTOP.md §5.3. */
+/* The sidecar turns a signal into an exit, and only an exit runs the kernel's sweep (docs/GEOKERNEL.md §10.1 #8b). */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const kernelPackage = path.resolve(here, '../../../../kernel/packages/opencode');
@@ -121,7 +117,6 @@ const startSidecar = async () => {
   return { proc, port, project, pidFile, cleanup };
 };
 
-/** Starts a fake GDAL through the kernel's own data plane and returns its pid once it is running. */
 const startGeographicProcess = async ({ port, project, pidFile }) => {
   const authorization = `Basic ${Buffer.from(`opencode:${PASSWORD}`).toString('base64')}`;
   // Meant to hang, since the fake toolchain never returns, so it is bounded and never awaited.

@@ -1,9 +1,7 @@
 export * as NetTypes from "./types"
 
-/* --- GeoCode: the vocabulary of the Net module (docs/GEOKERNEL.md §3.3).
- *
- * Separate from the service so probe, discovery, resolver and monitor can share it without importing one
- * another. --- */
+/* --- GeoCode: the Net module's shared types, apart from index.ts so the submodules can import them without a cycle
+ * (docs/GEOKERNEL.md §3.3). --- */
 
 export interface Target {
   /** Stable: it is the registry key, and it appears in status reporting. */
@@ -12,14 +10,11 @@ export interface Target {
   readonly port: number
 }
 
-/**
- * The proxy form keeps the URL complete, credentials included, because that is what has to be used; the redacted
- * form coexists with it rather than replacing it, and everything leaving the module goes through that one
- * (§3.3, 凭据的双份形态).
- */
+/** The proxy URL keeps its credentials because it is what gets used; `NetRedact` is the form to use wherever it
+ * does leave the module. */
 export type Route = { readonly kind: "direct" } | { readonly kind: "proxy"; readonly url: string }
 
-/** Safe to publish. Consumers compare it to tell whether a conclusion of their own still applies (§8.3). */
+/** Safe to publish: it carries host and port, never credentials. */
 export type RouteId = string
 
 export function routeId(route: Route): RouteId {
@@ -33,31 +28,23 @@ export function routeId(route: Route): RouteId {
 }
 
 export type Reachability =
-  /** Nobody is subscribed, so nothing is being probed (§3.3 按需驱动). */
+  /** Nobody is subscribed, so nothing is being probed. */
   | { readonly state: "idle" }
-  /** First probe since subscription, or a re-probe after the route was cleared. */
+  /** Subscribed, and the first probe has not answered yet. */
   | { readonly state: "checking" }
   | { readonly state: "reachable"; readonly route: RouteId }
-  /**
-   * `detail` is the underlying error and stays inside, as diagnostics; `tried` and `skipped` are safe to publish
-   * by construction, and are the only two facts that turn "cannot be reached" into something a person can act on.
-   */
+  /** `detail` is the raw error, kept as diagnostics; `tried` and `skipped` are published, so neither may carry a
+   * credential. */
   | {
       readonly state: "unreachable"
       readonly detail?: string
       /** Paths actually attempted this round. */
       readonly tried?: readonly RouteId[]
-      /**
-       * Declarations that could not be attempted at all, built from parsed fields rather than redacted from the
-       * raw value, so a credential cannot be present.
-       */
+      /** Declarations that could not be attempted at all, named from scheme, host and port only. */
       readonly skipped?: readonly string[]
     }
 
-/**
- * A binary split, and only to drive behaviour — never to produce wording: the message a user sees for a network
- * problem is one sentence either way, with the original error travelling alongside as diagnostics (§3.3).
- */
+/** Drives behaviour only, never wording (docs/GEOKERNEL.md §3.3). */
 export type FailureKind =
   /** An interface-level "there is no network" signal. Unambiguous, so no debounce. */
   | "offline"

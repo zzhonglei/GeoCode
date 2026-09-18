@@ -87,7 +87,6 @@ describe("gdal subprocess environment", () => {
       exists: fsWith(win(root, "share", "proj"), real, win(real, "proj.db")),
     })
     expect(env.PROJ_LIB).toBe(real)
-    // Both spellings, because which one is read depends on the version installed.
     expect(env.PROJ_DATA).toBe(real)
   })
 

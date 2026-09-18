@@ -1,6 +1,5 @@
 /* --- GeoCode: text the shell runtime hands the renderer, and that the renderer then shows as it is,
- * names GeoCode where upstream named OpenChamber or OpenCode (docs/PATHS.md §3.4). Most appear only
- * when something has gone wrong, which is also when a user reads them most closely. Each message is
+ * names GeoCode where upstream named OpenChamber or OpenCode (docs/PATHS.md §3.4). Each message is
  * found by the words around the name, so a reworded one turns this red instead of slipping past. --- */
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';

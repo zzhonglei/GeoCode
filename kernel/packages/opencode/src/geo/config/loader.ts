@@ -9,8 +9,7 @@ import { ConfigPaths } from "@/config/paths"
 import { ConfigParse } from "@/config/parse"
 import { MachineSchema } from "./schema"
 
-/* --- GeoCode: reading `machine.json` (docs/GEOKERNEL.md §3.1). Change is judged on a block's canonicalized VALUE
- * rather than on the file text, so a format-on-save does not cost a tens-of-seconds environment re-probe. --- */
+/* --- GeoCode: reading and canonicalizing `machine.json` (docs/GEOKERNEL.md §3.1). --- */
 
 const NAME = "machine"
 
@@ -30,7 +29,6 @@ export function isMachineFile(name: string) {
 
 export type ParseFailure = {
   readonly file: string
-  /** Where the syntax error is, or the decode error's own text when there is no position to report. */
   readonly message: string
 }
 
@@ -38,14 +36,12 @@ export type Loaded =
   | { readonly ok: true; readonly value: MachineSchema.Machine }
   | { readonly ok: false; readonly failure: ParseFailure }
 
-/** A file that will not parse fails the whole load rather than falling back: stale values would leave the file and
- * the system's behaviour disagreeing (§3.1). */
+/** An unparsable file fails the whole load rather than falling back to stale values (docs/GEOKERNEL.md §3.1). */
 export async function load(): Promise<Loaded> {
   let merged: MachineSchema.Machine = MachineSchema.EMPTY
   for (const file of files()) {
     const read = await readOne(file)
     if (!read.ok) return read
-    // Later files win per key (§3.1): both forms coexisting is a user mistake, but it must land on one result.
     merged = { ...merged, ...read.value }
   }
   return { ok: true as const, value: merged }
@@ -53,8 +49,7 @@ export async function load(): Promise<Loaded> {
 
 /**
  * One retry, because a just-saved file can still be held open for a few milliseconds by a Windows indexer or
- * antivirus. The watcher path logs and ignores a throw, so without it a dropped read leaves the previous
- * configuration running with nothing on screen saying so.
+ * antivirus, and the watcher path only logs a failed read.
  */
 async function readFileTolerantly(file: string): Promise<string | undefined> {
   for (let attempt = 0; ; attempt++) {
@@ -72,12 +67,12 @@ async function readFileTolerantly(file: string): Promise<string | undefined> {
 async function readOne(file: string): Promise<Loaded> {
   const text = await readFileTolerantly(file)
   if (text === undefined) return { ok: true, value: MachineSchema.EMPTY }
-  // A leading U+FEFF makes jsonc-parser report InvalidSymbol at offset 0, and Windows Notepad writes one by default.
+  // jsonc-parser rejects a leading BOM as InvalidSymbol at offset 0.
   const stripped = text.replace(/^\uFEFF/, "")
   if (!stripped.trim()) return { ok: true, value: MachineSchema.EMPTY }
   try {
     const data = ConfigParse.jsonc(stripped, file)
-    // Unknown top-level keys are dropped, not rejected, so one mistyped key (`gdal1`) disables only itself (§3.1).
+    // Unknown top-level keys are dropped, not rejected, so one mistyped key (`gdal1`) disables only itself.
     const value = Schema.decodeUnknownSync(MachineSchema.Machine)(data)
     return { ok: true, value }
   } catch (err) {
@@ -90,11 +85,7 @@ function messageOf(err: unknown) {
   return positionOf(err) ?? (err instanceof Error ? err.message : String(err))
 }
 
-/**
- * Positions only, never `data.message` itself: the parser prefixes its report with a `--- JSONC Input ---` dump of
- * the whole file and echoes each offending source line, and `config-error` carries this string onto the interface.
- * Unknown keys are ignored (§3.1), so nothing bounds what a user keeps in the file.
- */
+/** Positions only: `data.message` dumps the whole file, and this string reaches the interface as `config-error`. */
 function positionOf(err: unknown): string | undefined {
   const data = (err as { data?: { message?: unknown } } | null | undefined)?.data
   if (typeof data?.message !== "string") return undefined
@@ -105,7 +96,6 @@ function positionOf(err: unknown): string | undefined {
   return positions.length > 0 ? positions.join("; ") : undefined
 }
 
-/** Seed an empty template on first run so a new user has a file to edit. Never overwrites either existing form. */
 export async function ensureTemplate(): Promise<void> {
   for (const existing of files()) {
     if (await exists(existing)) return
@@ -147,15 +137,12 @@ function sort(value: unknown): unknown {
   return value
 }
 
-/** Stable identity of a block's value, for artifacts to bind to (§3.1): the GDAL preview cache keys on it. */
+/** GDAL cache keys are built on this, so it must change only when the block's value does. */
 export function fingerprint(block: MachineSchema.BlockName, value: unknown): string {
   return `${block}:${createHash("sha256").update(canonical(value)).digest("hex").slice(0, 16)}`
 }
 
-/**
- * A distinguished value rather than the last good one, so artifacts do not stay bound to a configuration the system
- * can no longer read; fixing the file restores the previous fingerprint and revalidates what was cached (§3.1).
- */
+/** Never the last good fingerprint, so nothing stays bound to a configuration that no longer parses. */
 export function unparsableFingerprint(block: MachineSchema.BlockName): string {
   return `${block}:unparsable`
 }

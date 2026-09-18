@@ -20,13 +20,9 @@ export { GeeExecutor } from "./executor"
 export { GeeGuidance } from "./guidance"
 export type { Environment } from "./types"
 
-/* --- GeoCode: the GEE lifecycle (docs/GEOKERNEL.md §5.1, §5.7).
- *
- * Sole writer of the status slot. The three facts come from sources that know nothing of each other — a local
- * probe, Net's verdict, the remote authorization check — and each is published the moment it settles rather than
- * waiting for the others; their priority lives in `compose` as a pure function. --- */
+/* --- GeoCode: the GEE lifecycle, sole writer of the `gee` status slot, publishing each fact the moment it settles
+ * (docs/GEOKERNEL.md §5.7). --- */
 
-/** The endpoint whose reachability decides whether Earth Engine is usable. */
 export const TARGET: NetTypes.Target = {
   id: "gee",
   host: "earthengine.googleapis.com",
@@ -45,10 +41,7 @@ const SELF_HEALING: ReadonlySet<GeoEvent.GeeSetup["status"]> = new Set([
 /** Leading edge: the first retry probes at once, and a burst behind it collapses into that one probe. */
 const RECHECK_DEBOUNCE_MS = 3_000
 
-/**
- * How long a rejected conclusion is reused before the remote is asked again (§5.5 退避). Short because a tool
- * retry does not clear it while setup is ready — a user who has just enabled the interface waits it out.
- */
+/** Short because a tool retry does not clear it while setup is ready: a user who just enabled the API waits it out. */
 const FAILURE_BACKOFF_MS = 30_000
 
 export interface Interface {
@@ -57,11 +50,10 @@ export interface Interface {
   /** The remote conclusion, computed only if not already cached — a credentialed call costing seconds (§5.5). */
   readonly validate: () => Effect.Effect<GeoEvent.GeeRuntime>
   /**
-   * Report that a real run was refused (§5.5). Nothing polls a conclusion sitting on "valid", so the user's own
-   * call is what corrects it. Answers whether the message was an authorization rejection at all.
+   * Report that a real run was refused; nothing polls a cached "valid", so this is what corrects it. Answers whether
+   * the message was an authorization rejection at all.
    */
   readonly reject: (message: string) => Effect.Effect<boolean>
-  /** The readiness question, answered with a verified environment; a refusal carries the status (§9.1, §5.6). */
   readonly gate: () => Effect.Effect<Gate>
 }
 
@@ -90,11 +82,7 @@ const layer = Layer.effect(
     const facts = yield* Ref.make(initial)
     const writer = yield* status.register("gee", GeeCompose.compose(initial.setup, initial.network, initial.runtime))
 
-    /**
-     * The token of the round currently in charge. The remote check reuses it instead of claiming one of its own:
-     * a claim supersedes the running network watch's token, and every later reachability change would then fail
-     * to commit.
-     */
+    /** The remote check reuses this rather than claiming: a claim would supersede the network watch's token. */
     let currentToken = yield* writer.claim()
 
     const publish = (token: GeoStatus.Token) =>
@@ -105,20 +93,16 @@ const layer = Layer.effect(
 
     /** The remote conclusion with the route it was reached over — over another route it no longer applies (§5.5). */
     let cached: { readonly route: string | undefined; readonly conclusion: GeoEvent.GeeRuntime } | undefined
-    /** When a failed conclusion stops being reused (§5.5 退避). */
     let backoffUntil = 0
-    /**
-     * Counts refusals reported from real runs. The check takes seconds, so a refusal can arrive while one is in
-     * flight, and without this a probe's older "valid" would land on top of it — §5.5 ranks it the other way.
-     */
+    /** Lets a check in flight see that a real refusal landed meanwhile, so its older answer does not overwrite it. */
     let refusals = 0
 
-    /** The network watch, alive exactly while setup is ready (§5.4 idle 的含义). */
+    /** The network watch, alive exactly while setup is ready. */
     let watching: Fiber.Fiber<void, never> | undefined
 
     const stopWatching = Effect.gen(function* () {
       if (!watching) return
-      // Interrupting drops the subscription, and Net stops probing a target nobody asks about (§3.3 按需驱动).
+      // Interrupting drops the subscription, and Net stops probing a target nobody asks about (§3.3).
       yield* Fiber.interrupt(watching)
       watching = undefined
     })
@@ -138,11 +122,7 @@ const layer = Layer.effect(
         )
       })
 
-    /**
-     * What a network verdict does to the remote conclusion (§5.7). Reachability is no evidence about
-     * authorization, so this never triggers a check; it only asks whether the conclusion we have still applies,
-     * and returning to the same route — after an outage included — means it does.
-     */
+    /** Starts no check: reachability says nothing about authorization, so a cached conclusion holds on its route. */
     function onNetwork(network: GeoEvent.GeeNetwork): GeoEvent.GeeRuntime {
       if (network.status !== "reachable") return { status: "unknown" }
       if (cached && cached.route === network.route) return cached.conclusion
@@ -151,9 +131,7 @@ const layer = Layer.effect(
 
     const body = (state: MachineConfig.BlockState<"gee">, token: GeoStatus.Token) =>
       Effect.gen(function* () {
-        // Everything downstream of the local chain stops being current (§5.7 setup 离开 ready): the watch belongs
-        // to a setup that was ready, and the cached conclusion verified a project and credentials about to be
-        // re-read.
+        // The watch, the cached conclusion and its backoff all belong to the setup about to be re-probed.
         yield* stopWatching
         cached = undefined
         backoffUntil = 0
@@ -172,7 +150,6 @@ const layer = Layer.effect(
         yield* Ref.update(facts, (current) => ({ ...current, setup }))
         yield* publish(token)
 
-        // Only ready opens the subscription — probing while the local chain is broken helps nobody (§5.4).
         if (setup.status === "ready") yield* startWatching(token)
       })
 
@@ -195,10 +172,8 @@ const layer = Layer.effect(
         )
       })
 
-    // One round at a time: interrupting awaits the previous round's exit, so a superseded round cannot write after
-    // the new one started, and the generation token is the second line of defence (§3.4). Serialized because two
-    // callers enter here — the config stream and a tool retry — and the handover reads and writes `running` across
-    // an await, so interleaved entries leave a forked round nobody holds a handle to interrupt.
+    // Serialized because the config stream and tool retries both enter, and interleaved handovers would orphan a
+    // round; `Fiber.interrupt` awaits the old round's exit, so it cannot write after the new one starts.
     const turn = Semaphore.makeUnsafe(1)
     let running: Fiber.Fiber<void, never> | undefined
     const start = (state: MachineConfig.BlockState<"gee">) =>
@@ -228,11 +203,7 @@ const layer = Layer.effect(
     /** Serialized so a burst of callers produces at most one remote call. */
     const asking = Semaphore.makeUnsafe(1)
 
-    /**
-     * The environment the check runs in. Unlike the setup probe, which is deliberately offline, this one makes a
-     * real remote call, so it carries Net's route in subprocess form (§5.9, §3.3). The project travels as an
-     * environment variable, which is where the runtime library reads it too.
-     */
+    /** Unlike the offline setup probe, this carries Net's route, because whatever runs in it reaches the remote. */
     const remoteEnv = (state: { readonly setup: GeoEvent.GeeSetup }) =>
       Effect.gen(function* () {
         const project = state.setup.status === "ready" ? state.setup.project : ""
@@ -249,12 +220,11 @@ const layer = Layer.effect(
       asking.withPermits(1)(
         Effect.gen(function* () {
           const current = yield* Ref.get(facts)
-          // Nothing to ask about, and nothing to ask over: both are answered by the layers below (§5.7).
           if (current.setup.status !== "ready") return current.runtime
           if (current.network.status !== "reachable") return current.runtime
 
-          // The round this answer belongs to: the call takes seconds, and a configuration edit inside that window
-          // starts a new round, whose status must not be overwritten with an answer about the project it replaced.
+          // Captured before the call: an edit during it starts a new round, whose status must not receive an answer
+          // about the project it replaced.
           const token = currentToken
           const witnessed = refusals
           const route = current.network.route
@@ -269,11 +239,9 @@ const layer = Layer.effect(
 
           const conclusion = yield* GeeValidate.run(runtime, current.setup.python, yield* remoteEnv(current), route)
 
-          // Superseded while we were asking: the caller still gets its answer, but the answer describes a
-          // configuration the system has moved on from, so it goes neither into the cache nor onto the wire.
+          // Superseded meanwhile: the caller still gets the answer, but it goes neither into the cache nor on the wire.
           if (token !== currentToken) return conclusion
-          // Overtaken by a real refusal, which outranks anything we probed — returned, not recorded
-          // (§5.5 真实使用兜底).
+          // Overtaken by a real refusal, which outranks anything we probed — returned, not recorded (§5.5).
           if (refusals !== witnessed) return conclusion
 
           cached = { route, conclusion }
@@ -288,8 +256,7 @@ const layer = Layer.effect(
 
     const reject = (message: string) =>
       Effect.gen(function* () {
-        // Only what we can attribute: a script that failed on its own logic must not invalidate a good
-        // authorization — every real use is an answer, but not every failure is a verdict.
+        // Only what we can attribute: a script that failed on its own logic must not invalidate a good authorization.
         if (!GeeValidate.isRemoteRefusal(message)) return false
 
         const current = yield* Ref.get(facts)
@@ -299,8 +266,7 @@ const layer = Layer.effect(
           reason: GeeValidate.classify(message),
           message,
         }
-        // The user's own call is the same operation against the same remote, so it outranks a probe in flight
-        // (§5.5 真实使用兜底).
+        // The user's own call is the same operation against the same remote, so it outranks a probe in flight (§5.5).
         refusals += 1
         cached = { route, conclusion }
         backoffUntil = (yield* Clock.currentTimeMillis) + FAILURE_BACKOFF_MS
@@ -349,10 +315,7 @@ const layer = Layer.effect(
   }),
 )
 
-/**
- * Net's verdict in this module's vocabulary, read and never computed (§8.3). No default: a state added to Net
- * should stop the build here rather than fall into `idle`, the one state meaning nothing is watching.
- */
+/** No default: a state added to Net should stop the build here rather than fall into `idle`, which means unwatched. */
 export function toNetwork(reachability: NetTypes.Reachability): GeoEvent.GeeNetwork {
   switch (reachability.state) {
     case "reachable":

@@ -1,10 +1,5 @@
 /* --- GeoCode: the copy left beside an overwritten file carries our name, not upstream's
- * (docs/PATHS.md §3.2, geocode/config-backup.js).
- *
- * Both call sites and every test that checks them read the suffix from one module, which is
- * what stops them drifting apart — and is also what would let the whole set go on passing if
- * the module itself were set back to upstream's string. So the value is asserted here, and one
- * file is written twice to show that the value is what reaches the disk. --- */
+ * (docs/PATHS.md §3.2). The literal is the check, since both writers read the constant. --- */
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';

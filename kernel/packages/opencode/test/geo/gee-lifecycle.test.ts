@@ -17,8 +17,7 @@ import { GeoRuntime } from "@/geo/runtime"
 import { GeoStatus } from "@/geo/status"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-/* The wiring between the three GEE facts (docs/GEOKERNEL.md §5.4, §5.6–§5.8): when the network subscription opens
- * and closes, what a retry is allowed to re-probe, and that the composition stays a pure function of the three. */
+/* The wiring between the three GEE facts (docs/GEOKERNEL.md §5.4, §5.6–§5.8). */
 
 const FILE = path.join(Global.Path.config, "machine.json")
 const write = (value: object) => Effect.promise(() => fs.promises.writeFile(FILE, JSON.stringify(value), "utf-8"))
@@ -34,7 +33,6 @@ const report = (payload: object) => `${GeeSetup.MARKER}${JSON.stringify(payload)
 const COMPLETE = report({ missing: [], credentials: true, version: "1.7.24" })
 const NO_CREDENTIALS = report({ missing: [], credentials: false })
 
-/** A runtime whose probe output is scripted, and which counts spawns. */
 function scriptedRuntime(outputs: string[]) {
   const calls = Ref.makeUnsafe(0)
   const layer = Layer.mock(GeoRuntime.Service)({
@@ -56,10 +54,7 @@ function scriptedRuntime(outputs: string[]) {
   return { layer, calls }
 }
 
-/**
- * A Net whose verdicts are pushed by the test, counting subscribes and releases: §5.4 defines `idle` as nobody
- * watching, so the count is the only thing that can tell it from a state anyone remembered to set.
- */
+/** Counts subscribes and releases: §5.4 defines `idle` as nobody watching, which a status value alone cannot show. */
 function scriptedNet() {
   const hub = PubSub.unbounded<NetTypes.Reachability>().pipe(Effect.runSync)
   const subscribes = Ref.makeUnsafe(0)
@@ -106,8 +101,7 @@ describe("gee composition", () => {
   const reachable: GeoEvent.GeeNetwork = { status: "reachable", route: "direct" }
 
   test("the last hop to the interface forwards what it was given, and keeps the raw error back", () => {
-    // `tried` and `skipped` are what separate a user whose network works only through a refused SOCKS declaration
-    // from one with no network at all, and dropping them here is invisible from both ends: Net still records them.
+    // Dropping `tried` and `skipped` here would be invisible from both ends, since Net still records them.
     expect(
       GeeService.toNetwork({
         state: "unreachable",
@@ -121,8 +115,7 @@ describe("gee composition", () => {
       skipped: ["socks5://127.0.0.1:1080"],
     })
 
-    // `detail` is the one that stays behind: the raw error, and the only one of the three that could be carrying
-    // a credential (§3.3).
+    // `detail` stays behind: the raw error is the one field that could carry a credential (§3.3).
     expect(GeeService.toNetwork({ state: "unreachable", detail: "connect ETIMEDOUT" })).toEqual({
       status: "unreachable",
     })
@@ -136,9 +129,8 @@ describe("gee composition", () => {
   })
 
   test("and the wire keeps them, which is a separate question from whether the code does", () => {
-    /* The encoding decides which keys survive, and `GeeNetwork` is a union whose member is chosen by matching: a
-     * second `unreachable` member without these two fields, anywhere ahead of the real one, wins and strips them.
-     * It type-checks, and nothing above encodes anything, so every assertion there still passes. */
+    // A second `unreachable` member without these fields, ahead of the real one in the union, would win the
+    // encoding and strip them while every assertion above still passes.
     const encoded = Schema.encodeUnknownSync(GeoEvent.GeeNetwork)({
       status: "unreachable",
       tried: ["direct", "proxy:127.0.0.1:7890"],
@@ -154,8 +146,7 @@ describe("gee composition", () => {
   })
 
   test("local comes before network comes before remote", () => {
-    // The short-circuit is what keeps the attribution off a layer downstream of the one the user has to fix:
-    // "credentials rejected" while the link is down sends them to re-authenticate over it (§5.6).
+    // "Credentials rejected" while the link is down would send the user to re-authenticate over it (§5.6).
     expect(GeeCompose.facing({ status: "packages-missing", python: "/p", missing: ["geemap"] }, reachable)).toBe(
       "setup",
     )
@@ -167,8 +158,7 @@ describe("gee composition", () => {
   })
 
   test("all three facts travel with the verdict", () => {
-    // The layers the short-circuit hid travel with it: `settlingGee` in tool/geo-tool.ts reads `setup` and
-    // `network` beside `facing` to tell an environment still settling from one that is broken.
+    // `settlingGee` in tool/geo-tool.ts reads `setup` and `network` beside `facing`.
     const composed = GeeCompose.compose(ready, reachable, { status: "unknown" })
     expect(composed).toEqual({
       facing: "runtime",
@@ -198,10 +188,9 @@ describe("gee lifecycle", () => {
           yield* clear
           yield* config.reload()
 
-          // Wait for the round rather than read straight after the reload: the round runs on its own fiber, so an
-          // immediate read answers with the previous state — another test file's configuration, at worst.
+          // Waited for, not read after the reload: the round runs on its own fiber, so an immediate read sees the
+          // previous state.
           const initial = yield* waitFor((s) => s.setup.status === "unconfigured", "never reached unconfigured")
-          // Nothing configured, so there is nothing worth spending probes on.
           expect(initial.network.status).toBe("idle")
           expect(initial.facing).toBe("setup")
           expect(yield* Ref.get(net.subscribes)).toBe(0)
@@ -210,21 +199,18 @@ describe("gee lifecycle", () => {
           yield* config.reload()
 
           const ready = yield* waitFor((s) => s.setup.status === "ready", "setup never reached ready")
-          // Ready and only ready opens the watch (§5.4), and it opens once.
           expect(yield* Ref.get(net.registered)).toEqual([GeeService.TARGET.id])
           expect(yield* Ref.get(net.subscribes)).toBe(1)
           // Subscribed and no verdict yet, so the composed answer still faces the network.
           expect(ready.facing).toBe("network")
 
-          // Net speaks; the fact is read, never recomputed here (§8.3).
           yield* PubSub.publish(net.hub, { state: "checking" })
           yield* waitFor((s) => s.network.status === "checking", "checking never arrived")
 
           yield* PubSub.publish(net.hub, { state: "reachable", route: "proxy:127.0.0.1:7890" })
           const reachable = yield* waitFor((s) => s.network.status === "reachable", "reachable never arrived")
           expect(reachable.network).toEqual({ status: "reachable", route: "proxy:127.0.0.1:7890" })
-          // "unknown" and not "checking": a credentialed call costs seconds, so nothing asks until an answer is
-          // needed (§5.5).
+          // "unknown", not "checking": a credentialed call costs seconds, so nothing asks until an answer is needed.
           expect(reachable.facing).toBe("runtime")
           expect(reachable.runtime).toEqual({ status: "unknown" })
 
@@ -264,8 +250,7 @@ describe("gee lifecycle", () => {
           yield* config.reload()
           yield* waitFor((s) => s.setup.status === "credentials-missing", "never left ready")
 
-          // `idle` is not a flag but monitoring that stopped, and the last unsubscribe is what stops it (§5.4,
-          // §3.3 按需驱动) — probing on would cost a fact the user cannot act on until setup is fixed.
+          // Polls the release, not the status: `idle` is monitoring that stopped, not a flag (§5.4).
           yield* pollWithTimeout(
             Effect.gen(function* () {
               const released = yield* Ref.get(net.releases)
@@ -319,7 +304,6 @@ describe("gee lifecycle", () => {
           )
           expect(yield* Ref.get(calls)).toBe(afterFirst + 1)
 
-          // A burst behind it collapses into that one probe rather than a subprocess per retry.
           expect(yield* gee.recheck()).toBe(false)
           expect(yield* gee.recheck()).toBe(false)
           expect(yield* Ref.get(calls)).toBe(afterFirst + 1)
@@ -349,8 +333,6 @@ describe("gee lifecycle", () => {
           yield* waitFor((s) => s.setup.status === "unconfigured", "never reached unconfigured")
           const before = yield* Ref.get(calls)
 
-          // `unconfigured` and `project-missing` are fixed by editing machine.json, which is already watched, so
-          // a re-probe here is a second trigger for an event that arrives anyway (§5.8).
           expect(yield* gee.recheck()).toBe(false)
           expect(yield* Ref.get(calls)).toBe(before)
         }),
@@ -378,11 +360,8 @@ describe("gee lifecycle", () => {
           yield* config.reload()
 
           const broken = yield* waitFor((s) => s.setup.status === "config-error", "the syntax error never surfaced")
-          // Its own state and not `unconfigured`, which contradicts the file the user is looking at, nor a probe
-          // failure: "go fix this line" and "your Python environment is broken" are different instructions (§8.1).
           expect(broken.setup).toMatchObject({ status: "config-error", file: FILE })
-          // A position, not merely a non-empty string: on a JSONC failure the bare message is the class name
-          // (geo/config/loader.ts).
+          // Guards against the loader's fallback message, a bare class name with no position (geo/config/loader.ts).
           if (broken.setup.status === "config-error") expect(broken.setup.message).toMatch(/line \d+, column \d+/)
           expect(broken.facing).toBe("setup")
         }),

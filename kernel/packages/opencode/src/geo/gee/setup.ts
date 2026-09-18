@@ -12,7 +12,6 @@ import { GeeDeps } from "./deps"
 /* --- GeoCode: the local dependency chain — four checks in dependency order, short-circuited at the first gap, so
  * where the chain stops is where the guidance starts (docs/GEOKERNEL.md §5.3, §5.11). --- */
 
-/** One marker line, same protocol as every other script in the kernel (§4.3 principle 7). */
 export const MARKER = "__GEOCODE_GEE_SETUP_JSON__"
 
 /** faulthandler first: these packages carry native extensions, and a segfault during import reaches no `except`. */
@@ -63,7 +62,6 @@ os._exit(0)
 /** Fixed total (§8.4): warm runs measure 1.4–1.7s; the rest is for the cold import of native extensions. */
 const TOTAL = "30 seconds"
 
-/** Every proxy spelling, blanked. Net owns the list of spellings (§3.3). */
 const offline: Record<string, string> = Object.fromEntries(NetRoute.PROXY_KEYS.map((key) => [key, ""]))
 
 export type Report = {
@@ -91,8 +89,8 @@ export function probe(
       .run({
         command: python,
         args: ["-c", SCRIPT, JSON.stringify(GeeDeps.DEPS.map((dep) => ({ pkg: dep.pkg, module: dep.module })))],
-        // Blanked rather than left unset, because the subprocess inherits our environment (§3.3 直连需显式清除): an
-        // ambient proxy plus one import that dials out is a probe timeout, reported as a broken local environment.
+        // Blanked rather than left unset, because the subprocess inherits our environment: an ambient proxy plus one
+        // import that dials out is a probe timeout, reported as a broken local environment.
         env: { ...offline, PYTHONUTF8: "1", PYTHONIOENCODING: "UTF-8" },
         delivery: { mode: "collect" },
         clocks: { total: TOTAL },

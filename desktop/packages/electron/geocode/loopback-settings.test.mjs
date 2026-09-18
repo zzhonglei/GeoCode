@@ -1,9 +1,5 @@
-/* --- GeoCode: the shell never binds beyond loopback (docs/DESKTOP.md §6.1, §7.3).
- *
- * The strip is a pure function pinned directly. Its place in main.mjs is pinned by reading
- * the source, the way release-updater.test.mjs pins the update wiring: it has to run after
- * the settings are parsed and before the upstream line that reads the LAN flag, or the
- * upstream lines see the file as written. --- */
+/* --- GeoCode: guards a strip that runs too late, letting upstream bind beyond loopback from the settings file as
+ * written (docs/DESKTOP.md §6.1). --- */
 import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';

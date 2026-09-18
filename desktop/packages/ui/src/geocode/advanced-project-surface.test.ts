@@ -1,14 +1,5 @@
-/* --- GeoCode: project actions and worktree setup commands stay closed in the renderer
- * (geocode/advanced-project-surface.ts, docs/DESKTOP.md §7.3). The shell's half is
- * web/server/geocode/worktree-setup-commands.test.js.
- *
- * Both halves are closed at the mount, not inside the components, so what a merge can undo is a
- * mount: upstream adds a second one, or rewrites the panel and drops the prop. Each test
- * therefore holds a closure over every mount in the renderer rather than pinning the one line
- * this project edited.
- *
- * The worktree half uses upstream's own `sections` prop — `WorktreesView` already mounts the
- * list that way — so what is asserted is that no mount asks for `all`. --- */
+/* --- GeoCode: project actions and worktree setup commands must stay closed at every mount in the renderer, including
+ * one a merge adds or rewrites (geocode/advanced-project-surface.ts, docs/DESKTOP.md §7.3). --- */
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -25,8 +16,7 @@ const sources = (dir: string): string[] => readdirSync(dir, { withFileTypes: tru
   return [full];
 });
 
-// A JSX mount, not a type parameter: `React.FC<WorktreeSectionContentProps>` carries the same
-// prefix, and counting it made the closure compare a mount against a declaration.
+// A JSX mount, not a type parameter such as `React.FC<WorktreeSectionContentProps>`.
 const mountPattern = (component: string) => new RegExp(`<${component}[\\s/>]`, 'g');
 const countMounts = (text: string, component: string) => (text.match(mountPattern(component)) ?? []).length;
 
@@ -65,7 +55,6 @@ describe('the project settings panel stays narrow', () => {
   });
 
   test('every mount of the actions button sits behind the guard', () => {
-    // The button runs a project's actions and auto-discovers a dev server to run.
     expect(mounts('ProjectActionsButton').length).toBeGreaterThan(0);
     expect(unguardedUses('<ProjectActionsButton', '!PROJECT_ACTIONS_OFFERED ? null :')).toEqual([]);
   });
@@ -87,7 +76,6 @@ describe('the project settings panel stays narrow', () => {
 
   test('no mount of the worktree section asks for the setup commands', () => {
     const found = mounts('WorktreeSectionContent');
-    // The mounts are what this guards; an empty set would pass while offering everything.
     expect(found.length).toBeGreaterThan(0);
     const withSetup = found
       .filter(({ text }) => countMounts(text, 'WorktreeSectionContent')

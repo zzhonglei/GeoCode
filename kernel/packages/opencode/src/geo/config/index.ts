@@ -10,11 +10,8 @@ import { MachineWatcher } from "./watcher"
 export { MachineSchema } from "./schema"
 export type { ParseFailure } from "./loader"
 
-/* --- GeoCode: the Config module of GeoKernel's infrastructure layer (docs/GEOKERNEL.md §3.1). Owns the single read
- * path for `machine.json`, watches it, and dispatches each change to the one capability domain it affects.
- *
- * An environment re-probe costs tens of seconds, so normalized comparison, per-block dispatch and debouncing are all
- * here to make one fire exactly when the user changed something relevant. --- */
+/* --- GeoCode: the single read path for `machine.json`, dispatching each change to the block it affects
+ * (docs/GEOKERNEL.md §3.1). --- */
 
 /** The fingerprint sits outside the union so artifacts have something to bind to in the failure case too. */
 export type BlockState<Name extends MachineSchema.BlockName = MachineSchema.BlockName> = {
@@ -32,15 +29,10 @@ export interface Snapshot {
 
 export interface Interface {
   readonly block: <Name extends MachineSchema.BlockName>(name: Name) => Effect.Effect<BlockState<Name>>
-  /**
-   * Current state, then every subsequent change. Not a bare change stream: a caller that reads `block` and then
-   * subscribes loses whatever lands between the two calls, so the current value is emitted from inside the
-   * subscription instead. Anything that reads and then keeps watching belongs here rather than on `block` (§3.1).
-   */
+  /** Current state, then every change: a caller that reads `block` and then subscribes misses what lands between. */
   readonly watch: <Name extends MachineSchema.BlockName>(name: Name) => Stream.Stream<BlockState<Name>>
-  /** Every block's current state in one call — the shape §3.1 reserves for the status face. */
   readonly snapshot: () => Effect.Effect<Snapshot>
-  /** `POST /geo/reload`: the escape hatch for a watch that died, and a settled moment for whoever just wrote (§3.1). */
+  /** Behind `POST /geo/reload`, the way back when the file watch has died. */
   readonly reload: () => Effect.Effect<void>
 }
 
@@ -54,7 +46,6 @@ const layer = Layer.effect(
     const pubsub = yield* PubSub.unbounded<BlockState>()
     yield* Effect.addFinalizer(() => PubSub.shutdown(pubsub))
 
-    /** Canonical form of each block at the last dispatch, for change detection. */
     const seen = new Map<MachineSchema.BlockName, string>()
     let parsable = true
     const states = new Map<MachineSchema.BlockName, BlockState>()
@@ -77,7 +68,7 @@ const layer = Layer.effect(
 
     const apply = Effect.fn("MachineConfig.apply")(function* (loaded: MachineLoader.Loaded) {
       if (!loaded.ok) {
-        // Every block fails, because nothing here knows which one the user broke (§3.1) — but only on the way in.
+        // Every block fails, because nothing here knows which one the user broke, but only on the way in.
         if (!parsable) return
         parsable = false
         for (const name of MachineSchema.BlockNames) {
@@ -91,8 +82,7 @@ const layer = Layer.effect(
         return
       }
 
-      // Recovery re-dispatches unconditionally: the diff below would say "nothing changed" and leave every module
-      // stuck in the error state it was driven into (§3.1).
+      // Recovery re-dispatches every block: the diff below would see no change and leave consumers in the error state.
       const forced = !parsable
       parsable = true
 
@@ -110,11 +100,7 @@ const layer = Layer.effect(
       }
     })
 
-    /**
-     * Two reads can be in flight at once — the watcher fires while `POST /geo/reload` runs, or the user saves twice
-     * past the debounce — and unserialized the older content can land last and be written back as `seen`, leaving
-     * the file saying one thing and every capability doing another until the next edit.
-     */
+    // Unserialized, an older read can apply after a newer one and leave every capability on stale configuration.
     const serialized = Semaphore.makeUnsafe(1)
 
     const reload = Effect.fn("MachineConfig.reload")(function* () {
@@ -131,8 +117,6 @@ const layer = Layer.effect(
       Effect.ignore,
     )
 
-    // The watcher callback arrives from outside Effect, so it hops back in with this layer's context. Failures are
-    // swallowed: a bad edit must not tear down the service that is the user's way to fix it.
     const context = yield* Effect.context<never>()
     const runFork = Effect.runForkWith(context)
     yield* MachineWatcher.watchScoped(
@@ -149,8 +133,7 @@ const layer = Layer.effect(
       },
     )
 
-    // Watch first, then read: the other order leaves a window where a save is in neither, and the system sits on
-    // pre-save configuration until the next edit. This order costs at most a duplicate read, which `seen` discards.
+    // Watch before the first read, or a save landing between the two is seen by neither.
     yield* reload()
 
     const block = <Name extends MachineSchema.BlockName>(name: Name) =>

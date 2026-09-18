@@ -1,10 +1,5 @@
-/* --- GeoCode: the update check reads GitHub Releases and never configures electron-updater
- * (docs/DESKTOP.md §7.2).
- *
- * The backend is driven through upstream's own `checkForDesktopUpdate` helper, because that
- * is how main.mjs calls it: what is pinned is the pair, not the backend alone. The main.mjs
- * wiring is pinned by reading its source, the same way kernel-environment.test.mjs pins the
- * order of its imports. --- */
+/* --- GeoCode: the backend is driven through upstream's `checkForDesktopUpdate`, as main.mjs calls it, so a change on
+ * either side of that pair fails here (docs/DESKTOP.md §7.2). --- */
 import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';

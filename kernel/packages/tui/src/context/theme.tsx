@@ -39,8 +39,7 @@ const themeSource: ThemeSource = {
   async discover() {
     const directories = [Global.Path.config]
     for (let current = process.cwd(); ; current = path.dirname(current)) {
-      // GeoCode: the kernel's project directory. The other two project-scope discoveries already
-      // derive it; this one had drifted (docs/PATHS.md §5).
+      // GeoCode: the kernel's project directory, as in the other project-scope discoveries (docs/PATHS.md §5)
       directories.push(path.join(current, Brand.projectDir))
       if (path.dirname(current) === current) break
     }

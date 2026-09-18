@@ -6,7 +6,6 @@ import { OsmIntersect } from "@/geo/osm/intersect"
 
 type Point = OsmIntersect.Point
 
-/** The 10×10 square with its lower-left corner at the origin. */
 const SQUARE: OsmIntersect.Polygon = {
   outer: [
     [0, 0],
@@ -18,7 +17,6 @@ const SQUARE: OsmIntersect.Polygon = {
   holes: [],
 }
 
-/** The same square with a 2×2 hole punched out of the middle. */
 const HOLED: OsmIntersect.Polygon = {
   outer: SQUARE.outer,
   holes: [

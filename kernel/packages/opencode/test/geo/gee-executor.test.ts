@@ -19,9 +19,7 @@ import { GeoRuntime } from "@/geo/runtime"
 import { GeoStatus } from "@/geo/status"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-/* GEE execution and the runtime library (docs/GEOKERNEL.md §5.9, §5.10): the generated constant still equalling its
- * source, the six things a script must not arrange for itself, an idle clock rather than a total one, and a return
- * that keeps the streamed output apart from the agent-facing facts. */
+/* GEE execution and the runtime library (docs/GEOKERNEL.md §5.9, §5.10). */
 
 const FILE = path.join(Global.Path.config, "machine.json")
 const write = (value: object) => Effect.promise(() => fs.promises.writeFile(FILE, JSON.stringify(value), "utf-8"))
@@ -53,25 +51,22 @@ describe("gee runtime library", () => {
   })
 
   test("the ported surface is intact", () => {
-    // The names `geo-gee-run.txt` tells scripts to import — one dropped in the port and `from geocode import …`
-    // fails before the script starts — then the three heartbeat forms the idle clock rests on.
+    // Every name geo-gee-run.txt has scripts import; one missing here fails that import before the script starts.
     for (const name of ["init_gee", "load_region", "export_image", "check_coverage", "download_image", "heartbeat"]) {
       expect(GEOCODE_PY).toContain(`def ${name}(`)
     }
     for (const form of ["_Heartbeat", "_FileHeartbeat", "_GeedimProgressHeartbeat"]) {
       expect(GEOCODE_PY).toContain(`class ${form}`)
     }
-    // The behaviours §5.10 names, each a decision rather than an implementation detail.
+    // The behaviours §5.10 names.
     expect(GEOCODE_PY).toContain("load_region expects exactly one feature")
     expect(GEOCODE_PY).toContain("ee.Image.constant(1)")
     expect(GEOCODE_PY).toContain("shutil.move")
     expect(GEOCODE_PY).toContain("Task ID:")
-    // And no reference to a config file that no longer exists.
+    // And no reference to geocode.json, which nothing reads.
     expect(GEOCODE_PY).not.toContain("geocode.json")
 
-    // The three missing-package hints (geopandas, geemap, geedim) name the tool in the string itself, because they
-    // raise inside the user's own script where no layer above can annotate them, and an agent holding an inline
-    // source has no file name to fall back on either.
+    // The missing-package hints raise inside the user's script, where no layer above can add the tool's name.
     expect(GEOCODE_PY.match(/retry the RunGeeScript call/g)).toHaveLength(3)
   })
 })
@@ -82,9 +77,8 @@ const systemPython = ["python3", "python"].find(
 
 describe.skipIf(!systemPython)("gee export, at each terminal state", () => {
   test("only COMPLETED returns — every other ending raises", () => {
-    // `geo-gee-run.ts` reads success off the exit code alone, so an export that ended FAILED and returned normally
-    // reaches the agent as a completed run — no error_code, and a file reported that is on nobody's Drive. The
-    // shipping module runs, not a copy: `import ee` happens inside the function, so a fake in sys.modules is enough.
+    // `geo-gee-run.ts` reads success off the exit code, so an export that ended FAILED and returned would reach the
+    // agent as a completed run.
     const run = Bun.spawnSync(
       [
         systemPython!,
@@ -104,7 +98,7 @@ describe.skipIf(!systemPython)("gee export, at each terminal state", () => {
     // CANCELLED included: stopping the task from the Code Editor is not an error, but it is not an export either.
     for (const state of ["FAILED", "CANCELLED", "UNKNOWN"]) expect(answers[state]!.outcome, state).toBe("raised")
 
-    // Carrying the id, because the export keeps running service-side and that is how a user reaches it afterwards.
+    // The task id is how a user finds the task in the Code Editor afterwards.
     expect(answers.FAILED!.message).toContain("quota exhausted")
     for (const state of ["FAILED", "CANCELLED", "UNKNOWN"]) expect(answers[state]!.message, state).toContain("T-fake")
   })
@@ -158,20 +152,15 @@ describe("gee execution", () => {
 
       const options = captured.at(-1)!
       const env = options.env!
-      // 1. the route Net resolved
       expect(env.HTTPS_PROXY).toBe("http://127.0.0.1:7890")
-      // 2. the project, so no script hardcodes it
       expect(env.GEE_PROJECT).toBe("demo-project")
-      // 3. the library path, so `from geocode import …` resolves
       expect(env.PYTHONPATH!.split(path.delimiter)[0]).toMatch(/gee-runtime/)
-      // 4. the fault handler, which cannot be inserted into a script we did not write
       expect(env.PYTHONFAULTHANDLER).toBe("1")
-      // 5. and 6. the encoding pair, so non-English output survives the pipe
       expect(env.PYTHONUTF8).toBe("1")
       expect(env.PYTHONIOENCODING).toBe("UTF-8")
       expect(options.cwd).toBe("/work")
 
-      // Raw result and environment, never a rendered string — composing it is the tool layer's (§9.1 第二条硬性形态).
+      // Raw result and environment, never a rendered string: rendering belongs to the tool layer (§9.1).
       expect(outcome.mode).toBe("inline")
       expect(outcome.environment).toBe(environment)
       expect(Object.keys(outcome)).toEqual(["result", "environment", "mode"])
@@ -186,8 +175,7 @@ describe("gee execution", () => {
         yield* GeeExecutor.run(runtime, environment, { script: "x", onChunk: () => Effect.void, idleSeconds })
         idles.push(Duration.toMillis(captured.at(-1)!.clocks.idle!))
       }
-      // Default, floored, honoured. The floor is what keeps a caller's 5 seconds — or 30, the interval itself —
-      // from killing a script that is heartbeating exactly as the contract promises works (§5.9 心跳契约).
+      // Default, floored, honoured; a floor not above the heartbeat interval would kill a compliant script (§5.9).
       expect(GeeExecutor.IDLE_FLOOR_SECONDS).toBeGreaterThan(GeeExecutor.HEARTBEAT_INTERVAL_SECONDS)
       expect(idles).toEqual([60_000, 60_000, 900_000])
       expect(captured.at(-1)!.clocks.total).toBeUndefined()
@@ -305,7 +293,6 @@ describe("gee gate", () => {
           const gate = yield* gee.gate()
           expect(gate.ok).toBe(false)
           if (!gate.ok) {
-            // One verdict, pointing at the layer actually in the way (§5.6).
             expect(gate.status.facing).toBe("runtime")
             expect(gate.status.runtime.status).toBe("failed")
             expect(gate.status.setup.status).toBe("ready")

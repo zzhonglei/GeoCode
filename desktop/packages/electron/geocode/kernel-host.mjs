@@ -1,23 +1,4 @@
-/* --- GeoCode: Electron main as the sole owner of the Agent Kernel process
- * (docs/DESKTOP.md §2.1, §5.1, §5.2).
- *
- * The shell runtime gives up this ownership through its own skip-start path, so nothing
- * downstream restarts or discovers a kernel behind our back. That makes this module the
- * one place where a kernel is born and the one place where it dies.
- *
- * Three timing rules, all taken from the upstream desktop's equivalent host because they
- * were paid for there:
- *
- *   - the start deadline is a STALL timer, refreshed by every message. A kernel that is
- *     slowly reporting progress is alive; one that has said nothing for the whole window
- *     is not, and the difference matters on a cold first launch;
- *   - stop asks before it kills, and every kill here is a signal the kernel catches: its exit
- *     handler owes its children a synchronous sweep (GEOKERNEL.md §10.1 #8b), and a kill it
- *     cannot catch orphans whatever QGIS process was mid-run;
- *   - an exit before ready fails the start rather than hanging until the deadline.
- *
- * Readiness is the kernel's own report. `health.wait` confirms it over HTTP for a caller that
- * needs the router answering, not just `listen` returning; starting does not wait for it. --- */
+/* --- GeoCode: starts and stops the kernel utility process, which main alone owns (docs/DESKTOP.md §2.1, §5.1). --- */
 
 import { randomBytes } from 'node:crypto';
 import net from 'node:net';
@@ -36,18 +17,8 @@ export const KERNEL_STOP_TIMEOUT_MS = 6_000;
 export const KERNEL_HEALTH_INTERVAL_MS = 100;
 export const KERNEL_HEALTH_REQUEST_TIMEOUT_MS = 3_000;
 
-/** One per launch, never persisted: the kernel outlives no session, so neither should its credential. */
 export const createKernelPassword = () => randomBytes(32).toString('base64url');
 
-/**
- * Chooses the port before the kernel does, and never hands it a 0.
- *
- * `Server.listen` reads an explicit 0 as "prefer 4096, then anything free" — deliberate
- * upstream behaviour, and exactly the wrong one here: 4096 is the port a user's own
- * opencode expects, and taking it would break their install rather than ours
- * (docs/DESKTOP.md §11.3). Asking the OS for a port up front costs one bind and keeps the
- * embedded kernel out of that address entirely.
- */
 export const pickFreePort = async ({ hostname }) => {
   const server = net.createServer();
   try {
@@ -111,7 +82,8 @@ export const startKernelHost = async ({
   onStdout,
   onStderr,
 }) => {
-  // Resolved here rather than delegated: a 0 reaching the kernel means "prefer 4096".
+  // Resolved here, never delegated: a 0 reaching the kernel means "prefer 4096", the port a user's own opencode
+  // expects (docs/DESKTOP.md §11.3).
   const requestedPort = Number.isInteger(port) && port > 0 ? port : await pickPort({ hostname });
 
   const child = fork(sidecarPath, [], { cwd, env: environment, serviceName, stdio: 'pipe' });
@@ -213,8 +185,7 @@ export const startKernelHost = async ({
     })();
     await Promise.race([poll, gone]);
   })();
-  // Production never awaits this, so a kernel that dies before its first answer would otherwise
-  // leave the rejection unhandled.
+  // A caller need not await this, and a kernel dying before its first answer must not leave the rejection unhandled.
   wait.catch(() => undefined);
 
   let stopping;
@@ -234,11 +205,8 @@ export const startKernelHost = async ({
   };
 
   /**
-   * The synchronous counterpart to `stop`, for the shutdown path Electron gives us.
-   * `shutdownBackgroundServices` is followed immediately by `app.exit(0)` in the same tick,
-   * so an awaited stop would never be reached. The signal is what lets the kernel's exit
-   * handler sweep its QGIS children, which sit in process groups of their own where no kill
-   * from here reaches them (GEOKERNEL.md §10.1 #8b).
+   * Synchronous, because main calls it right before `app.exit(0)` in the same tick. The kernel catches the signal, so
+   * its exit handler sweeps the QGIS process groups no kill from here reaches (docs/GEOKERNEL.md §10.1 #8b).
    */
   const terminate = () => {
     if (exited || stopping) return;

@@ -16,8 +16,7 @@ import { ElectronSshManager } from './ssh-manager.mjs';
 import { replaceFileWithRetry } from './windows-file-replace.mjs';
 import { createTrayController } from './tray.mjs';
 import { resolveManagedOpenCodeCwd } from './opencode-cwd.mjs';
-// GeoCode: a second import of 'electron' rather than widening the one above, so the
-// upstream line stays byte-identical across merges (docs/DESKTOP.md §9.3).
+// GeoCode: a separate import, so the upstream 'electron' import line stays byte-identical.
 import { utilityProcess } from 'electron';
 // --- GeoCode: own modules (electron/geocode/); environment-boundary.mjs stays first, above ---
 import { startEmbeddedKernel } from './geocode/kernel-boot.mjs';
@@ -115,9 +114,7 @@ if (isDev) {
   app.setPath('userData', path.join(app.getPath('appData'), DesktopIdentity.devUserDataDirectory));
 }
 app.setAppUserModelId(APP_USER_MODEL_ID);
-// --- GeoCode: the shell runtime's data root, placed here because `sshManager` below
-// resolves a settings path at module top level and keeps the string (docs/PATHS.md §5).
-// The inherited environment was stripped at the first import above, so this is a write. ---
+// --- GeoCode: the shell data root, set before `sshManager` below freezes its settings path (docs/PATHS.md §5) ---
 applyShellDataRoot({ environment: process.env, homeDirectory: os.homedir() });
 // --- /GeoCode ---
 app.commandLine.appendSwitch('proxy-bypass-list', '<-loopback>');
@@ -245,7 +242,7 @@ const readAppMetadata = () => {
 };
 
 const APP_METADATA = readAppMetadata();
-const APP_VERSION = GEOCODE_VERSION; // GeoCode: the product version; APP_METADATA.version is the OpenChamber baseline (docs/DESKTOP.md §4.6)
+const APP_VERSION = GEOCODE_VERSION; // GeoCode: APP_METADATA.version is the OpenChamber baseline (docs/DESKTOP.md §4.6)
 // GeoCode: notify-only updates from GitHub Releases (geocode/release-updater.mjs).
 const releaseUpdateBackend = createReleaseUpdateBackend({ currentVersion: APP_VERSION });
 
@@ -398,8 +395,7 @@ const shutdownBackgroundServices = () => {
   setDesktopKeepAwakeActive(false);
   if (state.installingUpdate) return;
   killSidecar();
-  // GeoCode: synchronous by necessity — app.exit(0) follows in this same tick, so the
-  // kernel is signalled rather than asked, and sweeps its own children on exit.
+  // GeoCode: a signal, not an awaited stop, because app.exit(0) follows in this same tick.
   state.kernelHandle?.terminate();
   state.kernelHandle = null;
   setImmediate(() => {
@@ -842,9 +838,7 @@ const buildStoredHostEntry = (entry) => {
 };
 
 const readDesktopHostsConfig = () => {
-  // --- GeoCode: one host, this machine (docs/DESKTOP.md §5.1). Nothing stored can make the
-  // boot ask which server to use or point the window elsewhere; the hosts list below is
-  // never read, so a stale entry from an earlier build has no effect either. ---
+  // --- GeoCode: one host, this machine, whatever the settings file lists (docs/DESKTOP.md §5.1) ---
   return { hosts: [], defaultHostId: LOCAL_HOST_ID, initialHostChoiceCompleted: true };
   // --- /GeoCode ---
   const root = readSettingsRoot();
@@ -1448,9 +1442,7 @@ import { clearAppImageArgv0FromProcessEnv } from '@openchamber/web/server/lib/in
 // subprocess to hand a custom env to.
 let userShellEnvInherited = false; // GeoCode: see the guard below
 const inheritUserShellEnv = () => {
-  // --- GeoCode: merge once per process. The strip at the end removes every branded name written
-  // since, and the background start calls this again after the kernel and the shell are up
-  // (docs/ENVIRONMENT.md §5.2). ---
+  // --- GeoCode: once per process; a repeat would strip the branded names written since (docs/ENVIRONMENT.md §5.2) ---
   if (userShellEnvInherited) return;
   userShellEnvInherited = true;
   // --- /GeoCode ---
@@ -1478,9 +1470,7 @@ const inheritUserShellEnv = () => {
     process.env.PATH = mergePathValues(shellPath, currentPath, delimiter);
   }
 
-  // GeoCode: the merge above refills every name the strip at module load removed, so it repeats
-  // here in the same body, where nothing can land between the two, and the data root it takes
-  // with it is written straight back (docs/ENVIRONMENT.md §5.2).
+  // GeoCode: strip what the merge refilled, in this same body, then restore the data root (docs/ENVIRONMENT.md §5.2)
   stripInheritedForeignVariables(process.env, { keep: inheritedKeep });
   applyShellDataRoot({ environment: process.env, homeDirectory: os.homedir() });
 };
@@ -1498,7 +1488,6 @@ const spawnLocalServer = async () => {
   const settings = readSettingsRoot();
   // --- GeoCode: loopback only (docs/DESKTOP.md §6.1); the upstream lines below then see LAN off and no password ---
   stripRemoteAccessSettings(settings);
-  // The relay identity an earlier build wrote is read by nothing now; drop it once (docs/DESKTOP.md §7.3).
   if (hasRelaySettings(settings)) await mutateSettingsRoot((root) => dropRelaySettings(root));
   // --- /GeoCode ---
   const storedPort = Number.isFinite(settings.desktopLocalPort) ? settings.desktopLocalPort : null;
@@ -1559,14 +1548,8 @@ const spawnLocalServer = async () => {
   process.env.NO_PROXY = process.env.NO_PROXY || 'localhost,127.0.0.1';
   process.env.no_proxy = process.env.no_proxy || 'localhost,127.0.0.1';
 
-  // --- GeoCode: the kernel comes up before the shell is imported, because the shell reads its
-  // OpenCode connection at import time (geocode/kernel-boot.mjs). A kernel that fails to start
-  // ends this function here with no server: the boot outcome then says the local host is
-  // unreachable and the window shows the failure screen (docs/DESKTOP.md §5.1), instead of
-  // the process exiting with nothing on screen. ---
-  // The browser tool is prepared here because the kernel starts before the shell: the plugin file,
-  // the callback address and the token (geocode/browser-tool.mjs). The shell adopts the token from
-  // this environment when it starts below. A failure here costs the tool, not the kernel.
+  // --- GeoCode: the kernel starts before the shell import, which reads its connection at import time. A failed
+  // start returns no server, so the window opens on the failure screen (docs/DESKTOP.md §5.1). ---
   let browserTool = null;
   try {
     browserTool = await prepareBrowserTool({ dataDirectory: process.env.OPENCHAMBER_DATA_DIR, shellPort: chosenPort });
@@ -1591,7 +1574,6 @@ const spawnLocalServer = async () => {
     delete process.env.OPENCHAMBER_AGENT_TOOL_TOKEN; // no shell starts to adopt it
     return null;
   }
-  // A kernel that dies later takes the window to the same failure screen; retry relaunches the app.
   const kernelHandle = state.kernelHandle;
   void watchKernelExit({
     handle: kernelHandle,
@@ -3169,8 +3151,7 @@ const compareSemver = (left, right) => {
 };
 
 const setupAutoUpdater = () => {
-  // --- GeoCode: no electron-updater feed is configured. Updates are announced from GitHub
-  // Releases and installed by the user (docs/DESKTOP.md §7.2), so nothing below runs. ---
+  // --- GeoCode: updates are announced from GitHub Releases, not an electron-updater feed (docs/DESKTOP.md §7.2) ---
   return;
   // --- /GeoCode ---
   if (!app.isPackaged) {
@@ -3922,11 +3903,8 @@ const closeAllDevTunnels = () => {
 };
 
 const handleInvoke = async (browserWindow, command, args = {}) => {
-  // --- GeoCode: the commands behind Remote Instances are answered before the switch, whatever
-  // called them: reads get empty results, the rest are refused (docs/DESKTOP.md §7.3,
-  // geocode/remote-ipc.mjs). ---
+  // --- GeoCode: Remote Instances commands are answered here, whoever sends them (docs/DESKTOP.md §7.3) ---
   if (isRemoteIpcCommand(command)) return answerRemoteIpc(command);
-  // The failure screen reads why the kernel did not come up (geocode/kernel-failure.mjs).
   if (command === 'geocode_kernel_failure') return state.kernelFailure ?? null;
   // --- /GeoCode ---
   switch (command) {
@@ -4229,9 +4207,8 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
         throw new Error('File is outside the allowed workspace');
       }
       const DENIED_SEGMENTS = ['.ssh', '.aws', '.gnupg', '.gpg', '.config/gh', '.config/openchamber/credentials'];
-      // --- GeoCode: upstream's list guards a path that does not exist and none of the files the
-      // shell and kernel keep credentials in (geocode/denied-paths.mjs). Appended rather than
-      // rewritten so the line above stays byte-identical for merges. ---
+      // --- GeoCode: GeoCode's credential files and other products' roots (geocode/denied-paths.mjs), appended so
+      // the upstream line above stays byte-identical ---
       DENIED_SEGMENTS.push(...geocodeDeniedSegments(home));
       // --- /GeoCode ---
       const relFromHome = underHome ? filePath.slice(home.length + 1) : '';
@@ -4589,8 +4566,7 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
     }
 
     case 'desktop_check_for_updates': {
-      // --- GeoCode: the check asks GitHub Releases and returns the release page; the
-      // electron-updater path below is never reached (docs/DESKTOP.md §7.2). ---
+      // --- GeoCode: answered from GitHub Releases, never electron-updater (docs/DESKTOP.md §7.2) ---
       {
         const currentVersion = APP_VERSION;
         const { available, updateInfo, nextVersion, pendingUpdate } = await checkForDesktopUpdate({

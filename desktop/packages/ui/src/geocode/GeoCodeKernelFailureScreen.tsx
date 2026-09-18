@@ -1,13 +1,6 @@
-/* --- GeoCode: the screen for a kernel that did not come up, or went away later (docs/DESKTOP.md §5.1, §5.2).
- *
- * The desktop shell has one host, this machine, so a boot that does not reach the main view
- * has one meaning: the embedded kernel failed to start. Upstream answers that case with its
- * recovery screens, which offer to install OpenCode or connect to another server; neither
- * applies. This shows what the main process recorded (geocode/kernel-failure.mjs): the error,
- * the kernel's last lines, and where the log is. Retry relaunches the app. The layout follows
- * upstream's recovery card with the app mark on top, as the About dialog does (the mark changes
- * with the rest of the branding, later); the strings live here because they are GeoCode's own
- * and the dictionaries demand every key in every language. --- */
+/* --- GeoCode: the screen for a kernel that did not come up or went away later, showing what
+ * electron/geocode/kernel-failure.mjs recorded; the strings live here because a dictionary key must exist in every
+ * locale (docs/DESKTOP.md §5.1, §5.2). --- */
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -101,8 +94,7 @@ export const GeoCodeKernelFailureScreen: React.FC = () => {
     };
   }, []);
 
-  // Always a relaunch: upstream's boot handler only reloads while the shell is up, and a reload
-  // after a lost kernel reads the same record and lands here again.
+  // Not upstream's boot handler: it reloads while the shell is up, and a reload reads the same record and lands here.
   const handleRetry = React.useCallback(async () => {
     setIsRetrying(true);
     try {

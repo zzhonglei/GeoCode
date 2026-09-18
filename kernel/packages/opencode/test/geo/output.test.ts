@@ -1,7 +1,7 @@
 import { expect, describe, test } from "bun:test"
 import { GeoOutput } from "@/geo/runtime/output"
 
-/* The shared output utilities (docs/GEOKERNEL.md §3.2 输出通用件). */
+/* The shared output utilities (docs/GEOKERNEL.md §3.2). */
 
 describe("geo output utilities", () => {
   test("truncation keeps the tail", () => {

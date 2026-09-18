@@ -7,8 +7,7 @@ import { OsmHttp } from "@/geo/osm/http"
 import type { NetTypes } from "@/geo/net/types"
 import { testEffect } from "../lib/effect"
 
-/* The reliability layer (docs/GEOKERNEL.md §6.3), over a scripted HTTP layer: who gets asked first, what counts as
- * a failure, and what a proxy changes. */
+/* The reliability layer (docs/GEOKERNEL.md §6.3). */
 
 const OFFICIAL = "overpass-api.de"
 const BACKUP_ONE = "lz4.overpass-api.de"
@@ -20,7 +19,6 @@ type Scripted =
   | { readonly error: OsmHttp.OsmHttpError }
   | { readonly abort: true }
 
-/** An HTTP layer answering per host, recording the order and the route used. */
 function scriptedHttp(byHost: Record<string, Scripted | Scripted[]>) {
   const asked = Ref.makeUnsafe<string[]>([])
   const routes = Ref.makeUnsafe<string[]>([])
@@ -50,7 +48,6 @@ function scriptedHttp(byHost: Record<string, Scripted | Scripted[]>) {
   return { layer, asked, routes }
 }
 
-/** A Net answering the one question the client asks it — has this machine got a proxy — and counting the asks. */
 function scriptedNet(proxyUrl?: string) {
   const asks = Ref.makeUnsafe(0)
   const layer = Layer.succeed(
@@ -226,7 +223,7 @@ describe("osm failover", () => {
   }
 
   {
-    // Two attempts on one endpoint reach total failure, where the pool costs sixteen.
+    // Nominatim, whose two attempts on one endpoint reach total failure sooner than the whole Overpass pool.
     const http = scriptedHttp({})
     const net = scriptedNet()
     const it = graph(http.layer, net.layer)
@@ -276,8 +273,7 @@ describe("osm routing", () => {
         yield* osm.overpass("out count;")
         yield* osm.overpass("out count;")
         expect(yield* Ref.get(http.routes)).toEqual(["direct", "direct"])
-        // Asking sweeps the loopback ports (geo/net/discovery.ts), and a machine's proxy does not change between
-        // two requests a second apart.
+        // Asking sweeps the loopback ports (geo/net/discovery.ts).
         expect(yield* Ref.get(net.asks)).toBe(1)
       }),
     )

@@ -14,8 +14,7 @@ import { GeoRuntime } from "@/geo/runtime"
 import { GeoStatus } from "@/geo/status"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-/* The algorithm catalog (docs/GEOKERNEL.md §4.11). Query semantics and failure paths over a synthetic registry,
- * plus the one fact no unit test can show: with the real catalog layer in place of a stub, the gate opens. */
+/* The algorithm catalog (docs/GEOKERNEL.md §4.11). */
 
 /** Shaped for the queries below: `Vector geometry` sits in two providers, and `slope` names two algorithms. */
 const REGISTRY: QgisCatalog.Registry = {
@@ -224,7 +223,6 @@ describe("qgis catalog queries", () => {
       const catalog = yield* QgisCatalog.Service
       yield* catalog.build(ENVIRONMENT)
 
-      // The consumer is a model re-spelling what the catalog printed, not a user mistyping it.
       expect((yield* catalog.get("Native:Buffer"))?.id).toBe("native:buffer") // case
       expect((yield* catalog.get("gdal:CLIPRASTERBYEXTENT"))?.id).toBe("gdal:cliprasterbyextent")
       expect((yield* catalog.get("clip_raster_by_extent"))?.id).toBe("gdal:cliprasterbyextent") // snake
@@ -255,7 +253,6 @@ describe("qgis catalog queries", () => {
       const catalog = yield* QgisCatalog.Service
       yield* catalog.build(ENVIRONMENT)
 
-      // `get` collapses two outcomes that need opposite advice, and drops the candidate set it just computed.
       const shortId = yield* catalog.resolve("slope")
       expect(shortId.kind).toBe("ambiguous")
       if (shortId.kind === "ambiguous") expect([...shortId.candidates].sort()).toEqual(["extra:slope", "other:slope"])
@@ -304,8 +301,7 @@ describe("qgis catalog queries", () => {
       yield* catalog.build(ENVIRONMENT)
       const found = yield* catalog.search("clip")
       expect(found.length).toBeGreaterThanOrEqual(2)
-      // Subsequence matching, so a dropped character still finds its target; the re-spellings a model produces
-      // are settled by get/inGroup before anything reaches here.
+      // Subsequence matching, so a dropped character still finds its target.
       const suggested = yield* catalog.suggest("native:bufer", "algorithm")
       expect(suggested[0]).toBe("native:buffer")
       const groups = yield* catalog.suggest("Vector geomtry", "group")
@@ -366,7 +362,7 @@ describe("qgis catalog build failures", () => {
 
 describe("qgis catalog wired into the lifecycle", () => {
   const bundles = fs.mkdtempSync(path.join(os.tmpdir(), "geo-catalog-"))
-  // A dozen other test files read this same path, so a machine.json left behind decides their starting state.
+  // Other test files read this same path, so a machine.json left behind decides their starting state.
   afterAll(() => {
     fs.rmSync(bundles, { recursive: true, force: true })
     fs.rmSync(path.join(Global.Path.config, "machine.json"), { force: true })

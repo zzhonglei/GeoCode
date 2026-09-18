@@ -1,14 +1,5 @@
-/* --- GeoCode: a project setup committed to the checkout is not a GeoCode surface.
- *
- * Upstream reads `<repo>/.openchamber/project.json` and merges it over the user's personal
- * setup: worktree setup commands that run on checkout, and project actions bound to buttons in
- * the sidebar. Both are shell commands written by whoever committed the file. GeoCode's users
- * work alone, often inside repositories they did not write, so the read reports the file
- * missing and the write is refused. The repository plans folder stays, renamed: it is created
- * inside the user's own repository and must not carry another product's name.
- *
- * The control case reads the same bytes through upstream's own parser, so a shield that starts
- * refusing a file it never understood in the first place cannot pass unnoticed. --- */
+/* --- GeoCode: a project setup committed to the checkout is not a GeoCode surface: its setup commands and
+ * button actions are shell commands written by whoever committed the file. --- */
 import { describe, expect, it } from 'vitest';
 import express from 'express';
 import request from 'supertest';
@@ -66,9 +57,6 @@ describe('shared project setup', () => {
   it('offers no repository plans folder at all', async () => {
     const { runtime, projectId, cleanup } = seed();
     try {
-      // Null is upstream's own "no checkout" state, so its readers already handle it. Were a
-      // folder named instead, it would be either OpenChamber's or the one the kernel writes
-      // plans into — and this module lists that folder whole and deletes from it by file name.
       expect(await runtime.resolveSharedPlansDir(projectId)).toBeNull();
     } finally {
       cleanup();

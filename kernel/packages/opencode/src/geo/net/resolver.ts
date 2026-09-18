@@ -4,8 +4,8 @@ import { NetDiscovery } from "./discovery"
 import { NetProbe } from "./probe"
 import { routeId, type Route, type RouteId, type Target } from "./types"
 
-/* --- GeoCode: resolving a path to one target (docs/GEOKERNEL.md §3.3
- * 路径解析:直连优先,代理回退). --- */
+/* --- GeoCode: resolving a path to one target, direct first and proxy candidates only after it fails
+ * (docs/GEOKERNEL.md §3.3). --- */
 
 export interface Options extends NetDiscovery.Options {
   readonly probeTimeoutMs?: number
@@ -37,7 +37,7 @@ export async function resolve(target: Target, options: Options = {}): Promise<Re
 
   return {
     ok: false,
-    // The direct failure, whatever the proxies then did: failure kinds drive behaviour, never wording (§3.3).
+    // The direct failure, whatever the proxies then did: it is the reason `NetClassifier` reads interface codes from.
     reason: direct.reason,
     tried,
   }

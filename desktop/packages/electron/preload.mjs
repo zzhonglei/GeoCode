@@ -19,9 +19,7 @@ const homeDirectory = readArgValue('--openchamber-home');
 const macosMajorRaw = readArgValue('--openchamber-macos-major');
 const macosMajor = Number.parseInt(macosMajorRaw, 10);
 const trayEnabled = process.platform !== 'darwin' || readArgValue('--openchamber-tray-enabled') !== '0';
-// --- GeoCode: the origin the shell serves the bundled UI from, computed by main.mjs from the
-// desktop identity. Read rather than copied: this file ships unbundled, so it cannot import that
-// module, and the literal it used to carry was upstream's and matched nothing (docs/PATHS.md §3.4). ---
+// --- GeoCode: from main.mjs, since this unbundled file cannot import the desktop identity (docs/PATHS.md §3.4) ---
 const packagedOrigin = readArgValue('--openchamber-packaged-origin');
 // --- /GeoCode ---
 
@@ -44,7 +42,7 @@ const currentOrigin = (() => {
   }
 })();
 const isLocalPage = currentOrigin !== 'null'
-  && ((packagedOrigin && currentOrigin === packagedOrigin) // GeoCode: was a literal, see above
+  && ((packagedOrigin && currentOrigin === packagedOrigin) // GeoCode: see packagedOrigin above
   || (localOrigin && currentOrigin === localOrigin));
 
 // Remote pages need __OPENCHAMBER_LOCAL_ORIGIN__ so the HostSwitcher knows

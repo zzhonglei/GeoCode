@@ -968,12 +968,8 @@ export const createProjectConfigRuntime = (deps) => {
   const sharedConfigPathOf = (projectPath) => path.join(projectPath, ...SHARED_CONFIG_RELATIVE_PATH.split('/'));
 
   const readSharedProjectConfig = async (projectID, personalRaw) => {
-    // --- GeoCode: the shared file is `<repo>/.openchamber/project.json`, a setup a team commits
-    // to its checkout. GeoCode does not offer it: our users work alone on repositories they did
-    // not necessarily write, so a file in the checkout would run setup commands and bind buttons
-    // to shell commands nobody here chose. This is the only read path — `mergedProjectSetupOf`
-    // and the two callers below all come through here — so every reader now sees "missing", the
-    // same state as a project without the file. The write path is refused in routes.js. ---
+    // --- GeoCode: a checkout's shared setup would run commands nobody here chose (docs/DESKTOP.md §7.3).
+    // Every reader comes through here and sees "missing"; the write route is refused in routes.js. ---
     return { status: 'missing' };
     // --- /GeoCode ---
     const projectPath = projectPathOf(projectID, personalRaw);
@@ -1063,11 +1059,8 @@ export const createProjectConfigRuntime = (deps) => {
    * checkout cannot be located.
    */
   const resolveSharedPlansDir = async (projectID) => {
-    // --- GeoCode: plans committed to the checkout are the other half of the shared setup
-    // refused above, and the same reason applies. The folder would also have to be named: the
-    // upstream default is `.openchamber/plans`, and our own project directory already holds the
-    // plans the kernel writes, which this module lists and deletes by file name. `null` is the
-    // state upstream reads as "the checkout cannot be located", and every caller handles it. ---
+    // --- GeoCode: shared plans are part of the setup refused above; `null` is upstream's "checkout not found",
+    // which every caller handles (docs/DESKTOP.md §7.3) ---
     return null;
     // --- /GeoCode ---
     const personalRaw = await readRawProjectConfigFromDisk(projectID);

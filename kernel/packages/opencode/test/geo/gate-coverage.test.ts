@@ -2,13 +2,8 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import path from "node:path"
 
-/* The gate has to actually run the tripwires (docs/CONVENTIONS.md §7).
- *
- * `scripts/test-gate.sh` names its files one by one — it must, because the
- * vendored suite around them fails by design and cannot be run wholesale — so
- * a new tripwire file can sit in the tree, pass when run by hand, and never be
- * run again.
- */
+/* Guards against a tripwire file that passes by hand but is never run, since the gate names its files one by one
+ * (docs/CONVENTIONS.md §7). */
 
 /** The parent test/ directory, not this one: its `geocode-*.test.ts` files are the ones named. */
 const HERE = path.dirname(import.meta.dirname)
@@ -33,9 +28,7 @@ describe("the test gate", () => {
   })
 
   test("and every upstream test file holding a GeoCode-named case is in it too", () => {
-    // The check above sees only test/'s own naming convention, so a tripwire written as a
-    // `GeoCode: …` case inside an upstream file — the only place some of them can live — would
-    // otherwise sit unrun while the gate reported green.
+    // The name filter above cannot see a `GeoCode: …` case written inside an upstream test file.
     const script = fs.readFileSync(GATE, "utf8")
     const holders: string[] = []
     const walk = (dir: string) => {

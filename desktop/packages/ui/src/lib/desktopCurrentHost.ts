@@ -17,9 +17,8 @@ import { getRuntimeApiBaseUrl, getRuntimeKey } from '@/lib/runtime-switch';
  * word "Instance" while the switcher two clicks away named it correctly.
  */
 
-// --- GeoCode: the scheme the shell serves the bundled UI over, renamed with the product
-// (electron/geocode/desktop-identity.mjs uiProtocol). A hand-copy because the renderer cannot
-// import that module; desktop-identity.test.mjs pins it. ---
+// --- GeoCode: a hand-copy of desktop-identity.mjs uiProtocol, which the renderer cannot import;
+// desktop-identity.test.mjs pins it. ---
 const PACKAGED_UI_SCHEME = 'geocode-ui://';
 // --- /GeoCode ---
 

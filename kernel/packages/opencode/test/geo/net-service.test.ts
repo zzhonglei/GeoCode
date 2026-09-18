@@ -6,15 +6,13 @@ import { GeoNet } from "@/geo/net"
 import type { NetTypes } from "@/geo/net/types"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-/* The Net service facade, covering what the sub-module tests cannot: that nothing probes on behalf of a target
- * nobody asked about, and that monitoring starts and stops with the watchers (docs/GEOKERNEL.md §3.3). */
+/* The Net service facade (docs/GEOKERNEL.md §3.3). */
 
 const it = testEffect(LayerNode.compile(LayerNode.group([GeoNet.node])))
 
 const servers: net.Server[] = []
 afterAll(() => servers.forEach((server) => server.close()))
 
-/** A port nothing is listening on, so every probe against it fails fast. */
 async function closedPort(): Promise<number> {
   const server = net.createServer()
   const port = await new Promise<number>((resolve) =>

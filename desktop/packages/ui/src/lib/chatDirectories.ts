@@ -14,9 +14,8 @@ const joinPath = (base: string, ...parts: string[]): string =>
 
 function legacyRootForHome(home: string | null | undefined): string | null {
   const normalized = normalizePath(home);
-  // --- GeoCode: our own chats root (src/geocode/shell-data-root.ts). This root is the fallback
-  // when the server omits `chatsRoot`, and every function below also accepts it as one of ours,
-  // so upstream's literal would make OpenChamber's chats read as GeoCode's. ---
+  // --- GeoCode: our chats root (geocode/shell-data-root.ts); every function below accepts it as ours, so
+  // upstream's literal would make OpenChamber's chats read as GeoCode's. ---
   return normalized ? joinPath(normalized, ...CHATS_SEGMENTS) : null;
   // --- /GeoCode ---
 }

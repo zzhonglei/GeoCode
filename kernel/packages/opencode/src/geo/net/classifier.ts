@@ -3,8 +3,7 @@ export * as NetClassifier from "./classifier"
 import os from "node:os"
 import type { FailureKind } from "./types"
 
-/* --- GeoCode: telling one kind of failure from another, to drive behaviour and never wording (docs/GEOKERNEL.md
- * §3.3, and see `FailureKind`). --- */
+/* --- GeoCode: telling one kind of network failure from another (docs/GEOKERNEL.md §3.3). --- */
 
 /** Interface-level and unambiguous. Host-level codes stay out: an unreachable host can be one bad service. */
 const OFFLINE_CODES = ["ENETDOWN", "ENETUNREACH"]
@@ -30,7 +29,7 @@ export function hasNetworkInterface(): boolean {
   return false
 }
 
-/** "offline" skips debouncing entirely (§3.3 快速降级), so it is reported only on unambiguous evidence. */
+/** "offline" skips the monitor's failure streak, so it is reported only on unambiguous evidence. */
 export function classify(reason: string, hasInterface = hasNetworkInterface()): FailureKind {
   if (!hasInterface) return "offline"
   for (const code of OFFLINE_CODES) {

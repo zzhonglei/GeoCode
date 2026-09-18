@@ -229,11 +229,8 @@ describe("Instruction.system", () => {
     }),
   )
 
-  /* --- GeoCode: the same assertion as the case below, minus the flag
-   * override — GeoCode disables the Claude Code prompt path by default
-   * (src/effect/runtime-flags.ts, docs/PATHS.md §7). This is the behavioural
-   * tripwire: it reads the real path, not the flag value, so flipping the
-   * default back turns it red. --- */
+  /* --- GeoCode: the case below without its flag override, red if CLAUDE.md is read again by default
+   * (docs/KERNEL.md §6). --- */
   it.live("GeoCode: skips project and global CLAUDE.md by default", () =>
     Effect.gen(function* () {
       const globalTmp = yield* tmpWithFiles({ ".claude/CLAUDE.md": "# Global Claude" })

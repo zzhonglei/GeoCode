@@ -1,8 +1,7 @@
-/* --- GeoCode: the slash commands GeoCode closes and the ones it ships (docs/DESKTOP.md §7.3, docs/KERNEL.md §5.5). --- */
+/* --- GeoCode: the slash commands GeoCode closes and the ones it ships
+ * (docs/DESKTOP.md §7.3, docs/KERNEL.md §5.5). --- */
 
-// Composer entries GeoCode does not offer, each a prompt written for programmers. The kernel no longer registers its
-// own init and review (docs/KERNEL.md §6); these names close the composer's built-in entries only, so a command the
-// user configures under one of them still runs.
+// Composer built-in entries GeoCode does not offer; a command the user configures under one of these names still runs.
 export const CLOSED_SLASH_COMMANDS: ReadonlySet<string> = new Set([
   'init',
   'review',

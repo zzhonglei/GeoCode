@@ -15,10 +15,7 @@ function resolveDataDir() {
   if (fromEnv) {
     return path.resolve(fromEnv);
   }
-  // --- GeoCode: the shell data root Electron main injects, then GeoCode's own fallback
-  // (docs/PATHS.md §3.3). `ensureStorageDir` below creates this directory and the OAuth tokens
-  // land in it, so upstream's fallback would have GeoCode write credentials into OpenChamber's.
-  // The upstream line is kept verbatim below and is unreachable. ---
+  // --- GeoCode: GeoCode's own fallback, since the Linear OAuth tokens are stored here (docs/PATHS.md §3.3) ---
   return path.join(os.homedir(), '.config', 'GeoCode', 'desktop');
   // --- /GeoCode ---
   return path.join(os.homedir(), '.config', 'openchamber');

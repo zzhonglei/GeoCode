@@ -1,6 +1,5 @@
-// --- GeoCode: the one GIS extension taxonomy every geo-aware consumer selects from (docs/GEOKERNEL.md §10.1 #5), so
-// the snapshot exclude and the watcher ignore cannot drift apart. Each consumer may take only the categories its own
-// matching rule allows. ---
+// --- GeoCode: the one GIS extension taxonomy, so geo-aware consumers cannot drift apart; each takes only the
+// categories its own matching rule tolerates (docs/GEOKERNEL.md §10.1 #5). ---
 
 // Companion (sidecar) extensions, grouped by the dataset family that anchors them.
 export const SHAPEFILE_SIDECARS = [

@@ -1,14 +1,5 @@
-/* --- GeoCode: notify-only updates from GitHub Releases (docs/DESKTOP.md §7.2).
- *
- * The app is not code-signed, so electron-updater cannot install anything on macOS; the
- * previous GeoCode announced releases and opened the release page, and this keeps that shape.
- * The backend below has the one method upstream's `checkForDesktopUpdate` helper calls, so
- * the helper, its 404-means-no-update rule and its pending-update bookkeeping stay as they
- * are. Only the source changes: the newest release of the repository DesktopIdentity names,
- * fetched anonymously.
- *
- * A 404 from the API means the repository has no release yet; it is thrown with the status
- * in the message on purpose, because that is what the helper recognises as "no update". --- */
+/* --- GeoCode: notify-only updates from the release repository DesktopIdentity names (docs/DESKTOP.md §7.2), through
+ * the one method upstream's `checkForDesktopUpdate` calls. --- */
 
 import { DesktopIdentity } from './desktop-identity.mjs';
 
@@ -25,8 +16,7 @@ const compareIdentifiers = (left, right) => {
   return a < b ? -1 : a > b ? 1 : 0;
 };
 
-// Semantic version order: numeric core first, then a version without a pre-release tag is
-// newer than the same core with one, then pre-release identifiers left to right.
+// Semantic version precedence, ignoring build metadata.
 export const compareReleaseVersions = (left, right) => {
   const [coreA, preA = ''] = normalizeReleaseTag(left).split('+')[0].split(/-(.*)/s);
   const [coreB, preB = ''] = normalizeReleaseTag(right).split('+')[0].split(/-(.*)/s);
@@ -67,6 +57,7 @@ export const createReleaseUpdateBackend = ({
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
+      // The status stays in the message: the helper reads a 404, a repository with no release yet, as no update.
       throw new Error(`GitHub release API returned ${response.status}`);
     }
     const release = await response.json();

@@ -4,13 +4,9 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import type { Choice, Diagnostics, Track } from "./types"
 
-/* --- GeoCode: the diagnostics bundle (docs/GEOKERNEL.md §4.10). Everything needed to locate a failure without a
- * log file, and the one place the environment is filtered — execution keeps the complete one (§4.3 principle 8). --- */
+/* --- GeoCode: the diagnostics bundle, and the one place the environment is filtered (docs/GEOKERNEL.md §4.10). --- */
 
-/**
- * Variables worth showing. A keep-list only works at a display exit, where the cost of dropping one is a missing
- * line; execution needs the opposite polarity and so never comes through here (§4.3 principle 8).
- */
+/** A keep-list only works at a display exit, where dropping a variable costs a line; never apply it to execution. */
 const DISPLAY_PREFIX = /^(QGIS_|GDAL_|PROJ_|OSGEO4W_|O4W_|VSI_|QT_|PYTHON)/i
 const DISPLAY_KEYS = new Set(["PATH"])
 
@@ -30,18 +26,13 @@ export interface CheckInput {
   readonly platform?: NodeJS.Platform
 }
 
-/**
- * Existence checks, defined per track (§4.10): macOS and the bridge track register no dynamic-library directories
- * (§4.3 principle 5), so the core library is looked for wherever each of them actually keeps it.
- */
 export function pathChecks(input: CheckInput): Record<string, boolean> {
   const platform = input.platform ?? process.platform
   const checks: Record<string, boolean> = {}
   const separator = platform === "win32" ? ";" : ":"
 
-  // One finding, not one per module-path entry: the other module directories and whatever the user's own PYTHONPATH
-  // contributed are not supposed to carry the package, so per-entry marks put guaranteed crosses on a healthy
-  // install. Only when it is nowhere do the candidates become the diagnosis.
+  // One finding, not one per module-path entry: the other entries are not supposed to carry the package, so
+  // per-entry marks would put guaranteed crosses on a healthy install.
   const entries = (input.env.PYTHONPATH ?? "").split(separator).filter(Boolean)
   const moduleEntries = entries.filter((entry) => path.basename(entry).toLowerCase() !== "plugins")
   const packageMarkers = moduleEntries.map((entry) => path.join(entry, "qgis", "__init__.py"))
@@ -52,23 +43,22 @@ export function pathChecks(input: CheckInput): Record<string, boolean> {
     for (const marker of packageMarkers) checks[marker] = false
   }
 
-  // The plugins entry carries processing instead — the subsystem the ready status reports on.
+  // A plugins entry carries processing instead.
   for (const entry of entries) {
     if (path.basename(entry).toLowerCase() !== "plugins") continue
     const marker = path.join(entry, "processing", "__init__.py")
     checks[marker] = existsSync(marker)
   }
 
-  // The native core library, wherever the platform and the track keep it.
   if (platform === "win32") {
     if (input.dllDirectories.length > 0) {
-      // Manual track: it will load from a registered directory or not at all.
+      // Manual track: the core library loads from a registered directory or not at all.
       for (const dir of input.dllDirectories) {
         const lib = path.join(dir, "qgis_core.dll")
         checks[lib] = existsSync(lib)
       }
       // Qt only inside directories that look like a Qt root; the registered set is wide, and checking all of it
-      // would bury the signal (§4.10).
+      // would bury the signal.
       for (const dir of input.dllDirectories) {
         const parent = path.basename(path.dirname(dir)).toLowerCase()
         if (path.basename(dir).toLowerCase() !== "bin" || (parent !== "qt5" && parent !== "qt6")) continue
@@ -76,8 +66,7 @@ export function pathChecks(input: CheckInput): Record<string, boolean> {
         checks[lib] = existsSync(lib)
       }
     } else {
-      // Bridge track: nothing registered, by design (§4.3 principle 5), so the equivalents come from what the
-      // launcher exported — the prefix's executable directory and the adopted search path.
+      // Bridge track: nothing is registered (§4.3 principle 5), so look in the prefix's bin and the adopted PATH.
       const core = path.join(input.prefix, "bin", "qgis_core.dll")
       checks[core] = existsSync(core)
       const pathDirs = (input.env.PATH ?? "").split(";").filter(Boolean)
@@ -92,8 +81,8 @@ export function pathChecks(input: CheckInput): Record<string, boolean> {
       }
     }
   } else {
-    // Both generations: the older bundle keeps the core library under the prefix's lib directory, the current one in
-    // Frameworks beside it and ships no lib directory at all (3.44.9) — the old spot alone would mark it missing.
+    // The older bundle keeps the core library under the prefix's lib directory, the newer one only in Frameworks
+    // beside it, so the old spot alone would mark it missing.
     const candidates = [
       path.join(input.prefix, "lib", "libqgis_core.dylib"),
       path.join(path.resolve(input.prefix, ".."), "Frameworks", "libqgis_core.dylib"),
@@ -106,7 +95,7 @@ export function pathChecks(input: CheckInput): Record<string, boolean> {
     }
   }
 
-  // Projection database — the payload, never the directory (§4.3 principle 4).
+  // The database, never the directory (§4.3 principle 4).
   for (const key of ["PROJ_LIB", "PROJ_DATA"] as const) {
     const dir = input.env[key]
     if (!dir) continue
@@ -142,7 +131,6 @@ export function build(input: BuildInput): Diagnostics {
   }
 }
 
-/** A minimal bundle for failures reached before any assembly existed. */
 export function bare(python: string, error: string): Diagnostics {
   return {
     python,

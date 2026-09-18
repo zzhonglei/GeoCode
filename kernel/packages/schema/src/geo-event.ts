@@ -4,12 +4,8 @@ import { Schema } from "effect"
 import { optional } from "./schema"
 import { Event } from "./event"
 
-/* --- GeoCode: the status face of GeoKernel (docs/GEOKERNEL.md §8.1, §9.2).
- *
- * Three slots — QGIS, GEE, GDAL. OSM has none, having no configuration and no local dependency to report (§6.2).
- * Every set carries a `config-error` member because a syntax error fails every block (§3.1), which is a different
- * fact from unconfigured and must not collapse into it. Event payloads are the whole state object: the channel
- * replaces a slot, it does not patch one (§3.4). --- */
+/* --- GeoCode: the status face of GeoKernel (docs/GEOKERNEL.md §8.1, §9.2). A config syntax error fails every
+ * block, so each set keeps `config-error` apart from `unconfigured`; an event carries a slot's whole state. --- */
 
 // QGIS ----------------------------------------------------------------------
 
@@ -94,10 +90,8 @@ export const GeeSetup = Schema.Union([
   Schema.Struct({ status: Schema.Literal("python-missing"), python: Schema.String }),
   Schema.Struct({ status: Schema.Literal("checking") }),
   /**
-   * These two carry the interpreter because their guidance is a command — install these packages, run this
-   * authentication — and both are built from it (§5.11). Without it the copy degrades to "use the interpreter you
-   * configured", which is what leaves a user installing into the wrong environment. The probe states do not carry
-   * it: their guidance names machine.json instead and has the reader read `gee.python` back out of it.
+   * Carries the interpreter, as credentials-missing does, because the guidance is a command built from it; without it
+   * the copy can only say "the interpreter you configured", and a user installs into the wrong environment (§5.11).
    */
   Schema.Struct({
     status: Schema.Literal("packages-missing"),
@@ -105,10 +99,8 @@ export const GeeSetup = Schema.Union([
     missing: Schema.Array(Schema.String),
   }),
   /**
-   * Installed and still unusable — a native library that will not load, or a binary built against a different
-   * version of what it links to. Its own state rather than a shade of `packages-missing`, whose fix would loop
-   * here; and not `probe-failed`, which means the check produced no answer, where this one answered and named the
-   * package.
+   * Installed but unusable, such as a native library that will not load: not `packages-missing`, whose fix would loop
+   * back here, and not `probe-failed`, which means the check gave no answer.
    */
   Schema.Struct({
     status: Schema.Literal("packages-broken"),

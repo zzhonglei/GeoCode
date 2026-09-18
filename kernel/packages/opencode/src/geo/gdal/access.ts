@@ -4,10 +4,7 @@ import { realpathSync } from "node:fs"
 import path from "node:path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 
-/* --- GeoCode: what the data face is allowed to open (docs/GEOKERNEL.md §7.8).
- *
- * String containment is not enough: a symlink keeps the name inside the project while the bytes come from outside
- * it, so the boundary and the target are both resolved to what they refer to before they are compared. --- */
+/* --- GeoCode: what the data face is allowed to open (docs/GEOKERNEL.md §7.8). --- */
 
 /** Checked as a union: the worktree is the repo root above the working directory, so it admits files it does not. */
 export interface Boundary {
@@ -17,14 +14,14 @@ export interface Boundary {
 
 export type Resolved =
   | { readonly ok: true; readonly file: string }
-  /** The path resolves outside the project — including via a symlink. */
   | { readonly ok: false; readonly reason: "escapes" }
   /** The requested file, or the project directory, does not exist. */
   | { readonly ok: false; readonly reason: "missing" }
 
-/** The same four the cache keys on: content that reaches the caller is content whose location matters. */
+/** The same four the cache keys on. */
 const SIDECARS = [".dbf", ".shx", ".prj", ".cpg"] as const
 
+/** Boundary and target alike: a symlink can keep a name inside the project while its bytes come from outside. */
 function real(file: string): string | undefined {
   try {
     return realpathSync(file)

@@ -1,11 +1,5 @@
 /* --- GeoCode: choosing or upgrading a system OpenCode is not a product surface
- * (docs/DESKTOP.md §7.3).
- *
- * Two runtime facts are pinned. The routes that would find or upgrade a system OpenCode
- * answer 404 under Electron, and a leftover opencodeBinary setting no longer reaches
- * OPENCODE_BINARY or the main process PATH. Each has a control run without the Electron mark
- * that must reach the upstream behaviour, or the guard proves nothing about the path it
- * closes. Harnesses mirror lib/opencode/routes-upgrade.test.js and env-runtime.test.js. --- */
+ * (docs/DESKTOP.md §7.3). --- */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';

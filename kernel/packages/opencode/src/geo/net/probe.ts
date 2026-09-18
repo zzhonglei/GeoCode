@@ -5,33 +5,28 @@ import tls from "node:tls"
 import { NetTunnel } from "./tunnel"
 import type { Target } from "./types"
 
-/* --- GeoCode: the probes behind every reachability verdict (docs/GEOKERNEL.md §3.3 探针规格).
- *
- * Socket work in this process and never a subprocess, which is what keeps Net independent of Runtime (§2.3). --- */
+/* --- GeoCode: the probes behind every reachability verdict, in-process sockets and never a subprocess, which keeps
+ * Net independent of Runtime (docs/GEOKERNEL.md §3.3). --- */
 
-/** Must stay under the re-verify interval, or a round stretches the cadence instead of keeping it. */
+/** A hanging handshake holds the monitor's round this long before its interval sleep starts. */
 const DEFAULT_TIMEOUT_MS = 3_000
 
-/** Loopback only: this bounds the one expensive case, a port that is open but answers nothing (§3.3). */
+/** Loopback only: this bounds the one expensive case, a port that is open but answers nothing. */
 export const LOOPBACK_TIMEOUT_MS = 1_000
 
 export interface Options {
   readonly timeoutMs?: number
-  /** Tests only, against a locally generated certificate; nothing in the kernel passes it. */
+  /** Tests only, against a locally generated certificate. */
   readonly tls?: tls.ConnectionOptions
 }
 
-/** Which of the three stages a proxy probe got to before failing. */
 export type Stage = "connect" | "tunnel" | "handshake"
 
 export type Result =
   | { readonly ok: true; readonly latencyMs: number }
   | { readonly ok: false; readonly stage: Stage; readonly reason: string }
 
-/**
- * SNI carries a host name and the runtime throws rather than send an address, so a target written as a literal
- * address must be probed without one.
- */
+/** The runtime throws on an IP address as the TLS server name, so a literal-address target is probed without one. */
 function serverName(host: string): string | undefined {
   return net.isIP(host) === 0 ? host : undefined
 }
@@ -70,17 +65,14 @@ export function direct(target: Target, options: Options = {}): Promise<Result> {
   })
 }
 
-/** Whether a candidate is a proxy that can reach the target, in three stages (§3.3 探针规格). */
 export async function viaProxy(target: Target, proxyUrl: string, options: Options = {}): Promise<Result> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const startedAt = Date.now()
 
-  // Stages 1 and 2, shared with the in-process route so the verified path and the traffic-carrying one cannot differ.
   const tunnel = await NetTunnel.open(proxyUrl, `${target.host}:${target.port}`, timeoutMs)
   if (!tunnel.ok) return { ok: false, stage: tunnel.stage, reason: tunnel.reason }
 
-  // Stage 3 is not skippable: some proxies answer the tunnel request without ever checking upstream, so stopping at
-  // stage 2 reports "reachable" on a machine with no working route at all.
+  // Stage 3 is not skippable: some proxies answer the tunnel request without ever checking upstream.
   return new Promise<Result>((resolve) => {
     let settled = false
     const secure = tls.connect({ socket: tunnel.socket, servername: serverName(target.host), ...options.tls })
@@ -99,7 +91,7 @@ export async function viaProxy(target: Target, proxyUrl: string, options: Option
   })
 }
 
-/** A cheap liveness check, never evidence of a proxy on its own (§3.3). */
+/** A cheap liveness check, never evidence of a proxy on its own. */
 export function listening(host: string, port: number, timeoutMs = 1_000): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = net.connect({ host, port })

@@ -2,11 +2,8 @@ import * as path from "path"
 import { Global } from "@opencode-ai/core/global"
 import type { GeoEvent } from "@opencode-ai/schema/geo-event"
 
-/* --- GeoCode: the guidance shown when the QGIS environment is not ready (docs/GEOKERNEL.md §8.6).
- *
- * In the kernel because the three QGIS tools share one environment and one configuration step and must say the same
- * words; the tool layer renders what this returns and never authors environment copy of its own. The copy teaches
- * `machine.json`'s `qgis` hint, in any of the five shapes §4.2 accepts. --- */
+/* --- GeoCode: the guidance shown when the QGIS environment is not ready (docs/GEOKERNEL.md §8.6). The QGIS tools
+ * share one environment and must say the same words, so the tool layer renders this and writes none of its own. --- */
 
 const machineJson = () => path.join(Global.Path.config, "machine.json")
 
@@ -76,10 +73,9 @@ function fixable(opening: string): string {
 }
 
 /**
- * The prohibitions are repeated here and not left to `fixable()`, because unlike that branch this copy
- * ends in "reinstall QGIS", and an Agent told to recommend one is a step away from running the installer itself.
- * The interpreter is echoed because step 1 asks the reader to judge the hint, and on the non-ready statuses that
- * reach here `GeoTool.qgisHeader` renders nothing — it needs `ready`.
+ * The prohibitions are repeated here because this copy ends in "reinstall QGIS", and an Agent told to recommend one is
+ * a step away from running the installer itself. The interpreter is echoed because step 1 asks the reader to judge
+ * the hint, and `GeoTool.qgisHeader` renders nothing for a status other than `ready`.
  */
 function broken(symptom: string, opts?: { error?: string; interpreter?: string }): string {
   const head = [
@@ -150,9 +146,8 @@ function broken(symptom: string, opts?: { error?: string; interpreter?: string }
     "Do not try to repair bindings or plugins by hand; that is not reliably",
     "fixable from here.",
     "",
-    // The one place in this file where "saving re-probes" would be false: config dispatches per block and drops a
-    // block whose value is unchanged (`config/index.ts`), and `POST /geo/reload` re-reads the file into that same
-    // filter (.artifacts/OPEN.md D8) — so a reinstall at the same path re-probes nothing until a restart.
+    // Here "saving re-probes" would be false: config drops a block whose value is unchanged (`config/index.ts`), and
+    // `POST /geo/reload` goes through the same filter, so a reinstall at the same path re-probes nothing until restart.
     `GeoCode re-probes when the "qgis" hint in machine.json CHANGES. Saving the`,
     "same value again is not a change, and nothing runs. So once the user has",
     "reinstalled:",
@@ -164,16 +159,12 @@ function broken(symptom: string, opts?: { error?: string; interpreter?: string }
   ].join("\n")
 }
 
-/** One voice for every not-ready state. A fully ready status returns "". */
+/** A fully ready status returns ""; a ready one can still fail the gate when Processing or the catalog is missing. */
 export function render(status: GeoEvent.QgisStatus): string {
   switch (status.status) {
     case "ready":
-      // A ready environment can still fail the gate (§4.9): the probe succeeds against installs whose Processing
-      // framework is absent or whose catalog export errors, and the catalog may simply not be built yet.
       if (status.catalog === "building")
         return "QGIS is ready and its algorithm catalog is still being built — the first build after a configuration change can take a while. Try again shortly."
-      // `skipped` is only ever committed together with `processing: false` (`qgis/index.ts`), so it rides along here
-      // rather than in a branch of its own, which would be unreachable.
       if (!status.processing || status.catalog === "skipped")
         return broken("QGIS's Processing framework is not available in this installation", {
           interpreter: status.interpreter,

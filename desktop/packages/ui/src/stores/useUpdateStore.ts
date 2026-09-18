@@ -268,8 +268,7 @@ export const useUpdateStore = create<UpdateStore>()((set, get) => ({
   downloadUpdate: async () => {
     const { available, runtimeType } = get();
 
-    // --- GeoCode: nothing is downloaded in-app; the release page opens for the user
-    // (docs/DESKTOP.md §7.2). ---
+    // --- GeoCode: nothing is downloaded in-app; the release page opens instead (docs/DESKTOP.md §7.2) ---
     if (get().runtimeType === 'desktop') {
       const releaseUrl = get().info?.releaseUrl;
       if (available && releaseUrl) {

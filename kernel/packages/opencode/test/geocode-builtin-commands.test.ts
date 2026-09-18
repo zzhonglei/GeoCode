@@ -1,5 +1,5 @@
-/* --- GeoCode: the kernel registers neither built-in init nor review but does register the set command GeoCode
- * ships, and a command the user configures under any of these names still registers (docs/KERNEL.md §5.5, §6). --- */
+/* --- GeoCode: a merge can restore upstream's programmer-facing init and review, or drop a user's command that
+ * shares their names (docs/KERNEL.md §6). --- */
 import { describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"

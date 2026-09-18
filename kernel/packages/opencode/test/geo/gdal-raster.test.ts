@@ -49,7 +49,6 @@ const georeferenced = {
   coordinateSystem: { projjson: { id: { authority: "EPSG", code: 32649 } } },
 }
 
-/** Twelve bands, none of them declared red, green or blue, and every one named `B<n>`. */
 const LANDSAT = JSON.stringify({
   ...georeferenced,
   bands: Array.from({ length: 12 }, (_, index) => ({
@@ -62,7 +61,6 @@ const LANDSAT = JSON.stringify({
   })),
 })
 
-/** One band of measurements, which the preview colourizes. */
 const DEM = JSON.stringify({
   ...georeferenced,
   bands: [
@@ -70,7 +68,6 @@ const DEM = JSON.stringify({
   ],
 })
 
-/** A screenshot that happens to carry a `.tif` extension. */
 const PLAIN = JSON.stringify({
   size: [800, 600],
   cornerCoordinates: { lowerLeft: [0, 0], upperRight: [800, 600] },
@@ -92,13 +89,12 @@ const warped = (bands: number) =>
 interface Script {
   readonly source: string
   readonly warpedBands: number
-  /** Older builds cannot select bands while warping. */
   readonly warpSelectsBands?: boolean
   /** The encoder exits zero and leaves nothing behind. */
   readonly encoderLies?: boolean
 }
 
-/** Answers per tool and records every command; the encoder really writes its file, since the pipeline reads it back. */
+/** The encoder really writes its file, since the pipeline reads it back. */
 function scripted(script: Script) {
   const calls = Ref.makeUnsafe<{ command: string; args: readonly string[] }[]>([])
   const answer = (command: string, args: readonly string[]): string => {
@@ -191,7 +187,6 @@ describe("gdal raster band choice", () => {
       GdalRaster.selectBands(
         info(JSON.stringify({ ...georeferenced, bands: Array.from({ length: count }, () => ({})) })),
       ).rgb
-    // Four bands or more is a multispectral stack, whose true-colour triple is 4/3/2; three are already RGB.
     expect(anonymous(5)).toEqual([4, 3, 2])
     expect(anonymous(3)).toEqual([1, 2, 3])
   })
@@ -199,14 +194,12 @@ describe("gdal raster band choice", () => {
 
 describe("gdal raster stretch", () => {
   test("the window is a few deviations around the mean, clamped to the data", () => {
-    // Stretched across this DEM's full range, everything that is not a summit lands in the bottom of the scale.
     const [low, high] = GdalRaster.stretch({ index: 1, minimum: -138, maximum: 7467, mean: 1762, stdDev: 1712 })
     expect(low).toBe(-138)
     expect(high).toBeCloseTo(1762 + 1712 * 1.8, 3)
   })
 
   test("a band with no usable statistics still yields a window", () => {
-    // Every degenerate case still owes a window: the pair goes straight into the encode's `-scale_N` (raster.ts).
     expect(GdalRaster.stretch({ index: 1, minimum: 5, maximum: 9 })).toEqual([5, 9])
     expect(GdalRaster.stretch({ index: 1, minimum: 5, maximum: 9, mean: 7, stdDev: 0 })).toEqual([5, 9])
     expect(GdalRaster.stretch({ index: 1, minimum: 3, maximum: 3, mean: 3, stdDev: 1 })).toEqual([0, 255])
@@ -258,8 +251,7 @@ describe("gdal raster pipeline", () => {
         const calls = yield* Ref.get(script.calls)
 
         expect(tools(calls)).toContain("gdaldem")
-        // The encode reads the recomposed file, so nodata stays transparent instead of taking the ramp's bottom
-        // colour, which is what `gdaldem` alone would leave behind.
+        // Encoding the `gdaldem` output directly would paint nodata in the ramp's bottom colour.
         const encode = calls.find((call) => call.args.includes("WEBP"))!
         expect(encode.args[encode.args.length - 2]).toMatch(/rgba\.vrt$/)
         const composed = fs.readFileSync(encode.args[encode.args.length - 2]!, "utf8")
@@ -305,14 +297,12 @@ describe("gdal raster pipeline", () => {
         yield* raster.preview(environment, source)
         const calls = yield* Ref.get(script.calls)
 
-        // A read-only preview that leaves a statistics sidecar beside the source is a state change nobody sees
-        // until their working tree turns up dirty (§7.6).
+        // Without GDAL_PAM_ENABLED NO, a read-only preview leaves a statistics sidecar beside the source (§7.6).
         const working = calls.filter((call) => !call.args.includes("--help"))
         expect(working.length).toBeGreaterThan(3)
         for (const call of working) expect(call.args.join(" ")).toContain("GDAL_PAM_ENABLED NO")
 
-        // Overviews are used, never built: building them writes to the user's data and costs a full read of the
-        // source, which is the read the reprojection is already paying (§12).
+        // Overviews are used, never built: building them writes to the user's data (§12).
         expect(tools(calls)).not.toContain("gdaladdo")
         expect(flat(calls).some((line) => line.includes("-ovr AUTO"))).toBe(true)
       }),
@@ -350,14 +340,12 @@ describe("gdal raster pipeline", () => {
         const outcome = yield* Effect.result(raster.preview(environment, source))
         expect(outcome._tag).toBe("Failure")
         if (outcome._tag === "Failure") {
-          // Structured, because the caller branches on `kind` and answers this one by showing the file as a
-          // picture rather than reporting a fault (httpapi/groups/geo.ts, §7.7).
+          // The caller branches on `kind` to show this file as a picture rather than a fault (httpapi/groups/geo.ts).
           expect((outcome.failure as GdalRaster.GdalRasterError).kind).toBe("not-geographic")
         }
         const calls = yield* Ref.get(script.calls)
         expect(tools(calls)).toEqual(["gdalinfo"])
-        // `-mdd` takes one domain and errors on a repeat, so a call naming both fails against a real gdalinfo
-        // while a stub agrees with anything (inspector.ts).
+        // A real gdalinfo errors on a repeated `-mdd` that this stub would accept (inspector.ts).
         expect(flat(calls)[0]).not.toContain("-mdd")
       }),
     )
@@ -370,8 +358,7 @@ describe("gdal raster pipeline", () => {
 
     it.live("an encoder that exits zero and produces nothing is a failure, not a defect", () =>
       Effect.gen(function* () {
-        // A full disk ends here: reading the size of a file that was never written raises a defect, outside the
-        // error channel the caller can answer for.
+        // A full disk ends this way.
         const raster = yield* GdalRaster.make()
         const outcome = yield* Effect.result(raster.preview(environment, source)).pipe(
           Effect.catchDefect(() => Effect.succeed({ _tag: "Defect" as const })),

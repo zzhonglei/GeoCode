@@ -1,6 +1,5 @@
 /* --- GeoCode: a worktree created under Electron runs no setup commands, whoever sends them
- * (docs/DESKTOP.md §7.3). The control run without the Electron mark must run the same command,
- * or a bootstrap that never reached it would pass as well. --- */
+ * (docs/DESKTOP.md §7.3). --- */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

@@ -10,9 +10,7 @@ import { GeoRuntime } from "@/geo/runtime"
 import type { GdalTypes } from "@/geo/gdal/types"
 import { testEffect } from "../lib/effect"
 
-/* The vector pipeline (docs/GEOKERNEL.md §7.4). The subprocesses are scripted so what gets tested is the
- * pipeline's own decisions: which of the three page levels answered, whether the guard spent a conversion before
- * refusing, and what the caller is told. */
+/* The vector pipeline (docs/GEOKERNEL.md §7.4). */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-gdal-vec-"))
 afterAll(() => {
@@ -63,7 +61,6 @@ const summary = (featureCount: number, name = "layer") =>
     ],
   })
 
-/** A runtime answering per tool, recording every command it was given. */
 function scripted(answer: (command: string, args: readonly string[]) => string | { fail: true }) {
   const calls = Ref.makeUnsafe<{ command: string; args: readonly string[] }[]>([])
   const layer = Layer.succeed(
@@ -110,7 +107,7 @@ describe("gdal vector delivery", () => {
         expect(outcome._tag).toBe("Failure")
         if (outcome._tag === "Failure") {
           expect((outcome.failure as GdalVector.GdalVectorError).kind).toBe("too-many-features")
-          // Carried onto the HTTP error, so a caller refused here can size its pages (httpapi/groups/geo.ts, §7.7).
+          // Carried onto the HTTP error so a refused caller can size its pages (httpapi/groups/geo.ts).
           expect((outcome.failure as GdalVector.GdalVectorError).featureCount).toBe(9_000)
         }
         expect(tools(yield* Ref.get(http.calls))).toEqual(["ogrinfo"])

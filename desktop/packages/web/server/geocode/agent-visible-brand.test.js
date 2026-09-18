@@ -17,8 +17,6 @@ describe('messages the agent reads from the shell', () => {
   });
 
   it('a prompt that never reached the session is reported under GeoCode', () => {
-    // Reaching it at runtime takes the whole session service and a kernel that accepts a prompt and then loses it,
-    // so this reads the literals the service returns to the geocode tool.
     const source = fs.readFileSync(
       path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../lib/openchamber-sessions/routes.js'),
       'utf8',

@@ -1,9 +1,5 @@
-/* --- GeoCode: the main process refuses the Remote Instances commands (docs/DESKTOP.md §7.3).
- *
- * The list is pinned against main.mjs in both directions: every name here must still be a case
- * upstream handles (a renamed command would otherwise be "refused" by a list that no longer
- * matches anything), and the guard must sit before the switch. The connect deep link and the
- * one-time relay settings cleanup are pinned the same way. --- */
+/* --- GeoCode: guards the Remote Instances refusal against an upstream rename that leaves the list matching no
+ * command, and against the guard landing behind the switch (docs/DESKTOP.md §7.3). --- */
 import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';

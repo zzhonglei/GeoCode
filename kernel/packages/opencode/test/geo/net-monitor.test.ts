@@ -3,7 +3,7 @@ import { GeoNet } from "@/geo/net"
 import { NetClassifier } from "@/geo/net/classifier"
 import { NetMonitor } from "@/geo/net/monitor"
 
-/* Tripwires for the connectivity state machine (docs/GEOKERNEL.md §3.3 监视). */
+/* Tripwires for the connectivity state machine (docs/GEOKERNEL.md §3.3). */
 
 const reachable = (route: string): NetMonitor.Machine => ({ state: { state: "reachable", route }, streak: 0 })
 const failure = (kind: "offline" | "other"): NetMonitor.Verdict => ({ ok: false, kind, detail: "probe failed" })
@@ -89,7 +89,7 @@ describe("net monitor transitions", () => {
 
   test("re-verification is route-aware only while a route is held", () => {
     expect(NetMonitor.shouldRediscover(reachable("direct"))).toBe(false)
-    // Rediscovering is what picks up a proxy the user has just started (§3.3 自动恢复).
+    // Rediscovering is what picks up a proxy the user has just started (§3.3).
     expect(NetMonitor.shouldRediscover({ state: { state: "unreachable" }, streak: 2 })).toBe(true)
     expect(NetMonitor.shouldRediscover(NetMonitor.initial)).toBe(true)
   })
@@ -144,8 +144,6 @@ describe("net failure classification", () => {
 })
 
 describe("what a failed round carries out with it", () => {
-  /* Asserted on `GeoNet.failed` directly because its two callers in net/index.ts sit inside `probeOnce`, and
-   * reaching the re-verification one needs a route already HELD — a real TLS handshake a unit test cannot make. */
   test("the route that was tried, named the way a route is named", () => {
     const verdict = GeoNet.failed("ECONNREFUSED: connection refused", ["proxy:127.0.0.1:7890"])
     if (verdict.ok) throw new Error("expected a failure")

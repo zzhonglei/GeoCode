@@ -12,52 +12,38 @@ import { GeoOutput } from "./output"
 
 export { GeoOutput } from "./output"
 
-/* --- GeoCode: Runtime, the subprocess primitive of GeoKernel's infrastructure layer (docs/GEOKERNEL.md §3.2).
- *
- * The caller decides what counts as abnormal — how long silence or a whole run may last, how output is delivered —
- * and Runtime decides how to end correctly. It does not own WHEN an execution ends, so that control is an interface
- * rather than one blocking call: `start` hands back a live handle, and `run` is the wrapper over it. --- */
+/* --- GeoCode: Runtime, GeoKernel's subprocess primitive (docs/GEOKERNEL.md §3.2). --- */
 
 /** Bounds the drain on every path, kill or clean exit alike: a grandchild can hold the streams open forever. */
 const SETTLEMENT = Duration.seconds(5)
 
-/** Default window between asking a process to stop and forcing it. */
 const DEFAULT_GRACE = Duration.seconds(3)
 
-/** Bound on whatever Runtime holds on to, overridable only in collect mode. */
+/** Also bounds the buffers in incremental mode, where the caller cannot override it. */
 const DEFAULT_OUTPUT_LIMIT = 4 * 1024 * 1024
 
-/** Chunks buffered between the reader and a slow consumer. See the queue comment in `start`. */
 const CHUNK_BUFFER = 1024
 
 /**
  * macOS only, where the check earns its keep: its crash reporter holds a dead child's stdio open, so without it the
- * call waits out the whole idle budget. Off elsewhere, per the platform switch in §3.2 异常终止识别.
+ * call waits out the whole idle budget (docs/GEOKERNEL.md §3.2).
  */
 const LIVENESS_CHECK = process.platform === "darwin"
 
 export type Reason =
-  /** The process ended on its own. */
   | "exit"
-  /** Stopped from outside — the caller's signal fired, or `terminate` was called. */
   | "abort"
   /** The total clock elapsed. */
   | "timeout"
-  /** The idle clock elapsed — no output for longer than the caller allows. */
   | "idle"
   /** The process died while its output stream stayed open. */
   | "crash"
-  /** The collect-mode cap was passed. Incremental mode gives the watchdog no limit, so it never ends this way. */
+  /** Collect mode only: incremental delivery gives the watchdog no limit. */
   | "output-limit"
 
-/**
- * One of the two orthogonal axes (§3.2). Either way Runtime holds something — collect the result, incremental still
- * stderr for failure diagnosis — so both are bounded.
- */
 export type Delivery =
   | {
       readonly mode: "collect"
-      /** Overridable because some calls legitimately produce more (§3.2 参数面). */
       readonly limit?: number
     }
   | {
@@ -67,7 +53,7 @@ export type Delivery =
       readonly source?: "stdout" | "all"
     }
 
-/** The other axis; at least one is required, since waiting without bound is an omission rather than a choice. */
+/** At least one is required, since waiting without bound is an omission rather than a choice. */
 export type Clocks =
   | { readonly total: Duration.Input; readonly idle?: Duration.Input }
   | { readonly total?: Duration.Input; readonly idle: Duration.Input }
@@ -78,33 +64,25 @@ export interface Options {
   readonly delivery: Delivery
   readonly clocks: Clocks
   readonly cwd?: string
-  /** Overlaid on the host environment, never replacing it (§3.2, §4.3 principle 8). */
   readonly env?: Record<string, string>
-  /** Piped to stdin and closed. */
   readonly input?: string
   /**
-   * The owner's stop signal — `ctx.abort` at the tool layer — the only channel tools meet that both stops and
-   * reports what it produced, since tool bodies run on a detached root fiber (`EffectBridge.promise` is
-   * `Effect.runPromise`) that abandoning the promise cannot interrupt; geo tools must be wired the same way. A
-   * kernel caller interrupted through its scope is cleaned up but cannot report, so it should trip a signal (§3.2).
+   * Tools must pass `ctx.abort`: their bodies run under `Effect.runPromise`, so a cancelled call interrupts nothing
+   * and this signal is the only stop that still returns what the run produced.
    */
   readonly abort?: AbortSignal
-  /** Window before escalating to a forced kill. Overridable for tasks that clean up on exit. */
   readonly grace?: Duration.Input
-  /** Shown in `list`, so an operator can tell one running execution from another. */
   readonly label?: string
 }
 
 export interface Result {
-  /** Null when the process was killed before reporting one. */
   readonly code: number | null
   readonly reason: Reason
-  /** Accumulated stdout in collect mode; empty in incremental mode. */
+  /** Empty in incremental mode. */
   readonly stdout: string
   /** Accumulated stderr, except in incremental mode with source "all". */
   readonly stderr: string
   readonly durationMs: number
-  /** Output passed its cap and was cut. */
   readonly truncated: boolean
   /** The streams did not close within the settlement window, so this may be incomplete — not a reason of its own. */
   readonly drainIncomplete: boolean
@@ -119,31 +97,26 @@ export interface Live {
   readonly startedAt: number
 }
 
-/** A running execution, for whoever owns its lifecycle: stopping, inspecting and awaiting it are separate acts. */
 export interface Handle extends Live {
   /** Idempotent, and safe once the execution has already ended. Settles as `abort`. */
   readonly terminate: () => Effect.Effect<void>
-  /** Readable while the execution runs. Stdout is empty in incremental mode, which streams rather than keeps it. */
   readonly partial: () => Effect.Effect<{ readonly stdout: string; readonly stderr: string }>
-  /** Completes when the execution settles. Awaitable more than once. */
+  /** Awaitable more than once. */
   readonly result: Effect.Effect<Result, Error>
 }
 
 export interface Interface {
-  /** Start an execution and wait for it. Equivalent to `start` plus awaiting the result. */
   readonly run: (options: Options) => Effect.Effect<Result, Error>
-  /** Start an execution and get its handle. Ends with the enclosing scope. */
+  /** The execution is stopped when the enclosing scope closes. */
   readonly start: (options: Options) => Effect.Effect<Handle, Error, Scope.Scope>
   readonly list: () => Effect.Effect<readonly Live[]>
   readonly terminateAll: () => Effect.Effect<void>
-  /** For the host's shutdown path, where the choice is an immediate kill or processes left behind. */
   readonly killAllSync: () => void
 }
 
 /**
- * Children are process-group leaders on POSIX (the spawner passes `detached`), which is what lets one signal reach
- * the whole tree — and why they outlive us unsignalled. Windows has no process groups, hence `taskkill /T`, spawned
- * synchronously because the exit handler this runs under cannot await.
+ * Signals the process group, which the spawner makes each child lead on POSIX; synchronous because it runs under the
+ * `exit` handler, which cannot await.
  */
 function killTreeSync(pid: number) {
   try {
@@ -153,7 +126,7 @@ function killTreeSync(pid: number) {
     }
     process.kill(-pid, "SIGKILL")
   } catch {
-    // Already gone, or not ours to signal — and nowhere useful to report it from, since we are on the way out.
+    // Already gone, or not ours to signal.
   }
 }
 
@@ -191,10 +164,8 @@ const layer = Layer.effect(
       for (const handle of live.values()) if (handle.pid !== undefined) killTreeSync(handle.pid)
     }
 
-    // Last line of defence, and the only process-wide hook here: `exit` observes a decision already made, including
-    // the explicit `process.exit()` the CLI ends on, which skips every scope finalizer. Signals belong to the host
-    // (§3.2) — a listener here would suppress Node's default termination and make this module decide how the whole
-    // application shuts down.
+    // `exit` also covers the CLI's explicit process.exit(), which skips scope finalizers. No signal listeners here:
+    // one would suppress Node's default termination, and signals belong to the host (docs/GEOKERNEL.md §3.2).
     process.on("exit", killAllSync)
     yield* Effect.addFinalizer(() => Effect.sync(() => void process.off("exit", killAllSync)))
 
@@ -210,7 +181,7 @@ const layer = Layer.effect(
           ChildProcess.make(options.command, [...options.args], {
             cwd: options.cwd,
             env: options.env,
-            // Overlay, never replace: one missing base variable can stop the interpreter starting (§4.3 principle 8).
+            // Overlay, never replace: one missing base variable can stop the interpreter starting.
             extendEnv: true,
             stdin:
               options.input !== undefined
@@ -222,7 +193,7 @@ const layer = Layer.effect(
         )
 
         const lastActivity = yield* Ref.make(startedAt)
-        // Total bytes ever seen: that is what the output limit judges, where the buffers below drop from the front.
+        // The output limit judges this total, not the buffers, which drop from the front to stay within the cap.
         const accumulated = yield* Ref.make(0)
         const cap = limit ?? DEFAULT_OUTPUT_LIMIT
         const stdoutBuf = GeoOutput.boundedBuffer(cap)
@@ -231,13 +202,11 @@ const layer = Layer.effect(
         const interleaved = options.delivery.mode === "incremental" && options.delivery.source === "all"
         const primary = interleaved ? child.all : child.stdout
 
-        // The idle clock refreshes when a chunk is READ off the process, never after the caller has handled it: the
-        // consumer's own cost — writing to disk, updating a view — is not the task's to pay (§3.2).
+        // Refreshed on read, never after the consumer handles a chunk, so a slow consumer spends no idle budget.
         const touch = Effect.suspend(() => Ref.set(lastActivity, Date.now()))
 
-        // That refresh point only means something if reading and consuming are genuinely decoupled: these streams are
-        // pull-based, so a read-and-handle loop reads the next chunk only once the previous is handled and the gaps
-        // stay the CONSUMER's wherever the refresh sits (§3.2 时钟语义).
+        // A queue, because these streams are pull-based: calling onChunk inside the read loop would bill the
+        // consumer's time to the idle clock anyway.
         const queue =
           options.delivery.mode === "incremental" ? yield* Queue.bounded<string, Cause.Done>(CHUNK_BUFFER) : undefined
         const onChunk = options.delivery.mode === "incremental" ? options.delivery.onChunk : undefined
@@ -272,7 +241,6 @@ const layer = Layer.effect(
         const consumerFiber =
           queue && onChunk ? yield* Effect.forkScoped(Stream.runForEach(Stream.fromQueue(queue), onChunk)) : undefined
 
-        // External stop, an AbortController so it merges with the owner's own signal and repeat calls are harmless.
         const stopper = new AbortController()
 
         // Liveness is asked of the operating system, never of the spawner's handle: the handle's "running" settles on
@@ -314,12 +282,10 @@ const layer = Layer.effect(
             yield* child.kill({ forceKillAfter: options.grace ?? DEFAULT_GRACE }).pipe(Effect.ignore)
           }
 
-          // Draining runs on every path, normal exit included, or the last batch of output is lost just when the
-          // caller most needs it. The settlement clock starts HERE rather than at the call, which would kill the
-          // incremental task that legitimately runs for hours (§3.2).
+          // Drained on every path, clean exit included; the settlement clock starts here, not at the call, or it would
+          // cut runs that legitimately last for hours.
           const drained = yield* Effect.timeoutOption(
             Effect.gen(function* () {
-              // Reader first: it ends the queue, without which the consumer blocks on a chunk that never comes.
               yield* Fiber.join(primaryFiber).pipe(Effect.catchCause(() => Effect.void))
               if (stderrFiber) yield* Fiber.join(stderrFiber).pipe(Effect.catchCause(() => Effect.void))
               if (consumerFiber) yield* Fiber.join(consumerFiber).pipe(Effect.catchCause(() => Effect.void))
@@ -356,18 +322,17 @@ const layer = Layer.effect(
           result: Fiber.join(settleFiber).pipe(Effect.mapError(toError)),
         }
 
+        // Registered before the fork below, or an execution that settles first is deleted before it is added.
         live.set(id, handle)
 
-        // Deregistration happens when the execution SETTLES, not when its scope closes: a scope can outlive many
-        // executions, and `killAllSync` over a stale entry would signal a pid the system has since handed to
-        // something else — process-group signals being indiscriminate. Registering first keeps the two in order
-        // however fast the process exits.
+        // Deregistered on settling, not only at scope close: a scope can outlive its executions, and `killAllSync` over
+        // a stale entry would signal a pid the system has since reused.
         yield* Effect.forkScoped(
           Fiber.join(settleFiber).pipe(Effect.ignore, Effect.ensuring(Effect.sync(() => void live.delete(id)))),
         )
 
-        // Scope closure is the other end, and tripping the stopper here is what sends an interrupted owner down the
-        // SAME termination path as the other two channels rather than the spawner's own scope release (§3.2).
+        // Tripping the stopper sends an interrupted owner down the same termination path as the other stops, not the
+        // spawner's own scope release.
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
             stopper.abort()

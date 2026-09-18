@@ -207,7 +207,7 @@ function normalizeServerUrlForConnection(value) {
 function getOpenChamberDataDir() {
   return process.env.OPENCHAMBER_DATA_DIR
     ? path.resolve(process.env.OPENCHAMBER_DATA_DIR)
-    : path.join(os.homedir(), '.config', 'GeoCode', 'desktop'); // GeoCode: GeoCode's own shell data root (docs/PATHS.md §3.3)
+    : path.join(os.homedir(), '.config', 'GeoCode', 'desktop'); // GeoCode: own shell data root (docs/PATHS.md §3.3)
 }
 
 async function displayTunnelQrCode(url) {

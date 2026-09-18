@@ -1,12 +1,6 @@
-/* --- GeoCode: the IPC commands behind Remote Instances (docs/DESKTOP.md §7.3).
- *
- * The renderer reaches the main process through one `openchamber:invoke` channel and a command
- * name. Hiding the Remote Instances page and the host switcher removes the callers the product
- * ships, not the commands: anything running in the renderer can still invoke them. These are
- * the ones that connect to another machine, log in to another server, probe a host, or write a
- * remote host into the hosts list; handleInvoke refuses them before its switch. Reading the
- * hosts list stays, because the header and the recovery screens use it to learn that the
- * current host is the local one. --- */
+/* --- GeoCode: the IPC commands behind Remote Instances, refused in handleInvoke because hiding their pages leaves
+ * them invocable from the renderer (docs/DESKTOP.md §7.3). `desktop_hosts_get` is not among them: the header and
+ * the recovery screen read it to learn that the current host is the local one. --- */
 
 export const REMOTE_IPC_COMMANDS = Object.freeze([
   'desktop_ssh_instances_get',
@@ -26,8 +20,7 @@ const REMOTE_IPC_SET = new Set(REMOTE_IPC_COMMANDS);
 
 export const REMOTE_IPC_REFUSAL = 'Remote instances are not part of GeoCode';
 
-// Upstream stores query these at start-up (useDesktopSshStore.load) whether or not the page
-// exists; an empty answer keeps them quiet, where a refusal would log an error on every launch.
+// Upstream's useDesktopSshStore.load still sends two of these with the page hidden, so reads answer empty.
 const EMPTY_READ_RESULTS = Object.freeze({
   desktop_ssh_instances_get: () => ({ instances: [] }),
   desktop_ssh_status: () => [],
@@ -36,7 +29,6 @@ const EMPTY_READ_RESULTS = Object.freeze({
 
 export const isRemoteIpcCommand = (command) => REMOTE_IPC_SET.has(command);
 
-// Reads answer empty; everything else throws.
 export const answerRemoteIpc = (command) => {
   const empty = EMPTY_READ_RESULTS[command];
   if (empty) return empty();

@@ -1,11 +1,5 @@
-/* --- GeoCode: the shell listens on loopback only (docs/DESKTOP.md §6.1).
- *
- * Upstream reads two settings when it spawns the local server, `desktopLanAccessEnabled` and
- * `desktopUiPassword`, and binds every interface when both are set. GeoCode offers neither
- * setting, but a settings file written by an earlier build, or by hand, can still carry them.
- * main.mjs strips them from the parsed settings before the bind host is chosen, so the
- * upstream lines that follow see the "off" state: loopback bind, no UI password, and the local
- * window never lands behind a login page. --- */
+/* --- GeoCode: keeps the shell on loopback (docs/DESKTOP.md §6.1). A settings file from an earlier build, or written
+ * by hand, can still carry the remote access settings; main.mjs strips them before upstream picks the bind host. --- */
 
 export const REMOTE_ACCESS_SETTING_KEYS = Object.freeze(['desktopLanAccessEnabled', 'desktopUiPassword']);
 
@@ -18,8 +12,7 @@ export const stripRemoteAccessSettings = (settings) => {
   return settings;
 };
 
-// Written by upstream's relay service on first use; the inert relay never writes them, so a
-// value found here came from an earlier build.
+// Only an earlier build writes these: under Electron the relay service is inert (web/server/geocode/inert-relay.js).
 export const RELAY_SETTING_KEYS = Object.freeze(['privateRelay', 'relaySigningKey', 'relayEncryptionKey']);
 
 export const hasRelaySettings = (settings) =>

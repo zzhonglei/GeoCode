@@ -1,10 +1,5 @@
-/* --- GeoCode: no relay and no device pairing in the desktop shell (docs/DESKTOP.md §6.1, §7.3).
- *
- * Both halves are driven for real: the relay factory is called the way index.js calls it and
- * its result exercised, and the pairing refusal is mounted on an Express app in front of a
- * stand-in handler. Each has a control run without the Electron mark that must reach upstream's
- * behaviour, or the guard proves nothing. The order inside core-routes.js is pinned by source,
- * because a refusal registered after the handlers would be unreachable and still green. --- */
+/* --- GeoCode: no relay and no device pairing in the desktop shell (docs/DESKTOP.md §6.1, §7.3). The order
+ * inside core-routes.js is read from source, because a refusal registered after the handlers stays green here. --- */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import fs from 'node:fs';

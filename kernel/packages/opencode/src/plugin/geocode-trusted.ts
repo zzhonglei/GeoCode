@@ -1,12 +1,5 @@
-/* --- GeoCode: the one file the kernel loads as a plugin (docs/KERNEL.md §6 item 1, docs/DESKTOP.md §7.2).
- *
- * External plugins stay off: nothing a configuration declares and nothing found in a project directory is
- * loaded. The single exception is the file holding the desktop's agent tools, which its main process writes
- * into the shell data root and names in the kernel's environment when it starts the kernel. Two conditions, both
- * required: the variable is set, which only the process owner can do because the inherited environment
- * is stripped before the kernel starts, and the named file resolves to exactly this path under the
- * kernel's own config root, so a variable pointing anywhere else loads nothing. Server kind only; the
- * TUI never gets it. --- */
+/* --- GeoCode: the one file the kernel loads as a plugin, the desktop's agent tools, for the server kind only and only
+ * when the env var resolves to exactly this path under the kernel's config root (docs/KERNEL.md §6). --- */
 import path from "path"
 import { fileURLToPath } from "url"
 import { Global } from "@opencode-ai/core/global"
@@ -14,8 +7,7 @@ import type { PluginKind } from "./shared"
 
 export const GEOCODE_BROWSER_PLUGIN_ENV = "GEOCODE_BROWSER_PLUGIN"
 
-// A hand-copy of the shell's layout (electron/geocode/shell-data-root.mjs, electron/geocode/browser-tool.mjs):
-// the shell data root is `<config root>/desktop`, the plugin lives in `agent-tool/` under it.
+// Hand-copied from the shell's layout (electron/geocode/shell-data-root.mjs, electron/geocode/browser-tool.mjs).
 export const GEOCODE_BROWSER_PLUGIN_SEGMENTS = ["desktop", "agent-tool", "geocode-browser-plugin.js"] as const
 
 export function trustedPluginSpec(input: {

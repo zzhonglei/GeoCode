@@ -7,9 +7,8 @@ import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { EventV2 } from "@opencode-ai/core/event"
 import { GeoEvent } from "@opencode-ai/schema/geo-event"
 
-/* --- GeoCode: the Status module of GeoKernel's infrastructure layer (docs/GEOKERNEL.md §3.4) — slot storage,
- * generation-guarded commit, publication and snapshot, so that no capability module implements "a stale result must
- * never overwrite a fresh one" itself. --- */
+/* --- GeoCode: status slots with generation-guarded commits, so a stale result never overwrites a fresh one
+ * (docs/GEOKERNEL.md §3.4). --- */
 
 export type SlotName = "qgis" | "gee" | "gdal"
 
@@ -21,45 +20,31 @@ export interface SlotValues {
 
 export const SLOTS = ["qgis", "gee", "gdal"] as const satisfies readonly SlotName[]
 
-/** The event each slot publishes on. Payload is the whole state object. */
 const DEFINITIONS = {
   qgis: GeoEvent.QgisChanged,
   gee: GeoEvent.GeeChanged,
   gdal: GeoEvent.GdalChanged,
 } as const
 
-/** Identifies one round of resolution; callers take one and hand it back, never reading it. */
 export interface Token {
   readonly slot: SlotName
   readonly generation: number
 }
 
-/** A slot's sole writer, handed out once per slot at registration, which makes the single-writer rule structural. */
 export interface Writer<Name extends SlotName> {
-  /**
-   * One token for the whole round rather than one per phase, so that a new round invalidates the phases the previous
-   * one has still to finish without any module tracking that itself (§4.8).
-   */
+  /** Once per round, not per phase: a new claim invalidates every phase the previous round has yet to commit. */
   readonly claim: () => Effect.Effect<Token>
-  /**
-   * False when the token is not this slot's current round, and the value is then dropped — intermediate states too,
-   * so a superseded round cannot flash its progress onto the screen. A value equal to the current one returns true
-   * and publishes nothing.
-   */
+  /** False, dropping the value, for a token from an earlier round; an unchanged value returns true unpublished. */
   readonly commit: (token: Token, value: SlotValues[Name]) => Effect.Effect<boolean>
 }
 
-/**
- * Optional per slot because a slot exists only from its module's registration, so a snapshot taken while the process
- * is still coming up is genuinely missing entries — the data face declares the same (httpapi/groups/geo.ts).
- */
+/** Optional per slot: a slot exists only once its module registers, as the HTTP schema also declares. */
 export type Snapshot = { readonly [Name in SlotName]?: SlotValues[Name] }
 
 export interface Interface {
-  /** Claim a slot and seed its initial value. Registering twice is a defect and dies. */
+  /** Registering the same slot twice is a defect and dies. */
   readonly register: <Name extends SlotName>(slot: Name, initial: SlotValues[Name]) => Effect.Effect<Writer<Name>>
   readonly current: <Name extends SlotName>(slot: Name) => Effect.Effect<SlotValues[Name] | undefined>
-  /** Every slot's current value, for a client that has just connected (§9.2). */
   readonly snapshot: () => Effect.Effect<Snapshot>
   /** Current value followed by every subsequent change, subscribed before read. */
   readonly watch: <Name extends SlotName>(slot: Name) => Stream.Stream<SlotValues[Name]>
@@ -82,8 +67,7 @@ const layer = Layer.effect(
     const generations = new Map<SlotName, number>()
     const registered = new Set<SlotName>()
 
-    // Uninterruptible as a unit — a new configuration interrupts a round mid-flight, and stopping after the store
-    // strands subscribers on a stale frame, the next round's identical value being discarded as a duplicate.
+    // Uninterruptible: a stop after the store strands subscribers, as committing the same value publishes nothing.
     const publish = (slot: SlotName, value: SlotValues[SlotName]) =>
       Effect.gen(function* () {
         values.set(slot, value)
@@ -111,7 +95,6 @@ const layer = Layer.effect(
           Effect.gen(function* () {
             if (token.slot !== slot) return false
             if (token.generation !== generations.get(slot)) return false
-            // A periodic probe reaching the same conclusion again is a success with nothing to publish (§3.4).
             if (isDeepStrictEqual(values.get(slot), value)) return true
             yield* publish(slot, value)
             return true
@@ -123,13 +106,12 @@ const layer = Layer.effect(
     const current = <Name extends SlotName>(slot: Name) =>
       Effect.sync(() => values.get(slot) as SlotValues[Name] | undefined)
 
-    // The cast recovers the key-to-value correlation `Object.fromEntries` drops; it asserts nothing about presence.
     const snapshot = () => Effect.sync(() => Object.fromEntries(values) as Snapshot)
 
     const watch = <Name extends SlotName>(slot: Name): Stream.Stream<SlotValues[Name]> =>
       Stream.unwrap(
         Effect.gen(function* () {
-          // Subscribe first, read second (§9.2): the reverse loses a change landing between the two to both paths.
+          // Subscribe before reading, or a change landing between the two is lost to both.
           const subscription = yield* PubSub.subscribe(pubsub)
           const seed = values.get(slot) as SlotValues[Name] | undefined
           let last = seed

@@ -1,12 +1,7 @@
 #!/usr/bin/env bun
 
-/* --- GeoCode: serialize the data-reading Python scripts into module constants
- * (docs/GEOKERNEL.md §4.13 构建链).
- *
- * The product ships as a single file with no script assets on disk, and
- * TypeScript cannot import .py — so the scripts become constants here. The
- * generated modules are kept in version control, so a bare checkout runs with
- * no extra step. --- */
+/* --- GeoCode: embeds the Python scripts as module constants, because the single-file build carries no script
+ * assets; the output is committed so a bare checkout runs without this step (docs/GEOKERNEL.md §4.13). --- */
 
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -32,8 +27,7 @@ export const GEO_SCRIPTS = [
     file: "raster_preview.py",
     name: "RASTER_PREVIEW_PY",
   },
-  // Not a script we run but a module we put on the interpreter's path (§5.10); it rides the same
-  // chain because it has the same problem.
+  // A module put on the interpreter's path rather than a script to run (docs/GEOKERNEL.md §5.10).
   { dir: ["src", "geo", "gee", "pylib"], out: ["src", "geo", "gee"], file: "geocode.py", name: "GEOCODE_PY" },
 ] as const
 

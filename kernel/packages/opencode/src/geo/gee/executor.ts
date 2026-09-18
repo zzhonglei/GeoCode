@@ -9,16 +9,10 @@ import type { GeoRuntime } from "../runtime"
 import { GEOCODE_PY } from "./scripts.generated"
 import type { Environment } from "./types"
 
-/* --- GeoCode: GEE script execution (docs/GEOKERNEL.md §5.9).
- *
- * Takes a verified environment from the gate rather than looking a status up (§9.1), and returns structured facts:
- * the script's own output went to `onChunk` as it arrived, and the agent-facing text is the tool layer's to
- * compose (§9.1 第二条硬性形态). --- */
+/* --- GeoCode: GEE script execution, taking the gate's verified environment rather than looking a status up; the
+ * agent-facing text is the tool layer's to compose (docs/GEOKERNEL.md §5.9). --- */
 
-/**
- * Idle rather than total (§8.4): one remote call legitimately runs for hours, so silence is the only signal left —
- * which works only because the script must wrap long operations in the library's heartbeat (§5.9 心跳契约).
- */
+/** Idle, not total: a remote call can run for hours, so scripts must wrap long work in the library's heartbeat. */
 export const IDLE_FLOOR_SECONDS = 60
 export const IDLE_DEFAULT_SECONDS = 60
 
@@ -38,18 +32,16 @@ export interface Options {
 
 export interface Outcome {
   readonly result: GeoRuntime.Result
-  /** The environment the run actually used, for the caller's header. */
   readonly environment: Environment
   readonly mode: "inline" | "file"
 }
 
-/** The directory holding the runtime library, created on first use. */
 export function ensureLibrary(
   directory: string = path.join(Global.Path.cache, "geo", "gee-runtime"),
   content: string = GEOCODE_PY,
 ): string {
   // The DIRECTORY carries the hash: the module has to import as `geocode`, so its filename is fixed and the hash
-  // lives one level up. A library change lands in a new directory; an existing one already holds this content.
+  // lives one level up.
   const hash = createHash("sha256").update(content).digest("hex").slice(0, 8)
   const home = path.join(directory, hash)
   const module = path.join(home, "geocode.py")
@@ -68,7 +60,6 @@ export function ensureLibrary(
   return home
 }
 
-/** The injection (§5.9 注入内容): route, project, library path, fault handler, encoding — none of it a script's job. */
 export function environmentFor(environment: Environment, libraryHome: string): Record<string, string> {
   const separator = process.platform === "win32" ? ";" : ":"
   const inherited = process.env.PYTHONPATH

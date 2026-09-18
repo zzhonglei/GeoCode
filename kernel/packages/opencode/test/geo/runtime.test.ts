@@ -4,12 +4,10 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { GeoRuntime } from "@/geo/runtime"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-/* Runtime, the subprocess primitive of GeoKernel (docs/GEOKERNEL.md §3.2): what it fixes rather than what callers
- * choose — the clocks, the two deliveries, and how an execution is made to end. */
+/* Runtime, the subprocess primitive of GeoKernel (docs/GEOKERNEL.md §3.2). */
 
 const it = testEffect(LayerNode.compile(LayerNode.group([GeoRuntime.node])))
 
-/** Runs a snippet under the same interpreter the tests run under. */
 const script = (source: string) => ({ command: process.execPath, args: ["-e", source] })
 
 /** Prints `count` lines `gapMs` apart, then exits cleanly. */
@@ -215,7 +213,6 @@ describe("geo runtime", () => {
             const running = yield* runtime.list()
             expect(running.map((item) => item.label)).toContain("qgis:buffer")
 
-            // The user clicking stop on a QGIS run.
             yield* handle.terminate()
             // Twice, because a stop button can be pressed twice and a teardown can race a user action.
             yield* handle.terminate()
@@ -427,8 +424,6 @@ describe("geo runtime", () => {
         expect(result.reason).toBe("crash")
         // Well under the idle budget: the point is not waiting it out.
         expect(result.durationMs).toBeLessThan(15_000)
-        // No drain flag asserted: the kill takes the stream-holding grandchild with it, as the wait below checks,
-        // so the streams close and the drain completes.
 
         const grandchild = yield* Ref.get(pids)
         if (grandchild) yield* waitUntilGone(grandchild, "the stream-holding grandchild was left behind")
@@ -466,7 +461,6 @@ describe("geo runtime", () => {
         }),
       )
 
-      // A misconfigured toolchain path is the likeliest thing to be wrong on a user's machine.
       expect(exit._tag).toBe("Failure")
     }),
   )
