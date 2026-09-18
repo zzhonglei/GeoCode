@@ -4,6 +4,8 @@ import { SettingsFieldRow, SettingsSection } from '@/components/sections/shared/
 import { useUIStore } from '@/stores/useUIStore';
 import { updateDesktopSettings } from '@/lib/persistence';
 import { isVSCodeRuntime } from '@/lib/desktop';
+import { isDesktopShell } from '@/lib/desktop'; // GeoCode: for the filter below
+import { isShortcutHiddenOnDesktop } from '@/geocode/host-switcher-surface'; // GeoCode: own module
 import {
   formatShortcutForDisplay,
   getCustomizableShortcutActions,
@@ -29,7 +31,8 @@ export const KeyboardShortcutsSettings: React.FC = () => {
   const [editingAction, setEditingAction] = React.useState<CustomizableShortcutAction | null>(null);
 
   const actions = React.useMemo(() => {
-    const all = getCustomizableShortcutActions();
+    const all = getCustomizableShortcutActions()
+      .filter((action) => !isShortcutHiddenOnDesktop(action.id, isDesktopShell())); // GeoCode: own module
     return isVSCodeRuntime() ? all.filter((action) => action.id !== 'toggle_prompt_navigator') : all;
   }, []);
   const persist = (nextOverrides: Record<string, ShortcutCombo>) => {

@@ -1,5 +1,5 @@
-/* --- GeoCode: the desktop shell has no host switcher, so nothing mounts one and nothing warms its
- * statuses (docs/DESKTOP.md §7.3).
+/* --- GeoCode: the desktop shell has no host switcher, so nothing mounts one, nothing warms its
+ * statuses and no shortcut list offers its toggle (docs/DESKTOP.md §7.3).
  *
  * The warm-up runs unprompted after every launch, so it is run here against a stand-in for the
  * desktop bridge. The mount sites are pinned by source, as the header menu is in
@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 import { isDesktopShell } from '../lib/desktop';
 import { warmDesktopHostStatuses } from '../lib/desktopHostStatus';
+import { getCustomizableShortcutActions } from '../lib/shortcuts';
+import { isShortcutHiddenOnDesktop } from './host-switcher-surface';
 
 const SRC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const scope = globalThis as { window?: unknown };
@@ -62,6 +64,24 @@ describe('host switcher surface', () => {
     expect(switchers.length).toBeGreaterThan(0);
     for (const at of switchers) {
       expect(gate.lastIndexOf('{showHostSwitcher && (', at)).toBeGreaterThan(gate.lastIndexOf(')}', at));
+    }
+  });
+
+  test('the shortcut that toggles the switcher is not listed in the desktop shell', () => {
+    // Pressing it only flips the state of a menu the desktop shell never mounts.
+    expect(getCustomizableShortcutActions().some((action) => action.id === 'toggle_services_menu')).toBe(true);
+    expect(isShortcutHiddenOnDesktop('toggle_services_menu', true)).toBe(true);
+    expect(isShortcutHiddenOnDesktop('toggle_services_menu', false)).toBe(false);
+    const listings = componentFiles(SRC)
+      .filter((file) => /getCustomizableShortcutActions\(|getShortcutAction\(/.test(readFileSync(file, 'utf8')))
+      .map((file) => path.relative(SRC, file).split(path.sep).join('/'))
+      .sort();
+    expect(listings).toEqual([
+      'components/sections/openchamber/KeyboardShortcutsSettings.tsx',
+      'components/ui/HelpDialog.tsx',
+    ]);
+    for (const file of listings) {
+      expect(readFileSync(path.join(SRC, file), 'utf8')).toContain('!isShortcutHiddenOnDesktop(');
     }
   });
 });

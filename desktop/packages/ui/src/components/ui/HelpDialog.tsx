@@ -17,6 +17,8 @@ import {
 } from "@/lib/shortcuts";
 import { useI18n, type I18nKey } from "@/lib/i18n";
 import { isVSCodeRuntime } from "@/lib/desktop";
+import { isDesktopShell } from "@/lib/desktop"; // GeoCode: for the filter below
+import { isShortcutHiddenOnDesktop } from "@/geocode/host-switcher-surface"; // GeoCode: own module
 import type { IconName } from "@/components/icon/icons";
 import { ScrollableOverlay } from "@/components/ui/ScrollableOverlay";
 
@@ -234,6 +236,7 @@ export const HelpDialog: React.FC = () => {
                 <div className="space-y-1">
                   {section.items
                     .filter((shortcut) => !(isVSCode && shortcut.id === 'toggle_prompt_navigator'))
+                    .filter((shortcut) => !isShortcutHiddenOnDesktop(shortcut.id, isDesktopShell())) // GeoCode: own module
                     .map((shortcut) => {
                       const action = shortcut.id ? getShortcutAction(shortcut.id) : undefined;
                       const descriptionKey = shortcut.descriptionKey

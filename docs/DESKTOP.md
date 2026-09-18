@@ -453,7 +453,9 @@ Electron main 匿名查发布仓库的 GitHub Releases 最新一条(仓库名由
 Release 页面地址交给上游的更新对话框,「下载」按钮打开 Release 页面由用户自己下载安装。节奏沿用
 上游的轮询钩子:启动 3 秒后一次,之后每小时一次;没有「跳过此版本」,与上游一致。上游的 electron-updater
 不配置更新源,应用内下载入口直接拒绝;壳向 OpenChamber 更新服务上报安装标识的那条路由在 Electron 下
-只返回「无更新」,不出网。发布仓库里没有任何 Release 时按「无更新」处理,不报错。
+只返回「无更新」,不出网。发布仓库里没有任何 Release 时按「无更新」处理,不报错。设置通用页上游的「发送匿名使用报告」开关
+只作用于那条上报,因此在桌面壳里什么也不控制,桌面壳不显示它,设置搜索也不列(`OpenChamberPage.tsx`、
+`geocode/desktop-settings-surface.ts`,09-17)。
 
 **浏览器工具:智能体能操控应用内的浏览器面板,强制开启,没有开关。** 它给 GeoAgent 与 plan 一个名为 `browser` 的工具,
 动作是上游 Web 工具的十个:打开、读页、点击、输入、滚动、前进后退、读样式、截图、改视口;用途是查资料、
@@ -632,7 +634,7 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
 - **SSH host、Remote Instance、Relay 与设备配对**:「远程实例」页在桌面壳不可用(与 Tunnel 同一个页面可用性谓词);
   主机切换器在桌面壳不渲染,它的两个挂载点是顶栏的服务菜单(`Header.tsx`)与登录门出错屏、锁定屏上的「切换实例」
   (`SessionAuthGate.tsx`);上游启动三秒后替它预热各实例连通性,在桌面壳也不做(`lib/desktopHostStatus.ts`),
-  否则每次启动都探一次本机、被下文的主进程拒绝,留一条错误日志并把本机记成「无法连接」。壳在 Electron 下由 `createRelayService` 返回惰性对象
+  否则每次启动都探一次本机、被下文的主进程拒绝,留一条错误日志并把本机记成「无法连接」。切换它的快捷键在快捷键帮助与设置的快捷键页里都不列(`geocode/host-switcher-surface.ts`,09-17),按下去本来就没有反应。壳在 Electron 下由 `createRelayService` 返回惰性对象
   (`server/geocode/inert-relay.js`):不注册路由、不建宿主客户端、不生成写进 settings.json 的身份密钥,serverId 恒为 null;
   配对的五条路由(会话、传输候选、兑换)先于上游 handler 注册 404(`server/geocode/remote-access-surface.js`),
   已配对设备的列表路由保留,只读且恒空。主进程在命令分发前拒绝 11 个远程命令(8 个 `desktop_ssh_*`、远程口令登录、

@@ -28,8 +28,8 @@ import type { OpenChamberSection } from './types';
 const OpenCodeCliSettings: React.FC = () => (isDesktopShell() ? null : <UpstreamOpenCodeCliSettings />);
 // The desktop section without LAN access and the UI password (docs/DESKTOP.md §6.1).
 const DesktopNetworkSettings: React.FC = () => (isDesktopShell() ? <GeoCodeDesktopSettings /> : <UpstreamDesktopNetworkSettings />);
-// The agent tools are not switches in GeoCode: the control tool is not offered, and the browser
-// tool is always on once GeoCode's own plugin lane delivers it (§7.3), so the section is gone.
+// The agent tools are not switches in GeoCode: the browser and control tools are always on (§7.2),
+// so the section is gone.
 const OpenChamberToolsSettings: React.FC = () => (isDesktopShell() ? null : <UpstreamOpenChamberToolsSettings />);
 // --- /GeoCode ---
 
@@ -166,7 +166,7 @@ const GeneralSectionContent: React.FC = () => {
                 ...(!isVSCode ? ['terminalShell' as const] : []),
                 ...(!isVSCode ? ['terminalLoginShell' as const] : []),
                 'messageTransport',
-                'reportUsage',
+                ...(isDesktopShell() ? [] : ['reportUsage' as const]), // GeoCode: the switch controls nothing in the desktop shell (docs/DESKTOP.md §7.2)
             ]} />
         </>
     );

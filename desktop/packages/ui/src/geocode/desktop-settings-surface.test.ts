@@ -6,7 +6,7 @@
  * call sites are pinned by reading their source, because a renderer test that mounts the
  * settings page would drag every store along and prove less than it costs. --- */
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -15,6 +15,13 @@ import { getSettingsPageMeta } from '../lib/settings/metadata';
 
 const read = (relative: string) =>
   readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', relative), 'utf8');
+
+const componentFiles = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return componentFiles(full);
+    return entry.name.endsWith('.tsx') && !entry.name.includes('.test.') ? [full] : [];
+  });
 
 const KEPT_DESKTOP_OPTION_IDS = [
   'sessions.desktop-launch-at-login',
@@ -38,6 +45,7 @@ describe('desktop settings surface', () => {
       'projects.shared.plansDir',
       'projects.worktree.setup.wait',
       'projects.worktree.setup.replace',
+      'appearance.usage-reports',
     ]) {
       expect(HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS.has(id)).toBe(true);
     }
@@ -56,6 +64,18 @@ describe('desktop settings surface', () => {
       expect(search).toContain(`id: '${id}'`);
     }
     expect(search).toContain('isSettingsSearchItemHiddenOnDesktop(item.id, isDesktopShell())');
+  });
+
+  test('the usage-report switch is listed outside the desktop shell only', () => {
+    // It only rides on upstream's update check, which the shell answers locally (docs/DESKTOP.md §7.2).
+    // OpenChamberVisualSettings.tsx declares the name and renders the section; every other file only lists it.
+    const lists = componentFiles(path.join(path.dirname(fileURLToPath(import.meta.url)), '..'))
+      .filter((file) => !file.endsWith(`${path.sep}OpenChamberVisualSettings.tsx`))
+      .flatMap((file) => readFileSync(file, 'utf8').split('\n').filter((line) => line.includes("'reportUsage'")));
+    expect(lists.length).toBeGreaterThan(0);
+    for (const line of lists) {
+      expect(line).toContain("...(isDesktopShell() ? [] : ['reportUsage' as const])");
+    }
   });
 
   test('the settings page renders the OpenCode CLI section through the desktop guard only', () => {

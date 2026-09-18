@@ -3,8 +3,8 @@
  * The kernel is embedded, so choosing a system OpenCode binary or upgrading one is not a
  * product action; and the shell listens on loopback only (§6.1), so LAN access and the UI
  * password that guards it are not either. The agent tools are not switches in GeoCode: the
- * control tool is not offered, the browser tool is always on, and the system-prompt optimizer
- * is not a GeoCode capability, and neither is the starter row under a new session. The sections
+ * browser and control tools are always on, and the system-prompt optimizer is not a GeoCode
+ * capability, and neither is the starter row under a new session. The sections
  * themselves are wrapped away in OpenChamberPage.tsx, BehaviorPage.tsx and
  * OpenChamberVisualSettings.tsx; this module is the second half of those decisions, the search
  * entries that would otherwise point at controls that are not on the page. Both sides read from
@@ -28,6 +28,8 @@ export const HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS: ReadonlySet<string> = new Set([
   // Nor the worktree setup-command block (advanced-project-surface.ts).
   'projects.worktree.setup.wait',
   'projects.worktree.setup.replace',
+  // The usage-report switch controls nothing in the desktop shell (docs/DESKTOP.md §7.2).
+  'appearance.usage-reports',
 ]);
 
 export const isSettingsSearchItemHiddenOnDesktop = (id: string, desktopShell: boolean): boolean =>
