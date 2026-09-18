@@ -1144,10 +1144,15 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   `之前: [] 之后: []`——**长得和「安全」一模一样**。是因为「之前」也空才发现它空转;
 
 - **归阶段 3「特性修缮」**:外部二进制发现在 `electron:dev` 下的分叉(Electron 下已关,见下文「真欠着的」一条)、`gitlab-ai-provider` 的 vendor 泄漏、内置技能
-  `customize-geocode`(原名 `customize-opencode`)的描述与正文、以及品牌与 i18n。**另有 `packages/vscode/` 整包**:`opencodeConfig.ts`
-  是 `server/lib/opencode/` 的一份近乎逐行的副本,项目目录、配置文件名、技能根、外部二进制发现全都
-  还是上游的名字(约三十处)。它是独立交付物,不随桌面端启动,所以不拦这一批;但它与壳共用的是同一
-  份逻辑,壳侧每改一处,那边就多欠一处,单独成批而不是逐条跟着改。
+  `customize-geocode`(原名 `customize-opencode`)的描述与正文、以及品牌与 i18n。
+
+⚠️ **`packages/vscode/` 整包判为不改,这一条到此为止**(2026-09-18 定):GeoCode 不需要这个扩展。它是独立交付物,
+§4.2 的表里就写着不构建,整门也从不跑它,因此没有任何入口能让人看见包里的上游名字——而改牌的判据正是
+「用户有可能看见的才换」。改名要动 50 到 60 个文件,在上游持续编辑的行上留下永久冲突面,与 §12 否决
+「删掉 mobile / VS Code / Web 源码」时给的理由是同一条。**代价写明**:包里的 `opencodeConfig.ts` 是
+`server/lib/opencode/` 近乎逐行的副本(单这一个文件 56 处 `opencode`),项目目录、配置文件名、技能根、
+外部二进制发现全是上游的名字,而且它会去读**真正的 OpenCode 的数据根**。所以**一旦有一天要发布这个扩展,
+必须先把整包过一遍**;在那之前它只是跟着上游走的源码。不配绊线:发布是明摆着的动作,没有静默路径(§5)。
 
 ```bash
 # 硬编码到 OpenChamber 目录的 fallback(认 OPENCHAMBER_DATA_DIR 的那一半不会命中,
