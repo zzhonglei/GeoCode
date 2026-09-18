@@ -5,6 +5,7 @@ import { useSkillsStore } from '@/stores/useSkillsStore';
 import { useMcpStore } from '@/stores/useMcpStore';
 import { useSession } from '@/sync/sync-context';
 import { getLinkedIssues, canOpenLinearIssueInContextPanel } from '@/lib/linkedIssues';
+import { LINEAR_OFFERED } from '@/geocode/linear-surface'; // GeoCode: own module
 import { fetchSessionKnowledgeSummary, setSessionProjectContextPin, type SessionKnowledgeSummary } from '@/lib/sessionKnowledgeApi';
 import { useProjectContextStore } from '@/stores/useProjectContextStore';
 import { useAgentMemoryStore } from '@/stores/useAgentMemoryStore';
@@ -158,6 +159,7 @@ export const WorkStatusContextSection: React.FC<Props> = ({ sessionId, directory
     if (
       entry.kind === 'linear'
       && directory
+      && LINEAR_OFFERED
       && canOpenLinearIssueInContextPanel({
         linearAvailable: Boolean(linear),
         linearConnected,

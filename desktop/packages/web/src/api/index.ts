@@ -15,7 +15,6 @@ import { createWebNotificationsAPI } from './notifications';
 import { createWebToolsAPI } from './tools';
 import { createWebPushAPI } from './push';
 import { createWebGitHubAPI } from './github';
-import { createWebLinearAPI } from './linear';
 import { createWebClientAuthAPI } from './clientAuth';
 
 export interface WebAPIsOptions {
@@ -46,7 +45,8 @@ export const createWebAPIs = (options: WebAPIsOptions = {}): RuntimeAPIs => {
   permissions: createWebPermissionsAPI(),
   notifications: createWebNotificationsAPI(),
   github: createWebGitHubAPI({ urls: activeUrls }),
-  linear: createWebLinearAPI(),
+  // --- GeoCode: no `linear` here, so every entry that asks the runtime for it goes quiet and the startup
+  // status request is never sent (ui/src/geocode/linear-surface.ts, docs/DESKTOP.md §7.3). ---
   push: createWebPushAPI(),
   clientAuth: createWebClientAuthAPI(),
   tools: createWebToolsAPI(),

@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { sortContextSurfaces } from '@/lib/surfaces/registry';
+import { LINEAR_OFFERED } from '@/geocode/linear-surface'; // GeoCode: own module
 
 /**
  * Which surfaces the context rail shows. Everything is on by default and the
@@ -31,7 +32,11 @@ export const ContextRailSurfacesDialog: React.FC<{
 
   // The full registry in the user's rail order — including surfaces a runtime
   // filter currently drops, so a choice made on desktop is editable anywhere.
-  const surfaces = React.useMemo(() => sortContextSurfaces(contextRailOrder), [contextRailOrder]);
+  // GeoCode: this list is the full registry on purpose, so the runtime filter above does not reach it
+  const surfaces = React.useMemo(
+    () => sortContextSurfaces(contextRailOrder).filter((surface) => LINEAR_OFFERED || surface.id !== 'linear'),
+    [contextRailOrder],
+  );
 
   const allVisible = hidden.length === 0;
   const noneVisible = surfaces.every((surface) => hidden.includes(surface.id));

@@ -2274,5 +2274,5 @@ export const settingsDict = {
   'settings.openchamber.visual.field.inputHistoryLimitUnit': 'prompts',
   ...linearIntegrationI18n.en,
   'settings.page.integrations.title': 'Integrations',
-  'settings.page.integrations.description': 'Connect GitHub and Linear so GeoCode can work with your issues and pull requests.',
+  'settings.page.integrations.description': 'Connect GitHub so GeoCode can work with your issues and pull requests.',
 } as const;

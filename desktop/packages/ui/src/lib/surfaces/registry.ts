@@ -1,6 +1,7 @@
 import type { IconName } from '@/components/icon/icons';
 import type { I18nKey } from '@/lib/i18n';
 import type { ContextPanelMode } from '@/stores/useUIStore';
+import { LINEAR_OFFERED } from '@/geocode/linear-surface'; // GeoCode: own module
 
 export type ContextSurfaceId =
   | 'editor'
@@ -239,6 +240,10 @@ export const getVisibleContextRailSurfaces = (options: VisibleRailSurfacesOption
     // not have. Offering the surface anyway would promise the panel people see
     // on the desktop.
     if (surface.id === 'browser' && options.isVSCode) {
+      return false;
+    }
+    // GeoCode: not a surface GeoCode offers (geocode/linear-surface.ts, docs/DESKTOP.md §7.3)
+    if (surface.id === 'linear' && !LINEAR_OFFERED) {
       return false;
     }
     if (surface.id === 'linear' && !options.linearConnected) {

@@ -182,6 +182,7 @@ import {
     mergeSessionInputHistory,
 } from './inputHistory';
 import { useUserMessageHistory } from '@/sync/sync-context';
+import { LINEAR_OFFERED } from '@/geocode/linear-surface'; // GeoCode: own module
 
 // Lazy like in ChatMessage: a static import would pull the @pierre/diffs and
 // Shiki stacks into the eager startup graph for a dialog opened on demand.
@@ -3044,7 +3045,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
 
     const footerGapClass = 'gap-x-1.5 gap-y-0';
     const isVSCode = isVSCodeRuntime();
-    const showLinearPicker = Boolean(runtimeLinear) && !isVSCode;
+    const showLinearPicker = LINEAR_OFFERED && Boolean(runtimeLinear) && !isVSCode;
     // The work-status panel carries the agent's todos, but only on the
     // desktop/web layout — VS Code and mobile have no panel, so the todos keep
     // their place above the composer there.

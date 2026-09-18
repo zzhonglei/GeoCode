@@ -20,6 +20,10 @@ export const HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS: ReadonlySet<string> = new Set([
   'projects.worktree.setup.replace',
   // The usage-report switch controls nothing in the desktop shell (docs/DESKTOP.md §7.2).
   'appearance.usage-reports',
+  // Linear is not offered (linear-surface.ts); the GitHub entries beside these stay.
+  'integrations.linear',
+  'integrations.linear.add-workspace',
+  'integrations.linear.mapping',
 ]);
 
 export const isSettingsSearchItemHiddenOnDesktop = (id: string, desktopShell: boolean): boolean =>

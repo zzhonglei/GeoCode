@@ -69,6 +69,7 @@ import type {
 } from '@/lib/api/types';
 import type { CreateWorktreeArgs, ProjectRef } from '@/lib/worktrees/worktreeManager';
 import { useI18n } from '@/lib/i18n';
+import { LINEAR_OFFERED } from '@/geocode/linear-surface'; // GeoCode: own module
 
 type Mode = 'new-branch' | 'existing-branch';
 
@@ -1160,7 +1161,7 @@ export function NewWorktreeDialog({
 
   // GitHub connection check
   const isGitHubConnected = githubAuthChecked && githubAuthStatus?.connected === true;
-  const isLinearConnected = Boolean(linear) && linearAuthChecked && linearAuthStatus?.connected === true;
+  const isLinearConnected = LINEAR_OFFERED && Boolean(linear) && linearAuthChecked && linearAuthStatus?.connected === true;
 
   // Check if form is valid for submission
   const isFormValid = mode === 'existing-branch'

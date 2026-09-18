@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/i18n';
 import { isVSCodeRuntime } from '@/lib/desktop';
 import { getRegisteredRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { GitHubIntegration } from './GitHubIntegration';
+import { LINEAR_OFFERED } from '@/geocode/linear-surface'; // GeoCode: own module
 import { LinearSettings } from './LinearSettings';
 
 export const IntegrationsPage: React.FC = () => {
@@ -28,7 +29,7 @@ export const IntegrationsPage: React.FC = () => {
         contentClassName="space-y-3"
       >
         {hasGitHub ? <GitHubIntegration /> : null}
-        {hasLinear ? <LinearSettings /> : null}
+        {LINEAR_OFFERED && hasLinear ? <LinearSettings /> : null}
       </SettingsSection>
     </SettingsPageLayout>
   );
