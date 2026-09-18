@@ -49,7 +49,6 @@ import { Icon } from "@/components/icon/Icon";
 import { useMessageTTS } from '@/hooks/useMessageTTS';
 import { renderMagicPrompt } from '@/lib/magicPrompts';
 import { useI18n } from '@/lib/i18n';
-// GeoCode: the kernel's project directory, which the renderer reads plan files out of
 import { KERNEL_PLANS_SEGMENTS, KERNEL_PROJECT_DIR } from '@/geocode/kernel-roots'; // GeoCode: own module
 
 type PlanViewProps = {
@@ -88,10 +87,8 @@ const joinPath = (base: string, segment: string): string => {
   return `${normalizedBase}/${cleanSegment}`;
 };
 
-// --- GeoCode: the directory the kernel actually writes plans into (src/geocode/kernel-roots.ts).
-// `session.ts` composes `<worktree>/.geocode/plans` and the plan agent's edit permission spreads
-// the same segments, so naming the old directory here did not leak — it made this panel read a
-// file nobody writes, and report that the session has no plan. ---
+// --- GeoCode: the directory the kernel writes plans into (geocode/kernel-roots.ts); the kernel never writes
+// upstream's, so reading it leaves this panel reporting no plan. ---
 const buildRepoPlanPath = (directory: string, created: number, slug: string): string => {
   const plansDir = KERNEL_PLANS_SEGMENTS.reduce((acc, segment) => joinPath(acc, segment), directory);
   return joinPath(plansDir, `${created}-${slug}.md`);

@@ -1,5 +1,5 @@
 import { $ } from "bun"
-import { Brand } from "@opencode-ai/core/brand"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: own module
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import * as fs from "fs/promises"
 import os from "os"

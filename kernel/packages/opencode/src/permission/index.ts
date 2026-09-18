@@ -201,16 +201,8 @@ export function merge(...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule[] 
   return rulesets.flat()
 }
 
-/* --- GeoCode: the third of this function's tool-id-to-permission maps (docs/TOOLS.md §4.1, §9).
- *
- * Visibility is decided by TOOL ID, execution by the key a tool declares in `ctx.ask`. Upstream's own tools
- * mostly spell those the same, and where they do not it keeps a table — `edits` and `reads` below. GeoCode's
- * do not: the ids are the names the model reads (`ReadGeoData`), the keys are the groups a user reasons about
- * (`geodata`). Without an entry here a rule written against a group would govern execution and silently miss
- * visibility: the rule is written, it is simply never consulted.
- *
- * A missing row shows up only on a user-defined agent, the one ruleset that reaches this table, and
- * geocode-geo-permissions.test.ts pins it there. --- */
+/* --- GeoCode: geographic tool ids mapped to the keys they ask with, like `edits` and `reads` below; a missing row
+ * lets a group deny block calls yet leave the tool visible, silently (docs/TOOLS.md §4.1). --- */
 const GEO = {
   ReadGeoData: "geodata",
   QgisDoc: "qgis",
@@ -232,7 +224,7 @@ export function disabled(tools: string[], ruleset: PermissionV1.Ruleset): Set<st
           ? "edit"
           : reads.includes(tool)
             ? "read"
-            : ((GEO as Record<string, string>)[tool] ?? tool) // GeoCode
+            : ((GEO as Record<string, string>)[tool] ?? tool) // GeoCode: the geo groups, from the table above
       const rule = ruleset.findLast((rule) => Wildcard.match(permission, rule.permission))
       return rule?.pattern === "*" && rule.action === "deny"
     }),

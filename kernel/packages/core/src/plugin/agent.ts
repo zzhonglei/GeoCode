@@ -1,7 +1,7 @@
 export * as AgentPlugin from "./agent"
 
 import path from "path"
-import { Brand } from "../brand"
+import { Brand } from "../brand" // GeoCode: own module
 import { define } from "./internal"
 import { Effect } from "effect"
 import { AgentV2 } from "../agent"

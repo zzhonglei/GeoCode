@@ -1,5 +1,5 @@
 import { Bonjour } from "bonjour-service"
-import { Brand } from "@opencode-ai/core/brand"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: own module
 
 let bonjour: Bonjour | undefined
 let currentPort: number | undefined

@@ -13,10 +13,8 @@ import { GlobalPaths } from "../../src/server/routes/instance/httpapi/groups/glo
 import { controlHandlers } from "../../src/server/routes/instance/httpapi/handlers/control"
 import { controlPlaneHandlers } from "../../src/server/routes/instance/httpapi/handlers/control-plane"
 import { globalHandlers } from "../../src/server/routes/instance/httpapi/handlers/global"
-// --- GeoCode: the data face mounts on the root API (docs/GEOKERNEL.md §10.1 #2), so
-// RootHttpApi no longer builds without GeoHandler and the two services it reads. This
-// suite assembles that API itself, which is the only reason the wiring reaches a test
-// file — nothing below asserts anything about geo. ---
+// --- GeoCode: RootHttpApi includes the geo api, so assembling it here needs GeoHandler and the two services it
+// reads; nothing below tests geo (docs/GEOKERNEL.md §10.1 #2). ---
 import { GeoHandler } from "../../src/server/routes/instance/httpapi/handlers/geo"
 import { MachineConfig } from "../../src/geo/config"
 import { GeoStatus } from "../../src/geo/status"
@@ -26,7 +24,7 @@ import { testEffect } from "../lib/effect"
 
 const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(RootHttpApi).pipe(
-    Layer.provide([controlHandlers, controlPlaneHandlers, globalHandlers, GeoHandler]), // GeoCode
+    Layer.provide([controlHandlers, controlPlaneHandlers, globalHandlers, GeoHandler]), // GeoCode: the geo api's handler
     Layer.provide([authorizationLayer, schemaErrorLayer]),
     // Raw HttpApi routes expose an opaque handler context at the request boundary.
     // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
@@ -38,8 +36,10 @@ const apiLayer = HttpRouter.serve(
   Layer.provide(Layer.mock(Auth.Service)({})),
   Layer.provide(Layer.mock(Config.Service)({})),
   Layer.provide(Layer.mock(MoveSession.Service)({})),
-  Layer.provide(Layer.mock(GeoStatus.Service)({})), // GeoCode
-  Layer.provide(Layer.mock(MachineConfig.Service)({})), // GeoCode
+  // --- GeoCode: the services GeoHandler reads ---
+  Layer.provide(Layer.mock(GeoStatus.Service)({})),
+  Layer.provide(Layer.mock(MachineConfig.Service)({})),
+  // --- /GeoCode ---
   Layer.provide(
     Layer.mock(Installation.Service)({
       method: () => Effect.succeed("npm"),

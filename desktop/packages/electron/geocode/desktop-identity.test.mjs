@@ -10,9 +10,8 @@ const readElectronFile = (name) => fs.readFileSync(path.join(electronRoot, name)
 
 describe('desktop identity', () => {
   it('is the origin the shell runtime trusts for the bundled UI', () => {
-    // A hand-copy in the web package (CONVENTIONS.md §3 forbids the import). The two drift
-    // with no conflict and no failure, except that every request from the window then gets
-    // no CORS headers and the UI reports the server unreachable.
+    // A hand-copy in the web package; drifted, requests from the window get no CORS headers and the UI reports the
+    // server unreachable.
     const source = fs.readFileSync(
       path.resolve(electronRoot, '../web/server/geocode/shell-identity.js'),
       'utf8',
@@ -22,8 +21,7 @@ describe('desktop identity', () => {
   });
 
   it('keeps package.json build fields from drifting, since JSON carries no patch marker', () => {
-    // CONVENTIONS.md §5: JSON is one of the two file kinds the locator grep cannot see, so
-    // an upstream merge can revert these without leaving a trace anywhere else.
+    // An upstream merge can revert these without leaving a trace (docs/CONVENTIONS.md §5).
     const { build } = JSON.parse(readElectronFile('package.json'));
     expect(build.appId).toBe(DesktopIdentity.appId);
     expect(build.productName).toBe(DesktopIdentity.productName);
@@ -32,9 +30,8 @@ describe('desktop identity', () => {
   });
 
   it('ships the product name in the metadata that travels with the installer', () => {
-    // `author` reaches the installed package's metadata, so it is the product's name and not
-    // upstream's. `name` stays `@openchamber/electron`: other workspace packages import it,
-    // and Windows gets the rewrite it needs from extraMetadata instead.
+    // `name` stays upstream's, which main.mjs and upstream scripts look the package up by; Windows gets its rewrite
+    // from extraMetadata.
     const manifest = JSON.parse(readElectronFile('package.json'));
     expect(manifest.author).toBe(DesktopIdentity.productName);
     expect(manifest.description).toContain(DesktopIdentity.productName);
@@ -42,8 +39,7 @@ describe('desktop identity', () => {
   });
 
   it('publishes to, and announces from, the release repository it names', () => {
-    // package.json cannot import the identity; the renderer cannot import the electron package.
-    // Both carry copies, and each copy is pinned here so none can drift back to upstream's.
+    // package.json and the renderer cannot import the identity, so each carries a copy.
     const { build } = JSON.parse(readElectronFile('package.json'));
     expect(`${build.publish.owner}/${build.publish.repo}`).toBe(DesktopIdentity.releaseRepository);
     expect(DesktopIdentity.releasesUrl).toBe(`https://github.com/${DesktopIdentity.releaseRepository}/releases`);
@@ -67,18 +63,15 @@ describe('desktop identity', () => {
   });
 
   it('rewrites the Windows install directory, which comes from name and not productName', () => {
-    // PATHS.md §2: without this, GeoCode installs over upstream OpenCode, and the wrong path
-    // then sticks in the registry's InstallLocation where reinstalling does not clear it.
+    // Without it the install directory follows upstream's package name, and a wrong one persists in the registry's
+    // InstallLocation (docs/PATHS.md §3.5).
     const { build } = JSON.parse(readElectronFile('package.json'));
     expect(build.extraMetadata?.name).toBe(DesktopIdentity.windowsPackageName);
   });
 
   it('refuses our own schemes in the chat link classifier', () => {
-    // Upstream keeps its own schemes off the app-link path so chat content cannot re-launch the
-    // product's internal deep links; the classifier is in the renderer, which cannot import this
-    // module, so it hand-copies the two names. Renaming one side alone silently turns
-    // `geocode://` into an ordinary third-party app link, and its "trust" option then opens
-    // every later one without asking.
+    // The renderer hand-copies these; a drift turns `geocode://` in chat content into a third-party app link whose
+    // "trust" option then opens every later one without asking.
     const url = fs.readFileSync(
       path.resolve(electronRoot, '../ui/src/lib/url.ts'),
       'utf8',
@@ -89,9 +82,7 @@ describe('desktop identity', () => {
   });
 
   it('sends the OAuth return leg to our own protocol', () => {
-    // The MCP authorization return lands in the system browser, which raises the app by opening a
-    // deep link. Two pages carry it — the in-app route and the self-contained one the server
-    // renders for a browser with no UI session — and neither can import this module.
+    // Both pages that raise the app from the browser after MCP authorization hand-copy the scheme.
     const focus = `${DesktopIdentity.deepLinkProtocol}://focus/mcp-auth`;
     for (const file of ['../ui/src/components/sections/mcp/McpOAuthCallbackPage.tsx', '../web/server/lib/opencode/routes.js']) {
       // Line comments are dropped first: upstream's own comment in routes.js still names its protocol.
@@ -102,8 +93,8 @@ describe('desktop identity', () => {
   });
 
   it('names the browser panel partition the renderer actually mounts', () => {
-    // The renderer cannot import the identity either. main.mjs answers capture and clear-data only
-    // for views in this partition, so a drift here breaks both while open and click still work.
+    // main.mjs answers capture and clear-data only for views in this partition, so a drift breaks both while open
+    // and click still work.
     const pane = fs.readFileSync(
       path.resolve(electronRoot, '../ui/src/components/browser/BrowserPane.tsx'),
       'utf8',
@@ -114,10 +105,8 @@ describe('desktop identity', () => {
   });
 
   it('reads the bundled UI origin from the shell instead of naming it', () => {
-    // preload ships unbundled (build.files below), so it cannot import this module, and the
-    // literal it used to compare against was upstream's: the four capabilities it gates were
-    // withheld from the very window they are meant for, and two other injection paths happened
-    // to cover most of them. Every window that opens with a preload has to pass the value.
+    // preload ships unbundled and cannot import the identity, so every window that opens with it has to pass the
+    // origin, or that window loses what the check gates.
     const preload = readElectronFile('preload.mjs');
     expect(preload).toContain("readArgValue('--openchamber-packaged-origin')");
     // The declaration alone is not the comparison: the gate has to be the thing that reads it.
@@ -130,8 +119,7 @@ describe('desktop identity', () => {
   });
 
   it('names our scheme where the renderer decides the window is the local instance', () => {
-    // Another hand-copy the renderer cannot avoid. It sits behind an earlier short circuit today,
-    // so a drift here is invisible until the branch is reached.
+    // A renderer hand-copy behind earlier checks that can answer first, so a drift stays invisible.
     const host = fs.readFileSync(
       path.resolve(electronRoot, '../ui/src/lib/desktopCurrentHost.ts'),
       'utf8',
@@ -141,8 +129,7 @@ describe('desktop identity', () => {
   });
 
   it('names the log directory the diagnostics report sends the user to', () => {
-    // A hand-copy as well: electron-log takes the directory from the product name, and the report
-    // the renderer builds is where a user finds out where to look.
+    // electron-log names the directory after the product, and this report is where a user learns where to look.
     const status = fs.readFileSync(
       path.resolve(electronRoot, '../ui/src/lib/openCodeStatus.ts'),
       'utf8',
@@ -156,7 +143,6 @@ describe('desktop identity', () => {
   });
 
   it('sends Help feedback to the repository it names, and offers no Discord', () => {
-    // Upstream's Help menu opened its own issue templates and its Discord server.
     expect(DesktopIdentity.newIssueUrl).toBe(`https://github.com/${DesktopIdentity.releaseRepository}/issues/new`);
     const main = readElectronFile('main.mjs');
     const lines = main.split('\n');
@@ -181,11 +167,8 @@ describe('desktop identity', () => {
   });
 
   it('leaves no upstream identity literal in the files the installer ships', () => {
-    // Guards the merge that quietly restores one. The file list comes from build.files rather
-    // than from a list kept here, because a per-file list cannot see a file it does not name —
-    // preload was outside the old one, which is how its stale origin survived. Wire fingerprints
-    // are deliberately absent: OPENCHAMBER_* variables, the @openchamber/electron package name
-    // and the openchamber: IPC channels identify the code, not the product, and stay upstream.
+    // Guards a merge that quietly restores one. Files come from build.files, so a newly shipped file is scanned too;
+    // wire names are absent on purpose (desktop-identity.mjs).
     const { build } = JSON.parse(readElectronFile('package.json'));
     // `dist-bundle/main.mjs` is built from `main.mjs`; the source is what a merge touches.
     const shipped = build.files.map((entry) => entry.replace(/^dist-bundle\//, ''));
@@ -194,7 +177,8 @@ describe('desktop identity', () => {
       const source = readElectronFile(file);
       for (const literal of [
         "app.setName('OpenChamber')",
-        "'dev.openchamber.desktop'",
+        // No closing quote: upstream spells the dev build `dev.openchamber.desktop.dev`.
+        "'dev.openchamber.desktop",
         'openchamber-ui',
         "'persist:openchamber-browser'",
         "'openchamber.desktop'",

@@ -1,5 +1,5 @@
 import { cmd } from "./cmd"
-import { Brand } from "@opencode-ai/core/brand"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: own module
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { Global } from "@opencode-ai/core/global"

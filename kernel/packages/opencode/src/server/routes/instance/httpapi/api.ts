@@ -57,7 +57,7 @@ export const RootHttpApi = HttpApi.make("opencode-root")
   .addHttpApi(ControlApi)
   .addHttpApi(ControlPlaneApi)
   .addHttpApi(GlobalApi)
-  // GeoKernel is process-wide, so it belongs on the root api beside global (§10.2).
+  // GeoCode: GeoKernel is process-wide, so its api sits on the root api beside global (docs/GEOKERNEL.md §10.2).
   .addHttpApi(GeoApi)
   .middleware(SchemaErrorMiddleware)
   .middleware(Authorization)
@@ -66,8 +66,7 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(ConfigApi)
   .addHttpApi(ExperimentalApi)
   .addHttpApi(FileApi)
-  // GeoCode: the preview endpoints take a path from outside, so unlike the
-  // status face they need to know which project they answer for (§7.8).
+  // GeoCode: preview endpoints resolve paths within a project, hence the instance api (docs/GEOKERNEL.md §7.8)
   .addHttpApi(GeoPreviewApi)
   .addHttpApi(InstanceApi)
   .addHttpApi(McpApi)

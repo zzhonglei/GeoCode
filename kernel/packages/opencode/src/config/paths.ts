@@ -1,14 +1,14 @@
 export * as ConfigPaths from "./paths"
 
 import path from "path"
-import { Brand } from "@opencode-ai/core/brand"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: own module
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { unique } from "remeda"
 import * as Effect from "effect/Effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 
-/** True when `dir` is a project config directory (docs/PATHS.md §5). */
+/* --- GeoCode: true when `dir` is a project config directory (docs/PATHS.md §5). --- */
 export function isProjectDir(dir: string) {
   return path.basename(dir) === Brand.projectDir
 }
@@ -37,10 +37,8 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
           stop: worktree,
         })
       : []),
-    /* --- GeoCode: upstream also scans `~/.opencode`, a second global root it
-     * kept from before the XDG move. GeoCode has exactly one global root and
-     * it is `Global.Path.config` above (docs/PATHS.md §3.1), so this scan is
-     * removed rather than renamed — there is no `~/.geocode` to find. --- */
+    /* --- GeoCode: no `~/.opencode` scan; GeoCode's one global root is `Global.Path.config` above, so the scan is
+     * removed rather than renamed (docs/KERNEL.md §6). --- */
     ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
   ])
 })

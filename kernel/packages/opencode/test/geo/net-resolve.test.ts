@@ -65,7 +65,6 @@ async function tlsTarget(): Promise<Target> {
   return { id: "test", host: "localhost", port: await listen(server) }
 }
 
-/** A port number nothing is listening on. */
 async function closedPort(): Promise<number> {
   const server = net.createServer()
   const port = await new Promise<number>((resolve) =>
@@ -147,7 +146,8 @@ describe("net path resolution", () => {
     expect(NetDiscovery.skipped({ ALL_PROXY: "socks5://[::1]:1080" })).toEqual(["socks5:[::1]:1080"])
 
     // Both parse with an empty host — no `//` in the first, nothing after it in the second — leaving nothing to name.
-    expect(NetDiscovery.skipped({ ALL_PROXY: "socks5:127.0.0.1:1080" })).toEqual(["socks5:unparseable"])
+    // The first also loses its scheme, since without `//` the text before the colon is not provably one.
+    expect(NetDiscovery.skipped({ ALL_PROXY: "socks5:127.0.0.1:1080" })).toEqual(["socks:unparseable"])
     expect(NetDiscovery.skipped({ ALL_PROXY: "socks5://" })).toEqual(["socks5:unparseable"])
   })
 
@@ -159,15 +159,18 @@ describe("net path resolution", () => {
       // A `/` in the username parses instead, to the host `al`, so the @-without-a-user check is what catches it.
       ["socks5://al/ice:secret@10.0.0.9:1080", "socks5:unparseable"],
       // No `//` at all parses too, with an empty host and no username, so a try/catch alone would return `socks5:`.
-      ["socks5:alice:hunter2@10.0.0.9:1080", "socks5:unparseable"],
+      ["socks5:alice:hunter2@10.0.0.9:1080", "socks:unparseable"],
       ["socks5://alice:p@ssw0rd@10.0.0.9:1080", "socks5:10.0.0.9:1080"],
+      // A username is what `^socks` matched here, and the scheme is read only ahead of `//` so that it stays out.
+      ["socksalice:hunter2@10.0.0.9:1080", "socks:unparseable"],
+      ["socksalice:pw@10.0.0.9:1080://x", "socks:unparseable"],
     ] as const
 
     for (const [declared, expected] of secrets) {
       const published = NetDiscovery.skipped({ ALL_PROXY: declared })
       expect(published).toEqual([expected])
       for (const item of published) {
-        for (const secret of ["hunter2", "secret", "pa/ss", "p@ssw0rd", "alice", "al/ice"]) {
+        for (const secret of ["hunter2", "secret", "pa/ss", "p@ssw0rd", "alice", "al/ice", "socksalice"]) {
           expect(item).not.toContain(secret)
         }
       }
@@ -175,7 +178,6 @@ describe("net path resolution", () => {
   })
 
   test("the same value is never reported twice, however many variables carry it", () => {
-    // A proxy is usually exported under three names, and three identical lines read as three problems.
     expect(
       NetDiscovery.skipped({ ALL_PROXY: "socks5://127.0.0.1:1080", all_proxy: "socks5://127.0.0.1:1080" }),
     ).toEqual(["socks5:127.0.0.1:1080"])

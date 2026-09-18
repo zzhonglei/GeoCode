@@ -70,8 +70,9 @@ v2 路径会主动扫三个兄弟产品的 appData 目录复用已在跑的守�
 
 ### 4.1 带商标却是我们自己要用的名字
 
-这是设计里最要盯住的一张表。每一行都带商标,所以都会被剥;它们能工作,**只**因为我们的代码在剥离之后把它们写回去。
-顺序一错,后果在最后一列。
+这是设计里最要盯住的一张表。每一行都会被剥;它们能工作,**只**因为我们的代码在剥离之后把它们写回去。
+带上游商标的那些由前缀表剥掉,`GEOCODE_BROWSER_PLUGIN` 按名字剥(§5.1 的 `INJECTED_ONLY`)——它带的是我们自己的前缀,
+而那个前缀是留着继承的。顺序一错,后果在最后一列。
 
 | 名字 | 谁写 | 谁读、何时 | 顺序错了会怎样 |
 |---|---|---|---|
@@ -112,10 +113,11 @@ v2 路径会主动扫三个兄弟产品的 appData 目录复用已在跑的守�
 |---|---|
 | `INHERITED_PREFIXES` | `['OPENCODE_', 'OTEL_', 'OPENCHAMBER_']`(类 A) |
 | `CHILD_DENYLIST` | 类 B,按平台分组:通用一组,`darwin` 加 `DYLD_INSERT_LIBRARIES`,`linux` 加 `LD_PRELOAD` |
+| `INJECTED_ONLY` | 只经 `overrides` 到内核的名字,现有一个 `GEOCODE_BROWSER_PLUGIN`。继承来的那份会让内核加载上一次启动留下的插件文件,而回调要的两个变量已被前缀剥掉,模型于是多出两个恒报连接不可用的工具 |
 | `LAUNCHER_ALLOWLIST` / `E2E_ALLOWLIST` | 类 F:前者 4 个 dev 旋钮,后者 2 个 e2e 名字 |
 | `stripInheritedForeignVariables(env, { keep })` | 按前缀删,`keep` 里的名字跳过;返回删掉的名字 |
 | `environment-boundary.mjs` 的 `inheritedKeep` | 本进程的 `keep`:未打包时两张表都留,打包时只留 e2e;模块加载即做第一次剥离,是 `main.mjs` 的第一条 import。Electron 之外没有 `app`,按打包处理 |
-| `createKernelProcessEnvironment({ environment, platform, overrides })` | 从零建子进程环境:按前缀过滤 → 按黑名单删 → 叠 `overrides`。`overrides` 仍是唯一有意驱动内核的通道(要改代码、走提交、过审查) |
+| `createKernelProcessEnvironment({ environment, platform, overrides })` | 从零建子进程环境:按前缀过滤 → 按 `INJECTED_ONLY` 与黑名单删 → 叠 `overrides`。`overrides` 仍是唯一有意驱动内核的通道(要改代码、走提交、过审查) |
 | `applyKernelConnectionToShellEnvironment` | 不变 |
 
 判据用 `app.isPackaged`,不用任何环境变量。

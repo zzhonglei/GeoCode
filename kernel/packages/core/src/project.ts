@@ -10,7 +10,7 @@ import { makeGlobalNode } from "./effect/app-node"
 import { Hash } from "./util/hash"
 import { ProjectDirectories } from "./project/directories"
 import { ProjectSchema } from "./project/schema"
-import { Brand } from "./brand"
+import { Brand } from "./brand" // GeoCode: own module
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID

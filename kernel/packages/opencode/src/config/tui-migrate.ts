@@ -5,7 +5,7 @@ import { Option, Schema } from "effect"
 import { TuiConfig } from "@opencode-ai/tui/config"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
-import { Brand } from "@opencode-ai/core/brand"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: own module
 import { Filesystem } from "@/util/filesystem"
 import * as ConfigPaths from "@/config/paths"
 
@@ -115,8 +115,7 @@ async function backupAndStripLegacy(file: string, source: string) {
 
 async function opencodeFiles(input: { directories: string[]; cwd: string }) {
   const files = [
-    // --- GeoCode: branded config file names, global and project alike
-    // (docs/PATHS.md §5). ---
+    // --- GeoCode: branded config file names, global and project alike (docs/PATHS.md §5) ---
     ...ConfigPaths.fileInDirectory(Global.Path.config, Brand.name),
     ...(await Filesystem.findUp([Brand.configJson, Brand.configJsonc], input.cwd, undefined, { rootFirst: true })),
     // --- /GeoCode ---

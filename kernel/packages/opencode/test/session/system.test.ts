@@ -84,22 +84,9 @@ const it = testEffect(
 )
 
 describe("session.system", () => {
-  /* --- GeoCode: upstream picks one of nine prompts by model family; GeoCode returns its own single base for
-   * every model (docs/KERNEL.md §5.2), so the cases this replaces could not pass and sat red in every vendored
-   * run — indistinguishable from a patch the merge had just undone.
-   *
-   * Generalized rather than deleted: `geocode-brand.test.ts` asserts the SOURCE of `session/system.ts`, which
-   * is a different question from what the function returns. This is the runtime half of that patch.
-   *
-   * Upstream original, as of v1.18.18 — one case at v1.18.4, three now, and the growth is the point: this is
-   * an area upstream actively works, so expect the next merge to conflict here again.
-   *   test("selects the Meta prompt for Muse Spark model IDs", …)      // + {{MODEL_NAME}} substitution
-   *   test("selects the Meta prompt for Muse Glimmer model IDs", …)    // added in v1.18.18
-   *   test("selects the Kimi prompt for official provider model IDs", …) // added in v1.18.18
-   */
+  /* --- GeoCode: replaces upstream's per-family cases (Meta Muse Spark and Muse Glimmer, Kimi), which cannot pass
+   * once every model gets the one base prompt; red if family branching comes back (docs/KERNEL.md §5.2). --- */
   test("GeoCode: every model gets the one base prompt, family branching and all", () => {
-    // A spread of provider prefixes, the first being the one upstream asserted
-    // here. If the branching ever comes back, it comes back for these.
     for (const id of ["meta/muse-spark-preview", "anthropic/claude-opus-4", "openai/gpt-5", "unknown/model"]) {
       const selected = SystemPrompt.provider({ api: { id } } as Provider.Model)
       expect(selected.length, id).toBe(1)

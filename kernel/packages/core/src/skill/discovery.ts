@@ -7,7 +7,7 @@ import { FSUtil } from "../fs-util"
 import { Global } from "../global"
 import { makeGlobalNode } from "../effect/app-node"
 import { httpClient } from "../effect/app-node-platform"
-import { Brand } from "../brand"
+import { Brand } from "../brand" // GeoCode: own module
 import { AbsolutePath } from "../schema"
 
 const skillConcurrency = 4

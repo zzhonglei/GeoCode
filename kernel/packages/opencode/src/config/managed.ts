@@ -4,7 +4,7 @@ import { existsSync } from "fs"
 import os from "os"
 import path from "path"
 import { Process } from "@/util/process"
-import { Brand } from "@opencode-ai/core/brand"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: own module
 
 // GeoCode: managed-policy identity — plist domain + system config dirs
 const MANAGED_PLIST_DOMAIN = Brand.managedDomain

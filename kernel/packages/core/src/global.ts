@@ -6,7 +6,7 @@ import { Context, Effect, Layer } from "effect"
 import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
 import { makeGlobalNode } from "./effect/app-node"
-import { Brand } from "./brand"
+import { Brand } from "./brand" // GeoCode: own module
 
 // GeoCode: namespace all roots under our own identity (docs/PATHS.md §3.1)
 const app = Brand.dirName

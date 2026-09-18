@@ -1,10 +1,5 @@
-/* --- GeoCode: the "OpenCode CLI" section and the network half of the desktop section stay
- * off the desktop shell (docs/DESKTOP.md §7.3, §6.1).
- *
- * Two halves have to agree: the page must not render the controls, and the settings search
- * must not offer entries that lead to them. The filter is a pure function pinned here; the
- * call sites are pinned by reading their source, because a renderer test that mounts the
- * settings page would drag every store along and prove less than it costs. --- */
+/* --- GeoCode: settings the desktop shell does not offer must stay off both the page and the settings search, so a
+ * merge can bring back neither a control nor an entry that leads to it (docs/DESKTOP.md §6.1, §7.3). --- */
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -58,16 +53,17 @@ describe('desktop settings surface', () => {
     }
   });
 
-  test('the hidden ids are the ids the search table declares', () => {
+  test('the ids this surface names are the ids the search table declares', () => {
+    // Both halves go stale in silence: a hidden id that no longer exists hides nothing, and a kept id that no
+    // longer matches leaves a search hit that scrolls nowhere.
     const search = read('lib/settings/search.ts');
-    for (const id of HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS) {
+    for (const id of [...HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS, ...KEPT_DESKTOP_OPTION_IDS]) {
       expect(search).toContain(`id: '${id}'`);
     }
     expect(search).toContain('isSettingsSearchItemHiddenOnDesktop(item.id, isDesktopShell())');
   });
 
   test('the usage-report switch is listed outside the desktop shell only', () => {
-    // It only rides on upstream's update check, which the shell answers locally (docs/DESKTOP.md §7.2).
     // OpenChamberVisualSettings.tsx declares the name and renders the section; every other file only lists it.
     const lists = componentFiles(path.join(path.dirname(fileURLToPath(import.meta.url)), '..'))
       .filter((file) => !file.endsWith(`${path.sep}OpenChamberVisualSettings.tsx`))
@@ -82,7 +78,6 @@ describe('desktop settings surface', () => {
     const page = read('components/sections/openchamber/OpenChamberPage.tsx');
     expect(page).toContain("import { OpenCodeCliSettings as UpstreamOpenCodeCliSettings } from './OpenCodeCliSettings'");
     expect(page).toContain('isDesktopShell() ? null : <UpstreamOpenCodeCliSettings />');
-    // The upstream JSX sites keep their name, so they resolve to the guarded component above.
     expect(page.match(/<OpenCodeCliSettings \/>/g)?.length).toBe(2);
     expect(page.match(/<UpstreamOpenCodeCliSettings \/>/g)?.length).toBe(1);
   });
@@ -106,14 +101,12 @@ describe('desktop settings surface', () => {
     for (const token of ['desktopLanAccess', 'desktopUiPassword', 'getDesktopLanAddress']) {
       expect(section).not.toContain(token);
     }
-    // The menu bar option is the only value that goes through the settings file.
     expect(section.match(/desktopMacMenuBarEnabled: draftMacMenuBarEnabled/g)?.length).toBe(1);
   });
 
   test('the External Tunnel page is unavailable in the desktop shell only', () => {
-    // Navigation, direct routes and search all read this one predicate (SettingsView.tsx
-    // isPageAvailable, search.ts buildSettingsSearchResults), so hiding the page here hides
-    // every way to reach it.
+    // Navigation, direct routes and search all read this predicate (SettingsView.tsx, search.ts), so it closes
+    // every way to reach a page.
     const tunnel = getSettingsPageMeta('tunnel');
     const base = { isVSCode: false, isWeb: false, isMobile: false };
     expect(tunnel?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
@@ -121,8 +114,6 @@ describe('desktop settings surface', () => {
   });
 
   test('the Plugins page is unavailable in the desktop shell only', () => {
-    // The kernel loads no plugin a configuration declares, so everything this page writes would be
-    // discarded; the shell half is server/geocode/closed-surface.test.js.
     const plugins = getSettingsPageMeta('plugins');
     const base = { isVSCode: false, isWeb: false, isMobile: false };
     expect(plugins?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
@@ -130,8 +121,6 @@ describe('desktop settings surface', () => {
   });
 
   test('the Magic Prompts page is unavailable in the desktop shell only', () => {
-    // Its VS Code exclusion is upstream's; the desktop half is ours. Server side is
-    // server/geocode/closed-surface.test.js.
     const prompts = getSettingsPageMeta('magic-prompts');
     const base = { isVSCode: false, isWeb: false, isMobile: false };
     expect(prompts?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
@@ -139,8 +128,6 @@ describe('desktop settings surface', () => {
   });
 
   test('the Snippets page is unavailable in the desktop shell only', () => {
-    // The composer affordance and the six routes are the other two halves
-    // (SnippetAutocomplete.tsx, server/geocode/snippet-surface.test.js).
     const snippets = getSettingsPageMeta('snippets');
     const base = { isVSCode: false, isWeb: false, isMobile: false };
     expect(snippets?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
@@ -148,7 +135,6 @@ describe('desktop settings surface', () => {
   });
 
   test('the Skills Catalog page is unavailable in the desktop shell only', () => {
-    // The four catalog routes are the other half (server/geocode/skill-catalog-surface.test.js).
     const catalog = getSettingsPageMeta('skills.catalog');
     const base = { isVSCode: false, isWeb: false, isMobile: false };
     expect(catalog?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
@@ -156,15 +142,13 @@ describe('desktop settings surface', () => {
   });
 
   test('the composer offers no snippet popup in the desktop shell', () => {
-    // Pinned by source: three composers mount it, so the wrapper is the one place that covers
-    // them all, and a merge that reinstates upstream's direct export must fail here.
+    // Three composers mount it, so a merge that reinstates upstream's direct export reopens all of them.
     const source = read('components/chat/SnippetAutocomplete.tsx');
     expect(source).toContain('const SnippetAutocompleteUpstream = React.forwardRef');
     expect(source).toContain('isDesktopShell() ? null :');
   });
 
   test('no starter row under a new session in the desktop shell, and no switch for it', () => {
-    // Both composers mount DraftPresetChips, so its guard is the one place that covers them.
     const chips = read('components/chat/DraftPresetChips.tsx');
     const component = chips.indexOf('export const DraftPresetChips:');
     const guard = chips.indexOf('if (isDesktopShell()) return null;', component);
@@ -210,7 +194,6 @@ describe('desktop settings surface', () => {
     const section = page.indexOf("t('settings.behavior.page.section.systemPromptOptimization')", guard);
     expect(guard).toBeGreaterThan(-1);
     expect(section).toBeGreaterThan(guard);
-    // The optimizer is the only section behind that guard; the rest of the page still renders.
     expect(page).toContain("t('settings.behavior.page.section.systemPrompt')");
   });
 });

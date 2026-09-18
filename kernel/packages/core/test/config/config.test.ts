@@ -1,6 +1,6 @@
 // GeoCode: fixtures write the branded names the loader reads (docs/PATHS.md §5).
 import path from "path"
-import { Brand } from "@opencode-ai/core/brand"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: own module
 import fs from "fs/promises"
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema } from "effect"

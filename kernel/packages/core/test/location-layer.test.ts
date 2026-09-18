@@ -1,6 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
-import { Brand } from "@opencode-ai/core/brand"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: own module
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Equal, Hash, Schema } from "effect"
 import { Tool } from "@opencode-ai/core/tool/tool"

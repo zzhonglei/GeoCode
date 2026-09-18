@@ -2,7 +2,7 @@ export * as Config from "./config"
 
 import { makeLocationNode } from "./effect/app-node"
 import path from "path"
-import { Brand } from "./brand"
+import { Brand } from "./brand" // GeoCode: own module
 import { type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
@@ -140,9 +140,7 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     const policy = yield* Policy.Service
-    // GeoCode: branded config file names (docs/PATHS.md §5). This is the
-    // location-scoped discovery, independent of the one in opencode/src/config
-    // — both have to be renamed or a project config would still be read here.
+    // GeoCode: branded names; opencode/src/config/paths.ts discovers separately, so a name left upstream here is still read
     const names = [Brand.configJson, Brand.configJsonc]
     const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
     const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)

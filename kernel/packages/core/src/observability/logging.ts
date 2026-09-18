@@ -1,7 +1,7 @@
 import { Formatter, Logger, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global"
-import { Brand } from "../brand"
+import { Brand } from "../brand" // GeoCode: own module
 import { runID } from "./shared"
 
 function formatter(id: string = runID) {

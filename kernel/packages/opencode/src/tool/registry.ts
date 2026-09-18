@@ -26,14 +26,16 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
 import { WebSearchTool } from "./websearch"
-import { GeoReadTool } from "./geo-read" // GeoCode: the geographic toolset (docs/TOOLS.md §3)
-import { QgisDocTool } from "./geo-qgis-doc" // GeoCode
-import { RunQgisAlgorithmTool } from "./geo-qgis-run" // GeoCode
-import { RunGeeScriptTool } from "./geo-gee-run" // GeoCode
-import { OsmSearchTool } from "./geo-osm-search" // GeoCode
-import { OsmProbeTool } from "./geo-osm-probe" // GeoCode
-import { OsmGetObjectsTool } from "./geo-osm-objects" // GeoCode
-import { OsmGetFeaturesTool } from "./geo-osm-features" // GeoCode
+// --- GeoCode: own modules, the geographic toolset (docs/TOOLS.md §3) ---
+import { GeoReadTool } from "./geo-read"
+import { QgisDocTool } from "./geo-qgis-doc"
+import { RunQgisAlgorithmTool } from "./geo-qgis-run"
+import { RunGeeScriptTool } from "./geo-gee-run"
+import { OsmSearchTool } from "./geo-osm-search"
+import { OsmProbeTool } from "./geo-osm-probe"
+import { OsmGetObjectsTool } from "./geo-osm-objects"
+import { OsmGetFeaturesTool } from "./geo-osm-features"
+// --- /GeoCode ---
 import { GeoKernel } from "@/geo" // GeoCode: its services flow into this registry's layer (docs/TOOLS.md §7)
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
@@ -121,14 +123,16 @@ const layer = Layer.effect(
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
-    const georead = yield* GeoReadTool // GeoCode: appended, off upstream's churn path
-    const qgisdoc = yield* QgisDocTool // GeoCode
-    const qgisrun = yield* RunQgisAlgorithmTool // GeoCode
-    const geerun = yield* RunGeeScriptTool // GeoCode
-    const osmsearch = yield* OsmSearchTool // GeoCode
-    const osmprobe = yield* OsmProbeTool // GeoCode
-    const osmobjects = yield* OsmGetObjectsTool // GeoCode
-    const osmfeatures = yield* OsmGetFeaturesTool // GeoCode
+    // --- GeoCode: appended, off upstream's churn path ---
+    const georead = yield* GeoReadTool
+    const qgisdoc = yield* QgisDocTool
+    const qgisrun = yield* RunQgisAlgorithmTool
+    const geerun = yield* RunGeeScriptTool
+    const osmsearch = yield* OsmSearchTool
+    const osmprobe = yield* OsmProbeTool
+    const osmobjects = yield* OsmGetObjectsTool
+    const osmfeatures = yield* OsmGetFeaturesTool
+    // --- /GeoCode ---
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -192,10 +196,8 @@ const layer = Layer.effect(
           }
         }
 
-        /* --- GeoCode: upstream scans `{tool,tools}/*.{js,ts}` under every config directory and imports what it finds,
-         * so opening a folder can register and run its code. GeoCode's own tools are built in and a user's
-         * custom tool belongs on MCP, so leaving the list empty keeps the loop below upstream's
-         * (docs/PATHS.md §7). --- */
+        /* --- GeoCode: no `{tool,tools}/*.{js,ts}` scan of config directories, so opening a folder never runs its code;
+         * user tools belong on MCP, and the empty list keeps the loop below upstream's (docs/KERNEL.md §6). --- */
         const matches: string[] = []
         for (const match of matches) {
           const namespace = path.basename(match, path.extname(match))
@@ -232,14 +234,16 @@ const layer = Layer.effect(
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
-          georead: Tool.init(georead), // GeoCode
-          qgisdoc: Tool.init(qgisdoc), // GeoCode
-          qgisrun: Tool.init(qgisrun), // GeoCode
-          geerun: Tool.init(geerun), // GeoCode
-          osmsearch: Tool.init(osmsearch), // GeoCode
-          osmprobe: Tool.init(osmprobe), // GeoCode
-          osmobjects: Tool.init(osmobjects), // GeoCode
-          osmfeatures: Tool.init(osmfeatures), // GeoCode
+          // --- GeoCode: the ids the model calls them by (docs/TOOLS.md §3) ---
+          georead: Tool.init(georead),
+          qgisdoc: Tool.init(qgisdoc),
+          qgisrun: Tool.init(qgisrun),
+          geerun: Tool.init(geerun),
+          osmsearch: Tool.init(osmsearch),
+          osmprobe: Tool.init(osmprobe),
+          osmobjects: Tool.init(osmobjects),
+          osmfeatures: Tool.init(osmfeatures),
+          // --- /GeoCode ---
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
@@ -263,10 +267,8 @@ const layer = Layer.effect(
             tool.search,
             tool.skill,
             tool.patch,
-            // GeoCode: the geographic toolset, built in beside the native tools (docs/TOOLS.md §3; GEOKERNEL §10.1
-            // #9). Registered for every agent; WHICH of them an agent sees is settled afterwards by the GEO map
-            // in permission/index.ts, and whether a call goes through by the key each tool names in `ctx.ask`.
-            // Four keys with deliberately no common prefix: they are names a user reads (docs/TOOLS.md §4.1).
+            // GeoCode: registered for every agent; the GEO map in permission/index.ts decides which ones each sees
+            // (docs/TOOLS.md §4.1)
             tool.georead,
             tool.qgisdoc,
             tool.qgisrun,
@@ -481,8 +483,7 @@ export const node = LayerNode.make({
     MCP.node,
     Database.node,
     Ripgrep.node,
-    // GeoCode: geo tools yield geo-kernel services at init, so their node joins the registry's dependencies. The
-    // server graph mounts the same node; the shared memo map makes this the same instance, not a second kernel
+    // GeoCode: geo tools yield geo-kernel services at init; the shared memo map keeps this the server graph's instance
     // (docs/TOOLS.md §7).
     GeoKernel.node,
   ],

@@ -5,7 +5,7 @@ import { Durable } from "./durable-event-manifest"
 import { Event } from "./event"
 import { FileSystem } from "./filesystem"
 import { FileSystemWatcher } from "./filesystem-watcher"
-import { GeoEvent } from "./geo-event"
+import { GeoEvent } from "./geo-event" // GeoCode: own module
 import { InstallationEvent } from "./installation-event"
 import { Integration } from "./integration"
 import { LegacyEvent } from "./legacy-event"
@@ -53,9 +53,8 @@ const featureDefinitions = Event.inventory(
   ...FileSystemWatcher.Event.Definitions,
   ...Pty.Event.Definitions,
   ...Question.Event.Definitions,
-  // GeoCode: the status face of GeoKernel (docs/GEOKERNEL.md §9.2, §10.1 #1).
-  // Registered among the feature definitions so it reaches both the general
-  // manifest and ServerDefinitions — the status face is consumed over SSE.
+  // GeoCode: the GeoKernel status events, among the feature definitions so both Definitions and ServerDefinitions
+  // carry them (docs/GEOKERNEL.md §10.1 #1)
   ...GeoEvent.Definitions,
 )
 

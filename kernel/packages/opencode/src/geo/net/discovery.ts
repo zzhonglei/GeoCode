@@ -4,11 +4,10 @@ import { NetProbe } from "./probe"
 import { NetTunnel } from "./tunnel"
 import type { Target } from "./types"
 
-/* --- GeoCode: finding proxy candidates, reached only after a direct connection has failed (docs/GEOKERNEL.md §3.3).
- *
- * Two sources, and no third: the operating system's own proxy settings are deliberately not read (§12). --- */
+/* --- GeoCode: proxy candidates from the environment and known loopback ports, never from the operating system's
+ * proxy settings (docs/GEOKERNEL.md §3.3). --- */
 
-/** Order is the precedence — `declared` takes the first value that survives `normalize`, so a SOCKS one is passed over. */
+/** Order is the precedence: `declared` takes the first value that survives `normalize`. */
 const ENV_KEYS = ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy"] as const
 
 /** 8080 last: it is as likely to be somebody's development server as a proxy, and the conventions go first. */
@@ -19,20 +18,16 @@ const LOOPBACK = "127.0.0.1"
 export function normalize(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   if (!trimmed) return undefined
-  // SOCKS is skipped rather than adopted: consuming runtimes raise without an extra optional dependency (§12).
+  // SOCKS is skipped rather than adopted: consuming runtimes raise without an extra optional dependency.
   if (/^socks/i.test(trimmed)) return undefined
   return trimmed.includes("://") ? trimmed : `http://${trimmed}`
 }
 
-/**
- * A declaration named the way `routeId` names a route: scheme, host, port.
- *
- * Assembled from parsed fields, never from the raw string with the credentials wiped — a hostname and a port cannot
- * carry a `user:password@` even in principle, so there is no cleaning step to fail open.
- */
+/** Built from scheme, host and port alone rather than a redacted raw string, so no cleaning step can fail open. */
 function identify(value: string): string {
-  // Off the front of the string, so it survives the values `new URL` rejects; it stops at the first colon.
-  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(value)?.[1]?.toLowerCase() ?? "socks"
+  // Off the front of the string, so it survives the values `new URL` rejects. The `//` is required: without it the
+  // text before the first colon can be a username, and `socksalice:pw@host` would publish it as the scheme.
+  const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(value)?.[1]?.toLowerCase() ?? "socks"
   let host = ""
   let port = ""
   let user = ""
@@ -44,17 +39,13 @@ function identify(value: string): string {
   } catch {
     // Handled below: an unusable host is the single condition, however it arose.
   }
-  // An `@` the parser saw no user for means it read the string as something else: `socks5://al/ice:secret@host:1080`
-  // parses to the host `al`, half a username, so neither the catch nor the empty-host check below sees it.
+  // An `@` with no parsed user is a misreading: `socks5://al/ice:secret@host:1080` parses to the host `al`.
   if (value.includes("@") && !user) return `${scheme}:unparseable`
   if (!host) return `${scheme}:unparseable`
   return port ? `${scheme}:${host}:${port}` : `${scheme}:${host}`
 }
 
-/**
- * Proxy declarations that were found and refused, reported rather than acted on: a user whose network only works
- * through that proxy otherwise sees "cannot be reached" forever with nothing to go on (§12).
- */
+/** SOCKS declarations that were refused, reported so a user whose network needs that proxy can see why. */
 export function skipped(env: NodeJS.ProcessEnv = process.env): string[] {
   const found: string[] = []
   for (const key of ENV_KEYS) {
@@ -82,10 +73,7 @@ export interface Options {
   readonly tls?: NetProbe.Options["tls"]
 }
 
-/**
- * Proxy addresses worth trying, in the order to try them. A declaration goes first but is verified like any other
- * candidate — an environment variable can name a proxy that stopped running months ago (§3.3).
- */
+/** A declaration goes first but is verified like any other candidate: the variable can name a proxy long stopped. */
 export async function candidates(authority: Target, options: Options = {}): Promise<string[]> {
   const found: string[] = []
   const seen = new Set<string>()
@@ -100,16 +88,14 @@ export async function candidates(authority: Target, options: Options = {}): Prom
   if (explicit) await consider(explicit)
 
   const ports = options.ports ?? KNOWN_PORTS
-  // Sequential, or the order above means nothing; a closed loopback port refuses in about a millisecond.
+  // Sequential, or `consider` appends in completion order; a closed loopback port refuses at once.
   for (const port of ports) await consider(`http://${LOOPBACK}:${port}`)
 
   return found
 }
 
-/** Whether an address speaks proxy does not depend on the target; the decision that uses the answer does (§3.3). */
 export async function speaksProxy(authority: Target, proxyUrl: string, options: Options = {}): Promise<boolean> {
-  // Stops at the end of stage 2: the resolver runs stage 3 on the survivors, so probing it here too would cost every
-  // working proxy a second handshake with the target.
+  // Stops at stage 2: the resolver runs stage 3 on the survivors, and repeating it here doubles the target handshake.
   const result = await NetTunnel.open(
     proxyUrl,
     `${authority.host}:${authority.port}`,

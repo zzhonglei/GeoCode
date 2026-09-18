@@ -1,5 +1,5 @@
 import { cmd } from "./cmd"
-import { Brand } from "@opencode-ai/core/brand"
+import { Brand } from "@opencode-ai/core/brand" // GeoCode: own module
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { effectCmd } from "../effect-cmd"
 import { Cause } from "effect"
@@ -392,10 +392,8 @@ export const McpLogoutCommand = effectCmd({
   }),
 })
 
-/* --- GeoCode: branded config file and directory names (docs/PATHS.md §5).
- * These were the only WRITE path left on the old names while every reader had
- * already moved to the branded ones, so a global `mcp add` wrote a file the
- * loader never reads and the server silently never appeared. --- */
+/* --- GeoCode: writes the branded names the loader reads, or `mcp add` succeeds on a server that never appears
+ * (docs/PATHS.md §5). --- */
 async function resolveConfigPath(baseDir: string, global = false) {
   // Check for existing config files (prefer .jsonc over .json, check the project config dir too)
   const candidates = [path.join(baseDir, Brand.configJson), path.join(baseDir, Brand.configJsonc)]

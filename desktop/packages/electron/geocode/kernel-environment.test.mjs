@@ -8,9 +8,11 @@ import {
   createKernelProcessEnvironment,
   E2E_ALLOWLIST,
   INHERITED_PREFIXES,
+  INJECTED_ONLY,
   LAUNCHER_ALLOWLIST,
   stripInheritedForeignVariables,
 } from './kernel-environment.mjs';
+import { BROWSER_PLUGIN_ENV } from './browser-tool.mjs';
 
 const readMain = () => fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
 
@@ -43,7 +45,6 @@ describe('createKernelProcessEnvironment', () => {
       platform: 'darwin',
     });
     expect(next).not.toHaveProperty('OPENCODE_CONFIG');
-    // `GEOCODE_PY` and friends are our geographic tools' own, not kernel configuration.
     expect(next.GEOCODE_CONFIG).toBe('/ours.json');
   });
 
@@ -55,7 +56,6 @@ describe('createKernelProcessEnvironment', () => {
       fs.readFileSync(path.join(kernel, 'opencode/src/effect/runtime-flags.ts'), 'utf8'),
     ].join('\n');
     const names = new Set([...sources.matchAll(/"([A-Z][A-Z0-9_]{3,})"/g)].map((match) => match[1]));
-    // Names that are not environment variables at all: service identifiers and the like.
     const notEnvironment = new Set(['GET', 'POST', 'HEAD']);
     const uncovered = [...names].filter((name) =>
       !notEnvironment.has(name) && !INHERITED_PREFIXES.some((prefix) => name.startsWith(prefix)));
@@ -63,9 +63,7 @@ describe('createKernelProcessEnvironment', () => {
   });
 
   it('strips the shell process at its very first import, ahead of every other module', () => {
-    // Static imports evaluate before any statement, and one of them pulls in shell runtime
-    // modules; `isDev` reads the environment right after. Only a module imported first runs
-    // before both (docs/ENVIRONMENT.md §5.2).
+    // Anything evaluated before the strip reads the inherited environment (docs/ENVIRONMENT.md §5.2).
     const main = readMain();
     const firstImport = main.match(/^import .*$/m)[0];
     expect(firstImport).toContain("'./geocode/environment-boundary.mjs'");
@@ -76,10 +74,7 @@ describe('createKernelProcessEnvironment', () => {
   });
 
   it('strips again inside the login-shell merge and writes the data root straight back', () => {
-    // The merge fills every key that is undefined, and a stripped key is exactly that. So the
-    // strip has to sit in the same function body, after the loop, where no later call can land
-    // between them; and the data root, which shares the prefix, is rewritten right after it
-    // (docs/ENVIRONMENT.md §5.2 invariants 1 and 2).
+    // The merge refills every stripped name, and the data root shares the stripped prefix (docs/ENVIRONMENT.md §5.2).
     const main = readMain();
     const functionStart = main.indexOf('const inheritUserShellEnv = () => {');
     const functionEnd = main.indexOf('\n};', functionStart);
@@ -96,9 +91,7 @@ describe('createKernelProcessEnvironment', () => {
   });
 
   it('never merges the login shell again once the shell and kernel connection have been written', () => {
-    // Invariant 2: the strip rides inside the merge, so a second merge would take everything written
-    // since. The background start reaches it again through shouldSkipLocalServer(), so this runs the
-    // function main.mjs actually has instead of looking for call sites (docs/ENVIRONMENT.md §5.2).
+    // A second merge would strip the shell and kernel connection written since the first (docs/ENVIRONMENT.md §5.2).
     const main = readMain();
     const sliceStart = main.indexOf('let userShellEnvInherited = false;');
     const functionStart = main.indexOf('const inheritUserShellEnv = () => {');
@@ -147,8 +140,7 @@ describe('createKernelProcessEnvironment', () => {
   });
 
   it('covers every prefix the shell reads its own configuration under', () => {
-    // The kernel check above reads two registries; the shell has none, so its reads are
-    // collected from source. Comments are dropped first: shielded blocks still spell the names.
+    // Comments are dropped first because shielded upstream blocks still spell the names.
     const serverRoot = new URL('../../web/server/', import.meta.url).pathname;
     const files = fs.readdirSync(serverRoot, { recursive: true })
       .filter((name) => name.endsWith('.js') && !name.includes('.test.') && !name.includes('node_modules'))
@@ -184,8 +176,7 @@ describe('createKernelProcessEnvironment', () => {
   });
 
   it('lets the shell runtime skip its own login-shell merge under Electron', () => {
-    // Invariant 3: one merge per process. The shell keeps its merge for standalone serve; the
-    // Electron build passes the upstream line by, byte-identical inside a comment.
+    // A shell-side merge would refill what main stripped; standalone serve keeps it (docs/ENVIRONMENT.md §5.2).
     const lines = fs
       .readFileSync(new URL('../../web/server/index.js', import.meta.url).pathname, 'utf8')
       .split('\n');
@@ -224,9 +215,6 @@ describe('createKernelProcessEnvironment', () => {
   });
 
   it('drops the runtime switches that change what code the child runs, per platform', () => {
-    // Every one of these was measured in a real utility process (docs/ENVIRONMENT.md §3 no. 4):
-    // NODE_OPTIONS --require executes a file, DYLD_INSERT_LIBRARIES loads a dylib,
-    // ELECTRON_RUN_AS_NODE keeps the child from starting, NODE_V8_COVERAGE writes to disk.
     const poisoned = {
       NODE_OPTIONS: '--require /tmp/x.js',
       NODE_PATH: '/tmp/modules',
@@ -294,6 +282,26 @@ describe('createKernelProcessEnvironment', () => {
     expect(next).not.toHaveProperty('OPENCODE_CONFIG');
   });
 
+  it('takes the browser plugin from overrides alone, so a failed preparation leaves the kernel without one', () => {
+    const stale = 'file:///previous/run/geocode-browser-plugin.js';
+    const inherited = createKernelProcessEnvironment({
+      environment: { [BROWSER_PLUGIN_ENV]: stale },
+      platform: 'darwin',
+    });
+    expect(inherited).not.toHaveProperty(BROWSER_PLUGIN_ENV);
+
+    const prepared = createKernelProcessEnvironment({
+      environment: { [BROWSER_PLUGIN_ENV]: stale },
+      platform: 'darwin',
+      overrides: { [BROWSER_PLUGIN_ENV]: 'file:///this/run/geocode-browser-plugin.js' },
+    });
+    expect(prepared[BROWSER_PLUGIN_ENV]).toBe('file:///this/run/geocode-browser-plugin.js');
+  });
+
+  it('lists the name browser-tool.mjs actually injects, which a rename would otherwise leave behind', () => {
+    expect(INJECTED_ONLY).toContain(BROWSER_PLUGIN_ENV);
+  });
+
   it('never carries a password, which travels over IPC instead', () => {
     const next = createKernelProcessEnvironment({
       environment: { OPENCODE_SERVER_PASSWORD: 'inherited-secret' },
@@ -305,8 +313,6 @@ describe('createKernelProcessEnvironment', () => {
 
 describe('environment-boundary.mjs', () => {
   it('strips this very process at import, treating anything but a real dev launch as packaged', async () => {
-    // Outside Electron there is no `app`, so the module takes the strict form: dev knobs go,
-    // the e2e pair stays, and nothing unbranded is touched.
     process.env.OPENCHAMBER_PROBE_STRIPPED = '1';
     process.env.OPENCODE_PROBE_STRIPPED = '1';
     process.env.OPENCHAMBER_HMR_UI_PORT = '5999';

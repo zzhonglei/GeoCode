@@ -1,17 +1,11 @@
-/* --- GeoCode: the environment boundary around the embedded kernel and the shell runtime beside
- * it (docs/ENVIRONMENT.md). Neither takes configuration from the environment it inherited:
- * names under another product's prefix are removed, everything else is the user's and passes.
- *
- * The password is deliberately NOT placed in this environment. It travels over the utility
- * process IPC instead (kernel-protocol.mjs), so it never appears in the child's environment
- * block where any process listing would show it. --- */
+/* --- GeoCode: the environment boundary around the embedded kernel and the shell runtime (docs/ENVIRONMENT.md §5).
+ * The kernel password is not placed in the child's environment; it travels over IPC (kernel-protocol.mjs). --- */
 
-/** Prefixes the kernel and the shell read configuration under. `OTEL_` is here because a rule
- *  written for `OPENCODE_` alone cannot see the telemetry pair, which steers where traces go. */
+/** `OTEL_` steers where traces go, and carries no `OPENCODE_` prefix to be caught by. */
 export const INHERITED_PREFIXES = ['OPENCODE_', 'OTEL_', 'OPENCHAMBER_'];
 
-/** What our own `electron:dev` scripts hand the main process; honoured only while unpackaged,
- *  so a shell export cannot turn a release build into the development form. */
+/** Set by our `electron:dev` launcher, and kept only while unpackaged so a shell export cannot turn a release build
+ *  into the development form. */
 export const LAUNCHER_ALLOWLIST = [
   'OPENCHAMBER_ELECTRON_DEV',
   'OPENCHAMBER_ELECTRON_USE_BUNDLED_UI',
@@ -19,13 +13,15 @@ export const LAUNCHER_ALLOWLIST = [
   'OPENCHAMBER_HMR_API_PORT',
 ];
 
-/** The updater e2e fixture drives a packaged build with these; inert unless the build was made
- *  with the e2e define, so they can stay in every form. */
+/** Inert unless the build carries the updater e2e define, so they can stay in every form. */
 export const E2E_ALLOWLIST = ['OPENCHAMBER_E2E', 'OPENCHAMBER_UPDATER_E2E_URL'];
 
-/** Runtime switches read by Node, Electron or the loader before any code of ours runs, so the
- *  process boundary is the only place to handle them. Each either runs code of its own in the
- *  child, keeps the child from starting, or writes files (docs/ENVIRONMENT.md §5.3, measured). */
+/** Reaches the kernel through `overrides` alone; an inherited one would point it at a plugin the shell did not
+ *  prepare this run. Listed by name rather than by a `GEOCODE_` prefix, which is ours and stays inheritable. */
+export const INJECTED_ONLY = ['GEOCODE_BROWSER_PLUGIN'];
+
+/** Read by Node, Electron or the loader before our code runs, so only the process boundary can remove them
+ *  (docs/ENVIRONMENT.md §5.3). */
 export const CHILD_DENYLIST = {
   common: [
     'NODE_OPTIONS', 'NODE_PATH', 'NODE_ICU_DATA', 'OPENSSL_CONF',
@@ -37,9 +33,6 @@ export const CHILD_DENYLIST = {
   linux: ['LD_PRELOAD'],
 };
 
-/** Mutates `process.env`. Runs once at module load, before shell modules resolve names at import,
- *  and again inside main's login-shell merge, which refills whatever was undefined. `keep` is for
- *  the caller's own launcher knobs, which share a prefix with what this removes. */
 export const stripInheritedForeignVariables = (environment, { keep = [] } = {}) => {
   const kept = new Set(keep);
   const removed = [];
@@ -71,7 +64,7 @@ export const createKernelProcessEnvironment = ({
     next[key] = String(value);
   }
 
-  for (const key of [...CHILD_DENYLIST.common, ...(CHILD_DENYLIST[platform] ?? [])]) delete next[key];
+  for (const key of [...INJECTED_ONLY, ...CHILD_DENYLIST.common, ...(CHILD_DENYLIST[platform] ?? [])]) delete next[key];
 
   for (const [key, value] of Object.entries(overrides)) {
     if (value === undefined) {
@@ -84,12 +77,7 @@ export const createKernelProcessEnvironment = ({
   return next;
 };
 
-/**
- * Hands the shell runtime the connection main already owns. These three variables are the
- * upstream's own external-server path (`lifecycle.js` skip-start branch, `env-config.js`,
- * `hmr-state-runtime.js`), so nothing in the shell is patched to accept them — the values
- * are simply in place before it is imported.
- */
+/** The shell's own external-server path reads these at import, so they must be in place before main imports it. */
 export const applyKernelConnectionToShellEnvironment = ({ environment, connection }) => {
   if (!connection || !connection.baseUrl) {
     throw new Error('Cannot point the shell runtime at a kernel without a base URL');

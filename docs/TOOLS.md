@@ -232,7 +232,7 @@ task 规则不发明自己的机制,逐个对应上游的形状:
 
 后两种同属执行类却不同待遇,判据是 GEOKERNEL §8.4 立过的那一条:**谁控制输出的节奏**。GEE 的脚本由模型撰写,想打多少打多少,所以要预算;QGIS 的算法从目录里选,输出经我们自己的引导脚本,形状因此是我们定的——进度量化到 10% 档且只在递增时打(整场至多十一行),算法名与启动各一行,参数警告按参数个数,相似候选取前五条。
 
-更根本的一条支撑它:**算法的结果不随用户数据的规模增长**。Processing 把逐要素的发现写进**输出图层**,留在 feedback 日志里的只有进度与摘要——实测五千个无效多边形过 checkvalidity、fixgeometries 与 buffer,日志不足 1 KB(2026-08-05,同一笔记在 `geo-qgis-run.ts` 的 `Metadata` 类型注释上)。
+更根本的一条支撑它:**算法的结果不随用户数据的规模增长**。Processing 把逐要素的发现写进**输出图层**,留在 feedback 日志里的只有进度与摘要——实测五千个无效多边形过 checkvalidity、fixgeometries 与 buffer,日志不足 1 KB(2026-08-05)。
 
 第五种同样自设 `metadata.truncated`,只是它恒为 `false`。**那是一句表态,不是占位**:表了态上游的 head 截断就不会跑(§5.1),而它恰好会砍掉结尾那几样必留的。
 
@@ -260,7 +260,7 @@ task 规则不发明自己的机制,逐个对应上游的形状:
 |---|---|
 | `settledQgisGate` / `settledGeeGate` | 门禁检查与中间态等待,带上限 |
 | `qgisHeader` / `geeHeader` | 环境头快照。**只前缀于返回值**,绝不经 `ctx.metadata`(§2 第 2 条) |
-| `gateStatus` / `geeGateStatus` | 环境未就绪时的指导文案,整组同一个声音 |
+| `gateStatus` / `geeGateStatus` | 门禁状态名,整组同一套写法;指导文案在内核的 `QgisGuidance` / `GeeGuidance` |
 | `terminationBanner` | 五种终止路径的横幅 |
 | `elapsedFooter` | 耗时页脚 |
 

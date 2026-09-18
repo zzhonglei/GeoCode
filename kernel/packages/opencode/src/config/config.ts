@@ -8,8 +8,10 @@ import { mergeDeep } from "remeda"
 import { Global } from "@opencode-ai/core/global"
 import fsNode from "fs/promises"
 import { Flag } from "@opencode-ai/core/flag/flag"
+// --- GeoCode: own modules ---
 import { Brand } from "@opencode-ai/core/brand"
 import { GeoCodeConfig } from "./geocode"
+// --- /GeoCode ---
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
@@ -357,8 +359,7 @@ const layer = Layer.effect(
           return mergePluginOrigins(source, next.plugin, kind)
         }
 
-        // --- GeoCode: factory base layer, merged before everything else so user
-        // and project config can still override it (config/geocode.ts). ---
+        // --- GeoCode: the factory base layer, merged first so every other config overrides it (config/geocode.ts) ---
         result = mergeConfigConcatArrays(result, GeoCodeConfig.base())
         // --- /GeoCode ---
 
@@ -444,12 +445,8 @@ const layer = Layer.effect(
             }
           }
 
-          /* --- GeoCode: upstream installs `@opencode-ai/plugin` into every config directory (project ones too) and
-           * writes a `.gitignore` for the resulting `node_modules`. Both exist only so a user's own plugin or tool file
-           * can import the SDK, and GeoCode loads neither, so nothing is installed and nothing is written into the
-           * user's project (docs/PATHS.md §7). `deps` stays empty and `waitForDependencies` has nothing to wait for.
-           * Upstream's block is commented out rather than deleted, byte-identical, so it merges straight in
-           * (docs/CONVENTIONS.md §5). --- */
+          /* --- GeoCode: no plugin SDK install or `.gitignore` in any config directory, project ones included; they
+           * serve only user plugin and tool files, which GeoCode never loads (docs/KERNEL.md §6). --- */
           /*
           yield* ensureGitignore(dir).pipe(Effect.orDie)
 

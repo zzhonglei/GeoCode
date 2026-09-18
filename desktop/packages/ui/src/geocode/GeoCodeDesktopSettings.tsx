@@ -1,11 +1,6 @@
-/* --- GeoCode: the desktop section of the general settings page (docs/DESKTOP.md §7.3).
- *
- * Upstream's DesktopNetworkSettings pairs the machine options with LAN access and the UI
- * password that guards it. GeoCode listens on loopback only (§6.1), so this component keeps
- * the four machine options, with upstream's IPC calls, search ids and strings, and leaves the
- * network half out. The menu bar option still saves through the settings file and restarts,
- * as upstream's does, because the tray is created once at start-up. OpenChamberPage mounts
- * this in place of the upstream section in the desktop shell. --- */
+/* --- GeoCode: upstream's DesktopNetworkSettings without LAN access and its UI password, because the shell listens
+ * on loopback only; OpenChamberPage mounts it in place of upstream's in the desktop shell
+ * (docs/DESKTOP.md §6.1). --- */
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -22,6 +17,7 @@ import {
 } from '@/lib/desktop';
 import { useI18n } from '@/lib/i18n';
 import { runtimeFetch } from '@/lib/runtime-fetch';
+import type { DesktopSettings } from '@/lib/desktop'; // GeoCode: own module
 import {
   SettingsSection,
   SettingsCheckboxRow,
@@ -66,9 +62,10 @@ export const GeoCodeDesktopSettings: React.FC = () => {
           throw new Error(t('settings.openchamber.desktopNetwork.error.loadFailed'));
         }
 
-        const data = (await response.json().catch(() => null)) as null | {
-          desktopMacMenuBarEnabled?: unknown;
-        };
+        // GeoCode: the key is taken from the settings registry, so renaming it there is a type error rather than a
+        // checkbox that silently falls back to its default.
+        type Loaded = { [K in keyof Pick<DesktopSettings, 'desktopMacMenuBarEnabled'>]?: unknown };
+        const data = (await response.json().catch(() => null)) as null | Loaded;
         if (cancelled) {
           return;
         }
@@ -219,7 +216,7 @@ export const GeoCodeDesktopSettings: React.FC = () => {
         },
         body: JSON.stringify({
           desktopMacMenuBarEnabled: draftMacMenuBarEnabled,
-        }),
+        } satisfies DesktopSettings),
       });
 
       if (!response.ok) {
