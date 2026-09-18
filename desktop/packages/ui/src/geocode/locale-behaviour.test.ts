@@ -40,6 +40,11 @@ const BINDINGS: Binding[] = [
     forbidden: [/reload/i, /重新加载/, /重新載入/],
   },
   {
+    behaviour: 'typing # reaches nothing: the snippet popup is closed and so are its endpoints',
+    keys: ['chat.chatInput.placeholder.chat', 'chat.chatInput.placeholder.chatCompact'],
+    forbidden: [/#/, /snippet/i, /代码片段/, /程式片段/],
+  },
+  {
     behaviour: 'the update button opens the release page; nothing downloads',
     keys: ['updateDialog.actions.downloadUpdate'],
     forbidden: [/download update/i, /下载更新/, /下載更新/],
