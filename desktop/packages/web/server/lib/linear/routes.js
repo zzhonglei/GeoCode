@@ -1,5 +1,6 @@
 import express from 'express';
 import { readTrimmedString } from './parse.js';
+import { refuseSurfaceUnderElectron } from '../../geocode/closed-surface.js'; // GeoCode: own module
 
 const PENDING_JSON_LIMIT = '16kb';
 const parseJsonBody = express.json({ limit: PENDING_JSON_LIMIT });
@@ -76,6 +77,11 @@ async function storeAuthorizationResult(libraries, result) {
 }
 
 export function registerLinearRoutes(app) {
+  // --- GeoCode: Linear is not a surface GeoCode offers (docs/DESKTOP.md §7.3). The prefix is refused rather than
+  // merely left unregistered because the kernel proxy answers whatever `/api` path is left over; the OAuth
+  // callback outside `/api` needs no refusal, since the static fallback excludes `/linear` already. ---
+  if (refuseSurfaceUnderElectron(app, '/api/linear')) return;
+  // --- /GeoCode ---
   let linearLibraries = null;
   const getLinearLibraries = async () => {
     if (!linearLibraries) {

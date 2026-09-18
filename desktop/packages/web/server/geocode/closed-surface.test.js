@@ -1,5 +1,5 @@
-/* --- GeoCode: the magic prompt, plugin and tunnel surfaces answer 404 under Electron, and none of their
- * requests, including routes upstream adds later, reaches the kernel proxy (docs/DESKTOP.md §7.3). --- */
+/* --- GeoCode: the magic prompt, plugin, tunnel and Linear surfaces answer 404 under Electron, and none of
+ * their requests, including routes upstream adds later, reaches the kernel proxy (docs/DESKTOP.md §7.3). --- */
 import { afterEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import request from 'supertest';
@@ -7,6 +7,7 @@ import request from 'supertest';
 import { registerMagicPromptRoutes } from '../lib/magic-prompts/routes.js';
 import { registerPluginRoutes } from '../lib/opencode/plugin-routes.js';
 import { createTunnelRoutesRuntime } from '../lib/tunnels/routes.js';
+import { registerLinearRoutes } from '../lib/linear/routes.js';
 
 const originalElectron = process.versions.electron;
 
@@ -18,6 +19,15 @@ afterEach(() => {
 const inert = () => null;
 
 const SURFACES = [
+  {
+    name: 'linear',
+    prefix: '/api/linear',
+    // The OAuth callback is the one route outside `/api`, so the control below has to accept a second prefix.
+    extraPrefix: '/linear',
+    minimum: 14,
+    named: { method: 'get', path: '/api/linear/auth/status' },
+    register: (app) => registerLinearRoutes(app),
+  },
   {
     name: 'magic prompt',
     prefix: '/api/magic-prompts',
@@ -109,7 +119,9 @@ describe.each(SURFACES)('$name surface', (surface) => {
   it('control: outside Electron every route it mounts sits under the refused prefix', () => {
     const routes = recordUpstreamRoutes(surface.register);
     expect(routes.length).toBeGreaterThanOrEqual(surface.minimum);
-    expect(routes.every(({ path }) => path === surface.prefix || path.startsWith(`${surface.prefix}/`))).toBe(true);
+    const prefixes = [surface.prefix, ...(surface.extraPrefix ? [surface.extraPrefix] : [])];
+    const under = (path) => prefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+    expect(routes.every(({ path }) => under(path))).toBe(true);
     expect(routes).toContainEqual(surface.named);
   });
 

@@ -892,6 +892,10 @@ const contextObligatoryRuntime = createContextObligatoryRuntime({
 });
 
 const linearSessionStatusRuntime = createLinearSessionStatusRuntime();
+// --- GeoCode: closing the routes does not reach this one, which posts issue comments straight off the
+// session event bus below rather than through a request (docs/DESKTOP.md §7.3) ---
+if (process.versions.electron) linearSessionStatusRuntime.stop();
+// --- /GeoCode ---
 
 const globalMessageStreamHub = createGlobalMessageStreamHub({
   buildOpenCodeUrl,
