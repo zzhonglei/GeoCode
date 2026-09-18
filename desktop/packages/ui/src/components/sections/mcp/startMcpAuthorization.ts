@@ -154,7 +154,7 @@ const clearCustomRedirectUriForNativeFlow = async (name: string): Promise<void> 
       throw new McpAuthorizationError(
         applied.requiresManualRestart
           ? 'The callback settings changed, but OpenCode must be restarted manually before authorization can start.'
-          : 'Failed to apply the callback settings. Use Apply & Restart, then authorize again.',
+          : 'Could not apply the changes. Click Apply changes, then authorize again.', // GeoCode: nothing restarts
       );
     }
   }

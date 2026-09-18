@@ -319,7 +319,7 @@ export const createSessionRuntime = ({ writeSseEvent, getNotificationClients, br
           sessionID: sessionId,
           error: {
             name: 'MessageAbortedError',
-            message: 'The running turn was interrupted when GeoCode restarted.', // GeoCode: product name
+            message: 'The response was interrupted while GeoCode applied changes.', // GeoCode: applying reloads the kernel; nothing restarts
           },
         },
       });

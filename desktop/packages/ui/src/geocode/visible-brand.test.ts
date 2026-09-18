@@ -7,6 +7,7 @@ import path from 'node:path';
 
 import { DEFAULT_DARK_THEME_ID, DEFAULT_LIGHT_THEME_ID, themes } from '../lib/theme/themes';
 import { AGENT_MENTION_LINKS_OFFERED } from './agent-mention-surface';
+import { dict as en } from '../lib/i18n/messages/en';
 
 // The file, a pattern capturing the product name inside the message, and how many times the message appears.
 type Message = [file: string, pattern: RegExp, count: number];
@@ -43,6 +44,8 @@ const SEEN_BY_THE_USER: Message[] = [
   // Also the label of the API key a user creates by running it.
   ['components/sections/usage/QuotaCredentials.tsx', /generate-api-key --label=(\w+) --exp/g, 1],
   ['components/chat/SkillAutocomplete.tsx', /const sourceLabel = source === 'opencode' \? '(\w+)' : source;/g, 1],
+  // The first line of the tray menu: the product name alone, with no remote host to tell it from.
+  ['hooks/useTraySync.ts', /(?:isDesktopLocalOriginActive\(\)\)|localOrigin\)\)) return '([^']+)';/g, 2],
 ];
 
 const IN_THE_DIAGNOSTICS_REPORT: Message[] = [
@@ -89,6 +92,15 @@ describe('a server message the renderer would show as it is', () => {
 });
 
 const readSource = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+
+describe('a message about applying changes', () => {
+  test('a failed apply before MCP authorization names the button that exists and restarts nothing', () => {
+    const source = readSource('components/sections/mcp/startMcpAuthorization.ts');
+    const message = source.match(/applied\.requiresManualRestart\s*\?\s*'[^']*'\s*:\s*'([^']*)'/)?.[1] ?? '';
+    expect(message).toContain(en['settings.view.actions.applyAndRestartOpenCode']);
+    expect(/restart/i.test(message)).toBe(false);
+  });
+});
 
 describe('renderer affordances that named or led to upstream', () => {
   test('the default themes are called Default', () => {

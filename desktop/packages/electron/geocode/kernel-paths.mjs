@@ -36,13 +36,12 @@ export const resolveKernelDirectory = (options) => path.join(resolveResourceRoot
 export const resolveKernelSidecarPath = (options) => path.join(resolveKernelDirectory(options), KERNEL_SIDECAR_FILENAME);
 
 /**
- * Fails with the command that fixes it. A missing kernel is not a user error and not a
- * runtime fault: it means the build step that stages it never ran, and saying so here
- * saves reading a module-resolution stack from inside a utility process that died at import.
+ * Fails with what fixes it, which saves reading a module-resolution stack from a utility process that
+ * died at import: in development the staging step never ran; an installed app can only be reinstalled.
  */
-export const assertKernelRuntimePresent = ({ sidecarPath, exists = fs.existsSync }) => {
+export const assertKernelRuntimePresent = ({ sidecarPath, isDev = false, exists = fs.existsSync }) => {
   if (exists(sidecarPath)) return sidecarPath;
-  throw new Error(
-    `GeoCode Kernel runtime is missing at ${sidecarPath}. Run \`bun run prepare:geocode-kernel\` in packages/electron to stage it.`,
-  );
+  throw new Error(isDev
+    ? `GeoCode Kernel runtime is missing at ${sidecarPath}. Run \`bun run prepare:geocode-kernel\` in packages/electron to stage it.`
+    : 'GeoCode is missing some of its files. Reinstall GeoCode.');
 };

@@ -41,9 +41,9 @@ interface Strings {
 const STRINGS: Record<'en' | 'zh-CN' | 'zh-TW', Strings> = {
   en: {
     title: 'GeoCode could not start its kernel',
-    description: 'The built-in kernel did not start, so the workspace cannot open. The details below and the log file say what went wrong.',
+    description: 'The built-in kernel did not start, so the workspace cannot open.',
     lostTitle: 'The GeoCode kernel stopped unexpectedly',
-    lostDescription: 'The built-in kernel stopped while GeoCode was running, and work in progress was interrupted. The details below and the log file say what went wrong. Retry reopens GeoCode.',
+    lostDescription: 'The built-in kernel stopped while GeoCode was running, and work in progress was interrupted. Retry reopens GeoCode.',
     errorLabel: 'Error',
     outputLabel: 'Last lines from the kernel',
     logLabel: 'Log file',
@@ -54,9 +54,9 @@ const STRINGS: Record<'en' | 'zh-CN' | 'zh-TW', Strings> = {
   },
   'zh-CN': {
     title: 'GeoCode 内核未能启动',
-    description: '内置内核没有启动，工作区无法打开。下面的错误信息与日志文件说明了原因。',
+    description: '内置内核没有启动，工作区无法打开。',
     lostTitle: 'GeoCode 内核意外退出',
-    lostDescription: '内置内核在运行中退出，正在进行的工作已中断。下面的错误信息与日志文件说明了原因，重试会重新打开 GeoCode。',
+    lostDescription: '内置内核在运行中退出，正在进行的工作已中断。重试会重新打开 GeoCode。',
     errorLabel: '错误',
     outputLabel: '内核最后输出',
     logLabel: '日志文件',
@@ -67,9 +67,9 @@ const STRINGS: Record<'en' | 'zh-CN' | 'zh-TW', Strings> = {
   },
   'zh-TW': {
     title: 'GeoCode 核心未能啟動',
-    description: '內建核心沒有啟動，工作區無法開啟。下面的錯誤資訊與記錄檔說明了原因。',
+    description: '內建核心沒有啟動，工作區無法開啟。',
     lostTitle: 'GeoCode 核心意外結束',
-    lostDescription: '內建核心在執行中結束，進行中的工作已中斷。下面的錯誤資訊與記錄檔說明了原因，重試會重新開啟 GeoCode。',
+    lostDescription: '內建核心在執行中結束，進行中的工作已中斷。重試會重新開啟 GeoCode。',
     errorLabel: '錯誤',
     outputLabel: '核心最後輸出',
     logLabel: '記錄檔',

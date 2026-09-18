@@ -74,8 +74,10 @@ describe('startEmbeddedKernel', () => {
     expect(calls[0].environment).not.toHaveProperty('OPENCHAMBER_DATA_DIR');
   });
 
-  it('refuses to start when the runtime was never staged, naming the fix', async () => {
-    await expect(bootWith({ exists: () => false }).started).rejects.toThrow(/prepare:geocode-kernel/);
+  it('refuses to start when the runtime is missing, naming the fix for the form it runs in', async () => {
+    await expect(bootWith({ exists: () => false }).started).rejects.toThrow(/reinstall/i);
+    await expect(bootWith({ isDev: true, moduleDirectory: '/repo/packages/electron', exists: () => false }).started)
+      .rejects.toThrow(/prepare:geocode-kernel/);
   });
 
   it('resolves the development path from the module directory instead', async () => {

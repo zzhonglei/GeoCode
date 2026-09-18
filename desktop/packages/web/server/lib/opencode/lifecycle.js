@@ -851,7 +851,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
           state.openCodeNotReadySince = 0;
           syncToHmrState();
         } else {
-          state.lastOpenCodeError = `External GeoCode server on port ${probePort} is not responding`; // GeoCode: product name
+          state.lastOpenCodeError = 'The GeoCode kernel is not responding. Try again in a moment.'; // GeoCode: the kernel is built in, not an external server
           console.error(state.lastOpenCodeError);
           throw new Error(state.lastOpenCodeError);
         }

@@ -1143,8 +1143,7 @@ package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌
   ⚠️ 排查过程本身有一条教训:第一次实验造的任务形状不合法,被规范化直接丢掉,输出是
   `之前: [] 之后: []`——**长得和「安全」一模一样**。是因为「之前」也空才发现它空转;
 
-- **归阶段 3「特性修缮」**:外部二进制发现的
-  十三处与 `electron:dev` 的分叉、`gitlab-ai-provider` 的 vendor 泄漏、内置技能
+- **归阶段 3「特性修缮」**:外部二进制发现在 `electron:dev` 下的分叉(Electron 下已关,见下文「真欠着的」一条)、`gitlab-ai-provider` 的 vendor 泄漏、内置技能
   `customize-geocode`(原名 `customize-opencode`)的描述与正文、以及品牌与 i18n。**另有 `packages/vscode/` 整包**:`opencodeConfig.ts`
   是 `server/lib/opencode/` 的一份近乎逐行的副本,项目目录、配置文件名、技能根、外部二进制发现全都
   还是上游的名字(约三十处)。它是独立交付物,不随桌面端启动,所以不拦这一批;但它与壳共用的是同一
@@ -1199,7 +1198,7 @@ grep -rnE "=\s*['\"]\.(openchamber|opencode|claude|agents)['\"]\s*;?\s*$" \
   目录名」,不算泄漏;
 - **不可达但留着的**:`skill-routes.js` 里按路径判作用域的分类器,以及 `skills.js` 的
   `homeOpencodeDir`——发现关掉之后没有路径会走到它们,删掉反而增加暴露面;
-- **真欠着的**:`env-runtime.js` 与 `server-utils-runtime.js` 的外部二进制探测,归阶段 3。
+- **原记为真欠着、现已关上的**:`env-runtime.js` 与 `server-utils-runtime.js` 的外部二进制探测(找系统里的 `opencode`)。Electron 下三条入口都关了:解析与升级两条路由先注册 404,`startOpenCode` 首行拒绝(ENVIRONMENT.md §5.6),`applyOpencodeBinaryFromSettings` 早退;绊线分别在 `server/geocode/system-opencode-surface.test.js` 与 `managed-kernel.test.js`,都带不标 Electron 的对照。仍走得到的只有 `electron:dev`(不带 bundled)的开发形态分叉(CONVENTIONS.md §7)。2026-09-17 复核。
 
 ⚠️ **不要在这份文档里写行号。** 实测过:七处 `file:line` 引用里四处在两天内就漂了,而且是被我们
 自己的注释改动推移的。行号失效时不报错,只是安静地指向另一句代码,读的人会以为文档错了或者代码被

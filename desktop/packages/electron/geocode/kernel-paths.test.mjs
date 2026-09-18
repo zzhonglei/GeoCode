@@ -49,10 +49,18 @@ describe('assertKernelRuntimePresent', () => {
       .toBe('/app/kernel/kernel-sidecar.mjs');
   });
 
-  it('names both the missing path and the command that stages it', () => {
-    expect(() => assertKernelRuntimePresent({ sidecarPath: '/app/kernel/kernel-sidecar.mjs', exists: () => false }))
+  it('names both the missing path and the command that stages it in development', () => {
+    expect(() => assertKernelRuntimePresent({ sidecarPath: '/app/kernel/kernel-sidecar.mjs', isDev: true, exists: () => false }))
       .toThrow(/\/app\/kernel\/kernel-sidecar\.mjs/);
-    expect(() => assertKernelRuntimePresent({ sidecarPath: '/app/kernel/kernel-sidecar.mjs', exists: () => false }))
+    expect(() => assertKernelRuntimePresent({ sidecarPath: '/app/kernel/kernel-sidecar.mjs', isDev: true, exists: () => false }))
       .toThrow(/prepare:geocode-kernel/);
+  });
+
+  it('asks an installed app to be reinstalled, with no build step a user cannot run', () => {
+    // The message is shown as it is on the failure screen.
+    expect(() => assertKernelRuntimePresent({ sidecarPath: '/app/kernel/kernel-sidecar.mjs', exists: () => false }))
+      .toThrow(/reinstall/i);
+    expect(() => assertKernelRuntimePresent({ sidecarPath: '/app/kernel/kernel-sidecar.mjs', exists: () => false }))
+      .not.toThrow(/bun |packages\//);
   });
 });

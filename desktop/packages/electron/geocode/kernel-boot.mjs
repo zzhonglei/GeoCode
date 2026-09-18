@@ -30,6 +30,7 @@ export const startEmbeddedKernel = async ({
 }) => {
   const sidecarPath = assertKernelRuntimePresent({
     sidecarPath: resolveKernelSidecarPath({ isDev, moduleDirectory, resourcesPath }),
+    isDev,
     ...(exists ? { exists } : {}),
   });
 

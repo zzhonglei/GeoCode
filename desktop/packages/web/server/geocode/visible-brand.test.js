@@ -11,7 +11,7 @@ const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.
 
 // The file, a pattern whose groups capture the product name, and how many times the message appears.
 const MESSAGES = [
-  ['server/lib/opencode/lifecycle.js', /External (\w+) server on port \$\{probePort\} is not responding/g, 1],
+  ['server/lib/opencode/lifecycle.js', /'The (\w+) kernel is not responding\. Try again in a moment\.'/g, 1],
   ['server/lib/opencode/lifecycle.js', /'(\w+) port is not available'/g, 2],
   ['server/lib/opencode/lifecycle.js', /`(\w+) health endpoint responded with status/g, 1],
   ['server/lib/opencode/lifecycle.js', /'(\w+) health endpoint returned unhealthy response'/g, 1],
@@ -23,7 +23,7 @@ const MESSAGES = [
   ['server/lib/opencode/shared.js', /`(\w+) configuration at \$\{filePath\} contains invalid JSONC/g, 1],
   ['server/lib/opencode/shared.js', /'Failed to (?:read|write) (\w+) configuration'/g, 2],
   ['server/lib/opencode/auth.js', /'Failed to (?:read|write) (\w+) auth configuration'/g, 2],
-  ['server/lib/opencode/session-runtime.js', /interrupted when (\w+) restarted\./g, 1],
+  ['server/lib/opencode/session-runtime.js', /interrupted while (\w+) applied changes\./g, 1],
   ['server/lib/git/service.js', /'Failed to derive (\w+) project ID'/g, 1],
   ['server/lib/git/service.js', /'(\w+) enables Git `core\.longpaths`/g, 1],
   ['server/lib/small-model/call.js', /`(\w+) login for "\$\{providerID\}" has no usable credential`/g, 1],

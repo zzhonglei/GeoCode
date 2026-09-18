@@ -52,6 +52,15 @@ describe('kernel failure screen', () => {
     }
   });
 
+  test('the descriptions promise no details the screen may not have', () => {
+    // With nothing recorded the error box says so and no log line is shown.
+    const screen = read('geocode/GeoCodeKernelFailureScreen.tsx');
+    const strings = screen.slice(screen.indexOf('const STRINGS'), screen.indexOf('const stringsFor'));
+    for (const promise of ['below', '下面', '下方']) {
+      expect(strings.includes(promise)).toBe(false);
+    }
+  });
+
   test('every product language has the same set of strings', () => {
     const screen = read('geocode/GeoCodeKernelFailureScreen.tsx');
     const blocks = [...screen.matchAll(/^  (?:en|'zh-CN'|'zh-TW'): \{\n([\s\S]*?)\n  \},/gm)].map((m) => m[1]);
