@@ -50,7 +50,8 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 TREE=$(git stash create 2>/dev/null || true)
 TREE="${TREE:-HEAD}"
 
-git diff --name-status "$BRANCH" "$TREE:$ROOT" > "$tmp/surface"
+# Tab-separated, and paths here do contain spaces, so the field separator cannot be whitespace.
+git -c core.quotePath=false diff --name-status "$BRANCH" "$TREE:$ROOT" > "$tmp/surface"
 added=$(awk '$1=="A"' "$tmp/surface" | wc -l | tr -d ' ')
 modified=$(awk '$1=="M"' "$tmp/surface" | wc -l | tr -d ' ')
 deleted=$(awk '$1=="D"' "$tmp/surface" | wc -l | tr -d ' ')
@@ -65,9 +66,9 @@ echo
 # `bun install` over the closure, and it differs from upstream by thousands of
 # lines that cost nothing (docs/CONVENTIONS.md §5).
 echo "== exposure: upstream lines deleted or rewritten =="
-git diff --numstat "$BRANCH" "$TREE:$ROOT" \
-  | awk '$1 ~ /^[0-9]+$/ && $3 != "bun.lock" && $2 > 0 { print $2, $3 }' \
-  | sort -rn > "$tmp/exposure"
+git -c core.quotePath=false diff --numstat "$BRANCH" "$TREE:$ROOT" \
+  | awk -F'\t' '$1 ~ /^[0-9]+$/ && $3 !~ /(^|\/)bun\.lock$/ && $2 > 0 { print $2, $3 }' \
+  | LC_ALL=C sort -rn > "$tmp/exposure"
 
 total=$(awk '{s+=$1} END {print s+0}' "$tmp/exposure")
 files=$(wc -l < "$tmp/exposure" | tr -d ' ')
@@ -83,19 +84,24 @@ echo
 # inventory (docs/CONVENTIONS.md §5): a hand-kept one drifts, and once called
 # six healthy patches debts, one of which did not exist.
 echo "== auditability =="
-awk '$1=="M" {print $2}' "$tmp/surface" | LC_ALL=C sort > "$tmp/patched"
+awk -F'\t' '$1=="M" {print $2}' "$tmp/surface" | LC_ALL=C sort > "$tmp/patched"
 grep -rlE '// GeoCode:|--- GeoCode|"GeoCode: ' "$ROOT" 2>/dev/null \
   | sed "s|^$ROOT/||" | LC_ALL=C sort > "$tmp/marked"
-unmarked=$(comm -23 "$tmp/patched" "$tmp/marked")
+# `comm` collates with the locale, so it has to agree with the `sort` above or it falls out of step:
+# under zh_TW.UTF-8 it dropped `app-icon.svg` from one side and reported a marked file as unmarked.
+unmarked=$(LC_ALL=C comm -23 "$tmp/patched" "$tmp/marked")
 n=$(printf '%s' "$unmarked" | grep -c . || true)
 printf "  patched files carrying a marker  %s / %s\n" "$((modified - n))" "$modified"
 if [ "$n" -gt 0 ]; then
   echo "  changed but not locatable by the grep:"
   echo "$unmarked" | sed 's/^/    /'
-  echo "  (.txt prompts, JSON, the lock file and translation dictionaries cannot carry markers — those are expected here)"
+  echo "  (.txt prompts, JSON, the lock file, translation dictionaries and image assets cannot carry markers — those are expected here)"
 fi
 
-offending=$(printf '%s\n' "$unmarked" | grep -vE '(^|/)bun\.lock$|\.json$|\.txt$|^packages/ui/src/lib/i18n/messages/[^/]+\.ts$' | grep . || true)
+# Image assets are named one extension at a time rather than by "binary": a kind that turns up later
+# should redden once so somebody decides whether it can carry a marker. SVG is deliberately absent,
+# since XML takes a comment.
+offending=$(printf '%s\n' "$unmarked" | grep -vE '(^|/)bun\.lock$|\.json$|\.txt$|\.png$|\.icns$|\.ico$|\.car$|^packages/ui/src/lib/i18n/messages/[^/]+\.ts$' | grep . || true)
 if [ "$CHECK" = "--check" ] && [ -n "$offending" ]; then
   echo
   echo "refuse: patched upstream files without a marker (docs/CONVENTIONS.md §5):" >&2
