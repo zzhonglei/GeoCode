@@ -1853,7 +1853,11 @@ const buildStartupSplashHtml = () => {
       :root {
         --splash-background: ${splashBgLight};
         --splash-stroke: ${splashFgLight};
-        /* --- GeoCode: the mark's own colour, not the theme's --- */
+        --splash-face-fill: rgba(0, 0, 0, 0.15);
+        --splash-cell-fill: rgba(0, 0, 0, 0.4);
+        --splash-logo-fill: var(--splash-stroke);
+        /* --- GeoCode: the orbit is the mark's own colour, not the theme's. The cube fills above are no
+           longer drawn; they are kept rather than deleted so upstream can still edit them (KERNEL.md §4.3). --- */
         --geocode-orbit: #5A6874;
       }
       body {
@@ -1869,7 +1873,15 @@ const buildStartupSplashHtml = () => {
         :root {
           --splash-background: ${splashBgDark};
           --splash-stroke: ${splashFgDark};
-          --geocode-orbit: #A8B5C1;
+          --splash-face-fill: rgba(255, 255, 255, 0.15);
+          --splash-cell-fill: rgba(255, 255, 255, 0.35);
+          --geocode-orbit: #A8B5C1; /* GeoCode: the mark's own colour */
+        }
+      }
+      @supports (color: color-mix(in srgb, white 50%, transparent)) {
+        :root {
+          --splash-face-fill: color-mix(in srgb, var(--splash-stroke) 15%, transparent);
+          --splash-cell-fill: color-mix(in srgb, var(--splash-stroke) 35%, transparent);
         }
       }
       .stack {

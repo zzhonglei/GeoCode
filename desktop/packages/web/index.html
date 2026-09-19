@@ -466,22 +466,38 @@
         --splash-background: var(--splash-background-dark);
         --splash-stroke: var(--splash-stroke-dark);
 
-        /* --- GeoCode: the orbit is the mark's own colour, not the theme's; the cube's grid fills went with it --- */
+        /* Fallback fills (overridden below when supported) */
+        --splash-face-fill: rgba(255, 255, 255, 0.15);
+        --splash-cell-fill: rgba(255, 255, 255, 0.35);
+        --splash-logo-fill: var(--splash-stroke);
+
+        /* --- GeoCode: the orbit is the mark's own colour, not the theme's. The cube fills above are no
+           longer drawn; they are kept rather than deleted so upstream can still edit them (KERNEL.md §4.3). --- */
         --geocode-orbit: #A8B5C1;
       }
 
       html[data-splash-variant='light'] {
         --splash-background: var(--splash-background-light);
         --splash-stroke: var(--splash-stroke-light);
-        --geocode-orbit: #5A6874;
+        --splash-face-fill: rgba(0, 0, 0, 0.15);
+        --splash-cell-fill: rgba(0, 0, 0, 0.4);
+        --splash-logo-fill: var(--splash-stroke);
+        --geocode-orbit: #5A6874; /* GeoCode: the mark's own colour */
       }
 
       html[data-splash-variant='dark'] {
         --splash-background: var(--splash-background-dark);
         --splash-stroke: var(--splash-stroke-dark);
-        --geocode-orbit: #A8B5C1;
+        --splash-logo-fill: var(--splash-stroke);
+        --geocode-orbit: #A8B5C1; /* GeoCode: the mark's own colour */
       }
 
+      @supports (color: color-mix(in srgb, white 50%, transparent)) {
+        :root {
+          --splash-face-fill: color-mix(in srgb, var(--splash-stroke) 15%, transparent);
+          --splash-cell-fill: color-mix(in srgb, var(--splash-stroke) 35%, transparent);
+        }
+      }
       #initial-loading {
         background-color: var(--splash-background);
         color: var(--splash-foreground);
