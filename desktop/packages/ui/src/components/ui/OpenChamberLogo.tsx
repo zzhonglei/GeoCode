@@ -1,20 +1,23 @@
-import React, { useMemo } from 'react';
+/* --- GeoCode: our own mark. Upstream computes an OpenChamber cube here; this draws the globe instead, so the
+ * file is a rewrite rather than a patched region (docs/DESKTOP.md §7.2). The light and dark artwork differ only
+ * in the orbit colour, so one body is inlined and that colour follows the theme. --- */
+import React, { useId, useMemo } from 'react';
 import { useOptionalThemeSystem } from '@/contexts/useThemeSystem';
 import { useI18n } from '@/lib/i18n';
 
-const LEFT_FACE_CELL_OPACITIES = [
-  0.2, 0.45, 0.15, 0.55,
-  0.35, 0.1, 0.5, 0.25,
-  0.4, 0.3, 0.45, 0.15,
-  0.55, 0.2, 0.35, 0.1,
-];
+const ORBIT_LIGHT = '#5A6874';
+const ORBIT_DARK = '#A8B5C1';
 
-const RIGHT_FACE_CELL_OPACITIES = [
-  0.3, 0.15, 0.45, 0.25,
-  0.5, 0.35, 0.1, 0.4,
-  0.2, 0.55, 0.3, 0.15,
-  0.45, 0.25, 0.4, 0.2,
-];
+const STATIC_BODY = `<g transform="translate(7.0 7.0) scale(0.86)"><g transform="translate(11.89 15.04) scale(0.6992)"><ellipse cx="50" cy="50" rx="58.0" ry="15.2" transform="rotate(-22 50 50)" fill="none" stroke="var(--geocode-orbit)" stroke-width="5.6"/><clipPath id="dv1"><circle cx="50" cy="50" r="40"/></clipPath><circle cx="50" cy="50" r="40" fill="#EFF7FD"/><g clip-path="url(#dv1)"><g transform="rotate(28 50 50)"><path d="M -12.00 19.69 C -11.06 20.27 -8.24 21.88 -6.36 23.17 C -4.48 24.46 -2.61 25.99 -0.73 27.43 C 1.15 28.86 3.03 30.43 4.91 31.78 C 6.79 33.13 8.67 34.47 10.55 35.52 C 12.42 36.57 14.30 37.48 16.18 38.06 C 18.06 38.64 19.94 38.98 21.82 39.00 C 23.70 39.02 25.58 38.72 27.45 38.18 C 29.33 37.63 31.21 36.75 33.09 35.73 C 34.97 34.71 36.85 33.38 38.73 32.04 C 40.61 30.71 42.48 29.15 44.36 27.71 C 46.24 26.28 48.12 24.74 50.00 23.43 C 51.88 22.12 53.76 20.84 55.64 19.88 C 57.52 18.91 59.39 18.10 61.27 17.62 C 63.15 17.15 65.03 16.93 66.91 17.02 C 68.79 17.12 70.67 17.53 72.55 18.18 C 74.42 18.83 76.30 19.81 78.18 20.91 C 80.06 22.00 81.94 23.39 83.82 24.76 C 85.70 26.14 87.58 27.71 89.45 29.14 C 91.33 30.57 93.21 32.08 95.09 33.33 C 96.97 34.59 98.85 35.79 100.73 36.68 C 102.61 37.56 104.48 38.26 106.36 38.63 C 108.24 39.00 111.06 38.85 112.00 38.89 L 112 160 L -12 160 Z" fill="#8FD1F0"/><path d="M -12.00 37.45 C -11.06 37.79 -8.24 38.59 -6.36 39.50 C -4.48 40.41 -2.61 41.64 -0.73 42.92 C 1.15 44.19 3.03 45.71 4.91 47.14 C 6.79 48.58 8.67 50.15 10.55 51.51 C 12.42 52.87 14.30 54.24 16.18 55.31 C 18.06 56.38 19.94 57.33 21.82 57.95 C 23.70 58.56 25.58 58.94 27.45 58.99 C 29.33 59.05 31.21 58.79 33.09 58.28 C 34.97 57.77 36.85 56.92 38.73 55.93 C 40.61 54.93 42.48 53.63 44.36 52.31 C 46.24 50.99 48.12 49.44 50.00 48.00 C 51.88 46.56 53.76 45.01 55.64 43.69 C 57.52 42.37 59.39 41.07 61.27 40.07 C 63.15 39.08 65.03 38.23 66.91 37.72 C 68.79 37.21 70.67 36.95 72.55 37.01 C 74.42 37.06 76.30 37.44 78.18 38.05 C 80.06 38.67 81.94 39.62 83.82 40.69 C 85.70 41.76 87.58 43.13 89.45 44.49 C 91.33 45.85 93.21 47.42 95.09 48.86 C 96.97 50.29 98.85 51.81 100.73 53.08 C 102.61 54.36 104.48 55.59 106.36 56.50 C 108.24 57.41 111.06 58.21 112.00 58.55 L 112 160 L -12 160 Z" fill="#1FA085"/><path d="M -12.00 56.11 C -11.06 56.15 -8.24 56.00 -6.36 56.37 C -4.48 56.74 -2.61 57.44 -0.73 58.32 C 1.15 59.21 3.03 60.41 4.91 61.67 C 6.79 62.92 8.67 64.43 10.55 65.86 C 12.42 67.29 14.30 68.86 16.18 70.24 C 18.06 71.61 19.94 73.00 21.82 74.09 C 23.70 75.19 25.58 76.17 27.45 76.82 C 29.33 77.47 31.21 77.88 33.09 77.98 C 34.97 78.07 36.85 77.85 38.73 77.38 C 40.61 76.90 42.48 76.09 44.36 75.12 C 46.24 74.16 48.12 72.88 50.00 71.57 C 51.88 70.26 53.76 68.72 55.64 67.29 C 57.52 65.85 59.39 64.29 61.27 62.96 C 63.15 61.62 65.03 60.29 66.91 59.27 C 68.79 58.25 70.67 57.37 72.55 56.82 C 74.42 56.28 76.30 55.98 78.18 56.00 C 80.06 56.02 81.94 56.36 83.82 56.94 C 85.70 57.52 87.58 58.43 89.45 59.48 C 91.33 60.53 93.21 61.87 95.09 63.22 C 96.97 64.57 98.85 66.14 100.73 67.57 C 102.61 69.01 104.48 70.54 106.36 71.83 C 108.24 73.12 111.06 74.73 112.00 75.31 L 112 160 L -12 160 Z" fill="#0A5A3C"/></g></g><path d="M 89.82 46.21 A 58.0 15.2 -22 0 1 18.72 74.94" fill="none" stroke="var(--geocode-orbit)" stroke-width="5.6" stroke-linecap="round"/><g transform="translate(100.80 25.51)"><path fill="#E9A13B" d="M 0 -15 Q 2.70 -2.70 15 0 Q 2.70 2.70 0 15 Q -2.70 2.70 -15 0 Q -2.70 -2.70 0 -15 Z"/></g></g></g>`;
+
+const ANIMATED_BODY = `<g transform="translate(11.89 15.04) scale(0.6992)"><g><ellipse cx="50" cy="50" rx="58.0" ry="15.2" transform="rotate(-22 50 50)" fill="none" stroke="var(--geocode-orbit)" stroke-width="5.6"/><g><g><g><path fill="#E9A13B" d="M 0 -15 Q 2.70 -2.70 15 0 Q 2.70 2.70 0 15 Q -2.70 2.70 -15 0 Q -2.70 -2.70 0 -15 Z"/><animateTransform attributeName="transform" type="scale" values="1;1.18;1;0.84;1" keyTimes="0;0.25;0.5;0.75;1" dur="3.2s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1;.42 0 .58 1;.42 0 .58 1;.42 0 .58 1"/></g><animateMotion dur="3.2s" repeatCount="indefinite" rotate="0" path="M 103.78 28.27 A 58.0 15.2 -22 0 1 -3.78 71.73 A 58.0 15.2 -22 0 1 103.78 28.27"/></g></g><animateTransform attributeName="transform" type="rotate" values="0 50 50;10 50 50;0 50 50;-10 50 50;0 50 50" keyTimes="0;0.25;0.5;0.75;1" dur="6.4s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1;.42 0 .58 1;.42 0 .58 1;.42 0 .58 1"/></g><clipPath id="dl1"><circle cx="50" cy="50" r="40"/></clipPath><circle cx="50" cy="50" r="40" fill="#EFF7FD"/><g clip-path="url(#dl1)"><g transform="rotate(28 50 50)"><path d="M -12.00 19.69 C -11.06 20.27 -8.24 21.88 -6.36 23.17 C -4.48 24.46 -2.61 25.99 -0.73 27.43 C 1.15 28.86 3.03 30.43 4.91 31.78 C 6.79 33.13 8.67 34.47 10.55 35.52 C 12.42 36.57 14.30 37.48 16.18 38.06 C 18.06 38.64 19.94 38.98 21.82 39.00 C 23.70 39.02 25.58 38.72 27.45 38.18 C 29.33 37.63 31.21 36.75 33.09 35.73 C 34.97 34.71 36.85 33.38 38.73 32.04 C 40.61 30.71 42.48 29.15 44.36 27.71 C 46.24 26.28 48.12 24.74 50.00 23.43 C 51.88 22.12 53.76 20.84 55.64 19.88 C 57.52 18.91 59.39 18.10 61.27 17.62 C 63.15 17.15 65.03 16.93 66.91 17.02 C 68.79 17.12 70.67 17.53 72.55 18.18 C 74.42 18.83 76.30 19.81 78.18 20.91 C 80.06 22.00 81.94 23.39 83.82 24.76 C 85.70 26.14 87.58 27.71 89.45 29.14 C 91.33 30.57 93.21 32.08 95.09 33.33 C 96.97 34.59 98.85 35.79 100.73 36.68 C 102.61 37.56 104.48 38.26 106.36 38.63 C 108.24 39.00 111.06 38.85 112.00 38.89 L 112 160 L -12 160 Z" fill="#8FD1F0"/><path d="M -12.00 37.45 C -11.06 37.79 -8.24 38.59 -6.36 39.50 C -4.48 40.41 -2.61 41.64 -0.73 42.92 C 1.15 44.19 3.03 45.71 4.91 47.14 C 6.79 48.58 8.67 50.15 10.55 51.51 C 12.42 52.87 14.30 54.24 16.18 55.31 C 18.06 56.38 19.94 57.33 21.82 57.95 C 23.70 58.56 25.58 58.94 27.45 58.99 C 29.33 59.05 31.21 58.79 33.09 58.28 C 34.97 57.77 36.85 56.92 38.73 55.93 C 40.61 54.93 42.48 53.63 44.36 52.31 C 46.24 50.99 48.12 49.44 50.00 48.00 C 51.88 46.56 53.76 45.01 55.64 43.69 C 57.52 42.37 59.39 41.07 61.27 40.07 C 63.15 39.08 65.03 38.23 66.91 37.72 C 68.79 37.21 70.67 36.95 72.55 37.01 C 74.42 37.06 76.30 37.44 78.18 38.05 C 80.06 38.67 81.94 39.62 83.82 40.69 C 85.70 41.76 87.58 43.13 89.45 44.49 C 91.33 45.85 93.21 47.42 95.09 48.86 C 96.97 50.29 98.85 51.81 100.73 53.08 C 102.61 54.36 104.48 55.59 106.36 56.50 C 108.24 57.41 111.06 58.21 112.00 58.55 L 112 160 L -12 160 Z" fill="#1FA085"/><path d="M -12.00 56.11 C -11.06 56.15 -8.24 56.00 -6.36 56.37 C -4.48 56.74 -2.61 57.44 -0.73 58.32 C 1.15 59.21 3.03 60.41 4.91 61.67 C 6.79 62.92 8.67 64.43 10.55 65.86 C 12.42 67.29 14.30 68.86 16.18 70.24 C 18.06 71.61 19.94 73.00 21.82 74.09 C 23.70 75.19 25.58 76.17 27.45 76.82 C 29.33 77.47 31.21 77.88 33.09 77.98 C 34.97 78.07 36.85 77.85 38.73 77.38 C 40.61 76.90 42.48 76.09 44.36 75.12 C 46.24 74.16 48.12 72.88 50.00 71.57 C 51.88 70.26 53.76 68.72 55.64 67.29 C 57.52 65.85 59.39 64.29 61.27 62.96 C 63.15 61.62 65.03 60.29 66.91 59.27 C 68.79 58.25 70.67 57.37 72.55 56.82 C 74.42 56.28 76.30 55.98 78.18 56.00 C 80.06 56.02 81.94 56.36 83.82 56.94 C 85.70 57.52 87.58 58.43 89.45 59.48 C 91.33 60.53 93.21 61.87 95.09 63.22 C 96.97 64.57 98.85 66.14 100.73 67.57 C 102.61 69.01 104.48 70.54 106.36 71.83 C 108.24 73.12 111.06 74.73 112.00 75.31 L 112 160 L -12 160 Z" fill="#0A5A3C"/></g></g><g><path d="M 89.82 46.21 A 58.0 15.2 -22 0 1 18.72 74.94" fill="none" stroke="var(--geocode-orbit)" stroke-width="5.6" stroke-linecap="round"/><g><animate attributeName="opacity" values="1;0;1" keyTimes="0;0.5;1" calcMode="discrete" dur="3.2s" repeatCount="indefinite"/><g><g><path fill="#E9A13B" d="M 0 -15 Q 2.70 -2.70 15 0 Q 2.70 2.70 0 15 Q -2.70 2.70 -15 0 Q -2.70 -2.70 0 -15 Z"/><animateTransform attributeName="transform" type="scale" values="1;1.18;1;0.84;1" keyTimes="0;0.25;0.5;0.75;1" dur="3.2s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1;.42 0 .58 1;.42 0 .58 1;.42 0 .58 1"/></g><animateMotion dur="3.2s" repeatCount="indefinite" rotate="0" path="M 103.78 28.27 A 58.0 15.2 -22 0 1 -3.78 71.73 A 58.0 15.2 -22 0 1 103.78 28.27"/></g></g><animateTransform attributeName="transform" type="rotate" values="0 50 50;10 50 50;0 50 50;-10 50 50;0 50 50" keyTimes="0;0.25;0.5;0.75;1" dur="6.4s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1;.42 0 .58 1;.42 0 .58 1;.42 0 .58 1"/></g></g>`;
+
+const SMIL_ELEMENT = /<animate(?:Transform|Motion)?\b[^>]*\/>/g;
+
+const prefersReducedMotion = (): boolean =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 interface OpenChamberLogoProps {
   className?: string;
@@ -23,69 +26,15 @@ interface OpenChamberLogoProps {
   isAnimated?: boolean;
 }
 
-// Generate grid cells for a face (4x4 grid)
-// Returns array of parallelogram paths in isometric projection
-const generateFaceGrid = (
-  topLeft: { x: number; y: number },
-  topRight: { x: number; y: number },
-  bottomRight: { x: number; y: number },
-  bottomLeft: { x: number; y: number },
-  gridSize: number = 4
-) => {
-  const cells: Array<{ path: string; row: number; col: number }> = [];
-  
-  for (let row = 0; row < gridSize; row++) {
-    for (let col = 0; col < gridSize; col++) {
-      // Interpolate corners for this cell
-      const t1 = col / gridSize;
-      const t2 = (col + 1) / gridSize;
-      const s1 = row / gridSize;
-      const s2 = (row + 1) / gridSize;
-      
-      // Bilinear interpolation for each corner of the cell
-      const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-      const bilinear = (tl: number, tr: number, br: number, bl: number, t: number, s: number) => {
-        const top = lerp(tl, tr, t);
-        const bottom = lerp(bl, br, t);
-        return lerp(top, bottom, s);
-      };
-      
-      const p1 = {
-        x: bilinear(topLeft.x, topRight.x, bottomRight.x, bottomLeft.x, t1, s1),
-        y: bilinear(topLeft.y, topRight.y, bottomRight.y, bottomLeft.y, t1, s1),
-      };
-      const p2 = {
-        x: bilinear(topLeft.x, topRight.x, bottomRight.x, bottomLeft.x, t2, s1),
-        y: bilinear(topLeft.y, topRight.y, bottomRight.y, bottomLeft.y, t2, s1),
-      };
-      const p3 = {
-        x: bilinear(topLeft.x, topRight.x, bottomRight.x, bottomLeft.x, t2, s2),
-        y: bilinear(topLeft.y, topRight.y, bottomRight.y, bottomLeft.y, t2, s2),
-      };
-      const p4 = {
-        x: bilinear(topLeft.x, topRight.x, bottomRight.x, bottomLeft.x, t1, s2),
-        y: bilinear(topLeft.y, topRight.y, bottomRight.y, bottomLeft.y, t1, s2),
-      };
-      
-      cells.push({
-        path: `M${p1.x} ${p1.y} L${p2.x} ${p2.y} L${p3.x} ${p3.y} L${p4.x} ${p4.y} Z`,
-        row,
-        col,
-      });
-    }
-  }
-  
-  return cells;
-};
-
 export const OpenChamberLogo: React.FC<OpenChamberLogoProps> = ({
   className = '',
   width = 70,
   height = 70,
   isAnimated = false,
 }) => {
-  const { t } = useI18n();
   const themeContext = useOptionalThemeSystem();
+  const { t } = useI18n();
+  const instanceId = useId().replace(/[^a-zA-Z0-9]/g, '');
 
   let isDark = true;
   if (themeContext) {
@@ -94,183 +43,25 @@ export const OpenChamberLogo: React.FC<OpenChamberLogoProps> = ({
     isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   }
 
-  const strokeColor = useMemo(() => {
-    if (themeContext) {
-      return themeContext.currentTheme.colors.surface.foreground;
-    }
-    if (typeof window !== 'undefined') {
-      const fromVars = getComputedStyle(document.documentElement).getPropertyValue('--splash-stroke').trim();
-      if (fromVars) {
-        return fromVars;
-      }
-    }
-    return isDark ? 'white' : 'black';
-  }, [themeContext, isDark]);
-
-  const supportsColorMix = useMemo(() => {
-    if (typeof window === 'undefined' || typeof CSS === 'undefined' || typeof CSS.supports !== 'function') {
-      return false;
-    }
-    return CSS.supports('color', 'color-mix(in srgb, white 50%, transparent)');
-  }, []);
-
-  const fillColor = useMemo(() => {
-    if (themeContext) {
-      if (supportsColorMix) {
-        return `color-mix(in srgb, ${strokeColor} 15%, transparent)`;
-      }
-      return isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)';
-    }
-    if (typeof window !== 'undefined') {
-      const fromVars = getComputedStyle(document.documentElement).getPropertyValue('--splash-face-fill').trim();
-      if (fromVars) {
-        return fromVars;
-      }
-    }
-    return isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)';
-  }, [themeContext, supportsColorMix, strokeColor, isDark]);
-
-  const cellHighlightColor = useMemo(() => {
-    if (themeContext) {
-      if (supportsColorMix) {
-        return `color-mix(in srgb, ${strokeColor} 35%, transparent)`;
-      }
-      return isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.4)';
-    }
-    if (typeof window !== 'undefined') {
-      const fromVars = getComputedStyle(document.documentElement).getPropertyValue('--splash-cell-fill').trim();
-      if (fromVars) {
-        return fromVars;
-      }
-    }
-    return isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.4)';
-  }, [themeContext, supportsColorMix, strokeColor, isDark]);
-
-  const logoFillColor = strokeColor;
-
-
-
-  // Isometric cube geometry (mathematically correct)
-  // For true isometric: horizontal edges at ±30° from horizontal
-  // cos(30°) ≈ 0.866, sin(30°) = 0.5
-  // Cube edge length = 46, center at (50, 52) - larger cube, slightly lower
-  const edge = 48;
-  const cos30 = 0.866;
-  const sin30 = 0.5;
-  const centerY = 50;
-  
-  // Key points of the isometric cube
-  const top = { x: 50, y: centerY - edge };                           // top vertex
-  const left = { x: 50 - edge * cos30, y: centerY - edge * sin30 };   // top-left
-  const right = { x: 50 + edge * cos30, y: centerY - edge * sin30 };  // top-right  
-  const center = { x: 50, y: centerY };                                // center (front vertex of top face)
-  const bottomLeft = { x: 50 - edge * cos30, y: centerY + edge * sin30 };  // bottom-left
-  const bottomRight = { x: 50 + edge * cos30, y: centerY + edge * sin30 }; // bottom-right
-  const bottom = { x: 50, y: centerY + edge };                         // bottom vertex
-
-  // Isometric transformation matrix for top face
-  // Maps a flat square to the isometric rhombus (top face)
-  // Center of top face rhombus: average of top, left, center, right vertices
-  // topFaceCenter.x = (top.x + left.x + center.x + right.x) / 4 = 50
-  // topFaceCenter.y = (top.y + left.y + center.y + right.y) / 4
-  const topFaceCenterY = (top.y + left.y + center.y + right.y) / 4;
-  const isoMatrix = `matrix(0.866, 0.5, -0.866, 0.5, 50, ${topFaceCenterY})`;
-
-  // Generate grid cells for both faces
-  // Left face: center -> left -> bottomLeft -> bottom
-  const leftFaceCells = generateFaceGrid(left, center, bottom, bottomLeft);
-  
-  // Right face: center -> right -> bottomRight -> bottom  
-  const rightFaceCells = generateFaceGrid(center, right, bottomRight, bottom);
+  const markup = useMemo(() => {
+    // The clip path id is document-wide, so each instance gets its own: unmounting the first logo would
+    // otherwise take the definition every other one still points at.
+    const [source, id] = isAnimated ? [ANIMATED_BODY, 'dl1'] : [STATIC_BODY, 'dv1'];
+    const scoped = source.split(id).join(`${id}-${instanceId}`);
+    // SMIL ignores the CSS motion media query, so the mark is frozen at its first frame instead.
+    return isAnimated && prefersReducedMotion() ? scoped.replace(SMIL_ELEMENT, '') : scoped;
+  }, [isAnimated, instanceId]);
 
   return (
     <svg
+      className={className}
       width={width}
       height={height}
       viewBox="0 0 100 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
       role="img"
       aria-label={t('openChamberLogo.aria.logo')}
-    >
-      {isAnimated ? (
-        <style>{`@keyframes oc-logo-glow{0%,100%{filter:drop-shadow(0 0 0 transparent)}50%{filter:drop-shadow(0 0 4px var(--oc-glow-color))}}.oc-logo-glow{animation:oc-logo-glow 1.8s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.oc-logo-glow{animation:none}}`}</style>
-      ) : null}
-      {/* Left face - base fill */}
-      <path
-        d={`M${center.x} ${center.y} L${left.x} ${left.y} L${bottomLeft.x} ${bottomLeft.y} L${bottom.x} ${bottom.y} Z`}
-        fill={fillColor}
-        stroke={strokeColor}
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      
-      {/* Left face - grid cells with varying opacity */}
-      {leftFaceCells.map((cell, i) => (
-        <path
-          key={`left-${i}`}
-          d={cell.path}
-          fill={cellHighlightColor}
-          opacity={LEFT_FACE_CELL_OPACITIES[cell.row * 4 + (3 - cell.col)] ?? 0.35}
-        />
-      ))}
-      
-      {/* Right face - base fill */}
-      <path
-        d={`M${center.x} ${center.y} L${right.x} ${right.y} L${bottomRight.x} ${bottomRight.y} L${bottom.x} ${bottom.y} Z`}
-        fill={fillColor}
-        stroke={strokeColor}
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      
-      {/* Right face - grid cells with varying opacity */}
-      {rightFaceCells.map((cell, i) => (
-        <path
-          key={`right-${i}`}
-          d={cell.path}
-          fill={cellHighlightColor}
-          opacity={RIGHT_FACE_CELL_OPACITIES[cell.row * 4 + cell.col] ?? 0.35}
-        />
-      ))}
-      
-      {/* Top face - open (no fill), only stroke */}
-      <path
-        d={`M${top.x} ${top.y} L${left.x} ${left.y} L${center.x} ${center.y} L${right.x} ${right.y} Z`}
-        fill="none"
-        stroke={strokeColor}
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      
-      {/* OpenCode logo on top face */}
-      <g
-        opacity={1}
-        className={isAnimated ? 'oc-logo-glow' : undefined}
-        style={isAnimated ? ({ '--oc-glow-color': strokeColor } as React.CSSProperties) : undefined}
-      >
-        {/*
-          Isometric transform for top face:
-          OpenCode logo (32x40 viewBox) centered and projected to isometric plane
-        */}
-        <g transform={`${isoMatrix} scale(0.75)`}>
-          {/* OpenCode logo - outer frame with inner square */}
-          {/* Outer frame (centered at origin, original: 0,0 to 32,40) */}
-          <path
-            fillRule="evenodd"
-            clipRule="evenodd"
-            d="M-16 -20 L16 -20 L16 20 L-16 20 Z M-8 -12 L-8 12 L8 12 L8 -12 Z"
-            fill={logoFillColor}
-          />
-          {/* Inner square */}
-          <path
-            d="M-8 -4 L8 -4 L8 12 L-8 12 Z"
-            fill={logoFillColor}
-            fillOpacity="0.4"
-          />
-        </g>
-      </g>
-    </svg>
+      style={{ '--geocode-orbit': isDark ? ORBIT_DARK : ORBIT_LIGHT } as React.CSSProperties}
+      dangerouslySetInnerHTML={{ __html: markup }}
+    />
   );
 };

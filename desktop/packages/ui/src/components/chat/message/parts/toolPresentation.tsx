@@ -66,9 +66,9 @@ export const getToolIcon = (toolName: string) => {
     if (tool === 'browser') {
         return <Icon name="global" className={iconClass} />;
     }
-    // GeoCode: upstream's control tool renamed, with its icon (browser-tool.mjs GEOCODE_TOOL_NAME)
+    // GeoCode: upstream's control tool renamed, with a mark of our own (browser-tool.mjs GEOCODE_TOOL_NAME)
     if (tool === 'geocode') {
-        return <Icon name="openchamber" className={iconClass} />;
+        return <Icon name="geocode" className={iconClass} />;
     }
     if (tool === 'openchamber_memory') {
         return <Icon name="brain-4" className={iconClass} />;

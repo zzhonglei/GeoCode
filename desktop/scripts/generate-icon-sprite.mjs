@@ -22,6 +22,11 @@ const customIconData = new Map([
     "openchamber",
     `<polygon points="12 2.5 3.5 7.4 3.5 17.2 12 22.1 20.5 17.2 20.5 7.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><polyline points="3.5 7.4 12 12.3 20.5 7.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="12.3" x2="12" y2="22.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m12 5.5 3.7 2.1L12 9.7 8.3 7.6 12 5.5Zm0 1.5-1 .6 1 .6 1-.6-1-.6Z" fill="currentColor" fill-rule="evenodd"/>`,
   ],
+  // --- GeoCode: our own mark, adapted from its 100x100 master (docs/DESKTOP.md §7.2) ---
+  [
+    "geocode",
+    `<!-- --- GeoCode: our own mark --- --><g transform="translate(0.57 0.15) scale(0.233)"><g transform="translate(5.03 9.71) scale(0.8139)"><mask id="gc-orbit-mask" maskUnits="userSpaceOnUse" x="-60" y="-60" width="220" height="220"><rect x="-60" y="-60" width="220" height="220" fill="#fff"/><path d="M 82.00 49.49 A 51.84 14.08 -22 0 1 26.63 71.86" stroke="#000" stroke-width="13.5" fill="none" stroke-linecap="round"/></mask><g mask="url(#gc-orbit-mask)"><circle cx="50" cy="50" r="32" fill="none" stroke="currentColor" stroke-width="8.0"/></g><ellipse cx="50" cy="50" rx="51.84" ry="14.08" transform="rotate(-22 50 50)" fill="none" stroke="currentColor" stroke-width="8.0"/><path d="M 82.00 49.49 A 51.84 14.08 -22 0 1 26.63 71.86" fill="none" stroke="currentColor" stroke-width="8.0" stroke-linecap="round"/><g transform="translate(95.36 28.00) scale(1.000)" opacity="1.000"><path fill="currentColor" d="M 0 -15 Q 3.30 -3.30 15 0 Q 3.30 3.30 0 15 Q -3.30 3.30 -15 0 Q -3.30 -3.30 0 -15 Z"/></g></g></g>`,
+  ],
   // Command Code — corner squares + center square (official logo geometry).
   [
     "command-code",
