@@ -209,7 +209,7 @@ describe("brand literal scan", () => {
 })
 
 describe("the product name people see", () => {
-  test("the OAuth callback pages name GeoCode, with the wordmark left for the icon batch", async () => {
+  test("the OAuth callback pages name GeoCode, wordmark included", async () => {
     const { OauthCallbackPage } = await import("../src/oauth/page")
     const pages = [
       OauthCallbackPage.success({ provider: "MCP" }),
@@ -219,9 +219,11 @@ describe("the product name people see", () => {
       OauthCallbackPage.bootstrap({ tokenPath: "/callback", provider: "xAI" }),
     ]
     for (const page of pages) {
-      const text = page.replace(/<svg class="wordmark"[\s\S]*?<\/svg>/g, "")
-      expect(text).toContain("· GeoCode</title>")
-      expect(text).not.toMatch(/opencode/i)
+      expect(page).toContain("· GeoCode</title>")
+      expect(page).not.toMatch(/opencode/i)
+      // Names alone would pass with upstream's mark and a renamed label, so the proportions of our own
+      // asset are what is checked.
+      expect(page).toContain('viewBox="0 0 512 112"')
     }
   })
 
