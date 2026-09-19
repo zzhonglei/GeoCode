@@ -522,8 +522,16 @@ GeoAgent 在临时会话里调 `projects.list` 成功(工具状态 completed,返
 `web/server/geocode/browser-tool-callback.test.js`(令牌、每个工具只到自己的动作、裸动作名在工具内解析、解析不出时只列自己的动作)。
 
 **应用图标(2026-09-19 落地,用户自行设计)。** 标志在仓库里有九处表现,要紧的是**其中五处画在源码里而不是图片文件里**:
-Electron 的启动闪屏、网页的启动闪屏、`OpenChamberLogo` 组件、图标精灵的图元、内核 OAuth 回调页的字标。换图片不会让它们跟着变,
+Electron 的启动闪屏、网页的启动闪屏、渲染层的 Logo 组件、图标精灵的图元、内核 OAuth 回调页的字标。换图片不会让它们跟着变,
 而 git 与编译器都看不见它们该一致,所以前三处的同一份动画由 `ui/src/geocode/brand-mark.test.ts` 钉住(它一写出来就抓到一处真不一致)。
+
+**渲染层那一处换过一次形态,理由可复用。** 起初是把上游的 `OpenChamberLogo.tsx` 整份重写,暴露面 239 行,当天全树最贵的补丁;
+现在图形住在自有文件 `ui/src/geocode/GeoCodeBrandMark.tsx`,上游那份原样留着、只改导出名一行让出名字,暴露面降到 1。
+没有用 `CONVENTIONS.md` §5 那条「早退」,是因为它会在函数体里留 276 行不可达代码(这个包里两种写法都编译得过,
+`no-unreachable` 被 typescript-eslint 关掉了),下一个做死代码清理的人很可能把它删掉;改名后上游那份仍是一个完整、
+导出的组件,读起来就是有意留下的。⚠️ **两个启动闪屏里的立方体图形不照此办理,仍是整段删除。**
+`index.html` 那段自带 9 处 `<!--`,HTML 注释不能嵌套,屏蔽它就得引入第三种形态,而 `main.mjs` 那段包得住——
+分开处理会让同一份图形在两个文件里形态不一致。这里接受形态 4:冲突的解法是机械的「取我们的」,而标记就在旁边写着为什么。
 
 **macOS 继续走上游的 Icon Composer 管线**(用户定:与上游保持一致),因此应用图标是零代码改动——只换 `AppIcon.icon/Assets/` 下两张
 透明底前景图层,再跑一次 `bun run generate:macos-icon` 重新生成 `Assets.car` 并提交。⚠️ 那一步不在打包链里,而 `after-pack.cjs` 找不到
