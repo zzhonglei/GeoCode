@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const DESKTOP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 
 const SPLASHES = ['packages/electron/main.mjs', 'packages/web/index.html'] as const;
-const COMPONENT = 'packages/ui/src/components/ui/OpenChamberLogo.tsx';
+const COMPONENT = 'packages/ui/src/geocode/GeoCodeBrandMark.tsx';
 
 const read = (file: string) => readFileSync(path.join(DESKTOP, file), 'utf8');
 
