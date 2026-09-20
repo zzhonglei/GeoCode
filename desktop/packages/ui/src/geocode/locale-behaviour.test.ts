@@ -55,6 +55,11 @@ const BINDINGS: Binding[] = [
     forbidden: [/network/i, /网络/, /網路/],
   },
   {
+    behaviour: 'the session gate answers on this computer only, so there is no LAN address and no second device',
+    keys: ['sessionAuth.error.networkDescription'],
+    forbidden: [/desktop network/i, /\bLAN\b/, /another device/i, /另一台设备/, /其他裝置/, /本地网络/, /本機網路/],
+  },
+  {
     behaviour: 'GeoCode is a desktop app on this computer, with no web page, phone or server',
     keys: [
       'settings.integrations.firstParty.info',
