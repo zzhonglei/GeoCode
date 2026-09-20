@@ -1,5 +1,5 @@
-/* --- GeoCode: the magic prompt, plugin, tunnel and Linear surfaces answer 404 under Electron, and none of
- * their requests, including routes upstream adds later, reaches the kernel proxy (docs/DESKTOP.md §7.3). --- */
+/* --- GeoCode: the magic prompt, plugin, tunnel, Linear and extension surfaces answer 404 under Electron, and
+ * none of their requests, including routes upstream adds later, reaches the kernel proxy (docs/DESKTOP.md §7.3). --- */
 import { afterEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import request from 'supertest';
@@ -8,6 +8,7 @@ import { registerMagicPromptRoutes } from '../lib/magic-prompts/routes.js';
 import { registerPluginRoutes } from '../lib/opencode/plugin-routes.js';
 import { createTunnelRoutesRuntime } from '../lib/tunnels/routes.js';
 import { registerLinearRoutes } from '../lib/linear/routes.js';
+import { registerGuestRoutes } from '../lib/guests/routes.js';
 
 const originalElectron = process.versions.electron;
 
@@ -59,6 +60,19 @@ const SURFACES = [
       decodePluginId: inert,
       refreshOpenCodeAfterConfigChange: inert,
       clientReloadDelayMs: 0,
+    }),
+  },
+  {
+    name: 'extension',
+    prefix: '/api/guests',
+    minimum: 20,
+    named: { method: 'get', path: '/api/guests' },
+    register: (app) => registerGuestRoutes(app, {
+      openchamberDataDir: '/tmp/geocode-closed-surface-test',
+      openchamberVersion: '0.0.0-test',
+      resolveGitBinaryForSpawn: inert,
+      resolveOptionalProjectDirectory: inert,
+      getSmallModelService: inert,
     }),
   },
   {

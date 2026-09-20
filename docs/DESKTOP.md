@@ -811,6 +811,19 @@ OAuth 仍为当前账号,原 CLI 账号保留为其他账号。完整验证门�
   而给 `session-actions.ts` 加早退会打红上游自己的测试,抬高补丁面。
   绊线在 `ui/src/geocode/session-share-surface.test.ts`:它不钉这两个文件,而是走遍渲染层源码,断言任一文件里
   分享菜单项的出现次数等于守卫的出现次数,所以上游日后把入口加进第三个文件同样会转红。
+- **扩展(Extensions / Guests)**:v1.24.0 上游新增的整套子系统——从文件夹、ZIP 或 git URL 装入的第三方面板、
+  附加菜单、集成与本地服务。判据:这是一个很新、尚不完善的功能,GeoCode 暂不保留(2026-09-20 用户定)。
+  ⚠️ **关法只有三处,因为上游自己就带「这个运行时不支持扩展」的状态**:`lib/guests/load-catalog.ts` 里
+  `markUnsupported` 那个判断加上桌面壳,于是扩展页、上下文栏的面、附加菜单、斜杠命令、集成页的扩展卡片
+  一并收起,既不发请求也不进错误态——碰这个面的渲染层文件有 18 个,逐个加守卫是错的做法。
+  服务端 `registerGuestRoutes` 在 Electron 下首行把 `/api/guests` 整个前缀答成 404,23 条路由一条不注册;
+  「扩展」页在桌面壳不可用(与 Tunnel 同一个页面可用性谓词)。
+  ⚠️ **闭包不跟着收窄**:`packages/extensions`(两份说明加一个空 `registry.json`,不是 workspace 成员)与
+  `packages/sdk`(`ui` 与 `web` 的 `workspace:*` 依赖,不圈就装不上)都照常圈进来。产品边界落在代码里,
+  不落在闭包里——收窄闭包是这套机制里唯一没有自动防护的操作(§9.2)。
+  绊线在 `server/geocode/closed-surface.test.js`(对照组在非 Electron 下挂满 23 条,再逐条验证 Electron 下全 404
+  且一条都不落到内核代理,外加一条日后新增路径)与 `ui/src/geocode/locale-brand.test.ts` 的闭包绑定
+  (四条豁免前缀各自指名 `load-catalog.ts` 或 `metadata.ts` 里那句判断,判断一没就转红)。
 
 ---
 

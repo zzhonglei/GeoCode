@@ -229,7 +229,8 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
     group: 'general',
     kind: 'single',
     keywords: ['extension', 'extensions', 'guest', 'panel', 'rail', 'folder', 'zip', 'git', 'url'],
-    isAvailable: (ctx) => !ctx.isVSCode && !ctx.isMobile,
+    // GeoCode: extensions are not a surface GeoCode offers (docs/DESKTOP.md §7.3)
+    isAvailable: (ctx) => !ctx.isVSCode && !ctx.isMobile && !ctx.isDesktop,
   },
 ] as const;
 

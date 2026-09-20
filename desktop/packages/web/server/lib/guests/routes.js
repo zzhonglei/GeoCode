@@ -28,6 +28,7 @@ import {
 import { runGuestFileOperation } from './files.js';
 import { injectGuestAssetTokens, parseGuestUrlToken } from './html-tokens.js';
 import { injectGuestDocumentStyles } from './html-styles.js';
+import { refuseSurfaceUnderElectron } from '../../geocode/closed-surface.js'; // GeoCode: own module
 import { installGuest, installGuestFromZipBuffer, parseInstallRequest, uninstallGuest } from './install.js';
 import { guestUploadMaxBytes, readGuestUploadBody } from './upload.js';
 import { checkAllGuestUpdates, updateGuest, withGuestUpdate } from './updates.js';
@@ -196,6 +197,10 @@ export const registerGuestRoutes = (app, {
   resolveOptionalProjectDirectory,
   getSmallModelService,
 }) => {
+  // --- GeoCode: extensions are not a surface GeoCode offers; the whole prefix is taken so routes upstream
+  // adds to this group are refused with it (docs/DESKTOP.md §7.3) ---
+  if (refuseSurfaceUnderElectron(app, '/api/guests')) return;
+  // --- /GeoCode ---
   const persistPath = extensionsPersistPath(openchamberDataDir);
   const authPath = guestAuthPersistPath(openchamberDataDir);
   const versionOptions = { openchamberVersion };

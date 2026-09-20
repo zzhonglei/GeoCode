@@ -69,6 +69,26 @@ const EXEMPT_SURFACES: ReadonlyArray<{ prefix: string; closedBy: string; closure
     closure: '{!isVSCode && !isDesktopShell() && (',
   },
   {
+    prefix: 'settings.extensions.',
+    closedBy: 'packages/ui/src/lib/guests/load-catalog.ts',
+    closure: 'if (isDesktopShell() || isVSCodeRuntime() || isMobileSurfaceRuntime()) {',
+  },
+  {
+    prefix: 'settings.integrations.guests.',
+    closedBy: 'packages/ui/src/lib/guests/load-catalog.ts',
+    closure: 'if (isDesktopShell() || isVSCodeRuntime() || isMobileSurfaceRuntime()) {',
+  },
+  {
+    prefix: 'chat.chatInput.toast.guest',
+    closedBy: 'packages/ui/src/lib/guests/load-catalog.ts',
+    closure: 'if (isDesktopShell() || isVSCodeRuntime() || isMobileSurfaceRuntime()) {',
+  },
+  {
+    prefix: 'settings.page.extensions.',
+    closedBy: 'packages/ui/src/lib/settings/metadata.ts',
+    closure: 'isAvailable: (ctx) => !ctx.isVSCode && !ctx.isMobile && !ctx.isDesktop,',
+  },
+  {
     prefix: 'settings.skills.catalog.',
     closedBy: 'packages/ui/src/lib/settings/metadata.ts',
     closure: "// GeoCode: installing skills from upstream's catalogs is not a surface GeoCode offers",

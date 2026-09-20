@@ -1,4 +1,4 @@
-import { isVSCodeRuntime } from '@/lib/desktop';
+import { isDesktopShell, isVSCodeRuntime } from '@/lib/desktop';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { isMobileSurfaceRuntime } from '@/lib/runtimeSurface';
 import { getRuntimeKey } from '@/lib/runtime-switch';
@@ -37,7 +37,9 @@ const loadGuestCatalogOnce = async (runtimeKey: string): Promise<void> => {
   alignCatalogRuntime(runtimeKey);
 
   const store = useGuestsStore.getState();
-  if (isVSCodeRuntime() || isMobileSurfaceRuntime()) {
+  // GeoCode: extensions are not a surface GeoCode offers; upstream's own unsupported path takes the whole
+  // UI down with it, so no entrance needs closing one by one (docs/DESKTOP.md §7.3).
+  if (isDesktopShell() || isVSCodeRuntime() || isMobileSurfaceRuntime()) {
     store.markUnsupported(runtimeKey);
     return;
   }
