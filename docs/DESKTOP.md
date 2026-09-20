@@ -932,10 +932,23 @@ grep -rlE '// GeoCode:|--- GeoCode|"GeoCode: ' desktop/ | wc -l
 第二次账的「差集」部分(改过却查不到的文件)由验收门每次都算(`patch-surface.sh <root> --check`),放行的只有
 载不动标记的四类文件;翻译字典的绑定方式见 `CONVENTIONS.md` §5。
 
-`bun.lock` 是例外:`chamber-upstream` 上取上游原味,main 上则是 `bun install` over 闭包的产物,
-两者差着数千行。冲突时删掉重新生成,永远不要手工解。
+`bun.lock` 是例外:`chamber-upstream` 上取上游原味,main 上则是 `bun install` over 闭包的产物。
+冲突时**永远不要手工解**,但⚠️ **也不要直接删掉重新生成**——没有锁文件的 `bun install` 会做一次
+全新解析,把一大批传递依赖解到范围内的最新版,而那与这次合并无关。正确做法是**先取上游那一侧,
+再让 `bun install` 调和**:
 
-**重新生成之后要清掉 `node_modules` 再装,不能增量。** `bun install` 会按新锁文件补齐缺的包,
+```sh
+git show chamber-upstream:bun.lock > desktop/bun.lock
+bun install
+```
+
+v1.23.1 → v1.23.2 实测两种做法的差别:删掉重生成得到 `zod@4.6.5`、`zustand@5.0.15`、`yaml@2.9.1`,
+锁文件离上游 **1677** 行;先取上游再调和得到上游钉的 `zod@4.3.6`、`zustand@5.0.11`、`yaml@2.8.2`,
+离上游 **9** 行——5 行是我们钉的 `@opencode-ai/sdk`(含 sha512),4 行是 `bun install` 纠正
+**上游自己发歪的锁文件**(v1.23.2 的 `package.json` 写 `1.23.2`,其 `bun.lock` 里 workspace 版本
+仍是 `1.23.1`)。后一类躲不开,也不必躲。
+
+**换过锁文件之后要清掉 `node_modules` 再装,不能增量。** `bun install` 会按新锁文件补齐缺的包,
 但**不清掉不再被引用的旧版本**——同一个包的两个版本从此并存,而 TypeScript 把它们当成两个
 不同的类型。症状是几十条 `TS2322` / `TS2345`,报的是 `node_modules/.bun/<包>@<旧版>` 与
 `@<新版>` 之间不兼容,**读起来像是代码坏了**。v1.18.4 → v1.21.0 那次实测过:增量安装后
