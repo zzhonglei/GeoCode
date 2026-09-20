@@ -20,7 +20,7 @@ export const routingI18n = {
     'settings.routing.token.present': 'Connected. Auto mode and the safety net make their decisions through Jev, TypeSafe\'s decision model, with this key. It is saved on this server.',
     'settings.routing.token.missing': 'Auto mode and the safety net make their decisions through Jev, TypeSafe\'s decision model. Get an API key at docs.typesafe.ai and paste it here.',
     'settings.routing.token.label': 'API key',
-    'settings.routing.token.info': 'Stored on this computer in its own file and never sent to the interface. TypeSafe receives only the text of your prompts and the action being checked, never files or images.', // GeoCode: product name and one host
+    'settings.routing.token.info': 'Stored on the OpenChamber server in its own file and never sent to the browser. TypeSafe receives only the text of your prompts and the action being checked, never files or images.',
     'settings.routing.token.placeholder': 'Paste your TypeSafe API key',
     'settings.routing.token.replacePlaceholder': 'Paste a new key to replace the saved one',
     'settings.routing.token.save': 'Save',
@@ -660,7 +660,7 @@ export const routingI18n = {
     'settings.routing.token.present': '已连接。Auto 模式和安全网通过此密钥经 TypeSafe 的决策模型 Jev 做出判断。密钥保存在此服务器上。',
     'settings.routing.token.missing': 'Auto 模式和安全网经 TypeSafe 的决策模型 Jev 做出判断。请在 docs.typesafe.ai 获取 API 密钥并粘贴到此处。',
     'settings.routing.token.label': 'API 密钥',
-    'settings.routing.token.info': '保存在本机的独立文件中，绝不发送到界面。TypeSafe 只接收你的提示文本和被检查的操作，绝不接收文件或图片。', // GeoCode: product name and one host
+    'settings.routing.token.info': '保存在 OpenChamber 服务器的独立文件中，绝不发送到浏览器。TypeSafe 只接收你的提示文本和被检查的操作，绝不接收文件或图片。',
     'settings.routing.token.placeholder': '粘贴你的 TypeSafe API 密钥',
     'settings.routing.token.replacePlaceholder': '粘贴新密钥以替换已保存的密钥',
     'settings.routing.token.save': '保存',
@@ -724,7 +724,7 @@ export const routingI18n = {
     'settings.routing.token.present': '已連線。Auto 模式與安全網透過此金鑰經 TypeSafe 的決策模型 Jev 做出判斷。金鑰儲存在此伺服器上。',
     'settings.routing.token.missing': 'Auto 模式與安全網經 TypeSafe 的決策模型 Jev 做出判斷。請至 docs.typesafe.ai 取得 API 金鑰並貼到此處。',
     'settings.routing.token.label': 'API 金鑰',
-    'settings.routing.token.info': '儲存在本機的獨立檔案中，絕不傳送到介面。TypeSafe 只會收到你的提示文字和被檢查的操作，絕不會收到檔案或圖片。', // GeoCode: product name and one host
+    'settings.routing.token.info': '儲存在 OpenChamber 伺服器的獨立檔案中，絕不傳送到瀏覽器。TypeSafe 只會收到你的提示文字和被檢查的操作，絕不會收到檔案或圖片。',
     'settings.routing.token.placeholder': '貼上你的 TypeSafe API 金鑰',
     'settings.routing.token.replacePlaceholder': '貼上新金鑰以取代已儲存的金鑰',
     'settings.routing.token.save': '儲存',

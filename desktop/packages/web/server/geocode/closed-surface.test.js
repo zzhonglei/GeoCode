@@ -1,5 +1,6 @@
-/* --- GeoCode: the magic prompt, plugin, tunnel, Linear and extension surfaces answer 404 under Electron, and
- * none of their requests, including routes upstream adds later, reaches the kernel proxy (docs/DESKTOP.md §7.3). --- */
+/* --- GeoCode: the magic prompt, plugin, tunnel, Linear, extension and routing surfaces answer 404 under
+ * Electron, and none of their requests, including routes upstream adds later, reaches the kernel proxy
+ * (docs/DESKTOP.md §7.3). --- */
 import { afterEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import request from 'supertest';
@@ -9,6 +10,8 @@ import { registerPluginRoutes } from '../lib/opencode/plugin-routes.js';
 import { createTunnelRoutesRuntime } from '../lib/tunnels/routes.js';
 import { registerLinearRoutes } from '../lib/linear/routes.js';
 import { registerGuestRoutes } from '../lib/guests/routes.js';
+import { registerRoutingRoutes } from '../lib/routing/routes.js';
+import { isRoutingFeatureAvailable } from '../lib/routing/feature-flag.js';
 
 const originalElectron = process.versions.electron;
 
@@ -76,6 +79,16 @@ const SURFACES = [
     }),
   },
   {
+    name: 'routing',
+    prefix: '/api/routing',
+    minimum: 2,
+    named: { method: 'get', path: '/api/routing' },
+    // The control run needs the capability on, or upstream mounts nothing to compare against.
+    beforeControl: () => { process.env.OPENCHAMBER_ROUTING_ENABLE = '1'; },
+    afterControl: () => { delete process.env.OPENCHAMBER_ROUTING_ENABLE; },
+    register: (app) => registerRoutingRoutes(app, { describe: inert, setToken: inert, clearToken: inert }),
+  },
+  {
     name: 'tunnel',
     prefix: '/api/openchamber/tunnel',
     minimum: 8,
@@ -113,8 +126,9 @@ const SURFACES = [
   },
 ];
 
-const recordUpstreamRoutes = (register) => {
+const recordUpstreamRoutes = (register, surface = {}) => {
   delete process.versions.electron;
+  surface.beforeControl?.();
   const routes = [];
   const recorder = (method) => (path) => { routes.push({ method, path }); };
   register({
@@ -126,12 +140,13 @@ const recordUpstreamRoutes = (register) => {
     all: recorder('get'),
     use: recorder('get'),
   });
+  surface.afterControl?.();
   return routes;
 };
 
 describe.each(SURFACES)('$name surface', (surface) => {
   it('control: outside Electron every route it mounts sits under the refused prefix', () => {
-    const routes = recordUpstreamRoutes(surface.register);
+    const routes = recordUpstreamRoutes(surface.register, surface);
     expect(routes.length).toBeGreaterThanOrEqual(surface.minimum);
     const prefixes = [surface.prefix, ...(surface.extraPrefix ? [surface.extraPrefix] : [])];
     const under = (path) => prefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
@@ -140,7 +155,7 @@ describe.each(SURFACES)('$name surface', (surface) => {
   });
 
   it('under Electron each of those routes answers 404 and none reaches the kernel proxy', async () => {
-    const routes = recordUpstreamRoutes(surface.register);
+    const routes = recordUpstreamRoutes(surface.register, surface);
     process.versions.electron = '0.0.0-test';
     const forwarded = [];
     const app = express();
@@ -154,5 +169,21 @@ describe.each(SURFACES)('$name surface', (surface) => {
     }
     await request(app).get(`${surface.prefix}/added-later`).expect(404);
     expect(forwarded).toEqual([]);
+  });
+});
+
+describe('the routing capability', () => {
+  // The prefix refusal above is the second line. This is the first: with the capability off, upstream's own
+  // comment says there is no Auto row, no settings page, no routes and no request rewriting.
+  it('stays off under Electron even when the environment asks for it', () => {
+    process.env.OPENCHAMBER_ROUTING_ENABLE = '1';
+    try {
+      delete process.versions.electron;
+      expect(isRoutingFeatureAvailable()).toBe(true);
+      process.versions.electron = '0.0.0-test';
+      expect(isRoutingFeatureAvailable()).toBe(false);
+    } finally {
+      delete process.env.OPENCHAMBER_ROUTING_ENABLE;
+    }
   });
 });

@@ -824,6 +824,26 @@ OAuth 仍为当前账号,原 CLI 账号保留为其他账号。完整验证门�
   绊线在 `server/geocode/closed-surface.test.js`(对照组在非 Electron 下挂满 23 条,再逐条验证 Electron 下全 404
   且一条都不落到内核代理,外加一条日后新增路径)与 `ui/src/geocode/locale-brand.test.ts` 的闭包绑定
   (四条豁免前缀各自指名 `load-catalog.ts` 或 `metadata.ts` 里那句判断,判断一没就转红)。
+- **Routing(自动选模型与安全网)**:v1.24.0 上游新增,两件事都经 TypeSafe 的 Jev 决策模型,要用户自备
+  TypeSafe API key:按提示词自动挑模型,以及在自动接受的会话里把有风险的动作拦下来问用户(动作分八类,
+  从 `read-only` 到 `sends data outside`)。判据是**出门的是什么**:上游自述「TypeSafe 只收到提示词的文字
+  与被检查的动作,不收文件或图片」——不收文件是真的,但提示词本身就可能带着尚未发表的研究数据,
+  与会话分享同一类(2026-09-20 用户定)。
+  ⚠️ **「这是 OpenChamber 的功能」不能单独推出保留**:本节关掉的隧道、外部插件、Linear、魔法提示词、
+  会话分享、局域网访问全都是 OpenChamber 的功能。归属回答的是「这是不是我们该修的缺陷」(不是),
+  产品取舍另判。真正的分界线是自有数据出不出门:主题浏览连 `open-vsx.org` 但什么都不上传,保留;
+  会话分享与 Routing 把用户自己的内容送出去,关掉。
+  ⚠️ **关在能力开关上,不是逐处隐藏界面**(§9.3 第 1 级):`server/lib/routing/feature-flag.js` 的
+  `isRoutingFeatureAvailable()` 在 Electron 下直接返回 false。上游自己的注释写明,这个开关一关就
+  **没有模型选择器里的 Auto 行、没有设置页、没有路由、没有请求改写**;`runtime.js`、`routes.js` 与
+  `opencode/settings-helpers.js`(它算出界面读的 `routingFeatureAvailable`)三处都读它,所以一处即全部。
+  设置页谓词本来就是 `!ctx.isVSCode && ctx.routingAvailable`,**不再另加 `!ctx.isDesktop`**——那会把同一个
+  事实写成两份,正是副本漂移的来源。第二道是 `registerRoutingRoutes` 首行把 `/api/routing` 整个前缀答成 404,
+  它防的是另一件事:上游日后加进这一组却没查开关的路由。
+  绊线在 `server/geocode/closed-surface.test.js`(能力开关在环境变量开着时仍须为 false;对照组把开关打开
+  记录上游挂的路由,再验证 Electron 下全 404)与 `ui/src/geocode/locale-brand.test.ts` 里
+  `settings.routing.` 的闭包绑定。⚠️ 合并 v1.24.2 时曾给 `settings.routing.token.info` 改过品牌,
+  **后来撤掉换成豁免**:改品牌是哑的,闭包绑定会在开关消失时转红,而且少一个补丁文件。
 
 ---
 

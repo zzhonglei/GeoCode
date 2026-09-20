@@ -69,6 +69,11 @@ const EXEMPT_SURFACES: ReadonlyArray<{ prefix: string; closedBy: string; closure
     closure: '{!isVSCode && !isDesktopShell() && (',
   },
   {
+    prefix: 'settings.routing.',
+    closedBy: 'packages/web/server/lib/routing/feature-flag.js',
+    closure: 'if (process.versions.electron) return false;',
+  },
+  {
     prefix: 'settings.extensions.',
     closedBy: 'packages/ui/src/lib/guests/load-catalog.ts',
     closure: 'if (isDesktopShell() || isVSCodeRuntime() || isMobileSurfaceRuntime()) {',

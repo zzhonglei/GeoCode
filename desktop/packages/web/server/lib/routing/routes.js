@@ -10,6 +10,7 @@
  */
 import express from 'express';
 import { isRoutingFeatureAvailable } from './feature-flag.js';
+import { refuseSurfaceUnderElectron } from '../../geocode/closed-surface.js'; // GeoCode: own module
 
 const AUTO_SESSION_PATHS = [
   '/api/session/:sessionId/prompt_async',
@@ -23,6 +24,10 @@ const sendError = (res, error) => {
 };
 
 export function registerRoutingRoutes(app, runtime) {
+  // --- GeoCode: the capability is already off in feature-flag.js; the whole prefix is taken as well so a
+  // route upstream adds to this group without consulting it is refused too (docs/DESKTOP.md §7.3) ---
+  if (refuseSurfaceUnderElectron(app, '/api/routing')) return;
+  // --- /GeoCode ---
   const unavailable = (res) => res.status(404).json({ error: 'Routing is not available in this build' });
 
   app.get('/api/routing', async (_req, res) => {
