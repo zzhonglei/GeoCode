@@ -24,7 +24,8 @@ describe('relaunch options', () => {
 
   it('every relaunch in main.mjs passes the options', () => {
     const calls = mainSource.match(/app\.relaunch\([^\n]*\)/g) ?? [];
-    expect(calls.length).toBeGreaterThanOrEqual(2);
+    // A floor against the pattern silently matching nothing, not a pinned count.
+    expect(calls.length).toBeGreaterThanOrEqual(1);
     for (const call of calls) {
       expect(call).toContain('relaunchOptions({ packaged: app.isPackaged, argv: process.argv, entryFile: __filename })');
     }

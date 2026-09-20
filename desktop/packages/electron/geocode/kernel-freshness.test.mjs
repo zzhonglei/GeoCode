@@ -18,9 +18,14 @@ describe('kernel bundle freshness', () => {
   });
 
   it('both development scripts stage the kernel before starting Electron', () => {
+    // Ordering, not position: upstream runs its own steps first and may add more.
     for (const name of ['electron:dev', 'electron:dev:bundled']) {
       const command = desktopPackage.scripts[name];
-      expect([name, command.startsWith('node ./packages/electron/scripts/prepare-geocode-kernel.mjs && ')]).toEqual([name, true]);
+      const stage = command.indexOf('node ./packages/electron/scripts/prepare-geocode-kernel.mjs');
+      const launch = command.indexOf('electron-dev.mjs');
+      expect([name, stage]).not.toEqual([name, -1]);
+      expect([name, launch]).not.toEqual([name, -1]);
+      expect([name, stage < launch]).toEqual([name, true]);
     }
   });
 });

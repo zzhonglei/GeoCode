@@ -10,6 +10,7 @@ import {
   BROWSER_PLUGIN_ENV,
   BROWSER_PLUGIN_RELATIVE_PATH,
   BROWSER_TOOL_NAME,
+  loadUpstreamTemplate as realTemplate,
   GEOCODE_TOOL_NAME,
   UPSTREAM_STRINGS,
   createBrowserPluginSource,
@@ -38,26 +39,6 @@ const stubTemplate = async () => ({
   },
 });
 
-const realTemplate = async () => {
-  const [runtime, actions] = await Promise.all([
-    import('@openchamber/web/server/lib/agent-tool/runtime.js'),
-    import('@openchamber/web/server/lib/openchamber-control/actions.js'),
-  ]);
-  return {
-    createToolEntry: runtime.createToolEntry,
-    browser: {
-      parameters: runtime.WEB_PARAMETER_PROPERTIES,
-      actions: actions.OPENCHAMBER_WEB_ACTIONS,
-      definitions: actions.OPENCHAMBER_WEB_ACTION_DEFINITIONS,
-    },
-    geocode: {
-      description: runtime.CONTROL_TOOL_DESCRIPTION,
-      parameters: runtime.CONTROL_PARAMETER_PROPERTIES,
-      actions: actions.OPENCHAMBER_AGENT_TOOL_ACTIONS,
-      definitions: actions.OPENCHAMBER_AGENT_TOOL_ACTION_DEFINITIONS,
-    },
-  };
-};
 
 // bun resolves a data: URL as a package name, so the source goes through a scratch file.
 const importSource = async (source) => {
@@ -116,10 +97,12 @@ describe('the generated plugin', () => {
   it('is browser with the web actions and geocode with the control actions, each asking before it acts', async () => {
     const tools = await loadTools();
     expect(Object.keys(tools)).toEqual([BROWSER_TOOL_NAME, GEOCODE_TOOL_NAME]);
-    const browserActions = tools[BROWSER_TOOL_NAME].args.action.enum;
+    // Upstream dropped the redundant `enum` in v1.24.0; `oneOf` is where the actions are declared.
+    const actionList = (tool) => tool.args.action.oneOf.map((entry) => entry.const);
+    const browserActions = actionList(tools[BROWSER_TOOL_NAME]);
     expect(browserActions.every((action) => action.startsWith('browser.'))).toBe(true);
     expect(browserActions.length).toBeGreaterThanOrEqual(10);
-    const geocodeActions = tools[GEOCODE_TOOL_NAME].args.action.enum;
+    const geocodeActions = actionList(tools[GEOCODE_TOOL_NAME]);
     for (const action of ['session.create', 'session.send', 'schedule.create', 'schedule.delete']) {
       expect([action, geocodeActions.includes(action)]).toEqual([action, true]);
     }

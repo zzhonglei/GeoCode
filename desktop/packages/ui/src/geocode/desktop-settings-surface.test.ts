@@ -6,7 +6,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { HIDDEN_DESKTOP_SETTINGS_SEARCH_IDS, isSettingsSearchItemHiddenOnDesktop } from './desktop-settings-surface';
-import { getSettingsPageMeta } from '../lib/settings/metadata';
+import { getSettingsPageMeta, type SettingsRuntimeContext } from '../lib/settings/metadata';
+
+// Typed and shared, so a field upstream adds to the context fails here once rather than in every case below.
+const runtime = (overrides: Partial<SettingsRuntimeContext>): SettingsRuntimeContext => ({
+  isVSCode: false,
+  isWeb: false,
+  isDesktop: false,
+  isMobile: false,
+  routingAvailable: false,
+  ...overrides,
+});
 
 const read = (relative: string) =>
   readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', relative), 'utf8');
@@ -108,37 +118,32 @@ describe('desktop settings surface', () => {
     // Navigation, direct routes and search all read this predicate (SettingsView.tsx, search.ts), so it closes
     // every way to reach a page.
     const tunnel = getSettingsPageMeta('tunnel');
-    const base = { isVSCode: false, isWeb: false, isMobile: false };
-    expect(tunnel?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
-    expect(tunnel?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
+    expect(tunnel?.isAvailable?.(runtime({ isDesktop: true }))).toBe(false);
+    expect(tunnel?.isAvailable?.(runtime({ isWeb: true }))).toBe(true);
   });
 
   test('the Plugins page is unavailable in the desktop shell only', () => {
     const plugins = getSettingsPageMeta('plugins');
-    const base = { isVSCode: false, isWeb: false, isMobile: false };
-    expect(plugins?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
-    expect(plugins?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
+    expect(plugins?.isAvailable?.(runtime({ isDesktop: true }))).toBe(false);
+    expect(plugins?.isAvailable?.(runtime({ isWeb: true }))).toBe(true);
   });
 
   test('the Magic Prompts page is unavailable in the desktop shell only', () => {
     const prompts = getSettingsPageMeta('magic-prompts');
-    const base = { isVSCode: false, isWeb: false, isMobile: false };
-    expect(prompts?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
-    expect(prompts?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
+    expect(prompts?.isAvailable?.(runtime({ isDesktop: true }))).toBe(false);
+    expect(prompts?.isAvailable?.(runtime({ isWeb: true }))).toBe(true);
   });
 
   test('the Snippets page is unavailable in the desktop shell only', () => {
     const snippets = getSettingsPageMeta('snippets');
-    const base = { isVSCode: false, isWeb: false, isMobile: false };
-    expect(snippets?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
-    expect(snippets?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
+    expect(snippets?.isAvailable?.(runtime({ isDesktop: true }))).toBe(false);
+    expect(snippets?.isAvailable?.(runtime({ isWeb: true }))).toBe(true);
   });
 
   test('the Skills Catalog page is unavailable in the desktop shell only', () => {
     const catalog = getSettingsPageMeta('skills.catalog');
-    const base = { isVSCode: false, isWeb: false, isMobile: false };
-    expect(catalog?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
-    expect(catalog?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
+    expect(catalog?.isAvailable?.(runtime({ isDesktop: true }))).toBe(false);
+    expect(catalog?.isAvailable?.(runtime({ isWeb: true }))).toBe(true);
   });
 
   test('the composer offers no snippet popup in the desktop shell', () => {
@@ -165,9 +170,8 @@ describe('desktop settings surface', () => {
 
   test('the Remote Instances page is unavailable in the desktop shell only', () => {
     const remote = getSettingsPageMeta('remote-instances');
-    const base = { isVSCode: false, isWeb: false, isMobile: false };
-    expect(remote?.isAvailable?.({ ...base, isDesktop: true })).toBe(false);
-    expect(remote?.isAvailable?.({ ...base, isDesktop: false, isWeb: true })).toBe(true);
+    expect(remote?.isAvailable?.(runtime({ isDesktop: true }))).toBe(false);
+    expect(remote?.isAvailable?.(runtime({ isWeb: true }))).toBe(true);
   });
 
   test('the header services menu, which is the host switcher, renders nothing in the desktop shell', () => {

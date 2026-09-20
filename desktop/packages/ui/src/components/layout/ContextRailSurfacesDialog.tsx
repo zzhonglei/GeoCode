@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useGuestSurfaces } from '@/hooks/useGuestSurfaces';
 import { sortContextSurfaces } from '@/lib/surfaces/registry';
 import { LINEAR_OFFERED } from '@/geocode/linear-surface'; // GeoCode: own module
 
@@ -32,10 +33,11 @@ export const ContextRailSurfacesDialog: React.FC<{
 
   // The full registry in the user's rail order — including surfaces a runtime
   // filter currently drops, so a choice made on desktop is editable anywhere.
+  const guestSurfaces = useGuestSurfaces();
   // GeoCode: this list is the full registry on purpose, so the runtime filter above does not reach it
   const surfaces = React.useMemo(
-    () => sortContextSurfaces(contextRailOrder).filter((surface) => LINEAR_OFFERED || surface.id !== 'linear'),
-    [contextRailOrder],
+    () => sortContextSurfaces(contextRailOrder, guestSurfaces).filter((surface) => LINEAR_OFFERED || surface.id !== 'linear'),
+    [contextRailOrder, guestSurfaces],
   );
 
   const allVisible = hidden.length === 0;
@@ -56,8 +58,8 @@ export const ContextRailSurfacesDialog: React.FC<{
               settingsItem={`layout.context-rail.surface.${surface.id}`}
               checked={!hidden.includes(surface.id)}
               onChange={(checked) => setSurfaceVisible(surface.id, checked)}
-              label={t(surface.labelKey)}
-              ariaLabel={t(surface.labelKey)}
+              label={surface.label ?? t(surface.labelKey)}
+              ariaLabel={surface.label ?? t(surface.labelKey)}
             />
           ))}
         </div>

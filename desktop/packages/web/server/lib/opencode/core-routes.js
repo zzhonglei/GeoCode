@@ -1,4 +1,6 @@
 import { buildExternalManualRestartResponse } from './config-mutation-response.js';
+import { ThemeImportStorageError } from './theme-runtime.js';
+import { registerThemeCatalogRoutes } from './theme-catalog.js';
 import { refusePairingRoutesUnderElectron } from '../../geocode/remote-access-surface.js'; // GeoCode: own module
 
 const parseLoopbackUrl = (rawUrl) => {
@@ -590,7 +592,15 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
     res.status(statusCode).json({ error: 'Invalid or expired pairing session' });
   };
 
+  const isGuestOauthCallback = (req) => (
+    req.method === 'GET'
+    && /^\/guests\/[a-z][a-z0-9-]*\/oauth\/callback$/.test(req.path || '')
+  );
+
   const requireApiAuth = async (req, res, next) => {
+    if (isGuestOauthCallback(req)) {
+      return next();
+    }
     const requestScope = tunnelAuthController.classifyRequestScope(req);
     if (requestScope === 'tunnel' || requestScope === 'unknown-public') {
       return tunnelAuthController.requireTunnelSession(req, res, next);
@@ -999,6 +1009,8 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
 export const registerSettingsUtilityRoutes = (app, dependencies) => {
   const {
     readCustomThemesFromDisk,
+    saveImportedTheme,
+    deleteImportedTheme,
     refreshOpenCodeAfterConfigChange,
     clientReloadDelayMs,
   } = dependencies;
@@ -1010,6 +1022,30 @@ export const registerSettingsUtilityRoutes = (app, dependencies) => {
     } catch (error) {
       console.error('Failed to load custom themes:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load custom themes' });
+    }
+  });
+
+  app.post('/api/config/themes', async (req, res) => {
+    try {
+      const theme = await saveImportedTheme(req.body?.theme);
+      res.status(201).json({ theme });
+    } catch (error) {
+      if (error instanceof ThemeImportStorageError) {
+        res.status(error.status).json({ error: error.code });
+        return;
+      }
+      console.error('[themes] Failed to save imported theme');
+      res.status(500).json({ error: 'save' });
+    }
+  });
+
+  registerThemeCatalogRoutes(app);
+  app.delete('/api/config/themes/:id', async (req, res) => {
+    try {
+      await deleteImportedTheme(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(error instanceof ThemeImportStorageError ? error.status : 500).json({ error: 'delete' });
     }
   });
 
@@ -1045,7 +1081,9 @@ export const registerCommonRequestMiddleware = (app, dependencies) => {
   const { express, verboseRequestLogs = false } = dependencies;
 
   app.use((req, res, next) => {
-    if (req.path.startsWith('/api/behavior')) {
+    if (req.path === '/api/config/themes' || req.path.startsWith('/api/config/themes/')) {
+      express.json({ limit: '1mb' })(req, res, next);
+    } else if (req.path.startsWith('/api/behavior')) {
       const contentLength = parseInt(req.headers['content-length'] || '0', 10);
       if (contentLength > 1024 * 1024) {
         return res.status(413).json({ error: 'Content exceeds maximum size of 1048576 bytes' });

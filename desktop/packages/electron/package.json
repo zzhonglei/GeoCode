@@ -1,6 +1,6 @@
 {
   "name": "@openchamber/electron",
-  "version": "1.23.2",
+  "version": "1.24.2",
   "private": true,
   "description": "Electron desktop runtime for GeoCode",
   "author": "GeoCode",
@@ -30,7 +30,7 @@
     "Linux: native x64 or arm64 host (no cross-arch packaging); FUSE/libfuse2 to run AppImages, or APPIMAGE_EXTRACT_AND_RUN=1"
   ],
   "scripts": {
-    "dev": "node ./scripts/electron-dev.mjs",
+    "dev": "bun ../../scripts/build-builtin-extensions.mjs && node ./scripts/electron-dev.mjs",
     "build:web-assets": "node ./scripts/build-web-assets.mjs",
     "build": "bun -e \"process.exit(0)\"",
     "ensure:electron": "node ./scripts/ensure-electron.mjs",
@@ -59,6 +59,9 @@
     "extraMetadata": {
       "name": "GeoCode"
     },
+    "asarUnpack": [
+      "node_modules/@openchamber/web/server/built-in-extensions/**/*"
+    ],
     "files": [
       "dist-bundle/main.mjs",
       "preload.mjs"
@@ -122,7 +125,7 @@
         "AppImage"
       ],
       "category": "Development",
-      "icon": "resources/icons/icon.png",
+      "icon": "resources/icons/app-icon.svg",
       "executableName": "geocode",
       "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
       "desktop": {

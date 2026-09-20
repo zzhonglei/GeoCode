@@ -19,7 +19,8 @@ export const BROWSER_TOOL_DESCRIPTION = [
   "The page runs with the user's real logins, so treat what you see as their live session.",
 ].join(' ');
 
-const loadUpstreamTemplate = async () => {
+// Exported so the tripwire builds from this wiring rather than a copy of it that can drift from it.
+export const loadUpstreamTemplate = async () => {
   const [runtime, actions] = await Promise.all([
     import('@openchamber/web/server/lib/agent-tool/runtime.js'),
     import('@openchamber/web/server/lib/openchamber-control/actions.js'),

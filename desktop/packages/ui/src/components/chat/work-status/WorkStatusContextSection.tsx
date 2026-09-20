@@ -4,7 +4,7 @@ import { Icon } from '@/components/icon/Icon';
 import { useSkillsStore } from '@/stores/useSkillsStore';
 import { useMcpStore } from '@/stores/useMcpStore';
 import { useSession } from '@/sync/sync-context';
-import { getLinkedIssues, canOpenLinearIssueInContextPanel } from '@/lib/linkedIssues';
+import { getLinkedIssues, canOpenLinearIssueInContextPanel, isGuestPull } from '@/lib/linkedIssues';
 import { LINEAR_OFFERED } from '@/geocode/linear-surface'; // GeoCode: own module
 import { fetchSessionKnowledgeSummary, setSessionProjectContextPin, type SessionKnowledgeSummary } from '@/lib/sessionKnowledgeApi';
 import { useProjectContextStore } from '@/stores/useProjectContextStore';
@@ -193,8 +193,14 @@ export const WorkStatusContextSection: React.FC<Props> = ({ sessionId, directory
   // The heading names what is distinctive about this session when there is
   // something — an attached thread — and falls back to the ambient counts
   // when there is not. `1 · 33 · 2` said nothing without opening the section.
-  const issueCount = linked.filter((entry) => entry.kind === 'issue' || entry.kind === 'linear').length;
-  const prCount = linked.filter((entry) => entry.kind === 'pull').length;
+  const issueCount = linked.filter((entry) => (
+    entry.kind === 'issue'
+    || entry.kind === 'linear'
+    || (entry.kind === 'guest' && !isGuestPull(entry))
+  )).length;
+  const prCount = linked.filter((entry) => (
+    entry.kind === 'pull' || (entry.kind === 'guest' && isGuestPull(entry))
+  )).length;
   const summaryParts: string[] = [];
   if (issueCount > 0) {
     summaryParts.push(issueCount === 1
@@ -237,11 +243,17 @@ export const WorkStatusContextSection: React.FC<Props> = ({ sessionId, directory
       {linked.map((entry) => (
         <WorkStatusRow
           key={entry.id}
-          leading={entry.authorAvatarUrl ? (
+          leading={'authorAvatarUrl' in entry && entry.authorAvatarUrl ? (
             <img src={entry.authorAvatarUrl} alt="" className="size-4 shrink-0 rounded-full" loading="lazy" />
           ) : (
             <Icon
-              name={entry.kind === 'pull' ? 'git-pull-request' : entry.kind === 'linear' ? 'linear' : 'error-warning'}
+              name={entry.kind === 'pull' || (entry.kind === 'guest' && isGuestPull(entry))
+                ? 'git-pull-request'
+                : entry.kind === 'linear'
+                  ? 'linear'
+                  : entry.kind === 'guest'
+                    ? 'attachment-2'
+                    : 'error-warning'}
               className="size-4 shrink-0 text-muted-foreground"
             />
           )}
@@ -252,10 +264,12 @@ export const WorkStatusContextSection: React.FC<Props> = ({ sessionId, directory
           onClick={() => openLinkedIssue(entry)}
           ariaLabel={entry.kind === 'linear'
             ? t('chat.workStatus.linkedIssues.openLinear', { identifier: entry.identifier })
-            : t('chat.workStatus.linkedIssues.open', { number: entry.number })}
+            : entry.kind === 'guest'
+              ? t('chat.workStatus.linkedIssues.openGuest', { id: entry.identifier })
+              : t('chat.workStatus.linkedIssues.open', { number: entry.number })}
           value={(
             <WorkStatusValue tone="muted">
-              {entry.kind === 'linear' ? entry.identifier : `#${entry.number}`}
+              {entry.kind === 'linear' || entry.kind === 'guest' ? entry.identifier : `#${entry.number}`}
             </WorkStatusValue>
           )}
         />

@@ -2,6 +2,125 @@
 
 <!-- Legacy copy for app versions up to 1.22.1, which fetch this file for their update notes. Generated from changelog/*.md while it exists; delete it after 2026-09-19 and nothing will recreate it. -->
 
+## [1.24.2] - 2026-09-18
+
+### New
+
+- Sessions: collapsed folders and groups show when an agent is waiting for permission or an answer.
+
+### Improvements
+
+- Diff: click a collapsed section to load and reveal surrounding lines for that file, with a loading indicator while you wait.
+- Interface: widen the side panel to use more of a large screen while keeping the chat visible.
+
+### Fixes
+
+- **Startup:** opening the app no longer starts MCP servers and background work for every saved project and worktree, preventing runaway memory use (thanks to @knorby).
+- **Desktop/SSH:** reconnecting reuses the running remote server, preventing duplicate servers from piling up and exhausting memory (thanks to @yulia-ivashko).
+- Chat: malformed Markdown stays readable as plain text without crashing the chat.
+- Chat: switching agents respects each agent's pinned model and thinking level (thanks to @maxiedaniels).
+- Chat: context usage reflects the model that wrote the latest answer.
+- Chat: fixes empty replies and provider errors with OpenChamber tools on affected OpenAI-compatible services (thanks to @mobileka).
+- Chat: queued messages resume after a server restart even if the previous reply was interrupted (thanks to @JustinKeltner).
+- Chat: session titles and summaries work again with GLM on OpenCode Go, Groq, and other affected providers (thanks to @yulia-ivashko).
+- Sessions: Rename closes the session menu and opens the name field again (thanks to @karimodm).
+- Chats: sessions stay visible when macOS reports different capitalization for the same home folder (thanks to @yulia-ivashko).
+- Dictation: switching sessions during transcription keeps the text as a draft in the original session (thanks to @karimodm).
+- Multi-run: Run fusion works with OpenRouter models and renamed sessions, and separate launches keep their own groups (thanks to @yulia-ivashko).
+- Git: stalled Git commands no longer leave the changes panel stuck or lingering Git processes on Windows.
+- Git: repositories rooted at your home folder or drive root are ignored, preventing accidental whole-disk scans.
+- Git: staging and unstaging preserve the file's added and removed line counts (thanks to @Naputt1).
+- Diff: open file diffs refresh after agent edits even when the added and removed line counts stay the same.
+- Worktrees: Enter creates a worktree once from the branch or directory field; confirming text with an input method doesn't create it early.
+- Mobile/iOS: the keyboard, message box, and chat move together when opening or closing the keyboard, removing sudden jumps.
+- Mobile: resizing across phone and tablet layouts preserves the open file and unsaved edits (thanks to @yulia-ivashko).
+- Desktop/Windows and Linux: installing an update no longer exits early and reopens the old version (thanks to @yulia-ivashko).
+- Terminal: programs on macOS and Linux get time to finish when the server shuts down or the desktop app quits, restarts, or updates (thanks to @yulia-ivashko).
+- Desktop: terminals connect to password-protected remote servers when the connection uses custom headers (thanks to @yulia-ivashko).
+- Server: agent controls for sessions, the browser, and memory work when the server listens on a specific IP address (thanks to @yulia-ivashko).
+- Docker: fixes startup permission errors and rebuild failures involving built-in extensions (thanks to @yulia-ivashko).
+- Chat: math formulas use the correct KaTeX fonts (thanks to @Dawnfz-Lenfeng).
+- Themes: Catppuccin dark and light consistently use the Mocha and Latte palettes (thanks to @gbPagano).
+
+### Misc
+
+- Installation: npm installs no longer show dependency compatibility and deprecated-package warnings.
+
+## [1.24.1] - 2026-09-18
+
+### New
+
+- Chat: attach files and images to `/btw` messages through the file picker, paste, or drag and drop.
+- Mini Chat: use installed extensions from a message's action menu.
+
+### Improvements
+
+- **Sessions:** large session lists open faster and use less memory, with smoother scrolling across projects (thanks to @deatheros).
+- **Chat:** lower CPU use while the agent thinks or writes a response (thanks to @deatheros).
+- Interface: clearer checkbox and radio outlines, brighter secondary text, and larger labels make controls easier to read.
+- Interface: lighter text rendering on macOS.
+
+### Fixes
+
+- Web: instances on different ports stay signed in independently. Existing browser sessions on an explicit port need one fresh sign-in after upgrading (thanks to @jlu-lujing).
+- Chat: sending a message no longer briefly flashes "OpenCode did not start a reply".
+- Chat: the queue panel starts expanded, remembers your choice across sessions, and leaves the last messages readable above the queue and `/btw` panels.
+- Chat: inline `$...$` formulas render correctly, and display formulas with apostrophes or ampersands no longer appear as red errors (thanks to @Dawnfz-Lenfeng).
+- Chat: reconnecting mid-response no longer drops part of the streamed text (thanks to @deatheros).
+- Git: Commit & Push and Sync publish new branches to the configured push remote and confirm success only when something was pushed (thanks to @IbrahimKhan12).
+- Git: staged and unstaged rows show their own added and removed line counts for partially staged files (thanks to @Naputt1).
+- Git: large repositories no longer spawn dozens of git processes, and very large untracked folders appear as one folder entry.
+- Settings/Usage: Gemini 3.x models such as Gemini 3.1 Pro are included in the initial model selection (thanks to @DeryFerd).
+- Mini Chat: the dictation keyboard shortcut now starts voice input.
+- Extensions: clicking an option in an extension's dropdown or menu now applies the selection reliably.
+- Desktop/SSH: remote setup finds Bun-installed programs in custom cache locations, fixing "installed but no openchamber binary could be found" (thanks to @hdp01).
+- Desktop/Linux: the AppImage shows the OpenChamber icon in GNOME's launcher (thanks to @bashrusakh).
+- Installation: fresh npm installs include the dependencies needed to start the server (thanks to @presswizards).
+
+### SDK
+
+- Actions: use `mode: "background"` and `host.onAction` to handle message and session actions without opening a panel.
+- Extensions: declare `background.entry` to run actions and slash commands on demand. A visible panel and sidebar icon are optional.
+- Notifications: `host.toast` now supports `copy`, `dismiss`, and `persistent` options for Copy and OK buttons and notifications that stay until dismissed.
+
+## [1.24.0] - 2026-09-17
+
+### New
+
+- **Extensions:** Add third-party tools to web and desktop, with their own panels, pages, and chat actions. Get started with [using extensions](https://docs.openchamber.dev/extensions/) or [building your own](https://docs.openchamber.dev/sdk/). A catalog of our own and community-made extensions is coming soon to the OpenChamber website (thanks to @AlexKutas).
+- **Themes:** Browse VS Code themes from Open VSX or import a theme file in Settings. Choose individual color variants and remove imported themes from the theme picker.
+- Projects: Choose a default agent for new chats in each project, including chats in its worktrees (thanks to @MltStephane).
+- Files: Keep the file tree open while the editor is closed, so you can browse your project alongside the chat (thanks to @cmdaltctr).
+
+### Improvements
+
+- Desktop: The app window opens much faster.
+- Sessions: Sticky sidebar headers now fade smoothly between sections as you scroll, keeping the current section's name and actions within reach.
+- Themes: Menu text and selected items are easier to read, and code block backgrounds blend better with the rest of the app.
+- Chat: Agent labels and icons use more distinct colors from your theme, making agents easier to tell apart.
+- Appearance: The loading screen fades into the app without the logo changing colors between loading steps.
+
+### Fixes
+
+- Chat: Switching chats or starting a new one no longer loses your draft attachments or moves them to another chat.
+- Chat: Your chosen model no longer resets while models are loading. Thinking levels, including Default, are remembered after a reload.
+- Chat: Fixed growing memory use when switching between conversations.
+- Chat: Completed subagent results display formatted Markdown again (thanks to @bashrusakh).
+- Chat: The selection menu opens above or below the text you select, keeping it accessible for copying (thanks to @yulia-ivashko).
+- Context: Fixed incorrect percentages after compaction. The counter shows a dash until the next response reports usage (thanks to @yulia-ivashko).
+- Git: Fixed blank diffs for submodules and repeated errors for nested repositories. Changes now shows submodule status and identifies separate repositories (thanks to @yulia-ivashko).
+- Settings/Behavior: Instructions edited outside the app appear when you reopen settings, including when the file was cleared (thanks to @bashrusakh).
+- Desktop: Fixed background OpenCode and tool processes left behind after quitting the app, restarting OpenCode, or a failed start.
+- Files: Fixed file searches getting stuck in some repositories.
+- Files: Escape closes an open menu while keeping the file panel open.
+- macOS: The Dock's unread badge keeps updating when the menu bar icon is disabled.
+- Mobile: Theme import fits above the keyboard, and long theme lists stay clear of the status bar and home indicator.
+
+### Misc
+
+- Usage: Removed Crof usage tracking after the service shut down (thanks to @kydorn).
+- Tooling: Updated Bun to 1.4.2 for local development, CI, and Docker images (thanks to @osztenkurden).
+
 ## [1.23.2] - 2026-09-14
 
 ### New

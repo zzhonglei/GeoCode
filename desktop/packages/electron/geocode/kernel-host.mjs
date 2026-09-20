@@ -205,8 +205,9 @@ export const startKernelHost = async ({
   };
 
   /**
-   * Synchronous, because main calls it right before `app.exit(0)` in the same tick. The kernel catches the signal, so
-   * its exit handler sweeps the QGIS process groups no kill from here reaches (docs/GEOKERNEL.md §10.1 #8b).
+   * Synchronous: main signals here and lets its own awaited shutdown settle, rather than waiting on the kernel. The
+   * kernel catches the signal, so its exit handler sweeps the QGIS process groups no kill from here reaches
+   * (docs/GEOKERNEL.md §10.1 #8b).
    */
   const terminate = () => {
     if (exited || stopping) return;

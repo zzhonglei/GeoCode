@@ -76,7 +76,7 @@ describe('createKernelProcessEnvironment', () => {
   it('strips again inside the login-shell merge and writes the data root straight back', () => {
     // The merge refills every stripped name, and the data root shares the stripped prefix (docs/ENVIRONMENT.md §5.2).
     const main = readMain();
-    const functionStart = main.indexOf('const inheritUserShellEnv = () => {');
+    const functionStart = main.indexOf('const inheritUserShellEnv = async () => {');
     const functionEnd = main.indexOf('\n};', functionStart);
     const mergeLoop = main.indexOf('for (const [key, value] of Object.entries(shellEnv))', functionStart);
     const stripInside = main.indexOf('stripInheritedForeignVariables(process.env, { keep: inheritedKeep })', mergeLoop);
@@ -90,11 +90,11 @@ describe('createKernelProcessEnvironment', () => {
     expect(rootRewrite).toBeLessThan(functionEnd);
   });
 
-  it('never merges the login shell again once the shell and kernel connection have been written', () => {
+  it('never merges the login shell again once the shell and kernel connection have been written', async () => {
     // A second merge would strip the shell and kernel connection written since the first (docs/ENVIRONMENT.md §5.2).
     const main = readMain();
     const sliceStart = main.indexOf('let userShellEnvInherited = false;');
-    const functionStart = main.indexOf('const inheritUserShellEnv = () => {');
+    const functionStart = main.indexOf('const inheritUserShellEnv = async () => {');
     const functionEnd = main.indexOf('\n};', functionStart) + '\n};'.length;
     expect(sliceStart).toBeGreaterThan(-1);
     expect(sliceStart).toBeLessThan(functionStart);
@@ -117,13 +117,13 @@ describe('createKernelProcessEnvironment', () => {
       ({ environment: target }) => { target.OPENCHAMBER_DATA_DIR = '/Users/geo/data'; },
     );
 
-    inheritUserShellEnv();
+    await inheritUserShellEnv();
     expect(environment.LANG).toBe('zh_TW.UTF-8');
     expect(environment).not.toHaveProperty('OPENCODE_CONFIG');
 
     environment.OPENCHAMBER_RUNTIME = 'desktop';
     environment.OPENCODE_HOST = 'http://127.0.0.1:4096';
-    inheritUserShellEnv();
+    await inheritUserShellEnv();
     expect(environment.OPENCHAMBER_RUNTIME).toBe('desktop');
     expect(environment.OPENCODE_HOST).toBe('http://127.0.0.1:4096');
     expect(environment).not.toHaveProperty('OPENCODE_CONFIG');

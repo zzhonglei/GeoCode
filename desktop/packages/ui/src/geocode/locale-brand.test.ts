@@ -106,6 +106,7 @@ const EXEMPT_KEYS = new Set([
   'contextPanel.browser.devServers.remoteOnly',
   'contextPanel.browser.tunnelFailedHint',
   // No caller.
+  'settings.themeImport.hint',
   'settings.providers.page.openCodeGo.title',
   'settings.providers.page.openCodeGo.description',
   'settings.providers.page.openCodeGo.help',
