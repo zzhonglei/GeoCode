@@ -16,13 +16,12 @@ import {
   createBrowserPluginSource,
   prepareBrowserTool,
 } from './browser-tool.mjs';
+import { resolveShellDataRoot } from './shell-data-root.mjs';
 
 const electronRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mainSource = fs.readFileSync(path.join(electronRoot, 'main.mjs'), 'utf8');
-const trustedSource = fs.readFileSync(
-  path.resolve(electronRoot, '../../../kernel/packages/opencode/src/plugin/geocode-trusted.ts'),
-  'utf8',
-);
+const trustedModulePath = path.resolve(electronRoot, '../../../kernel/packages/opencode/src/plugin/geocode-trusted.ts');
+const trustedSource = fs.readFileSync(trustedModulePath, 'utf8');
 
 const stubTemplate = async () => ({
   createToolEntry: ({ name }) => `    ${name}: { description: "stub", args: {}, async execute() { return "stub" } },\n`,
@@ -161,13 +160,24 @@ describe('the generated plugin', () => {
 });
 
 describe('the two sides agree on the file', () => {
-  it('names the same relative path as the kernel expects under its config root', () => {
-    // The shell data root is `<config root>/desktop`, so the kernel's segments minus the first are the shell's path.
+  it('names the same relative path as the kernel expects under the shell data root', () => {
     const segments = trustedSource.match(/GEOCODE_BROWSER_PLUGIN_SEGMENTS = \[([^\]]+)\]/)?.[1]
       ?.split(',').map((part) => part.trim().replace(/^"|"$/g, '')) ?? [];
     expect(segments[0]).toBe('desktop');
     expect(path.join(...segments.slice(1))).toBe(BROWSER_PLUGIN_RELATIVE_PATH);
     expect(trustedSource).toContain(`"${BROWSER_PLUGIN_ENV}"`);
+  });
+
+  // Both real functions rather than a reading of either source, and the whole absolute path rather than the segments
+  // below the root: the two roots are computed by different rules, so comparing only the tail agrees either way.
+  it('expects the file at the absolute path the shell writes it to, HOME being the only input', async () => {
+    const { trustedPluginSpec } = await import(pathToFileURL(trustedModulePath).href);
+    for (const home of ['/Users/tester', path.join(os.tmpdir(), 'geocode-two-sides')]) {
+      const written = path.join(resolveShellDataRoot(home), BROWSER_PLUGIN_RELATIVE_PATH);
+      const spec = pathToFileURL(written).href;
+      const accepted = trustedPluginSpec({ kind: 'server', env: { [BROWSER_PLUGIN_ENV]: spec }, homeDirectory: home });
+      expect([home, accepted]).toEqual([home, spec]);
+    }
   });
 });
 

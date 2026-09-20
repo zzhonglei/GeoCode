@@ -322,7 +322,7 @@ GeoCode 保留整套机制,只做适配。上游多处假设「主 agent 永远�
 
 | # | 屏蔽项 | 为什么前四层做不到 | 截断点 |
 |---|---|---|---|
-| 1 | 外部插件(配置里声明的 + `{plugin,plugins}/` 自动发现) | 配置里**没有**「关闭插件加载」这个键。而且加载有两条独立路径,其中 `core` 侧那条(内置的 `config-plugin`)不受任何开关约束——实测在 `OPENCODE_DISABLE_PROJECT_CONFIG=1` 下仍然执行了项目里的插件 | `plugin/loader.ts` 的 `loadExternal`(两个调用点的唯一必经处)+ `core/plugin/internal.ts` 摘掉 `ConfigExternalPlugin` 的注册。**唯一例外**:桌面主进程启动内核时点名的那个插件文件(装着浏览器工具与控制工具),且解析路径必须恰为 `<配置根>/desktop/agent-tool/geocode-browser-plugin.js`,仅 server 形态(`plugin/geocode-trusted.ts`,DESKTOP.md §7.2);这不是「支持白名单插件」,配置声明与目录扫描照旧返回空,`geocode-trusted-plugin.test.ts` 四个方向都钉着 |
+| 1 | 外部插件(配置里声明的 + `{plugin,plugins}/` 自动发现) | 配置里**没有**「关闭插件加载」这个键。而且加载有两条独立路径,其中 `core` 侧那条(内置的 `config-plugin`)不受任何开关约束——实测在 `OPENCODE_DISABLE_PROJECT_CONFIG=1` 下仍然执行了项目里的插件 | `plugin/loader.ts` 的 `loadExternal`(两个调用点的唯一必经处)+ `core/plugin/internal.ts` 摘掉 `ConfigExternalPlugin` 的注册。**唯一例外**:桌面主进程启动内核时点名的那个插件文件(装着浏览器工具与控制工具),且解析路径必须恰为 `<HOME>/.config/GeoCode/desktop/agent-tool/geocode-browser-plugin.js`——**从 HOME 推,不从本进程的配置根推**,否则 `XDG_CONFIG_HOME` 一挪就拒掉壳真实写入的文件(PATHS.md §3.3),仅 server 形态(`plugin/geocode-trusted.ts`,DESKTOP.md §7.2);这不是「支持白名单插件」,配置声明与目录扫描照旧返回空,`geocode-trusted-plugin.test.ts` 四个方向都钉着 |
 | 2 | 文件式工具 `{tool,tools}/*.{js,ts}` | 扫描写死在工具注册表的构建里,没有开关;它与 `plugin` 是**不同的扩展点**,关掉插件并不能关掉它 | `tool/registry.ts` 的发现处 |
 | 3 | Claude Code 的 `CLAUDE.md` 提示词 | 上游有 env 开关,但**默认是开的**。靠启动方设 env 会静默失败,而且失败方向是开放的——桌面壳与测试台各是一条启动路径,漏一条就恢复读取 | `effect/runtime-flags.ts` 的两个默认值(env 仍可反向打开) |
 | 4 | `~/.opencode` 家目录扫描 | 上游**没有任何开关**能挡它——`OPENCODE_DISABLE_PROJECT_CONFIG` 只管项目级 | `config/paths.ts` 整段删除。我们只有一个全局根,没有 `~/.geocode` 可改名 |

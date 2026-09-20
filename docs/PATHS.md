@@ -113,7 +113,10 @@ GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统�
     ├── settings.json            窗口、主题、布局等桌面偏好
     ├── chats/  projects/        聊天的工作目录、按项目的壳侧设置
     └── agent-tool/geocode-browser-plugin.js   主进程每次启动重写、内核加载的插件,装着浏览器工具与控制工具(DESKTOP.md §7.2);
-                                 内核侧以 `<配置根>/desktop/agent-tool/…` 拼出同一路径,两边的拼写由 browser-tool.test.mjs 对账
+                                 ⚠️ 内核侧**也从 HOME 推**这条路径,不从自己的配置根推。两个根只在 `XDG_CONFIG_HOME`
+                                 未设时重合,而壳必须挂 HOME(理由见 §5),所以按配置根推会在用户设了该变量时
+                                 拒掉壳真实写入的文件,`loadExternal` 又是静默返回空,两个工具就凭空消失。
+                                 两边由 browser-tool.test.mjs 拿**双方的真函数**比绝对路径对账
 
 ~/.cache/GeoCode/                缓存根:可整个删掉,下次自动重建
 ├── bin/                         LSP 与 ripgrep 二进制
