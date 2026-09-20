@@ -105,9 +105,6 @@ const EXEMPT_KEYS = new Set([
   'walkthrough.blocked.serverUnsupported.description',
   'contextPanel.browser.devServers.remoteOnly',
   'contextPanel.browser.tunnelFailedHint',
-  // Shown, and kept: GitHub authorizes upstream's OAuth app, whose own page names it.
-  'settings.github.page.flow.title',
-  'settings.github.page.ghCli.fallbackDescription',
   // No caller.
   'settings.providers.page.openCodeGo.title',
   'settings.providers.page.openCodeGo.description',

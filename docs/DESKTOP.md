@@ -640,14 +640,32 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
 一个词:上游要它「Only suggest work the **coding** agent can perform」,照字面地理工作就不在可建议之列。绊线在
 `web/server/geocode/session-assist-prompt.test.js`。
 
-**GitHub 发布流与 PR 面:挂起,不做判断也不做改动。** 能力本身该留,GeoAgent 也做代码工作。挂起的理由是
-上游正在重构这块表面:新版把 GitHub 账号连接从 Git 页搬到了「集成」页,与 Linear 并列成内置集成。现在动手
-等于给一个即将搬家的界面打补丁。同步新基线时连同新形态一并判,届时要一起解决的两件事已经查清:一是设备流
-用的是 OpenChamber 的 OAuth 应用(`github/auth.js` 的默认 client id),用户在 GitHub 授权页上看到的是别人的
-产品名、撤销时找的也是别人的应用名——这是身份归属问题不是保密问题,修法是注册 GeoCode 自己的 OAuth 应用
-并顺手收窄 scope(`workflow` 用不上);二是壳每次启动都执行用户的 `gh` 取令牌并调 `api.github.com`,没有
-任何人在应用里连接过账号。同一条原则适用于「集成」页(2026-09-07 用户决定):**凡是上游正在重构的表面,
-先不动,等同步基线时连同新形态一起判。**
+**GitHub OAuth 身份已切换为 GeoCode(2026-09-19)。** 自有 OAuth App 的 Client ID 为
+`Ov23liGGsghsdLRXeIil`,名称与图标由维护者在 GitHub 注册页管理。沿用上游设备授权流程,
+不引入 Client Secret、回调服务或新登录协议。默认 scope 为 `repo read:org read:user user:email`,
+移除允许改写工作流文件的 `workflow`;读取 PR 检查和工作流任务不需要该 scope。
+应用注册保持 Device Flow 开启、Token expiration 关闭,当前实现没有保存或刷新 refresh token。
+三种产品语言中的授权与备用账号文案改为 GeoCode,移出品牌检查的豁免清单。
+
+默认值位于 `github/auth.js`,原因是用户设置只覆盖本机,不能为新安装提供产品身份。仍保留上游的显式配置
+优先级:环境变量、`settings.json` 的 `githubClientId` / `githubScopes`、产品默认值;桌面启动会剥离继承来的
+`OPENCHAMBER_*`,因此普通桌面安装主要检查 settings 覆盖。迁移时若曾手填旧 Client ID
+`Ov23lizomPOC3eFYo56r`,应移除该覆盖或改为自有 ID;自定义应用配置不自动覆盖。
+
+**已有授权不自动改名、不自动删除或撤销。** 新 ID 只影响后续登录,旧令牌仍归原签发应用。已保存 OAuth
+账号需在「集成 → GitHub」重新连接,同名账号的新令牌替换旧记录,其他账号不受影响;多账号逐个连接。
+需要撤销原应用授权时,由用户在 GitHub 设置中操作,因为该授权可能还被其 OpenChamber 使用。
+`gh` 凭据独立保留,不会因本次迁移被清空。维护者本机在本次接入前没有 `github-auth.json`,也没有上述
+两个 settings 覆盖,因此没有存量令牌需要迁移。新登录由用户在 GitHub 确认授权。
+绊线 `web/server/geocode/github-identity.test.js` 检查真实设备流两次请求的 Client ID 与 scope,
+并验证自定义配置优先级和重连只替换对应账号。
+
+2026-09-19 在 macOS arm64 的当前工作树桌面构建上验过:授权页显示 GeoCode 名称与图标,
+用户确认后集成页显示 OAuth 账号,scope 不含 `workflow`;凭据文件权限为 0600。正常退出并重开后,
+OAuth 仍为当前账号,原 CLI 账号保留为其他账号。完整验证门通过,Windows 实机尚未验证。
+
+**GitHub 发布流与 PR 界面的其他取舍继续挂起。** 上游已把账号连接搬到「集成」页,本次只处理授权身份。
+壳启动时自动读取 `gh` 令牌并访问 GitHub 的行为尚未重新裁定,不与 OAuth 身份迁移混做。
 
 已按此执行的项,连同它们的判据与绊线:
 
@@ -760,7 +778,7 @@ Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着�
   对 npm 官方 registry 的调用,那条出网 §7.3 本就不允许。用户扩展 GeoCode 的路是 MCP:进程外、按服务器
   逐个授权、界面完整。「集成」页(第三方订阅 Claude 与 Cursor)走同一条管道因而同样无效,但**暂不屏蔽**:
   上游后续版本把 GitHub 与 Linear 做成了这一页的内置集成,那两项不经插件管道(2026-09-07 用户决定)。
-  其中 **Linear 已于 09-18 关闭**(见下一条),**GitHub 仍挂起**,等同步新基线时再判。绊线在
+  其中 **Linear 已于 09-18 关闭**(见下一条);GitHub OAuth 身份见 §7.2,其余产品取舍仍挂起。绊线在
   `server/geocode/closed-surface.test.js`(对照组挂满十条并点名那条出网路由)与
   `ui/src/geocode/desktop-settings-surface.test.ts`。
 - **Linear**:GeoCode 不提供这个集成(2026-09-18 用户定)。壳在 Electron 下 `registerLinearRoutes` 首行把
