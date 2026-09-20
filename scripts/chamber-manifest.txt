@@ -113,12 +113,19 @@ Dockerfile
 docker-compose.yml
 Caddyfile
 
-# --- Packages: all six, whole. electron depends on web, vscode on ui; docs and
+# --- Packages: all eight, whole. electron depends on web, vscode on ui; docs and
 # mobile stand alone. All of ui, web and vscode pin @opencode-ai/sdk to an exact
-# 1.18.18 — the seam docs/DESKTOP.md §4.3 governs. ---
+# 1.18.18 — the seam docs/DESKTOP.md §4.3 governs.
+# sdk and extensions arrived in v1.24.0. sdk is not optional: ui and web declare
+# it as workspace:*, so leaving it out breaks the install. extensions holds two
+# documents and an empty registry.json rather than code, and is taken because the
+# closure defaults to all of upstream; whether the product offers that surface is
+# settled in the shell, not by narrowing the closure. ---
 packages/docs
 packages/electron
+packages/extensions
 packages/mobile
+packages/sdk
 packages/ui
 packages/vscode
 packages/web
