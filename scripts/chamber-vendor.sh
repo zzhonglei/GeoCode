@@ -78,7 +78,7 @@ if [ -n "$overlap" ]; then
   exit 1
 fi
 
-# A whitelist's failure mode is silence: upstream adds a top-level entry, no
+# A whitelist's failure mode is silence: upstream adds an entry, no
 # line names it, and it is dropped with nothing said. The `!` declarations exist
 # so this check can tell "we decided against it" from "nobody has looked at it
 # yet". Reported, not refused — a new entry is news, not an error.
@@ -87,13 +87,40 @@ declared() {
   awk -v t="$1" '$0==t {f=1} END{exit !f}' "$tmp/excluded" && return 0
   return 1
 }
+
+# A line naming a directory outright covers everything inside it. A directory
+# reached only by deeper lines does not: `packages/docs` makes `packages` answer
+# "declared" while saying nothing about a sibling upstream adds later, so those
+# children are checked one level further down. Walking only the top level would
+# have dropped both packages v1.24.0 added, in silence and with no conflict.
+named_outright() {
+  awk -v t="$1" '$0==t {f=1} END{exit !f}' "$tmp/manifest" && return 0
+  awk -v t="$1" '$0==t {f=1} END{exit !f}' "$tmp/excluded" && return 0
+  return 1
+}
+check_entry() {
+  if ! declared "$1"; then
+    echo "$1" >> "$tmp/undeclared"
+    return 0
+  fi
+  if named_outright "$1"; then
+    return 0
+  fi
+  if [ ! -d "$tmp/src/$1" ]; then
+    return 0
+  fi
+  for child in $(cd "$tmp/src/$1" && ls -A); do
+    check_entry "$1/$child"
+  done
+  return 0
+}
 : > "$tmp/undeclared"
 for top in $(cd "$tmp/src" && ls -A); do
-  declared "$top" || echo "$top" >> "$tmp/undeclared"
+  check_entry "$top"
 done
 if [ -s "$tmp/undeclared" ]; then
   echo
-  echo "NOTE — $TAG has top-level entries the manifest does not mention:" >&2
+  echo "NOTE — $TAG has entries the manifest does not mention:" >&2
   sed 's/^/    /' "$tmp/undeclared" >&2
   echo "  Decide each one: add it to the selection, or declare it with a leading !." >&2
   echo
