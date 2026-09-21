@@ -355,6 +355,16 @@ web 包全量测试就会落一个目录出来。带 `desktop/` 这一段是必�
   上游它自己的凭据也没挡到,所以这不是我们的回归;但我们把四份凭据搬到 GeoCode 的根之后,
   守卫留在原地,而那个 handler 的注释写明它防的是**被提示注入的 agent**。
 
+**2026-09-21 按这条判据又查了一轮,三处仍是「一半改了、另一半没改」。**
+
+- `/api/fs/home` 除了 chats 根还报一个 legacy 别名,服务端那半仍写死 `~/.config/openchamber/chats`,
+  而渲染进程的 `legacyRootForHome` 早改成了我们的根,`chatDirectories.ts` 又把别名当自己的根接受——
+  **OpenChamber 的会话目录因此被判成 GeoCode 的托管聊天**。⚠️ **它在每台机器上都成立**:别名经
+  `canonicalDirectoryPath`,而那个函数遇 ENOENT 会一路向上爬祖先,`$HOME` 一定存在,所以从不抛错、
+  也从不缺字段。原先的绊线只喂 `{ home }`,缺的字段正好走兜底,**永远看不见这条**。改法是让服务端从
+  同一个配置根派生;新绊线 `server/geocode/chats-root-alias.test.js` 给它一个**任意**配置根,再断言
+  返回的三个根都落在其下——写死的形态无论如何都满足不了;
+
 **判据因此要再改一次。** §5 前面那三条问的是「写到哪」;这一轮问的是**「读的那一侧和写的那一侧是不是
 同一个路径」**——三处里有两处读写分属前后端,各自自洽,单看任何一侧都正常。绊线也因此成对写:
 `kernel-roots.test.js` 同时读 `routes.js` 与 `session/instruction.ts`,两端一起钉。

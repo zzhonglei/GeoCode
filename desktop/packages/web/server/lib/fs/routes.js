@@ -747,7 +747,10 @@ export const registerFsRoutes = (app, dependencies) => {
       }
       const [canonicalChatsRoot, canonicalLegacyChatsRoot] = await Promise.all([
         canonicalDirectoryPath(chatsRoot, fsPromises, path),
-        canonicalDirectoryPath(path.join(home, '.config', 'openchamber', 'chats'), fsPromises, path).catch((error) => {
+        // --- GeoCode: the default chats root is ours, derived from the same config root the handler above uses. Upstream's
+        // literal would hand the renderer another product's root as a legacy alias, and every function there
+        // accepts that alias as ours (geocode/chat-directories.test.ts, docs/PATHS.md §5). ---
+        canonicalDirectoryPath(path.join(openchamberUserConfigRoot, 'chats'), fsPromises, path).catch((error) => {
           // A relocated root must remain usable if the old root is inaccessible.
           // Omit only this optional alias; clients retain exact legacy matching.
           console.warn('Failed to resolve legacy chats root:', error);
