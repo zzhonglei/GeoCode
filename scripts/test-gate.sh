@@ -119,7 +119,16 @@ echo "== shielding tripwires living inside upstream's own test files =="
   test/effect/runtime-flags.test.ts \
   test/session/instruction.test.ts \
   test/session/system.test.ts)
-(cd "$ROOT/kernel/packages/opencode" && bun test $TIMEOUT -t "GeoCode:" test/skill/skill.test.ts)
+# `bun test -t` exits 0 when the name matches nothing ("matched 0 tests"), so a merge that erased
+# these cases back to upstream would leave this step green with no assertions at all, and
+# patch-surface.sh --check cannot see a patch erased back to upstream either. Count what ran.
+# The floor is 1 rather than the number of cases on purpose: an expectation counted out of the same
+# file would fall to zero along with them and still agree.
+skill_cases=$(cd "$ROOT/kernel/packages/opencode" && bun test $TIMEOUT -t "GeoCode:" test/skill/skill.test.ts 2>&1 | tee /dev/stderr | sed -n 's/^ *\([0-9][0-9]*\) pass$/\1/p')
+if [ "${skill_cases:-0}" -lt 1 ]; then
+  echo "refuse: the GeoCode skill cases matched nothing, so that step asserted nothing" >&2
+  exit 1
+fi
 
 echo
 echo "== geo kernel (core) =="
