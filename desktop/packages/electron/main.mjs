@@ -27,7 +27,7 @@ import { compareReleaseVersions, createReleaseUpdateBackend } from './geocode/re
 import { GEOCODE_VERSION } from './geocode/app-version.mjs';
 import { applyShellDataRoot } from './geocode/shell-data-root.mjs';
 import { stripInheritedForeignVariables } from './geocode/kernel-environment.mjs';
-import { geocodeDeniedSegments } from './geocode/denied-paths.mjs';
+import { deniesRelativePath, geocodeDeniedSegments } from './geocode/denied-paths.mjs';
 import { hasRelaySettings, dropRelaySettings, stripRemoteAccessSettings } from './geocode/loopback-settings.mjs';
 import { answerRemoteIpc, isRemoteIpcCommand } from './geocode/remote-ipc.mjs';
 import { KERNEL_LOST_EVENT, describeKernelFailure, watchKernelExit } from './geocode/kernel-failure.mjs';
@@ -4206,7 +4206,8 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
       // --- /GeoCode ---
       const relFromHome = underHome ? filePath.slice(home.length + 1) : '';
       const relNormalized = relFromHome.split(path.sep).join('/');
-      if (DENIED_SEGMENTS.some((segment) => relNormalized === segment || relNormalized.startsWith(`${segment}/`))) {
+      // GeoCode: matched case-insensitively, see geocode/denied-paths.mjs
+      if (deniesRelativePath(relNormalized, DENIED_SEGMENTS)) {
         throw new Error('Access to this path is not allowed');
       }
       const basename = path.basename(filePath).toLowerCase();

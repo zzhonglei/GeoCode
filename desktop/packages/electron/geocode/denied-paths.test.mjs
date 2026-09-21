@@ -4,16 +4,20 @@ import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { geocodeDeniedSegments } from './denied-paths.mjs';
+import { deniesRelativePath, geocodeDeniedSegments } from './denied-paths.mjs';
 import { resolveShellDataRoot } from './shell-data-root.mjs';
 
 const HOME = '/Users/tester';
 
-/** A copy of the matching rule the handler in main.mjs applies. */
-const denies = (absolute) => {
-  const relative = path.relative(HOME, absolute).split(path.sep).join('/');
-  return geocodeDeniedSegments(HOME).some((segment) => relative === segment || relative.startsWith(`${segment}/`));
-};
+// Upstream's own entries, which the handler denies alongside ours and hands to the same matcher.
+const UPSTREAM_SEGMENTS = ['.ssh', '.aws', '.gnupg', '.gpg', '.config/gh', '.config/openchamber/credentials'];
+
+// The real rule, not a copy of it: a copy would have stayed green while the handler compared exactly.
+const denies = (absolute) =>
+  deniesRelativePath(
+    path.relative(HOME, absolute).split(path.sep).join('/'),
+    [...UPSTREAM_SEGMENTS, ...geocodeDeniedSegments(HOME)],
+  );
 
 describe('denied paths', () => {
   it('refuses every credential the shell writes under its data root', () => {
@@ -49,10 +53,18 @@ describe('denied paths', () => {
     expect(source).not.toContain('.config/GeoCode');
   });
 
+  it('refuses a credential spelled in another case, which the filesystem resolves to the same file', () => {
+    // macOS and Windows are case-insensitive by default, so these read the files the cases above deny.
+    for (const spelling of ['.local/share/geocode/auth.json', '.LOCAL/SHARE/GEOCODE/AUTH.JSON',
+                            '.SSH/id_rsa', '.Config/GH/hosts.yml']) {
+      expect([spelling, denies(path.join(HOME, spelling))]).toEqual([spelling, true]);
+    }
+  });
+
   it('stays wired into the handler', () => {
     const main = fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
     const pushedAt = main.indexOf('DENIED_SEGMENTS.push(...geocodeDeniedSegments(home))');
-    const checkedAt = main.indexOf('DENIED_SEGMENTS.some((segment)');
+    const checkedAt = main.indexOf('deniesRelativePath(relNormalized, DENIED_SEGMENTS)');
     expect(pushedAt).toBeGreaterThan(-1);
     expect(checkedAt).toBeGreaterThan(pushedAt);
   });

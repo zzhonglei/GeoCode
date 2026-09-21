@@ -27,3 +27,18 @@ export const geocodeDeniedSegments = (homeDirectory) => {
     ...FOREIGN_ROOTS,
   ];
 };
+
+/**
+ * Whether a `/`-separated path, already made relative to $HOME, falls under any denied segment. Folded,
+ * like the basename check the handler applies right after: macOS and Windows resolve `.SSH/id_rsa` and
+ * `.local/share/geocode/auth.json` to the same files these segments name, so comparing exactly refuses one
+ * spelling and allows every other. The cost is refusing a genuinely different `.SSH` on a case-sensitive
+ * filesystem, which is a refused read rather than a leak.
+ */
+export const deniesRelativePath = (relativePath, segments) => {
+  const candidate = String(relativePath).toLowerCase();
+  return segments.some((segment) => {
+    const denied = String(segment).toLowerCase();
+    return candidate === denied || candidate.startsWith(`${denied}/`);
+  });
+};

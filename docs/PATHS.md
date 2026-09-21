@@ -367,6 +367,12 @@ web 包全量测试就会落一个目录出来。带 `desktop/` 这一段是必�
 - `agents.js` 与 `commands.js` 抛的「already exists in opencode.json」经 `config-entity-routes.js` 的
   `res.json({ error: error.message })` 原样弹给用户,而服务端真正读的是 `geocode.json` / `geocode.jsonc`。
   改用 `KERNEL_CONFIG_JSON` 常量(同文件另四处 `console.log` 不动,那不是用户可见面);
+- 凭据拒绝表**大小写敏感**,而 macOS 与 Windows 默认不敏感。实测:写进 `.local/share/GeoCode/auth.json`
+  的文件,用 `geocode/` 乃至 `GEOCODE/AUTH.JSON` 都读得到,`.SSH/id_rsa` 同样绕过上游自己那条。
+  ⚠️ **紧挨着它下面的 `.env` / `.pem` 检查却做了 `.toLowerCase()`**——上游在同一个 handler 里自己就不一致。
+  匹配规则因此挪进 `denied-paths.mjs` 的 `deniesRelativePath` 并折叠大小写,**顺带拆掉了绊线里那份副本**:
+  它原先自己抄了一遍匹配规则,所以 handler 比得再严也不会红。代价是大小写敏感的文件系统上会误拒一个
+  真叫 `.SSH` 的目录,那是一次被拒的读取,不是泄漏。
 
 **判据因此要再改一次。** §5 前面那三条问的是「写到哪」;这一轮问的是**「读的那一侧和写的那一侧是不是
 同一个路径」**——三处里有两处读写分属前后端,各自自洽,单看任何一侧都正常。绊线也因此成对写:
