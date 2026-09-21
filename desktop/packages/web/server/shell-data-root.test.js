@@ -76,6 +76,28 @@ describe('shell data root', () => {
     }
   });
 
+  it('leaves no file outside the shielded three computing an OpenChamber root', () => {
+    // The list above only checks what it names, which is how `lib/fs/routes.js` kept handing the renderer
+    // an OpenChamber chats root until 2026-09-21. Scanned instead, with comments removed first: five of
+    // today's mentions are prose describing the old location, and prose computes nothing.
+    const SKIP = new Set(['node_modules', 'dist', '.turbo']);
+    const ROOT_IN_CODE = /(['"])\.config\1\s*,\s*(['"])openchamber\2|\.config\/openchamber/;
+    const offenders = [];
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (SKIP.has(entry.name)) continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) { walk(full); continue; }
+        if (!entry.name.endsWith('.js') || entry.name.includes('.test.')) continue;
+        const code = fs.readFileSync(full, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        const relative = path.relative(serverRoot, full);
+        if (ROOT_IN_CODE.test(code) && !SHIELDED.has(relative)) offenders.push(relative);
+      }
+    };
+    walk(serverRoot);
+    expect(offenders).toEqual([]);
+  });
+
   it('leaves no path computation reading the home directory unconditionally', () => {
     const INJECTED = [
       /process\.env\.OPENCHAMBER_(?:DATA_DIR|MANAGED_PROCESS_REGISTRY)\b/,

@@ -25,7 +25,7 @@ import { startEmbeddedKernel } from './geocode/kernel-boot.mjs';
 import { DesktopIdentity } from './geocode/desktop-identity.mjs';
 import { compareReleaseVersions, createReleaseUpdateBackend } from './geocode/release-updater.mjs';
 import { GEOCODE_VERSION } from './geocode/app-version.mjs';
-import { applyShellDataRoot } from './geocode/shell-data-root.mjs';
+import { applyShellDataRoot, resolveShellDataRoot } from './geocode/shell-data-root.mjs';
 import { stripInheritedForeignVariables } from './geocode/kernel-environment.mjs';
 import { deniesRelativePath, geocodeDeniedSegments } from './geocode/denied-paths.mjs';
 import { hasRelaySettings, dropRelaySettings, stripRemoteAccessSettings } from './geocode/loopback-settings.mjs';
@@ -588,8 +588,9 @@ const settingsFilePath = () => {
   if (typeof process.env.OPENCHAMBER_DATA_DIR === 'string' && process.env.OPENCHAMBER_DATA_DIR.trim()) {
     return path.join(process.env.OPENCHAMBER_DATA_DIR.trim(), 'settings.json');
   }
-  // GeoCode: GeoCode's own shell data root; `sshManager` roots SSH credentials here (docs/PATHS.md §3.3)
-  return path.join(os.homedir(), '.config', 'GeoCode', 'desktop', 'settings.json');
+  // GeoCode: our own shell data root, derived rather than spelled out again; `sshManager` roots SSH
+  // credentials here (docs/PATHS.md §3.3)
+  return path.join(resolveShellDataRoot(os.homedir()), 'settings.json');
 };
 
 const sshManager = new ElectronSshManager({

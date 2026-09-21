@@ -6,6 +6,7 @@ import { applyShellDataRoot, resolveShellDataRoot } from './shell-data-root.mjs'
 import { CHATS_SEGMENTS, SHELL_DATA_ROOT_SEGMENTS } from '../../ui/src/geocode/shell-data-root.ts';
 
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const HOME = path.join('/tmp', 'geocode-home');
 
@@ -44,6 +45,30 @@ describe('shell data root', () => {
     const firstReaderAt = main.indexOf('new ElectronSshManager(');
     expect(injectedAt).toBeGreaterThan(-1);
     expect(firstReaderAt).toBeGreaterThan(injectedAt);
+  });
+
+  it('is the only place in the package that spells the root out', () => {
+    // `main.mjs` used to repeat the segments for its settings fallback, which is a copy that drifts the
+    // moment the root moves. Scanned rather than listed: a new copy in a file nobody listed is the case
+    // the listing cannot see.
+    const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const SKIP = new Set(['node_modules', 'resources', 'dist', '.turbo']);
+    const SPELLED = /'\.config',\s*'GeoCode'|"\.config",\s*"GeoCode"|\.config\/GeoCode\/desktop/;
+    const OWN = new Set([fileURLToPath(new URL('./shell-data-root.mjs', import.meta.url)), fileURLToPath(import.meta.url)]);
+    const offenders = [];
+    // Walked by hand rather than with a recursive readdir: that one descends into node_modules before any
+    // filter can see it, which does not finish.
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (SKIP.has(entry.name)) continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) { walk(full); continue; }
+        if (!/\.(mjs|js|cjs)$/.test(entry.name) || OWN.has(full)) continue;
+        if (SPELLED.test(fs.readFileSync(full, 'utf8'))) offenders.push(path.relative(packageRoot, full));
+      }
+    };
+    walk(packageRoot);
+    expect(offenders).toEqual([]);
   });
 
   it('refuses to guess when the home directory is missing', () => {

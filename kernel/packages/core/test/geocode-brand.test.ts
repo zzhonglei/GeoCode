@@ -2,7 +2,7 @@
  * name (docs/PATHS.md). --- */
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { readFileSync } from "fs"
+import { existsSync, readdirSync, readFileSync, statSync } from "fs"
 import { Brand } from "../src/brand"
 import { Global } from "../src/global"
 
@@ -83,6 +83,77 @@ describe("brand literal scan", () => {
     "packages/opencode/src/agent/agent.ts": ['".opencode", "plans"'],
     "packages/core/src/plugin/agent.ts": ['".opencode", "plans"'],
   }
+
+  /* --- GeoCode: the map above only refuses what it names, so a file nobody listed leaks in silence — which
+   * is how three defects reached 2026-09-21 (docs/CONVENTIONS.md). This scan inverts the default: every
+   * file-shaped or directory-shaped `opencode` literal in the kernel's source has to be exempted here, by
+   * its own text, with a reason. Wire names are filtered rather than exempted one by one, because they are
+   * code identity and stay upstream's: module specifiers, URLs, HTTP headers, Effect service ids. --- */
+  const WIRE = [/^@opencode(-ai)?\//, /:\/\//, /^x-opencode-/, /^~opencode\//]
+  // A closed set of extensions on purpose: `opencode.status` and `opencode.mode` are an event and a flag,
+  // and letting any dotted word through would have buried the real hits under them.
+  const PATH_SHAPED = [
+    /^\.opencode/,
+    /^opencode(-[a-z0-9]+)*\.(json|jsonc|db|log|png|md|yml|yaml|toml|txt)$/,
+    /\/opencode/,
+    /opencode\//,
+  ]
+
+  // Whole files whose `opencode` text is prose rather than a path this product computes. Coarser than the
+  // literal exemptions below, and that is the trade: a reworded upstream tip would otherwise turn this red
+  // on every merge. A file listed here still has to earn its line.
+  const EXEMPT_FILES: Record<string, string> = {
+    "packages/tui/src/feature-plugins/home/tips-view.tsx": "tips the TUI prints, and the TUI is not a GeoCode surface",
+    "packages/opencode/src/cli/cmd/github.handler.ts": "the `/opencode` slash command, a GitHub wire name",
+    "packages/opencode/src/skill/index.ts": "the builtin skill body, which the user rewrites in the kernel round",
+    "packages/core/src/plugin/skill.ts": "the second hand-copy of that same body",
+  }
+
+  const EXEMPT_LITERALS: Record<string, string> = {
+    // Upstream's own installer layout, read only to report how it was installed. GeoCode ships as an
+    // application and never writes here (docs/DESKTOP.md §7.3 rules self-upgrade out).
+    ".opencode/bin": "installation/index.ts names the install method",
+    ".opencode": "the same check, whose join spells the two segments apart",
+    // A source path quoted inside a demo transcript, not a path anything opens.
+    "packages/opencode/src/cli/cmd/run/stream.ts": "cli/cmd/run/demo.ts, sample output",
+    // An unreferenced development plugin, byte-identical to upstream; nothing in the tree imports it.
+    "/tmp/opencode-workspace-dev-data.json": "control-plane/dev/debug-workspace-plugin.ts, no importer",
+    // Data files inside the catalogs, named by their publisher rather than by us.
+    "./assets/opencode.json": "models.dev catalog asset",
+    "./themes/opencode.json": "theme catalog asset",
+    "./provider/opencode": "provider plugin directory in the catalog",
+    // Upstream's own distribution names, quoted to the user by the CLI.
+    "anomalyco/tap/opencode": "uninstall.ts, the homebrew tap",
+  }
+
+  const literalsIn = (source: string): string[] =>
+    (source.match(/"[^"\n]*opencode[^"\n]*"|'[^'\n]*opencode[^'\n]*'/g) ?? [])
+      .map((quoted) => quoted.slice(1, -1))
+      .filter((text) => !WIRE.some((pattern) => pattern.test(text)))
+      .filter((text) => PATH_SHAPED.some((pattern) => pattern.test(text)))
+
+  test("no unexempted file or directory in the kernel's source is named after OpenCode", () => {
+    const roots = readdirSync(path.join(repo, "packages"), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(repo, "packages", entry.name, "src"))
+      .filter((dir) => existsSync(dir))
+    const found = new Map<string, string>()
+    for (const root of roots) {
+      for (const relative of readdirSync(root, { recursive: true }) as string[]) {
+        if (!/\.tsx?$/.test(relative)) continue
+        const file = path.join(root, relative)
+        if (!statSync(file).isFile()) continue
+        for (const literal of literalsIn(readFileSync(file, "utf8"))) {
+          if (!found.has(literal)) found.set(literal, path.relative(repo, file))
+        }
+      }
+    }
+    // Reported with the file that holds each one, so a red run says where to look rather than only what.
+    const unexempted = [...found]
+      .filter(([literal, file]) => !(literal in EXEMPT_LITERALS) && !(file in EXEMPT_FILES))
+      .map(([literal, file]) => `${file}: ${literal}`)
+    expect([roots.length > 0, unexempted]).toEqual([true, []])
+  })
 
   for (const [file, literals] of Object.entries(forbidden)) {
     test(file, () => {
