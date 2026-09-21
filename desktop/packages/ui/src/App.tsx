@@ -977,7 +977,9 @@ function App({ apis }: AppProps) {
                   <SyncAppEffects embeddedBackgroundWorkEnabled={embeddedBackgroundWorkEnabled} />
                   <OpenCodeUpdateToast />
                   <MainLayout />
-                  <AppStartupOverlay ready={isInitialized && (!isDesktopRuntime || (bootOutcomeKnown && bootViewIsMain))} />
+                  {/* --- GeoCode: the moving master, so the mark keeps its size and its motion when this
+                      overlay paints over the HTML splash (docs/DESKTOP.md §7.2) --- */}
+                  <AppStartupOverlay ready={isInitialized && (!isDesktopRuntime || (bootOutcomeKnown && bootViewIsMain))} animated />
                   <Toaster />
                   <AppLinkConfirmDialog />
                   <SharedTrustConfirmDialog />

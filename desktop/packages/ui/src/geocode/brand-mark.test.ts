@@ -28,6 +28,25 @@ const literal = (text: string, name: string) =>
 const orbitColours = (text: string) =>
   [...new Set(text.match(/#(?:5A6874|A8B5C1)/gi) ?? [])].map((c) => c.toUpperCase()).sort();
 
+// The still master carries a further scale, so a surface that falls back to it shrinks the mark
+// mid-handoff. Both lines below are upstream's, which a merge can restore without any conflict.
+const SURFACES = [
+  ['packages/ui/src/App.tsx', 'AppStartupOverlay', 'animated'],
+  ['packages/ui/src/components/auth/SessionAuthGate.tsx', 'OpenChamberLogo', 'isAnimated'],
+] as const;
+
+const element = (text: string, name: string) => new RegExp(`<${name}\\b[\\s\\S]*?/>`).exec(text)?.[0] ?? '';
+const occurrences = (text: string, name: string) => (text.match(new RegExp(`<${name}\\b`, 'g')) ?? []).length;
+
+describe('the startup loading surfaces draw the moving master', () => {
+  for (const [file, name, prop] of SURFACES) {
+    test(`${file} asks for it`, () => {
+      // Counted as well as read: a second one of these would leave the reader pinning the wrong line.
+      expect([occurrences(read(file), name), element(read(file), name).includes(prop)]).toEqual([1, true]);
+    });
+  }
+});
+
 describe('the loading mark is one artwork', () => {
   test('each splash inlines it exactly once', () => {
     const counts = SPLASHES.map((file) => `${file}: ${marksIn(read(file)).length}`);
@@ -84,6 +103,15 @@ describe('a drifted copy is caught', () => {
     const drifted = component.replace('#A8B5C1', '#FF0000');
     expect(drifted).not.toBe(component);
     expect(orbitColours(drifted)).not.toEqual(orbitColours(component));
+  });
+
+  test('a startup surface dropped back to the still master', () => {
+    const [file, name, prop] = SURFACES[0];
+    const source = read(file);
+    const drifted = source.replace(` ${prop} />`, ' />');
+    // Compared as flags rather than as text: these files are large enough that a failed identity
+    // assertion would bury the reason under the whole source.
+    expect([drifted === source, element(drifted, name).includes(prop)]).toEqual([false, false]);
   });
 
   test('a second mark pasted in', () => {
