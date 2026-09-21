@@ -23,6 +23,9 @@ export default defineConfig({
     ],
   },
   test: {
+    // GeoCode: see server/geocode/loopback-listen.js — supertest picks its port in one address family
+    // and dials the other, so a run can reach a stranger's server instead of its own.
+    setupFiles: ['./server/geocode/loopback-listen.js'],
     // UI integration fixtures with Vite asset imports cannot execute in Bun's
     // raw TS loader. Keep them beside their UI owner and run them here.
     include: [...configDefaults.include, '../ui/src/**/*.vitest.tsx'],
