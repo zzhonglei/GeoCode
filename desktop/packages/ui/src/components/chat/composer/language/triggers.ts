@@ -19,6 +19,8 @@ import {
     type FileMentionAutocompleteInputSource,
 } from '../../fileMentionAutocompleteState';
 
+import { snippetsOffered } from '@/geocode/snippet-surface'; // GeoCode: own module
+
 export type AutocompleteKind = 'command' | 'skill' | 'snippet' | 'mention';
 
 export interface AutocompleteTrigger {
@@ -98,7 +100,7 @@ export function resolveAutocompleteTrigger(
 
     return matchCommandPalette(value, cursorPosition)
         ?? matchInlineToken(value, cursorPosition, '/', 'skill')
-        ?? matchInlineToken(value, cursorPosition, '#', 'snippet')
+        ?? (snippetsOffered() ? matchInlineToken(value, cursorPosition, '#', 'snippet') : null) // GeoCode: see geocode/snippet-surface.ts
         ?? matchMention(value, cursorPosition, context);
 }
 
