@@ -1,35 +1,47 @@
 # 文件路径与系统身份
 
-本文档描述 GeoCode 在磁盘与操作系统上的身份:四个数据根、文件命名、系统注册项,以及它们
-为什么必须与 OpenCode 彻底分开。
+本文档描述 GeoCode 在磁盘与操作系统上的身份:四个数据根、文件命名、系统注册项,以及它们为什么
+必须与 OpenCode 彻底分开。
 
-内核侧已经落地——身份字符串集中在 `Brand` 模块(§5),并在沙箱里实测过落盘(§6)。
-桌面侧的身份与数据根也已落地(`DESKTOP.md` §10 阶段 6),在 macOS 上端到端验过;§3.5 的 Windows
-注册表与 §6 末段的双平台对账仍记的是它们**应当**写成什么样,那两处只有实机能回答。
+内核侧与桌面侧的身份都已落地,在 macOS 上端到端验过。§3.5 的 Windows 注册表与 §6 末段的双平台
+对账写的是它们**应当**是什么样,那两处只有实机能回答。
 
 ## 1. 为什么这件事排在最前
 
-GeoCode 与 OpenCode 共享同一个内核,却必须是用户机器上两个互不相干的程序。这条边界不是靠 UI 上的名字划出来的,而是靠磁盘路径、进程身份与操作系统注册表划出来的——只要有一处漏了,两个程序就会读写彼此的文件。这类事故一旦发生,用户看到的是「装了 GeoCode 之后 OpenCode 打不开了」,而排查要翻到注册表层。
+GeoCode 与 OpenCode 共享同一个内核,却必须是用户机器上两个互不相干的程序。这条边界不靠 UI 上的
+名字划出来,而靠磁盘路径、进程身份与操作系统注册表——只要有一处漏了,两个程序就会读写彼此的
+文件。用户看到的是「装了 GeoCode 之后 OpenCode 打不开了」,而排查要翻到注册表层。
 
-它必须在任何功能定制之前完成,还有一个务实的原因:此后所有实机验证的落盘都以这套路径为准。路径没定就做装配,测出来的每一个文件都要重测一遍。
+它排在任何功能定制之前,还有一个务实的理由:此后所有实机验证的落盘都以这套路径为准。路径没定
+就做装配,测出来的每个文件都要重测一遍。
 
 ## 2. 旧版留下的教训
 
-旧版只改了内核里的一个常量 `app = "geocode"`,四个 XDG 根随之改名,但**文件名那一层从未触碰**。实测旧版目录,商标残留八处:`opencode.db`(含 `-shm`/`-wal`)、`opencode-local.db`(同)、`log/opencode.log`、`opencode.jsonc`。用户打开自己的数据目录,看到的是一个叫 OpenCode 的程序在写文件。
+后面每一条规矩都是从这三件事来的。
 
-更深的问题是路径不成体系:配置目录里 `geocode.json` 与 `opencode.jsonc` 并存,谁生效说不清;日志目录里三种命名风格混排;GeoCode 自有的 `gee-runtime`、`qgis-pyhome`、`qgis-registry`、`store` 与内核的 `bin`、`models.json` 平铺在缓存根下,分不出谁属于谁。这是增量注入的必然结果——每加一个功能就往根目录随手放一个文件夹,没有人负责整体。
+**只改命名空间不改文件名,等于没改。** 旧版改了内核里的一个常量,四个 XDG 根随之改名,文件名
+那一层却从未触碰。用户打开自己的数据目录,看到的是一个叫 OpenCode 的程序在写文件。
 
-最隐蔽的一处在壳与内核之间。Electron 壳启动内核进程时注入 `XDG_STATE_HOME = userData`,于是内核的 state 根被搬到 `<appData>/<appId>/` 下,而 data、config、cache 三根仍在 XDG 位置。同一个产品的数据因此散在四个顶层位置,其中一根还会随启动方式(TUI 直起 / 壳拉起)漂移。需要说明:这不是旧版的私货,而是**上游桌面壳自身的设计**(state 按应用通道隔离、其余三根跨通道共享)。新版照搬体系时原样保留——这个漂移是刻意的,不要单方面把它「修」掉。
+**增量注入必然长成一团。** 两代配置文件在同一个目录里并存、谁生效说不清;自有缓存与内核产物
+平铺在同一层、分不出谁属于谁。每加一个功能就往根目录随手放一个文件夹,没有人负责整体。
 
-Windows 上还发生过真实事故:NSIS 单击安装器的安装目录取自 package.json 的 `name` 而非 `productName`,由于包名为保持合并卫生保留了 `@opencode-ai/desktop`,GeoCode 装进了 `%LOCALAPPDATA%\Programs\@opencode-aidesktop`——与上游 OpenCode 完全相同的目录,两个程序互相覆盖文件。修复靠 `extraMetadata` 在打包期改写 `name`,但已经装过旧安装器的机器会因注册表里记录的 `InstallLocation` 继续沿用老目录。**身份错误会在注册表里固化,不是重装就能自动纠正的。**
+**身份错误会在注册表里固化。** Windows 的 NSIS 安装目录取自 `package.json` 的 `name` 而非
+`productName`,GeoCode 因此装进过与上游完全相同的目录,两个程序互相覆盖文件。修复靠
+`extraMetadata` 在打包期改写 `name`,但装过旧安装器的机器会按注册表里记的 `InstallLocation`
+继续用老目录——**不是重装就能自动纠正的**。
+
+壳与内核的 state 根位置不一致(壳把它搬进 userData,其余三根留在 XDG 位置),这是**上游桌面壳
+自身的设计**,不是旧版的私货。新版原样保留,不要单方面把它「修」掉。
 
 ## 3. 与 OpenCode 的一一对应
 
-新版沿用上游的 XDG 布局(不改用各平台惯例路径),差异只在命名空间与文件名。这样做的理由是与上游对齐:内核升级时路径逻辑不会成为冲突点,行为可预测。
+沿用上游的 XDG 布局,不改用各平台惯例路径,差异只在命名空间与文件名。理由是与上游对齐:内核
+升级时路径逻辑不会成为冲突点,行为可预测。
 
-### 3.1 四根 + 临时目录
+### 3.1 四根与临时目录
 
-`xdg-basedir` 是纯环境变量实现,未设 `XDG_*` 时一律回落到家目录下的 Linux 风格路径,**Windows 亦然**。因此两个平台的相对结构完全一致,只是家目录写法不同。
+`xdg-basedir` 是纯环境变量实现,未设 `XDG_*` 时一律回落到家目录下的 Linux 风格路径,**Windows
+亦然**。两个平台的相对结构因此完全一致,只是家目录写法不同。
 
 | 根 | OpenCode | GeoCode | macOS 展开 | Windows 展开 |
 |---|---|---|---|---|
@@ -39,64 +51,59 @@ Windows 上还发生过真实事故:NSIS 单击安装器的安装目录取自 pa
 | state | `<XDG_STATE_HOME>/opencode` | `<XDG_STATE_HOME>/GeoCode` | `~/.local/state/GeoCode` | `C:\Users\<user>\.local\state\GeoCode` |
 | tmp | `<tmpdir>/opencode` | `<tmpdir>/GeoCode` | `$TMPDIR/GeoCode` | `%TEMP%\GeoCode` |
 
-### 3.2 各根内的文件
+### 3.2 命名规则与两个配置文件
 
-带商标的一律改名;不带商标的逐字保留,减少与上游的差异面。
+带商标的一律改名,不带商标的逐字保留,减少与上游的差异面。改名后的每个名字都由两个基串派生,
+完整清单是 `core/src/brand.ts` 自己(§5),本文不复述——一份清单两处抄写必然漂移。
 
-| 根 | OpenCode | GeoCode | 说明 |
-|---|---|---|---|
-| data | `opencode.db` `-shm` `-wal` | `geocode.db` `-shm` `-wal` | 打包版主库 |
-| data | `opencode-<channel>.db` | `geocode-<channel>.db` | 按发行通道分库;开发态 channel 为 `local` |
-| data | `auth.json` / `mcp-auth.json` | 同名 | 凭据,无商标。账号本身存在主库的表里,**不是文件** |
-| data | `storage/` `snapshot/` `worktree/` `tool-output/` `plans/` `repos/` | 同名 | 无商标 |
-| data | `log/opencode.log` | `log/geocode.log` | |
-| data | `log/direct/*.jsonl` | 同名 | |
-| config | `opencode.json` / `opencode.jsonc` / `config.json` | `geocode.json` / `geocode.jsonc` | **只保留一套**,不再新旧并存 |
-| config | —— | `machine.json` / `machine.jsonc` | **GeoCode 自有**:本机的地理环境描述(见下) |
-| config | `themes/` `tui/` `agents/` | 同名 | |
-| config | `node_modules/` `package.json` `package-lock.json` | 同名 | 插件安装用,npm 机制要求,不可改名 |
-| cache | `bin/` `skills/` `models.json` | 同名 | LSP 与 ripgrep 二进制、模型快照 |
-| state | `model.json` `plugin-meta.json` `locks/` | 同名 | |
-| cache | `skills/` 暂存区内 `.opencode-version` | `.geocode-version` | 技能暂存版本标记 |
-| 用户项目 `.git/` | `opencode`(项目 id 标记文件) | `geocode` | 内核写进项目 git 目录的唯一文件;改名后两个程序各记各的项目 id,互不干扰 |
-| 用户项目的分支 | `openchamber/<名字>`(壳上游) | `geocode/<名字>` | 会话移到 worktree 时建的分支。工作区目录落在我们的数据根下(`worktree/<项目 id>/`),分支却只能建在用户仓库里——worktree 与主工作区共用同一份 `.git`,这是 git 的机制。只有调用方不指定分支名时才用这个前缀,而应用里每条创建路径都指定(`ui/src/lib/worktreeSessionCreator.ts` 的 `createQuickWorktree` 连名字都自己生成),所以今天到不了;它此前也没有任何测试,绊线 `server/geocode/worktree-branch.test.js` 用真实仓库跑一遍,是这行代码的第一份覆盖 |
-| config / data / 用户项目 | `<文件名>.openchamber.backup` | `<文件名>.geocode.backup` | 壳在覆盖配置层或凭据前留下的副本(`web/server/geocode/config-backup.js`)。它由壳而非内核写出,所以旧名是 OpenChamber 的;配置层含项目层,那一份会落在**用户自己的仓库里**。没有任何代码读回它,它只供人手动恢复,因此名字必须是我们的。后缀定义在一处,两个调用点(`writeConfig`、`writeAuthFile`)与它们的测试都从那里取 |
+三处不套这条规则:
 
-GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统一收进 `cache/geo/` 一层之下,不再与内核产物平铺。这条规则对将来新增的地理能力同样生效——地理内核的任何缓存都在 `geo/` 里,永远一眼可辨。已就位四个成员:`preview/`(预览产物,每次启动清空,§7.6)、`scripts/`(Python 脚本的物化产物,内容哈希命名、变更即换名,§4.13)、`qgis-pyhome/`(符号链接农场,§4.4)、`gee-runtime/`(随执行注入的运行时库,§5.10)——章节号均指 GEOKERNEL.md。
+- `node_modules/`、`package.json`、`package-lock.json` 逐字保留,npm 机制要求;
+- 上游那些本来就不带商标的名字(`auth.json`、`storage/`、`snapshot/` 等)原样沿用;
+- **数据库按发行通道分库,而通道取自构建时的 `git branch --show-current`**
+  (`script/src/index.ts`),不是固定值。`latest`、`beta`、`prod` 三个通道落回不带后缀的
+  `geocode.db`,其余按分支名落在 `geocode-<分支>.db`。⚠️ **换个分支构建就换一个库**,上一个库
+  里的会话从界面上消失,但仍留在磁盘上。
 
-**两个配置文件的分工**必须清晰,否则用户不知道该改哪一个:
+配置目录**只保留一套**配置文件,不再新旧并存;GeoCode 自有的缓存统一收进 `cache/geo/` 一层之下,
+不与内核产物平铺。这两条直接冲着 §2 第二条教训去,对将来新增的地理能力同样生效。
+
+配置分成**两个文件**:
 
 | 文件 | 内容 | 生效方式 |
 |---|---|---|
 | `geocode.json` | 内核与 Agent 配置(模型、代理人、权限等),沿用上游语义 | 实例加载时读取 |
 | `machine.json` | **本机地理环境的描述**:各外部软件的位置与所需标识 | **保存即生效**,由地理内核监控并按域重探 |
 
-分成两个文件而非合并为一个,是因为二者的生效语义相反:一个文件内出现两种生效方式,用户无从分辨哪些改动需要重启。分开还带来两项收益——`machine.json` 写坏不波及 Agent 配置;设置界面写入 `machine.json` 时不可能损坏用户手写的内核配置。文件设计见 GEOKERNEL.md §3.1。
+不合并成一个,是因为二者的生效语义相反:一个文件里出现两种生效方式,用户无从分辨哪些改动需要
+重启。分开还带来两项收益——`machine.json` 写坏不波及 Agent 配置;设置界面写入它时不可能损坏用户
+手写的内核配置。它另有一项收益是自带「不可搬运」的语义:`geocode.json` 换机照抄即可用,而本文件
+全是绝对路径,抄过去必然全错。文件设计见 GEOKERNEL.md §3.1。
 
 **命名排除过两个候选**,理由都不是美学:
 
-- **不叫 `geo.json`**:在 GIS 应用中,名为 `geo.json` 的文件会被当作 GeoJSON 数据文件。
-- **不叫 `env.json`**:本产品自身大量操作真正的环境变量(GEOKERNEL.md §4.5、§7.3 要注入 `PROJ_LIB`、`QT_PLUGIN_PATH`、`GDAL_DATA` 等成串变量),而该名字在通行惯例中正指向环境变量文件。两个含义在同一个代码库里贴得太近,会诱发一类被容错机制吞掉的错误:GEOKERNEL.md §5.11 允许 Agent 独立写入本文件,而 §3.1 的未知键**静默忽略**规则(为键名笔误设计)会让写错的变量名解析成功、块值不变、不触发重探,**全链路无一处报错**。
+- **不叫 `geo.json`**:在 GIS 应用里,这个名字会被当成 GeoJSON 数据文件。
+- **不叫 `env.json`**:本产品自身大量操作真正的环境变量,而该名字在通行惯例中正指向环境变量
+  文件。两个含义贴得太近,会诱发一类被容错机制吞掉的错误:Agent 可以独立写入本文件,而未知键
+  **静默忽略**的规则(为键名笔误设计)会让写错的变量名解析成功、块值不变、不触发重探,
+  **全链路无一处报错**。
 
-**不做旧配置迁移**:旧版把 QGIS/GEE/GDAL 配置放在 `geocode.json` 的对应块里;新版不读取
-那些块,也不自动搬运——旧版已就地退役、配置已归档(§3.5),迁移代码只会为一台机器的一次性
-动作长期存在。升级后这些能力显示「未配置」属预期,重新填写 `machine.json` 即可。
+**不做旧配置迁移。** 旧版把 QGIS/GEE/GDAL 配置放在 `geocode.json` 的对应块里;新版不读取那些块,
+也不自动搬运——迁移代码只会为一台机器的一次性动作长期存在。升级后这些能力显示「未配置」属预期。
 
-`machine.json` 另有一项两个候选都不具备的收益:它自带「不可搬运」的语义。`geocode.json` 里是模型与代理人配置,换机照抄即可用;本文件全是绝对路径,抄过去必然全错。名字说清这一点,省掉一次用户事故。
+### 3.3 全景:一台机器上实际会出现什么
 
-### 3.3 全景:一台机器上会出现什么
-
-上面两张表按根拆开对照,这里把它们合成一棵树——**用户在自己的磁盘上实际会看到什么**。
-标 ★ 的是 GeoCode 自有,其余承自内核。
+标 ★ 的是 GeoCode 自有,其余承自内核或壳上游。**这棵树是 §6 对账的判据**,所以它必须完整:新增
+一个落盘位置而不写进来,验证就发现不了它。
 
 ```
 ~/.local/share/GeoCode/          数据根:删了会丢会话与登录
-├── geocode.db  -shm  -wal       主库:会话、消息、账号、项目登记
-├── geocode-local.db  ...        开发态按通道分库
+├── geocode-<通道>.db  -shm  -wal  主库:会话、消息、账号、项目登记(通道见 §3.2)
 ├── auth.json                    供应商凭据(OAuth 令牌与 API key)
 ├── mcp-auth.json                MCP 服务器的凭据
+├── <文件名>.geocode.backup    ★ 壳覆盖配置或凭据前留的副本,没有代码读回,只供人手动恢复
 ├── storage/                     会话消息与工具输出的正文
-├── snapshot/<项目>/<worktree哈希>/   每工作区一个 git 仓,做检查点用(★ 地理数据不入内)
+├── snapshot/<项目>/<工作区哈希>/  每工作区一个 git 仓,做检查点用(★ 地理数据不入内)
 ├── worktree/                    agent 创建的工作树
 ├── tool-output/                 超长工具输出的落盘副本
 ├── plans/                       计划模式的产物
@@ -107,41 +114,47 @@ GeoCode 自有的缓存(QGIS 注册表、GEE 运行时、技能商店目录)统�
 
 ~/.config/GeoCode/               配置根:用户手写,删了回到出厂状态
 ├── geocode.json / .jsonc        内核与 Agent 配置(模型、代理人、权限)
-├── machine.json / .jsonc      ★ 本机地理环境:QGIS/GEE/GDAL 装在哪
-├── themes/  tui/  agents/       主题、终端形态、自定义 agent
+├── machine.json / .jsonc      ★ 本机地理环境:QGIS/GEE/GDAL 装在哪(§3.2)
+├── AGENTS.md                    全局行为提示词
+├── agents/  commands/  skills/  自定义 agent、命令与技能
+├── themes/  tui/                主题与终端形态
 └── desktop/                     壳的数据根,不归内核(为什么挂在这里见 §5)
     ├── settings.json            窗口、主题、布局等桌面偏好
+    ├── preferences.json         安装档案
     ├── chats/  projects/        聊天的工作目录、按项目的壳侧设置
-    └── agent-tool/geocode-browser-plugin.js   主进程每次启动重写、内核加载的插件,装着浏览器工具与控制工具(DESKTOP.md §7.2);
-                                 ⚠️ 内核侧**也从 HOME 推**这条路径,不从自己的配置根推。两个根只在 `XDG_CONFIG_HOME`
-                                 未设时重合,而壳必须挂 HOME(理由见 §5),所以按配置根推会在用户设了该变量时
-                                 拒掉壳真实写入的文件,`loadExternal` 又是静默返回空,两个工具就凭空消失。
-                                 两边由 browser-tool.test.mjs 拿**双方的真函数**比绝对路径对账
+    ├── goals/                   会话目标
+    ├── sessions-directories.json  会话目录登记
+    ├── discovered-apps.json     已安装应用的探测缓存
+    ├── skills-catalog-cache.json  skills-github-meta.json   技能商店缓存
+    ├── install-id-<面>          三个安装标识(desktop-electron / mobile-capacitor / web)
+    ├── managed-opencode/        受管进程登记表
+    ├── jwt-secret  ui-passkeys.json  github-auth.json  quota/
+    │                            壳自己的四份凭据,`desktop_read_file` 一律拒读(§5)
+    └── agent-tool/geocode-browser-plugin.js
+                                 主进程每次启动重写、内核加载的插件,装着浏览器工具与控制工具
+                                 (DESKTOP.md §7.2)
 
 ~/.cache/GeoCode/                缓存根:可整个删掉,下次自动重建
 ├── bin/                         LSP 与 ripgrep 二进制
 ├── skills/                      技能暂存区(内含 .geocode-version 标记)
 ├── models.json                  模型目录快照
-└── geo/                       ★ 地理内核的全部缓存,一眼可辨
-    ├── preview/raster|vector/<键>/   预览产物,**每次启动整体清空**(GEOKERNEL.md §7.6)
-    ├── scripts/                 Python 脚本的物化产物,内容哈希命名
-    ├── qgis-pyhome/             符号链接农场,给 QGIS 子进程当 HOME
-    └── gee-runtime/             随执行注入的 GEE 运行时库
+└── geo/                       ★ 地理内核的全部缓存,一眼可辨(成员见 GEOKERNEL.md)
 
-~/.local/state/GeoCode/          状态根:小而重要,记"上次选了什么"
+~/.local/state/GeoCode/          状态根:小而重要,记「上次选了什么」
 ├── model.json                   上次使用的模型
 ├── plugin-meta.json             插件元信息
 └── locks/                       跨进程文件锁
 
 $TMPDIR/GeoCode/                 临时根:进程内的短命文件
 
-<appData>/GeoCode/               Electron 的 userData:只有 Chromium 自己的东西(Cookie、本地存储、缓存、浏览器面板的会话分区)
+<appData>/GeoCode/               Electron 的 userData:只有 Chromium 自己的东西(Cookie、本地
+                                 存储、缓存、浏览器面板的会话分区)
 
-~/Library/Logs/GeoCode/          壳侧日志:macOS 惯例位置,Windows 上落在 <appData>/GeoCode/logs
-└── main.log                     滚动,上限 5 MB
+~/Library/Logs/GeoCode/main.log  壳侧日志:macOS 惯例位置,Windows 落在 <appData>/GeoCode/logs
 
 <用户项目>/                       GeoCode 在用户项目里的全部接触面
-├── .git/geocode              ★ 项目 id 标记(一行文本,见下),始终写入
+├── .git/geocode              ★ 项目 id 标记(见下),始终写入
+├── .browser/                 ★ 智能体截图,只在它调用截图动作时创建(DESKTOP.md §7.2)
 └── .geocode/                    项目级配置,与全局同构;用户自建,GeoCode 不主动创建
     ├── geocode.json / .jsonc    覆盖全局设置
     ├── agent/  command/  skill/ 项目专属定义
@@ -150,54 +163,39 @@ $TMPDIR/GeoCode/                 临时根:进程内的短命文件
 
 三条值得单独记住:
 
-- **地理数据从不进快照仓库**。用户项目里的 `.tif`、`.gpkg`、`.shp` 及其附属文件被检查点排除,否则一景遥感影像就能让 `snapshot/` 比项目本身还大(GEOKERNEL.md §10.1 #6);
-- **`cache/geo/` 可以随时整个删掉**。四个成员都是可重建的:预览产物本来就每次启动清空,脚本与运行时库按需物化,链接农场重建即可;
-- **写进用户项目的只有 `.git/geocode`**。`.geocode/` 是用户自己建的,GeoCode 不主动创建它;写进去的只有计划文件,而且要实验性计划模式启用才会发生。上游会往每个配置目录(**含项目里的那个**)装 `@opencode-ai/plugin` 并写一份 `.gitignore`,那是为了让用户自写的插件能 import SDK——GeoCode 不加载插件,这两件事一并去掉了(KERNEL.md 屏蔽清单)。项目目录里因此不会出现 `node_modules/`。
+- **地理数据从不进快照仓库。** 用户项目里的 `.tif`、`.gpkg`、`.shp` 及其附属文件被检查点排除,
+  否则一景遥感影像就能让 `snapshot/` 比项目本身还大(GEOKERNEL.md §10.1)。
+- **`cache/geo/` 可以随时整个删掉。** 成员全部可重建:预览产物每次启动清空,脚本与运行时库按需
+  物化,链接农场重建即可。
+- **主动写进用户项目的只有两处**:`.git/geocode` 每次都写,`.browser/` 只在智能体调用截图动作时
+  建。`.geocode/` 是用户自己建的;写进去的只有计划文件,且要实验性计划模式启用才会发生。上游会往每个配置目录(**含项目里的那个**)装 `@opencode-ai/plugin`
+  并写一份 `.gitignore`,那是为了让用户自写的插件能 import SDK——GeoCode 不加载插件,这两件事
+  一并去掉了(KERNEL.md 屏蔽清单),项目目录里因此不会出现 `node_modules/`。
 
-OpenChamber 迁入后同样不得产生 `~/.config/openchamber`、`~/.config/opencode` 或
-`~/.local/share/opencode`:Shell 偏好归上表的 `desktop/`,Agent 配置与认证归上表中的 GeoCode
-XDG 根。完整所有权见 `DESKTOP.md` §8,迁移批次与零访问验收见 §10 阶段 6;OpenChamber 配置页面的
-逐项处置与 Kernel API 边界归 §8.1 与阶段 2。
+**两套根在支持的两个平台上都不相交。** 内核走 §3.1 的 XDG 布局,Electron 的 userData 在 macOS 是
+`~/Library/Application Support/GeoCode`、Windows 是 `%APPDATA%\GeoCode`,分处 `%USERPROFILE%` 下
+的不同子树。⚠️ **Linux 会撞**——那里 Electron 的 `appData` 就是 `~/.config`,userData 因此等于
+内核的配置根。我们只支持 macOS 与 Windows(`CONVENTIONS.md` §8),但壳里的 Linux 分支还在,谁
+将来打开它,必须先处理这处重叠。
 
-**Electron 的 userData 与内核的根,在支持的两个平台上都不相交。** 内核走上表的 XDG 布局,userData
-在 macOS 是 `~/Library/Application Support/GeoCode`,Windows 是 `%APPDATA%\GeoCode`。Windows 上
-也不撞,是因为 `xdg-basedir` **不区分平台**——没有 `XDG_*` 时它一律回落到 `~/.config`、
-`~/.local/share` 这样的 unix 形态,与 `%APPDATA%` 分处 `%USERPROFILE%` 下的不同子树。
-
-⚠️ **Linux 会撞,而代码里保留着 Linux 分支。** Electron 的 `appData` 在 Linux 上**就是**
-`~/.config`,userData 因此等于 `~/.config/GeoCode`——正是内核的配置根。我们只支持 macOS 与
-Windows(`CONVENTIONS.md` §8),但壳的 `main.mjs` 与打包配置里的 Linux 分支还在,谁将来打开它,
-必须先处理这处重叠。
-
-日志同样是两套,排障时要一起取:壳的在 `~/Library/Logs/GeoCode/`(Windows 落在 `<userData>/logs`,
-因为 electron-log 取 `app.getPath('logs')`,而这个值本身分平台),内核的在上表的 `log/`。壳日志记
-窗口与进程生命周期,内核日志记会话与工具执行,不合并。应用菜单「Show Diagnostics」生成的排错报告按
-这两处列日志位置:内核的目录名手抄在 `ui/src/geocode/kernel-roots.ts`,壳的手抄在
-`ui/src/lib/openCodeStatus.ts`,分别由 `kernel-roots.test.ts` 与 `desktop-identity.test.mjs` 对账。
-
-⚠️ **`app.setName()` 单独不改 `userData`,也不改 `logs`**(实测:调用后即使等到 `whenReady`,两者
-仍是默认名派生的)。真正让它们落对位置的是两条不同的路:**打包版**靠 electron-builder 把
-`productName` 写进 bundle,进程启动时默认名就已经是 `GeoCode`;**开发版**靠显式
-`setPath('userData', …)`,而 `logs` 是 `setName` 与那次 `setPath` 的**组合副作用**——只改名不生效,
-只设路径也不生效,两者都做才会重算。这条组合依赖很脆:上游哪天去掉开发版的 `setPath`,开发日志
-会无声地掉回 `~/Library/Logs/Electron/`。
-
-开发版与打包版的**壳日志目录相同**(都是 `~/Library/Logs/GeoCode/`),只有 userData 分开。这与
-§7 记的内核数据未隔离是同一类问题,一并处理。
+日志是两套,排障时一起取:壳日志记窗口与进程生命周期,内核日志记会话与工具执行,不合并。
 
 #### `.git/geocode`:项目身份
 
-内容是一行 id。会话、检查点仓库、工作树全部以它作键(`data/snapshot/<项目id>/…`),所以这个
-id **必须跨时间稳定**——一旦变了,用户之前的会话就还在磁盘上但没人找得到。
+内容是一行 id。会话、检查点仓库、工作树全部以它作键,所以这个 id **必须跨时间稳定**——一旦变了,
+用户之前的会话就还在磁盘上但没人找得到。
 
-id 按三档推导:**远端 URL 的哈希** → **本文件记的值** → **首个根提交的哈希**。既然一三档都能
-算出来,为什么还要存文件?**因为它们都会变**:本地 `git init` 起步的项目用根提交推导,等用户
-某天把它推上 GitHub,规则改用远端——若无本文件,那一刻之前的全部历史就此失联。文件记住上次
-用的是哪个,解析时一并返回,调用方据此迁移。改写过历史(rebase 到根)是同一类情形。
+id 按三档推导:**远端 URL 的哈希** → **本文件记的值** → **首个根提交的哈希**。既然一三档都能算出
+来,为什么还要存文件?**因为它们都会变**:本地 `git init` 起步的项目用根提交推导,等用户某天把它
+推上 GitHub,规则改用远端——若无本文件,那一刻之前的全部历史就此失联。文件记住上次用的是哪个,
+解析时一并返回,调用方据此迁移。改写过历史(rebase 到根)是同一类情形。
 
-**放在 `.git/` 内部而非项目根目录**,因为 git 不跟踪自己的元数据目录:它不出现在 `git status`
-里、不会被误提交、同事 clone 时也不会带走你的项目 id。写入位置取 git 的 common directory,
-因此一个仓库的多个工作树共享同一个 id,而不是各记各的。
+**放在 `.git/` 内部而非项目根目录**,因为 git 不跟踪自己的元数据目录:它不出现在 `git status` 里、
+不会被误提交、同事 clone 时也不会带走你的项目 id。写入位置取 git 的 common directory,因此一个
+仓库的多个工作树共享同一个 id,而不是各记各的。
+
+壳与内核**共用这一个文件**,这是安全的:内核按「远端 → 本文件 → 根提交」取值,壳写进去的值永远
+盖不掉它优先的远端哈希,而没有远端时两侧推出的是同一个根提交。
 
 ### 3.4 系统身份
 
@@ -205,253 +203,166 @@ id 按三档推导:**远端 URL 的哈希** → **本文件记的值** → **首
 |---|---|---|---|
 | bundle id / appId | `ai.opencode.desktop` | `ai.geocode.desktop` | macOS 包标识;Windows 注册表键名 |
 | 通道变体 | `.dev` / `.beta` 后缀 | 同构 | |
-| URL 协议 | `opencode://` | `geocode://` | 深链;注册在系统。**改名的另一半在渲染端**:`ui/src/lib/url.ts` 的 `BLOCKED_APP_LINK_SCHEMES` 必须同步加上自家协议(上游那一对原样留着),否则聊天内容里的 `geocode://` 会被当成普通第三方应用深链、可点、且「信任」之后不再询问。两处由 `desktop-identity.test.mjs` 钉住 |
-| 产品名 | `OpenCode` | `GeoCode` | 显示名。用户与 Agent 看得到的文字里只把商标名 OpenChamber / OpenCode 换成 GeoCode,措辞照上游(如窗口标题 `GeoCode - AI Coding Assistant`、托盘 `Quit GeoCode`);代码标识、存储键名等内部名字非必要不改;指真实外部服务(如 OpenCode Zen)或属模型请求标识(见下方末行)的不换(2026-09-14 用户定)。界面里写死的提示与报错、随附件送进模型的截断与省略标记同此,绊线在 `ui/src/geocode/visible-brand.test.ts`。三份产品语言字典同此(2026-09-16):设置侧栏两个分组原叫 OpenChamber 与 OpenCode,同屏显示,机械替换会撞成两个 GeoCode,定为 GeoCode 与 Agent(简中「智能体」,繁中照其字典通篇的写法仍作 Agent);两句供应商密钥说明里的 OpenCode 指内核,改写成「密钥存在本机 GeoCode 的凭据文件里,不写进配置文件」;用量页保存失败的兜底提示对所有供应商生效,改成不点名供应商。用户看不到的键(已关的面、无调用方的键)不改。GitHub 授权两句原先因上游 OAuth 身份暂留,2026-09-19 随自有应用接入一并改为 GeoCode,迁移规则见 DESKTOP.md §7.2;绊线在 `ui/src/geocode/locale-brand.test.ts`,它按键前缀与逐键清单豁免这些,其余键的值出现 OpenChamber / OpenCode 即红。2026-09-17 判据放宽为「用户有可能看见的都换」,只在出错、竞态或兜底时出现的也算;应用发给模型厂商的内容一律不换(请求头、User-Agent、归属头、授权地址里的 originator)。壳服务端据此换了原样上屏的报错与提示、写进用户仓库的暂存默认名、听写子进程名,迷你聊天窗标题与通知兜底标题同批;Help 菜单的反馈入口指向 GeoCode 的发布仓库 `zzhonglei/GeoCode-Release`,Discord 一项屏蔽。上游 `lifecycle.test.js`、`opencode-proxy.test.js`、`session-runtime.test.js` 里断言原文的几条按设计变红。界面里同批:删除 MCP 服务器后的提示不换商标,改走新建与更新已用的本地化提示(服务端那句叫人重启,而「应用」什么都不重启);默认主题名 OpenChamber 改为 Default(主题 id 不动,存过的设置照旧)、技能来源徽标、exe.dev 取令牌命令里的标签、诊断报告的字段名;消息里的 @ 智能体提及不再链到 opencode.ai 文档,导读面板打开 OpenChamber 文档站的「?」按钮隐藏。内核里同批:MCP 与供应商登录后浏览器里的 OAuth 回调页(OpenCode 字标留到换图标那一批)、DigitalOcean 与 Snowflake 的授权说明、shell 模式传给 shell 的 `$0`(bash 自己的报错以它开头);三句教用户跑 `opencode auth` 的报错改为指向 Providers 设置,因为 GeoCode 没有 CLI;内置配置技能改名 `customize-geocode`,描述与正文等用户自己改,上游 `core/test/plugin/skill.test.ts` 因此按设计变红。回调页、两段授权说明与三句报错落在冻结区,按细化后的红线只动给用户看的文字(`CONVENTIONS.md §9`)。绊线在 `web/server/geocode/visible-brand.test.js`、`electron/geocode/desktop-identity.test.mjs`、`ui/src/geocode/visible-brand.test.ts` 与内核的 `core/test/geocode-brand.test.ts`。只换了商标、但说的事在 GeoCode 里不成立的句子(提到网页端、手机、服务器、重启或已关的功能)同日改写成本机成立的说法,措辞从简,不写技术细节;上游自己本来就不准的句子不改(2026-09-17 用户定),绊线在 `ui/src/geocode/locale-behaviour.test.ts`,只断言不再说那件做不到的事。 |
-| Windows 安装目录 | 由 package.json `name` 推导 | 经 `extraMetadata` 改写为 `GeoCode` | **必须显式改写**,否则与上游同目录 |
-| Electron userData | `<appData>/<appId>` | `<appData>/GeoCode` | 壳自己的数据;取显示名而非 appId,`app.setName` 一句带出,用户在 Finder 里看到的与应用名一致 |
-| 应用日志 | `<userData>/logs` | 随平台惯例:macOS `~/Library/Logs/GeoCode`,Windows `<userData>/logs` | electron-log 取 `app.getPath('logs')`,不覆写;打包版由 `productName` 写进 bundle 带出,开发版见下 |
-| 浏览器面板 partition | `persist:openchamber-browser`(壳上游) | `persist:geocode-browser` | 主进程只对该 partition 的视图回答截图与清除数据;渲染端 `BrowserPane.tsx` 手抄一份,`desktop-identity.test.mjs` 钉住两份一致 |
-| 打包 UI 的自有协议 | `openchamber-ui://app`(壳上游) | `geocode-ui://app` | 打包版与 `electron:dev:bundled` 的窗口都从这个源载入。三处要认这个源:服务器的 CORS 白名单(`web/server/geocode/shell-identity.js`)与渲染端判断「当前就是本机实例」那处(`ui/src/lib/desktopCurrentHost.ts`)各手抄一份;preload 不抄——它随安装包**原样复制、不参与打包**(`package.json` 的 `build.files`),import 不到身份模块,所以由主进程经 `--openchamber-packaged-origin` 把算好的值传进去。三处都由 `desktop-identity.test.mjs` 钉住,其中 literal 扫描的文件清单取自 `build.files` 而不是另列一份——preload 当初正是因为不在那份清单里,才留着上游的源比对了很久 |
-| mDNS 服务名 | `opencode-<port>` | `geocode-<port>` | 局域网发现 |
-| mDNS 默认域名 | `opencode.local` | `geocode.local` | 用户可在配置中覆盖 |
+| URL 协议 | `opencode://` | `geocode://` | 深链,注册在系统。改名的另一半在渲染端:聊天内容里的自家深链必须进拦截清单,否则会被当成普通第三方应用深链、可点、且信任之后不再询问 |
+| 打包 UI 的自有协议 | `openchamber-ui://app` | `geocode-ui://app` | 打包版窗口从这个源载入。服务器的 CORS 白名单与渲染端「当前就是本机实例」的判断各持一份手抄 |
+| 产品名 | `OpenCode` | `GeoCode` | 显示名,判据见下 |
+| Windows 安装目录 | 由 `package.json` 的 `name` 推导 | 经 `extraMetadata` 改写为 `GeoCode` | **必须显式改写**,否则与上游同目录(§2) |
+| Electron userData | `<appData>/<appId>` | `<appData>/GeoCode` | 取显示名而非 appId,用户在 Finder 里看到的与应用名一致 |
+| 应用日志 | `<userData>/logs` | macOS `~/Library/Logs/GeoCode`,Windows `<userData>/logs` | electron-log 取 `app.getPath('logs')`,不覆写 |
+| 浏览器面板 partition | `persist:openchamber-browser` | `persist:geocode-browser` | 主进程只对该 partition 的视图回答截图与清除数据;渲染端手抄一份 |
+| mDNS 服务名与域名 | `opencode-<port>` / `opencode.local` | `geocode-<port>` / `geocode.local` | 局域网发现,域名可在配置中覆盖 |
 | macOS MDM plist 域 | `ai.opencode.managed` | `ai.geocode.managed` | `/Library/Managed Preferences/` 下的策略文件名 |
-| 系统托管配置目录 | `/Library/Application Support/opencode`(macOS)/ `%ProgramData%\opencode`(Windows) | 同构,`GeoCode` | 目录内的配置文件同样按 `geocode.json(c)` 命名 |
-| MCP 客户端标识 | 握手 `opencode`;OAuth 动态注册 `OpenCode` 与 `https://opencode.ai` | 握手 `geocode`(`Brand.name`);注册 `GeoCode` 与 `https://github.com/zzhonglei/GeoCode-Release`(由 `Brand.dirName` 派生,与桌面端检查更新用的是同一个仓库) | 握手名每次连接任何 MCP 服务器都会发出;注册信息只在服务器要求 OAuth 且尚未注册时发出,显示在授权页上。已注册过的服务器按地址复用存下的客户端信息,改名不触发重新授权。它不属模型请求、不在冻结区,所以换(2026-09-14 用户定);握手里的版本号仍是内核构建版本 |
-| 环境变量(内核内部) | `OPENCODE_*` | **原样保留** | 降格为壳与内核之间的内部 ABI,人类不再直接书写;产品没有公开的环境变量面(§3.6) |
-| npm 包名 / User-Agent / config schema URL / 模型目录 URL | 上游值 | **原样保留** | 同上。模型目录取自 `https://models.opencode.ai`,请求头是 `opencode/<通道>/<版本>/<客户端>`——两者是同一条链路的两半。**刻意不换**:产品小众,借上游已有的商标身份接入各家 LLM 供应商更现实,而用户体感没有差别(2026-09-09 用户定)。这一行同时是启动期出站连接清单里 `models.opencode.ai` 的判决 |
+| 系统托管配置目录 | `/Library/Application Support/opencode`、`%ProgramData%\opencode` | 同构,`GeoCode` | 目录内配置文件同样按 `geocode.json(c)` 命名 |
+| MCP 客户端标识 | 握手 `opencode`;OAuth 动态注册 `OpenCode` | 握手 `geocode`;注册 `GeoCode` 与自家发布仓库 | 握手名每次连接都发出;注册信息显示在授权页上。已注册过的服务器按地址复用,改名不触发重新授权 |
+| 环境变量(内核内部) | `OPENCODE_*` | **原样保留** | 降格为壳与内核之间的内部 ABI,人类不再直接书写(§3.6) |
+| npm 包名 / User-Agent / schema URL / 模型目录 URL | 上游值 | **原样保留** | 借上游已有的商标身份接入各家 LLM 供应商更现实,用户体感没有差别 |
+
+⚠️ **`app.setName()` 单独既不改 `userData`,也不改 `logs`。** 打包版落对位置靠的是打包器把产品名
+写进 bundle,进程启动时默认名就已经对了;开发版靠显式设置 userData 路径,而**日志目录是「改名」与
+「设路径」两件事的组合副作用**——只做一件都不生效。这条依赖很脆:上游哪天去掉开发版那次设置,
+开发日志会无声地掉回 Electron 的默认目录,而没有任何东西会报错。
+
+**改牌的判据:用户有可能看见的都换**,包括只在出错、竞态或兜底时才出现的文字;**应用发给模型
+厂商的内容一律不换**(请求头、User-Agent、归属头、授权地址里的 originator)。代码标识与存储键名
+非必要不改,指真实外部服务的名字(如 OpenCode Zen)不改。
+
+只换了商标、但说的事在 GeoCode 里不成立的句子(提到网页端、手机、服务器或已关的功能),同批改写
+成本机成立的说法,措辞从简;上游自己本来就不准的句子不改。
+
+逐批的处置记录与绊线清单在 `DESKTOP.md` §7 与 `.artifacts/DECISIONS.md`。
 
 ### 3.5 Windows 注册表
 
-NSIS 单击、按用户安装(`oneClick: true`, `perMachine: false`)会写入以下位置,全部在 `HKCU` 下,不触碰 `HKLM`:
+NSIS 单击、按用户安装(`oneClick: true`, `perMachine: false`)只写 `HKCU`,不触碰 `HKLM`:
 
 | 键 | 内容 | 隔离要点 |
 |---|---|---|
-| `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\<appId>` | 卸载信息、`InstallLocation`、显示名与版本 | 键名即 appId,改了 appId 就天然隔离 |
-| `HKCU\Software\Classes\<scheme>` | `geocode://` 协议处理器 | scheme 必须改,否则抢注上游深链 |
-| `HKCU\Software\Classes\Applications\<exe>` | 可执行文件关联 | 随可执行文件名变化 |
+| `…\CurrentVersion\Uninstall\<appId>` | 卸载信息、`InstallLocation`、显示名与版本 | 键名即 appId,改了 appId 就天然隔离 |
+| `…\Classes\<scheme>` | `geocode://` 协议处理器 | scheme 必须改,否则抢注上游深链 |
+| `…\Classes\Applications\<exe>` | 可执行文件关联 | 随可执行文件名变化 |
 | AppUserModelId | 任务栏图标归并与通知归属 | 壳启动时显式设置为 appId |
 
-`InstallLocation` 的固化行为需要特别记住:安装器在决定目标目录时优先读这个键,而不是重新推导默认值。这意味着一次错误的安装目录会跨版本延续,唯一的纠正方式是完整卸载后重装。
+`InstallLocation` 的固化行为要特别记住:安装器决定目标目录时优先读这个键,而不是重新推导默认值。
+一次错误的安装目录会跨版本延续,唯一的纠正方式是完整卸载后重装。
 
 ### 3.6 环境变量:边界在进程,规则在 `ENVIRONMENT.md`
 
-内核源码里从环境读 `OPENCODE_*` 的位置有数十处、散布二十余个文件,其中几处落在 OAuth 冻结区。在源码层
-逐处改名既违背薄内核铁律,还有一个更隐蔽的恶果:上游每个版本都在新增 `OPENCODE_*`,合并后它们不会自动
-跟随改名,产品会退化成一半 flag 听新名、一半听旧名的混杂态。所以处理做在**进程边界**而非内核。
+内核源码里读 `OPENCODE_*` 的位置有数十处、散布二十余个文件,其中几处落在 OAuth 冻结区。在源码层
+逐处改名既违背薄内核铁律,还有一个更隐蔽的恶果:上游每个版本都在新增 `OPENCODE_*`,合并后它们
+不会自动跟随改名,产品会退化成一半 flag 听新名、一半听旧名的混杂态。所以处理做在**进程边界**。
 
-规则、变量分类、时序、绊线与决策记录全部在 `ENVIRONMENT.md`,本节只留一句:**带商标的剥,不带商标的
-不动**——`OPENCODE_*`、`OTEL_*`、`OPENCHAMBER_*` 一律不接,其余原样放行。`XDG_*` 属于后者:四个数据根
-由用户环境决定(§3.1),GeoCode 只保证壳与内核对它的解读一致。
-
-曾经有一条 `GEOCODE_*` → `OPENCODE_*` 的翻译通道,已从产品中删除;`scripts/kernel-tui.sh` 的开发沙箱仍
-保留自己那份映射,仅此脚本,产品无此通道。
+本节只留一句:**带商标的剥,不带商标的不动**。`XDG_*` 属于后者——四个数据根由用户环境决定,
+GeoCode 只保证壳与内核对它的解读一致。产品没有公开的环境变量面。
 
 ## 4. 与旧版 0.9.x 的交接
 
-命名空间不做通道派生,也不为新旧共存设计任何机制:新版直接占用 `GeoCode`,内核里的改动就是一个字符串。这个决定有一个前提——**旧版在开发机上就地退役**。macOS 的 APFS 与 Windows 的 NTFS 默认对大小写不敏感,`GeoCode` 与旧版的 `geocode` 解析为同一个目录,共存不可能靠大小写实现;与其为过渡期发明一套派生命名,不如清场。开发机上旧版的 data、config、state 三根已归档(cache 可再生,不留),归档件保存在家目录,此后该目录由新版独占。**旧版应用从此不再启动**——一旦启动它会重建 `geocode` 目录,与新版数据混写在同一个物理位置。
+命名空间不做通道派生,也不为新旧共存设计任何机制:新版直接占用 `GeoCode`。这有一个前提——
+**旧版在开发机上就地退役**。macOS 的 APFS 与 Windows 的 NTFS 默认对大小写不敏感,`GeoCode` 与
+旧版的 `geocode` 解析为同一个目录,共存不可能靠大小写实现;与其为过渡期发明一套派生命名,不如
+清场。**旧版应用从此不再启动**——一旦启动它会重建目录,与新版数据混写在同一个物理位置。
 
-日常开发照旧不落真实目录:沙箱脚本(`scripts/kernel-tui.sh`)通过 `XDG_*` 环境变量把一切收进独立沙箱,删目录即工厂重置。真实的 `GeoCode` 目录只由打包后的应用写入。
+日常开发不落真实目录:沙箱脚本通过 `XDG_*` 把一切收进独立沙箱,删目录即工厂重置。真实的
+`GeoCode` 目录只由打包后的应用写入。
 
-真正的交接义务是**消息迁移**。用户的会话消息是最重要的资产,正式版必须提供从旧版(内核 v1.15.6 世代)到新版(v1.18.18 世代)的迁移通道。会话数据存在于数据库与 `storage/` 两处,中间隔着十几个内核 schema 迁移版本,直接拷贝文件不可行;迁移工具是一项独立工程,排期在界面可用之后、正式发布之前。开发机的归档备份同时充当这个工具的第一份真实测试数据。
+真正的交接义务是**消息迁移**。会话数据存在数据库与 `storage/` 两处,中间隔着十几个内核 schema
+迁移版本,直接拷贝文件不可行;迁移工具是一项独立工程,排期在界面可用之后、正式发布之前。
 
 ## 5. 实现方式
 
-身份字符串集中到 `core/src/brand.ts` 这一个模块,所有消费点引用它,不再散落字面量。全部字段由**两个基串**派生:
+身份字符串集中在 `core/src/brand.ts` 一个模块,所有消费点引用它,不再散落字面量。全部字段由两个
+基串派生:
 
 ```ts
 const dirName = "GeoCode"   // XDG 各根与系统目录的命名空间(大小写形态)
 const name = "geocode"      // 文件名与网络标识的基串,也是配置文件的基名
 ```
 
-派生出的是数据库文件名、日志文件名、两个配置文件名、项目配置目录、计划文件路径片段、
-mDNS 主机与服务名、macOS 托管配置域、项目 id 标记文件、技能暂存版本标记、临时目录前缀。
+**不写平铺字面量**,这不是简洁的问题:文件名与「扫描它的那个基名」必须一致,写成两个字面量就是
+两处要人工同步的地方;派生之后它们是同一个表达式。收益也不在少写几行,而在审计——上游将来新增
+一处硬编码 `opencode` 字面量时 typecheck 不会报错,但对照这一个模块做一次 grep 就能发现遗漏。
+路径层的正确性无法靠类型系统保证,只能靠可审计性保证。
 
-**不写平铺字面量。** 这不是简洁的问题:文件名与「扫描它的那个基名」必须一致,写成两个字面量就是两处需要人工保持同步的地方。派生之后它们是同一个表达式。
+壳与内核必须用同一套常量来源,避免两侧各自演化。唯一的例外是 `electron/package.json` 的 `build`
+块:JSON 取不到那份常量,只能抄一份,由绊线对住。
 
-其中两项是这条原则的具体后果,值得单独说明。`projectDir` 与 `configJson` 同源,因为**加载器先判断「这个目录是不是项目配置目录」,再进去找配置文件**——两者若分别写死,判断会通过而文件永远找不到,且不报错。`plansSegments` 给的是**路径片段数组而非字符串**,因为有两个调用点必须一致:一处把它接在 worktree 下面写文件,另一处把它接成 glob 作为计划 agent 的编辑授权。展开同一个数组,「写到哪」与「允许改哪」就不可能分家。
+**写入方与读取方必须成对。** 它们分家时不报错:写入的命令照样报告成功,而写下去的东西永远没人
+读。这条规律有三个形状:
 
-这类「写入方与读取方必须成对」的要求不是理论:全局 `mcp add` 曾经写 `opencode.json`、而加载器早已改读 `geocode.json`,于是命令报告成功、服务器永不出现。现在每一处改名都配一个往返测试。
+- **路径本身要同源。** 判断「这个目录是不是项目配置目录」与「进去找哪个配置文件」若分别写死,
+  判断会通过而文件永远找不到。`plansSegments` 给的是路径片段数组而非字符串,因为「写到哪」与
+  「允许计划 agent 改哪」展开的必须是同一个数组。
+- **读取时机也要对齐。** 壳的 `main.mjs` 里,有的路径在模块顶层就求值成字符串、此后不再重算,
+  有的是惰性的、每次调用都跟随。所以注入壳数据根必须**紧跟身份设置**,晚一步对某些读取方就已经
+  太晚。两种取值方式在同一文件里并存,**不能靠看一眼判断,读取方要逐个查**。
+- **前后端各自自洽不等于对齐。** 同一条路径的读取方在渲染端、写入方在服务端时,单看任何一侧都
+  正常。绊线因此成对写,一次钉住两端。
 
-同一条规律在壳侧还有第二个形状,变量换成了**读取时机**:`main.mjs` 的 `sshManager` 在模块顶层就把
-`settingsFilePath()` 求值成字符串、此后不再重算,而同一文件里的 `buildInstalledAppsCachePath()` 是
-惰性的、每次调用都跟随。所以注入 `OPENCHAMBER_DATA_DIR` 必须**紧跟身份设置**——userData 一确定就注入;
-放到导入 Shell Runtime 之前那一步已经太晚,那对 Shell Runtime 够用,对 `main.mjs` 自己不够。
-两种取值方式在同一文件里并存,**不能靠看一眼判断,读取方要逐个查**。
+**壳的数据根挂在 HOME 下,不挂在 Electron 的 userData 下,`.config` 也是写死的而不是读
+`XDG_CONFIG_HOME`。** 两条都是被渲染进程逼出来的:它要按 HOME 自己拼一份 chats 根来兜底,并据此
+判断一个目录是不是 chat,而它**读不到环境变量**。**渲染进程算不出来的根,就是两半迟早会各说各话
+的根。** 上游把这个根挂在 HOME 下正是同一个理由。
 
-**这个根挂在 HOME 下,不挂在 Electron 的 userData 下,`.config` 也是写死的而不是读
-`XDG_CONFIG_HOME`。** 两条都是被渲染进程逼出来的:它按 HOME 自己拼一份 chats 根,在 `/api/fs/home` 的回答到达之前
-或缺字段时拿它兜底,并据它判断一个目录是不是 chat——而它**读不到环境变量**。**渲染进程算不出来的根,就是两半迟早会
-各说各话的根。** 曾经就是:一次改动把注入端搬到 userData,而 `chatDirectories.ts` 还在按 HOME 拼
-OpenChamber 的目录,于是 GeoCode 在别人的配置目录里建 chats,而服务端的 `managedProjectRoots`
-——决定一个 chat 会话的记忆算哪个项目——指着一个那些 chats 从不出现的地方。上游把这个根挂在 HOME
-下正是同一个理由。
-
-代价要说清楚:开发版与打包版因此**共用一套壳数据**(settings、chats、projects)。userData 侧靠
+代价要说清楚:开发版与打包版因此**共用一套壳数据**(settings、chats、projects),userData 侧靠
 `GeoCode Dev` 分开的只是 Chromium 自己的东西。上游也是这个形状。
 
-被改过的那几处,fallback 指向 `~/.config/GeoCode/desktop`,不是上游的 `~/.config/openchamber`。
-产品路径本来就走不到 fallback——Electron main 一定注入,那条注入配了绊线,并且连「注入排在第一个
-读取者之前」一起断言。但**只要那个字面量还在,就仍有代码路径能写进别人的目录**:实测过,跑一次
-web 包全量测试就会落一个目录出来。带 `desktop/` 这一段是必须的:`.config/GeoCode` 本身是内核的
-配置根,而 macOS 文件系统大小写不敏感,写 `geocode` 会落进同一个目录,把壳的 settings 与 chats
-混进 Agent 配置里。
+根名带 `desktop/` 这一段是必须的:`.config/GeoCode` 本身是内核的配置根,而 macOS 文件系统大小写
+不敏感,写 `geocode` 会落进同一个目录,把壳的 settings 与 chats 混进 Agent 配置里。
 
-`package-manager.js` 用**早退**而不是改写:它的平台分支与末尾的 fallback 逐字节留着,只是永不
-到达——上游改动那几行仍能自动合入(`CONVENTIONS.md` §5)。
+壳侧还有第二个自有模块,管的是另一件事:它给出**内核**的根,供壳里那几处必须读内核文件的地方
+引用。它有两处不能照抄上游——**必须认 `XDG_*`**,否则开发沙箱里壳读一份凭据、内核写另一份,
+两边都不报错;**两个基串是手抄件**,因为 `web` 是 `electron` 的依赖而非反向,内核又是另一个安装
+根,import 不过去,跨文件的抄件正是绊线的适用场景。
 
-### 一次全面审计,和它推翻的三个判断
+这一层必须对齐的理由比命名整洁强得多:壳读配置层的那个函数是**凭据入口**。它读错根,读到的就是
+用户真实的 OpenCode 配置文件,而会话空闲时触发的小模型调用会把里面的 `apiKey` 连同 `baseURL` 一起
+送进 `fetch`,默认开、不需要用户操作。**壳读错一个配置根,后果不是设置丢失,是拿别的产品的凭据去
+打别的端点。**
 
-2026-08-30 对全树做了一次穷尽测绘(六个方向并行:内核根、OpenChamber 根、外部进程、跨产品读取、
-前端身份、内核残留),查出约五十项,分四层。**在此之前的做法是一批一批发现、一批一批改**,而这次
-测绘推翻了三个当时以为成立的判断:
+改读取方时**必须同时数清写入方**:有几处模块自己拼配置路径、不经统一入口取,改了读取方而不动
+它们,写进去的文件就再没人读。
 
-**① 补丁可以是对的、被绊线钉住的、而且是死代码。** `mdns.ts` 的 `domain ?? Brand.mdnsHost` 写得
-没错,`geocode-brand.test.ts` 也钉住了那一行——但 `cli/network.ts` 给 yargs 的默认值是
-`"opencode.local"`,于是 `domain` 永不为 `undefined`,回退分支从未执行。**GeoCode 一直在局域网上
-广播 `opencode.local`,而三层检查全绿。** 现在两个文件各占禁止字面量表的一行,并且默认值改为派生。
+`desktop_read_file` 对四份壳凭据与内核的凭据一律拒读,匹配**折叠大小写**——macOS 与 Windows 默认
+大小写不敏感,逐字比较等于只拦住一种拼法。代价是大小写敏感的文件系统上会误拒一个真叫 `.SSH` 的
+目录,那是一次被拒的读取,不是泄漏。
 
-**② 一条 grep 可以把自己关进盲区。** 阶段 6 原先记的定位命令带一个过滤器,本意是排除三元里读变量
-的分支,实际把写在 else 分支上的硬编码 fallback 一起吃掉——报告 2 处,真实 13 处。**批 2 就是照着
-那份残缺清单做的。** 命令已更正,注释里点名了漏掉的十一个文件。
+**关闭一条跨模块的路径时,中间状态必须是合法状态。** 「读关了写没关」比两头都开更糟——用户会
+造出一个自己再也管不了的东西。判断方式很直接:把改到一半的产品交给用户用一遍,想想他会撞上
+什么。同理,**一个只读的清单和一个可写的清单危险程度差着量级**,不能因为长得像就一起归类。
 
-**③ 「读写自洽因此不算 split」是错的判断。** `snippets.js`、`agents.js`、`commands.js` 的项目级路径
-自读自写,当时据此判为「不是 split,可以缓」。但它们**往用户的仓库里写** `.opencode/`,而且
-`agents`/`commands` 两处内核确实会扫(`{agent,agents}/**/*.md`、`{command,commands}/**/*.md`),
-所以既是归属问题也是对接问题。判据应当是「写到哪」,不是「读写是否一致」。
-
-**方法上的结论**:先测绘,再施工;验收断言磁盘,不断言源码(`CONVENTIONS.md` §7 的第二道门)。
-
-### 提交前的复审,和同一个盲区的第二次
-
-上面那批改动在提交前又走了一遍逐行复审,结果是**同一类盲区又咬了一次**,记在这里因为它比前三条更
-说明问题。
-
-复审用的定位器写成 `path.join\([^)]*'openchamber'`,想的是「找出用 `path.join` 拼出来的外部根」。
-但 `[^)]*` 不允许中间出现右括号,而这类路径**几乎全都长成 `path.join(os.homedir(), ...)`** —— 那个
-`()` 把它自己排除掉了。也就是说,这条定位器系统性地漏掉了它最该找到的那一种形状,而它报出来的结果
-看上去干净、可信、还挺长。
-
-漏掉的是 `packages/web/bin/`:那是 `package.json` 的 `bin` 字段指向的**已发布 CLI**,它按
-`~/.config/openchamber` 解析自己的数据根,往下挂 `settings.json`、`logs/`、`run/`、隧道配置。
-而且这不只是归属问题——CLI **正是靠读 `settings.json` 找到正在运行的桌面端的**,桌面端那一侧早已
-改到 GeoCode 的根,两边已经不是同一个文件。和 `plugins.js` 是同一类配对断裂。
-
-**教训不是「再写一条更好的正则」。** 判断一条定位器是否可信,唯一的办法是**先证明它会响**:拿一处
-已知的命中去喂它,看它报不报。没做过这一步的清单,长度只代表它扫了多少行,不代表它找到了什么。
-`shell-data-root.test.js` 的 `PATCHED` 表因此不再限于 `server/` 目录,`bin/` 的两个文件也在里面。
-
-### 迁移「做完了没有」,以及两次点数的差别
-
-2026-08-30 又按包点了一次,起因是「基础工作是不是已经彻底完成」这个问题。答案是**壳自己的存储收口了,
-跨到内核那一侧的没有**,而漏掉的那几处有个共同形状:**它们不是泄漏,是坏掉的功能**——
-
-- `PlanView.tsx` 读 `<项目>/.opencode/plans/<id>.md`,而内核按 `Brand.plansSegments` 写
-  `<worktree>/.geocode/plans/<id>.md`。**计划面板因此永远报「没有计划」。** 讽刺的是 `plansSegments`
-  做成数组的全部理由就是「展开同一个数组,写到哪与允许改哪不可能分家」,而渲染进程根本没用它;
-- `routes.js` 把全局行为提示词存到 `~/.config/opencode/AGENTS.md`,而 `session/instruction.ts` 读
-  `<配置根>/AGENTS.md`。**行为页保存成功、agent 一个字都看不到**,而且那个 PUT 会 mkdir 出
-  OpenCode 的配置根;
-- `desktop_read_file` 的凭据拒绝表守着 `.config/openchamber/credentials`——一个从不存在的路径。
-  上游它自己的凭据也没挡到,所以这不是我们的回归;但我们把四份凭据搬到 GeoCode 的根之后,
-  守卫留在原地,而那个 handler 的注释写明它防的是**被提示注入的 agent**。
-
-**2026-09-21 按这条判据又查了一轮,三处仍是「一半改了、另一半没改」。**
-
-- `/api/fs/home` 除了 chats 根还报一个 legacy 别名,服务端那半仍写死 `~/.config/openchamber/chats`,
-  而渲染进程的 `legacyRootForHome` 早改成了我们的根,`chatDirectories.ts` 又把别名当自己的根接受——
-  **OpenChamber 的会话目录因此被判成 GeoCode 的托管聊天**。⚠️ **它在每台机器上都成立**:别名经
-  `canonicalDirectoryPath`,而那个函数遇 ENOENT 会一路向上爬祖先,`$HOME` 一定存在,所以从不抛错、
-  也从不缺字段。原先的绊线只喂 `{ home }`,缺的字段正好走兜底,**永远看不见这条**。改法是让服务端从
-  同一个配置根派生;新绊线 `server/geocode/chats-root-alias.test.js` 给它一个**任意**配置根,再断言
-  返回的三个根都落在其下——写死的形态无论如何都满足不了;
-- `agents.js` 与 `commands.js` 抛的「already exists in opencode.json」经 `config-entity-routes.js` 的
-  `res.json({ error: error.message })` 原样弹给用户,而服务端真正读的是 `geocode.json` / `geocode.jsonc`。
-  改用 `KERNEL_CONFIG_JSON` 常量(同文件另四处 `console.log` 不动,那不是用户可见面);
-- 凭据拒绝表**大小写敏感**,而 macOS 与 Windows 默认不敏感。实测:写进 `.local/share/GeoCode/auth.json`
-  的文件,用 `geocode/` 乃至 `GEOCODE/AUTH.JSON` 都读得到,`.SSH/id_rsa` 同样绕过上游自己那条。
-  ⚠️ **紧挨着它下面的 `.env` / `.pem` 检查却做了 `.toLowerCase()`**——上游在同一个 handler 里自己就不一致。
-  匹配规则因此挪进 `denied-paths.mjs` 的 `deniesRelativePath` 并折叠大小写,**顺带拆掉了绊线里那份副本**:
-  它原先自己抄了一遍匹配规则,所以 handler 比得再严也不会红。代价是大小写敏感的文件系统上会误拒一个
-  真叫 `.SSH` 的目录,那是一次被拒的读取,不是泄漏。
-
-**判据因此要再改一次。** §5 前面那三条问的是「写到哪」;这一轮问的是**「读的那一侧和写的那一侧是不是
-同一个路径」**——三处里有两处读写分属前后端,各自自洽,单看任何一侧都正常。绊线也因此成对写:
-`kernel-roots.test.js` 同时读 `routes.js` 与 `session/instruction.ts`,两端一起钉。
-
-还有一条这道门抓不到:`gitlab-ai-provider` 在 bundle 里读 `~/.local/share/opencode/auth.json`。
-**读不留痕,`foreign-writes.sh` 只看写**(`CONVENTIONS.md` §7)。它的触发条件很窄——用户显式配置
-gitlab provider 且 GeoCode 自己没有 token——而配置层唯一的关法是禁掉整个 provider,那是产品决定,
-归阶段 3 与 `.claude` 技能、外部二进制一起答。
-
-壳侧还有第二个自有模块,管的是另一件事:`packages/web/server/geocode/kernel-roots.js` 给出**内核**
-的根,供壳里四处必须读内核文件的地方引用(`auth.json`、antigravity 账号、worktree 根、`.git` 里的
-项目 id 标记)。它与上面那个不是一回事——那个是壳自己的数据放哪,这个是壳去内核的目录里取什么。
-
-它有两处不能照抄上游。**必须认 `XDG_*`**:内核的根出自 `xdg-basedir`,而上游四处里有两处直接取家
-目录,只要 `XDG_DATA_HOME` 一设(开发沙箱正是这么做的),壳读一份 `auth.json`、内核写另一份,两边
-都不报错。**两个基串是 `Brand` 的手抄件**:`web` 是 `electron` 的依赖而非反向(`CONVENTIONS.md` §3),
-内核又是另一个安装根,import 不过去;跨文件的抄件正是绊线的适用场景,所以 `kernel-roots.test.js`
-把 `brand.ts` 当文本读进来比对。
-
-`.git` 里的项目 id 标记与内核**共用同一个文件**,这是安全的:内核按 `remote ?? previous ?? root`
-取值,壳写进去的值永远盖不掉它优先的远端哈希,而没有远端时两侧推出的是同一个根提交。写成
-OpenCode 的名字反而是真问题——那把我们的 id 放进了另一个产品的文件里。
-
-同一个模块还供着**配置面**:壳的三个全局配置层与内核的加载顺序一一对应(`config.json` 不带商标、
-两侧同名;另外两个是 `geocode.json` / `geocode.jsonc`),项目级则是 `.geocode/`。这一层必须对齐的
-理由比命名整洁强得多——`shared.js` 的 `readConfigLayers()` 是**凭据入口**:实测它从用户真实的
-`~/.config/opencode/opencode.jsonc` 读回 1944 字节、含 `apiKey`,而 `small-model/call.js` 会把那个
-key 连同文件里的 `baseURL` 一起送进 `fetch`,触发者是 busy→idle 的 `session-assist`,默认开、不需要
-用户操作。**壳读错一个配置根,后果不是设置丢失,是拿别的产品的凭据去打别的端点。**
-
-改读取方时**必须同时数清写入方**,这一条在本次审查里抓到三个漏网的:`mcp.js` 自己拼项目级 MCP 配置
-路径、`plugins.js` 自带一整套配置路径、`skills-catalog/install.js` 自定安装目标。三者都不经
-`readConfigLayers` 取路径,所以改了读取方而不动它们,写进去的文件就再没人读——`mcp.js` 那处正是
-§5 开头点名的那次事故的形状,现已配往返绊线。
-
-曾有一处**刻意没做**:`getManagedSkillRoots` 仍把 `~/.claude/skills` 与 `~/.agents/skills` 当作
-可改名的受管根,尽管内核已拒绝加载它们。只摘这一半会更糟——`createSkill` 仍能写进 `.agents`、UI 仍
-提供那个选项,于是变成建得了改不了。**那一批已完成**(`DESKTOP.md` 阶段 2 批 2),六处同时动:发现、
-`createSkill`、`deleteSkill`、受管根、目录商店安装目标、UI 位置选择器。
-
-这里留下的是那次的方法结论,因为它不只关于技能:**一条跨模块的关闭,能不能分批做,取决于中间状态是
-不是一个合法状态。** 「读关了写没关」不是合法状态,它比两头都开更糟——用户会造出一个自己再也管不了的
-东西。判断方式很直接:把改到一半的产品交给用户用一遍,想想他会撞上什么。
-
-还有一条同样归这里:`deleteSkill` **不接受 source 参数**,它把知道的每个根删一遍。所以「壳还认得
-`~/.claude/skills`」这件事不只是多列几个技能,而是删自己的技能会连带删掉用户 Claude Code 的同名技能,
-递归、无提示。**一个只读的清单和一个可写的清单,危险程度差着量级,不能因为它们长得像就一起归类。**
-
-这样做的收益不在少写几行,而在审计:上游将来新增一处硬编码 `opencode` 字面量时,typecheck 不会报错,但只要对照这个模块做一次 grep 就能发现遗漏。路径层的正确性无法靠类型系统保证,只能靠可审计性保证。
-
-路径补丁之外还有一处成对的摘除。内核内置的 GitLab Duo 与 Poe 登录插件(`opencode-gitlab-auth` / `opencode-poe-auth`)以 npm 发布包的形式随内核加载,其打包产物**内嵌了一份发布版 core 的路径代码**——插件一加载就在用户磁盘上创建 `opencode` 命名的空目录,而这份副本是编译产物,源码补丁永远够不到。GeoCode 不提供这两种登录方式,已在 `plugin/index.ts` 的内置插件清单中摘除;Anthropic、OpenAI、Copilot 等其余登录链路不受影响,对应绊线测试防上游合并悄然复活。**给界面阶段的提醒:对接 UI 时,登录/供应商界面中 GitLab Duo 与 Poe 的入口元素必须一并移除**——内核侧已经没有这两个认证方法,留下入口就是点了没反应的死按钮。
-
-注入点:`core/src/global.ts` 的命名空间常量、`core/src/database/database.ts` 的库名、日志与配置文件名各一处,以及壳侧的 `electron-builder.config.ts` 与 `src/main/index.ts` 的身份配置。壳与内核必须使用同一套常量来源,避免两侧各自演化。
+内核内置的 GitLab Duo 与 Poe 登录插件不随 GeoCode 加载:它们以 npm 发布包的形式进来,打包产物
+**内嵌了一份发布版 core 的路径代码**,一加载就在用户磁盘上创建 `opencode` 命名的空目录,而那份
+副本是编译产物,源码补丁永远够不到。摘除做在内置插件清单里,其余登录链路不受影响。
 
 ## 6. 验证
 
-路径正确性不能靠阅读代码确认,必须实测落盘:在干净沙箱中启动内核,遍历产生的全部文件,逐一对照本文档的表格;再以打包后的应用重复一次,确认生产态与开发态一致。Windows 侧额外检查注册表三个键的实际写入值。任何一处对不上,都说明存在未被发现的硬编码。
+路径正确性不能靠阅读代码确认,必须实测落盘:在干净沙箱中启动内核,遍历产生的全部文件,逐一对照
+§3.3 的树;再以打包后的应用重复一次,确认生产态与开发态一致。Windows 侧额外检查注册表三个键的
+实际写入值。任何一处对不上,都说明存在未被发现的硬编码。
 
-桌面侧的对账多一条约束:开发机上装着真的 OpenChamber,「运行后不存在 OpenChamber 目录」这个判据
-恒假、且不含关于本次改动的任何信息。改用**快照对比**——跑前对相关位置取一次文件清单,跑完再取一次,
-差集里只应出现 GeoCode 领域内的路径。Windows 侧的「两套根不相交」目前只是推导(依据 `xdg-basedir`
-的源码与 Electron 对 `appData` 的取值),实机确认归 `DESKTOP.md` 阶段 8。
+桌面侧多一条约束:开发机上装着真的 OpenChamber,「运行后不存在 OpenChamber 目录」这个判据恒假、
+且不含关于本次改动的任何信息。改用**快照对比**——跑前对相关位置取一次文件清单,跑完再取一次,
+差集里只应出现 GeoCode 领域内的路径。
 
-对账会话必须**真正进入项目、加载过插件**——健康检查级别的冒烟不会触发插件层,而内置插件恰恰以这种方式漏检过一次(GitLab/Poe 插件的内嵌 core 副本只在插件加载时落盘)。
+对账会话必须**真正进入项目、加载过插件**:健康检查级别的冒烟不会触发插件层,而内置插件恰恰以
+这种方式漏检过一次。
 
-## 7. 挂起项
+⚠️ 这道门只看写,不看读(`CONVENTIONS.md` §7)。读取另一个产品的凭据不留痕,只能靠代码审计发现。
 
-以下与「独立于 OpenCode」相关、但刻意不在路径阶段处理的事项,记录在此防止遗忘:
+Windows 侧的「两套根不相交」目前只是推导(依据 `xdg-basedir` 的源码与 Electron 对 `appData` 的
+取值),实机确认归 `DESKTOP.md` 阶段 8。
 
-- **CLI scriptName 与 OTLP serviceName** 等非磁盘品牌字符串:2026-09-13 查实两者都在内核侧,**归内核那一轮**,不在界面阶段。
-- **开发版与正式版的数据未隔离,内核与壳都是。** 内核侧:嵌入式 Kernel 的启动不传 `XDG_*` 覆写,两个通道共用同一套 XDG 根;上游桌面壳的做法是注入 `XDG_STATE_HOME = userData`(即 §2 末尾那个刻意保留的漂移),我们没有照搬。壳侧原先靠 `<appData>/GeoCode Dev` 分开,**2026-08-30 起不再**:壳数据根从 userData 搬到了 HOME,因为渲染进程算不出 userData(见 §5),`GeoCode Dev` 现在只分开 Chromium 自己的东西。上游也是这个形状。`DESKTOP.md` 阶段 8 要求「开发版与正式版数据隔离」,届时两侧一起处理,或明确接受共享并写下理由——**壳侧要接受共享,得先回答渲染进程怎么知道自己在哪个通道**。
+## 7. 另外两个 agent 工具的技能根
 
-原先挂在这里的三条已经处理,去向记在此处以免再被当作待办:
+`~/.claude/skills` 与 `~/.agents/skills`(家目录与项目各级)不进 GeoCode 体系。**判据是归属,不是
+开放与否**:两者都是用户写给**任意** agent 工具的技能库,而 GeoCode 是地理助手不是通用 agent。
+同一判据也覆盖壳侧的 `.agents/loops`——同一个目录下的邻居,归属完全一样。**下一个
+`.agents/<新名字>` 出现时先套这条判据,不要另起讨论。**
 
-- **内核自动更新检查**不必关闭,内嵌 Kernel 走不到它:检查只由 TUI 调用(`cli/tui/worker.ts` 调 `cli/upgrade.ts`),而 Kernel 是 `kernel-sidecar.mjs` 直接 `Server.listen` 起来的。`OPENCODE_DISABLE_AUTOUPDATE` 管的正是这段不运行的代码,所以不设。2026-09-13 在 v1.18.18 与 v1.18.30 上各查过一次,升级内核时复查 `cli/upgrade.ts` 的调用方。另外两条更新路径由壳侧关着:「升级 OpenCode」路由在 Electron 下 404(`system-opencode-surface.test.js`),OpenChamber 自己的检查更新在本地回答「无更新」(`DESKTOP.md` §7.2)。
-- **项目目录的 `.opencode/` 与 `opencode.json`** 已改名为 `.geocode/` 与 `geocode.json`,家目录那条没有开关保护的 `~/.opencode` 扫描直接删除(我们只有一个全局根)。跨产品执行代码的那一半由屏蔽清单解决——插件与文件式工具都不再加载,见 KERNEL.md。
-- **`.agents/skills`(家目录与项目各级)决定关闭**,与 `.claude/skills` 同级处理:两者都是用户写给**任意** agent 工具的技能库,不属于 GeoCode 体系,而 GeoCode 是地理助手不是通用 agent。判据因此是**归属**,不是开放与否。**`AGENTS.md` 保留**——它是信息而非能力注入,全局那份读的是 `~/.config/GeoCode/AGENTS.md`,本就在我们自己的配置根里。用户自定义技能改从 `~/.config/GeoCode/{skill,skills}`、项目 `.geocode/{skill,skills}` 或 `skills.paths` 进,关闭后仍生效(KERNEL.md §6 第 6 项)。
+**`AGENTS.md` 保留**:它是信息而非能力注入,全局那份读的是我们自己配置根里的那个。用户自定义
+技能改从 `~/.config/GeoCode/{skill,skills}`、项目 `.geocode/{skill,skills}` 或 `skills.paths`
+进,关闭后仍生效(KERNEL.md §6)。
 
-  **同一判据后来又判了 `.agents/loops`**(壳侧的循环任务,`DESKTOP.md` 阶段 6):同一个目录下的邻居,
-  归属完全一样。它当时没被一并评估,于是多挂了一批。**下一个 `.agents/<新名字>` 出现时先套这条判据,
-  不要另起讨论。**
+关闭这条路径时**六处必须同时动**:发现、创建、删除、受管根、目录商店安装目标、UI 位置选择器。
+理由就是 §5 末尾那条——「读关了写没关」不是合法状态。⚠️ 删除技能的接口**不接受来源参数**,它把
+知道的每个根删一遍,所以「壳还认得 `~/.claude/skills`」不只是多列几个技能,而是删自己的技能会
+连带删掉用户 Claude Code 的同名技能,递归、无提示。

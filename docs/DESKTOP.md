@@ -21,6 +21,9 @@ GeoCode 只有一种产品形态:**安装在用户本机的桌面应用**。
 这项决策把「源码维护范围」与「产品能力范围」分开。完整保留上游目录有利于合并更新;
 只装配桌面目标保证用户面对的仍是一个边界清晰的 GeoCode。
 
+⚠️ **这四项不再重开**:是否只有 Desktop、是否内置 Kernel、是否保留 Shell Runtime、是否由 main
+管理 Kernel。后面的细节讨论都在它们之下,不上溯。
+
 ---
 
 ## 2. 目标架构
@@ -80,7 +83,7 @@ GeoCode 沿用 OpenCode Desktop 已验证的内核封装方式:
 GeoCode 与 OpenCode Desktop 的区别是中间多一层 Shell Runtime。它不是另一个产品 Server,
 而是 OpenChamber React UI 正常工作所需的桌面内部后端。
 
-### 2.4 已验证的 OpenChamber 接缝
+### 2.4 壳与内核的接缝
 
 对 OpenCode Desktop 与 OpenChamber 的源码对照确认了三条事实(2026-08-28 在 OpenChamber
 v1.21.0 上复核):
@@ -242,9 +245,16 @@ Shell 使用的 `@opencode-ai/sdk` 必须由**同一份 GeoCode Kernel OpenAPI**
 
 精确的 SDK 交付形式(本地 workspace 包或构建期产物)属于实施选择;「与 Kernel 同源」不是。
 
-**已执行的一半(2026-09-10)**:壳的四处声明——安装根自己那份加三个 workspace 包——一律钉在本仓 vendor 的内核版本上,由 `electron/geocode/sdk-source.test.mjs` 断言。它靠遍历安装根与 workspaces 找声明,不靠清单:第一版用手写清单,当场漏掉了安装根自己那处。此前四处钉的是 `1.18.23`,那是壳上游的 pin——OpenChamber 不自带内核、只能连用户装的那个,对不齐是它的常态;GeoCode 两边都出,所以能对齐。
+**壳的每一处 SDK 声明都钉在本仓 vendor 的内核版本上**——安装根自己那份加三个 workspace 包。绊线
+靠遍历安装根与 workspaces 找声明,**不靠手写清单**(第一版用清单,当场漏掉了安装根自己那处)。
+上游钉的是它自己的 pin,因为 OpenChamber 不自带内核、只能连用户装的那个,对不齐是它的常态;
+GeoCode 两边都出,所以能对齐。
 
-**没执行的一半**:版本相同不等于同源。壳装的仍是上游发布的产物,而不是由**我们这份内核**的 OpenAPI 生成的客户端——两者的差别今天看不出来(实测 1.18.18 与 1.18.23 的 162 条路径、1409 个导出类型逐一相同),但它有一个立刻能看见的后果:**`/geo/*` 在任何一份 SDK 里都没有**。生成线是现成的(`kernel/packages/sdk/js/script/build.ts`,它 `bun dev generate` 导出内核 OpenAPI 再生成客户端),从 vendor 之后没跑过。阶段七要调地理端点时补,连同一条「路由定义源码哈希 ≠ 生成印记就红」的绊线。
+⚠️ **版本相同不等于同源,这一半还没做。** 壳装的仍是上游发布的产物,而不是由**我们这份内核**的
+OpenAPI 生成的客户端。两者的差别今天看不出来(1.18.18 与 1.18.23 的 162 条路径、1409 个导出类型
+逐一相同),但有一个立刻能看见的后果:**`/geo/*` 在任何一份 SDK 里都没有**。生成线是现成的
+(`kernel/packages/sdk/js/script/build.ts`),阶段七要调地理端点时补,连同一条「路由定义源码哈希
+≠ 生成印记就红」的绊线。
 
 ### 4.4 原生构建
 
@@ -275,13 +285,18 @@ Shell 使用的 `@opencode-ai/sdk` 必须由**同一份 GeoCode Kernel OpenAPI**
 
 ### 4.6 版本号
 
-上游的发布脚本每次发版把五个 `package.json` 的 `version` 一起改写。这些数字留给上游,合并时无条件取
-上游,它们从此只表示「壳基于 OpenChamber 哪一版」。GeoCode 的产品版本是另一个数字,从 `1.0.0` 起,
-放在自己的文件里:Electron 包一份、web 包一份手抄(两个包不能互相 import),由测试钉住相等,
-由 `scripts/bump-geocode-version.mjs` 一次改两份。三个读取点都读它:Electron main 的应用版本(更新检查
-用它比对)、渲染层的 `__APP_VERSION__`、打包时经 `extraMetadata.version` 写进安装包与安装器元数据。
-About 对话框沿用上游的版式,只显示图标、产品名、产品版本与代码仓库链接;壳基线那个数字仍由
-`/api/system/info` 报出,供 §9.5 要求的发布记录与诊断使用,不上界面。
+**上游那五个 `version` 留给上游。** 它的发布脚本每次发版把它们一起改写,所以合并时无条件取上游;
+这些数字从此只表示「壳基于 OpenChamber 哪一版」。
+
+**GeoCode 的产品版本是另一个数字**,从 `1.0.0` 起,放在自己的文件里。Electron 包一份、web 包一份
+手抄——两个包不能互相 import——由测试钉住相等,由 `scripts/bump-geocode-version.mjs` 一次改两份。
+三个读取点:Electron main 的应用版本(更新检查用它比对)、渲染层的 `__APP_VERSION__`、打包时经
+`extraMetadata.version` 写进安装包与安装器元数据。
+
+About 对话框只显示图标、产品名、产品版本与代码仓库链接,版式沿用上游。壳基线那个数字由
+`/api/system/info` 报出供诊断,不上界面。
+
+⚠️ **每个可发布版本都要记下壳 commit、内核 commit 与 API fingerprint**,否则历史安装包不可复现。
 
 ## 5. 启动、重启与退出
 
@@ -301,14 +316,16 @@ About 对话框沿用上游的版式,只显示图标、产品名、产品版本�
 窗口不能在「服务地址尚未确定」时自行猜测默认端口。失败必须落在可诊断的启动阶段,
 而不是让 UI 在一个永远连不上的地址上转圈。
 
-**启动只有两种结果。** 上游桌面端启动时先回答「这个界面该连哪台服务器」,围绕它有首次启动选择页、
-远程主机探测与几种恢复页;GeoCode 的内核在应用里,这个问题不存在。主进程读到的主机配置恒为
-「本机」(`readDesktopHostsConfig` 首行返回,存量设置文件里的主机列表不再被读),所以结果只剩:
-Kernel 起来了,进主界面;Kernel 没起来,`spawnLocalServer` 记下失败(错误、Kernel 最后几十行输出、
-日志路径,`electron/geocode/kernel-failure.mjs`)并且不启动 Shell Runtime,窗口照常打开,渲染进程
-把任何非主界面的启动结果都交给 GeoCode 自己的失败屏(`ui/src/geocode/GeoCodeKernelFailureScreen.tsx`),
-它经 `geocode_kernel_failure` 读那份记录,提供「在文件夹中显示」日志与重试(重新启动应用)。
-上游的选择页、安装页与恢复页在桌面壳下没有到达路径。运行中 Kernel 死亡进同一个失败屏,见 §5.2。
+**启动只有两种结果。** 上游桌面端启动时先要回答「这个界面该连哪台服务器」,围绕它有首次启动选择页、
+远程主机探测与几种恢复页。GeoCode 的内核在应用里,这个问题不存在——主进程读到的主机配置**恒为本机**,
+存量设置文件里的主机列表不再被读。所以只剩两条路:
+
+- **Kernel 起来了**,进主界面;
+- **Kernel 没起来**,主进程记下失败(错误、Kernel 最后几十行输出、日志路径)并且**不启动 Shell
+  Runtime**。窗口照常打开,渲染进程把任何非主界面的启动结果都交给 GeoCode 自己的失败屏,它读那份
+  记录,提供「在文件夹中显示」日志与重试——重试就是重开应用。
+
+上游的选择页、安装页与恢复页在桌面壳下没有到达路径。运行中 Kernel 死亡进同一个失败屏(§5.2)。
 
 ### 5.2 配置生效与 Kernel 重启
 
@@ -326,14 +343,6 @@ Kernel 起来了,进主界面;Kernel 没起来,`spawnLocalServer` 记下失败(�
   强制应用、技能重命名与升级路由也不再谎报。判据仍是 `process.versions.electron`:Electron 下的外部服务器
   只可能是内嵌 Kernel。
 
-**2026-09-09 真实会话验过这条通路**,补的是 09-06 那笔账:开发启动此前一直跑 08-30 的内核产物,
-所以这处内核改动只被单测证明过。做法与判据:在设置里新建一个自定义供应商 —— 它只写进 `geocode.jsonc`,
-模型目录里没有它 —— 保存后点「应用」,它出现在供应商列表(该列表取自 SDK 的 `config.providers()`,
-也就是 Kernel);删掉它、**不点应用**,它仍在;点了才消失。全程端口不变、进程未死。
-⚠️ **判据必须是「目录里没有的东西」**:先用凭据试过一轮,结论是错的 —— 模型列表来自模型目录,
-有没有凭据都列得出来,「看得见」与「能用」是两回事(用户指出的)。凭据那条路同一轮也验了:
-加完 key 不点应用则选得到、用不了,点了才能用。
-
 丢弃实例会像手动中断一样终止正在运行的会话,Kernel 没有忙时保护。壳在丢弃之前用自己的活动会话计数拦下:
 有会话在跑就报错并保留徽标,让用户等它结束再应用。这是刻意选「拦下」而不是上游的「确认后中断」:
 刷新是用户主动点的,等得起。
@@ -345,7 +354,7 @@ Kernel 起来了,进主界面;Kernel 没起来,`spawnLocalServer` 记下失败(�
 `config.json`),否则目录里多一份遗留文件时两边写进不同的文件;壳写全局配置是整文件覆盖,注释不保留,
 这是上游形态。
 
-**运行中的 Kernel 死了,恢复靠重开应用,不在原地重拉,也不自动重试**(2026-09-13 定)。main 在 Kernel 报 ready
+**运行中的 Kernel 死了,恢复靠重开应用,不在原地重拉,也不自动重试。main 在 Kernel 报 ready
 之后盯住它的退出:句柄仍是当前那个、应用也没有在退出,就按启动失败的形状记一份记录(`phase: 'running'`、退出码、
 最后几十行输出、日志路径,`electron/geocode/kernel-failure.mjs`)并通知所有窗口。窗口收到通知,或打开时读到这份记录,
 就换成同一个失败屏(`ui/src/geocode/kernel-lost.ts`),标题改为「意外退出」。重试一律重开应用:上游的启动处理函数在壳
@@ -354,10 +363,6 @@ Kernel 起来了,进主界面;Kernel 没起来,`spawnLocalServer` 记下失败(�
 
 原先设计的原地重拉不做:换端口、复用口令、壳侧重绑代理与事件流,还必须沿用同一枚浏览器工具令牌,换来的只是窗口不关,
 代价是一整套每次合并上游都要维护的重连链路。Shell Runtime 仍不得自行 spawn 第二个 Kernel。
-
-**2026-09-13 真实会话验过**:主界面里 `kill -9` 掉 Kernel,窗口切到失败屏,记录为「exited while running, with code 9」;
-点重试后应用重开并进入主界面;Cmd+Q 退出不产生记录。另把 `kernel-sidecar.mjs` 挪走起一次,启动失败屏照旧,挪回后重试
-进入主界面。三轮写入检测都干净。
 
 ### 5.3 正常退出
 
@@ -372,13 +377,11 @@ Kernel 起来了,进主界面;Kernel 没起来,`spawnLocalServer` 记下失败(�
 
 只关闭窗口不等于退出应用的平台行为,由产品设置决定;一旦进入真正退出路径,上述清扫不可跳过。
 
-Electron 下第 3 至 6 步是这样落地的:main 给 Kernel 发终止信号,同一拍接着退出自己,不等回应;Kernel 的入口
-(`kernel-sidecar.mjs`)把信号转成正常退出,退出钩子同步清扫地理子进程(`GEOKERNEL.md` §10.1 #8b)。第 5 步
-的强制结束够不到地理子进程,它们各自成组,所以 main 这一侧只能发终止信号,不能改成直接强杀。main 这一侧的调用
-(`shutdownBackgroundServices` 里的 `terminate`,以及 `prepareForQuit` 调它)由 `kernel-host.test.mjs` 钉住。
-**2026-09-11 真实会话验过**:Kernel 跑着一个地理子进程时,Cmd+Q 一轮、直接给 main 发终止信号三轮,子进程每次
-都被清掉,Kernel 连同子进程总比 main 早约 50 到 70 毫秒结束。
+Electron 下第 3 至 6 步这样落地:**main 给 Kernel 发终止信号,同一拍接着退出自己,不等回应。**
+Kernel 的入口把信号转成正常退出,退出钩子同步清扫地理子进程(`GEOKERNEL.md` §10.1 #8b)。
 
+⚠️ **第 5 步的强制结束够不到地理子进程**——它们各自成组,所以 main 这一侧只能发终止信号,不能改
+成直接强杀。
 ### 5.4 崩溃恢复
 
 正常退出覆盖不了断电、主进程崩溃与强制结束(包括用户在「强制退出」窗口里结束应用)。这几种情况会留下什么,
@@ -423,6 +426,12 @@ Agent Kernel。GeoCode 产品配置中被排除的能力也不能只靠隐藏按
 
 ## 7. 产品能力边界
 
+**本节是产品排除项的判据登记处**:每一处关掉上游功能的补丁,块标记里的 why 指回这里的段号。所以
+这三个小节的编号不要动。
+
+一条判据贯穿全节:**GeoCode 面向地理工作者,不是面向程序员。** 但「面向谁」要看机制,不看上游给
+它起的名字——§7.1 末尾那四项就是照抄上游的自我定位判错、后来重判回来的。
+
 ### 7.1 首个桌面闭环保留
 
 - 本地项目选择;
@@ -435,6 +444,24 @@ Agent Kernel。GeoCode 产品配置中被排除的能力也不能只靠隐藏按
 - 基础设置、主题与英文 / 简体中文 / 繁体中文;
 - 原生日志与启动错误诊断。
 
+**判过之后保留的四项**:计划任务、Session Goals、Multi-run / Fusion,以及 agent 与 command 管理
+表面。它们原先被归类为「面向编程工作的」准备关掉,**而那个分类是照抄 OpenChamber 对自己的定位,
+我们从未重判**。逐一读过实现之后它不成立:三者都是**通用的智能体能力,机制里没有一处与编程绑定**,
+对地理工作反而对路——定期抓取与刷新、多轮且容易半途宣布完成的清洗任务、同一分析换几套参数比着看;
+斜杠命令就是可复用的提示词模板。保留不等于原样照搬,三条落点:
+
+- **权限一律走既有体系,不为它们新增任何机制。** 自动批准是「用户提前回答确认框」,不是绕过它,
+  与用户在会话里手动打开是同一件事。
+- **新建 agent 由构造保证安全**:全局权限块关掉了 geodata、qgis、osm、gee 与 browser,新 agent 继承
+  这些关闭状态,除非用户明确打开。编辑内置 agent 会生成用户级覆盖文件,那是配置体系本身的性质;
+  界面以「重置」代替删除,重置删的是覆盖文件而不是 agent。
+- **两处提示词各去掉一个词。** 上游写「You audit progress of a **coding** agent」(Session Goals 的
+  评估)与「Only suggest work the **coding** agent can perform」(会话辅助)。评估模型是唯一有权判定
+  目标达成的角色——干活的 agent 没有渠道结束自己的目标——它把什么当作证据就决定循环何时停止。
+  判据与 `KERNEL.md` §5.2 同形:只改那一个词,其余照上游。
+
+**GitHub 的 PR 与工单面同样判为保留**,判据见 §7.3 末尾。
+
 ### 7.2 桌面内后续接入
 
 - diff 与文件查看;
@@ -445,464 +472,117 @@ Agent Kernel。GeoCode 产品配置中被排除的能力也不能只靠隐藏按
 - GeoCode 受管技能商店;
 - 应用更新通知。
 
-这些仍属于同一个 Desktop 产品,只是不能进入「壳与内核是否接通」的第一验收面。
+**应用更新只通知,不安装。** 应用不签名,macOS 上装不了应用内更新。主进程匿名查发布仓库最新一条
+Release,按语义化版本比较,有新版就把版本号与 Release 页地址交给上游的更新对话框,「下载」按钮打开
+那一页由用户自己装。上游的 electron-updater 不配更新源,应用内下载入口直接拒绝;壳向 OpenChamber
+更新服务上报安装标识的那条路由在 Electron 下只答「无更新」,不出网。
 
-**应用更新只通知,不安装。** 应用不签名,macOS 上装不了应用内更新,所以形态与旧版 GeoCode 相同:
-Electron main 匿名查发布仓库的 GitHub Releases 最新一条(仓库名由 `desktop-identity.mjs` 派生),
-去掉 tag 前导 `v` 后与当前版本按语义化版本比较,预发布后缀算更旧;有新版就把版本号、Release 正文与
-Release 页面地址交给上游的更新对话框,「下载」按钮打开 Release 页面由用户自己下载安装。节奏沿用
-上游的轮询钩子:启动 3 秒后一次,之后每小时一次;没有「跳过此版本」,与上游一致。上游的 electron-updater
-不配置更新源,应用内下载入口直接拒绝;壳向 OpenChamber 更新服务上报安装标识的那条路由在 Electron 下
-只返回「无更新」,不出网。发布仓库里没有任何 Release 时按「无更新」处理,不报错。设置通用页上游的「发送匿名使用报告」开关
-只作用于那条上报,因此在桌面壳里什么也不控制,桌面壳不显示它,设置搜索也不列(`OpenChamberPage.tsx`、
-`geocode/desktop-settings-surface.ts`,09-17)。
+#### 注入给内核的两个工具
 
-⚠️ **上游那一个控制工具被我们拆成了两个**(`browser` 与 `geocode`),而两个名字都是我们起的,所以 `toolHelpers.ts` 的
-工具元数据表**两个都得有**:缺条目的工具会落到未知工具的兜底,`outputLanguage` 变成 `text`,JSON 回答因此丢掉高亮
-(2026-09-21 补上 `browser`)。绊线 `ui/src/geocode/agent-tool-metadata.test.ts` 从注入模块的源码里读出两个工具名,
-再拿真的 `getToolMetadata` 与一个必然不存在的名字对比——只断言「条目存在」的话,兜底也满足。
+这是内核对接面的一部分。上游那条 agent-tool 注入管道本身已出局(§7.3),GeoCode 自己注入一个插件
+文件,里面装着两个工具;记忆工具不注入。
 
-**浏览器工具:智能体能操控应用内的浏览器面板,强制开启,没有开关。** 它给 GeoAgent 与 plan 一个名为 `browser` 的工具,
-动作是上游 Web 工具的十个:打开、读页、点击、输入、滚动、前进后退、读样式、截图、改视口;用途是查资料、
-操作网页、把看到的东西截图回到对话。它与地理数据预览是两件事,不共用任何部件。
+**链路与上游不同,因为启动顺序反了。** 上游是壳把插件写到磁盘、再由壳 spawn 的 OpenCode 加载;
+GeoCode 的内核由主进程启动且**先于壳**。所以改成:主进程在选定壳端口之后、启动内核之前把插件写到
+`<壳数据根>/agent-tool/`,铸一枚一次性令牌,经内核进程环境的 `overrides` 递进去三个变量——插件
+地址、回调地址、令牌;壳启动后从主进程环境采纳同一枚令牌,之后主进程把它删掉。
 
-上游把这个工具做成壳写到磁盘、再由壳 spawn 的 OpenCode 加载的插件;GeoCode 的内核由主进程启动且先于壳,
-所以链路改成:主进程在选定壳端口之后、启动内核之前,把插件写成 `<壳数据根>/agent-tool/geocode-browser-plugin.js`
-(`electron/geocode/browser-tool.mjs`,源码复用上游的工具模板,改名、改描述、去掉品牌字样、只带 Web 动作、
-每次调用先向权限系统 `ask`),铸一枚一次性令牌,经 `createKernelProcessEnvironment` 的 `overrides` 递给内核三个变量:
-插件文件地址、回调地址、令牌;壳启动后从主进程环境采纳同一枚令牌(`agent-tool/runtime.js`),之后主进程删掉它。
-内核侧**不开放插件**:`loadExternal` 仍对配置声明与目录扫描一律返回空,唯一的例外是「主进程点名、且解析路径恰为
-`<配置根>/desktop/agent-tool/geocode-browser-plugin.js`」的那一个文件,仅限 server 形态(`plugin/geocode-trusted.ts`,
-KERNEL.md §6 第 1 项)。这个文件里还写着下文的控制工具,回调路由 `/api/openchamber/agent-tool` 在 Electron 下只接受两个工具
-各自的动作:持令牌也调不到记忆动作,一个工具也调不到另一个的动作,省略前缀的动作名只在发起调用的工具自己的动作里解析
-(`server/geocode/agent-tools.js`)。解析不出来的动作名同样由这道关卡回话,只列发起调用的那个工具自己的动作,措辞与工具其余
-两条错误一致都以 GeoCode 起头——上游原本会把它知道的二十八个动作全列出来,那既带商标,又等于把关掉的记忆功能广告给模型。
-壳里浏览器代理那句「没有能操作页面的客户端」也送进模型,只把两处 OpenChamber 换成 GeoCode,其余照上游。
+**内核侧并没有因此开放插件。** `loadExternal` 对配置声明与目录扫描一律返回空,唯一的例外是「主进程
+点名、且解析路径恰为那一个文件」,并且仅限 server 形态(`KERNEL.md` §6 第 1 项)。回调路由在 Electron
+下只接受两个工具各自的动作:**持令牌也调不到记忆动作,一个工具也调不到另一个的动作**;解析不出来的
+动作名只列发起调用的那个工具自己的动作——上游原本会把它知道的二十八个全列出来,那等于把关掉的功能
+广告给模型。
 
-权限在 `config/geocode.ts`:GeoAgent 与 plan 是 `browser: "allow"`,其余 agent 落在全局的 `browser: "deny"` 上。
-这里不设询问,理由是询问在这条链上不区分风险:上游根本不接权限系统(生成的插件里没有 `ask`),而 GeoAgent 的
-`bash` 没有写规则,落回引擎给每个 agent 的通配放行——一个能任意执行 shell 的智能体,点一下网页并没有多拿到什么;
-何况 `browser.open` 免费,拦下点击也不减少它能到达的页面,只是让每次查资料断一次。全局的 deny 保留的是范围而不是
-危险:`Permission.disabled` 只认「通配 + deny」,所以未点名的 agent 连工具列表里都看不到它,而不是调用时才被拒。
-插件仍然每次调用都走一遍 `ask`,机制留着,策略由配置决定:将来要收紧改一行配置即可,不必改代码,裁决也会进日志。
-plan 拿到的理由与它的 `geodata: "allow"` 一致——读网页是研究,不落盘。
-模型常把 `browser.` 前缀省掉只发 `click`,壳会把它解析成唯一同名的动作;插件在 `ask` 之前做同一归一,
-否则规则永远匹配不到、由通配放行(09-06 真机第一次点击就是这样漏过去的)。
-`browser.capture` 落到项目的 `.browser/`,与工作区内写文件同级,不问。截图需要面板正在显示:面板关着或不是当前标签时
-合成器不出帧,会报 `UnknownVizError`。上游 v1.23 起在截图前自己打开面板并切到那个浏览器标签,等布局稳定再截,所以智能体
-截图时面板会弹出来;读页、点击这些在页面内执行脚本的动作不需要面板可见。截图与清除浏览数据经主进程,主进程只认面板
-自己的 partition(`DesktopIdentity.browserPanelPartition`);渲染端 `BrowserPane.tsx` 手抄同一值,由 `desktop-identity.test.mjs` 钉住,
-漂回上游拼写时打开与点击照常而截图报「不是浏览器面板页面」(PATHS.md §3.4)。下载:工具本身没有下载动作,点到下载链接时
-照上游处理:上游与 GeoCode 都没有 `will-download` 处理器,Electron 走默认流程,弹出系统的另存为对话框由用户选位置。
-截图与下载这两点是 2026-09-13 读 v1.23.1 代码得出的,未真机验证。
+| 工具 | 给谁 | 能做什么 |
+|---|---|---|
+| `browser` | GeoAgent、plan | 上游 Web 工具的十个动作:打开、读页、点击、输入、滚动、前进后退、读样式、截图、改视口。它与地理数据预览是两件事,不共用任何部件 |
+| `geocode` | GeoAgent | 上游 `openchamber` 工具的十三个动作:列项目与会话、读会话消息、新建与分叉会话、发提示词,以及定时任务的增删与启停 |
 
-**控制工具:智能体能替用户建会话、给会话发提示词、管定时任务,同样强制开启,没有开关。** 它是上游的 `openchamber` 工具,
-在 GeoCode 里叫 `geocode`,动作是上游给智能体的十三个:列项目、看模型偏好、列会话、查会话状态、读会话消息、新建会话
-(可作为目标运行)、给会话发提示词、分叉会话,以及定时任务的列出、创建、立即运行、删除、启用停用;`schedule.status` 上游
-也只给命令行。它让 `/craft-goal`、`/schedule-task` 最后那步「替用户创建」做得成,也让用户在聊天里直接管理会话与定时任务。
-09-06 判为不提供,2026-09-15 用户改判全开。
+两个都**强制开启,没有开关**。权限在装配层点名,其余 agent 落在全局的 deny 上——`Permission.disabled`
+只认「通配 + deny」,所以未点名的 agent **连工具列表里都看不到它**,而不是调用时才被拒。
 
-它与浏览器工具写在同一个插件文件里,走同一枚令牌、同一条回调,内核那条窄路不变。对上游只做改牌:工具名;工具说明里的
-两处 OpenChamber;模板的三句报错;`agent` 参数说明——上游写「OpenCode agent name; new sessions default to the build agent」,
-GeoCode 禁用了 `build`,不指定 agent 的新会话按 `default_agent` 落到 GeoAgent,所以换成「Agent name; new sessions use the
-default agent」。其余措辞照上游,替换表逐个工具钉在 `browser-tool.test.mjs` 上,上游再添一处品牌字样会转红。
-服务端回给它的结果里,「提示词没出现在会话里」那句的 OpenCode 同样换成 GeoCode;这句与上文浏览器代理那句由
-`web/server/geocode/agent-visible-brand.test.js` 钉住。
+⚠️ **这条链上不设询问,理由是询问在这里不区分风险**:GeoAgent 的 `bash` 本来就能做到同样的事(本机
+只带一个受信任的 `Origin` 头就能调通壳的控制路由),一个能任意执行 shell 的智能体,点一下网页并没有
+多拿到什么。插件**仍然每次调用都走一遍 `ask`**,机制留着、策略由配置决定:将来要收紧改一行配置,
+不必改代码,裁决也会进日志。`plan` 拿得到浏览器工具却拿不到控制工具——它会建会话、删定时任务,而
+`plan` 只读。
 
-权限与上游一致:GeoAgent 是 `geocode: "allow"`,其余 agent 落在全局的 `geocode: "deny"` 上,工具列表里看不到它。`plan`
-拿到浏览器工具却拿不到这个,因为它会建会话、删定时任务,而 `plan` 只读。放行的理由与浏览器工具同一条:本机不带令牌、
-只带受信任的 `Origin` 头就能调通壳的 `/api/openchamber/control`(2026-09-15 实测),GeoAgent 的 `bash` 本来就做得到;插件
-照样每次调用都 `ask`,将来要收紧改一行配置。聊天里它沿用上游控制工具的呈现:隐藏原始输入,图标是图标精灵里 `geocode`
-那枚(09-19 换成 GeoCode 自己的标志,见本节末),显示名 GeoCode。插件文件、环境变量与 `prepareBrowserTool` 这些名字早于这个工具,是内部名,
-没有跟着改。
+⚠️ **模型常把 `browser.` 前缀省掉只发 `click`。** 壳会把它解析成唯一同名的动作,而插件必须在 `ask`
+**之前**做同一次归一,否则权限规则永远匹配不到、由通配放行。
 
-2026-09-15 真实会话验过:主进程写出的插件文件里两个工具都在,没有 OpenChamber 与 OpenCode 字样;内核工具清单里有 `geocode`;
-GeoAgent 在临时会话里调 `projects.list` 成功(工具状态 completed,返回 `ok: true`)。写操作走同一条回调与上游同一个服务,
-没有在用户的项目里建真实的定时任务。
+⚠️ **两个工具名都是我们起的**,所以渲染层的工具元数据表**两个都得有条目**:缺条目的工具落到未知
+工具的兜底,输出语言变成 `text`,JSON 回答因此丢掉高亮。
 
-绊线:`kernel/test/geocode-trusted-plugin.test.ts`(四个方向)、`geocode-geo-permissions.test.ts`(两个工具的裁决)、
-`electron/geocode/browser-tool.test.mjs`(文件、覆盖变量、生成源码可导入、两个工具各自的动作、调用前询问、裸动作名归一后再问、
-逐个工具的替换表且无品牌字样、界面三处按名匹配、两侧路径一致、主进程顺序)、
-`electron/geocode/desktop-identity.test.mjs`(渲染端的面板 partition)、
-`web/server/geocode/browser-tool-callback.test.js`(令牌、每个工具只到自己的动作、裸动作名在工具内解析、解析不出时只列自己的动作)。
+**截图落在 `<项目>/.browser/`**,与智能体在工作区里写文件同级,不单独询问。不用上游的
+`.openchamber/screenshots`(那是别人的产品),也不用 `.geocode/`(那里是用户手写的配置)。截图需要
+面板正在显示——面板关着或不是当前标签时合成器不出帧;读页、点击这些在页面内执行脚本的动作不需要。
 
-**应用图标(2026-09-19 落地,用户自行设计)。** 标志在仓库里有九处表现,要紧的是**其中五处画在源码里而不是图片文件里**:
-Electron 的启动闪屏、网页的启动闪屏、渲染层的 Logo 组件、图标精灵的图元、内核 OAuth 回调页的字标。换图片不会让它们跟着变,
-而 git 与编译器都看不见它们该一致,所以前三处的同一份动画由 `ui/src/geocode/brand-mark.test.ts` 钉住(它一写出来就抓到一处真不一致)。
+#### 品牌资产的维护约束
 
-**渲染层那一处换过一次形态,理由可复用。** 起初是把上游的 `OpenChamberLogo.tsx` 整份重写,暴露面 239 行,当天全树最贵的补丁;
-现在图形住在自有文件 `ui/src/geocode/GeoCodeBrandMark.tsx`,上游那份原样留着、只改导出名一行让出名字,暴露面降到 1。
-没有用 `CONVENTIONS.md` §5 那条「早退」,是因为它会在函数体里留 276 行不可达代码(这个包里两种写法都编译得过,
-`no-unreachable` 被 typescript-eslint 关掉了),下一个做死代码清理的人很可能把它删掉;改名后上游那份仍是一个完整、
-导出的组件,读起来就是有意留下的。⚠️ **两个启动闪屏里的立方体图形不照此办理,仍是整段删除。**
-`index.html` 那段自带 9 处 `<!--`,HTML 注释不能嵌套,屏蔽它就得引入第三种形态,而 `main.mjs` 那段包得住——
-分开处理会让同一份图形在两个文件里形态不一致。这里接受形态 4:冲突的解法是机械的「取我们的」,而标记就在旁边写着为什么。
+**这个标志在仓库里有九处表现,要紧的是其中五处画在源码里而不是图片文件里**:两个启动闪屏、Logo
+组件、图标精灵、内核的 OAuth 回调页。改标志时它们不会被任何图片替换流程带到。
 
-**macOS 继续走上游的 Icon Composer 管线**(用户定:与上游保持一致),因此应用图标是零代码改动——只换 `AppIcon.icon/Assets/` 下两张
-透明底前景图层,再跑一次 `bun run generate:macos-icon` 重新生成 `Assets.car` 并提交。⚠️ 那一步不在打包链里,而 `after-pack.cjs` 找不到
-`Assets.car` 会直接让 macOS 打包失败,所以改完图层必须记得跑。
-
-**托盘图不是正方形。** 这个标志天然 1.5:1,塞进正方形画布就只能缩到轨道宽度装得下为止,图形只占画布高度的 61%,在菜单栏里明显比
-旁边的图标小一圈。macOS 只按高度对齐、不限制宽度,所以画布改成 28x18(及其 2x、3x),图形占到 89%。**低于约 18px 要去掉球体内部的波纹**
-是设计者自己的尺寸分档规则;14px 的工具卡片图标据此也用无波纹版。⚠️ 已知偏差,用户定不修:托盘 @1x 仍带波纹——@1x 与 @2x 必须保持
-2:1 的像素比,不能只把 @1x 换回旧件,而重导 18 帧不划算;它只在外接非 HiDPI 显示器上用得到。
-
-**加载标志不跟随系统的「减少动态效果」,动画一直放**(2026-09-21 用户定,原话:「我觉得我们不值得做的这么细致面面俱到了」)。
-原先三处各自在该设置打开时把 `<animate*>` 元素摘掉,09-21 一并删除:主进程的 `freezeWhenMotionIsReduced` 与它独占的
-`systemPreferences` 导入、网页闪屏那段 `matchMedia` 脚本、组件里的 `prefersReducedMotion`。⚠️ **删掉的同时修掉了一个显示错误**:
-星在动画母版上的位置**只**来自 `animateMotion`,摘掉元素之后它回到局部原点、落到画布左上角(Chrome 实测 (14.3, 18.0),
-在轨道上时是 (101.4, 41.8));球体自带坐标不受影响,所以这条一直没人看见。⚠️ **这是刻意偏离上游**:上游在它唯一的动画上是遵守的
-(`oc-logo-glow` 自带 `@media (prefers-reduced-motion:reduce){animation:none}`)。判据是这枚标志只有 120px、强度轻,
-不值得为它维护三处适配代码。**复查线索**:哪天要改回遵守,`prefers-reduced-motion` 全仓已无我们的消费者,得三处重新加,
-而且**不能再用摘元素的写法**——要么按上游那样走 CSS,要么冻结前先从 `animateMotion` 自己的 `path="M 103.78 28.27 …"` 读出起点
-写成静态 `transform`。顺带的好处是补丁更薄:`main.mjs` 回到上游原文一行,暴露面 −1。
-
-**启动期的整屏加载面一律用动画母版。** 两份母版不是一个尺寸:静态母版比动画母版多一层 `scale(0.86)`,那是标志待在版面里
-(关于页、空状态、内核失败页)时的留白。而启动路径上整屏加载面会**依次**出现四张——主进程闪屏、`index.html` 闪屏、
-`SessionAuthGate` 的 `LoadingScreen`、`AppStartupOverlay`——后两张原先没要动画母版,于是 React 首帧那一下标志会从 67.1px
-缩到 57.7px 并停住(120px 画布上的球体直径,Chrome 实测)。⚠️ **两张都得改**:桌面上 `skipAuth` 只在 VS Code 为真,
-`LoadingScreen` 因此比 `AppStartupOverlay` 先渲染,只改后者看不出变化。两处改的都是上游的行,合并时被还原**不会有冲突**,
-所以由 `brand-mark.test.ts` 按「这个元素全文件只此一个,且带着那个属性」钉住。
-
-**三段的动画相位对到墙上时钟。** 标志在启动路径上画三次,而这是**三个互不相干的 SMIL 时钟**:主进程闪屏是一份文档,`index.html` 是第二次
-真正的文档导航,React 覆盖层又是新挂载的元素,每一次时钟都从 0 开始走,星星于是在每次交接都跳回轨道起点。跳多远取决于交接落在 3.2 秒周期的
-哪一点,所以它每次启动都发生、可见度却是随机的。三处各在挂载后取一次 `setCurrentTime((Date.now() / 1000) % 周期)`,周期从图形自己的
-`dur` 属性取最大值,不手抄。⚠️ **调用时机是测出来的,不是推出来的**:在解析期设、或在 `load` 事件里设,**都会被丢弃**(Electron 实测两者
-`got=0.000`,而 `requestAnimationFrame` 与零延时任务都拿到了设进去的值),因为时间线是随文档启动的。两张闪屏用的是逐字节相同的一段内联脚本,
-由 `brand-mark.test.ts` 比对;组件那一侧则**拿闪屏里的真表达式**去比,不在绊线里另抄一份——先写成「源码里出现过 `setCurrentTime`」那样的断言,
-被守卫里的 `typeof mark.setCurrentTime` 喂饱了,植入缺陷也不红。⚠️ 它只消除**必然发生**的那次跳回起点:渲染进程解析前端包时主线程是堵的,
-SMIL 归主线程驱动,那一段仍会掉帧。
-
-**启动末段星星会停一下,判为接受、不修**(2026-09-21 用户定,原话:「我觉得到此为止吧,我们这个转换成 CSS 的代价觉得太大了」)。
-界面出现之前,渲染进程正在解析执行前端包、主线程满载,而 **SMIL 归主线程驱动**,那一段动画是真的停,堵完再跳到墙上时钟该在的位置。
-实测(拿仓库里的 Electron 跑真实 `data:` URL,主线程忙等 600 毫秒):一条 3.2 秒 / 320px 的轨道该前进 60.1px,SMIL 只走了 **0.8px**,
-同页的 CSS 动画走 59.2px,**挂在 SVG 内部元素上的 CSS 也走 59.2px**,连 `offset-path` + `offset-distance` 都走了 92.8px——
-就是说根治的办法是把四种动画全翻成 CSS,而代价是三份内联副本连同相位对齐的代码一起重写,判为不值。
-⚠️ **这一条完全是我们自己带进来的,不适用「上游的缺陷不修」**:上游两张闪屏**零动画、零 `<animate*>`**,画的是静止的立方体;
-全树唯一的动画是组件里那个 CSS 光晕(`oc-logo-glow`,1.8 秒,自带 `prefers-reduced-motion` 媒体查询),而桌面启动覆盖层连它都不用
-(`isAnimated` 默认 false)。上游 `isAnimated` 的两条分支**几何完全相同**,只多一个 `<style>` 与一个 className。
-**一张静止的图不会卡顿,也不会跳相位、不会在交接时缩小——上游是靠不做动画绕开整个问题域的。**
-**复查线索**:要重新判就重跑上面那个忙等实验。
-
-**这一批判为接受、不修的偏差**(2026-09-19 用户定「不要大幅度修改图标和动画」,前两条都在设计母版里):
-星在轨道最左端会被 100x100 的画布切掉约 16%(左缘到 −1.24,算上 ±10° 摆动到 −3.31);
-深色卡片上字标的深蓝部分对比度 2.34:1、球体描边 1.19:1,都低于非文本元素的 3:1(它自带配色,不跟随页面的三档图标令牌)。
-另有两条与图形无关:重新生成图标精灵时抹掉了上游一条自己的生成器也产不出、全树无人引用的图元;
-`index.html` 里 `--splash-stroke` 那条链现在没有消费者,删它要动更多上游行,不划算。
-
-**OAuth 回调页的字标另算一份资产**,是横版的 `GeoCode` 像素画,与应用内那枚方形图形不是同一张。高度定在 56px,判据是那个高度让它在
-2x 屏上落成 1:1、一个像素都不插值;上游的 19px 是为纯色块字标定的,会把纹理糊掉。品牌扫描原先把 wordmark 整段剥掉再查上游名字,
-09-19 起不再豁免。
+- **两份母版不是一个尺寸**:静态母版比动画母版多一层 `scale(0.86)`。所以启动期的整屏加载面**一律用
+  动画母版**,否则交接时标志会当场缩一下。
+- **标志在启动路径上画三次,而那是三个互不相干的 SMIL 时钟**(主进程闪屏、`index.html`、React 组件
+  各一份文档)。三段都把相位对到墙上时钟,否则每次交接星星都跳回轨道起点。
+- **托盘图不是正方形。** 这个标志天然 1.5:1,塞进正方形画布只能缩到轨道宽度装得下为止,在菜单栏里
+  明显比别的应用小。
+- **加载标志不跟随系统的「减少动态效果」**,动画一直放。
+- **启动末段星星会停一下,判为接受、不修。** 主线程解析 bundle 时 SMIL 会冻住,改成 CSS 动画的代价
+  不值得。上游没有这个问题,是因为它的闪屏根本不做动画。
+- macOS 继续走上游的 Icon Composer 管线,所以应用图标是**零代码改动**:只换前景图层。⚠️ **但要记得
+  跑一次 `bun run generate:macos-icon` 重新生成 `Assets.car` 并提交**——那一步不在打包链里,而打包
+  钩子找不到它会**直接让 macOS 打包失败**。
+- OAuth 回调页的字标另算一份资产:横版的 `GeoCode` 像素画,与应用内那枚方形图形不是同一张。
 
 ### 7.3 不进入 GeoCode 产品
 
 - Web / PWA;
 - VS Code extension;
 - iOS / Android;
-- 对外 CLI / Server(`packages/web/bin` 不随应用分发,`openchamber serve` 与 `startup enable` 不是产品入口,
-  `ENVIRONMENT.md` §5.7);
+- 对外 CLI / Server(`packages/web/bin` 不随应用分发,`ENVIRONMENT.md` §5.7);
 - LAN、SSH host、Remote Instance、Relay、Tunnel 与设备配对;
 - 选择或自动发现系统 OpenCode;
 - OpenCode 自升级;
 - 会话分享(内核侧的截断见 `KERNEL.md` §6 第 5 项,这里关的是界面入口);
-- 仓库共享的项目配置(`<repo>/.openchamber/project.json`)与它带的仓库计划目录;
+- 仓库共享的项目配置与它带的仓库计划目录;
 - 项目操作(把 shell 命令绑到顶栏按钮)与 worktree 的初始化命令;
 - 写给程序员的斜杠命令(内核内置的 `/init`、`/review` 与界面自带的八条);
-- OpenChamber 的外部插件管理、system-prompt optimizer,以及上游那条 agent-tool 注入管道(浏览器工具与控制工具改由 GeoCode 自己注入,见 §7.2;记忆工具不注入);
+- OpenChamber 的外部插件管理、system-prompt optimizer,以及上游那条 agent-tool 注入管道
+  (两个工具改由 GeoCode 自己注入,见 §7.2;记忆工具不注入)。
 
-上游源码中的这些模块可以保留,但 GeoCode profile 下不得注册路由、启动定时器、建立网络连接
-或显示入口。此约束需用运行时测试验证,不能从「构建命令没有点名它」推断。
+上游源码中的这些模块可以保留,但 GeoCode profile 下不得注册路由、启动定时器、建立网络连接或显示入口。
+三条通则:
 
-**不注册不等于关上,关掉的路由要由壳自己答 404。** 壳的通用代理注册在所有路由之后,把谁都没接住的 `/api/*`
-转给 Kernel;上游的 Kernel 兜底路由再把它不认识的路径原样转发到 `https://app.opencode.ai`,请求头里带着 Kernel 口令
-(`server/shared/ui.ts`,打包的 Kernel 没有内嵌网页界面,所以走的正是这条)。2026-09-13 查实:每个一键动作都先读一次
-魔法提示词的覆盖值,而那组路由当时只是不注册,这一读就经 Kernel 发到了上游,沙箱里同样的请求实测出网。现在魔法提示词、
-插件、隧道三组在 Electron 下按整个前缀抢先答 404(`server/geocode/closed-surface.js`),上游日后在组内加的路由一并被拦。
-绊线 `server/geocode/closed-surface.test.js` 先记下每组在非 Electron 下挂的全部路由,再在 Electron 下逐条请求,其后挂一个
-代理替身,断言都是 404、替身一条没收到。代码片段与配对路由本来就是这个形状。2026-09-13 真实会话验过:向壳请求三组各一条,都是这句 404,
-前后 Kernel 进程的连接没有变化。2026-09-14 起 Kernel 侧也已截断(`KERNEL.md` §6 第 7 项),壳漏接的请求只会
-得到 Kernel 的 404。
+⚠️ **不注册不等于关上,关掉的路由要由壳自己抢先答 404。** 壳的通用代理注册在所有路由之后,把谁都没
+接住的 `/api/*` 转给内核;而上游内核的兜底路由会把它不认识的路径**原样转发到 `app.opencode.ai`**,请求
+头里还带着内核口令。「只是不注册」因此不等于不出网——实测过一次真的出去了。
 
-**2026-09-12 与 09-13 新判(合并 v1.23.1 及其收尾):仓库共享的项目配置、仓库计划、项目操作与 worktree
-初始化命令都不进入产品。**前两项 09-12 定,后两项 09-13 定。用户给的理由是同一条:GeoCode 面向地理从业者,
-他们的代码需求很轻,基本不涉及团队项目开发。四项各有落点。
+⚠️ **按整个前缀关,不按路由逐条关。** 这样上游日后在组内新增的路由一并被拦,不必等人发现。
 
-共享项目配置是上游让一个团队把项目设置 commit 进仓库、队友 pull 就自动拿到的机制,内容是 worktree 的初始化
-命令与绑在按钮上的项目操作——也就是**别人写的 shell 命令**。我们的用户常在不是自己写的仓库里工作。服务端两条腿
-都封:`readSharedProjectConfig` 首行早退报「文件不存在」(它是所有读路径的唯一入口),写路由前按同形注册 404。
-界面四处入口关掉:专属的「共享」一节,加项目操作、worktree 命令、草稿起手三处「移至仓库」。设置搜索里指向这一节的
-两条条目(仓库配置、计划文件夹)在桌面壳隐藏(`ui/src/geocode/desktop-settings-surface.ts`,09-16 补:节关了而搜索
-仍搜得到,计划文件夹那条还露出 `.openchamber/plans`)。
+⚠️ **此约束必须用运行时测试验证,不能从「构建命令没有点名它」推断。**
 
-仓库计划是 v1.23 新增的:一个计划文件可以从个人数据根移进仓库,跟着 git 走给队友看。同样关掉
-(`resolveSharedPlansDir` 返回 null,那是上游自己的「找不到签出」状态,每个调用点都处理)。这里不能改目录名
-了事:上游默认 `.openchamber/plans`,换成我们的 `.geocode/plans` 会和**内核写计划的目录重合**,而上游那侧会
-`readdir` 整个目录、按文件名删文件,有误删内核计划的风险。右侧栏「计划」列表上每个计划的「移至仓库」按钮同样不显示
-(`PlansSection.tsx`,09-16 补:原先漏掉,点了服务端因没有仓库计划目录而拒绝,界面弹「移动计划失败」;漏的原因是
-绊线按入口文案的翻译键扫描,这个键不在名单里,现已加入)。
+**那几条与团队开发相关的,判据是同一条**:GeoCode 面向地理从业者,他们的代码需求很轻,基本不涉及
+团队项目开发。共享项目配置是上游让一个团队把项目设置 commit 进仓库、队友 pull 就自动拿到的机制,
+而它的内容是 worktree 初始化命令与绑在按钮上的项目操作——**也就是别人写的 shell 命令**,而我们的用户
+常在不是自己写的仓库里工作。
 
-项目操作与 worktree 初始化命令一并关掉:两者都是「把一条 shell 命令绑到界面上」,上游自己拿前者跑
-`bun run dev:web:hmr`,是开发者的便利。设置搜索里指向初始化命令那一块的两条条目(「创建或发送会话前等待初始化命令完成」
-「仅使用我的设置命令」)同样隐藏(09-16 补)。09-17 补关三处:顶栏的项目操作按钮(它的「Auto-discover」会跑项目的
-dev 脚本或起一个静态服务器);Multi-Run 启动器里的初始化命令一栏(它会预填已存的命令,还会把命令存回项目设置);
-壳这一侧,Electron 下新建 worktree 不执行任何初始化命令,之前存下的也不执行(`git/service.js` 的 `runWorktreeStartScripts`)。
-界面的守卫在 `geocode/advanced-project-surface.ts`,绊线 `advanced-project-surface.test.ts` 按挂载点扫描;壳的绊线
-`server/geocode/worktree-setup-commands.test.js` 带一个不标 Electron 的对照,证明命令确实走到了执行处。
+**没有关掉的是 worktree 本身。** 它是两个会话改同一个项目而不打架的机制,创建入口在聊天输入区而不在
+设置页;「现有工作树」列表照旧显示,它既是完整清单,也是删掉它们的入口之一。
 
-**没有关掉的是 worktree 本身。** 它是两个会话改同一个项目而不打架的机制,创建入口在聊天输入区而不在设置页;
-「现有工作树」列表照旧显示,它是工作树的完整清单,也是删掉它们的入口之一(侧栏的工作树分组也能删)。
+**GitHub 的 PR 与工单面判为保留,判据与上面那些关掉的面不同,要分清。** 保留的是 Git 视图里的 PR 面板
+(新建、编辑、合并、标为可评审、在 GitHub 打开)、它下面的 CI 检查详情、把失败的检查贴进对话让模型去
+修,以及在聊天框里挂一个 GitHub 工单当上下文。⚠️ **判据是「它不往外送用户自己的数据」**——动的是
+用户已经在 GitHub 上的东西,用的是用户自己的令牌。会话分享与 Routing 关掉是因为研究数据出门,这条
+没有那个理由;它确实会写(建 PR、合并),但写的对象是用户自己的仓库,由用户按下按钮。启动时自动读取
+`gh` 令牌同样判为不改。
 
-**2026-09-07 重判:计划任务、Session Goals、Multi-run / Fusion 与 agent / command 管理表面保留。** 前三样原先和 GitHub 写在同一句里,归类为
-「面向编程工作的」;agent 与 command 管理表面是另一条,归类为「面向编程项目的」。两条都是照抄 OpenChamber
-对自己的定位,我们从未重判。逐一读过实现之后判据不成立:
-计划任务是「到点在项目里开一个会话跑一段提示词」,Session Goals 是「盯住一个目标、由独立评估决定何时停、
-花超预算就停」,Multi-run 是「同一任务分组各跑一遍再合成一个答案」。三者都是通用的智能体能力,机制里没有
-一处与编程绑定,对地理工作反而对路:定期抓取与刷新、多轮且容易半途宣布完成的清洗任务、同一分析换几套参数
-比着看。权限一律走既有体系,不为它们新增任何机制——包括自动批准:那是「用户提前回答确认框」,不是绕过它,
-和用户在会话里手动打开是同一件事。
-
-agent 与 command 两页同判,而且不需要任何额外工作。斜杠命令就是可复用的提示词模板,「把这个目录的 shapefile
-重投影到 EPSG:4326 并出质检报告」正是地理用户想要的东西。新建智能体由构造保证安全:全局权限块关掉了
-geodata、qgis、osm、gee 与 browser,新 agent 继承这些关闭状态,除非用户明确打开。编辑内置智能体会生成用户级
-文件覆盖装配层,这一点是配置体系本身的性质(装配层最先合并,用户与项目配置可以覆盖),而界面对它有完整交代:
-内置单独分组、不可删除、以「重置」代替删除——重置删的是覆盖文件而不是智能体。删不掉是结构使然而非界面拦阻,
-`agents.js` 的 `deleteAgent` 找不到任何承载文件时直接抛「built-in or not deletable」,因为 `config/geocode.ts`
-装配的智能体在磁盘上没有文件。内置这个标记本身也是我们加的(`agent/agent.ts` 的 `native: shippedAgents.has(key)`)。
-
-Session Goals 唯一的改动是评估提示词里去掉一个词:上游写着「You audit progress of a **coding** agent」,
-而评估模型是唯一有权判定目标达成的角色(干活的 agent 没有渠道结束自己的目标),它把什么当作证据就决定循环
-何时停止。判据与 KERNEL.md §5.2 的压缩提示词同形——那一处也只改一个词。绊线在
-`web/server/geocode/session-goal-prompt.test.js`。会话辅助(每轮回复结束后的回顾与下一步建议,由小模型生成)同理只去掉
-一个词:上游要它「Only suggest work the **coding** agent can perform」,照字面地理工作就不在可建议之列。绊线在
-`web/server/geocode/session-assist-prompt.test.js`。
-
-**GitHub OAuth 身份已切换为 GeoCode(2026-09-19)。** 自有 OAuth App 的 Client ID 为
-`Ov23liGGsghsdLRXeIil`,名称与图标由维护者在 GitHub 注册页管理。沿用上游设备授权流程,
-不引入 Client Secret、回调服务或新登录协议。默认 scope 为 `repo read:org read:user user:email`,
-移除允许改写工作流文件的 `workflow`;读取 PR 检查和工作流任务不需要该 scope。
-应用注册保持 Device Flow 开启、Token expiration 关闭,当前实现没有保存或刷新 refresh token。
-三种产品语言中的授权与备用账号文案改为 GeoCode,移出品牌检查的豁免清单。
-
-默认值位于 `github/auth.js`,原因是用户设置只覆盖本机,不能为新安装提供产品身份。仍保留上游的显式配置
-优先级:环境变量、`settings.json` 的 `githubClientId` / `githubScopes`、产品默认值;桌面启动会剥离继承来的
-`OPENCHAMBER_*`,因此普通桌面安装主要检查 settings 覆盖。迁移时若曾手填旧 Client ID
-`Ov23lizomPOC3eFYo56r`,应移除该覆盖或改为自有 ID;自定义应用配置不自动覆盖。
-
-**已有授权不自动改名、不自动删除或撤销。** 新 ID 只影响后续登录,旧令牌仍归原签发应用。已保存 OAuth
-账号需在「集成 → GitHub」重新连接,同名账号的新令牌替换旧记录,其他账号不受影响;多账号逐个连接。
-需要撤销原应用授权时,由用户在 GitHub 设置中操作,因为该授权可能还被其 OpenChamber 使用。
-`gh` 凭据独立保留,不会因本次迁移被清空。维护者本机在本次接入前没有 `github-auth.json`,也没有上述
-两个 settings 覆盖,因此没有存量令牌需要迁移。新登录由用户在 GitHub 确认授权。
-绊线 `web/server/geocode/github-identity.test.js` 检查真实设备流两次请求的 Client ID 与 scope,
-并验证自定义配置优先级和重连只替换对应账号。
-
-2026-09-19 在 macOS arm64 的当前工作树桌面构建上验过:授权页显示 GeoCode 名称与图标,
-用户确认后集成页显示 OAuth 账号,scope 不含 `workflow`;凭据文件权限为 0600。正常退出并重开后,
-OAuth 仍为当前账号,原 CLI 账号保留为其他账号。完整验证门通过,Windows 实机尚未验证。
-
-**GitHub 发布流与 PR 界面:判为保留(2026-09-20 用户定)。** 用户原意是保留写代码这件事本身的能力,
-不要过分阉割 GitHub。这一条**不进 §7.3 的出局清单**。
-
-保留的是什么:Git 视图里的 PR 面板(新建、编辑、合并、标为可评审、在 GitHub 打开),它下面的 CI 检查
-详情(哪一步挂了、起止与结论),把失败的检查贴进对话让模型去修,以及在聊天框里挂一个 GitHub 工单当上下文。
-服务端是 `web/server/lib/github/` 的 `pr/*` 四条与 `issues/*` 三条路由。
-
-判据与前两次关掉的面不同,要分清:⚠️ **它不往外送用户自己的数据**——动的是用户已经在 GitHub 上的东西,
-用的是用户自己的令牌;会话分享与 Routing 关掉是因为研究数据出门,这条没有那个理由。它确实会**写**
-(建 PR、改 PR、合并、标就绪),但写的对象是用户的仓库,由用户在界面上按下按钮。
-
-⚠️ **连带:默认 scope 里的 `repo` 是这个面要的**,28 处调用要读写仓库、PR、工单与检查。若将来改判为关闭,
-授权范围可一并缩到 `read:user user:email`——那时 GeoCode 向用户 GitHub 账号索取的就只剩「你是谁」。
-现在不缩。
-
-这个面只在工作目录是**带 GitHub 远端的 git 仓库**时出现(服务端从 git remote 解析 `owner/repo`),
-所以对默认的 Chats 目录与典型 GIS 数据目录本来就不显示,不需要额外的可用性判断。
-
-**启动时自动读取 `gh` 令牌:判为不改(2026-09-20 用户定)。** 壳在每次启动时执行用户的 `gh auth token`,拿到的令牌调 `api.github.com` 认人(公开资料里没有邮箱时会再取一次邮箱列表),这一串在用户没有连接过任何账号时就会发生。⚠️ **这是上游的功能按设计工作,不是缺陷**,判据落在归属:用户的判断是「既然是 OpenChamber 的功能我觉得我们没有必要去改,因为我们的 GeoCode 的用户也不是完全不写代码的」。⚠️ 不要再拿「地理从业者代码需求很轻」去推翻它——那句话是用来砍团队协作功能的(仓库共享、项目操作),GitHub 能力本身按本节开头那句「能力本身该留」保留,身份自动发现随它一起留。`ghCliDisabled` 这个开关上游自带,要关的用户关得掉。
-
-已按此执行的项,连同它们的判据与绊线:
-
-- **选择或自动发现系统 OpenCode、OpenCode 自升级**:设置里的「OpenCode CLI」一节在桌面壳不渲染,
-  设置搜索不再列出它的两个条目(`geocode/desktop-settings-surface.ts`);壳在 Electron 下让
-  「解析二进制」与「升级」两条路由返回 404,`opencodeBinary` 旧设置不再写入 `OPENCODE_BINARY` 与主进程
-  `PATH`。读版本号的「升级状态」路由保留,它在外部模式下不访问网络,About 页靠它显示内核版本。
-  绊线在 `server/geocode/system-opencode-surface.test.js` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
-- **LAN**:设置里「桌面」一节在桌面壳换成 GeoCode 自己的组件(`ui/src/geocode/GeoCodeDesktopSettings.tsx`),
-  只保留登录时启动、菜单栏图标、最小化到托盘、保持唤醒四个本机选项,复用上游的 IPC、搜索 id 与文案;
-  「允许局域网访问」开关与为它配套的「桌面 UI 密码」不再出现,搜索也不列。主进程在解析设置文件之后、
-  选绑定地址之前剥掉 `desktopLanAccessEnabled` 与 `desktopUiPassword`(`electron/geocode/loopback-settings.mjs`),
-  所以旧版本或手工写进 settings.json 的值也只会得到回环绑定与无口令的本机窗口,§6.1 不依赖界面是否显示。
-  绊线在 `electron/geocode/loopback-settings.test.mjs` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
-- **Tunnel**:设置里「External Tunnel」整页在桌面壳不可用(`ui/src/lib/settings/metadata.ts` 的页面可用性判断,
-  导航、直达路由与搜索都读它);壳在 Electron 下不注册 `/api/openchamber/tunnel/*` 的任何一个处理器,整个前缀
-  答 404(`lib/tunnels/routes.js` 首行),所以 cloudflared 与 ngrok 没有任何入口能被拉起。隧道服务对象保留,
-  relay 与系统信息接口从它读当前端口,公网地址恒为空。它本就不在启动时做任何事,没有自动恢复与定时器。
-  绊线在 `server/geocode/closed-surface.test.js` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
-- **SSH host、Remote Instance、Relay 与设备配对**:「远程实例」页在桌面壳不可用(与 Tunnel 同一个页面可用性谓词);
-  主机切换器在桌面壳不渲染,它的两个挂载点是顶栏的服务菜单(`Header.tsx`)与登录门出错屏、锁定屏上的「切换实例」
-  (`SessionAuthGate.tsx`);上游启动三秒后替它预热各实例连通性,在桌面壳也不做(`lib/desktopHostStatus.ts`),
-  否则每次启动都探一次本机、被下文的主进程拒绝,留一条错误日志并把本机记成「无法连接」。切换它的快捷键在快捷键帮助与设置的快捷键页里都不列(`geocode/host-switcher-surface.ts`,09-17),按下去本来就没有反应。壳在 Electron 下由 `createRelayService` 返回惰性对象
-  (`server/geocode/inert-relay.js`):不注册路由、不建宿主客户端、不生成写进 settings.json 的身份密钥,serverId 恒为 null;
-  配对的五条路由(会话、传输候选、兑换)先于上游 handler 注册 404(`server/geocode/remote-access-surface.js`),
-  已配对设备的列表路由保留,只读且恒空。主进程在命令分发前拒绝 11 个远程命令(8 个 `desktop_ssh_*`、远程口令登录、
-  主机探测、主机写入;`electron/geocode/remote-ipc.mjs`),`desktop_hosts_get` 保留给顶栏与恢复页判断「当前是本机」;
-  `connect` 深链在分发前丢弃;早期构建写进 settings.json 的 `privateRelay`、`relaySigningKey`、`relayEncryptionKey`
-  在启动时清理一次。`dev-tunnel` 不动:它只在 API 地址是远程时启用,主机切换没了它不可达。
-  绊线在 `server/geocode/remote-access-surface.test.js`、`electron/geocode/remote-ipc.test.mjs`、
-  `ui/src/geocode/desktop-settings-surface.test.ts` 与 `ui/src/geocode/host-switcher-surface.test.ts`。
-- **首次启动选择页、「安装 OpenCode」页与恢复页**:按 §5.1「启动只有两种结果」处理,三页在桌面壳下没有到达路径。
-  绊线在 `electron/geocode/kernel-failure.test.mjs` 与 `ui/src/geocode/kernel-failure-screen.test.ts`。
-- **代码片段(Snippets)**:「代码片段」页在桌面壳不可用,六条管理路由在 Electron 下先于上游的 handler 注册 404
-  (`server/geocode/snippet-surface.js`,做法与配对路由同形——它们嵌在与 MCP、agent、command 共用的注册函数里,
-  没法整体早退,靠 Express 的匹配顺序解决),输入框里 `#` 不再弹出补全。片段是「把 `#名字` 在发送前替换成一段
-  预存文本」,替换发生在壳侧,内核只收到替换后的完整文本。判据:这不是 GeoCode 要提供的表面(2026-09-07 用户决定)。
-  **展开函数本身不动**——和其余保留但不暴露的模块一样,§7.3 要求的是关入口不是拆机器;应用里既然无法创建片段,
-  注册表恒空,展开就是一次空操作。补全必须一并摘掉,因为路由关闭后它会弹出一个空列表,而列表里唯一剩下的动作
-  是跳转到已经隐藏的设置页。三个组合器都挂它(聊天、多路启动、定时任务编辑),所以收口做在组件自身的包装上,
-  渲染 null 让父组件的 ref 始终为空,而父组件只在 ref 存在时才路由按键(`ChatInput.tsx`),于是按键不会被面板接管。
-  ⚠️ **只关面板不够,2026-09-21 补上了另一半**:`triggers.ts` 仍把 `#` 匹配成 snippet,而 `ChatInput` 判断的是
-  `openAutocomplete !== null` 而不是 ref——**单打一个 `#`** 就足以让它认为有面板开着,于是 ↑ 历史召回、Agent 循环
-  与 Markdown 自动配对**同时静默失效**,屏幕上却什么都没有。触发器那一侧改由 `ui/src/geocode/snippet-surface.ts`
-  决定,绊线 `snippet-surface.test.ts` 同时断言非桌面仍返回 snippet、且 `/` 与 `@` 不受影响。
-  ⟹ **关一个表面要问「谁还在读这个状态」,不只是「谁还在画这个组件」。**
-  遗留:输入框占位文字仍写着「# 用于代码片段」,那是十种语言的翻译串,归改牌那一批。绊线在
-  `server/geocode/snippet-surface.test.js`(真实 Express,拒绝必须先于记录式 handler 命中;`config-entity-routes.js`
-  里那行调用必须排在第一条片段路由之前)与
-  `ui/src/geocode/desktop-settings-surface.test.ts`(页面可用性与包装的存在)。
-- **技能目录(Skills Catalog)**:「技能目录」页在桌面壳不可用,四条路由(目录、目录来源、扫描仓库、安装)在 Electron 下
-  先于上游的 handler 注册 404(`server/geocode/skill-catalog-surface.js`,与片段同形:这四条与技能自身的增删改共用一个
-  注册函数,且 `/api/config/skills/:name` 会先匹配到 `catalog`,所以靠 Express 的匹配顺序解决)。拒绝按上游注册的方法
-  逐条挂,名叫 `scan`、`install` 的技能用其余方法仍走技能自身的路由。判据:上游的目录装的是它自己策划的 git 仓库,
-  GeoCode 之后要做自己的技能库(2026-09-16 用户决定)。技能本身不受影响:新建、编辑、删除、读写支持文件走另外几条
-  路由。打开「技能」页时,以及每次应用改动后重载技能时,上游仍顺带请求目录,得到 404 后只在目录的状态里记一条错误,
-  不弹提示,能显示它的只有已关的目录页。连带两处文字从此没有到达路径——安装冲突对话框里的来源标签 `opencode`,与「添加目录」
-  说明里的 OpenChamber 字样,改牌那一批因此不含它们。绊线在 `server/geocode/skill-catalog-surface.test.js`(真实 Express,
-  拒绝必须先于记录式 handler 命中,`skill-routes.js` 里那行调用必须排在第一条目录路由之前)与
-  `ui/src/geocode/desktop-settings-surface.test.ts`(页面可用性)。
-- **上游其余九种语言**:设置「外观」里的语言选择器只列 GeoCode 的三种产品语言(英文、简体、繁体);存过的语言若在其外
-  (早先的构建能存十二种里的任何一种),启动时经 `setLocale` 落回英文。九份上游译文从未改牌(每份约两百处
-  OpenChamber / OpenCode),还写着 `.opencode`、`opencode.json`、`~/.config/openchamber/` 这些 GeoCode 没有的路径,
-  而两条语言绊线只扫产品语言那三份——既没改也没人看。判据:产品只发布这三种语言(2026-09-16 用户定,核心用户是
-  台湾、大陆与英文学术圈)。桌面壳不注入系统语言(上游只有 VS Code 插件注入),没存过语言的机器本来就从英文起。
-  Walkthrough 里选讲解语言的菜单不收窄:它选的是模型写讲解用的语言,不是界面语言。九份字典原样留着;上游测试里切到
-  西语、法语、乌克兰语的三条(`lib/i18n/store.test.ts` 两条、`LiveTurnActivity.test.tsx` 一条)因此按设计变红
-  (上游套件不在门里)。绊线在 `ui/src/geocode/locale-surface.test.ts`(选择器只列这三种;存过的德文等落回英文;
-  产品语言正是语言绊线扫描的那三份)。
-- **魔法提示词**:「魔法提示词」页在桌面壳不可用,`registerMagicPromptRoutes` 在 Electron 下首行把整个前缀答成 404,
-  四条路由一条不注册。这一页管的不是用户写的咒语,而是**产品自己那些一键动作背后的提示词**——生成提交信息、会话摘要、
-  追进度、起草目标、多路合并等,v1.23.1 上共 52 条。判据:这些提示词是 GeoCode 该自己写的东西,不是设置项
-  (2026-09-07 用户决定)。关掉不影响任何功能:每个一键动作仍先取一次覆盖值,拿到 404 就回落到内置模板
-  (`ui/src/lib/magicPrompts.ts` 的 `getEffectiveMagicPromptTemplate`)。⚠️ 这里原先只是不注册,那一次读取因此经 Kernel
-  发到了上游,见本节开头「不注册不等于关上」。
-  ⚠️ **随之而来的欠账**:这些提示词是给编程助手写的,全文点名代码、仓库、提交、分支处逾百,例如「探索」开头就是
-  「get oriented in this codebase」;而它们驱动的正是我们保留的功能(起草目标、创建定时任务、多路合并)。
-  屏蔽这一页把改写它们的口子关上了,所以改写从此是我们的活,归改牌那一批,记在 `.artifacts/OPEN.md`。
-  绊线在 `server/geocode/closed-surface.test.js` 与 `ui/src/geocode/desktop-settings-surface.test.ts`。
-  2026-09-15 先只换商标(用户定,措辞另议):送进模型的六处产品名与工具名改成 GeoCode 的,落在 `/craft-goal`、`/schedule-task`
-  与 Diff「Review」的审查交接三条提示词里,工具名随控制工具改为 `geocode`(§7.2)。关掉的命令背后的提示词不改,只在已关设置页
-  显示的 `description` 字段也不改。绊线在 `ui/src/geocode/magic-prompt-brand.test.ts`。
-  同日按「能照上游就照上游,只改为 GeoCode 适配的部分」(用户定,`.artifacts/PROMPTS.md`)只加了一句:`/schedule-task` 第 6 步提醒用户,
-  任务要跑 QGIS 算法或 Earth Engine 脚本时,这些步骤会请求批准,无人值守的运行会停在那里,除非在定时任务页面给该任务打开
-  「自动接受权限」。上游写代码的 agent 默认放行 bash 与编辑,很少遇到询问;GeoAgent 运行 QGIS 算法与 GEE 脚本要问,而 `geocode`
-  工具建任务时设不了这个开关。只告知不劝开:打开后那次运行里的权限请求都会被自动批准一次。`/craft-goal` 除工具名外全部照上游,
-  包括「粘进 Goal 对话框」那处上游原有的错误(新建目标的对话框没有入口),同步上游新版本时再看。绊线在
-  `ui/src/geocode/schedule-task-prompt.test.ts`,断言提示词里的开关名与编辑器显示的一致。
-  计划面板的三对(把待办发去做计划、改进计划、执行计划)照上游:「inspect the repo」这类措辞不改(用户定,用得上 git 的用户本就
-  有编程需求);执行计划里「不明确处不要停下来问」一句与 GeoAgent 写 Python 脚本前必须确认环境的规矩可能相左,用户判为小问题,
-  也不改。只换了一处商标:计划存为项目知识、没有文件路径时,界面在指令后附一段写死的说明(`components/views/PlanView.tsx`),
-  其中两处 OpenChamber 换成 GeoCode,绊线同在 `magic-prompt-brand.test.ts`。
-- **新会话下方的起手按钮**:整排不显示,设置里控制它的开关与对应搜索条目一并不列(2026-09-13 用户决定)。那一排是八个内置
-  按钮加用户自己固定的命令与技能;内置的八个点下去就是 `/explore`、`/debug` 这类斜杠命令,由魔法提示词驱动、措辞写给程序员。
-  收口做在 `DraftPresetChips` 的包装上,两个渲染点都经它;不改 `draftStartersVisible` 的存值,所以旧设置里的 `true` 也打不开它。
-  斜杠命令本身不随这一排关闭,其中写给程序员的几条 09-14 另行关掉(见下条)。当天真实会话里确认新会话下方与设置里都不再出现。
-  绊线在 `ui/src/geocode/desktop-settings-surface.test.ts`。
-- **写给程序员的斜杠命令**:输入 `/` 时不再列出、手打也不当命令执行的共十条,内核内置的 `/init`、`/review`,
-  以及界面自带的 `/summary`、`/workspace-review`、`/handoff-review`、`/plan-feature`、`/catch-up`、`/debug`、`/weigh`、`/explore`
-  (2026-09-14 用户决定)。判据:这些命令只替用户包一段提示词、背后不连保留的功能,提示词又是写给程序员的
-  (`/summary` 的提示词基本通用,用户仍定关掉)。留下的是会话操作
-  `/undo`、`/redo`、`/compact`、`/timeline`、`/btw`,以及连着保留功能的 `/craft-goal`、`/schedule-task`;GeoCode 另带一条内核命令 `/set`(`KERNEL.md` §5.5)。关掉不损失能力,用户直接说要做什么即可。
-  内核那两条在内核里就不注册(`KERNEL.md` §6 第 8 项),所以菜单、手打、设置里的命令页、Goal 目标展开与计划任务看到的都一样;界面自带的
-  八条由 `ui/src/geocode/slash-command-surface.ts` 的名单拦在两处:菜单把它们与用户命令合并之前,和输入框的本地命令计划里。手打的关闭命令
-  照上游对待未知命令的方式当普通文字发出;用户在配置里写的同名命令照常出现、照常执行。
-  Diff 视图工具栏的「Review」按钮开的是与 `/handoff-review` 同一个另开审查会话的流程,**保留**(同日用户定,理由是在 Diff 视图里审查改动
-  不违背 GeoCode 的业务逻辑),于是这套流程只剩这一个入口;它背后的几条提示词仍是写给程序员的,归改牌那一批改写。
-  当天真实会话验过:运行中的内核产物带着那两行删除,经壳取到的命令列表里没有 `init` 与 `review`,设置的命令页里也不再出现这两条。用户输入
-  `/debug` 时菜单仍有一条显示,按真实菜单数据算过是 `/customize-opencode`(2026-09-17 起改名 `/customize-geocode`):菜单搜索连描述一起模糊匹配,那条技能的英文描述被判为相近,不是 `/debug` 漏关。
-  上游 `slashCommands.test.ts` 里用 `/summary` 断言本地执行的那条按设计转红。绊线在 `ui/src/geocode/slash-command-surface.test.ts`。
-- **外部插件管理**:「插件」页在桌面壳不可用(与 Tunnel 同一个页面可用性谓词),壳在 Electron 下
-  `registerPluginRoutes` 首行把整个前缀答成 404,十条路由一条都不注册。判据不是「这个功能不好」,而是**内核保证不加载**:
-  `loadExternal` 对配置声明与目录扫描一律返回空(KERNEL.md §6 第 1 项),所以这一页写下的配置与文件
-  全部落盘、全部被丢弃,界面却报成功并催用户点「应用」。这一行顺带切断 `/api/config/plugins/registry`
-  对 npm 官方 registry 的调用,那条出网 §7.3 本就不允许。用户扩展 GeoCode 的路是 MCP:进程外、按服务器
-  逐个授权、界面完整。「集成」页(第三方订阅 Claude 与 Cursor)走同一条管道因而同样无效,但**暂不屏蔽**:
-  上游后续版本把 GitHub 与 Linear 做成了这一页的内置集成,那两项不经插件管道(2026-09-07 用户决定)。
-  其中 **Linear 已于 09-18 关闭**(见下一条);GitHub 身份与 PR 面见 §7.2,两者都判为保留。绊线在
-  `server/geocode/closed-surface.test.js`(对照组挂满十条并点名那条出网路由)与
-  `ui/src/geocode/desktop-settings-surface.test.ts`。
-- **Linear**:GeoCode 不提供这个集成(2026-09-18 用户定)。壳在 Electron 下 `registerLinearRoutes` 首行把
-  `/api/linear` 整个前缀答成 404,14 条路由一条都不注册;OAuth 回调虽在 `/api` 之外,但静态兜底的三条正则
-  本来就排除 `/linear`,没人接管,不需要第二道拒绝。⚠️ **只关路由关不干净**:会话状态运行时不是路由,它直接
-  挂在会话事件总线上、会话一结束就往工单发评论,所以同时 `stop()` 掉。渲染端六个入口各挂在 `LINEAR_OFFERED`
-  上(集成页那一节、聊天框的工单链接、新建 worktree 的按钮、右侧栏表面注册表、**Rail 配置对话框**——它故意渲染
-  全量注册表,运行时过滤器够不到它——以及已链接工单那一行),并且不再拿到 Linear 的运行时 API,所以启动时那次
-  状态请求也不再发出。**关的是入口不是机器**:组件、三份字典与 `contextPanelMode` 里的 `'linear'` 一律留着随上游
-  合并,`LinkedIssue` 那套与回形针菜单更不能动——GitHub 的工单与 PR 和它共用。授权本走 `api.openchamber.dev` 代理,
-  随之一并消失。绊线:`server/geocode/closed-surface.test.js`、`linear-runtime.test.js`、`ui/src/geocode/linear-surface.test.ts`。
-- **agent-tool 注入的三个开关、以及 system-prompt optimizer**:上游把控制工具、Web 工具、记忆工具做成三个开关,
-  都靠「壳把一个插件写到磁盘,再让壳自己 spawn 的 OpenCode 加载它」这条管道,而桌面壳不 spawn 任何 OpenCode
-  (四层断口见 `.artifacts/DECISIONS.md` 09-04)。GeoCode 里它们不是开关:**浏览器工具与控制工具是产品能力,强制开启、
-  无法关闭**,由 GeoCode 自己注入,做法见 §7.2「浏览器工具」「控制工具」,不读 `agentWebToolEnabled` 与
-  `agentControlToolEnabled`(控制工具 09-06 判为不提供,2026-09-15 用户改判全开);
-  记忆工具是上游未发布的功能,等它发布再判。所以设置里「工具」一节在桌面壳整节不渲染,三个搜索条目不列。
-  optimizer 走的也是这条管道,这是它不渲染的理由;它重写 `build` 与 `plan` 的提示词,前者 GeoCode 禁用,
-  后者保留上游原文(禁用的是 `build` 与 `general`,`plan` 是活的)。Behavior 页的那一节不渲染,搜索条目不列。
-  `/api/openchamber/agent-tool` 是浏览器工具的回调路由,保留;`/api/openchamber/control` 是同一控制服务的 HTTP 入口,保留。
-  绊线在 `ui/src/geocode/desktop-settings-surface.test.ts`。
-- **会话分享**:侧栏菜单与顶栏两处菜单里的「分享」不再渲染(`ui/src/geocode/session-share-surface.ts`)。
-  内核早已拒绝(`KERNEL.md` §6 第 5 项),界面却照旧提供入口,而且失败是静默的:SDK 断言在那句
-  `toast.error` 之前抛出,点击处理器又是无人接管的 promise,于是点下去只有菜单关闭,没有链接也没有报错。
-  判据是数据去向:一次分享把整场会话推给 `https://opncd.ai` 这个上游服务——每条消息、每次工具调用及其结果、
-  会话 diff 与工作目录,并在会话继续时持续增量同步;GeoCode 的会话可能带着尚未发表的研究数据。
-  常量不读运行环境,因为内核那道闸也不读:Electron 形态与网页形态下分享同样是死的。「复制链接」与
-  「取消分享」跟着一并关闭,它们本就只在分享成功之后才出现。壳侧不再加第二道拒绝:内核那道是权威的,
-  而给 `session-actions.ts` 加早退会打红上游自己的测试,抬高补丁面。
-  绊线在 `ui/src/geocode/session-share-surface.test.ts`:它不钉这两个文件,而是走遍渲染层源码,断言任一文件里
-  分享菜单项的出现次数等于守卫的出现次数,所以上游日后把入口加进第三个文件同样会转红。
-- **扩展(Extensions / Guests)**:v1.24.0 上游新增的整套子系统——从文件夹、ZIP 或 git URL 装入的第三方面板、
-  附加菜单、集成与本地服务。判据:这是一个很新、尚不完善的功能,GeoCode 暂不保留(2026-09-20 用户定)。
-  ⚠️ **关法只有三处,因为上游自己就带「这个运行时不支持扩展」的状态**:`lib/guests/load-catalog.ts` 里
-  `markUnsupported` 那个判断加上桌面壳,于是扩展页、上下文栏的面、附加菜单、斜杠命令、集成页的扩展卡片
-  一并收起,既不发请求也不进错误态——碰这个面的渲染层文件有 18 个,逐个加守卫是错的做法。
-  服务端 `registerGuestRoutes` 在 Electron 下首行把 `/api/guests` 整个前缀答成 404,23 条路由一条不注册;
-  「扩展」页在桌面壳不可用(与 Tunnel 同一个页面可用性谓词)。
-  ⚠️ **闭包不跟着收窄**:`packages/extensions`(两份说明加一个空 `registry.json`,不是 workspace 成员)与
-  `packages/sdk`(`ui` 与 `web` 的 `workspace:*` 依赖,不圈就装不上)都照常圈进来。产品边界落在代码里,
-  不落在闭包里——收窄闭包是这套机制里唯一没有自动防护的操作(§9.2)。
-  绊线在 `server/geocode/closed-surface.test.js`(对照组在非 Electron 下挂满 23 条,再逐条验证 Electron 下全 404
-  且一条都不落到内核代理,外加一条日后新增路径)与 `ui/src/geocode/locale-brand.test.ts` 的闭包绑定
-  (四条豁免前缀各自指名 `load-catalog.ts` 或 `metadata.ts` 里那句判断,判断一没就转红)。
-- **Routing(自动选模型与安全网)**:v1.24.0 上游新增,两件事都经 TypeSafe 的 Jev 决策模型,要用户自备
-  TypeSafe API key:按提示词自动挑模型,以及在自动接受的会话里把有风险的动作拦下来问用户(动作分八类,
-  从 `read-only` 到 `sends data outside`)。判据是**出门的是什么**:上游自述「TypeSafe 只收到提示词的文字
-  与被检查的动作,不收文件或图片」——不收文件是真的,但提示词本身就可能带着尚未发表的研究数据,
-  与会话分享同一类(2026-09-20 用户定)。
-  ⚠️ **「这是 OpenChamber 的功能」不能单独推出保留**:本节关掉的隧道、外部插件、Linear、魔法提示词、
-  会话分享、局域网访问全都是 OpenChamber 的功能。归属回答的是「这是不是我们该修的缺陷」(不是),
-  产品取舍另判。真正的分界线是自有数据出不出门:主题浏览连 `open-vsx.org` 但什么都不上传,保留;
-  会话分享与 Routing 把用户自己的内容送出去,关掉。
-  ⚠️ **关在能力开关上,不是逐处隐藏界面**(§9.3 第 1 级):`server/lib/routing/feature-flag.js` 的
-  `isRoutingFeatureAvailable()` 在 Electron 下直接返回 false。上游自己的注释写明,这个开关一关就
-  **没有模型选择器里的 Auto 行、没有设置页、没有路由、没有请求改写**;`runtime.js`、`routes.js` 与
-  `opencode/settings-helpers.js`(它算出界面读的 `routingFeatureAvailable`)三处都读它,所以一处即全部。
-  设置页谓词本来就是 `!ctx.isVSCode && ctx.routingAvailable`,**不再另加 `!ctx.isDesktop`**——那会把同一个
-  事实写成两份,正是副本漂移的来源。第二道是 `registerRoutingRoutes` 首行把 `/api/routing` 整个前缀答成 404,
-  它防的是另一件事:上游日后加进这一组却没查开关的路由。
-  绊线在 `server/geocode/closed-surface.test.js`(能力开关在环境变量开着时仍须为 false;对照组把开关打开
-  记录上游挂的路由,再验证 Electron 下全 404)与 `ui/src/geocode/locale-brand.test.ts` 里
-  `settings.routing.` 的闭包绑定。⚠️ 合并 v1.24.2 时曾给 `settings.routing.token.info` 改过品牌,
-  **后来撤掉换成豁免**:改品牌是哑的,闭包绑定会在开关消失时转红,而且少一个补丁文件。
-
----
+GitHub 登录走 GeoCode 自有的 OAuth App,沿用上游的设备授权流程,不引入 Client Secret、回调服务或新的
+登录协议;默认 scope 去掉了允许改写工作流文件的 `workflow`(读 PR 检查与工作流任务不需要它)。默认值
+放在服务端代码里而不是用户设置里——**用户设置只覆盖本机,不能为新安装提供产品身份**。⚠️ 换 Client ID
+**不影响已有授权**:旧令牌仍归原签发应用,已保存的账号需要重新连接;撤销原授权由用户自己在 GitHub 做,
+因为那份授权可能还被他的 OpenChamber 用着。
 
 ## 8. 磁盘与身份
 
@@ -929,470 +609,50 @@ Shell Runtime 不得沿用 OpenChamber 的 `~/.config/openchamber`,也不得直�
 
 ## 9. 双上游维护
 
-### 9.1 目录与分支
+规则在 `CONVENTIONS.md` §5:两棵 vendored 树用的是同一套机制——原味分支、闭包清单、补丁标记、
+绊线、合并纪律与锁文件处理。本节只记 desktop 这一棵自己的参数。
 
 ```
 GeoCode/
-├── kernel/    OpenCode vendor
-└── desktop/   OpenChamber vendor
+├── kernel/    OpenCode vendor    ← kernel-upstream
+└── desktop/   OpenChamber vendor ← chamber-upstream
 ```
 
-| 目录 | 原味分支 | 主分支形态 |
-|---|---|---|
-| `kernel/` | `kernel-upstream` | subtree + GeoCode 薄补丁 |
-| `desktop/` | `chamber-upstream` | subtree + GeoCode 薄补丁 |
+| | |
+|---|---|
+| 原味分支 | `chamber-upstream` |
+| 闭包清单 | `scripts/chamber-manifest.txt`,**排除项的理由写在清单里**,不在本文 |
+| 圈选脚本 | `scripts/chamber-vendor.sh`,取完做文件集对账,commit 由维护者亲自执行 |
+| 闭包边界 | **包层面全取**,排除的只有上游的开发设施。为证明「只做 Desktop」而删 mobile / vscode / web 源码已在 §12 否决 |
+| 当前基线 | 不记在本文里,它每次升级都变。查法:`git log -1 --format=%s chamber-upstream` |
 
-两个 vendor 根各自是独立安装与测试单元。仓库根只编排构建,不把二者揉成一个依赖方向混乱的
+两个 vendor 根各自是独立的安装与测试单元。仓库根只编排构建,不把二者揉成一个依赖方向混乱的
 workspace。
 
-**当前基线不记在本文里。** 它每次升级都变,写下就会漂(`CONVENTIONS.md` §10「只有人兜底的数字」)。查法是
-各自 pristine 分支的最新快照:`git log -1 --format=%s chamber-upstream`。
-
-### 9.2 闭包与对账
-
-`chamber-upstream` 只接受「上游版本的原样文件圈选」,圈选清单即 `scripts/chamber-manifest.txt`,
-内容零修改;`chamber-vendor.sh` 按清单从上游取文件、整棵替换,最后做**文件集对账**——清单选中
-的文件集与暂存的文件集必须逐个相等,不等即拒绝并列出两侧的差。commit 由维护者亲自执行。
-
-**它是一串孤儿快照,不是上游的历史。** 与 `kernel-upstream` 同一形态:根提交没有父,分支上只有
-我们自己造的快照,升级就是用脚本把上游的新版本重新圈选一次。**升级不走 `git merge` 上游**——
-排除项在这条分支上从不存在,merge 上游会把它们读成「上游修改了我们删掉的文件」并带回来;脚本
-重建则始终只产出圈选后的树。首次落到 main 要 `--allow-unrelated-histories`(孤儿分支与 main 没有
-共同祖先),此后每次都是正常三方合并。
-
-⚠️ 直接 `git fetch` 上游来建这条分支是行得通的,而且**一切看起来都正常**——直到某次改用 merge
-升级,或有人对着 2519 个上游提交找 merge-base。这条分支的价值全在「快照序列」这个形态上。
-
-**首次导入与后续升级用的不是同一条命令。** 孤儿分支与 main 没有共同祖先,`-X subtree=desktop`
-的路径偏移是**猜**出来的;猜不出时它不报错,只是把整棵上游树铺到仓库根——`packages/`、`docs/`、
-`scripts/` 直接盖在我们自己的目录上,而冲突只有 `.gitignore`、`LICENSE`、`.gitattributes` 三处
-add/add。**手一快把那三处解掉再提交,得到的是一棵内容全错、外表正常的树。** 首次导入因此走两步:
-
-```bash
-git merge -s ours --no-commit --allow-unrelated-histories chamber-upstream   # 只记父子关系,不动树
-git read-tree --prefix=desktop/ -u chamber-upstream                          # 内容读进子目录
-git commit
-```
-
-此后目录映射已经建立,升级就是普通的 `git merge -X subtree=desktop chamber-upstream`。验收门
-两次都一样:`git diff chamber-upstream main:desktop` 必须为空。
-
-**清单即闭包。** 改它一行就是改「下次合并把什么读成上游的增删」:少一行读作「上游删了这些
-文件」并把它们从 main 上移除,多一行读作「上游加了」。两个方向都不产生冲突,都是静默的。
-清单落成文件之前,这份选择只存在于做过它的那次会话里,没有任何东西能事后复核它。
-
-**收窄闭包是这套机制唯一没有自动防护的操作。** 少圈一个文件,git 读作「上游删了它」并把它
-从 main 上移除,不产生任何冲突;多圈一个文件只是多带了字节。因此默认全取,只排除验证过的项。
-
-**Desktop 的闭包边界与 Kernel 不同。** Kernel 圈的是 15 个包的最小闭包;Desktop **包层面全取**
-(§12 已否决为证明「只做 Desktop」而删源码)。排除的只有上游的开发设施,分两类——前两项**必须**
-排除,它们会被我们自己的系统读进去;其余是无用载荷:
-
-| 排除项 | 为什么不能一起落盘 |
-|---|---|
-| `.agents/` 与 `AGENTS.md` | **`AGENTS.md` 会被 Kernel 读进去**:经 `findUp` 进入系统提示,而它收集**所有**祖先匹配、不是最近的一个,所以 vendor 目录里的一份会混进用户项目的上下文。`.agents/skills` 现已由 KERNEL.md §6 第 6 项屏蔽,但目录仍一并排除——它与 `AGENTS.md` 同源,且那道屏蔽可以被 env 反向打开 |
-| `.claude/` 与 `CLAUDE.md` | 上面两项的符号链接(`CLAUDE.md → AGENTS.md`,`.claude/skills/* → ../../.agents/skills/*`),本体排除后必须一起走。Kernel 侧已屏蔽,但在本仓工作的 AI 助手仍会读 |
-| `.github/` | 无用载荷。GitHub Actions 只认仓库根的 `.github/workflows/`,vendor 目录下的不生效 |
-| `.opencode/` | Kernel 的项目配置根是 `Brand.projectDir`(`.geocode`),读不到它 |
-| `.env` | 未经决策的环境默认值 |
-
-Kernel 的清单为同一类问题留了先例:它只圈进 `.github/TEAM_MEMBERS`(`packages/script` 在 import
-期读它),其余 CI 排除的理由写作「CI we do not run」。**排除项的理由写进清单,不写进本文**——
-清单是可执行的,文档会漂。
-
-⚠️ **`chamber-upstream` 必须推到远端。** merge-base 就在那条分支上,它只存在于本机时,任何新
-clone(包括换机器后的自己)都做不了三方合并,而**失去这个能力不会有任何报错**,只会安静地
-退化成人肉 diff。
-
-**圈选错了的修正渠道是再 merge 一次 `chamber-upstream`,绝不在 main 上手改。** `kernel-upstream`
-的三个提交里有两个就是在修第一次圈选的错——一个被上游 `.gitignore` 吞掉的文件,一个没人注意
-到在 import 期被读的文件。手改 main 会让两侧文件集永久错位,对账从此每次都报差。
-
-**合并后对两次账。** 文件集对账由脚本做,补丁面对账要人看:
-
-```bash
-git diff --name-status chamber-upstream main:desktop        # 补丁面全集,不依赖标记
-grep -rlE '// GeoCode:|--- GeoCode|"GeoCode: ' desktop/ | wc -l
-```
-
-前者是唯一看得见 `.json`、`.txt` 那类**载不动标记**的补丁的手段;后者数的是可审计的那一部分。
-**任一数字变小就有补丁不见了,而它未必伴随任何冲突**——上游删掉或改名一个我们打过补丁的
-文件时,git 不报冲突,只是让那处补丁随文件一起消失。
-
-第二次账的「差集」部分(改过却查不到的文件)由验收门每次都算(`patch-surface.sh <root> --check`),放行的只有
-载不动标记的四类文件;翻译字典的绑定方式见 `CONVENTIONS.md` §5。
-
-`bun.lock` 是例外:`chamber-upstream` 上取上游原味,main 上则是 `bun install` over 闭包的产物。
-冲突时**永远不要手工解**,但⚠️ **也不要直接删掉重新生成**——没有锁文件的 `bun install` 会做一次
-全新解析,把一大批传递依赖解到范围内的最新版,而那与这次合并无关。正确做法是**先取上游那一侧,
-再让 `bun install` 调和**:
-
-```sh
-git show chamber-upstream:bun.lock > desktop/bun.lock
-bun install
-```
-
-v1.23.1 → v1.23.2 实测两种做法的差别:删掉重生成得到 `zod@4.6.5`、`zustand@5.0.15`、`yaml@2.9.1`,
-锁文件离上游 **1677** 行;先取上游再调和得到上游钉的 `zod@4.3.6`、`zustand@5.0.11`、`yaml@2.8.2`,
-离上游 **9** 行——5 行是我们钉的 `@opencode-ai/sdk`(含 sha512),4 行是 `bun install` 纠正
-**上游自己发歪的锁文件**(v1.23.2 的 `package.json` 写 `1.23.2`,其 `bun.lock` 里 workspace 版本
-仍是 `1.23.1`)。后一类躲不开,也不必躲。
-
-**换过锁文件之后要清掉 `node_modules` 再装,不能增量。** `bun install` 会按新锁文件补齐缺的包,
-但**不清掉不再被引用的旧版本**——同一个包的两个版本从此并存,而 TypeScript 把它们当成两个
-不同的类型。症状是几十条 `TS2322` / `TS2345`,报的是 `node_modules/.bun/<包>@<旧版>` 与
-`@<新版>` 之间不兼容,**读起来像是代码坏了**。v1.18.4 → v1.21.0 那次实测过:增量安装后
-`@codemirror/language` 留下 6.12.2 与 6.12.4 两份,`bun run build` 退出码 2;
-`rm -rf node_modules packages/*/node_modules` 后重装,全绿。
-
-### 9.3 Shell 定制阶梯
-
-OpenChamber 采用与 Kernel 相同的原则:
-
-1. 产品配置 / capability profile;
-2. 启动参数与依赖注入;
-3. 新增 GeoCode adapter 模块;
-4. UI 装配与路由不注册;
-5. 最后才修改上游源码流程。
-
-能在 `geocode-desktop` profile 里关闭的能力,不删除上游实现。必须修改上游文件的地方应集中在
-组合根、构建入口和身份边界,避免在大量叶子组件中撒条件分支。
-
-### 9.4 审计与绊线
-
-Shell 补丁没有独立的注入清单。清单会漂(`CONVENTIONS.md` §5),而它要回答的每个问题都已有更权威的来源:
-
-| 问题 | 来源 |
-|---|---|
-| 动了上游哪些地方 | 定位 grep;`patch-surface.sh desktop` 打印全集,`--check` 在门里保证没有查不到的 |
-| 为什么配置、注入或新增文件做不到 | 补丁旁的块标记 why。只写「做了什么」的块不合格,要写「前四级阶梯为何不够」 |
-| 用户可见效果 | 块注释引用的本文段号 |
-| 运行时绊线 | 与补丁同名的测试文件,`test-gate.sh` 逐个点名 |
-| 何时可以撤销 | 真有撤销条件的补丁,把条件写在 why 的末尾;产品决定没有撤销条件,不硬凑 |
-
-解冲突的人需要的是「这一处为什么这样改」,那句话就在冲突的正中间,比任何索引都近。
-
-所有 Shell 补丁使用统一 `GeoCode:` 标记,一条命令可列全。提示词、翻译资源等不能容纳标记的
-文件由测试绑定,绑定按后果不按措辞。
-
-### 9.5 升级顺序
-
-一次只升级一个上游:
-
-1. 合并 OpenCode,保持 Shell 基线不变,跑 Kernel 门与桌面契约测试;
-2. 或合并 OpenChamber,保持 Kernel 基线不变,跑 Shell 门与桌面契约测试;
-3. 单侧恢复基线后才处理另一侧升级。
-
-同时移动两端会让 API 变化、壳回归与 GeoCode 补丁失效混在一起,无法归因。
-
-每个可发布版本记录 Shell commit、Kernel commit 与 API fingerprint,使历史安装包可复现。
+Shell 侧的定制阶梯与内核同一条,落点是:能在 `geocode-desktop` profile 里关掉的能力,**不删除上游
+实现**;必须修改上游文件的地方集中在组合根、构建入口与身份边界,不在大量叶子组件里撒条件分支。
 
 ---
 
-## 10. 迁移计划
+## 10. 迁移定下的常驻约束
 
-### 阶段 0:契约实验
+OpenChamber 的迁移已经做完,逐批的经过与结论在 `.artifacts/DECISIONS.md`。本节只留**迁移期定下、
+此后一直生效的约束**——它们不随迁移结束而失效,新写的代码同样要守。
 
-不迁源码,用参考 OpenChamber 连接当前 GeoCode Kernel,验证:
+**壳与别的产品共用的东西一律改到我们自己的根下,哪怕它看起来只是缓存。** 判据不是「会不会泄漏
+数据」,而是**「它会不会替别人做决定」**。受管进程登记表就是这条的来源:孤儿回收在任何分支判断
+之前无条件运行,而**它按登记表里的 pid 去杀进程**——共用一份就会杀掉用户自己的 OpenChamber 正在
+跑的东西。落点见 `PATHS.md` §3.3。
 
-- health、agent、provider、config;
-- session 创建与恢复;
-- message / part / status 事件;
-- Permission、Question 与 interrupt;
-- HTTP Basic 与目录路由;
-- OpenChamber 当前 SDK 对 GeoCode OpenAPI 的差异。
+**往用户项目里写东西,位置既不能是别人的产品,也不能是用户手写配置的地方。** 智能体截图落
+`.browser/` 就是这条的应用:`.openchamber/screenshots` 是别人的,`.geocode/` 是用户自己写配置的。
 
-产出是一份接口差异表,不是产品代码。它决定 Shell 基线和 SDK 迁移量。
+**属于别的 agent 工具的目录,判据是归属,不是开放与否**(判法与落点在 `PATHS.md` §7)。⚠️ 关闭
+这类目录时**读与写必须一起关**:只关读会让用户建得出、改不了,比两头都开更糟。
 
-### 阶段 1:引入 Shell vendor
-
-- 建立 `chamber-upstream`;
-- 将完整 OpenChamber 以 subtree 放入 `desktop/`;
-- 保留上游许可证与版权;
-- 建立独立 bun 安装根;
-- 先证明原味 Shell 可以构建,再叠加 GeoCode 改动。
-
-⚠️ **「可以构建」在这一阶段只到「树是活的、类型是通的」**:`bun install` 装得上、
-`bun run build` 与 `bun run type-check` 退出码为 0。它**不等于桌面应用能打出安装包**——
-`packages/electron` 的 `build` 脚本是 `bun -e "process.exit(0)"`,真正的打包链在同包的
-`package` 脚本里(`build:web-assets → prepare:opencode-cli → bundle:main → rebuild:native →
-package.mjs`),其中 `prepare:opencode-cli` 准备的正是我们要换成内嵌 Kernel 的外部 CLI。
-打包属于阶段 8,在此之前跑它只会下载一个产品里不存在的组件。
-
-### 阶段 2:建立产品 profile
-
-- 对着已落地的 vendor 代码判 Settings 各页的去留与对接,没有另起专文:各页去留见 §7.3,壳怎样读写
-  内核配置见 §8.1,逐批做法见阶段 6 下归阶段 2 的各条。codex 的早期底稿
-  (`git show codex/desktop-init:docs/DESKTOP-CONFIG-MIGRATION.md`,基线 v1.18.4)主张壳只经 Kernel API
-  操作配置、由 Kernel 另定一套配置变更契约,这条路没有走,底稿不再作为提纲;
-- 集中定义 GeoCode 品牌、appId、协议、平台和 capability;
-- 发布命令只选择 Desktop 闭包;
-- 禁止 Web / Mobile / VS Code / CLI 入口;
-- 运行时不注册远程、Relay、Tunnel、任务与插件相关模块。
-
-### 阶段 3:接入 Kernel Host
-
-- 复用 OpenCode Desktop 的 utility process 形态;
-- 将 `build-node` 产物装入 Electron 构建;
-- Electron main 成为 Kernel 唯一生命周期所有者;
-- Shell Runtime 接收注入的 KernelConnection,不再自行发现 / spawn CLI;
-- 完成 ready、health、restart、stop 与异常退出测试。
-
-### 阶段 4:绑定 SDK 与代理
-
-- 从 GeoCode Kernel 生成 SDK;
-- React UI 与 Shell Runtime 统一消费该 SDK;
-- 代理覆盖 HTTP、SSE 与 WebSocket;
-- Kernel 重启后事件流能重绑;
-- 不允许 renderer 绕过 Shell Runtime 直连 Kernel。
-
-### 阶段 5:最小桌面闭环
-
-走通:
-
-```
-启动 → GeoAgent 就绪 → 登录模型 → 选择目录 → 创建会话
-→ 流式对话 → 权限 / Question → 中断 → 退出 → 再启动恢复会话
-```
-
-此阶段不迁地图、地理设置、远程能力或编程工作流。
-
-### 阶段 6:身份与磁盘审计
-
-目标状态与壳/内核两套根的关系见 `PATHS.md` §3.3,注入时机见 §5,零访问验收见 §6。顺序 1 → 2。
-
-- **批 1 · Electron 身份**:照 `core/src/brand.ts` 的形态建自有模块由基串派生,消费点引用它而非
-  平铺字面量,都在 `packages/electron` 的 `main.mjs` 与 `package.json` 里。日志不覆写。
-  ⚠️ Windows 的 `extraMetadata` 不能漏——NSIS 的安装目录取自 `name` 而非 `productName`,
-  `PATHS.md` §2 记着这条造成过真实事故,且错误会在注册表的 `InstallLocation` 里固化;
-  ⚠️ **这批漏了服务器那一侧**:web 服务器信任的打包 UI 来源名单(`index.js` 与 `request-security.js`
-  各一处)写死了上游的 `openchamber-ui://app`,协议改名后打包界面发出的每个请求都拿不到跨域许可头,
-  界面报「Unable to reach server」。套件照不到它,只有真实会话能。现由
-  `server/geocode/shell-identity.js` 的副本收口,`desktop-identity.test.mjs` 读副本对身份模块钉住,
-  `shell-identity.test.js` 真实驱动来源检查;
-- **批 2 · Shell 数据根**:注入 `OPENCHAMBER_DATA_DIR` 与 `OPENCHAMBER_MANAGED_PROCESS_REGISTRY`
-  (后者是防御性的:skip-start 后不再注册托管进程,但孤儿回收仍在启动路径上)。上游把同一个三元
-  表达式复制进了十几个文件、每份都认前者,那批零改动;不认的少数几处靠下面的命令列出,其中
-  `proxy.js` 是 `settings.json` 的读取方而写入方认变量,**必须配往返测试**;
-- **批 3 · 跨产品凭据**:已完成。Claude 的 quota provider 由 `isConfigured` 反查登录钥匙串,
-  仅仅枚举 provider 就会触发,前端清单与服务端注册表两条路径都已屏蔽。绊线只在服务端
-  (`claude-disabled.test.js` 钉住注册表与具名直通两个入口):钥匙串只会经服务端被读,
-  前端清单被合并带回来,后果只是多出一项报错的额度。Cursor 只在用户主动点导入时才读
-  `state.vscdb`,不动;`.claude/skills` 扫描归内核屏蔽清单(`KERNEL.md` §6 第 6 项);
-- **批 4 · 内核文件的四个读写点**:已完成。`auth.json`、antigravity 账号、worktree 根、`.git` 里的
-  项目 id 标记,上游全部指向 `~/.local/share/opencode` 与 `~/.config/opencode`。四处改指内核自己的
-  根,派生自 `packages/web/server/geocode/kernel-roots.js`(`PATHS.md` §5)。三条非显然的:
-  **`writeAuthFile` 在覆盖前会把旧文件复制成 `.openchamber.backup`**,所以读的是别人的凭据、留下
-  的也是别人凭据的副本(那个后缀本身也于 2026-09-09 改名,`PATHS.md` §3.2);**四处里有两处不认 `XDG_*` 而内核认**,不统一就会出现壳读一份 `auth.json`、
-  内核写另一份,两边都不报错;**项目 id 标记与内核共用一个文件是安全的**,因为内核按
-  `remote ?? previous ?? root` 取值,壳写进去的值盖不掉它优先的远端哈希;
-- **批 5 · 配置读取链**:已完成。`shared.js` 硬编码 `~/.config/opencode`,而它不是一个孤立常量,
-  是一整条链的源头 —— 三个配置层、`agents`/`commands`/`skills` 三个目录、以及 `writeConfig`。实测
-  `readConfigLayers()` 从用户真实的 `opencode.jsonc` 读回 1944 字节、含 `apiKey`,`call.js` 的
-  `readProviderConfig` 再把它包成 auth 条目送进 dispatch(上游注释原文:「so it can win the
-  precedence check」),最后 `fetch(baseURL)`。**触发者是 `session-assist`,busy→idle 事件驱动、
-  默认开** —— 不需要用户点任何东西。同批收口的还有:`skills.js` 的技能暂存根与项目级技能目录、
-  `getManagedSkillRoots` 里的 `~/.opencode`、以及三个**改了读取方就必须跟着改的写入方** ——
-  `mcp.js` 的项目级 MCP 路径、`plugins.js` 自带的一套配置路径、`skills-catalog/install.js` 的安装
-  目标,外加 `skill-routes.js` 按路径判作用域的那个分类器。**`mcp.js` 那处如果漏掉,就正好复现
-  `PATHS.md` §5 点名记着的那次事故**:加 MCP 报告成功、Agent 永远看不到,现已配往返绊线;
-
-  ⚠️ **`.claude`/`.agents` 这次没有从受管根里摘掉**,虽然内核已拒绝加载它们(`KERNEL.md` §6 第 6
-  项)。原因是只摘这一半会制造更坏的状态:`createSkill` 仍能写进 `.agents`、UI 仍提供那个选项
-  (`SkillsPage.tsx` 的 `draftSource`),于是变成**建得了、改不了**。完整关闭要同时动 `createSkill`、
-  列表路由与 UI 选择器,单独成批——**那一批见「阶段 2 · 批 2」,已完成**;
-- **批 6 · 壳的存储根收口**:已完成。十三处硬编码 `~/.config/openchamber` fallback 改指 GeoCode 自己的
-  根,其中**四处存凭据**(`jwt-secret`、`ui-passkeys.json`、`github-auth.json`、quota),另加
-  `main.mjs` 的 SSH 凭据根与**托管进程注册表**——最后这条不只是路径:`reapOrphanedProcesses` 在任何
-  分支判断之前无条件运行并杀掉注册表里的 pid,与用户自装的 OpenChamber 共用目录时,他们的内核就是
-  回收候选。实测确认当时没有杀成,唯一挡住的是「owner 进程还活着」这一个条件;提交前复审又补进
-  `packages/web/bin/` 的两处——那是 `package.json` `bin` 指向的已发布 CLI,它读 `settings.json` 去找
-  正在运行的桌面端,而桌面端那侧已经改根,两边不是同一个文件了(`PATHS.md` §5「同一个盲区的第二次」);
-- **批 7 · 项目级目录与文件名**:已完成。`snippets.js`(整文件,含写路径)、`agents.js`、
-  `commands.js` 的项目级 `.opencode/` 改名,以及 `plugins.js` 全局层的两个文件名——那两个是批 5 只改了
-  目录和项目层留下的回归,当时插件开关会写 `<配置根>/opencode.json`,一个内核永不加载的文件;
-- **批 8 · 内核侧残留**:已完成。`cli/network.ts` 的 mDNS 默认值(见 `PATHS.md` §5「一次全面审计」)、
-  `tui/context/theme.tsx` 的第三处项目扫描、`plugin/install.ts` 往用户仓库写 `.opencode/opencode.json`、
-  `tui/clipboard.ts` 落在共享 `/tmp` 的 `opencode-clipboard.png`;
-- **批 9 · 环境边界**:已完成,规则、时序、绊线与实测记录见 `ENVIRONMENT.md`。
-  批 3 把壳的托管启动在 Electron 下改为拒绝,§7.3「选择或自动发现系统 OpenCode」从此有了运行时绊线;
-- 验证与用户自装 OpenCode 并存互不读写(现在由 `scripts/foreign-writes.sh` 客观给出,
-  `CONVENTIONS.md` §7;读侧由 `scripts/kernel-env-probe.sh` 给出内核那一半)。
-
-**阶段 6 剩余**,按产品优先级而非严重性排列(用户定的顺序:先路径、再对接、最后特性):
-
-- **归阶段 2「配置与后端对接」·批 1**:已完成。前端 `chatDirectories.ts` 与 `openchamberConfig.ts`
-  自己拼 `~/.config/openchamber/{chats,projects}` 并真的建目录写文件,而服务端认的是注入来的根。
-  **根因是我们自己的回归**:上游 `index.js` 的 `OPENCHAMBER_USER_CONFIG_ROOT` 无条件挂在 HOME 下、
-  `main.mjs` 从不设置 `OPENCHAMBER_DATA_DIR`,前后端因此自洽;我们把服务端改成读注入变量,前端没跟。
-  后果不只是泄漏:`index.js` 的 `managedProjectRoots` 拿 `<根>/chats` 判断「这个 chat 会话的记忆算哪个
-  项目」,而 chats 根本不在那儿。
-  改法是把注入端搬回 HOME(`shell-data-root.mjs`),前端只换一个常量,十三个同步分类器调用点一个不动。
-  路径拼装**没有**搬到服务端:`project-context` 那次先例在这里不适用,渲染进程读不到环境变量、
-  也没有路由告诉它根,一旦搬走这两条同步判据就要全部改成异步,首帧会认错会话类型。真正的约束是
-  **渲染进程算不出来的根,两半迟早各说各话**,所以两端都挂 HOME、`.config` 写死不读 `XDG_CONFIG_HOME`。
-  这一批同时把 `packages/ui` 接进门——它此前整个不在门里,而缺口正好在出问题的地方;`chatDirectories.ts`
-  里 chats 根的四个派生点由 `ui/src/geocode/chat-directories.test.ts` 钉住;
-- **阶段 2 · 批 1 补遗**:已完成。按包重点一次之后补上的,共同形状是**坏掉的功能而不是泄漏**:
-  `PlanView.tsx` 去 `.opencode/plans/` 找计划而内核写 `.geocode/plans/`(面板永远报「没有计划」);
-  `routes.js` 把全局行为提示词存到 `~/.config/opencode/AGENTS.md` 而 `session/instruction.ts` 读
-  `<配置根>/AGENTS.md`(保存成功、agent 看不到,且 PUT 会 mkdir 出 OpenCode 的配置根);
-  `desktop_read_file` 的凭据拒绝表仍守着上游那个从不存在的路径,而我们的四份凭据早已搬走
-  ——那个 handler 防的是被提示注入的 agent,拒绝表现在从 `resolveShellDataRoot` 推导,根再搬一次
-  绊线就会红。另有界面文案一处(告诉用户 settings.json 在 openchamber 目录)与过时注释若干。
-  新增两个自有模块:`ui/src/geocode/kernel-roots.ts`(渲染进程要读 agent 写的文件,得叫同一个目录)
-  与 `electron/geocode/denied-paths.mjs`;
-- **阶段 2 · 批 2 · 外部技能库关闭**:已完成。`.claude/skills` 与 `.agents/skills` 是用户为别的
-  agent 工具写的技能库,内核早已拒绝加载(`runtime-flags.ts` 两个隔离开关默认 ON),而壳照旧扫描并
-  列出,**于是技能页告诉用户 GeoAgent 拥有它并不拥有的能力**。这一批把整条链一次关完,因为上一次
-  只关一半的教训还在上面那段里:发现、`createSkill`、`deleteSkill`、受管根清单、目录商店的安装目标、
-  以及 UI 的位置选择器,六处同时动。
-  **其中 `deleteSkill` 是破坏性的**:它不接受 source 参数,把它知道的每个根都删一遍,所以删掉
-  GeoCode 里叫 `foo` 的技能会连带递归删掉用户 `~/.claude/skills/foo`。绊线(`external-skills.test.js`)
-  因此断言的是「我们没建过的文件删完之后还在」。上游三个断言这项能力的用例原样留着,按设计会红
-  (`CONVENTIONS.md` §7)。
-  另外:`skill-routes.js` 上报的 `externalSkills` 不再读环境变量而是常量 `true`——原先那两行错了两
-  重,默认值(我们把内核默认改成 ON 却没改镜像)和优先级(上游把广播与具体两个开关 OR,而内核是具体
-  优先)。**不再有需要与内核保持同步的手抄规则,是这个方案比「修镜像」更好的地方**;
-
-- **破坏性项 · 项目级 legacy 配置**:已完成。两条破坏性项按「破坏性排最前」提到 2-D 之前做,
-  第一条 `deleteSkill` 对 `~/.claude/skills/<同名>` 的递归删除已随阶段 2 批 2 一并关掉,这里是第二条。
-  `openchamberConfig.ts` 读用户仓库里 `<project>/.openchamber/openchamber.json`(那是 OpenChamber 的
-  每项目配置),抄进 GeoCode 自己的目录之后**把原件删掉**,发生在普通的打开项目流程里、无提示。
-  **阶段 2 批 1 重新武装了它**:GeoCode 自己那份换了路径,对已有项目一律不存在,于是每个项目都会
-  走一次这条回落。答案取「完全不读」而不是「读但不删」:GeoCode 从没写过那个路径,所以它在那里找到的
-  只可能是别人的数据,与批 2 对 `.claude`/`.agents` 的答案同构;何况那份配置里的 `projectActions`
-  是绑在项目按钮上的任意 shell 命令,静默继承别的产品写的命令不合适。整条链连声明一起屏蔽——常量、
-  路径助手、删除函数——于是上游若在合并里加回一个调用点会**编译不过**,比静默返回更响。
-  绊线两个用例:一个断言那份文件既没被读也没被删,另一个把**同一份内容**放到 GeoCode 自己的
-  projects 根下,证明管路是通的——否则前一个用例对着一个什么都不答的 mock 也会通过;
-
-- **阶段 2 · 2-D · 设置逐页往返**:已完成,做成了门的一节(`CONVENTIONS.md` §7)。
-  原先记的「九个页面」里有两个是记错的:**snippets、themes、magic-prompts 都不面向内核**。
-  内核源码里 `snippet` 零匹配,壳却把它写进**内核的配置根**下——不是 bug,展开发生在壳侧、
-  消息发出去之前,但位置有误导性,读代码的人会以为那是内核配置。themes 与 magic-prompts
-  落在壳根,位置本来就对。
-  真正面向内核的是七类:agents、commands、skills、plugins、mcp、providers、behavior。
-  七类的写入端与读取端现在由 `scripts/settings-roundtrip.sh` 自动比对,不再靠人点。
-  顺带确认了一件之前没查过的:内核对单复数一律通吃(`{agent,agents}`、`{command,commands}`、
-  `{plugin,plugins}`、`{skill,skills}`),所以壳一直写复数不是隐患。
-  壳挑全局配置文件的顺序与内核一致:内核 `globalConfigFile()` 与壳的 `getPrimaryUserConfigPath()` 都在
-  `[geocode.jsonc, geocode.json, config.json]` 里取第一个存在的,都不存在时都取第一个(约束见 §5.2);
-  门里两种起始状态都覆盖了;
-
-- **归阶段 3 · agent 截图落点**:已完成。`browser.capture` 是控制模块里**唯一**碰磁盘的动作
-  (整个模块的写盘点只有两行,都在 `screenshots.js`),它把 agent 截的图写进用户仓库。
-  **写进仓库是上游有意的设计,保留**:图是代码变更的证据,要跟代码待在一起,才能被引用、提交、
-  附到 review 上。改的只是落点——原先是 `.openchamber`,而它**不在 `.gitignore` 里**,于是每截一次图,
-  用户的工作树和下一个提交里就多一个别的产品名字的目录。
-  现在是项目根下的 `.browser/`,两个决定各有理由:**按生产者命名而不是按产物**,以后浏览器控制存别的
-  东西(DOM 快照一类)不用再开目录;**不并进 `.geocode`**,那里放的是团队手写、有意提交的配置,
-  而这些是生成的、会累积,不该在 diff 里需要分辨。
-  顺带查明:上游那个往配置目录写 `.gitignore` 的 `ensureGitignore` **已无活的调用点**(唯一调用在
-  关掉插件安装时一并包掉了),所以 `.geocode` 与 `.browser` 都不会被自动忽略——截图可提交是这个功能的
-  本意,不是疏漏。
-  门里的绊线(`screenshot-directory.test.js`)断言的是**字节落在哪**而不是常量怎么拼——将来换个写法
-  组合出同一个路径仍然算对;上游那两个断言旧路径的用例原样留着,按设计会红。
-
-- **归阶段 3 · `.agents/loops` 循环任务**:已完成。**这一条原先在本清单里记成「`~/.agents/loops` 的
-  启动期扫描与写回」,三处都不准**:它还扫项目各级祖先;不在启动期而在 `syncProject()`(打开或同步
-  项目都走);「写回」不在 `loops.js`——那个文件整个只读——而在服务层,且是两条:删任务时
-  `fs.unlinkSync` 删掉用户的 `.md`,开关任务时 `writeMdFile` 改写它的 frontmatter。按错的那句排优先级
-  会把破坏性判轻。
-  这是 **OpenChamber 自己的功能**,内核对 `loop`/`cron`/定时任务零匹配;整个 `scheduled-tasks/`
-  与 `chamber-upstream` 零差异,我们从没动过。判据用现成的那条**归属**(`PATHS.md` 末尾):`.agents`
-  是用户写给**任意** agent 工具的地方,不属于 GeoCode 体系。循环任务比技能更该关——技能只是被列出来
-  等用户挑,循环任务**自己按 cron 跑起来**。
-  只屏蔽 `discoverLoopFiles` 一处。它是两条写路径**唯一的闸门**:`findLoopTask` 先 `syncProject()`
-  再查表,表里没有带 `loopFile` 的任务,删和开关都取不到文件。实测确认了三件事:界面上建的任务
-  (不带 `loopFile`)完好、用户的 `.md` 哈希不变、Goal 是另一个模块(`session-goal/` 只导入
-  `fs`/`os`/`path` 与自己的 `objectives.js`)完全不受影响。
-  绊线在门里(`agent-loops.test.js`);上游七个断言这项能力的用例原样留着,按设计会红。
-  ⚠️ 排查过程本身有一条教训:第一次实验造的任务形状不合法,被规范化直接丢掉,输出是
-  `之前: [] 之后: []`——**长得和「安全」一模一样**。是因为「之前」也空才发现它空转;
-
-- **归阶段 3「特性修缮」**:外部二进制发现在 `electron:dev` 下的分叉(Electron 下已关,见下文「真欠着的」一条)、`gitlab-ai-provider` 的 vendor 泄漏、内置技能
-  `customize-geocode`(原名 `customize-opencode`)的描述与正文、以及品牌与 i18n。
-
-⚠️ **`packages/vscode/` 整包判为不改,这一条到此为止**(2026-09-18 定):GeoCode 不需要这个扩展。它是独立交付物,
-§4.2 的表里就写着不构建,整门也从不跑它,因此没有任何入口能让人看见包里的上游名字——而改牌的判据正是
-「用户有可能看见的才换」。改名要动 50 到 60 个文件,在上游持续编辑的行上留下永久冲突面,与 §12 否决
-「删掉 mobile / VS Code / Web 源码」时给的理由是同一条。**代价写明**:包里的 `opencodeConfig.ts` 是
-`server/lib/opencode/` 近乎逐行的副本(单这一个文件 56 处 `opencode`),项目目录、配置文件名、技能根、
-外部二进制发现全是上游的名字,而且它会去读**真正的 OpenCode 的数据根**。所以**一旦有一天要发布这个扩展,
-必须先把整包过一遍**;在那之前它只是跟着上游走的源码。不配绊线:发布是明摆着的动作,没有静默路径(§5)。
-
-```bash
-# 硬编码到 OpenChamber 目录的 fallback(认 OPENCHAMBER_DATA_DIR 的那一半不会命中,
-# 因为那半边根本不含这两个路径段)。
-grep -rn "'\.config', 'openchamber'" desktop/packages/web --include="*.js" --include="*.mjs" \
-  | grep -v '\.test\.' | grep -v node_modules | grep -v '/dist/'
-
-# 硬编码到 OpenCode 根的路径计算。
-grep -rnE "'(\.config|\.local|\.cache)', '[Oo]pencode'|'\.opencode'" \
-  desktop/packages/web --include="*.js" --include="*.mjs" \
-  | grep -v '\.test\.' | grep -v node_modules | grep -v '/dist/'
-
-# 相对形态:目录名不挂 HOME,而是后面才拼上项目目录。上面两条一条都不匹配它。
-grep -rnE "path\.join\(\s*['\"]\.(openchamber|opencode|claude|agents)['\"]" \
-  desktop/packages kernel/packages --include="*.ts" --include="*.js" --include="*.mjs" \
-  | grep -v '\.test\.' | grep -v node_modules | grep -v '/dist/'
-
-# 裸的目录名常量,同理。
-grep -rnE "=\s*['\"]\.(openchamber|opencode|claude|agents)['\"]\s*;?\s*$" \
-  desktop/packages kernel/packages --include="*.ts" --include="*.js" --include="*.mjs" \
-  | grep -v '\.test\.' | grep -v node_modules | grep -v '/dist/'
-```
-
-⚠️ **前两条命令的范围是 `packages/web`,不是 `packages/web/server`。** 收窄到 `server/` 会漏掉
-`bin/`——那是已发布的 CLI,同样按 `~/.config/openchamber` 解析数据根。这是同一个盲区的第三次:
-第一次是下面那个过滤器,第二次是复审时临时写的 `path.join\([^)]*'openchamber'`(`[^)]*` 不允许中间
-出现右括号,而这类路径几乎全是 `path.join(os.homedir(), ...)`,它把最该找的形状排除了)。
-**`packages/vscode` 要单独扫**,它是另一份副本,不在前两条里(后两条的范围是整个 `desktop/packages`
-与 `kernel/packages`,覆盖到了它)。
-
-⚠️ **第四次是形态漏了,不是范围漏了。** 前两条命令找的都是**从 HOME 拼出来的绝对根**,而
-`screenshots.js` 写的是 `path.join('.openchamber', 'screenshots')`——相对路径,项目目录后面才拼上去,
-两条都不匹配。它把 agent 的截图落进用户仓库里一个别的产品名字的目录,而 `.openchamber` 不在
-`.gitignore` 里,于是会进用户自己的提交。后加的两条命令就是补这个形态的。
-它们报出来的东西要再过一道:**屏蔽块里的行 grep 照样匹配**,而**只读的判断**(比如拿路径判断自己
-是怎么装的)不建目录也不写文件,两类都不是欠账。抹掉块注释再看一遍,剩下的才是。
-
-⚠️ **第一条命令原先还带一个 `grep -v ":[[:space:]]*: "`,那个过滤器是错的**,务必不要加回去。
-它本意是排除三元里读变量的分支,但**硬编码 fallback 恰恰也写在 else 分支上、格式一模一样**,于是
-连要找的东西一起吃掉:实测它报告 2 处,真实是 13 处,批 2 就是照着那份残缺清单做的。
-**这是一条命令写错、把自己关进盲区两个批次的记录。**
-
-**这两条命令报出来的东西分四类**,按类记而不按条记——条数每批都在变,类别不变:
-
-- **早退或注释屏蔽的**:`package-manager.js` 的 `getOpenChamberConfigDir`、`shared.js` 里那个
-  `~/.opencode` 第二全局根、`skills.js` 的缓存候选列表。上游行逐字节留着,永不到达;
-- **不是路径的**:`path-utils.js` 的 `pathLooksUserConfigured`,它那张表判的是「PATH 里出现过哪些
-  目录名」,不算泄漏;
-- **不可达但留着的**:`skill-routes.js` 里按路径判作用域的分类器,以及 `skills.js` 的
-  `homeOpencodeDir`——发现关掉之后没有路径会走到它们,删掉反而增加暴露面;
-- **原记为真欠着、现已关上的**:`env-runtime.js` 与 `server-utils-runtime.js` 的外部二进制探测(找系统里的 `opencode`)。Electron 下三条入口都关了:解析与升级两条路由先注册 404,`startOpenCode` 首行拒绝(ENVIRONMENT.md §5.6),`applyOpencodeBinaryFromSettings` 早退;绊线分别在 `server/geocode/system-opencode-surface.test.js` 与 `managed-kernel.test.js`,都带不标 Electron 的对照。仍走得到的只有 `electron:dev`(不带 bundled)的开发形态分叉(CONVENTIONS.md §7)。2026-09-17 复核。
-
-⚠️ **不要在这份文档里写行号。** 实测过:七处 `file:line` 引用里四处在两天内就漂了,而且是被我们
-自己的注释改动推移的。行号失效时不报错,只是安静地指向另一句代码,读的人会以为文档错了或者代码被
-改过——两种猜测都不对。**符号名才是代码的身份**:改名会有编译错误、会有测试红;行号漂了什么都不会
-发生。要指位置就指函数名或常量名,要计数就给命令让人现数。
-
-### 阶段 7:桌面功能与地理界面
-
-在基础闭环稳定后,按独立批次接入 diff、终端、通知、地理设置、地图与预览。每一批都有自己的
-用户流程和验收,不回头改变基础进程边界。
-
-### 阶段 8:双平台打包
-
-macOS arm64 与 Windows x64 分别完成:
-
-- 干净机器首次安装;
-- 开发版与正式版数据隔离;
-- 启动、更新通知、卸载与重装;
-- 原生模块与 Kernel 架构验证;
-- 正常退出、Kernel 崩溃恢复,以及 main 崩溃后的进程残留(§5.2、§5.3、§5.4);
-- 与旧版会话迁移的真实数据验证。
+**迁移查出来的缺陷里最多的一类不是泄漏,是坏掉的功能。** 读的一侧改了、写的一侧没改,两边各自
+自洽,单看任何一侧都正常——计划面板因此永远报「没有计划」,行为页保存成功而 agent 一个字都看不到。
+**改一条路径时必须同时数清它的读取方与写入方**(`PATHS.md` §5)。
 
 ---
 
@@ -1429,7 +689,7 @@ macOS arm64 与 Windows x64 分别完成:
 - `scripts/test-gate.sh` 保持全绿;
 - 新增 Shell gate 覆盖 capability、Kernel Host、代理、身份和打包绊线;
 - 根级集成门使用真实 Shell + 真实 Kernel,不以 mock 证明兼容;
-- 每次上游合并后逐项审阅 GeoCode 在该目录上的全部改动(清单取自 `git diff --name-status`,见 §9.2);上游自己的套件不归我们维护(`CONVENTIONS.md` §7);
+- 每次上游合并后逐项审阅 GeoCode 在该目录上的全部改动(清单取自 `git diff --name-status`,见 `CONVENTIONS.md` §5);上游自己的套件不归我们维护(`CONVENTIONS.md` §7);
 - 发版前两平台实机、全新档案与存量档案各走一轮。
 
 ---
@@ -1449,27 +709,6 @@ macOS arm64 与 Windows x64 分别完成:
 
 ---
 
-## 13. 实施前仍需定稿的细节
-
-以下不改变总体架构,在对应迁移阶段以实验决定:
-
-1. 同源 SDK 以 workspace 依赖还是构建产物交付给 `desktop/`;
-2. 新版 OpenChamber 要求的 SDK 版本与 Kernel 版本不一致时如何处置——§9.5「一次只升级一个
-   上游」与 §4.3「Kernel 与 SDK 同源」在此相交。首次实测(OpenChamber v1.21.0 钉
-   `@opencode-ai/sdk` 1.18.23,Kernel 侧 1.18.18)显示两者 API 表面零差异,差的三行是版本号、
-   一句注释,以及一个我们不装配的 `app.upgrade` 参数——**所以这一条的结论是「版本号不能用来
-   判断」,而不是「已经对齐」**;
-3. Shell 补丁的注入表:已定,不建。§9.4 改为「清单由定位 grep 给出,理由写在补丁旁」;
-4. Shell Runtime 凭据的具体 token 形状与过期策略;
-5. utility process 异常退出后的自动重启次数与退避:已定,不自动重启,见 §5.2;
-6. GeoCode 应用更新通知的检查间隔和发布清单格式:已定,见 §7.2。清单就是 GitHub Release 本身,
-   不另生成 `latest.yml` 一类文件。
-
-这些细节必须有一个明确所有者和运行时测试,但不应重新打开「是否只有 Desktop」「是否内置
-Kernel」「是否保留 Shell Runtime」「是否由 main 管理 Kernel」四项已定决策。
-
----
-
 ## 14. 相关文档
 
 | 文档 | 分工 |
@@ -1479,5 +718,6 @@ Kernel」「是否保留 Shell Runtime」「是否由 main 管理 Kernel」四�
 | `KERNEL.md` | OpenCode 薄 fork、Agent 装配与生产 bundle |
 | `GEOKERNEL.md` | 地理执行内核与三个出口面 |
 | `TOOLS.md` | 模型工具、权限和输出契约 |
-| `PATHS.md` | 磁盘、系统身份与环境变量边界 |
-| `CONVENTIONS.md` | 开发、补丁、测试与上游合并纪律 |
+| `PATHS.md` | 磁盘、系统身份与命名空间隔离 |
+| `ENVIRONMENT.md` | 环境变量边界 |
+| `CONVENTIONS.md` | 开发、补丁、测试,以及两棵 vendored 树的闭包与合并纪律 |

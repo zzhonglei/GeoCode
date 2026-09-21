@@ -190,7 +190,7 @@ echo
 
 # HEAD does not exist on the first commit of a fresh orphan branch, which is
 # exactly how this branch begins: a sequence of snapshots with no upstream
-# history behind it (docs/DESKTOP.md §9.2).
+# history behind it (docs/CONVENTIONS.md §5).
 if ! git rev-parse --verify -q HEAD >/dev/null; then
   echo "orphan branch, no HEAD yet — this will be the root commit."
   echo

@@ -6,7 +6,7 @@
 # THIS FILE IS THE CLOSURE. Editing a line is a structural change, not a
 # preference: the next merge reads a removed line as "upstream deleted these
 # files" and an added one as "upstream added them", and neither produces a
-# conflict. Both are silent. See docs/DESKTOP.md §9.2.
+# conflict. Both are silent. See docs/CONVENTIONS.md §5.
 #
 # Unlike the kernel closure, this one takes every package whole. GeoCode ships
 # only a desktop app, but proving that by deleting the mobile/vscode/web sources
