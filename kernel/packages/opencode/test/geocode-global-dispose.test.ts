@@ -7,6 +7,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Auth } from "@/auth"
 import { Config } from "@/config/config"
+import { GeoCodeRefresh } from "@/config/geocode-refresh"
 import { Installation } from "@/installation"
 import { InstanceStore } from "@/project/instance-store"
 import { ServerAuth } from "@/server/auth"
@@ -67,6 +68,15 @@ describe("GeoCode: global dispose", () => {
       expect(response.status).toBe(200)
       expect(yield* response.json).toBe(true)
       expect(calls).toEqual(["invalidate", "disposeAll"])
+    }),
+  )
+  it.live("returns conflict before invalidating or disposing active execution", () =>
+    Effect.gen(function* () {
+      calls.length = 0
+      yield* GeoCodeRefresh.coordinator.observe(Effect.succeed(true))
+      const response = yield* HttpClient.post(GlobalPaths.dispose)
+      expect(response.status).toBe(409)
+      expect(calls).toEqual([])
     }),
   )
 })

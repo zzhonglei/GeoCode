@@ -307,41 +307,31 @@ describe('createKernelPassword', () => {
   });
 });
 
-describe('startKernelHost terminate', () => {
-  it('signals synchronously, for the shutdown path that cannot await', async () => {
-    const child = createFakeChild({ onStart: readyOnStart('127.0.0.1', 51234) });
-    const host = await startWith(child);
-
-    host.terminate();
-    expect(child.killed).toBe(1);
-    expect(child.sent.filter((m) => m.type === KERNEL_COMMAND.STOP)).toHaveLength(0);
-  });
-
-  it('does not signal a kernel that already exited or is stopping', async () => {
-    const exitedChild = createFakeChild({ onStart: readyOnStart('127.0.0.1', 51234) });
-    const exitedHost = await startWith(exitedChild);
-    exitedChild.emit('exit', 0);
-    exitedHost.terminate();
-    expect(exitedChild.killed).toBe(0);
-
-    const stoppingChild = createFakeChild({ onStart: readyOnStart('127.0.0.1', 51234) });
-    const stoppingHost = await startWith(stoppingChild);
-    stoppingHost.stop();
-    stoppingHost.terminate();
-    expect(stoppingChild.killed).toBe(0);
-  });
-});
-
 describe('main.mjs quit path', () => {
-  it('terminates the kernel in the teardown that quitting runs', () => {
-    // The signal is what starts the kernel's sweep of its geographic children (docs/DESKTOP.md §5.3).
-    const main = fs.readFileSync(new URL('../main.mjs', import.meta.url).pathname, 'utf8');
-    const body = (name) => {
-      const start = main.indexOf(`const ${name} = `);
-      expect(start).toBeGreaterThan(-1);
-      return main.slice(start, main.indexOf('\n};\n', start)).replace(/^\s*\/\/.*$/gm, '');
-    };
-    expect(body('shutdownBackgroundServices')).toContain('state.kernelHandle?.terminate();');
-    expect(body('prepareForQuit')).toContain('shutdownBackgroundServices();');
+  for (const shellFails of [false, true]) it(`waits for kernel STOP after shell shutdown (shell fails: ${shellFails})`, async () => {
+    const main = fs.readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
+    const start = main.indexOf('const shutdownBackgroundServices = ');
+    const source = main.slice(start, main.indexOf('\n};\n', start) + 4);
+    const timers = createControlledTimers();
+    const child = createFakeChild({ onStart: readyOnStart('127.0.0.1', 51234) });
+    const host = await startWith(child, { timers });
+    const state = { kernelHandle: host };
+    const shutdown = new Function('state', 'setDesktopKeepAwakeActive', 'shellEnvironmentAbort',
+      'loadShellEnv', 'killSidecar', 'shutdownSshSessions', `${source}; return shutdownBackgroundServices;`)(
+      state, () => {}, { abort() {} }, async () => {},
+      async () => { if (shellFails) throw new Error('shell failure'); }, async () => {},
+    );
+    let completed = false;
+    const pending = shutdown().catch((error) => error).then((result) => { completed = true; return result; });
+    await waitUntil(() => child.sent.some((message) => message.type === KERNEL_COMMAND.STOP), 'kernel stop');
+    expect(state.kernelHandle).toBeNull();
+    expect(child.killed).toBe(0);
+    expect(completed).toBe(false);
+    child.emit('exit', 0);
+    const result = await pending;
+    expect(completed).toBe(true);
+    expect(state.backgroundShutdownComplete).toBe(true);
+    expect(timers.size).toBe(0);
+    if (shellFails) expect(result.message).toBe('shell failure');
   });
 });

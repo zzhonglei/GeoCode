@@ -39,6 +39,7 @@ export type State<A, E> =
 export const make = <A, E = never>(
   scope: Scope.Scope,
   opts?: {
+    admit?: <B, E2, R>(transition: Effect.Effect<B, E2, R>) => Effect.Effect<B, E2, R> // GeoCode: reserve the state transition against config disposal
     onIdle?: Effect.Effect<void>
     onBusy?: Effect.Effect<void>
     onInterrupt?: Effect.Effect<A, E>
@@ -49,6 +50,8 @@ export const make = <A, E = never>(
   const onBusy = opts?.onBusy ?? Effect.void
   const onInterrupt = opts?.onInterrupt
   let ids = 0
+
+  const admit = opts?.admit ?? (<B, E2, R>(work: Effect.Effect<B, E2, R>) => work) // GeoCode: upstream runners keep their original behavior
 
   const state = () => SynchronizedRef.getUnsafe(ref)
   const next = () => {
@@ -135,7 +138,7 @@ export const make = <A, E = never>(
           }
         }
       }),
-    ).pipe(Effect.flatten)
+    ).pipe(admit, Effect.flatten) // GeoCode: release admission before awaiting the running fiber
 
   const startShell = (work: Effect.Effect<A, E>, ready?: Latch.Latch): Effect.Effect<A, E | Busy> =>
     SynchronizedRef.modifyEffect(
@@ -166,7 +169,7 @@ export const make = <A, E = never>(
           { _tag: "Shell", shell },
         ] as const
       }),
-    ).pipe(Effect.flatten)
+    ).pipe(admit, Effect.flatten) // GeoCode: release admission before awaiting the running fiber
 
   const cancel = SynchronizedRef.modify(ref, (st) => {
     switch (st._tag) {

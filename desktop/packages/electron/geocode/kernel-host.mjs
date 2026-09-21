@@ -192,26 +192,25 @@ export const startKernelHost = async ({
   const stop = () => {
     if (stopping) return stopping;
     if (exited) return Promise.resolve();
-    child.postMessage(createStopCommand());
+    let timeout;
     stopping = Promise.race([
       exit.promise.then(() => undefined),
-      new Promise((resolve) => timers.setTimeout(resolve, stopTimeoutMs)).then(() => {
-        if (exited) return;
-        logger.warn?.(`[geocode-kernel] did not stop within ${stopTimeoutMs}ms, killing`);
-        child.kill();
+      new Promise((resolve) => {
+        timeout = timers.setTimeout(() => {
+          if (!exited) {
+            logger.warn?.(`[geocode-kernel] did not stop within ${stopTimeoutMs}ms, killing`);
+            child.kill();
+          }
+          resolve();
+        }, stopTimeoutMs);
       }),
-    ]);
+    ]).finally(() => timers.clearTimeout(timeout));
+    try {
+      child.postMessage(createStopCommand());
+    } catch (error) {
+      logger.warn?.(`[geocode-kernel] stop request failed: ${error?.message ?? error}`);
+    }
     return stopping;
-  };
-
-  /**
-   * Synchronous: main signals here and lets its own awaited shutdown settle, rather than waiting on the kernel. The
-   * kernel catches the signal, so its exit handler sweeps the QGIS process groups no kill from here reaches
-   * (docs/GEOKERNEL.md §10.1 #8b).
-   */
-  const terminate = () => {
-    if (exited || stopping) return;
-    child.kill();
   };
 
   return {
@@ -220,7 +219,6 @@ export const startKernelHost = async ({
     /** Resolves with the exit code whenever the kernel exits, whoever caused it. */
     exit: exit.promise,
     stop,
-    terminate,
     get exited() {
       return exited;
     },

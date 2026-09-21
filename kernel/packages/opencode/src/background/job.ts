@@ -2,6 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { BackgroundJob as CoreBackgroundJob } from "@opencode-ai/core/background-job"
 import { InstanceState } from "@/effect/instance-state"
 import { Effect, Layer } from "effect"
+import { GeoCodeRefresh } from "@/config/geocode-refresh" // GeoCode: queued tasks outlive their parent runner
 
 export {
   Service,
@@ -18,7 +19,28 @@ export {
 const layer = Layer.effect(
   CoreBackgroundJob.Service,
   Effect.gen(function* () {
-    const state = yield* InstanceState.make(() => CoreBackgroundJob.make)
+    // --- GeoCode: config disposal must also see jobs before their child runner starts; HTTP/SSE cannot prove this.
+    const state = yield* InstanceState.make(() =>
+      Effect.gen(function* () {
+        let jobs: CoreBackgroundJob.Interface | undefined
+        const refresh = yield* GeoCodeRefresh.coordinator.observe(
+          Effect.suspend(() =>
+            jobs
+              ? jobs.list().pipe(Effect.map((items) => items.some((job) => job.status === "running")))
+              : Effect.succeed(true),
+          ),
+        )
+        const registry = yield* CoreBackgroundJob.make
+        jobs = registry
+        yield* Effect.addFinalizer(() => refresh.close)
+        return {
+          ...registry,
+          start: (input: CoreBackgroundJob.StartInput) => refresh.admit(registry.start(input)),
+          extend: (input: CoreBackgroundJob.ExtendInput) => refresh.admit(registry.extend(input)),
+        }
+      }),
+    )
+    // --- /GeoCode ---
     return CoreBackgroundJob.Service.of({
       list: () => InstanceState.useEffect(state, (jobs) => jobs.list()),
       get: (id) => InstanceState.useEffect(state, (jobs) => jobs.get(id)),

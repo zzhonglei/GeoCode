@@ -15,6 +15,7 @@ import { initializeAppearancePreferences, syncDesktopSettings } from '@/lib/pers
 import { startModelPrefsAutoSave } from '@/lib/modelPrefsAutoSave';
 import { startTypographyWatcher } from '@/lib/typographyWatcher';
 import { ElectronMiniChatApp } from './ElectronMiniChatApp';
+import { GeoCodeKernelFailureGate } from '@/geocode/GeoCodeKernelFailureGate'; // GeoCode: this root does not render App
 
 const initializeSharedPreferences = () => {
   initializeLocale();
@@ -48,9 +49,12 @@ export function renderElectronMiniChatApp(apis: RuntimeAPIs) {
       <I18nProvider>
         <ThemeSystemProvider>
           <ThemeProvider>
+            {/* GeoCode: keep the failure gate outside chat/auth so a dead kernel unmounts the chat. */}
+            <GeoCodeKernelFailureGate>
             <SessionAuthGate>
               <ElectronMiniChatApp apis={apis} />
             </SessionAuthGate>
+            </GeoCodeKernelFailureGate>
           </ThemeProvider>
         </ThemeSystemProvider>
       </I18nProvider>

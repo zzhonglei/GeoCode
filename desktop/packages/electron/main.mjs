@@ -400,15 +400,15 @@ const shutdownBackgroundServices = () => {
   if (!state.backgroundShutdownPromise) {
     setDesktopKeepAwakeActive(false);
     shellEnvironmentAbort.abort();
-    // GeoCode: a signal, not one of the awaited stops below; the kernel's own exit handler
-    // sweeps the QGIS process groups no kill from here reaches (docs/GEOKERNEL.md §10.1 #8b).
-    state.kernelHandle?.terminate();
+    // GeoCode: STOP IPC runs the kernel's exit sweep on Windows too; utilityProcess.kill() does not.
+    const kernelHandle = state.kernelHandle;
     state.kernelHandle = null;
     state.backgroundShutdownPromise = Promise.all([
       loadShellEnv().catch(() => {}),
       killSidecar(),
       shutdownSshSessions(),
-    ]).finally(() => {
+    ]).finally(async () => {
+      await kernelHandle?.stop(); // GeoCode: even a failed shell shutdown must wait for the kernel
       state.backgroundShutdownComplete = true;
     });
   }

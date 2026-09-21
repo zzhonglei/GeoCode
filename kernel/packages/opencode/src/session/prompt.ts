@@ -1,3 +1,4 @@
+import { GeoCodeRefresh } from "@/config/geocode-refresh" // GeoCode: prompt/command preparation also runs before a runner exists
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import path from "path"
@@ -1068,7 +1069,7 @@ const layer = Layer.effect(
 
       if (input.noReply === true) return message
       return yield* loop({ sessionID: input.sessionID })
-    })
+    }, (work) => GeoCodeRefresh.coordinator.admit(work)) // GeoCode: protect preparation and hand-off to the runner
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
       const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user").pipe(Effect.orDie)
@@ -1478,7 +1479,7 @@ const layer = Layer.effect(
         messageID: result.info.id,
       })
       return result
-    })
+    }, (work) => GeoCodeRefresh.coordinator.admit(work)) // GeoCode: command templates may execute before prompt starts
 
     return Service.of({
       cancel,

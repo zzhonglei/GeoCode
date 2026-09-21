@@ -138,6 +138,42 @@ describe('the generated plugin', () => {
     expect(await patternFor(GEOCODE_TOOL_NAME, 'create')).toBe('create');
   });
 
+  it('describes the URL the real upstream entry sends, including conflicting input shapes', async () => {
+    const tools = await loadTools();
+    const originalFetch = globalThis.fetch;
+    const oldUrl = process.env.OPENCHAMBER_AGENT_TOOL_URL;
+    const oldToken = process.env.OPENCHAMBER_AGENT_TOOL_TOKEN;
+    const sent = [];
+    const asked = [];
+    process.env.OPENCHAMBER_AGENT_TOOL_URL = 'http://127.0.0.1:1/unused';
+    process.env.OPENCHAMBER_AGENT_TOOL_TOKEN = 'synthetic-test-token';
+    globalThis.fetch = async (_url, init) => {
+      sent.push(JSON.parse(init.body).input);
+      return new Response(JSON.stringify({ schemaVersion: 1, ok: true, action: 'browser.open' }));
+    };
+    try {
+      for (const input of [
+        { action: 'browser.open', url: 'https://flat.example', parameters: { url: 'https://nested.example' } },
+        { action: 'browser.open', parameters: { url: 'https://nested.example' } },
+        { action: 'browser.open', url: 'https://flat.example', parameters: {} },
+        { action: 'browser.open', url: 'https://flat.example', parameters: { url: null } },
+      ]) {
+        await tools[BROWSER_TOOL_NAME].execute(input, recordingContext(asked));
+        const executed = sent.at(-1).url;
+        expect(asked.at(-1).metadata.url).toBe(typeof executed === 'string' ? executed : undefined);
+      }
+      expect(sent.map((input) => input.url)).toEqual([
+        'https://nested.example', 'https://nested.example', 'https://flat.example', null,
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (oldUrl === undefined) delete process.env.OPENCHAMBER_AGENT_TOOL_URL;
+      else process.env.OPENCHAMBER_AGENT_TOOL_URL = oldUrl;
+      if (oldToken === undefined) delete process.env.OPENCHAMBER_AGENT_TOOL_TOKEN;
+      else process.env.OPENCHAMBER_AGENT_TOOL_TOKEN = oldToken;
+    }
+  });
+
   it('carries no OpenChamber or OpenCode wording, and the rebranded strings are the ones upstream has', async () => {
     const template = await realTemplate();
     const upstreamEntries = {

@@ -1029,10 +1029,6 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
     // would cut off running chats (docs/DESKTOP.md §5.2) ---
     let geocodeKernelRefreshed = false;
     if (external && process.versions.electron) {
-      const busy = getActiveSessionCount();
-      if (busy > 0) {
-        throw new Error(`${busy} chat${busy === 1 ? ' is' : 's are'} still running. Wait for ${busy === 1 ? 'it' : 'them'} to finish, then apply again.`);
-      }
       await refreshEmbeddedKernel({ buildOpenCodeUrl, getOpenCodeAuthHeaders });
       geocodeKernelRefreshed = true;
     }

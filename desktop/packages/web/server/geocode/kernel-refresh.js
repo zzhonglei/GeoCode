@@ -17,6 +17,9 @@ export const refreshEmbeddedKernel = async ({
       headers: { Accept: 'application/json', ...getOpenCodeAuthHeaders() },
       signal: controller.signal,
     });
+    if (response.status === 409) {
+      throw new Error('Work is still running or starting. Wait for it to finish, then apply again.');
+    }
     if (!response.ok) {
       throw new Error(`Kernel refresh failed: HTTP ${response.status}`);
     }

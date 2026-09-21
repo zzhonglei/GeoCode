@@ -88,20 +88,22 @@ const guarded = (tool, describe) => ({
   async execute(input, context) {
     const requested = typeof input?.action === "string" ? input.action.trim() : ""
     const action = canonical(tool, requested || tool)
+    const { parameters, ...flattened } = input ?? {}
+    const normalized = { action, parameters: { ...flattened, ...(parameters ?? {}) } }
     await context.ask({
       permission: tool,
       patterns: [action],
       always: ["*"],
-      metadata: { action, ...describe(input) },
+      metadata: { action, ...describe(normalized.parameters) },
     })
-    return upstream[tool].execute({ ...input, action }, context)
+    return upstream[tool].execute(normalized, context)
   },
 })
 
 export const GeoCodeBrowserPlugin = async () => ({
   tool: {
     ${BROWSER_TOOL_NAME}: guarded(${JSON.stringify(BROWSER_TOOL_NAME)}, (input) => ({
-      url: typeof input?.url === "string" ? input.url : (typeof input?.parameters?.url === "string" ? input.parameters.url : undefined),
+      url: typeof input?.url === "string" ? input.url : undefined,
     })),
     ${GEOCODE_TOOL_NAME}: guarded(${JSON.stringify(GEOCODE_TOOL_NAME)}, () => ({})),
   },

@@ -94,6 +94,7 @@ echo "== geo kernel (opencode) =="
   test/geocode-osmfetch.test.ts \
   test/geocode-read-handoff.test.ts \
   test/geocode-global-dispose.test.ts \
+  test/geocode-config-refresh.test.ts \
   test/geocode-ui-fallback.test.ts \
   test/geocode-builtin-commands.test.ts)
 

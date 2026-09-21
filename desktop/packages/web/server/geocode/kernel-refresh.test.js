@@ -122,13 +122,21 @@ describe('applying configuration to the embedded kernel', () => {
     expect(onOpenCodeRestarted).not.toHaveBeenCalled();
   });
 
-  it('refuses while chats are running, before touching the kernel', async () => {
+  it('uses the kernel conflict even when the SSE counter missed the busy event', async () => {
     process.versions.electron = '0.0.0-test';
-    const { runtime, onOpenCodeRestarted } = createRuntime({ getActiveSessionCount: () => 2 });
-
-    await expect(runtime.refreshOpenCodeAfterConfigChange('test')).rejects.toThrow(/2 chats are still running/);
-    expect(disposeRequests()).toHaveLength(0);
+    globalThis.fetch = vi.fn(async (url) => (
+      String(url).endsWith('/global/dispose') ? jsonResponse(409, {}) : jsonResponse(200, { healthy: true })
+    ));
+    const { runtime, onOpenCodeRestarted } = createRuntime({ getActiveSessionCount: () => 0 });
+    await expect(runtime.refreshOpenCodeAfterConfigChange('test')).rejects.toThrow(/still running or starting/);
     expect(onOpenCodeRestarted).not.toHaveBeenCalled();
+  });
+
+  it('does not let stale SSE busy state prevent a kernel-approved refresh', async () => {
+    process.versions.electron = '0.0.0-test';
+    const { runtime } = createRuntime({ getActiveSessionCount: () => 2 });
+    expect(await runtime.refreshOpenCodeAfterConfigChange('test')).toEqual({ reloaded: true, external: false });
+    expect(disposeRequests()).toHaveLength(1);
   });
 
   it('surfaces a kernel that refuses the dispose instead of claiming a reload', async () => {

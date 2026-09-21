@@ -1,3 +1,4 @@
+import { ConflictError } from "../errors" // GeoCode: config apply refuses active work
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventManifest } from "@/event-manifest"
@@ -113,6 +114,7 @@ export const GlobalApi = HttpApi.make("global").add(
       ),
       HttpApiEndpoint.post("dispose", GlobalPaths.dispose, {
         success: described(Schema.Boolean, "Global disposed"),
+        error: ConflictError, // GeoCode: busy refusal is part of the HTTP contract
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "global.dispose",

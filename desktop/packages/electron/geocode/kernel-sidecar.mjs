@@ -116,13 +116,12 @@ const start = async (command) => {
   }
 };
 
-const stop = async () => {
+// Closing the listener can await active work; exit runs the geographic sweep without that dependency.
+const stop = () => {
   try {
-    await listener?.stop();
-  } finally {
-    listener = undefined;
     parentPort.postMessage(createStoppedMessage());
-    setImmediate(() => process.exit(0));
+  } finally {
+    process.exit(0);
   }
 };
 
@@ -130,7 +129,7 @@ parentPort.on('message', (event) => {
   const command = parseKernelCommand(event?.data);
   if (!command) return;
   if (command.type === KERNEL_COMMAND.STOP) {
-    void stop();
+    stop();
     return;
   }
   void start(command);

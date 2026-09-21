@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { pickFreePort } from './kernel-host.mjs';
-import { KERNEL_MESSAGE, createStartCommand, parseKernelMessage } from './kernel-protocol.mjs';
+import { KERNEL_MESSAGE, createStartCommand, createStopCommand, parseKernelMessage } from './kernel-protocol.mjs';
 
 /* The sidecar turns a signal into an exit, and only an exit runs the kernel's sweep (docs/GEOKERNEL.md §10.1 #8b). */
 
@@ -131,13 +131,51 @@ const startGeographicProcess = async ({ port, project, pidFile }) => {
 const it_ = process.platform === 'win32' ? it.skip : it;
 
 describe('kernel sidecar shutdown', () => {
-  it_('a termination signal takes a running geographic process down with the kernel', async () => {
+  it('STOP exits through the cleanup hook without waiting for a stuck listener', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-sidecar-stop-'));
+    for (const file of ['kernel-sidecar.mjs', 'kernel-protocol.mjs']) {
+      fs.copyFileSync(path.join(here, file), path.join(root, file));
+    }
+    const ready = path.join(root, 'ready');
+    const swept = path.join(root, 'swept');
+    fs.writeFileSync(path.join(root, 'node.js'), `
+      import fs from 'node:fs';
+      process.on('exit', () => fs.writeFileSync(${JSON.stringify(swept)}, 'done'));
+      export const Server = { listen: async () => {
+        fs.writeFileSync(${JSON.stringify(ready)}, 'ready');
+        return { hostname: '127.0.0.1', port: 12345, stop: () => new Promise(() => {}) };
+      } };
+    `);
+    const proc = Bun.spawn([process.execPath, path.join(root, 'kernel-sidecar.mjs')], {
+      stdin: 'pipe', stdout: 'ignore', stderr: 'ignore',
+    });
+    try {
+      proc.stdin.write(`${JSON.stringify(createStartCommand({ hostname: '127.0.0.1', port: 12345, password: '' }))}\n`);
+      proc.stdin.flush();
+      expect(await waitFor(() => fs.existsSync(ready), 5_000)).toBe(true);
+      proc.stdin.write(`${JSON.stringify(createStopCommand())}\n`);
+      proc.stdin.flush();
+      expect(await waitFor(() => proc.exitCode !== null, 3_000)).toBe(true);
+      expect(proc.exitCode).toBe(0);
+      expect(fs.readFileSync(swept, 'utf8')).toBe('done');
+    } finally {
+      if (proc.exitCode === null) proc.kill('SIGKILL');
+      await proc.exited;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  for (const method of ['ipc', 'signal']) it_(`${method} shutdown takes a running geographic process down with the kernel`, async () => {
     const sidecar = await startSidecar();
     try {
       const child = await startGeographicProcess(sidecar);
       expect(alive(child)).toBe(true);
 
-      sidecar.proc.kill('SIGTERM');
+      if (method === 'signal') sidecar.proc.kill('SIGTERM');
+      else {
+        sidecar.proc.stdin.write(`${JSON.stringify(createStopCommand())}\n`);
+        sidecar.proc.stdin.flush();
+      }
       // Well inside the kernel's own 30s clock on the read, so only the sweep can explain a death here.
       expect(await waitFor(() => !alive(child), 10_000)).toBe(true);
       expect(await waitFor(() => sidecar.proc.exitCode !== null, 10_000)).toBe(true);

@@ -7,6 +7,7 @@ import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
 import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
+import { GeoCodeRefresh } from "@/config/geocode-refresh" // GeoCode: disposal must observe actual runners
 
 export interface Interface {
   readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
@@ -36,8 +37,12 @@ const layer = Layer.effect(
       Effect.fn("SessionRunState.state")(function* () {
         const scope = yield* Scope.Scope
         const runners = new Map<SessionID, Runner.Runner<SessionV1.WithParts>>()
+        const refresh = yield* GeoCodeRefresh.coordinator.observe(
+          Effect.sync(() => [...runners.values()].some((runner) => runner.busy)),
+        ) // GeoCode: all instances participate, even when no SSE client is connected
         yield* Effect.addFinalizer(
           Effect.fnUntraced(function* () {
+            yield* refresh.close // GeoCode: stale callers cannot enter a disposed scope
             yield* Effect.forEach(runners.values(), (runner) => runner.cancel, {
               concurrency: "unbounded",
               discard: true,
@@ -45,7 +50,7 @@ const layer = Layer.effect(
             runners.clear()
           }),
         )
-        return { runners, scope }
+        return { runners, scope, refresh } // GeoCode: admission belongs to this instance
       }),
     )
 
@@ -57,6 +62,7 @@ const layer = Layer.effect(
       const existing = data.runners.get(sessionID)
       if (existing) return existing
       const next = Runner.make<SessionV1.WithParts>(data.scope, {
+        admit: data.refresh.admit, // GeoCode: serialize execution admission with configuration disposal
         onIdle: Effect.gen(function* () {
           data.runners.delete(sessionID)
           yield* status.set(sessionID, { type: "idle" })

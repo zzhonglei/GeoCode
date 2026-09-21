@@ -1,3 +1,5 @@
+import { GeoCodeRefresh } from "@/config/geocode-refresh" // GeoCode: atomic busy refusal at the disposal owner
+import { ConflictError } from "../errors" // GeoCode: report busy without changing the success contract
 import { Config } from "@/config/config"
 import { GlobalBus, type GlobalEvent as GlobalBusEvent } from "@/bus/global"
 import { EffectBridge } from "@/effect/bridge"
@@ -93,7 +95,9 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       yield* config.invalidate() // GeoCode: the shell edits config and relies on this to drop the never-expiring cache
       yield* disposeAllInstancesAndEmitGlobalDisposed()
       return true
-    })
+    }, (work) => GeoCodeRefresh.coordinator.refresh(work).pipe(
+      Effect.catchTag("GeoCodeRefreshBusy", (error) => Effect.fail(new ConflictError({ message: error.message }))),
+    )) // GeoCode: keep the busy check and disposal in one execution exclusion window
 
     const upgrade = Effect.fn("GlobalHttpApi.upgrade")(function* (ctx: { payload: typeof GlobalUpgradeInput.Type }) {
       const method = yield* installation.method()
