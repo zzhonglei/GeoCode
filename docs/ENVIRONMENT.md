@@ -1,7 +1,9 @@
 # 环境变量边界
 
 本文是 GeoCode 环境变量边界的设计:规则、变量分类、时序、机制与验证。`PATHS.md` §3.6 与 `DESKTOP.md` §8.2
-指向这里。凡写「实测」的都执行过,凡写「未验证」的都还没有。
+指向这里。凡写「实测」的都执行过,凡写「未验证」的都还没有。⚠️ 但其中有一批是**一次性运行时观测**
+(子进程环境块剩几个键、某个开关的退出码、某种输出有多大),仓库里不留痕迹、测试也照不到它们,
+复核只能重跑。要拿它们当判据之前,先重跑一次。
 
 ---
 
@@ -38,14 +40,14 @@ v2 路径会主动扫三个兄弟产品的 appData 目录复用已在跑的守�
 |---|---|---|---|
 | 1 | **两次登录 shell 回灌。** 主进程的 `inheritUserShellEnv()` 按「当前为 `undefined` 才填」把登录 shell 的值并入 `process.env`;web 服务器导入时 `applyLoginShellEnvSnapshot()` 按「当前为空才填」再并一次。两处都在内核 fork 与服务器导入之前或之中。 | 一次「删掉」正好制造出「undefined」,合并就把它填回来。剥离必须与合并同一函数体,且壳内只能合并一次(§5.2) | 用桩 `$SHELL` 驱动真实合并:删掉的 `OPENCODE_CONFIG` 与 `OTEL_EXPORTER_OTLP_HEADERS` 都回来 |
 | 2 | **子进程环境只取决于交给 fork 的对象。** `createKernelProcessEnvironment` 从零建对象、按前缀过滤;`utilityProcess.fork` 传了 `env` 就只有那个对象。 | 内核那一半的干净由 fork 边界独立保证,不依赖壳进程剥得多干净 | 传一个 3 键对象,子进程只剩这 3 个加系统自塞的 2 个 |
-| 3 | **`OPENCHAMBER_*` 是壳的配置面**,web 服务器读 61 个名字、主进程 19 个(2026-09-13 在 v1.23.1 上按 §7 壳侧扫描面的同一方法数得,去重后计);一批在回灌之后才读:`SKIP_LOCAL_SERVER`(整个服务器与内核都不起)、`OPENCODE_CWD`(内核工作目录)、`SERVER_URL`(把桌面端指向远端服务器)、`ALLOW_UNAUTHENTICATED_LAN`、`DEV_SHUTDOWN`、`DIST_DIR`(当作界面文件目录去 serve 的路径)、`MANAGED_PROCESS_REGISTRY`(启动时**杀掉**其中记录的 pid 的目录)、`OPENCODE_PATH`/`OPENCODE_BIN`、`TERMINAL_SHELL`、`PUSH_RELAY_URL`、`RELAY_URL`、`APNS_*`。 | 第三个商标必须入表,我们自己要用的名字在剥离之后写回(§4.1) | 桩 shell 里的 `OPENCHAMBER_SKIP_LOCAL_SERVER=1` 与 `OPENCHAMBER_OPENCODE_CWD` 到达读取点 |
-| 4 | **运行时变量在任何代码之前生效。** `NODE_OPTIONS='--require x.js'` 放进子进程 env,x.js 在 utility 进程里执行,`--import` 与 `--inspect` 同样;**打包后 Electron 只在主进程拒绝 `NODE_OPTIONS`,utility 子进程不受保护**。`DYLD_INSERT_LIBRARIES` 注入成功。`ELECTRON_RUN_AS_NODE=1` 让子进程直接起不来(exit 2304)。`NODE_V8_COVERAGE` 往磁盘写 403 KB。`DEBUG=*` 对 Electron/Node 本身**无任何输出**,`NODE_DEBUG=*` 才是噪音源。 | 这些没有读取点可屏蔽,只能在 fork 边界删(§5.3) | 全部实测,Electron 43.3.0,含一次合成的 `app.isPackaged === true` 运行。打包后 Electron 会从 `process.env` 删掉 `NODE_OPTIONS`,它变成 `undefined`,正好满足回灌条件 |
+| 3 | **`OPENCHAMBER_*` 是壳的配置面**,web 服务器读六十余个名字、主进程十九个(按 §7 壳侧扫描面的同一方法数,去重后计;**确切数字随每次上游合并变,要用就现数**);一批在回灌之后才读:`SKIP_LOCAL_SERVER`(整个服务器与内核都不起)、`OPENCODE_CWD`(内核工作目录)、`SERVER_URL`(把桌面端指向远端服务器)、`ALLOW_UNAUTHENTICATED_LAN`、`DEV_SHUTDOWN`、`DIST_DIR`(当作界面文件目录去 serve 的路径)、`MANAGED_PROCESS_REGISTRY`(启动时**杀掉**其中记录的 pid 的目录)、`OPENCODE_PATH`/`OPENCODE_BIN`、`TERMINAL_SHELL`、`PUSH_RELAY_URL`、`RELAY_URL`、`APNS_*`。 | 第三个商标必须入表,我们自己要用的名字在剥离之后写回(§4.1) | 桩 shell 里的 `OPENCHAMBER_SKIP_LOCAL_SERVER=1` 与 `OPENCHAMBER_OPENCODE_CWD` 到达读取点 |
+| 4 | **运行时变量在任何代码之前生效。** `NODE_OPTIONS='--require x.js'` 放进子进程 env,x.js 在 utility 进程里执行,`--import` 与 `--inspect` 同样;**打包后 Electron 只在主进程拒绝 `NODE_OPTIONS`,utility 子进程不受保护**。`DYLD_INSERT_LIBRARIES` 注入成功。`ELECTRON_RUN_AS_NODE=1` 让子进程直接起不来(exit 2304)。`NODE_V8_COVERAGE` 往磁盘写 403 KB。`DEBUG=*` 对 Electron/Node 本身**无任何输出**,`NODE_DEBUG=*` 才是噪音源。 | 这些没有读取点可屏蔽,只能在 fork 边界删(§5.3) | 在 Electron 43.3.0 上测过,⚠️ 其中 `isPackaged` 那一次是**合成的,不是 electron-builder 产物**,结论待真打包复验(§7 末)。打包后 Electron 会从 `process.env` 删掉 `NODE_OPTIONS`,它变成 `undefined`,正好满足回灌条件 |
 | 5 | **壳内两组读取时机不同。** `shared.js` 在导入时把内核配置根冻结成常量,`plugins.js`/`skill-routes.js`/`skills.js` 每次调用时重算。第二次回灌若带进 `XDG_CONFIG_HOME`,两组读到不同的根。主进程遇 nushell 整个跳过探测,服务器却会退到 `/bin/zsh`,两次探测可以不一致。 | 壳内只合并一次,三方(冻结常量、懒调用、内核子进程)才读到同一份 XDG(§5.4) | 实测:同一进程里冻结值为 `~/.config/GeoCode`,随后 `kernelConfigRoot()` 返回探针值 |
 | 6 | **壳有一条托管内核启动路。** `lifecycle.js` 的 `startOpenCode()` 按 `OPENCODE_BINARY` → 随包 `opencode-cli` → **PATH 扫描** → 家目录候选 → `$SHELL -lic 'command -v opencode'` 找一个二进制拉起来。不走这条路的条件是一对变量(`ENV_SKIP_OPENCODE_START && ENV_EFFECTIVE_PORT`),一对里任何一个为空,静默落到 PATH 扫描。 | 失败方向是「打开」,要改成「关闭」(§5.6) | `index.js` 与 `lifecycle.js` 逐行读 |
 | 7 | **`OPENCHAMBER_UI_PASSWORD` 由主进程写进 `process.env`**,再由 fork 边界复制给子进程;内核口令则走 IPC。 | 前缀表含 `OPENCHAMBER_`,口令自然不进子进程环境块 | `ps -E` 可见与否 |
 
 另有两件不在桌面路径上、只记录:`openchamber startup enable` 把整份 `process.env`(含全部 API 密钥)
-写进 launchd plist 与 `startup.env`,仅 27 个 shell 杂项进拒绝表(mode 0600,是 blast radius 不是权限洞);
+写进 launchd plist 与 `startup.env`,仅二十余个 shell 杂项进拒绝表(mode 0600,是 blast radius 不是权限洞);
 `ssh-manager.mjs` 把 SSH 口令放进子进程环境块,与内核口令走 IPC 的规则相悖,上游代码且有测试钉着现状。
 
 ## 4. 变量分类
@@ -54,7 +56,7 @@ v2 路径会主动扫三个兄弟产品的 appData 目录复用已在跑的守�
 
 | 类 | 是什么 | 例 | 处置 | 依据 |
 |---|---|---|---|---|
-| **A 带商标** | 三个产品各自的配置命名空间 | `OPENCODE_*`(内核两个注册表共 54 条,4 个重名,GeoCode 一条没改)、`OTEL_*`、`OPENCHAMBER_*`(壳侧读多少个名字见 §3 第 3 行) | **剥**:壳进程与内核子进程都不留继承来的;我们要用的在剥离之后自己写(类 E)或未打包时豁免(类 F) | §1;上游把它们当功能,我们当另一个产品的设置 |
+| **A 带商标** | 三个产品各自的配置命名空间 | `OPENCODE_*`(内核两个注册表,六十余个名字、若干重名,GeoCode 一条没改)、`OTEL_*`、`OPENCHAMBER_*`(壳侧读多少个名字见 §3 第 3 行) | **剥**:壳进程与内核子进程都不留继承来的;我们要用的在剥离之后自己写(类 E)或未打包时豁免(类 F) | §1;上游把它们当功能,我们当另一个产品的设置 |
 | **B 不带商标、但能改「跑什么代码」** | Node/Electron/加载器的运行时变量:注入代码、让子进程起不来、往磁盘写文件 | `NODE_OPTIONS`、`NODE_PATH`、`ELECTRON_RUN_AS_NODE`、`ELECTRON_NO_ASAR`、`DYLD_INSERT_LIBRARIES`、`LD_PRELOAD`、`OPENSSL_CONF`、`NODE_ICU_DATA`、`NODE_V8_COVERAGE`、`NODE_REDIRECT_WARNINGS`、`ELECTRON_LOG_FILE`、`CHROME_LOG_FILE`、`NODE_DEBUG`、`DEBUG` | **唯一例外,不交给内核子进程**(黑名单,按平台;§6.1)。壳自己的进程不动——Electron 主进程的环境是操作系统给的,打包后 Electron 自己会拒绝 `NODE_OPTIONS` | 实测 §3 第 4 条;`DEBUG` 沿用上游理由(污染我们解析的 stdout),`NODE_DEBUG` 是实测出来的真噪音源。它们既不是配置也不是凭据,是安全 |
 | **C 不带商标** | 用户自己的一切:身份、工具链、凭据 | `HOME`、`PATH`、`SHELL`、`TMPDIR`、`LANG`、`TZ`、`SSH_AUTH_SOCK`、`GIT_*`、代理六件套、`NODE_EXTRA_CA_CERTS`、`LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`、`PYTHONPATH`、**`XDG_*`**;供应商凭据 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GITHUB_TOKEN`、`GOOGLE_APPLICATION_CREDENTIALS`(名字由 models.dev 目录数据驱动,内核带的那份 211 家、208 个名字) | **原样放行,一个不动** | 实测传空对象给 `utilityProcess.fork` 时子进程只剩 5 个键;GDAL/PROJ 靠 `LD_LIBRARY_PATH`,GEE 靠 `GOOGLE_APPLICATION_CREDENTIALS`,agent 的 `gh` 靠 `GITHUB_TOKEN`,内核用 `extendEnv: true` 把它们传给子进程;供应商凭据的读取点在 `KERNEL.md` 冻结区,内核优先级本就是配置文件 > `auth.json` > 环境;上游桌面端同形;XDG 见 §5.4 |
 | **E 我们的注入** | 壳与内核之间的内部 ABI,由我们的代码在剥离**之后**写入 | §4.1 的表 | **写在最后一次剥离之后**;名字不成为公开配置面 | 它们带商标,所以顺序就是全部:先剥,后写 |
@@ -77,20 +79,20 @@ v2 路径会主动扫三个兄弟产品的 appData 目录复用已在跑的守�
 | 名字 | 谁写 | 谁读、何时 | 顺序错了会怎样 |
 |---|---|---|---|
 | `OPENCHAMBER_DATA_DIR` | `applyShellDataRoot`(`main.mjs` 模块顶层,紧跟身份设置;剥离函数尾部再写一次) | 主进程模块顶层(`sshManager` 冻结成字符串);壳 11 处导入时冻结、7 处每次调用重算,共 76 个读取点 | 两组读到不同的根,设置在一处写、另一处读,`PATHS.md` §5 记过一次 |
-| `OPENCHAMBER_MANAGED_PROCESS_REGISTRY` | 同上 | `lifecycle.js:1027` 启动时无条件回收孤儿,按这个目录里记录的 pid **杀进程** | 回落到默认目录;若与上游 OpenChamber 共用,他们的内核成回收候选 |
-| `OPENCHAMBER_HOST` | `main.mjs` 的 `spawnLocalServer`,本行至 `_SKIP_API_COMPRESSION` 都在这里 | `index.js:1474` 与 `server-startup-runtime.js:25`,启动时 | 绑定地址回落 loopback,局域网访问设置失效 |
-| `OPENCHAMBER_DESKTOP_LAN_ACCESS_ACTIVE` / `_BLOCKED_REASON` | 同上 | `settings-helpers.js:942-944`,每次请求 | 设置页少两个字段 |
-| `OPENCHAMBER_DIST_DIR` | 同上 | `static-routes-runtime.js:19`,**导入时** | 找不到界面文件,白屏 |
-| `OPENCHAMBER_RUNTIME = 'desktop'` | 同上 | `index.js:170/223/629/1687`、`lifecycle.js:485`、`package-manager.js:396`、`tts/base-url.js:50`,其中 629 行**导入时** | 桌面通知、压缩、包管理器探测、远端 TTS 守卫全部走 web 分支;包管理器探测会阻塞主进程 |
-| `OPENCHAMBER_OPENCODE_CWD` | 同上 | `hmr-state-runtime.js:10`,**导入时**;`spawnLocalServer` 把它作为 `startEmbeddedKernel` 的 `cwd` 传给内核 | 内核工作目录变成家目录 |
-| `OPENCHAMBER_DESKTOP_NOTIFY` | 同上 | `index.js:625`,**导入时** | 桌面通知关闭 |
-| `OPENCHAMBER_UI_PASSWORD` | 同上 | `index.js:1573`,启动时 | 界面无口令;开了局域网访问时被 `bind-host.js` 拒绝启动 |
-| `OPENCHAMBER_SKIP_API_COMPRESSION` | 同上 | `index.js:220`,每次请求 | 压缩打开,性能 |
-| `OPENCHAMBER_SKIP_OPENCODE_START` | `startEmbeddedKernel` → `applyKernelConnectionToShellEnvironment` | `index.js:623`,**导入时** | **壳改走托管启动**,被 §5.6 的早退拒绝,界面报内核不可用 |
+| `OPENCHAMBER_MANAGED_PROCESS_REGISTRY` | 同上 | `managed-process-registry.js` 解析目录,`lifecycle.js` 启动时无条件回收孤儿,按这里记录的 pid **杀进程** | 回落到默认目录;若与上游 OpenChamber 共用,他们的内核成回收候选 |
+| `OPENCHAMBER_HOST` | `main.mjs` 的 `spawnLocalServer`,本行至 `_SKIP_API_COMPRESSION` 都在这里 | `index.js` 与 `server-startup-runtime.js`,启动时 | 绑定地址回落 loopback,局域网访问设置失效 |
+| `OPENCHAMBER_DESKTOP_LAN_ACCESS_ACTIVE` / `_BLOCKED_REASON` | 同上 | `settings-helpers.js`,每次请求 | 设置页少两个字段 |
+| `OPENCHAMBER_DIST_DIR` | 同上 | `static-routes-runtime.js`,**导入时** | 找不到界面文件,白屏 |
+| `OPENCHAMBER_RUNTIME = 'desktop'` | 同上 | `index.js` 四处(其中一处**导入时**)、`lifecycle.js`、`package-manager.js`、`tts/base-url.js` | 桌面通知、压缩、包管理器探测、远端 TTS 守卫全部走 web 分支;包管理器探测会阻塞主进程 |
+| `OPENCHAMBER_OPENCODE_CWD` | 同上 | `hmr-state-runtime.js`,**导入时**;`spawnLocalServer` 把它作为 `startEmbeddedKernel` 的 `cwd` 传给内核 | 内核工作目录变成家目录 |
+| `OPENCHAMBER_DESKTOP_NOTIFY` | 同上 | `index.js`,**导入时** | 桌面通知关闭 |
+| `OPENCHAMBER_UI_PASSWORD` | 同上 | `index.js`,启动时 | 界面无口令;开了局域网访问时被 `bind-host.js` 拒绝启动 |
+| `OPENCHAMBER_SKIP_API_COMPRESSION` | 同上 | `index.js`,每次请求 | 压缩打开,性能 |
+| `OPENCHAMBER_SKIP_OPENCODE_START` | `startEmbeddedKernel` → `applyKernelConnectionToShellEnvironment` | `index.js`,**导入时** | **壳改走托管启动**,被 §5.6 的早退拒绝,界面报内核不可用 |
 | `GEOCODE_BROWSER_PLUGIN` | `browser-tool.mjs` → `startEmbeddedKernel` 的 `overrides` | 内核 `plugin/geocode-trusted.ts`,`loadExternal` 时 | 内核不加载浏览器工具与控制工具;它只认这一个路径 |
 | `OPENCHAMBER_AGENT_TOOL_URL` / `_TOKEN` | 同上,注入内核;`_TOKEN` 另放进主进程环境供壳采纳,壳起来后删除 | 插件源码在每次调用时读;壳 `agent-tool/runtime.js` 创建时读 | 工具回调无门,或壳的令牌为空恒 401。带商标是因为沿用上游模板读的名字,它们是我们注入的 ABI,不是继承的配置 |
-| `OPENCODE_HOST` | `applyKernelConnectionToShellEnvironment` | `env-config.js:41`,**导入时** | 同 `OPENCHAMBER_SKIP_OPENCODE_START`,它是那一对变量的另一半 |
-| `OPENCODE_SERVER_PASSWORD` | 同上 | `auth-state-runtime.js:48`,每次向内核的请求 | 壳对内核每个请求 401 |
+| `OPENCODE_HOST` | `applyKernelConnectionToShellEnvironment` | `env-config.js`,**导入时** | 同 `OPENCHAMBER_SKIP_OPENCODE_START`,它是那一对变量的另一半 |
+| `OPENCODE_SERVER_PASSWORD` | 同上 | `auth-state-runtime.js`,每次向内核的请求 | 壳对内核每个请求 401 |
 
 内核那一半**不需要**任何继承来的带商标名字:`OPENCODE_SERVER_USERNAME`/`_PASSWORD` 由 sidecar 收到 IPC 后在自己
 进程里设;将来要给内核的(比如上游桌面端设的 `OPENCODE_CLIENT`)
@@ -160,15 +162,16 @@ spawnLocalServer()       → 调 inheritUserShellEnv()   ┘ 真正合并的是�
    正常启动没有;加了这句之后两种启动一致。
 3. **壳内不做第二次合并。** 主进程已经把同一个登录 shell 并进同一份 `process.env`,服务器再并一次只会
    把剥掉的填回来。判据 `process.versions.electron` 是进程的固有事实,不是变量,丢不了;`openchamber
-   serve` 单独跑时它为空,上游行为不变。实测 `ELECTRON_RUN_AS_NODE=1` 下它仍为 `43.3.0`,所以
-   §7 的运行时测试可以用 Electron 二进制当 Node 跑。
+   serve` 单独跑时它为空,上游行为不变。⚠️ **正因为它丢不了,测试里只能伪造它**——§7 那条运行时
+   绊线就是给普通 Node 进程赋一个假值,而不是真起 Electron。
 
 ⚠️ 第 3 条是对上游 `index.js` 的一处一行改动,形态按 `CONVENTIONS.md` §5:新增一行条件调用,上游原行
 逐字节包进 `/* */`,前后标记。它不是「早退」也不是「变量门」——`OPENCHAMBER_RUNTIME === 'desktop'`
 这样的门正是 §3 第 6 条批评的那种,变量丢了门就开。
 
-服务器的 `getLoginShellEnvSnapshot()` 仍会在第一次需要时(给 PTY 拼 PATH)懒探测一次,那个 `spawnSync`
-没有超时,是上游既有行为;跳过导入时那一次只是把它挪出了启动关键路径,没有消除。记为上游问题。
+服务器的 `getLoginShellEnvSnapshot()` 仍会在第一次需要时(给 PTY 拼 PATH)懒探测一次。跳过导入时
+那一次只是把它挪出启动关键路径,没有消除——但它带 5 秒超时,与主进程那次同一个界限,超时即放弃
+并落到下一个候选。
 
 ### 5.3 内核子进程
 
@@ -242,8 +245,8 @@ bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 
 
 打包清单 `files` 只有 `dist-bundle/main.mjs` 与 `preload.mjs`,web 服务器打进了主进程 bundle,
 `packages/web/bin/` 不随应用分发。`openchamber serve` 与 `startup enable` 是仓库里的代码,不是 GeoCode
-的入口。**本设计不改它们**,在 `DESKTOP.md` §7 产品能力边界记一条「CLI 不是产品入口」,并配一条绊线:
-`main.mjs` 与 `geocode/*.mjs` 不引用 `packages/web/bin`。
+的入口。**本设计不改它们**,产品边界由 `DESKTOP.md` §7.3 的出局清单记着——打包清单只放主进程
+bundle 与 preload,`bin/` 根本进不了安装包。
 
 ## 6. 取舍
 
@@ -267,7 +270,6 @@ bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 
 **单元(`kernel-environment.test.mjs` 扩充)**
 - 三前缀表:`OPENCHAMBER_FOO` 被剥,`keep` 里的 `OPENCHAMBER_HMR_UI_PORT` 幸存,`keep` 为空时不幸存;不带商标的
   `ANTHROPIC_API_KEY`、`GITHUB_TOKEN` 原样留下;
-- §4.1 那张表逐名断言:每个名字在「剥离 → 注入」跑完之后都在,值是我们写的那个;
 - 黑名单:`NODE_OPTIONS`、`ELECTRON_RUN_AS_NODE`、`NODE_V8_COVERAGE` 在全部平台消失;`DYLD_INSERT_LIBRARIES`
   只在 darwin 消失,`LD_PRELOAD` 只在 linux;`LD_LIBRARY_PATH`、`NODE_EXTRA_CA_CERTS`、`HTTPS_PROXY`、
   `XDG_CONFIG_HOME` 全部留下;
@@ -281,7 +283,6 @@ bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 
 - 不变量 2 不看调用点:截出 `main.mjs` 里真实的 `inheritUserShellEnv` 配桩运行,合并一次、写入
   `OPENCHAMBER_RUNTIME` 与 `OPENCODE_HOST`、再调一次,两者都得还在。原先这条按文本位置找 `inheritUserShellEnv();`,
   看不到经 `shouldSkipLocalServer()` 的间接调用,后台启动那次正是从这里漏过去的;
-- 「剥离早于 kernel start 与 server import」。
 - 反证:各删一行,各应变红。
 
 **前缀覆盖绊线**
@@ -290,11 +291,11 @@ bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 
   不在扫描面上),去掉注释,名字里带 `OPENCODE`、`OTEL`、`OPENCHAMBER` 的必须以前缀表里的某个前缀开头。
   它必然全绿,存在的意义是钉住「壳读的名字与表同源」这条 `DESKTOP.md` §8.2 已经许下但没兑现的承诺。
 
-**运行时(新,`geocode/` 下,进 `test-gate.sh` 的 electron 段)**
-- 用 `ELECTRON_RUN_AS_NODE=1 <electron> driver.mjs` 跑一个驱动脚本:`SHELL` 指向一个打印
-  `OPENCODE_CONFIG=/probe\0OTEL_EXPORTER_OTLP_ENDPOINT=http://probe\0XDG_CONFIG_HOME=/probe-xdg\0` 的桩;
-  驱动先按 5.2 的顺序做剥离与注入,再 `await import('@openchamber/web/server/index.js')`,断言导入后
-  `OPENCODE_CONFIG` 与 `OTEL_EXPORTER_OTLP_ENDPOINT` 仍为 `undefined`。这是对不变量 3 的真实进程证明;
+**运行时(`server/geocode/` 下,跟着壳服务端那一节跑)**
+- 起一个子进程跑驱动脚本:`SHELL` 指向一个打印几个带商标变量的桩,驱动模拟一次登录 shell 合并,
+  再 `await import('@openchamber/web/server/index.js')`,断言导入后那几个名字仍为 `undefined`。
+  ⚠️ **它跑的是普通 Node,靠给 `process.versions.electron` 赋值来伪装 Electron**,不是真的 Electron
+  二进制。所以它证明的是「导入时那处屏蔽的逻辑成立」,不是「在 Electron 里成立」;
 - 反证:临时撤掉 `index.js` 那处屏蔽,应变红(A2 组已经用同样的桩在未屏蔽的现状上跑出了红)。
 
 **真实内核(`scripts/kernel-env-probe.sh`,手工门)**
@@ -324,8 +325,7 @@ bundled 的开发流程里,web 服务器是单独的 bun 进程,不在 Electron 
 上游代码里与本题相邻但不在 GeoCode 增改面上的,记在这里,不为它们改上游:
 
 - `ssh-manager.mjs` 把 SSH 口令放进子进程环境块(有上游测试钉着);
-- 服务器懒探测登录 shell 的 `spawnSync` 无超时(主进程那次有 5 秒);
-- `lsp/server.ts:571` elixir-ls 的 `{ MIX_ENV: 'prod', ...process.env }` 顺序反了;
+- `lsp/server.ts` elixir-ls 的 `{ MIX_ENV: 'prod', ...process.env }` 顺序反了;
 - 内核把 `OPENCODE_CONSOLE_TOKEN`、`AWS_BEARER_TOKEN_BEDROCK`、`AICORE_SERVICE_KEY` 写回自己的 `process.env`,
   于是 agent 的 bash 能读到;`control-plane/workspace.ts` 把整份 `auth.json` 序列化进子进程环境变量;
 - 内核口令同理:内核的服务端只从环境变量读鉴权口令,所以 sidecar 只能把它设进内核自己的 `process.env`;内核起的
