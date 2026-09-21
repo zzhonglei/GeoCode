@@ -19,7 +19,6 @@ import { resolveManagedOpenCodeCwd } from './opencode-cwd.mjs';
 import { stopEmbeddedServer } from './server-shutdown.mjs';
 import { createShellEnvironmentLoader } from './shell-environment.mjs';
 // GeoCode: a separate import, so the upstream 'electron' import line stays byte-identical.
-import { systemPreferences } from 'electron'; // GeoCode: the OS motion preference, read for the splash
 import { utilityProcess } from 'electron';
 // --- GeoCode: own modules (electron/geocode/); environment-boundary.mjs stays first, above ---
 import { startEmbeddedKernel } from './geocode/kernel-boot.mjs';
@@ -1798,18 +1797,6 @@ const readSplashColor = (settings, key, fallback) => {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 };
 
-/* --- GeoCode: SMIL ignores the CSS motion media query, so the mark is frozen at its first frame
- * when the system asks for less motion. Stripping the elements leaves the geometry untouched. --- */
-const SMIL_ELEMENT = /<animate(?:Transform|Motion)?\b[^>]*\/>/g;
-const freezeWhenMotionIsReduced = (html) => {
-  try {
-    if (!systemPreferences.getAnimationSettings().prefersReducedMotion) return html;
-  } catch {
-    return html;
-  }
-  return html.replace(SMIL_ELEMENT, '');
-};
-
 const buildStartupSplashHtml = () => {
   const settings = readSettingsRoot();
   const splashBgLight = readSplashColor(settings, 'bgLight', '#f5f5f4');
@@ -2704,7 +2691,7 @@ const createBrowserWindow = ({ label, restoreGeometry, url, runtimeConfig = {} }
   } else {
     void navigateWindow(
       browserWindow,
-      `data:text/html;charset=utf-8,${encodeURIComponent(freezeWhenMotionIsReduced(buildStartupSplashHtml()))}`, // GeoCode: honour the system motion preference
+      `data:text/html;charset=utf-8,${encodeURIComponent(buildStartupSplashHtml())}`,
       { allowAbort: true },
     );
   }

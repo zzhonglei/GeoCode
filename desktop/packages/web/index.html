@@ -528,19 +528,6 @@
       </div>
     </div>
 
-    <!-- --- GeoCode: SMIL ignores the CSS motion media query, so the mark is frozen at its first frame when
-         the system asks for less motion. Removing the elements leaves the geometry untouched. --- -->
-    <script>
-      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        var geocodeMark = document.querySelector('#initial-loading svg');
-        if (geocodeMark) {
-          geocodeMark.querySelectorAll('animate, animateTransform, animateMotion').forEach(function (node) {
-            node.remove();
-          });
-        }
-      }
-    </script>
-
     <script>
       // Fallback: hide loading screen after 10 seconds if React fails to load.
       // Desktop shells manage their own splash via the injected boot outcome;
