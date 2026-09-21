@@ -143,6 +143,15 @@ echo "== desktop shell (electron) =="
 # Everything under geocode/ is ours: the Electron identity, the kernel host and its
 # environment boundary, the kernel paths, and the shell data root. `bun test` rather than
 # `node --test` — they import from `bun:test`, which node's ESM loader rejects outright.
+# kernel-packaging.test.mjs is `describe.skipIf(!staged)`: without a staged kernel it reports no failures
+# and no coverage, which reads exactly like a pass. The bundle name comes from the module the shell itself
+# uses, so renaming it moves this check too.
+staged_kernel=$(cd "$ROOT/desktop/packages/electron" && node -e "import('./geocode/kernel-paths.mjs').then((m) => console.log(m.KERNEL_BUNDLE_FILENAME))")
+if [ ! -f "$ROOT/desktop/packages/electron/resources/kernel/$staged_kernel" ]; then
+  echo "refuse: no staged kernel, so the packaging cases would skip in silence." >&2
+  echo "        run: (cd desktop && node ./packages/electron/scripts/prepare-geocode-kernel.mjs)" >&2
+  exit 1
+fi
 (cd "$ROOT/desktop/packages/electron" && bun test geocode/)
 
 echo

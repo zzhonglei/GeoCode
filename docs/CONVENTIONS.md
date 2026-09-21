@@ -163,6 +163,10 @@ grep -rnE '// GeoCode:|--- GeoCode|"GeoCode: ' kernel/packages/ desktop/
 为 0 就拒绝。⚠️ **下界取 1,而不是「今天有几条」**:从同一份文件里数出来的期望值会跟着用例一起归零,那种断言对任何
 情况都成立(`LESSONS.md` §5 那条的又一次)。
 
+⚠️ **门里的 `skipIf` 同样会静默。** `kernel-packaging.test.mjs` 在内核没有暂存时整段 `describe.skipIf` 跳过,
+输出里既没有失败也没有覆盖,读起来和通过一模一样。2026-09-21 起门在跑 electron 那一节之前先查暂存的内核在不在,
+不在就拒绝并给出那一条命令;文件名取自壳自己用的 `kernel-paths.mjs`,改名会一起动。
+
 **门自己也会偶发地红。** 2026-09-21 一天之内撞到两次,分别是 `server/geocode/system-opencode-surface.test.js`
 (期望 409 收到 501)与 `server/geocode/browser-tool-callback.test.js`,两次都是**单独跑必过**(各复跑三到四次全绿),
 整门复跑也绿。与下一段那条已知抖动不同,这两个文件**在门里**。机制未定位。**一个会随机变红的门比没有门更糟**——
