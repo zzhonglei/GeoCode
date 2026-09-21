@@ -8,11 +8,26 @@ set -e
 # `.claude` is narrowed to the paths GeoCode's code can actually reach. Watching the whole
 # directory is useless here: Claude Code itself writes session transcripts and plugin caches
 # under it continuously, and that noise would bury a real hit on the first run.
+#
+# The three that reach it, each verified against the pristine upstream branches:
+#   skills/            kernel skill/index.ts CLAUDE_EXTERNAL_DIR, shell skills.js (reads, writes, deletes)
+#   CLAUDE.md          kernel session/instruction.ts reads it as agent instructions
+#   .credentials.json  shell quota/providers/claude/auth.js reads Claude Code's own OAuth blob
+# `ide/`, `agents/` and `commands/` were watched too and nothing upstream names them, so they
+# only ever reported Claude Code's own churn.
 ROOTS="$HOME/.config/opencode $HOME/.local/share/opencode $HOME/.cache/opencode
        $HOME/.opencode $HOME/.config/openchamber $HOME/.agents
-       $HOME/.claude/skills $HOME/.claude/ide $HOME/.claude/agents
-       $HOME/.claude/commands $HOME/.claude/CLAUDE.md $HOME/.claude/.credentials.json
+       $HOME/.claude/skills $HOME/.claude/CLAUDE.md $HOME/.claude/.credentials.json
        ${TMPDIR:-/tmp}/opencode"
+
+# Claude Code keeps its synced skills under `skills/synced/<bucket>/` and rewrites their
+# manifest on its own schedule. Only those children are skipped; `synced` itself stays in the
+# snapshot, so its own entry still moves. Checked against the four shapes that matter: a
+# manifest rewrite under a bucket reads clean, while `skills/<name>/SKILL.md`, a write placed
+# directly in `synced/` (a skill of that name) and deleting the whole tree (what `deleteSkill`
+# would do to it) are each still reported.
+PRUNE="*/.claude/skills/synced/*"
+
 # The gate adds GeoCode's own roots through this: a test suite has no business writing into the
 # user's data either, and once it does, nothing downstream can tell that write from the app's.
 ROOTS="$ROOTS ${FOREIGN_WRITES_EXTRA_ROOTS:-}"
@@ -53,7 +68,7 @@ not_theirs() {
 snapshot() {
   for root in $ROOTS; do
     [ -e "$root" ] || continue
-    find "$root" -not -path '*/.git/*' -exec stat -f '%N %m %z' {} \; 2>/dev/null
+    find "$root" -not -path '*/.git/*' -not -path "$PRUNE" -exec stat -f '%N %m %z' {} \; 2>/dev/null
   done | sort
 }
 
