@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: the kernel's project directory
+import { KERNEL_CONFIG_JSON, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: the kernel's own names
 import {
   CONFIG_FILE,
   AGENT_DIR,
@@ -337,7 +337,7 @@ function createAgent(agentName, config, workingDirectory, scope) {
   const layers = readConfigLayers(workingDirectory);
   const jsonSource = getJsonEntrySource(layers, 'agent', agentName);
   if (jsonSource.exists) {
-    throw new Error(`Agent ${agentName} already exists in opencode.json`);
+    throw new Error(`Agent ${agentName} already exists in ${KERNEL_CONFIG_JSON}`); // GeoCode: the kernel's config file, which this message reaches the user through
   }
 
   let targetPath;

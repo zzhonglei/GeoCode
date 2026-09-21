@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: the kernel's project directory
+import { KERNEL_CONFIG_JSON, KERNEL_PROJECT_DIR } from '../../geocode/kernel-roots.js'; // GeoCode: the kernel's own names
 import {
   CONFIG_FILE,
   OPENCODE_CONFIG_DIR,
@@ -172,7 +172,7 @@ function createCommand(commandName, config, workingDirectory, scope) {
   const layers = readConfigLayers(workingDirectory);
   const jsonSource = getJsonEntrySource(layers, 'command', commandName);
   if (jsonSource.exists) {
-    throw new Error(`Command ${commandName} already exists in opencode.json`);
+    throw new Error(`Command ${commandName} already exists in ${KERNEL_CONFIG_JSON}`); // GeoCode: the kernel's config file, which this message reaches the user through
   }
 
   let targetPath;

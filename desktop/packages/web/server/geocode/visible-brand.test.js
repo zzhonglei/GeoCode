@@ -34,6 +34,14 @@ const MESSAGES = [
   ['src/api/notifications.ts', /payload\?\.title \?\? '(\w+)'/g, 2],
 ];
 
+// Not a product name but the kernel's config file, which these two messages name. They reach the user
+// through config-entity-routes.js, which returns `error.message` as it is, so a literal here would point
+// at a file GeoCode never reads or writes.
+const CONFIG_FILE_MESSAGES = [
+  ['server/lib/opencode/agents.js', /already exists in \$\{KERNEL_CONFIG_JSON\}`\)/g, 1],
+  ['server/lib/opencode/commands.js', /already exists in \$\{KERNEL_CONFIG_JSON\}`\)/g, 1],
+];
+
 describe('the product name in text the shell hands the renderer', () => {
   it('is GeoCode', () => {
     for (const [file, pattern, count] of MESSAGES) {
@@ -41,6 +49,16 @@ describe('the product name in text the shell hands the renderer', () => {
       const names = [...source.matchAll(pattern)].flatMap((match) => match.slice(1));
       const perMatch = pattern.source.split('(\\w+)').length - 1;
       expect([file, String(pattern), names]).toEqual([file, String(pattern), Array(count * perMatch).fill('GeoCode')]);
+    }
+  });
+
+  it('names the kernel config file through the brand constant, never a literal', () => {
+    for (const [file, pattern, count] of CONFIG_FILE_MESSAGES) {
+      const source = fs.readFileSync(path.join(webRoot, file), 'utf8');
+      const thrown = [...source.matchAll(/throw new Error\(`[^`]*`\)/g)].map((match) => match[0]);
+      expect([file, [...source.matchAll(pattern)].length]).toEqual([file, count]);
+      // The throws are what the user sees; the console lines in these files are not, and stay upstream's.
+      expect([file, thrown.filter((message) => message.includes('opencode.json'))]).toEqual([file, []]);
     }
   });
 });

@@ -364,6 +364,9 @@ web 包全量测试就会落一个目录出来。带 `desktop/` 这一段是必�
   也从不缺字段。原先的绊线只喂 `{ home }`,缺的字段正好走兜底,**永远看不见这条**。改法是让服务端从
   同一个配置根派生;新绊线 `server/geocode/chats-root-alias.test.js` 给它一个**任意**配置根,再断言
   返回的三个根都落在其下——写死的形态无论如何都满足不了;
+- `agents.js` 与 `commands.js` 抛的「already exists in opencode.json」经 `config-entity-routes.js` 的
+  `res.json({ error: error.message })` 原样弹给用户,而服务端真正读的是 `geocode.json` / `geocode.jsonc`。
+  改用 `KERNEL_CONFIG_JSON` 常量(同文件另四处 `console.log` 不动,那不是用户可见面);
 
 **判据因此要再改一次。** §5 前面那三条问的是「写到哪」;这一轮问的是**「读的那一侧和写的那一侧是不是
 同一个路径」**——三处里有两处读写分属前后端,各自自洽,单看任何一侧都正常。绊线也因此成对写:
