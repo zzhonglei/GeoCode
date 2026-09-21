@@ -194,7 +194,15 @@ const TOOL_METADATA: Record<string, ToolMetadata> = {
       inputFields: []
     },
 
-    // GeoCode: upstream's control tool, renamed (electron/geocode/browser-tool.mjs GEOCODE_TOOL_NAME)
+    // GeoCode: upstream's single control tool, split in two and renamed. Both halves answer in JSON, so
+    // they carry the metadata upstream gave `openchamber` (electron/geocode/browser-tool.mjs).
+    browser: {
+      displayName: 'Browser',
+      category: 'system',
+      outputLanguage: 'json',
+      inputFields: []
+    },
+
     geocode: {
       displayName: 'GeoCode',
       category: 'system',

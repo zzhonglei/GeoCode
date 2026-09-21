@@ -457,6 +457,11 @@ Release 页面地址交给上游的更新对话框,「下载」按钮打开 Rele
 只作用于那条上报,因此在桌面壳里什么也不控制,桌面壳不显示它,设置搜索也不列(`OpenChamberPage.tsx`、
 `geocode/desktop-settings-surface.ts`,09-17)。
 
+⚠️ **上游那一个控制工具被我们拆成了两个**(`browser` 与 `geocode`),而两个名字都是我们起的,所以 `toolHelpers.ts` 的
+工具元数据表**两个都得有**:缺条目的工具会落到未知工具的兜底,`outputLanguage` 变成 `text`,JSON 回答因此丢掉高亮
+(2026-09-21 补上 `browser`)。绊线 `ui/src/geocode/agent-tool-metadata.test.ts` 从注入模块的源码里读出两个工具名,
+再拿真的 `getToolMetadata` 与一个必然不存在的名字对比——只断言「条目存在」的话,兜底也满足。
+
 **浏览器工具:智能体能操控应用内的浏览器面板,强制开启,没有开关。** 它给 GeoAgent 与 plan 一个名为 `browser` 的工具,
 动作是上游 Web 工具的十个:打开、读页、点击、输入、滚动、前进后退、读样式、截图、改视口;用途是查资料、
 操作网页、把看到的东西截图回到对话。它与地理数据预览是两件事,不共用任何部件。
