@@ -25,6 +25,11 @@ const shape = (mark: string) => openingTag(mark).replace(/\s*aria-label="[^"]*"/
 const literal = (text: string, name: string) =>
   new RegExp(`const ${name} = \`([\\s\\S]*?)\``).exec(text)?.[1] ?? null;
 
+const anchorCall = (text: string) => /setCurrentTime\(\(Date\.now\(\)[^;]*\);/.exec(text)?.[0] ?? null;
+
+const clockScripts = (text: string) =>
+  (text.match(/<script\b[^>]*>[\s\S]*?<\/script>/g) ?? []).filter((block) => block.includes('setCurrentTime'));
+
 const orbitColours = (text: string) =>
   [...new Set(text.match(/#(?:5A6874|A8B5C1)/gi) ?? [])].map((c) => c.toUpperCase()).sort();
 
@@ -74,6 +79,22 @@ describe('the loading mark is one artwork', () => {
     expect(new Set(sets).size).toBe(1);
   });
 
+  // Three stages, three SMIL clocks, each starting at zero: whichever stage lacks the wall-clock anchor
+  // is the one the star jumps at. Picked out by what it calls, so reformatting does not move the anchor.
+  test('both splashes anchor the clock, with the same code', () => {
+    const blocks = SPLASHES.map((f) => clockScripts(read(f)));
+    expect(blocks.map((b) => b.length)).toEqual([1, 1]);
+    expect(new Set(blocks.map((b) => b[0])).size).toBe(1);
+  });
+
+  // The expression is taken from the splash rather than spelled out here, so the component is held
+  // against what actually ships. Naming the call alone would not do: the guard names it too, so an
+  // assertion on the name stays green while the call itself is gone.
+  test('the component anchors it the same way', () => {
+    const fromSplash = anchorCall(clockScripts(read(SPLASHES[0]))[0]);
+    expect([fromSplash !== null, anchorCall(read(COMPONENT))]).toEqual([true, fromSplash]);
+  });
+
   test('the still mark is wired to the same colour', () => {
     const still = literal(read(COMPONENT), 'STATIC_BODY');
     expect(still).toContain('var(--geocode-orbit)');
@@ -112,6 +133,17 @@ describe('a drifted copy is caught', () => {
     // Compared as flags rather than as text: these files are large enough that a failed identity
     // assertion would bury the reason under the whole source.
     expect([drifted === source, element(drifted, name).includes(prop)]).toEqual([false, false]);
+  });
+
+  test('a splash that lost the clock anchor', () => {
+    // Every occurrence: the guard names the call too, so replacing only the call leaves the block matching.
+    const drifted = main.replaceAll('setCurrentTime', 'noSuchCall');
+    expect([drifted === main, clockScripts(drifted).length]).toEqual([false, 0]);
+  });
+
+  test('the two splashes anchoring it differently', () => {
+    const drifted = index.replace('(Date.now() / 1000) % period', '(Date.now() / 2000) % period');
+    expect([drifted === index, clockScripts(drifted)[0] === clockScripts(main)[0]]).toEqual([false, false]);
   });
 
   test('a second mark pasted in', () => {

@@ -1,7 +1,7 @@
 /* --- GeoCode: our own mark, drawn where upstream draws its cube. It lives here rather than in
  * components/ui/OpenChamberLogo.tsx so that file stays upstream's byte for byte (docs/DESKTOP.md §7.2).
  * Light and dark differ only in the orbit colour, so one body is inlined and that colour follows the theme. --- */
-import React, { useId, useMemo } from 'react';
+import React, { useId, useLayoutEffect, useMemo, useRef } from 'react';
 import { useOptionalThemeSystem } from '@/contexts/useThemeSystem';
 import { useI18n } from '@/lib/i18n';
 
@@ -43,8 +43,24 @@ export const GeoCodeBrandMark: React.FC<GeoCodeBrandMarkProps> = ({
     return source.split(id).join(`${id}-${instanceId}`);
   }, [isAnimated, instanceId]);
 
+  // The same wall-clock anchor the two startup splashes use, so the star stays where the splash left it
+  // when this mark takes over. Before paint, not after: the splashes have to wait a frame because a
+  // document's timeline resets at load, but this element joins a timeline that is already running, and
+  // anchoring it a frame late is itself a visible jump (docs/DESKTOP.md §7.2).
+  const markRef = useRef<SVGSVGElement>(null);
+  useLayoutEffect(() => {
+    const mark = markRef.current;
+    if (!isAnimated || !mark || typeof mark.setCurrentTime !== 'function') return;
+    let period = 0;
+    mark.querySelectorAll('[dur]').forEach((node) => {
+      period = Math.max(period, Number.parseFloat(node.getAttribute('dur') ?? '') || 0);
+    });
+    if (period > 0) mark.setCurrentTime((Date.now() / 1000) % period);
+  }, [isAnimated, markup]);
+
   return (
     <svg
+      ref={markRef}
       className={className}
       width={width}
       height={height}

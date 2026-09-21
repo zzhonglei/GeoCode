@@ -528,6 +528,22 @@
       </div>
     </div>
 
+    <!-- --- GeoCode: each stage starts its own SMIL clock at zero, so without an anchor the star jumps
+         back to the orbit start at every handoff. The period is read from the artwork's own durs.
+         ⚠️ it has to wait for a frame: the timeline starts with the document, and a value set during
+         parse or on load is discarded (both measured in Electron, docs/DESKTOP.md §7.2). --- -->
+    <script>
+      requestAnimationFrame(function () {
+        var mark = document.querySelector('svg');
+        if (!mark || typeof mark.setCurrentTime !== 'function') return;
+        var period = 0;
+        mark.querySelectorAll('[dur]').forEach(function (node) {
+          period = Math.max(period, parseFloat(node.getAttribute('dur')) || 0);
+        });
+        if (period > 0) mark.setCurrentTime((Date.now() / 1000) % period);
+      });
+    </script>
+
     <script>
       // Fallback: hide loading screen after 10 seconds if React fails to load.
       // Desktop shells manage their own splash via the injected boot outcome;
