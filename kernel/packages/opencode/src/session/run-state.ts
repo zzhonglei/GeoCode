@@ -37,9 +37,7 @@ const layer = Layer.effect(
       Effect.fn("SessionRunState.state")(function* () {
         const scope = yield* Scope.Scope
         const runners = new Map<SessionID, Runner.Runner<SessionV1.WithParts>>()
-        const refresh = yield* GeoCodeRefresh.coordinator.observe(
-          Effect.sync(() => [...runners.values()].some((runner) => runner.busy)),
-        ) // GeoCode: all instances participate, even when no SSE client is connected
+        const refresh = yield* GeoCodeRefresh.coordinator.watchRunners // GeoCode: lookup entries can disappear before a retained runner restarts
         yield* Effect.addFinalizer(
           Effect.fnUntraced(function* () {
             yield* refresh.close // GeoCode: stale callers cannot enter a disposed scope
@@ -61,9 +59,10 @@ const layer = Layer.effect(
       const data = yield* InstanceState.get(state)
       const existing = data.runners.get(sessionID)
       if (existing) return existing
-      const next = Runner.make<SessionV1.WithParts>(data.scope, {
-        admit: data.refresh.admit, // GeoCode: serialize execution admission with configuration disposal
+      const next: Runner.Runner<SessionV1.WithParts> = Runner.make<SessionV1.WithParts>(data.scope, {
+        admit: (work) => data.refresh.admit(next, work), // GeoCode: observe every actual execution admission
         onIdle: Effect.gen(function* () {
+          data.refresh.idle(next) // GeoCode: retire only idle runners from the independent refresh observation
           data.runners.delete(sessionID)
           yield* status.set(sessionID, { type: "idle" })
         }),

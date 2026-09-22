@@ -24,6 +24,7 @@ test('the gate handles live failures and existing records, and unmounts the chat
       return command === 'geocode_kernel_failure' ? record : true;
     } },
     __OPENCHAMBER_ELECTRON__: { runtime: 'electron' },
+    __OPENCHAMBER_PLATFORM__: 'win32',
   });
   for (const [name, value] of Object.entries({
     window: dom, document: dom.document, navigator: dom.navigator, localStorage: dom.localStorage,
@@ -61,6 +62,14 @@ test('the gate handles live failures and existing records, and unmounts the chat
     const reveal = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('Show in folder'));
     await act(async () => reveal?.click());
     expect(commands).toContain('desktop_reveal_path');
+    const close = container.querySelector<HTMLButtonElement>('button[aria-label="Close window"]');
+    const minimize = container.querySelector<HTMLButtonElement>('button[aria-label="Minimize window"]');
+    const maximize = container.querySelector<HTMLButtonElement>('button[aria-label="Maximize window"]');
+    expect(close === null || minimize === null || maximize === null).toBe(false);
+    await act(async () => { minimize?.click(); maximize?.click(); close?.click(); });
+    expect(commands).toContain('desktop_minimize_current_window');
+    expect(commands).toContain('desktop_toggle_current_window_maximized');
+    expect(commands).toContain('desktop_close_current_window');
   } finally {
     await act(async () => root.unmount());
     for (const [name, descriptor] of originals) {

@@ -4,6 +4,8 @@
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
+import { WindowsWindowControls } from '@/components/desktop/WindowsWindowControls';
+import { useDesktopWindowControlsLayout } from '@/hooks/useDesktopWindowControlsLayout';
 import { Icon } from '@/components/icon/Icon';
 import { OpenChamberLogo } from '@/components/ui/OpenChamberLogo';
 import { invokeDesktop, restartDesktopApp } from '@/lib/desktop';
@@ -78,6 +80,7 @@ const stringsFor = (locale: string): Strings =>
 
 export const GeoCodeKernelFailureScreen: React.FC = () => {
   const { locale } = useI18n();
+  const { usesFramelessChrome, side } = useDesktopWindowControlsLayout();
   const s = stringsFor(locale);
   const [failure, setFailure] = React.useState<KernelFailure | null>(null);
   const [isRetrying, setIsRetrying] = React.useState(false);
@@ -110,48 +113,56 @@ export const GeoCodeKernelFailureScreen: React.FC = () => {
   }, [failure?.logPath]);
 
   return (
-    <div className="flex flex-col items-center justify-center h-full p-8">
-      <div className="w-full max-w-md space-y-6">
-        <div className="flex flex-col items-center space-y-3 text-center">
-          <OpenChamberLogo width={64} height={64} />
-          <h1 className="typography-ui-header text-xl font-semibold text-foreground">{lost ? s.lostTitle : s.title}</h1>
-          <p className="text-muted-foreground text-sm max-w-sm">{lost ? s.lostDescription : s.description}</p>
-        </div>
-
-        <div className="rounded-lg border border-border bg-background/50 p-3">
-          <div className="text-xs text-muted-foreground mb-1">{s.errorLabel}</div>
-          <div className="font-mono text-sm text-foreground whitespace-pre-wrap break-words">
-            {failure?.message || s.unknown}
+    <div className="flex h-full min-h-0 flex-col">
+      <header
+        className={`flex h-14 shrink-0 items-center ${side === 'left' ? 'justify-start' : 'justify-end'}`}
+        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      >
+        <WindowsWindowControls visible={usesFramelessChrome} position={side} />
+      </header>
+      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto p-8">
+        <div className="my-auto w-full max-w-md shrink-0 space-y-6">
+          <div className="flex flex-col items-center space-y-3 text-center">
+            <OpenChamberLogo width={64} height={64} />
+            <h1 className="typography-ui-header text-xl font-semibold text-foreground">{lost ? s.lostTitle : s.title}</h1>
+            <p className="text-muted-foreground text-sm max-w-sm">{lost ? s.lostDescription : s.description}</p>
           </div>
-        </div>
 
-        {failure && failure.output.length > 0 ? (
           <div className="rounded-lg border border-border bg-background/50 p-3">
-            <div className="text-xs text-muted-foreground mb-1">{s.outputLabel}</div>
-            <pre className="font-mono text-xs text-foreground whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
-              {failure.output.join('\n')}
-            </pre>
-          </div>
-        ) : null}
-
-        {failure?.logPath ? (
-          <div className="rounded-lg border border-border bg-background/50 p-3">
-            <div className="text-xs text-muted-foreground mb-1">{s.logLabel}</div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="font-mono text-sm text-foreground truncate">{failure.logPath}</div>
-              <Button type="button" variant="ghost" size="xs" onClick={handleReveal} className="shrink-0">
-                <Icon name="folder-open" className="h-4 w-4" />
-                {s.reveal}
-              </Button>
+            <div className="text-xs text-muted-foreground mb-1">{s.errorLabel}</div>
+            <div className="font-mono text-sm text-foreground whitespace-pre-wrap break-words">
+              {failure?.message || s.unknown}
             </div>
           </div>
-        ) : null}
 
-        <div className="flex flex-col gap-2">
-          <Button type="button" onClick={() => { void handleRetry(); }} disabled={isRetrying}>
-            <Icon name="refresh" className={isRetrying ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-            {isRetrying ? s.retrying : s.retry}
-          </Button>
+          {failure && failure.output.length > 0 ? (
+            <div className="rounded-lg border border-border bg-background/50 p-3">
+              <div className="text-xs text-muted-foreground mb-1">{s.outputLabel}</div>
+              <pre className="font-mono text-xs text-foreground whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                {failure.output.join('\n')}
+              </pre>
+            </div>
+          ) : null}
+
+          {failure?.logPath ? (
+            <div className="rounded-lg border border-border bg-background/50 p-3">
+              <div className="text-xs text-muted-foreground mb-1">{s.logLabel}</div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-mono text-sm text-foreground truncate">{failure.logPath}</div>
+                <Button type="button" variant="ghost" size="xs" onClick={handleReveal} className="shrink-0">
+                  <Icon name="folder-open" className="h-4 w-4" />
+                  {s.reveal}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-2">
+            <Button type="button" onClick={() => { void handleRetry(); }} disabled={isRetrying}>
+              <Icon name="refresh" className={isRetrying ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+              {isRetrying ? s.retrying : s.retry}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

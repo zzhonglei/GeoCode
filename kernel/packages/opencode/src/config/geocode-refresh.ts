@@ -45,6 +45,22 @@ export const make = () => {
       (observer) => observer.remove,
     )
 
+  const watchRunners = Effect.gen(function* () {
+    const running = new Set<{ readonly busy: boolean }>()
+    const observer = yield* observe(Effect.sync(() => [...running].some((runner) => runner.busy)))
+    const update = (runner: { readonly busy: boolean }) => {
+      if (runner.busy) running.add(runner)
+      else running.delete(runner)
+    }
+    return {
+      close: observer.close,
+      idle: update,
+      // Track the actual admitted runner, even if an old idle callback removed its upstream lookup entry.
+      admit: <A, E, R>(runner: { readonly busy: boolean }, work: Effect.Effect<A, E, R>) =>
+        observer.admit(work.pipe(Effect.ensuring(Effect.sync(() => update(runner))))),
+    }
+  })
+
   const refresh = <A, E, R>(work: Effect.Effect<A, E, R>) =>
     Effect.acquireUseRelease(
       Effect.gen(function* () {
@@ -68,7 +84,7 @@ export const make = () => {
         }),
     )
 
-  return { admit, observe, refresh }
+  return { admit, observe, watchRunners, refresh }
 }
 
 export const coordinator = make()

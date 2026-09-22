@@ -1,5 +1,6 @@
 /* --- GeoCode: config apply must not dispose work hidden by missing SSE events or caller cancellation. --- */
 import { describe, expect } from "bun:test"
+import { readFileSync } from "node:fs"
 import { Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { GeoCodeRefresh } from "@/config/geocode-refresh"
@@ -191,3 +192,61 @@ describe("GeoCode: production execution registration without SSE", () => {
     }),
   )
 })
+
+for (const startBeforeIdle of [true, false])
+  it.live(`retained runner stays protected (restart before idle: ${startBeforeIdle})`, () =>
+    Effect.gen(function* () {
+      const source = readFileSync(new URL("../src/session/run-state.ts", import.meta.url), "utf8")
+      const begin = "onIdle: Effect.gen(function* () {"
+      expect(source.split(begin)).toHaveLength(2)
+      const start = source.indexOf(begin) + begin.length
+      const end = source.indexOf("        }),", start)
+      expect(end).toBeGreaterThan(start)
+      const refresh = GeoCodeRefresh.make()
+      const observation = yield* refresh.watchRunners
+      const data = { runners: new Map<string, Runner.Runner<string>>(), refresh: observation }
+      const idleReached = yield* Deferred.make<void>()
+      const releaseIdle = yield* Deferred.make<void>()
+      const nextStarted = yield* Deferred.make<void>()
+      let next: Runner.Runner<string>
+      let firstIdle = true
+      // Execute the production callback, delaying its scheduling after Runner has already become Idle.
+      const actualIdle: Effect.Effect<void> = new Function(
+        "Effect",
+        "data",
+        "status",
+        "sessionID",
+        "getNext",
+        `return Effect.gen(function* () { const next = getNext(); ${source.slice(start, end)} })`,
+      )(Effect, data, { set: () => Effect.void }, "same-session", () => next)
+      next = Runner.make(yield* Scope.Scope, {
+        admit: (work) => observation.admit(next, work),
+        onIdle: Effect.gen(function* () {
+          if (firstIdle) {
+            firstIdle = false
+            yield* Deferred.succeed(idleReached, undefined)
+            yield* Deferred.await(releaseIdle)
+          }
+          yield* actualIdle
+        }),
+      })
+      data.runners.set("same-session", next)
+      const first = yield* next.ensureRunning(Effect.succeed("first")).pipe(Effect.forkChild)
+      yield* Deferred.await(idleReached)
+      if (!startBeforeIdle) {
+        yield* Deferred.succeed(releaseIdle, undefined)
+        yield* Fiber.join(first)
+      }
+      const second = yield* next
+        .ensureRunning(Deferred.succeed(nextStarted, undefined).pipe(Effect.andThen(Effect.never)))
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(nextStarted)
+      yield* Deferred.succeed(releaseIdle, undefined)
+      yield* Fiber.join(first)
+      yield* Fiber.interrupt(second)
+      expect(next.busy).toBe(true)
+      yield* refused(refresh.refresh(Effect.void))
+      yield* next.cancel
+      yield* refresh.refresh(Effect.void)
+    }),
+  )
