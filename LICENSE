@@ -2,6 +2,7 @@ MIT License
 
 Copyright (c) 2026 GeoCode
 Copyright (c) 2025 opencode
+Copyright (c) 2025 Bohdan Triapitsyn
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -23,8 +24,9 @@ SOFTWARE.
 
 ---
 
-GeoCode is built on the OpenCode agent engine, which is vendored under
-`kernel/` and remains under its own copyright above. That directory keeps its
-original `kernel/LICENSE` unchanged; this file covers the repository as a
-whole. Both notices travel together — MIT requires the copyright notice to be
-included in every copy, and a packaged GeoCode application is a copy.
+GeoCode is built on OpenCode, vendored under `kernel/`, and OpenChamber,
+vendored under `desktop/`. Both remain under their own copyrights above, and
+each directory keeps its original LICENSE unchanged; this file covers the
+repository as a whole. All the notices travel together: MIT requires the
+copyright notice to be included in every copy, and a packaged GeoCode
+application is a copy.
