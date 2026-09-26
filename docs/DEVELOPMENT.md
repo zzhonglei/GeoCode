@@ -6,7 +6,7 @@
 
 ```
 docs/        设计与规范
-scripts/     上游导入(vendor.sh 与圈选清单)、写入检测、补丁面检查、死代码检查
+scripts/     上游导入(vendor.sh 与圈选清单)、写入检测、补丁面统计、死代码检查
 kernel/      OpenCode 的源码(见 UPSTREAM.md)
 desktop/     OpenChamber 的源码(见 UPSTREAM.md)
 ```
