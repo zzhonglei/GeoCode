@@ -3,10 +3,19 @@
 # One path per line, relative to the upstream root. A directory is taken whole,
 # a file alone, and `#` starts a comment. A leading `!` declares an upstream
 # entry deliberately left out; vendor.sh reports any entry that is neither.
+# A leading `-` names a file dropped wherever it appears in the selection.
 #
 # Editing a line is a structural change: the next merge reads a removed line as
 # "upstream deleted these files" and an added one as "upstream added them", and
 # neither produces a conflict.
+
+# --- Dropped wherever they appear: upstream's project introduction and
+# contribution notes, which nothing builds or runs. Design and architecture
+# notes stay. ---
+-README.md
+-CHANGELOG.md
+-CONTRIBUTING.md
+-SECURITY.md
 
 # --- Root infrastructure: install, build and tooling config. ---
 package.json
@@ -18,11 +27,13 @@ patches
 LICENSE
 .gitignore
 .gitattributes
-.editorconfig
 .oxlintrc.json
 .prettierignore
 # Referenced by each package's own sst-env.d.ts.
 sst-env.d.ts
+
+# The repository's own .editorconfig covers kernel/.
+!.editorconfig
 
 # packages/script reads this at import time. The rest of .github is upstream's CI.
 .github/TEAM_MEMBERS
@@ -94,11 +105,8 @@ packages/util
 !specs
 !sst.config.ts
 !screenshot-uk.png
-!CONTRIBUTING.md
-!SECURITY.md
 !STATS.md
 !V2_HTTP_API_AUDIT.md
-!README.md
 !README.ar.md
 !README.bn.md
 !README.br.md

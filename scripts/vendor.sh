@@ -50,7 +50,13 @@ tar -xzf "$tmp/upstream.tar.gz" -C "$tmp/src" --strip-components=1
 
 grep -v '^[[:space:]]*#' "$MANIFEST" | grep -v '^[[:space:]]*$' > "$tmp/all"
 grep '^!' "$tmp/all" | sed 's/^!//' > "$tmp/excluded" || true
-grep -v '^!' "$tmp/all" > "$tmp/manifest"
+grep '^-' "$tmp/all" | sed 's/^-//' > "$tmp/dropped" || true
+grep -v '^[!-]' "$tmp/all" > "$tmp/manifest"
+
+# FILENAME, not NR==FNR: the latter misreads an empty first file.
+drop() {
+  awk -F/ 'FILENAME==ARGV[1] {d[$0]=1; next} !($NF in d)' "$tmp/dropped" "$1"
+}
 
 LC_ALL=C sort "$tmp/manifest" > "$tmp/sel.sorted"
 LC_ALL=C sort "$tmp/excluded" > "$tmp/exc.sorted"
@@ -60,12 +66,19 @@ if [ -n "$overlap" ]; then
   echo "$overlap" >&2
   exit 1
 fi
+overlap=$(drop "$tmp/manifest" | LC_ALL=C sort | LC_ALL=C comm -13 - "$tmp/sel.sorted")
+if [ -n "$overlap" ]; then
+  echo "refuse: manifest selects a file whose name it drops:" >&2
+  echo "$overlap" >&2
+  exit 1
+fi
 
 # Every upstream entry must be either selected or declared with `!`, so that
 # "we decided against it" differs from "nobody has looked at it yet".
 declared() {
   awk -v t="$1" '$0==t || index($0, t "/")==1 {f=1} END{exit !f}' "$tmp/manifest" && return 0
   awk -v t="$1" '$0==t {f=1} END{exit !f}' "$tmp/excluded" && return 0
+  awk -v t="${1##*/}" '$0==t {f=1} END{exit !f}' "$tmp/dropped" && return 0
   return 1
 }
 
@@ -118,7 +131,8 @@ while IFS= read -r item; do
     exit 1
   fi
 done < "$tmp/manifest"
-LC_ALL=C sort -o "$tmp/expected" "$tmp/expected"
+drop "$tmp/expected" | LC_ALL=C sort > "$tmp/expected.kept"
+mv "$tmp/expected.kept" "$tmp/expected"
 
 echo "== replacing tracked tree =="
 # clean as well as rm: ignored leftovers such as a Finder .DS_Store would be
@@ -131,6 +145,13 @@ while IFS= read -r item; do
   [ "$parent" = "." ] || mkdir -p "$parent"
   cp -R "$tmp/src/$item" "$item"
 done < "$tmp/manifest"
+while IFS= read -r name; do
+  while IFS= read -r item; do
+    if [ -d "$item" ]; then
+      find "$item" \( -type f -o -type l \) -name "$name" -exec rm -f {} +
+    fi
+  done < "$tmp/manifest"
+done < "$tmp/dropped"
 
 # --force: upstream force-tracks files its own .gitignore matches.
 git add --force -A .

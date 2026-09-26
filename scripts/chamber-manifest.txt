@@ -3,14 +3,23 @@
 # One path per line, relative to the upstream root. A directory is taken whole,
 # a file alone, and `#` starts a comment. A leading `!` declares an upstream
 # entry deliberately left out; vendor.sh reports any entry that is neither.
+# A leading `-` names a file dropped wherever it appears in the selection.
 #
 # Editing a line is a structural change: the next merge reads a removed line as
 # "upstream deleted these files" and an added one as "upstream added them", and
 # neither produces a conflict.
 #
-# Every package is taken whole. What is left out is upstream's development
-# apparatus and anything our own kernel would read; nothing that installs,
-# builds or runs.
+# Every workspace package is taken whole. What is left out is upstream's project
+# introduction and user guides, its development apparatus and anything our own
+# kernel would read; nothing that installs, builds or runs.
+
+# --- Dropped wherever they appear: upstream's project introduction and
+# contribution notes, which nothing builds or runs. Design and architecture
+# notes stay. ---
+-README.md
+-CHANGELOG.md
+-CONTRIBUTING.md
+-SECURITY.md
 
 # --- Read by our own kernel as instructions, skills and project config whenever
 # its working directory is inside desktop/. CLAUDE.md and .claude/skills are
@@ -43,32 +52,35 @@ vite-theme-plugin.ts
 postcss.config.js
 eslint.config.js
 oxlint.config.ts
-components.json
-knip.json
 fix-deprecation.js
 tools
 .gitignore
 .gitattributes
-.nvmrc
 bun-patches
 scripts
 
-# --- Project files. ---
+# --- Project files: the license and upstream's design notes. Its user guides,
+# README screenshots and the documentation site's content, read only by the
+# docs:validate script, are left out. ---
 LICENSE
-README.md
-CHANGELOG.md
-CONTRIBUTING.md
-SECURITY.md
-docs
+docs/isolated-spaces
+!docs/.gitkeep
+!docs/CUSTOM_THEMES.md
+!docs/REVERSE_PROXY.md
+!docs/references
+!packages/docs
 
-# --- Deployment configs, kept because a script may reference them. ---
-.dockerignore
-Dockerfile
-docker-compose.yml
-Caddyfile
+# --- Deployment of upstream's server mode, and configs for developer tools we
+# do not run (shadcn, knip, nvm). Nothing installs, builds or runs them. ---
+!.dockerignore
+!Dockerfile
+!docker-compose.yml
+!Caddyfile
+!components.json
+!knip.json
+!.nvmrc
 
-# --- Packages: all of them. ---
-packages/docs
+# --- Packages: every workspace package. ---
 packages/electron
 packages/extensions
 packages/mobile
