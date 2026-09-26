@@ -1,6 +1,6 @@
 # GeoCode
 
-GeoCode 是面向地理工作者的桌面 AI 应用。用自然语言描述地理任务,内置的 GeoAgent 会调用 QGIS、GDAL、Google Earth Engine 与 OpenStreetMap 完成数据处理,结果(栅格、矢量、属性表)直接在应用里可视化。
+GeoCode 是面向地理工作者的桌面 AI 应用。用自然语言描述地理任务,内置的 GeoAgent 会调用 QGIS、GDAL、Google Earth Engine 与 OpenStreetMap 完成数据处理,结果在应用内可视化。
 
 ## 状态
 
@@ -19,7 +19,7 @@ GeoCode 建在两个开源项目之上:
 
 | 文档 | 内容 |
 |---|---|
-| [`docs/DESIGN.md`](docs/DESIGN.md) | GeoCode 是什么、为什么这样设计 |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | 设计大纲:定位、基础、原则、待定问题与路线 |
 | [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) | 开发规范:写代码、改上游代码、测试、文档与提交 |
 | [`docs/UPSTREAM.md`](docs/UPSTREAM.md) | 两个上游怎么导入与升级 |
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | 安装、构建与运行 |
