@@ -1,19 +1,18 @@
 #!/bin/sh
-# What our patches cost the next upgrade, for one vendor root: how many
-# upstream lines we deleted or rewrote (reported), and whether every patched
-# upstream file is found by the marker grep (enforced with --check).
+# The changes against the pristine branch for one vendor root: which files,
+# how many upstream lines were deleted or rewritten, and which patched upstream
+# files carry a GeoCode marker. Markers are optional, so this only reports.
 #
 # Measures the working tree, not the last commit.
 #
-# Usage:  ./scripts/patch-surface.sh <kernel|desktop> [--check]
+# Usage:  ./scripts/patch-surface.sh <kernel|desktop>
 set -e
 
 ROOT="$1"
-CHECK="${2:-}"
 case "$ROOT" in
   kernel)  BRANCH=kernel-upstream ;;
   desktop) BRANCH=chamber-upstream ;;
-  *) echo "usage: $(basename "$0") <kernel|desktop> [--check]" >&2; exit 1 ;;
+  *) echo "usage: $(basename "$0") <kernel|desktop>" >&2; exit 1 ;;
 esac
 cd "$(git rev-parse --show-toplevel)"
 
@@ -57,26 +56,15 @@ if [ "$files" -gt 0 ]; then
 fi
 echo
 
-echo "== auditability =="
+echo "== markers =="
 awk -F'\t' '$1=="M" {print $2}' "$tmp/surface" | LC_ALL=C sort > "$tmp/patched"
-grep -rlE --exclude-dir=node_modules '// GeoCode:|--- GeoCode|"GeoCode: ' "$ROOT" 2>/dev/null \
+grep -rl --exclude-dir=node_modules 'GeoCode:' "$ROOT" 2>/dev/null \
   | sed "s|^$ROOT/||" | LC_ALL=C sort > "$tmp/marked"
 # `comm` collates with the locale, so it must agree with the `sort` above.
 unmarked=$(LC_ALL=C comm -23 "$tmp/patched" "$tmp/marked")
 n=$(printf '%s' "$unmarked" | grep -c . || true)
-printf "  patched files carrying a marker  %s / %s\n" "$((modified - n))" "$modified"
+printf "  patched upstream files carrying a marker  %s / %s\n" "$((modified - n))" "$modified"
 if [ "$n" -gt 0 ]; then
-  echo "  changed but not locatable by the grep:"
+  echo "  without a marker (their commit messages should say what they do):"
   echo "$unmarked" | sed 's/^/    /'
-  echo "  (.txt prompts, JSON, the lock file, translation dictionaries and image assets cannot carry markers — those are expected here)"
-fi
-
-# Named one extension at a time, so a new kind reddens once and somebody decides
-# whether it can carry a marker. SVG is absent on purpose: XML takes a comment.
-offending=$(printf '%s\n' "$unmarked" | grep -vE '(^|/)bun\.lock$|\.json$|\.txt$|\.png$|\.icns$|\.ico$|\.car$|^packages/ui/src/lib/i18n/messages/[^/]+\.ts$' | grep . || true)
-if [ "$CHECK" = "--check" ] && [ -n "$offending" ]; then
-  echo
-  echo "refuse: patched upstream files without a marker:" >&2
-  echo "$offending" | sed 's/^/    /' >&2
-  exit 1
 fi
