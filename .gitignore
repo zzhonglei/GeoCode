@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+*.tsbuildinfo
+
+# Caches
+.turbo/
+.cache/
+.vite/
+coverage/
+
+# Private working notes
+.artifacts/
+
+# Logs
+*.log
+logs/
+
+# Local environment
+.env
+.env.*
+!.env.example
+*.local
+
+# OS / editor noise
+.DS_Store
+Thumbs.db

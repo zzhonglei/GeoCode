@@ -1,0 +1,122 @@
+# The kernel closure: what gets vendored from anomalyco/opencode.
+#
+# One path per line, relative to the upstream root. A directory is taken whole,
+# a file alone, and `#` starts a comment. A leading `!` declares an upstream
+# entry deliberately left out; vendor.sh reports any entry that is neither.
+#
+# Editing a line is a structural change: the next merge reads a removed line as
+# "upstream deleted these files" and an added one as "upstream added them", and
+# neither produces a conflict.
+
+# --- Root infrastructure: install, build and tooling config. ---
+package.json
+bun.lock
+bunfig.toml
+turbo.json
+tsconfig.json
+patches
+LICENSE
+.gitignore
+.gitattributes
+.editorconfig
+.oxlintrc.json
+.prettierignore
+# Referenced by each package's own sst-env.d.ts.
+sst-env.d.ts
+
+# packages/script reads this at import time. The rest of .github is upstream's CI.
+.github/TEAM_MEMBERS
+!.github
+
+# --- Packages: the workspace dependency closure of @opencode/cli, dev
+# dependencies included. ---
+packages/ai
+packages/cli
+packages/client
+packages/codemode
+packages/core
+packages/http-recorder
+packages/httpapi-codegen
+packages/latex
+packages/merman
+packages/plugin
+packages/plugin-browser
+packages/protocol
+packages/schema
+packages/script
+packages/server
+packages/simulation
+packages/theme
+packages/tui
+packages/ui
+packages/util
+
+# Outside that closure. app is the web UI the CLI build embeds, with
+# session-ui as its only extra dependency; GeoCode's UI comes from OpenChamber.
+!packages/app
+!packages/session-ui
+!packages/console
+!packages/containers
+!packages/desktop
+!packages/effect-drizzle-sqlite
+!packages/enterprise
+!packages/function
+!packages/identity
+!packages/posts
+!packages/sdk
+!packages/stats
+!packages/storybook
+!packages/web
+
+# --- Read by our own kernel as instructions and project config whenever its
+# working directory is inside kernel/. ---
+!AGENTS.md
+!.opencode
+
+# --- Upstream's development, release and hosting apparatus, and its docs. ---
+!.changeset
+!.dockerignore
+!.gitleaksignore
+!.husky
+!.vscode
+!.zed
+!artifacts
+!flake.lock
+!flake.nix
+!github
+!infra
+!install
+!nix
+!perf
+!script
+!sdks
+!services
+!specs
+!sst.config.ts
+!screenshot-uk.png
+!CONTRIBUTING.md
+!SECURITY.md
+!STATS.md
+!V2_HTTP_API_AUDIT.md
+!README.md
+!README.ar.md
+!README.bn.md
+!README.br.md
+!README.bs.md
+!README.da.md
+!README.de.md
+!README.es.md
+!README.fr.md
+!README.gr.md
+!README.it.md
+!README.ja.md
+!README.ko.md
+!README.no.md
+!README.pl.md
+!README.ru.md
+!README.th.md
+!README.tr.md
+!README.uk.md
+!README.vi.md
+!README.zh.md
+!README.zht.md

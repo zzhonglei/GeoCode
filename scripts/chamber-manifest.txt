@@ -1,0 +1,78 @@
+# The desktop closure: what gets vendored from openchamber/openchamber.
+#
+# One path per line, relative to the upstream root. A directory is taken whole,
+# a file alone, and `#` starts a comment. A leading `!` declares an upstream
+# entry deliberately left out; vendor.sh reports any entry that is neither.
+#
+# Editing a line is a structural change: the next merge reads a removed line as
+# "upstream deleted these files" and an added one as "upstream added them", and
+# neither produces a conflict.
+#
+# Every package is taken whole. What is left out is upstream's development
+# apparatus and anything our own kernel would read; nothing that installs,
+# builds or runs.
+
+# --- Read by our own kernel as instructions, skills and project config whenever
+# its working directory is inside desktop/. CLAUDE.md and .claude/skills are
+# symlinks onto AGENTS.md and .agents/skills. ---
+!AGENTS.md
+!CLAUDE.md
+!.agents
+!.claude
+!.opencode
+
+# --- Upstream's own use: per-project files the product keeps in the folder the
+# user opens, never here; repository governance; release notes the product
+# fetches over HTTP; PR screenshots. ---
+!.openchamber
+!.github
+!renovate.json
+!changelog
+!.create-pr-proof
+!pr-evidence
+
+# NODE_ENV=development, an environment default we have not decided on.
+!.env
+
+# --- Root infrastructure: install, build and tooling config. ---
+package.json
+bun.lock
+tsconfig.json
+vite.config.ts
+vite-theme-plugin.ts
+postcss.config.js
+eslint.config.js
+oxlint.config.ts
+components.json
+knip.json
+fix-deprecation.js
+tools
+.gitignore
+.gitattributes
+.nvmrc
+bun-patches
+scripts
+
+# --- Project files. ---
+LICENSE
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+SECURITY.md
+docs
+
+# --- Deployment configs, kept because a script may reference them. ---
+.dockerignore
+Dockerfile
+docker-compose.yml
+Caddyfile
+
+# --- Packages: all of them. ---
+packages/docs
+packages/electron
+packages/extensions
+packages/mobile
+packages/sdk
+packages/ui
+packages/vscode
+packages/web
