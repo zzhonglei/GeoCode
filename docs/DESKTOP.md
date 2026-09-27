@@ -83,7 +83,7 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 ### 6.2 对外边界
 
 - 壳服务端(`desktop/packages/web/server`):
-  - `geocode/closed-surface.js` 在 `index.js` 的 `main` 里、`express()` 创建后立即挂载,对设备令牌、配对与连接候选(`/api/client-auth`)、Private Relay、隧道与隧道引导(`/connect`)、推送订阅、Passkey、OpenChamber 更新、OpenCode 的升级检查、升级与安装、重置会话密钥(`/api/auth/reset`)的路径回 404。这些路径必须由壳自己回答,因为未匹配的 `/api` 路径会落到内核代理。比较不区分大小写,与 Express 的路由一致。`geocode/closed-surface.test.js` 验证大小写与结尾斜杠的变体也被拦下,在 `desktop/packages/web` 里以 `bun run test -- server/geocode/closed-surface.test.js` 运行。
+  - `geocode/closed-surface.js` 在 `index.js` 的 `main` 里、跨域处理之后挂载,对设备令牌、配对与连接候选(`/api/client-auth`)、Private Relay、隧道与隧道引导(`/connect`)、推送订阅、Passkey、OpenChamber 更新、OpenCode 的升级检查、升级与安装、PWA 的 manifest、开发用的关闭接口(`/api/system/dev-shutdown`)、重置会话密钥(`/api/auth/reset`)的路径回 404。挂在跨域处理之后,界面的预检请求才拿得到跨域头,关闭的接口以 404 而不是跨域错误回到界面。这些路径必须由壳自己回答,因为未匹配的 `/api` 路径会落到内核代理。比较不区分大小写,与 Express 的路由一致。`geocode/closed-surface.test.js` 验证大小写与结尾斜杠的变体也被拦下,在 `desktop/packages/web` 里以 `bun run test -- server/geocode/closed-surface.test.js` 运行。
   - `lib/relay/service.js` 的 `createRelayService` 在桌面里返回 `geocode/inert-relay.js` 的替身:不生成中继身份、不连接中继、不注册路由。
   - `lib/notifications/runtime.js` 的 `fanoutPush` 不发送网页推送与 APNs,磁盘上已有的订阅也不用。
 - Electron 主进程(`desktop/packages/electron/main.mjs`):
@@ -102,6 +102,7 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 - 壳服务端以上游的口令模式运行。`desktop/packages/electron/geocode/local-access.mjs` 在主进程启动时生成随机口令,`main.mjs` 的 `spawnLocalServer` 只经 `startWebUiServer` 的 `uiPassword` 传入,不写进环境变量。口令模式下,上游对 `/api` 的认证、各 WebSocket 的认证与 Origin 检查、url-token 都按完整逻辑执行。上游另有「无口令、只要客户端令牌」的模式(`createUiAuth` 的 `requireClientAuth`),不采用:多数 WebSocket 的处理器在无口令时不做认证,无口令分支的 `resolveAuthContext` 还把任意值的会话 cookie 当作已登录。
 - 令牌:`spawnLocalServer` 在服务起来后调用 `mintLocalClientToken`,经 `startWebUiServer` 返回的 `remoteClientAuthRuntime` 在进程内创建 `desktop-local` 客户端,不设过期时间。不经 HTTP 登录签发,所以不受登录接口限流的影响,`/api/client-auth` 也可以整个关闭,令牌只能这样产生。`dedupeKey` 取 `geocode-desktop`:每次启动替换上一次的记录,也不与数据目录里 OpenChamber 自己的桌面客户端互相替换。`readDesktopLocalClientToken` 返回这个令牌,不读设置里的 `desktopLocalClientToken`,主窗口、新窗口、迷你聊天与 IPC `desktop_local_client_token_get` 都从这里取。
 - 令牌经注入页面的脚本交给窗口(`buildInitScript` 与 `injectRuntimeConfigIntoHtml`)。`early-startup.mjs` 的 `buildRendererAdditionalArguments` 不把它放进渲染进程的命令行参数,那里本机的其他程序用 `ps` 就能读到。
+- `desktop/packages/web/server/geocode/loopback-host.js` 在 `express()` 创建后最先挂载,Host 不是 `127.0.0.1`、`localhost` 的 HTTP 请求回 403。它读原始的 Host 头:`trust proxy` 打开时,`req.hostname` 取的是 `X-Forwarded-Host`。WebSocket 的升级请求不经过 Express,只靠令牌挡住:DNS 重绑定时 Origin 与 Host 一致,Origin 检查拦不住。`geocode/loopback-host.test.js` 验证伪造的主机名被拒,运行方法同 `closed-surface.test.js`。
 - 会话 cookie 的签名密钥在桌面里每次启动随机生成,只在内存里(`desktop/packages/web/server/lib/ui-auth/ui-auth.js` 的 `getOrCreateJwtSecret`),不读 `OPENCODE_JWT_SECRET` 与数据目录里的 `jwt-secret`。另一个会写这个文件的入口 `/api/auth/reset`(`rotateJwtSecret`)在桌面里关闭。没有人登录,也就没有会话;OpenChamber 签发的会话在这里无效。
 - 界面:`SessionAuthGate` 在桌面里遇到 401 时显示 `desktop/packages/ui/src/geocode/SessionLostNotice.tsx`,提示重启应用,按钮调用 `desktop_restart`,不显示口令表单;使用中途上游判定会话过期,或用户点了横幅上的「重新登录」时,再查一次 `/auth/session`:仍为 401 就转到这个提示,通过就清除过期状态。
 - 不要求令牌的:登录与登录状态(`/auth/session`)、健康检查、版本、`/api/system/info`、`/api/system/free-port`、界面的静态文件,以及以 `state` 参数校验的 OAuth 回调。内核回调壳的 agent 工具与插件通知,用壳在每次启动内核时生成的另一个令牌。健康检查返回内核的路径与最近的错误输出;CORS 放行 `localhost` 与 `127.0.0.1` 的任意端口,本机这些端口上的网页可以读到它。

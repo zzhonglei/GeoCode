@@ -136,6 +136,7 @@ import { OpenChamberControlError } from './lib/openchamber-control/error.js';
 import { createFileOpenRequester } from './lib/openchamber-control/file-open.js';
 import { applyConnectAttemptTimeout } from './lib/network-defaults.js';
 import { closedSurface } from './geocode/closed-surface.js'; // GeoCode: see main
+import { loopbackHostOnly } from './geocode/loopback-host.js'; // GeoCode: see main
 
 // Background CLI launches enter here in a fresh process, without CLI defaults.
 applyConnectAttemptTimeout();
@@ -1901,7 +1902,7 @@ async function main(options = {}) {
   }
 
   const app = express();
-  app.use(closedSurface); // GeoCode: endpoints closed in the desktop app, see geocode/closed-surface.js
+  app.use(loopbackHostOnly); // GeoCode: refuses DNS rebinding, see geocode/loopback-host.js
   const serverStartedAt = new Date().toISOString();
   const packagedClientOrigins = new Set([
     'openchamber-ui://app',
@@ -1941,6 +1942,7 @@ async function main(options = {}) {
     }
     next();
   });
+  app.use(closedSurface); // GeoCode: after CORS so the UI reads the 404; see geocode/closed-surface.js
   app.use(compression({
     filter: (req, res) => {
       if (shouldSkipCompression(req, res)) return false;

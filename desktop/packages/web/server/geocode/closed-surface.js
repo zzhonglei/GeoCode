@@ -2,6 +2,7 @@
 const CLOSED_PATHS = Object.freeze([
   '/api/client-auth',
   '/api/auth/reset',
+  '/api/system/dev-shutdown',
   '/api/openchamber/relay',
   '/api/openchamber/tunnel',
   '/api/openchamber/update-check',
@@ -15,6 +16,7 @@ const CLOSED_PATHS = Object.freeze([
   '/api/passkeys',
   '/auth/passkey',
   '/connect',
+  '/manifest.webmanifest',
 ]);
 
 // Express matches routes case-insensitively, so the comparison must too.
