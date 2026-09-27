@@ -2338,6 +2338,7 @@ async function main(options = {}) {
   return {
     expressApp: app,
     httpServer: server,
+    remoteClientAuthRuntime, // GeoCode: the desktop mints its window token in-process, see electron/geocode/local-access.mjs
     getPort: () => tunnelRuntimeContext.getActivePort(),
     getOpenCodePort: () => openCodePort,
     getTunnelUrl: () => tunnelService.getPublicUrl(),

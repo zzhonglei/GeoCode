@@ -433,6 +433,7 @@ const OPENCHAMBER_DATA_DIR = process.env.OPENCHAMBER_DATA_DIR
 const JWT_SECRET_FILE = path.join(OPENCHAMBER_DATA_DIR, 'jwt-secret');
 
 function getOrCreateJwtSecret() {
+  if (process.versions.electron) return new TextEncoder().encode(crypto.randomBytes(32).toString('hex')); // GeoCode: no session outlives this launch or comes from OpenChamber's shared secret
   const envSecret = process.env.OPENCODE_JWT_SECRET;
   if (envSecret) {
     return new TextEncoder().encode(envSecret);

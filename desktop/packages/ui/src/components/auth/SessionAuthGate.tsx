@@ -27,6 +27,8 @@ import {
   type PasskeyStatus,
   registerCurrentDevicePasskey,
 } from '@/lib/passkeys';
+import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see the locked state and the expired session
+import { SessionLostNotice } from '@/geocode/SessionLostNotice'; // GeoCode: see the locked state
 
 const STATUS_CHECK_ENDPOINT = '/auth/session';
 // Transient-failure auto-retry for the initial session check. Over the relay the
@@ -570,6 +572,15 @@ export const SessionAuthGate: React.FC<SessionAuthGateProps> = ({
   }, [skipAuth]);
   React.useEffect(() => {
     if (skipAuth) return;
+    // --- GeoCode: no login can help, so a refused token goes to the restart notice; a passing check clears the expiry ---
+    if ((authSessionState === 'expired' || authSessionState === 'reauthenticating') && isGeoCodeDesktop()) {
+      void fetchSessionStatus().then((response) => {
+        if (response.status === 401) setState('locked');
+        else if (response.ok) useAuthSessionStore.getState().markAuthenticated();
+      }, () => undefined);
+      return;
+    }
+    // --- /GeoCode ---
     if (authSessionState === 'reauthenticating') {
       void checkStatusRef.current?.();
     }
@@ -884,6 +895,16 @@ export const SessionAuthGate: React.FC<SessionAuthGateProps> = ({
   if (state === 'rate-limited') {
     return <ErrorScreen onRetry={() => void checkStatus()} errorType="rate-limit" retryAfter={retryAfter} />;
   }
+
+  // --- GeoCode: the local password is never shown to anyone, so a refused token needs a restart, not a login ---
+  if (state === 'locked' && isGeoCodeDesktop()) {
+    return (
+      <AuthShell>
+        <SessionLostNotice />
+      </AuthShell>
+    );
+  }
+  // --- /GeoCode ---
 
   if (state === 'locked') {
     return (

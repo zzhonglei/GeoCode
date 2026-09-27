@@ -376,7 +376,7 @@ export const buildRendererAdditionalArguments = ({
 } = {}) => [
   `--openchamber-local-origin=${localOrigin}`,
   `--openchamber-api-base-url=${apiBaseUrl}`,
-  `--openchamber-client-token=${clientToken}`,
+  '--openchamber-client-token=', // GeoCode: pages get the token from the injected script; arguments show in the process list
   `--openchamber-runtime-headers=${JSON.stringify(requestHeaders)}`,
   `--openchamber-home=${os.homedir() || ''}`,
   `--openchamber-macos-major=${String(macosMajorVersion())}`,

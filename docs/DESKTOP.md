@@ -41,7 +41,7 @@ Electron 主进程
 
 GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以及连到本机内核以外主机的机制,一律关闭:
 
-- 入站:局域网访问、用户设置的界面口令、设备配对与二维码、Private Relay、公网隧道(cloudflared、ngrok)。dev-tunnel 与设备令牌只能经这些入口从其他设备使用,随之失效;设备令牌的接口 `/api/client-auth/clients` 保留。
+- 入站:局域网访问、用户设置的界面口令、设备配对与二维码、Private Relay、公网隧道(cloudflared、ngrok)。dev-tunnel 与设备令牌只能经这些入口从其他设备使用,随之失效;设备令牌的接口 `/api/client-auth` 一并关闭,本机窗口的令牌见第 5 节。
 - 出站:多主机与主机切换、SSH 远程实例、连接外部内核、安装与升级 OpenCode、OpenChamber 的更新检查与使用上报、推送(网页推送与 APNs)。
 - `openchamber://` 深链:不注册,也不处理。
 
@@ -53,8 +53,8 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 
 壳服务端只监听 127.0.0.1,但本机的任何程序都能连上它,浏览器里的网页也能:WebSocket 不受跨域限制,DNS 重绑定还能让网页以同源的身份发请求。壳服务端转发时替调用方附上内核的口令,所以能调用壳服务端,就能让 agent 以用户的身份执行命令、读写文件。
 
-- 壳服务端只接受 GeoCode 自己的窗口:每个 HTTP 请求与 WebSocket 连接都要出示令牌,没有令牌的一律拒绝。
-- 令牌由主进程在每次启动时签发,只存在于主进程与窗口的内存里,磁盘上只有它的哈希;下次启动换新,旧的随之作废。窗口以外没有取得令牌的途径:用户不设置口令,也不登录。
+- 壳服务端只接受 GeoCode 自己的窗口:每个 HTTP 请求与 WebSocket 连接都要出示令牌,没有令牌的一律拒绝。例外见 6.3 节。
+- 令牌由主进程在每次启动时签发,只存在于主进程与窗口的内存里,磁盘上只有它的哈希;下次启动换新,旧的随之作废。窗口以外没有取得令牌的途径:用户不设置口令,也不登录。例外是窗口里预览的 HTML 文件,见 6.3 节。
 - 壳服务端只接受 Host 为 `127.0.0.1` 或 `localhost` 的 HTTP 请求,DNS 重绑定的网页连不要求令牌的接口也读不到。
 - 令牌失效时(例如数据目录里的令牌记录被删,或启动时签发失败),界面显示错误并提示重启应用,不显示上游的口令登录页。
 - 内核的口令只交给内核,不留在壳服务端的环境变量里:壳启动的终端与其他子进程读不到它,不能绕过壳直接访问内核。
@@ -70,7 +70,7 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 - 壳服务端的补丁以 `process.versions.electron` 判断是否在桌面应用里(壳服务端在 Electron 主进程内运行);Electron 主进程的补丁本来只在桌面应用里运行。
 - 界面以 `desktop/packages/ui/src/geocode/surface.ts` 的 `isGeoCodeDesktop` 判断,设置页与搜索项以设置上下文的 `isDesktop` 判断。
 - 以 `serve --stdio` 启动内核的补丁对 OpenChamber 的所有运行方式都生效,包括网页服务:内核随壳服务端退出,就绪行是 JSON。
-- `electron:dev` 在 Electron 之外另起一个壳服务端,`process.versions.electron` 在那里不成立,壳服务端的补丁都不生效;环境变量的清洗只在 Electron 主进程里做,那个壳服务端仍会读用户导出的变量。验证用 `electron:dev:bundled` 或打包出的应用。
+- `electron:dev` 在 Electron 之外另起一个壳服务端,`process.versions.electron` 在那里不成立,壳服务端的补丁都不生效;环境变量的清洗只在 Electron 主进程里做,那个壳服务端仍会读用户导出的变量;它也不由主进程启动,没有口令,不做第 5 节的访问控制。验证用 `electron:dev:bundled` 或打包出的应用。
 
 ### 6.1 内核
 
@@ -83,7 +83,7 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 ### 6.2 对外边界
 
 - 壳服务端(`desktop/packages/web/server`):
-  - `geocode/closed-surface.js` 在 `index.js` 的 `main` 里、`express()` 创建后立即挂载,对配对与连接候选、Private Relay、隧道与隧道引导(`/connect`)、推送订阅、Passkey、OpenChamber 更新、OpenCode 的升级检查、升级与安装的路径回 404。这些路径必须由壳自己回答,因为未匹配的 `/api` 路径会落到内核代理。比较不区分大小写,与 Express 的路由一致。`geocode/closed-surface.test.js` 验证大小写与结尾斜杠的变体也被拦下,在 `desktop/packages/web` 里以 `bun run test -- server/geocode/closed-surface.test.js` 运行。
+  - `geocode/closed-surface.js` 在 `index.js` 的 `main` 里、`express()` 创建后立即挂载,对设备令牌、配对与连接候选(`/api/client-auth`)、Private Relay、隧道与隧道引导(`/connect`)、推送订阅、Passkey、OpenChamber 更新、OpenCode 的升级检查、升级与安装、重置会话密钥(`/api/auth/reset`)的路径回 404。这些路径必须由壳自己回答,因为未匹配的 `/api` 路径会落到内核代理。比较不区分大小写,与 Express 的路由一致。`geocode/closed-surface.test.js` 验证大小写与结尾斜杠的变体也被拦下,在 `desktop/packages/web` 里以 `bun run test -- server/geocode/closed-surface.test.js` 运行。
   - `lib/relay/service.js` 的 `createRelayService` 在桌面里返回 `geocode/inert-relay.js` 的替身:不生成中继身份、不连接中继、不注册路由。
   - `lib/notifications/runtime.js` 的 `fanoutPush` 不发送网页推送与 APNs,磁盘上已有的订阅也不用。
 - Electron 主进程(`desktop/packages/electron/main.mjs`):
@@ -97,7 +97,19 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
   - 自动发出的请求在源头停止:`useUpdateStore.checkForUpdates`、`warmDesktopHostStatuses`、`useDesktopSshStore.load`。`OpenCodeUpdateToast` 仍会向已关闭的升级检查接口请求至多三次,拿到 404 后放弃。
   - About 对话框读的是已关闭的升级检查接口,所以不显示内核版本。
 
-### 6.3 合并上游后的核对
+### 6.3 本机访问控制
+
+- 壳服务端以上游的口令模式运行。`desktop/packages/electron/geocode/local-access.mjs` 在主进程启动时生成随机口令,`main.mjs` 的 `spawnLocalServer` 只经 `startWebUiServer` 的 `uiPassword` 传入,不写进环境变量。口令模式下,上游对 `/api` 的认证、各 WebSocket 的认证与 Origin 检查、url-token 都按完整逻辑执行。上游另有「无口令、只要客户端令牌」的模式(`createUiAuth` 的 `requireClientAuth`),不采用:多数 WebSocket 的处理器在无口令时不做认证,无口令分支的 `resolveAuthContext` 还把任意值的会话 cookie 当作已登录。
+- 令牌:`spawnLocalServer` 在服务起来后调用 `mintLocalClientToken`,经 `startWebUiServer` 返回的 `remoteClientAuthRuntime` 在进程内创建 `desktop-local` 客户端,不设过期时间。不经 HTTP 登录签发,所以不受登录接口限流的影响,`/api/client-auth` 也可以整个关闭,令牌只能这样产生。`dedupeKey` 取 `geocode-desktop`:每次启动替换上一次的记录,也不与数据目录里 OpenChamber 自己的桌面客户端互相替换。`readDesktopLocalClientToken` 返回这个令牌,不读设置里的 `desktopLocalClientToken`,主窗口、新窗口、迷你聊天与 IPC `desktop_local_client_token_get` 都从这里取。
+- 令牌经注入页面的脚本交给窗口(`buildInitScript` 与 `injectRuntimeConfigIntoHtml`)。`early-startup.mjs` 的 `buildRendererAdditionalArguments` 不把它放进渲染进程的命令行参数,那里本机的其他程序用 `ps` 就能读到。
+- 会话 cookie 的签名密钥在桌面里每次启动随机生成,只在内存里(`desktop/packages/web/server/lib/ui-auth/ui-auth.js` 的 `getOrCreateJwtSecret`),不读 `OPENCODE_JWT_SECRET` 与数据目录里的 `jwt-secret`。另一个会写这个文件的入口 `/api/auth/reset`(`rotateJwtSecret`)在桌面里关闭。没有人登录,也就没有会话;OpenChamber 签发的会话在这里无效。
+- 界面:`SessionAuthGate` 在桌面里遇到 401 时显示 `desktop/packages/ui/src/geocode/SessionLostNotice.tsx`,提示重启应用,按钮调用 `desktop_restart`,不显示口令表单;使用中途上游判定会话过期,或用户点了横幅上的「重新登录」时,再查一次 `/auth/session`:仍为 401 就转到这个提示,通过就清除过期状态。
+- 不要求令牌的:登录与登录状态(`/auth/session`)、健康检查、版本、`/api/system/info`、`/api/system/free-port`、界面的静态文件,以及以 `state` 参数校验的 OAuth 回调。内核回调壳的 agent 工具与插件通知,用壳在每次启动内核时生成的另一个令牌。健康检查返回内核的路径与最近的错误输出;CORS 放行 `localhost` 与 `127.0.0.1` 的任意端口,本机这些端口上的网页可以读到它。
+- 口令模式的附带效果:上游「没有口令就不能开隧道、不能监听非本机地址」的两道保险不再起作用,由第 4 节关闭的隧道接口与固定的 127.0.0.1 覆盖;每个带令牌的请求都读一次 `remote-clients.json`,20 个并发时,带令牌的轻量请求中位延迟约 3 毫秒;校验时每分钟写一次 `lastUsedAt`,写不进去(磁盘满、文件无权限)时校验失败,所有请求都会被拒。
+- 与本机安装的 OpenChamber 共用数据目录时,令牌记录在同一个 `remote-clients.json` 里:它签发的令牌在 GeoCode 的壳上同样有效;两边同时运行时无锁地读改写这个文件,可能丢失 GeoCode 的记录(窗口转到重启提示),也可能恢复 OpenChamber 刚撤销的设备。
+- 文件预览里的 HTML 以壳服务端的来源运行,地址里带着 60 秒有效的 url-token;页面脚本能用它读取可读路径下的任意文件、打开事件流(上游的设计)。
+
+### 6.4 合并上游后的核对
 
 内核的选择与对外的关闭都依靠手写的清单与唯一入口,上游新增的变量、入口与请求不会自动被覆盖。合并 `chamber-upstream` 之后,按下面的方法重新推导,与现状对照:
 
@@ -108,6 +120,7 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 - 唯一入口:`fanoutPush` 仍是网页推送与 APNs 唯一的发送处,`handleDeepLinks` 仍是深链唯一的入口。
 - 新增的自动外发:在壳服务端、界面与 `main.mjs` 里找 `openchamber.dev`、`github.com/openchamber` 等 OpenChamber 的地址,看有没有不经用户操作就发出的请求。
 - `desktop/packages/web/server/lib/opencode/compatibility.js` 的 `MINIMUM_OPENCODE_VERSION` 不能高于 `kernel/` 的版本,否则壳会拒绝安装包里的内核。
+- 本机访问控制依赖上游口令模式的行为:`server.on('upgrade'` 的每个处理器在 `uiAuthController.enabled` 时校验令牌与 Origin,新增的处理器照此核对;`readDesktopLocalClientToken` 仍是窗口取本机令牌的唯一入口;令牌没有其他途径进入命令行参数;`createClient` 不传 `expiresAt` 时仍不过期;会话密钥仍只来自 `getOrCreateJwtSecret` 与 `/api/auth/reset` 背后的 `rotateJwtSecret`;`SessionAuthGate` 显示口令表单的仍只有 `locked` 状态。
 
 ## 7. 验收
 

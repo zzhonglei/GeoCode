@@ -647,6 +647,7 @@ const buildRendererRuntimeConfig = (uiUrl, runtimeConfig = {}) => {
 };
 
 const readDesktopLocalClientToken = () => {
+  return localClientToken(); // GeoCode: the token minted at startup, never one saved in settings
   return sanitizeClientTokenForStorage(readSettingsRoot().desktopLocalClientToken) || '';
 };
 
@@ -1208,6 +1209,7 @@ import { pathLooksUserConfigured, mergePathValues } from '@openchamber/web/serve
 import { provideLoginShellEnvSnapshot } from '@openchamber/web/server/lib/opencode/login-shell-env.js';
 import { dropIgnoredUserVariables } from './geocode/inherited-env.mjs'; // GeoCode: see inheritUserShellEnv
 import { assertDesktopCommandOpen } from './geocode/closed-commands.mjs'; // GeoCode: see handleInvoke
+import { localClientToken, localServerPassword, mintLocalClientToken } from './geocode/local-access.mjs'; // GeoCode: see spawnLocalServer and readDesktopLocalClientToken
 
 // Merge the user's login-shell env (PATH, etc.) into this process before we
 // import/start the server in-process. The server and its children (opencode
@@ -1252,7 +1254,7 @@ const spawnLocalServer = async () => {
   await inheritUserShellEnv();
 
   const settings = readSettingsRoot();
-  // --- GeoCode: the server stays on loopback with no UI password, whatever the settings file holds ---
+  // --- GeoCode: the server stays on loopback, and the settings file's UI password is never used ---
   delete settings.desktopLanAccessEnabled;
   delete settings.desktopUiPassword;
   // --- /GeoCode ---
@@ -1319,7 +1321,7 @@ const spawnLocalServer = async () => {
   const handle = await startWebUiServer({
     port: chosenPort,
     host: bindHost,
-    uiPassword: desktopUiPassword || null,
+    uiPassword: localServerPassword, // GeoCode: the per-launch password, see geocode/local-access.mjs
     attachSignals: false,
     exitOnShutdown: false,
     apiOnly: false,
@@ -1356,6 +1358,7 @@ const spawnLocalServer = async () => {
   await mutateSettingsRoot((root) => {
     root.desktopLocalPort = port;
   });
+  await mintLocalClientToken(handle).catch((error) => log.warn('[electron] local client token unavailable:', error)); // GeoCode: mints the window token, see geocode/local-access.mjs
 
   return url;
 };

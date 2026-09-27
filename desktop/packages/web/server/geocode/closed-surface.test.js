@@ -31,13 +31,12 @@ describe('GeoCode: closedSurface', () => {
   const statusOf = async (path) => (await fetch(`${baseUrl}${path}`)).status;
 
   it('refuses closed endpoints in any case and with a trailing slash', async () => {
-    for (const path of ['/api/openchamber/update-check', '/API/OpenChamber/Update-Check', '/api/push/subscribe/', '/CONNECT']) {
+    for (const path of ['/api/openchamber/update-check', '/API/OpenChamber/Update-Check', '/api/push/subscribe/', '/CONNECT', '/API/Client-Auth/Clients']) {
       expect(await statusOf(path)).toBe(404);
     }
   });
 
   it('leaves the endpoints the desktop app still uses to upstream', async () => {
-    expect(await statusOf('/api/client-auth/clients')).toBe(200);
     expect(await statusOf('/api/push/visibility')).toBe(200);
   });
 });

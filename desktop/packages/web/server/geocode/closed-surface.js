@@ -1,7 +1,7 @@
 // Answered here because an unmatched /api path would fall through to the OpenCode proxy.
 const CLOSED_PATHS = Object.freeze([
-  '/api/client-auth/pairing',
-  '/api/client-auth/connection',
+  '/api/client-auth',
+  '/api/auth/reset',
   '/api/openchamber/relay',
   '/api/openchamber/tunnel',
   '/api/openchamber/update-check',
