@@ -4,7 +4,7 @@
 
 ## 1. 定位
 
-GeoCode 是面向地理工作者的桌面 AI 应用。用户用自然语言描述地理任务,内置的 GeoAgent 调用 QGIS、GDAL、Google Earth Engine 与 OpenStreetMap 等工具完成处理,结果在应用内可视化。用户是做制图、遥感与空间分析的人,不是程序员,所以界面以地理工作流为中心,面向开发者的功能保持克制。
+GeoCode 是面向地理工作者的桌面 AI 应用。用户用自然语言描述地理任务,内置的 GeoAgent 调用 QGIS、GDAL、Google Earth Engine 与 OpenStreetMap 等工具完成处理,结果在应用内可视化。用户是做制图、遥感与空间分析的人,不是程序员,所以界面以地理工作流为中心,面向开发者的功能保持克制。很多用户不会先建项目,打开应用就直接对话,所以不属于任何项目的聊天是主要的入口,而不是附属功能。
 
 GeoCode 只做桌面应用,支持 macOS(arm64)与 Windows(x64)。
 
