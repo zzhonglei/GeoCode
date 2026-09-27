@@ -22,6 +22,7 @@ import { isCapacitorApp } from '@/lib/platform';
 import { useI18n } from '@/lib/i18n';
 import { subscribeRuntimeEndpointChanged } from '@/lib/runtime-switch';
 import type { OpenChamberSection } from './types';
+import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see GeneralSectionContent
 
 const useRuntimeEndpointEpoch = (): number => {
     const [epoch, setEpoch] = React.useState(0);
@@ -147,7 +148,8 @@ const GeneralSectionContent: React.FC = () => {
             {showDesktopNetworkSettings && <DesktopNetworkSettings />}
             {showPasskeySettings && <PasskeySettings />}
             <AppLinkSecuritySettings />
-            {!isVSCode && <OpenCodeCliSettings />}
+            {/* GeoCode: the desktop app runs only its bundled kernel */}
+            {!isVSCode && !isGeoCodeDesktop() && <OpenCodeCliSettings />}
             {!isVSCode && <OpenChamberToolsSettings />}
             {!isVSCode && ISOLATED_SPACES_RELEASED && <IsolatedSpacesSettings />}
             <OpenChamberVisualSettings visibleSettings={[
@@ -158,7 +160,8 @@ const GeneralSectionContent: React.FC = () => {
                 ...(!isVSCode ? ['terminalShell' as const] : []),
                 ...(!isVSCode ? ['terminalLoginShell' as const] : []),
                 'messageTransport',
-                'reportUsage',
+                // GeoCode: no usage-report toggle
+                ...(!isGeoCodeDesktop() ? ['reportUsage' as const] : []),
             ]} />
         </>
     );

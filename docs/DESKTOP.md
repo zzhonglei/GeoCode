@@ -35,13 +35,13 @@ Electron 主进程
 
 - 安装包里的内核由本仓库的 `kernel/` 构建,是单文件可执行程序,与 `kernel/` 的版本一致。上游 OpenChamber 在打包时从 npm 下载 OpenCode 发布的内核,GeoCode 不用这一步,否则对内核的修改进不了安装包。构建与暂存的方法见 `DEVELOPMENT.md`;暂存脚本是 POSIX sh,只有 macOS 的打包流程能用。
 - 壳只使用安装包里的内核:不读取设置里的内核路径,不读取环境变量指定的内核,不在 `PATH` 里查找。内核缺失或启动失败时报错,不引导用户安装 OpenCode。
-- 主机只有本机,所以启动时不出现上游「选择本地或远程」的首次引导。
+- 主机只有本机,所以启动时不出现上游「选择本地或远程」的首次引导。只有本机的壳服务端起不来时,上游仍会显示引导页;页上的安装 OpenCode、设置内核路径、连接远程都不起作用,只能重启应用。
 
 ## 4. 对外边界
 
 GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以及连到本机内核以外主机的机制,一律关闭:
 
-- 入站:局域网访问、界面口令、设备配对与二维码、Private Relay、公网隧道(cloudflared、ngrok)。dev-tunnel 与设备令牌只能经这些入口从其他设备使用,随之失效。
+- 入站:局域网访问、界面口令、设备配对与二维码、Private Relay、公网隧道(cloudflared、ngrok)。dev-tunnel 与设备令牌只能经这些入口从其他设备使用,随之失效;设备令牌的接口 `/api/client-auth/clients` 保留。
 - 出站:多主机与主机切换、SSH 远程实例、连接外部内核、安装与升级 OpenCode、OpenChamber 的更新检查与使用上报、推送(网页推送与 APNs)。
 - `openchamber://` 深链:不注册,也不处理。
 
@@ -56,6 +56,7 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 补丁生效的范围:
 
 - 壳服务端的补丁以 `process.versions.electron` 判断是否在桌面应用里(壳服务端在 Electron 主进程内运行);Electron 主进程的补丁本来只在桌面应用里运行。
+- 界面以 `desktop/packages/ui/src/geocode/surface.ts` 的 `isGeoCodeDesktop` 判断,设置页与搜索项以设置上下文的 `isDesktop` 判断。
 - 以 `serve --stdio` 启动内核的补丁对 OpenChamber 的所有运行方式都生效,包括网页服务:内核随壳服务端退出,就绪行是 JSON。
 - `electron:dev` 在 Electron 之外另起一个壳服务端,`process.versions.electron` 在那里不成立,壳服务端的补丁都不生效;环境变量的清洗只在 Electron 主进程里做,那个壳服务端仍会读用户导出的变量。验证用 `electron:dev:bundled` 或打包出的应用。
 
@@ -67,11 +68,33 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 - `desktop/packages/electron/geocode/inherited-env.mjs` 在 `main.mjs` 的 `inheritUserShellEnv` 里,从进程环境与登录 shell 的环境快照中删去会把壳指向其他内核、其他主机或其他口令的变量(`OPENCODE_BINARY`、`OPENCODE_HOST`、`OPENCHAMBER_SERVER_URL`、`OPENCODE_PASSWORD` 等);打包出的应用还删去 `OPENCHAMBER_BUNDLED_OPENCODE_CLI_DIR`。
 - `main.mjs` 的 `readDesktopHostsConfig` 只返回本机,不读设置里的主机列表。
 
-### 5.2 合并上游后的核对
+### 5.2 对外边界
 
-内核的选择依靠手写的清单,上游新增的变量不会自动被覆盖。合并 `chamber-upstream` 之后,按下面的方法重新推导,与现状对照:
+- 壳服务端(`desktop/packages/web/server`):
+  - `geocode/closed-surface.js` 在 `index.js` 的 `main` 里、`express()` 创建后立即挂载,对配对与连接候选、Private Relay、隧道与隧道引导(`/connect`)、推送订阅、Passkey、OpenChamber 更新、OpenCode 的升级检查、升级与安装的路径回 404。这些路径必须由壳自己回答,因为未匹配的 `/api` 路径会落到内核代理。比较不区分大小写,与 Express 的路由一致。`geocode/closed-surface.test.js` 验证大小写与结尾斜杠的变体也被拦下,在 `desktop/packages/web` 里以 `bun run test -- server/geocode/closed-surface.test.js` 运行。
+  - `lib/relay/service.js` 的 `createRelayService` 在桌面里返回 `geocode/inert-relay.js` 的替身:不生成中继身份、不连接中继、不注册路由。
+  - `lib/notifications/runtime.js` 的 `fanoutPush` 不发送网页推送与 APNs,磁盘上已有的订阅也不用。
+- Electron 主进程(`desktop/packages/electron/main.mjs`):
+  - `spawnLocalServer` 忽略设置里的局域网开关与界面口令,服务只监听 127.0.0.1。
+  - `desktop/packages/electron/geocode/closed-commands.mjs` 由 `handleInvoke` 在入口调用,拒绝主机、SSH、dev-tunnel、局域网地址与更新相关的 IPC 命令。
+  - 不注册 `openchamber://`,`handleDeepLinks` 直接返回。
+  - 菜单里没有「Check for Updates」;`setupAutoUpdater` 仍按上游配置更新源,但没有入口触发检查。
+- 界面(`desktop/packages/ui/src`):
+  - `geocode/settings.ts` 由 `lib/settings/metadata.ts` 与 `lib/settings/search.ts` 调用,隐藏远程实例与隧道两个设置页,以及口令、局域网、内核路径、重启 OpenCode、OpenCode 更新提示、使用上报的搜索项。
+  - 按 `isGeoCodeDesktop` 隐藏的组件:`OpenChamberPage` 的 `OpenCodeCliSettings` 整块(内核路径、OpenCode 更新提示、重启 OpenCode;命令面板的重启 OpenCode 保留)与使用上报开关,`DesktopNetworkSettings` 的口令与局域网字段,`Header` 的服务菜单,`DesktopHostSwitcherInline`。
+  - 自动发出的请求在源头停止:`useUpdateStore.checkForUpdates`、`warmDesktopHostStatuses`、`useDesktopSshStore.load`。`OpenCodeUpdateToast` 仍会向已关闭的升级检查接口请求至多三次,拿到 404 后放弃。
+  - About 对话框读的是已关闭的升级检查接口,所以不显示内核版本。
 
+### 5.3 合并上游后的核对
+
+内核的选择与对外的关闭都依靠手写的清单与唯一入口,上游新增的变量、入口与请求不会自动被覆盖。合并 `chamber-upstream` 之后,按下面的方法重新推导,与现状对照:
+
+- `closed-surface.js` 的路径:在 `desktop/packages/web/server` 里找 `app.get`、`app.post`、`app.put`、`app.patch`、`app.delete`、`app.all`、`app.use` 注册的路径,以及 `server.on('upgrade'` 的处理器,筛出属于第 4 节各机制的。
+- `closed-commands.mjs` 的命令:`main.mjs` 里 `handleInvoke` 的 `case 'desktop_…'`,以及它之外的 `ipcMain.handle` 与 `ipcMain.on` 频道。
 - `inherited-env.mjs` 的变量:`env-config.js`、`env-runtime.js` 的 `resolveOpencodeCliPath` 与 `bundledOpenCodeCliCandidates`、`hmr-state-runtime.js`、`auth-state-runtime.js`,以及 `main.mjs`(`resolveInitialUrl`、`shouldSkipLocalServer` 等)读取的环境变量。
+- `settings.ts` 的页面与搜索项:`metadata.ts` 的 `SETTINGS_PAGE_METADATA` 与 `search.ts` 的 `SETTINGS_SEARCH_ITEMS`。
+- 唯一入口:`fanoutPush` 仍是网页推送与 APNs 唯一的发送处,`handleDeepLinks` 仍是深链唯一的入口。
+- 新增的自动外发:在壳服务端、界面与 `main.mjs` 里找 `openchamber.dev`、`github.com/openchamber` 等 OpenChamber 的地址,看有没有不经用户操作就发出的请求。
 - `desktop/packages/web/server/lib/opencode/compatibility.js` 的 `MINIMUM_OPENCODE_VERSION` 不能高于 `kernel/` 的版本,否则壳会拒绝安装包里的内核。
 
 ## 6. 验收

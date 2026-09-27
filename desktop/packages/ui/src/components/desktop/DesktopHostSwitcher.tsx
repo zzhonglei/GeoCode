@@ -57,6 +57,7 @@ import {
   desktopSshStatus,
   type DesktopSshInstanceStatus,
 } from '@/lib/desktopSsh';
+import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see DesktopHostSwitcherInline
 
 const SSH_CONNECT_TIMEOUT_MS = 90_000;
 const SSH_CONNECT_CANCELLED_ERROR = 'SSH connection cancelled';
@@ -1117,6 +1118,11 @@ export function DesktopHostSwitcherInline() {
   if (!isDesktopShell()) {
     return null;
   }
+  // --- GeoCode: the desktop app has one local instance, so there is nothing to switch to ---
+  if (isGeoCodeDesktop()) {
+    return null;
+  }
+  // --- /GeoCode ---
 
   return (
     <>

@@ -160,6 +160,7 @@ try {
 } catch {
 }
 
+/* --- GeoCode: the app does not take over OpenChamber's openchamber:// links ---
 try {
   if (!app.isDefaultProtocolClient(DEEP_LINK_PROTOCOL)) {
     app.setAsDefaultProtocolClient(DEEP_LINK_PROTOCOL);
@@ -168,6 +169,7 @@ try {
   // log.* not yet initialized at this point; fall back to console.
   console.warn('[electron] failed to register deep-link protocol:', error);
 }
+--- /GeoCode --- */
 
 const readAppMetadata = () => {
   const candidates = [
@@ -1205,6 +1207,7 @@ const mapUpdaterProgressEvent = (payload) => ({
 import { pathLooksUserConfigured, mergePathValues } from '@openchamber/web/server/lib/opencode/path-utils.js';
 import { provideLoginShellEnvSnapshot } from '@openchamber/web/server/lib/opencode/login-shell-env.js';
 import { dropIgnoredUserVariables } from './geocode/inherited-env.mjs'; // GeoCode: see inheritUserShellEnv
+import { assertDesktopCommandOpen } from './geocode/closed-commands.mjs'; // GeoCode: see handleInvoke
 
 // Merge the user's login-shell env (PATH, etc.) into this process before we
 // import/start the server in-process. The server and its children (opencode
@@ -1249,6 +1252,10 @@ const spawnLocalServer = async () => {
   await inheritUserShellEnv();
 
   const settings = readSettingsRoot();
+  // --- GeoCode: the server stays on loopback with no UI password, whatever the settings file holds ---
+  delete settings.desktopLanAccessEnabled;
+  delete settings.desktopUiPassword;
+  // --- /GeoCode ---
   const storedPort = Number.isFinite(settings.desktopLocalPort) ? settings.desktopLocalPort : null;
   // When the user enables "Desktop Network Access" we bind on all interfaces
   // so phones/tablets on the same Wi-Fi can reach the app. UI shows a clear
@@ -1961,6 +1968,7 @@ const isMainWindowReadyForDeepLink = () =>
   && !state.mainWindow.webContents.isLoading();
 
 const handleDeepLinks = (urls) => {
+  return; // GeoCode: openchamber:// links are ignored, whether from argv, a second instance or open-url
   for (const raw of urls) {
     const parsed = parseDeepLink(raw);
     if (!parsed) continue;
@@ -3498,6 +3506,7 @@ const closeAllDevTunnels = () => {
 };
 
 const handleInvoke = async (browserWindow, command, args = {}) => {
+  assertDesktopCommandOpen(command); // GeoCode: see closed-commands.mjs
   switch (command) {
     case 'desktop_pick_theme_file': {
       const { pickThemeFile } = await import('./theme-file-picker.mjs');
@@ -4497,10 +4506,12 @@ const buildMacMenu = () => {
       label: app.name,
       submenu: [
         { label: 'About OpenChamber', click: () => dispatchAction('about') },
+        /* --- GeoCode: OpenChamber's release feed does not update this app ---
         {
           label: 'Check for Updates',
           click: () => dispatchCheckForUpdates(),
         },
+        --- /GeoCode --- */
         { type: 'separator' },
         { label: 'Settings', accelerator: 'Cmd+,', click: () => dispatchAction('settings') },
         { label: 'Reload Webview', click: () => reloadMenuTargetWindow() },
@@ -4607,10 +4618,12 @@ const buildAutoHiddenMenu = () => {
       label: 'OpenChamber',
       submenu: [
         { label: 'About OpenChamber', click: () => dispatchAction('about') },
+        /* --- GeoCode: OpenChamber's release feed does not update this app ---
         {
           label: 'Check for Updates',
           click: () => dispatchCheckForUpdates(),
         },
+        --- /GeoCode --- */
         { type: 'separator' },
         { label: 'Settings', accelerator: 'Ctrl+,', click: () => dispatchAction('settings') },
         { label: 'Reload Webview', click: () => reloadMenuTargetWindow() },

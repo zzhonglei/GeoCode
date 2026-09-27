@@ -10,6 +10,7 @@ import {
   type HostProbeResult,
 } from '@/lib/desktopHosts';
 import { LOCAL_HOST_ID, buildLocalDesktopHost } from '@/lib/desktopCurrentHost';
+import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see warmDesktopHostStatuses
 
 export type DesktopHostStatus = {
   status: HostProbeResult['status'];
@@ -178,6 +179,7 @@ let warmUpStarted = false;
  */
 export const warmDesktopHostStatuses = async (): Promise<void> => {
   if (warmUpStarted || !isDesktopShell()) return;
+  if (isGeoCodeDesktop()) return; // GeoCode: one local instance, nothing to probe
   warmUpStarted = true;
   const config = await desktopHostsGet().catch(() => null);
   if (!config) return;

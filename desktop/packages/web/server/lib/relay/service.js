@@ -15,6 +15,7 @@ import express from 'express';
 
 import { createRelayIdentityRuntime } from './identity.js';
 import { startRelayHost } from './host-client.js';
+import { createInertRelayService } from '../../geocode/inert-relay.js'; // GeoCode: see createRelayService
 
 export const DEFAULT_RELAY_URL = 'wss://relay.openchamber.dev/ws';
 
@@ -77,6 +78,8 @@ export const createRelayService = ({
   allowPassiveHost = true,
   logger = console,
 }) => {
+  // GeoCode: the desktop app never hosts or joins the relay
+  if (process.versions.electron) return createInertRelayService();
   const identityRuntime = createRelayIdentityRuntime({ crypto, readSettingsFromDiskMigrated, writeSettingsToDisk, readSettingsStrict });
 
   let hostClient = null;

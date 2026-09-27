@@ -12,6 +12,7 @@ import {
   type DesktopSshInstance,
   type DesktopSshInstanceStatus,
 } from '@/lib/desktopSsh';
+import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see load
 
 type DesktopSshState = {
   instances: DesktopSshInstance[];
@@ -54,6 +55,7 @@ export const useDesktopSshStore = create<DesktopSshState>((set, get) => ({
 
   load: async () => {
     if (get().isLoading) return;
+    if (isGeoCodeDesktop()) return; // GeoCode: SSH remote instances do not exist in the desktop app
     set({ isLoading: true, error: null });
     try {
       const [config, statuses] = await Promise.all([desktopSshInstancesGet(), desktopSshStatus()]);

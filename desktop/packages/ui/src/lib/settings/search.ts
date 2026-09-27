@@ -3,6 +3,7 @@ import { ISOLATED_SPACES_RELEASED } from '@/lib/spaces/release';
 import { useUIStore } from '@/stores/useUIStore';
 import type { SettingsPageSlug, SettingsRuntimeContext } from './metadata';
 import { getSettingsPageMeta } from './metadata';
+import { closeSettingsSearchItems } from '@/geocode/settings'; // GeoCode: see SETTINGS_SEARCH_ITEMS
 
 interface SettingsSearchItem {
   id: string;
@@ -1236,6 +1237,7 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     isAvailable: (ctx) => !ctx.isVSCode && !ctx.isMobile,
   },
 ] as const;
+closeSettingsSearchItems(SETTINGS_SEARCH_ITEMS); // GeoCode: see geocode/settings.ts
 
 interface BuildSettingsSearchResultsOptions {
   query: string;

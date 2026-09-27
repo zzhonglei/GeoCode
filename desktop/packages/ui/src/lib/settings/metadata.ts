@@ -1,5 +1,6 @@
 import type { SidebarSection } from '@/constants/sidebar';
 import type { IconName } from '@/components/icon/icons';
+import { closeSettingsPages } from '@/geocode/settings'; // GeoCode: see SETTINGS_PAGE_METADATA
 
 export type SettingsPageSlug =
   | 'home'
@@ -233,6 +234,7 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
     isAvailable: (ctx) => !ctx.isVSCode && !ctx.isMobile,
   },
 ] as const;
+closeSettingsPages(SETTINGS_PAGE_METADATA); // GeoCode: remote instances and tunnels do not exist in the desktop app
 
 const LEGACY_SIDEBAR_SECTION_TO_SETTINGS_SLUG: Record<SidebarSection, SettingsPageSlug> = {
   sessions: 'sessions',

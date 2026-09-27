@@ -16,6 +16,7 @@ import { formatMessage, useI18nStore } from '@/lib/i18n/store';
 import { getUpdateInstallErrorMessage } from '@/lib/updateInstallError';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { getClientPlatform, isCapacitorApp } from '@/lib/platform';
+import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see checkForUpdates
 
 declare const __APP_VERSION__: string | undefined;
 
@@ -254,6 +255,8 @@ export const useUpdateStore = create<UpdateStore>()((set, get) => ({
   checkForUpdates: async () => {
     const runtime = detectRuntimeType();
     if (!runtime) return null;
+    // GeoCode: no OpenChamber update check, and with it no usage report
+    if (isGeoCodeDesktop()) return null;
 
     set({ checking: true, error: null, runtimeType: runtime });
 

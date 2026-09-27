@@ -135,6 +135,7 @@ import { createPluginNotificationEmitter } from './lib/notifications/emit-route.
 import { OpenChamberControlError } from './lib/openchamber-control/error.js';
 import { createFileOpenRequester } from './lib/openchamber-control/file-open.js';
 import { applyConnectAttemptTimeout } from './lib/network-defaults.js';
+import { closedSurface } from './geocode/closed-surface.js'; // GeoCode: see main
 
 // Background CLI launches enter here in a fresh process, without CLI defaults.
 applyConnectAttemptTimeout();
@@ -1900,6 +1901,7 @@ async function main(options = {}) {
   }
 
   const app = express();
+  app.use(closedSurface); // GeoCode: endpoints closed in the desktop app, see geocode/closed-surface.js
   const serverStartedAt = new Date().toISOString();
   const packagedClientOrigins = new Set([
     'openchamber-ui://app',
