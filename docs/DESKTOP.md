@@ -1,6 +1,6 @@
 # 桌面应用
 
-本文档说明 GeoCode 怎样把 OpenCode 与 OpenChamber 组装成一个应用:进程怎样组成,内核怎样托管与打包,应用对外的边界在哪里,本机上谁能访问它。
+本文档说明 GeoCode 怎样把 OpenCode 与 OpenChamber 组装成一个应用:进程怎样组成,内核怎样托管与打包,应用对外的边界在哪里,本机上谁能访问它,接受哪些环境变量。
 
 ## 1. 组成
 
@@ -41,23 +41,35 @@ GeoCode 是单机、单用户的应用,三类机制一律关闭:让其他设备�
 
 口令模式也让上游「没有口令就不能开隧道、不能监听非本机地址」的两道保险不再起作用,第 3 节对隧道的关闭与只监听 127.0.0.1 因此不能放开。已知的例外有三个:文件预览里的 HTML 以壳服务端的来源运行,地址里带着 60 秒有效的临时令牌,页面脚本能用它读取壳服务端可读的任意文件,这是上游的设计;CORS 放行 `localhost` 与 `127.0.0.1` 的任意端口,这些端口上的网页能跨域读取不要求令牌的接口,其中健康检查会返回内核的路径与最近的错误输出;与本机安装的 OpenChamber 共用数据目录(见 `DESIGN.md` 第 4 节)时,两者的令牌记录在同一个文件里,互相有效,同时运行时还会无锁地互相覆盖,可能让 GeoCode 的窗口转到重启提示,也可能恢复 OpenChamber 刚撤销的设备。校验令牌时还会写这个文件,写不进去(磁盘满、文件无权限)时所有请求都被拒绝。
 
-## 5. 实现与维护
+## 5. 环境变量
+
+GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环境里名字以 `OPENCODE_`、`OPENCHAMBER_`、`OTEL_`、`BUN_`、`ELECTRON_` 开头的变量,是内核、壳与两个运行时的设置:它们能把配置与数据改到别处、从指定路径加载程序、把数据发往别处(包括遥测)、打开未发布或调试用的功能,少数还会让内核起不来。打包出的应用不接受这些变量(挡不住的几个见本节末尾),按前缀认定,上游以后新增的同前缀变量也在内。其余变量是用户自己的环境,包括 `PATH`、语言、时区、代理、证书、SSH 与各种工具链的变量,照常交给内核、agent 执行的命令、MCP 与终端:agent 调用 conda、GDAL、PROJ 这些地理工具,靠的就是它们。
+
+用户环境从两处进入应用,两处都要清理。启动环境在主进程执行的第一段应用代码里清理,那时应用还没读过它,也还没写入自己的变量;这也让「重启应用」不会把上一次合并进来的变量带进新进程。登录 shell 的快照在并入主进程、交给壳服务端之前清理,只清快照,不碰主进程的环境,因为后台启动时这次合并发生在应用写入自己的变量之后。应用自己的同前缀变量(壳服务端的运行参数,给内核的口令、托管配置与回调地址,内核给子进程的变量)都在清理之后写入,不受影响。开发模式的启动脚本正是用这些变量传参数,所以规则只在打包出的应用里生效。
+
+代价有两处。上游只能用环境变量打开或调整的功能不再可用:尚未发布的 agent 记忆、内核的几个管理开关(不读项目配置、不联网获取模型目录、日志级别等)、壳的超时与上限(取上游默认值),内核的 OpenTelemetry 遥测也完全关闭;OpenCode 自家模型服务的密钥 `OPENCODE_API_KEY` 不再从环境识别,改在服务商页填写。agent 执行命令时新开的 shell 只重读 `~/.zshenv`,用户写在 `.zshrc` 里、同样以这些前缀开头的工具变量(例如 `ELECTRON_MIRROR`、`BUN_CONFIG_REGISTRY`、用户自己程序的 `OTEL_*`)在那里看不到,需要时写进 `~/.zshenv` 或工具自己的配置文件;应用内的终端会重读 `.zshrc`,不受影响。
+
+还有几处没有处理。其余模型服务的密钥仍从环境里自动识别,配置文件里的 `{env:名字}` 仍能读取任意变量,两者留到内核装配时决定。有几个 `ELECTRON_` 变量由 Electron 在应用代码运行之前读取,清理挡不住:`ELECTRON_RUN_AS_NODE` 让应用根本不执行自己的代码,`ELECTRON_DISABLE_SANDBOX` 关掉渲染进程的沙箱,`ELECTRON_ENABLE_LOGGING` 等输出 Chromium 的日志。它们只在从终端启动、或以 `launchctl setenv` 设置时出现在启动环境里,写在 `.zshrc` 里的来得太晚,不起作用;留到打包那一站处理,其中 `ELECTRON_RUN_AS_NODE` 能用 Electron fuses 关掉,但扩展服务与本地听写靠它启动子进程,要先改用 `utilityProcess`。Windows 上壳服务端自己用 PowerShell 读取用户环境,不经过这里的清理,双平台打包时要补上。代理变量只有内核认,壳不认,这是上游的行为,保持原样。
+
+## 6. 实现与维护
 
 本节的路径以 `desktop/packages/` 为起点。GeoCode 自己的代码放在各包的 `geocode/` 目录里;对上游的补丁怎样标记、怎样列出,见 `CONVENTIONS.md` 第 3.4 节。
 
-壳服务端的补丁多数以 `process.versions.electron` 判断是否在桌面应用里,以 `serve --stdio` 启动内核的补丁(`web/server/lib/opencode/lifecycle.js`)例外,对 OpenChamber 的所有运行方式都生效;界面以 `ui/src/geocode/surface.ts` 的 `isGeoCodeDesktop` 判断,设置页与搜索项以设置上下文的 `isDesktop` 判断。`electron:dev` 在 Electron 之外另起一个壳服务端,壳服务端的这类补丁、环境变量的清洗与访问控制在那里都不生效,验证要用 `electron:dev:bundled` 或打包出的应用。关闭接口与主机名检查各有测试,运行方法见 `DEVELOPMENT.md` 第 7 节。
+壳服务端的补丁多数以 `process.versions.electron` 判断是否在桌面应用里,以 `serve --stdio` 启动内核的补丁(`web/server/lib/opencode/lifecycle.js`)例外,对 OpenChamber 的所有运行方式都生效;界面以 `ui/src/geocode/surface.ts` 的 `isGeoCodeDesktop` 判断,设置页与搜索项以设置上下文的 `isDesktop` 判断。`electron:dev` 在 Electron 之外另起一个壳服务端,壳服务端的这类补丁与访问控制在那里不生效,验证要用 `electron:dev:bundled` 或打包出的应用;环境变量的清理只在打包出的应用里生效。关闭接口与主机名检查各有测试,运行方法见 `DEVELOPMENT.md` 第 7 节。
 
 关闭与访问控制依靠几份手写的清单,也依赖上游口令模式的行为,上游新增的内容不会自动被覆盖。合并 `chamber-upstream` 之后,重新推导并对照:
 
-- 关闭的接口(`web/server/geocode/closed-surface.js`):在壳服务端里找 `app.get`、`app.post` 等方法与 `app.use` 注册的路径,以及 `server.on('upgrade'` 的处理器,属于第 3 节机制的加进清单;新的 WebSocket 处理器在口令模式下要校验令牌。关闭的 IPC 命令(`electron/geocode/closed-commands.mjs`):`main.mjs` 里 `handleInvoke` 的命令,以及 `ipcMain.handle` 与 `ipcMain.on` 的频道。不接受的用户环境变量(`electron/geocode/inherited-env.mjs`):壳服务端 `web/server/lib/opencode/` 与 `main.mjs` 读取的 `process.env`。隐藏的设置(`ui/src/geocode/settings.ts`):`SETTINGS_PAGE_METADATA` 与 `SETTINGS_SEARCH_ITEMS`。自动外发:在壳服务端、界面与 `main.mjs` 里找 `openchamber.dev`、`github.com/openchamber` 等地址。
-- 唯一入口仍然唯一:推送只经 `web/server/lib/notifications/runtime.js` 的 `fanoutPush`,深链只经 `electron/main.mjs` 的 `handleDeepLinks`,窗口取令牌只经 `main.mjs` 的 `readDesktopLocalClientToken`,会话密钥只来自 `web/server/lib/ui-auth/ui-auth.js` 的 `getOrCreateJwtSecret` 与 `rotateJwtSecret`。
+- 关闭的接口(`web/server/geocode/closed-surface.js`):在壳服务端里找 `app.get`、`app.post` 等方法与 `app.use` 注册的路径,以及 `server.on('upgrade'` 的处理器,属于第 3 节机制的加进清单;新的 WebSocket 处理器在口令模式下要校验令牌。关闭的 IPC 命令(`electron/geocode/closed-commands.mjs`):`main.mjs` 里 `handleInvoke` 的命令,以及 `ipcMain.handle` 与 `ipcMain.on` 的频道。不接受的环境变量按前缀认定(`electron/geocode/inherited-env.mjs`),上游新增的同前缀变量自动在内,要找的是另一种前缀的配置变量,例如新引入的运行时或库自带的。隐藏的设置(`ui/src/geocode/settings.ts`):`SETTINGS_PAGE_METADATA` 与 `SETTINGS_SEARCH_ITEMS`。自动外发:在壳服务端、界面与 `main.mjs` 里找 `openchamber.dev`、`github.com/openchamber` 等地址。
+- 唯一入口仍然唯一:推送只经 `web/server/lib/notifications/runtime.js` 的 `fanoutPush`,深链只经 `electron/main.mjs` 的 `handleDeepLinks`,窗口取令牌只经 `main.mjs` 的 `readDesktopLocalClientToken`,会话密钥只来自 `web/server/lib/ui-auth/ui-auth.js` 的 `getOrCreateJwtSecret` 与 `rotateJwtSecret`。用户环境只从两处进入:启动环境在 `electron/early-startup.mjs` 的模块顶层清理,在它之前执行的代码都不能在加载时读写 `process.env`,包括它 import 的外部模块(打包时不内联、先于它执行,如 `@openchamber/web/server/lib/inherited-env.js`)与打包产物 `electron/dist-bundle/early-startup.mjs` 里排在它前面的内联代码;登录 shell 的快照由 `main.mjs` 的 `inheritUserShellEnv` 清理,壳服务端只经 `provideLoginShellEnvSnapshot` 拿到它,不自己再读登录 shell(Windows 除外)。
 - 上游的行为没有变:`createClient` 不传 `expiresAt` 时不过期;令牌不经渲染进程的命令行参数(`electron/early-startup.mjs` 的 `buildRendererAdditionalArguments`);`ui/src/components/auth/SessionAuthGate.tsx` 只在 `locked` 状态显示口令表单。
 - `web/server/lib/opencode/compatibility.js` 的 `MINIMUM_OPENCODE_VERSION` 不高于 `kernel/` 的版本,否则壳会拒绝安装包里的内核。
 
-## 6. 验收
+## 7. 验收
 
 在没有安装 OpenCode 的环境里,打包出的应用启动后可以直接对话,用的是 `kernel/` 构建的内核,即使 `PATH`、设置或环境变量指向别的 `opencode` 也一样;内核缺失时报错。正常退出与强制结束之后,都没有残留的内核进程;agent 执行的命令与应用内的终端都读不到内核的口令。
 
 设置与界面里没有远程、局域网、配对、隧道等入口,对应的接口与 IPC 命令被拒绝,路径换了大小写也一样,`openchamber://` 链接不被处理。与本机 OpenChamber 共用数据目录时,它设置里的局域网开关、界面口令、主机列表,以及数据目录里的推送订阅,都不起作用。运行期间,应用不自动向 OpenChamber 的服务器发出请求,以监视应用进程的对外连接来确认。
 
 不带令牌的 HTTP 请求与 WebSocket 连接(终端、事件流、听写等)都被拒绝,伪造的或 OpenChamber 签发的会话 cookie 不被接受,Host 不是 `127.0.0.1` 或 `localhost` 的 HTTP 请求被拒绝。窗口带着令牌时,对话、终端、文件预览、迷你聊天、内置浏览器与 agent 的工具回调都正常;令牌失效时显示重启提示,而不是登录页。
+
+打包出的应用从带着第 5 节那些前缀变量的环境启动(Electron 自己先读的几个 `ELECTRON_` 变量除外),或登录 shell 导出了它们,应用的行为都不变:内核照常启动(即使设了 `BUN_BE_BUN`、`OPENCODE_SSH_ASKPASS_PORT`),数据与配置留在原来的位置,内核与 agent 执行的命令里看不到这些变量,后台启动与内核重启之后也一样。其余变量与 `PATH` 照常到达内核与 agent 执行的命令。

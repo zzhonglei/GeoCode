@@ -26,6 +26,9 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createShellEnvironmentLoader } from './shell-environment.mjs';
 import { clearAppImageArgv0FromProcessEnv } from '@openchamber/web/server/lib/inherited-env.js';
+import { dropInheritedAppVariables } from './geocode/inherited-env.mjs'; // GeoCode: see below
+
+dropInheritedAppVariables(process.env); // GeoCode: must run before anything reads or writes process.env
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const isDev = process.env.OPENCHAMBER_ELECTRON_DEV === '1' || !app.isPackaged;

@@ -1207,7 +1207,7 @@ const mapUpdaterProgressEvent = (payload) => ({
 
 import { pathLooksUserConfigured, mergePathValues } from '@openchamber/web/server/lib/opencode/path-utils.js';
 import { provideLoginShellEnvSnapshot } from '@openchamber/web/server/lib/opencode/login-shell-env.js';
-import { dropIgnoredUserVariables } from './geocode/inherited-env.mjs'; // GeoCode: see inheritUserShellEnv
+import { dropInheritedAppVariables } from './geocode/inherited-env.mjs'; // GeoCode: see inheritUserShellEnv
 import { assertDesktopCommandOpen } from './geocode/closed-commands.mjs'; // GeoCode: see handleInvoke
 import { localClientToken, localServerPassword, mintLocalClientToken } from './geocode/local-access.mjs'; // GeoCode: see spawnLocalServer and readDesktopLocalClientToken
 
@@ -1217,8 +1217,8 @@ import { localClientToken, localServerPassword, mintLocalClientToken } from './g
 // subprocess to hand a custom env to.
 const inheritUserShellEnv = async () => {
   const shellEnv = await startShellEnvironmentProbe();
-  // GeoCode: the user's OpenCode and OpenChamber variables must not redirect the app to another kernel or host
-  dropIgnoredUserVariables(process.env, shellEnv);
+  // GeoCode: the snapshot only; process.env may already hold the app's own variables
+  dropInheritedAppVariables(shellEnv);
   // The server would otherwise snapshot the same shell again, synchronously,
   // on this thread. Windows keeps the server's own registry-based snapshot:
   // the desktop loader only knows PATH there.
