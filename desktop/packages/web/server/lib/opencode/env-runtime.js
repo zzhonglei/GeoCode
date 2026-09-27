@@ -370,6 +370,8 @@ export const createOpenCodeEnvRuntime = (deps) => {
   };
 
   const resolveOpencodeCliPath = () => {
+    // GeoCode: the desktop app runs only its bundled kernel, never one from the environment or PATH
+    if (process.versions.electron) return bundledOpenCodeCliFallback();
     const explicit = [
       process.env.OPENCODE_BINARY,
       process.env.OPENCODE_PATH,
@@ -843,6 +845,11 @@ export const createOpenCodeEnvRuntime = (deps) => {
   };
 
   const resolveManagedOpenCodeLaunchSpec = (opencodePath) => {
+    // --- GeoCode: without its bundled kernel the desktop app fails rather than run whatever `opencode` is on PATH ---
+    if (process.versions.electron && !opencodePath) {
+      throw new Error('The OpenCode kernel bundled with this app is missing.');
+    }
+    // --- /GeoCode ---
     const fallbackBinary = typeof opencodePath === 'string' && opencodePath.trim().length > 0
       ? opencodePath.trim()
       : 'opencode';
@@ -1040,6 +1047,8 @@ export const createOpenCodeEnvRuntime = (deps) => {
   };
 
   const applyOpencodeBinaryFromSettings = async (options = {}) => {
+    // GeoCode: the desktop app ignores a kernel path stored in settings
+    if (process.versions.electron) return null;
     const strict = options?.strict === true;
     try {
       const settings = await readSettingsFromDiskMigrated();

@@ -732,6 +732,8 @@ const buildStoredHostEntry = (entry) => {
 };
 
 const readDesktopHostsConfig = () => {
+  // GeoCode: the app only connects to its own local shell, whatever the settings file holds
+  return { hosts: [], defaultHostId: LOCAL_HOST_ID, initialHostChoiceCompleted: true };
   const root = readSettingsRoot();
   const hostsRaw = Array.isArray(root.desktopHosts) ? root.desktopHosts : [];
   const hosts = hostsRaw
@@ -1202,6 +1204,7 @@ const mapUpdaterProgressEvent = (payload) => ({
 
 import { pathLooksUserConfigured, mergePathValues } from '@openchamber/web/server/lib/opencode/path-utils.js';
 import { provideLoginShellEnvSnapshot } from '@openchamber/web/server/lib/opencode/login-shell-env.js';
+import { dropIgnoredUserVariables } from './geocode/inherited-env.mjs'; // GeoCode: see inheritUserShellEnv
 
 // Merge the user's login-shell env (PATH, etc.) into this process before we
 // import/start the server in-process. The server and its children (opencode
@@ -1209,6 +1212,8 @@ import { provideLoginShellEnvSnapshot } from '@openchamber/web/server/lib/openco
 // subprocess to hand a custom env to.
 const inheritUserShellEnv = async () => {
   const shellEnv = await startShellEnvironmentProbe();
+  // GeoCode: the user's OpenCode and OpenChamber variables must not redirect the app to another kernel or host
+  dropIgnoredUserVariables(process.env, shellEnv);
   // The server would otherwise snapshot the same shell again, synchronously,
   // on this thread. Windows keeps the server's own registry-based snapshot:
   // the desktop loader only knows PATH there.

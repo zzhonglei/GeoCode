@@ -37,7 +37,7 @@
     "build:web-assets": "node ./scripts/build-web-assets.mjs",
     "build": "bun -e \"process.exit(0)\"",
     "ensure:electron": "node ./scripts/ensure-electron.mjs",
-    "prepare:opencode-cli": "node ./scripts/prepare-opencode-cli.mjs",
+    "prepare:opencode-cli": "sh ../../../scripts/stage-kernel.sh",
     "verify:opencode-cli": "node ./scripts/verify-opencode-cli.mjs --staged",
     "verify:opencode-cli:packaged": "node ./scripts/verify-opencode-cli.mjs --packaged",
     "verify:linux-appimage": "node ./scripts/verify-linux-appimage.mjs",

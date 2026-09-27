@@ -33,7 +33,7 @@ Electron 主进程
 
 ## 3. 内核的构建与打包
 
-- 安装包里的内核由本仓库的 `kernel/` 构建,是单文件可执行程序,与 `kernel/` 的版本一致。上游 OpenChamber 在打包时从 npm 下载 OpenCode 发布的内核,GeoCode 不用这一步,否则对内核的修改进不了安装包。
+- 安装包里的内核由本仓库的 `kernel/` 构建,是单文件可执行程序,与 `kernel/` 的版本一致。上游 OpenChamber 在打包时从 npm 下载 OpenCode 发布的内核,GeoCode 不用这一步,否则对内核的修改进不了安装包。构建与暂存的方法见 `DEVELOPMENT.md`;暂存脚本是 POSIX sh,只有 macOS 的打包流程能用。
 - 壳只使用安装包里的内核:不读取设置里的内核路径,不读取环境变量指定的内核,不在 `PATH` 里查找。内核缺失或启动失败时报错,不引导用户安装 OpenCode。
 - 主机只有本机,所以启动时不出现上游「选择本地或远程」的首次引导。
 
@@ -49,7 +49,32 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 
 模型服务的连接(各家 LLM 的接口)是内核的正常工作,不在此列。OpenChamber 其余的集成功能(GitHub、Linear、技能目录、模型目录、内置浏览器等)的去留,另行决定。
 
-## 5. 验收
+## 5. 实现
+
+本节的路径以仓库根目录为起点。
+
+补丁生效的范围:
+
+- 壳服务端的补丁以 `process.versions.electron` 判断是否在桌面应用里(壳服务端在 Electron 主进程内运行);Electron 主进程的补丁本来只在桌面应用里运行。
+- 以 `serve --stdio` 启动内核的补丁对 OpenChamber 的所有运行方式都生效,包括网页服务:内核随壳服务端退出,就绪行是 JSON。
+- `electron:dev` 在 Electron 之外另起一个壳服务端,`process.versions.electron` 在那里不成立,壳服务端的补丁都不生效;环境变量的清洗只在 Electron 主进程里做,那个壳服务端仍会读用户导出的变量。验证用 `electron:dev:bundled` 或打包出的应用。
+
+### 5.1 内核
+
+- `desktop/packages/electron/package.json` 的 `prepare:opencode-cli` 调用 `scripts/stage-kernel.sh`,打包流程因此取 `kernel/` 构建的内核。开发启动时,`electron-dev.mjs` 发现暂存的内核,以 `OPENCHAMBER_BUNDLED_OPENCODE_CLI_DIR` 交给壳。上游的 `verify:opencode-cli` 用 `opencodeCli.version`(上游固定的 npm 发布版本)核对暂存的内核,与 `kernel/` 的版本不符,不适用。
+- `desktop/packages/web/server/lib/opencode/lifecycle.js` 的 `createManagedOpenCodeServerProcess` 以 `serve --stdio` 启动内核,标准输入保持为管道;就绪行由 `desktop/packages/web/server/geocode/stdio-kernel.js` 解析。`startOpenCodeOnce` 在内核的环境里写入 `OPENCODE_PASSWORD`。
+- `desktop/packages/web/server/lib/opencode/env-runtime.js`:`resolveOpencodeCliPath` 只返回安装包里的内核,`applyOpencodeBinaryFromSettings` 不读设置里的路径,`resolveManagedOpenCodeLaunchSpec` 在没有内核路径时报错,而不是退回 `PATH` 上的 `opencode`。
+- `desktop/packages/electron/geocode/inherited-env.mjs` 在 `main.mjs` 的 `inheritUserShellEnv` 里,从进程环境与登录 shell 的环境快照中删去会把壳指向其他内核、其他主机或其他口令的变量(`OPENCODE_BINARY`、`OPENCODE_HOST`、`OPENCHAMBER_SERVER_URL`、`OPENCODE_PASSWORD` 等);打包出的应用还删去 `OPENCHAMBER_BUNDLED_OPENCODE_CLI_DIR`。
+- `main.mjs` 的 `readDesktopHostsConfig` 只返回本机,不读设置里的主机列表。
+
+### 5.2 合并上游后的核对
+
+内核的选择依靠手写的清单,上游新增的变量不会自动被覆盖。合并 `chamber-upstream` 之后,按下面的方法重新推导,与现状对照:
+
+- `inherited-env.mjs` 的变量:`env-config.js`、`env-runtime.js` 的 `resolveOpencodeCliPath` 与 `bundledOpenCodeCliCandidates`、`hmr-state-runtime.js`、`auth-state-runtime.js`,以及 `main.mjs`(`resolveInitialUrl`、`shouldSkipLocalServer` 等)读取的环境变量。
+- `desktop/packages/web/server/lib/opencode/compatibility.js` 的 `MINIMUM_OPENCODE_VERSION` 不能高于 `kernel/` 的版本,否则壳会拒绝安装包里的内核。
+
+## 6. 验收
 
 - 在没有安装 OpenCode 的环境里,打包出的应用启动后可以直接对话。
 - 使用的内核是 `kernel/` 构建的那一个:即使 `PATH` 里有其他 `opencode`、设置里写了其他内核路径、环境变量指定了其他内核,也不例外。安装包里的内核缺失时报错,不运行其他 `opencode`。

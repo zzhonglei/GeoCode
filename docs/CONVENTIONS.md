@@ -112,7 +112,7 @@ git diff --name-status chamber-upstream main:desktop
 | `docs/DESIGN.md` | 设计大纲:定位、基础、原则、待定问题与路线 |
 | `docs/CONVENTIONS.md` | 怎么写代码、改上游、测试与检查、写文档、提交 |
 | `docs/UPSTREAM.md` | 两个上游怎么导入与升级 |
-| `docs/DEVELOPMENT.md` | 怎么安装、构建、运行 |
+| `docs/DEVELOPMENT.md` | 怎么安装、构建、运行、打包 |
 | `docs/DESKTOP.md` | 桌面应用:进程组成、内核的托管与打包、对外边界 |
 
 各部分的设计文档(内核、地理内核、壳等)在开始做那一部分时建立。

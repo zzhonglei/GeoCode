@@ -6,6 +6,7 @@ import { registerManagedProcess, unregisterManagedProcess, reapOrphanedProcesses
 import { applyProviderEnvAliases } from './provider-env-aliases.js';
 import { recordStartupPerformance } from './startup-performance.js';
 import { topUpV1Migration } from './v1-migration-topup.js';
+import { readStdioReadyUrl } from '../../geocode/stdio-kernel.js'; // GeoCode: see createManagedOpenCodeServerProcess
 
 const parsePositiveInt = (value, fallback) => {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -393,7 +394,8 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
   const createManagedOpenCodeServerProcess = async ({ resolvedBinary, hostname, port, timeout, cwd, env: processEnv, shellEnvKeysCount = 0 }) => {
     let binary = (resolvedBinary || process.env.OPENCODE_BINARY || 'opencode').trim() || 'opencode';
     const sourceBinary = binary;
-    let args = ['serve', '--hostname', hostname, '--port', String(port)];
+    // GeoCode: a private kernel that exits once this process closes its stdin
+    let args = ['serve', '--stdio', '--hostname', hostname, '--port', String(port)];
     let launchWrapperType = null;
 
     if (process.platform === 'win32' && state.useWslForOpencode) {
@@ -434,7 +436,8 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
       env: processEnv,
       detached: process.platform !== 'win32',
       windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      // GeoCode: stdin stays open for the kernel's lifetime; see the args above
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     let runtimeStderrTail = '';
     let runtimeStderrAttached = false;
@@ -506,6 +509,14 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
         stdout += chunk.toString();
         const lines = stdout.split('\n');
         for (const line of lines) {
+          // --- GeoCode: `serve --stdio` reports readiness as a JSON line ---
+          const stdioUrl = readStdioReadyUrl(line);
+          if (stdioUrl) {
+            attachRuntimeStderrCapture();
+            finish(resolve, stdioUrl);
+            return;
+          }
+          // --- /GeoCode ---
           // OpenCode 2.x prints `server listening on http://host:port` with no
           // "opencode" prefix.
           const match = line.match(/server listening on\s+(https?:\/\/\S+)/);
@@ -776,6 +787,8 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
           ...managedOpenCodeEnv,
           PATH: envPath,
           OPENCODE_SERVER_PASSWORD: openCodePassword,
+          // GeoCode: the kernel prefers this name, so it must carry the shell's password
+          OPENCODE_PASSWORD: openCodePassword,
         })),
       });
 
