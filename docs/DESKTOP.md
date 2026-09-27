@@ -1,6 +1,6 @@
 # 桌面应用
 
-本文档说明 GeoCode 怎样把 OpenCode 与 OpenChamber 组装成一个应用:由哪些进程组成、内核怎样托管、内核怎样构建与打包、应用对外的边界在哪里。
+本文档说明 GeoCode 怎样把 OpenCode 与 OpenChamber 组装成一个应用:由哪些进程组成、内核怎样托管、内核怎样构建与打包、应用对外的边界在哪里、本机上谁能访问应用。
 
 ## 1. 组成与进程
 
@@ -14,7 +14,7 @@ Electron 主进程
 ```
 
 - 界面只与壳服务端通信。壳服务端把内核的接口代理给界面,并在转发时附上内核的口令;界面拿不到这个口令。
-- 两个服务都只监听 127.0.0.1。
+- 两个服务都只监听 127.0.0.1。壳服务端只接受 GeoCode 自己的窗口(见第 5 节)。
 
 ## 2. 内核的托管
 
@@ -41,15 +41,27 @@ Electron 主进程
 
 GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以及连到本机内核以外主机的机制,一律关闭:
 
-- 入站:局域网访问、界面口令、设备配对与二维码、Private Relay、公网隧道(cloudflared、ngrok)。dev-tunnel 与设备令牌只能经这些入口从其他设备使用,随之失效;设备令牌的接口 `/api/client-auth/clients` 保留。
+- 入站:局域网访问、用户设置的界面口令、设备配对与二维码、Private Relay、公网隧道(cloudflared、ngrok)。dev-tunnel 与设备令牌只能经这些入口从其他设备使用,随之失效;设备令牌的接口 `/api/client-auth/clients` 保留。
 - 出站:多主机与主机切换、SSH 远程实例、连接外部内核、安装与升级 OpenCode、OpenChamber 的更新检查与使用上报、推送(网页推送与 APNs)。
 - `openchamber://` 深链:不注册,也不处理。
 
-移动端、VS Code 扩展、独立的网页服务与命令行不构建、不打包。关闭的方式遵循 `DESIGN.md` 的「边界靠装配,不靠删除」。
+移动端、VS Code 扩展、独立的网页服务(包括安装为 PWA)与 `openchamber` 命令行不构建、不打包;用户只通过 GeoCode 的窗口操作应用。关闭的方式遵循 `DESIGN.md` 的「边界靠装配,不靠删除」。
 
 模型服务的连接(各家 LLM 的接口)是内核的正常工作,不在此列。OpenChamber 其余的集成功能(GitHub、Linear、技能目录、模型目录、内置浏览器等)的去留,另行决定。
 
-## 5. 实现
+## 5. 本机访问控制
+
+壳服务端只监听 127.0.0.1,但本机的任何程序都能连上它,浏览器里的网页也能:WebSocket 不受跨域限制,DNS 重绑定还能让网页以同源的身份发请求。壳服务端转发时替调用方附上内核的口令,所以能调用壳服务端,就能让 agent 以用户的身份执行命令、读写文件。
+
+- 壳服务端只接受 GeoCode 自己的窗口:每个 HTTP 请求与 WebSocket 连接都要出示令牌,没有令牌的一律拒绝。
+- 令牌由主进程在每次启动时签发,只存在于主进程与窗口的内存里,磁盘上只有它的哈希;下次启动换新,旧的随之作废。窗口以外没有取得令牌的途径:用户不设置口令,也不登录。
+- 壳服务端只接受 Host 为 `127.0.0.1` 或 `localhost` 的 HTTP 请求,DNS 重绑定的网页连不要求令牌的接口也读不到。
+- 令牌失效时(例如数据目录里的令牌记录被删,或启动时签发失败),界面显示错误并提示重启应用,不显示上游的口令登录页。
+- 内核的口令只交给内核,不留在壳服务端的环境变量里:壳启动的终端与其他子进程读不到它,不能绕过壳直接访问内核。
+
+防护的对象是浏览器里的网页、其他用户与沙箱内的程序、扫描本机端口的脚本。以用户身份运行、不受沙箱限制的程序不在此列:它本来就能修改用户的文件与配置。
+
+## 6. 实现
 
 本节的路径以仓库根目录为起点。
 
@@ -60,7 +72,7 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 - 以 `serve --stdio` 启动内核的补丁对 OpenChamber 的所有运行方式都生效,包括网页服务:内核随壳服务端退出,就绪行是 JSON。
 - `electron:dev` 在 Electron 之外另起一个壳服务端,`process.versions.electron` 在那里不成立,壳服务端的补丁都不生效;环境变量的清洗只在 Electron 主进程里做,那个壳服务端仍会读用户导出的变量。验证用 `electron:dev:bundled` 或打包出的应用。
 
-### 5.1 内核
+### 6.1 内核
 
 - `desktop/packages/electron/package.json` 的 `prepare:opencode-cli` 调用 `scripts/stage-kernel.sh`,打包流程因此取 `kernel/` 构建的内核。开发启动时,`electron-dev.mjs` 发现暂存的内核,以 `OPENCHAMBER_BUNDLED_OPENCODE_CLI_DIR` 交给壳。上游的 `verify:opencode-cli` 用 `opencodeCli.version`(上游固定的 npm 发布版本)核对暂存的内核,与 `kernel/` 的版本不符,不适用。
 - `desktop/packages/web/server/lib/opencode/lifecycle.js` 的 `createManagedOpenCodeServerProcess` 以 `serve --stdio` 启动内核,标准输入保持为管道;就绪行由 `desktop/packages/web/server/geocode/stdio-kernel.js` 解析。`startOpenCodeOnce` 在内核的环境里写入 `OPENCODE_PASSWORD`。
@@ -68,7 +80,7 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 - `desktop/packages/electron/geocode/inherited-env.mjs` 在 `main.mjs` 的 `inheritUserShellEnv` 里,从进程环境与登录 shell 的环境快照中删去会把壳指向其他内核、其他主机或其他口令的变量(`OPENCODE_BINARY`、`OPENCODE_HOST`、`OPENCHAMBER_SERVER_URL`、`OPENCODE_PASSWORD` 等);打包出的应用还删去 `OPENCHAMBER_BUNDLED_OPENCODE_CLI_DIR`。
 - `main.mjs` 的 `readDesktopHostsConfig` 只返回本机,不读设置里的主机列表。
 
-### 5.2 对外边界
+### 6.2 对外边界
 
 - 壳服务端(`desktop/packages/web/server`):
   - `geocode/closed-surface.js` 在 `index.js` 的 `main` 里、`express()` 创建后立即挂载,对配对与连接候选、Private Relay、隧道与隧道引导(`/connect`)、推送订阅、Passkey、OpenChamber 更新、OpenCode 的升级检查、升级与安装的路径回 404。这些路径必须由壳自己回答,因为未匹配的 `/api` 路径会落到内核代理。比较不区分大小写,与 Express 的路由一致。`geocode/closed-surface.test.js` 验证大小写与结尾斜杠的变体也被拦下,在 `desktop/packages/web` 里以 `bun run test -- server/geocode/closed-surface.test.js` 运行。
@@ -85,7 +97,7 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
   - 自动发出的请求在源头停止:`useUpdateStore.checkForUpdates`、`warmDesktopHostStatuses`、`useDesktopSshStore.load`。`OpenCodeUpdateToast` 仍会向已关闭的升级检查接口请求至多三次,拿到 404 后放弃。
   - About 对话框读的是已关闭的升级检查接口,所以不显示内核版本。
 
-### 5.3 合并上游后的核对
+### 6.3 合并上游后的核对
 
 内核的选择与对外的关闭都依靠手写的清单与唯一入口,上游新增的变量、入口与请求不会自动被覆盖。合并 `chamber-upstream` 之后,按下面的方法重新推导,与现状对照:
 
@@ -97,7 +109,7 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 - 新增的自动外发:在壳服务端、界面与 `main.mjs` 里找 `openchamber.dev`、`github.com/openchamber` 等 OpenChamber 的地址,看有没有不经用户操作就发出的请求。
 - `desktop/packages/web/server/lib/opencode/compatibility.js` 的 `MINIMUM_OPENCODE_VERSION` 不能高于 `kernel/` 的版本,否则壳会拒绝安装包里的内核。
 
-## 6. 验收
+## 7. 验收
 
 - 在没有安装 OpenCode 的环境里,打包出的应用启动后可以直接对话。
 - 使用的内核是 `kernel/` 构建的那一个:即使 `PATH` 里有其他 `opencode`、设置里写了其他内核路径、环境变量指定了其他内核,也不例外。安装包里的内核缺失时报错,不运行其他 `opencode`。
@@ -106,3 +118,7 @@ GeoCode 是单机、单用户的应用。让其他设备连进来的机制,以�
 - 设置与界面里没有远程、局域网、配对、隧道等入口;对应的接口与 IPC 命令被拒绝,路径换了大小写也一样;`openchamber://` 链接不被处理。
 - 与本机安装的 OpenChamber 共用数据时,它的设置里的局域网开关、界面口令、主机列表,以及数据目录里的推送订阅,都不起作用。
 - 运行期间,应用不自动向 OpenChamber 的服务器发出请求,以监视应用进程的对外连接来确认。用户主动使用的集成(如 Linear 的授权)随集成的去留另行决定。
+- 不带令牌的 HTTP 请求与 WebSocket 连接(终端、事件流、听写等)都被拒绝,会话 cookie(伪造的,或 OpenChamber 签发的)也不被接受;Host 不是 `127.0.0.1`、`localhost` 的 HTTP 请求被拒绝。
+- 窗口带着令牌时,对话的流式输出、终端、文件与图片预览、迷你聊天、内置浏览器、agent 的工具回调都正常。
+- 令牌失效时显示错误页,不出现口令登录页。
+- 应用内的终端读不到内核的口令。
