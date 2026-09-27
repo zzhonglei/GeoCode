@@ -22,7 +22,7 @@ GeoCode 建在两个开源项目之上:
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 设计大纲:定位、基础、原则、待定问题与路线 |
 | [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) | 开发规范:写代码、改上游代码、测试、文档与提交 |
 | [`docs/UPSTREAM.md`](docs/UPSTREAM.md) | 两个上游怎么导入与升级 |
-| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | 安装、构建、运行与打包 |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | 安装、构建、运行、打包与检查 |
 | [`docs/DESKTOP.md`](docs/DESKTOP.md) | 桌面应用:进程组成、内核的托管与打包、对外边界、本机访问控制 |
 
 ## 许可
