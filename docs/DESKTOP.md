@@ -57,11 +57,14 @@ Linear 集成关掉了:它把会话接到软件团队的任务管理上,地理�
 
 界面语言只提供英文、简体中文与繁体中文,GeoCode 自己的界面文字只写这三种;其他语言的翻译留在源码里,以前选过的退回英文,导读的撰写语言也只在这三种里选。
 
-### 4.4 尚未关闭的
+### 4.4 隔离空间
 
-OpenChamber 还在开发一个「隔离空间」功能:用 Docker 为项目起一个容器,在容器里另跑一个服务端,把这个项目的请求交给它处理。GeoCode 不需要它。它默认关闭,上游也藏起了设置里的开关,但设置文件里的一个键或一个接口仍能把它打开;打开后,发往空间的请求由容器里的服务端处理,第 3 节与本节关掉的接口在那里都不起作用。
+OpenChamber 还在开发一个「隔离空间」功能:用 Docker 为项目起一个容器,在容器里另跑一个服务端,把这个项目的请求交给它处理。GeoCode 不需要它,而且它一打开,发往空间的请求就由容器里的服务端处理,第 3、4 节关掉的接口在那里都不起作用。上游默认关着它,也藏起了设置里的开关,但设置文件里的一个键或一个接口仍能把它打开。GeoCode 把这两条路都堵上:设置文件里即使开着,应用也不建空间、不调用 Docker,开关与空间的接口都被拒绝。
+
+### 4.5 尚未关闭的
 
 内核自己仍会加载外部来源的插件与命令:用户与项目配置里列出的插件、项目目录往上各级 `.opencode/` 里的插件与命令、全局配置目录里的插件,以及 npm 插件包(加载时联网安装)。插件是在内核进程里运行的代码,命令模板里的 `` !`命令` `` 在展开时直接执行 shell,都不经权限确认,下载来的项目也能带上它们。GeoCode 只加载内置的与自己注册的插件,这一层留到内核装配时关掉。
+
 ## 5. 本机访问控制
 
 只监听 127.0.0.1 挡不住本机:任何程序都连得上壳服务端,浏览器里的网页也能,因为 WebSocket 不受跨域限制,DNS 重绑定还能让网页以同源的身份发请求。而壳服务端转发时替调用方附上内核的口令,能调用它,就能让 agent 以用户的身份执行命令、读写文件。防护的对象是浏览器里的网页、其他用户与沙箱内的程序、扫描本机端口的脚本。以用户身份运行、不受沙箱限制的程序不在此列,它本来就能修改用户的文件与配置。
@@ -100,6 +103,7 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 - 魔法提示词:改写只经 `/api/magic-prompts` 读写,这组接口关闭;界面读改写只经 `ui/src/lib/magicPrompts.ts` 的 `fetchMagicPromptOverrides`,桌面应用里直接返回没有改写,不发请求。
 - 代码片段:壳服务端的片段都经 `web/server/lib/opencode/snippets.js` 的 `loadSnippetRegistry` 读取(界面的展开、计划任务、会话接口的展开都经它),桌面应用里为空,`/api/config/snippets` 关闭;界面的 `#` 选择器有三处触发(在界面里找 `SnippetAutocomplete` 的使用处),`ui/src/components/chat/composer/language/triggers.ts`、`ui/src/components/multirun/MultiRunLauncher.tsx` 与 `ui/src/components/session/ScheduledTaskEditorDialog.tsx` 的 `updateAutocompleteState`,发送前的展开只经 `ui/src/stores/useSnippetsStore.ts` 的 `expandText`,桌面应用里都不起作用。
 - 路由:界面的路由入口(设置页、搜索项、命令面板、Auto 选项)都看 `routingFeatureAvailable`,它由 `web/server/lib/opencode/settings-helpers.js` 下发,桌面应用里为假;在界面里找 `routingFeatureAvailable` 的读取处;壳服务端的路由逻辑(Auto 的解析、安全网)都经 `web/server/lib/routing/store.js` 的 `readConfig` 读配置,桌面应用里一律得到默认的关闭状态,新代码若直接读 `routing.json`(`routingConfigPath`),就绕过了它;`/api/routing` 关闭。
+- 隔离空间:空间的一切行为都挂在 `web/server/index.js` 的 `spacesHost` 上(请求中间件、WebSocket 升级、会话列表的合并、目录的拒绝)。在 `index.js` 里找 `spacesHost` 的赋值处:启动时读 `isolatedSpacesEnabled` 后调用 `buildSpacesHost`,这一处在桌面应用里跳过;开关接口经 `createSwitchController` 的 `setHost`,开关所在的 `/api/openchamber/spaces` 与发往空间的 `/api/spaces` 关闭。新代码若不经 `spacesHost` 直接用 `web/server/lib/spaces/` 起空间或调用 Docker,就绕过了这层。设置里的开关现在由上游 `ui/src/lib/spaces/release.ts` 的 `ISOLATED_SPACES_RELEASED` 藏着,它变真之后,开关的设置行与搜索项要加进隐藏的设置。
 - 用量的服务商(`ui/src/geocode/quota.ts` 与 `web/server/geocode/closed-quota.js`,两份要一致):界面的 `ui/src/lib/quota/providers/index.ts` 的 `QUOTA_PROVIDERS`,壳服务端的 `web/server/lib/quota/providers/index.js` 的 `registry` 与 `web/server/lib/quota/credentials/providers.js` 的 `normalizers`;上游新增的服务商要读别的应用的凭据时,加进两份清单;`web/server/lib/quota/index.js` 还直接导出 `fetchClaudeQuota`、`fetchCursorQuota`,现在没有调用者,以后有了会绕过 `registry`。
 - 自动外发:在壳服务端、界面与 `main.mjs` 里找 `openchamber.dev`、`github.com/openchamber` 等地址。
 - 唯一入口仍然唯一:推送只经 `web/server/lib/notifications/runtime.js` 的 `fanoutPush`,深链只经 `electron/main.mjs` 的 `handleDeepLinks`,窗口取令牌只经 `main.mjs` 的 `readDesktopLocalClientToken`,会话密钥只来自 `web/server/lib/ui-auth/ui-auth.js` 的 `getOrCreateJwtSecret` 与 `rotateJwtSecret`。用户环境只从两处进入:启动环境在 `electron/early-startup.mjs` 的模块顶层清理,在它之前执行的代码都不能在加载时读写 `process.env`,包括它 import 的外部模块(打包时不内联、先于它执行,如 `@openchamber/web/server/lib/inherited-env.js`)与打包产物 `electron/dist-bundle/early-startup.mjs` 里排在它前面的内联代码;登录 shell 的快照由 `main.mjs` 的 `inheritUserShellEnv` 清理,壳服务端只经 `provideLoginShellEnvSnapshot` 拿到它,不自己再读登录 shell(Windows 除外)。
@@ -113,6 +117,7 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 对外边界与屏蔽的上游功能:
 
 - 设置与界面里没有远程、局域网、配对、隧道等入口(侧栏里嵌入的会话聊天也一样),对应的接口与 IPC 命令被拒绝,路径换了大小写也一样;`openchamber://` 链接不被处理。
+- 设置文件里开着隔离空间时,应用也不建空间、不调用 Docker,开关与空间的接口被拒绝。
 - 设置与界面里没有 Linear、扩展、路由、插件、魔法提示词与代码片段的入口;远程实例、隧道、扩展、插件、魔法提示词与代码片段页即使是上次停留的页面或链接指向的页面,打开设置时也显示「通用」。
 - 数据目录里已经装好的扩展既不显示也不运行;开着路由的 `routing.json`、`magic-prompts.json` 与全局和项目的片段文件都不起作用:模型选择器里不提供 Auto,不向 Jev 发请求,输入框里的 `#名字` 不弹出选择器、不展开。
 - 生成提交信息、解决冲突、斜杠命令与新聊天的起始按钮照常可用。

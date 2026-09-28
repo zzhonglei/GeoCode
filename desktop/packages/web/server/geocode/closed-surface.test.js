@@ -15,7 +15,7 @@ describe('GeoCode: closedSurface', () => {
     process.versions.electron = 'test';
     const app = express();
     app.use(closedSurface);
-    for (const route of ['/api/openchamber/update-check', '/api/push/subscribe', '/connect', '/api/client-auth/clients', '/api/push/visibility', '/api/plugin', '/api/plugin/check', '/api/magic-prompts/:id', '/api/config/snippets/expand']) {
+    for (const route of ['/api/openchamber/update-check', '/api/push/subscribe', '/connect', '/api/client-auth/clients', '/api/push/visibility', '/api/plugin', '/api/plugin/check', '/api/magic-prompts/:id', '/api/config/snippets/expand', '/api/openchamber/spaces/switch', '/api/spaces/:id/session']) {
       app.all(route, (_req, res) => res.status(200).send('upstream'));
     }
     server = http.createServer(app);
@@ -31,7 +31,7 @@ describe('GeoCode: closedSurface', () => {
   const statusOf = async (path) => (await fetch(`${baseUrl}${path}`)).status;
 
   it('refuses closed endpoints in any case and with a trailing slash', async () => {
-    for (const path of ['/api/openchamber/update-check', '/API/OpenChamber/Update-Check', '/api/push/subscribe/', '/CONNECT', '/API/Client-Auth/Clients', '/API/Plugin/Check', '/API/Magic-Prompts/git.commit.generate.visible', '/API/Config/Snippets/Expand']) {
+    for (const path of ['/api/openchamber/update-check', '/API/OpenChamber/Update-Check', '/api/push/subscribe/', '/CONNECT', '/API/Client-Auth/Clients', '/API/Plugin/Check', '/API/Magic-Prompts/git.commit.generate.visible', '/API/Config/Snippets/Expand', '/API/OpenChamber/Spaces/Switch', '/API/Spaces/space-1/session']) {
       expect(await statusOf(path)).toBe(404);
     }
   });

@@ -1891,7 +1891,7 @@ async function main(options = {}) {
     },
   });
   const startupSettings = await readSettingsFromDiskMigrated().catch(() => null);
-  if (startupSettings?.isolatedSpacesEnabled === true) {
+  if (startupSettings?.isolatedSpacesEnabled === true && !process.versions.electron) { // GeoCode: the desktop app never builds the spaces host; the switch route is closed, see geocode/closed-surface.js
     try {
       spacesHost = buildSpacesHost();
     } catch (error) {
