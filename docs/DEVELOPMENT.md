@@ -66,11 +66,11 @@ CSC_IDENTITY_AUTO_DISCOVERY=false bun run package -- --dir -c.mac.identity=- -c.
 
 `package` 依次构建界面、暂存内核(第 4 节)、打包主进程、重建原生模块,再调用 electron-builder。`--dir` 只生成应用目录 `dist/mac-arm64/<应用名>.app`,不生成 dmg 与 zip;`-c.mac.identity=-` 用临时签名(ad-hoc),不需要开发者证书;`-c.mac.notarize=false` 不公证。不要单独运行上游的 `verify:opencode-cli`:它按上游固定的 npm 版本核对暂存的内核,与 `kernel/` 的版本不符。
 
-在沙箱里运行打包出的应用,直接执行 `.app/Contents/MacOS/` 下的可执行文件,带上第 5 节的 `HOME`,Electron 的配置目录改用参数 `--user-data-dir=<沙箱里的目录>` 指定:打包出的应用不接受 `OPENCHAMBER_` 开头的环境变量(见 `DESKTOP.md` 第 5 节)。这个参数来自 Chromium,Electron 的文档没有列出,升级 Electron 后要确认它仍然有效。再加上 `--remote-debugging-port=<端口>`,就能以 DevTools 协议从外部检查各个窗口,例如读取页面状态、记录网络请求,或取出窗口的令牌来测试壳服务端的接口。
+在沙箱里运行打包出的应用,直接执行 `.app/Contents/MacOS/` 下的可执行文件,带上第 5 节的 `HOME`,Electron 的配置目录改用参数 `--user-data-dir=<沙箱里的目录>` 指定:打包出的应用不接受 `OPENCHAMBER_` 开头的环境变量(见 `DESKTOP.md` 第 6 节)。这个参数来自 Chromium,Electron 的文档没有列出,升级 Electron 后要确认它仍然有效。再加上 `--remote-debugging-port=<端口>`,就能以 DevTools 协议从外部检查各个窗口,例如读取页面状态、记录网络请求,或取出窗口的令牌来测试壳服务端的接口。
 
 ## 7. 检查与测试
 
-类型检查与 lint 的命令见 `CONVENTIONS.md` 第 2 节,测试写什么、怎么证明它会失败见第 4 节。`desktop/` 里 GeoCode 自己的测试放在各包的 `geocode/` 目录,壳服务端的那些在 `desktop/packages/web` 里以 `bun run test -- server/geocode/` 运行;`kernel/` 里的用例怎样命名、怎样单独运行,见 `CONVENTIONS.md` 第 4 节。
+类型检查与 lint 的命令见 `CONVENTIONS.md` 第 2 节,测试写什么、怎么证明它会失败见第 4 节。`desktop/` 里 GeoCode 自己的测试放在各包的 `geocode/` 目录,壳服务端的那些在 `desktop/packages/web` 里以 `bun run test -- server/geocode/` 运行。上游的测试不保证只写临时目录,`web` 包里就有测试会在主目录下建 OpenCode 与 OpenChamber 的目录、写 npm 缓存,所以跑上游测试时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉,不要设成空值,否则 Bun 会把转译缓存写到当前目录下。`kernel/` 里的用例怎样命名、怎样单独运行,见 `CONVENTIONS.md` 第 4 节。
 
 ## 8. 写入检测
 

@@ -1,6 +1,6 @@
 # 桌面应用
 
-本文档说明 GeoCode 怎样把 OpenCode 与 OpenChamber 组装成一个应用:进程怎样组成,内核怎样托管与打包,应用对外的边界在哪里,本机上谁能访问它,接受哪些环境变量。
+本文档说明 GeoCode 怎样把 OpenCode 与 OpenChamber 组装成一个应用:进程怎样组成,内核怎样托管与打包,应用对外的边界在哪里,屏蔽了哪些上游功能,本机上谁能访问它,接受哪些环境变量。
 
 ## 1. 组成
 
@@ -13,7 +13,7 @@ Electron 主进程
  └─ 界面(渲染进程)── HTTP、SSE、WebSocket ──→ 壳服务端
 ```
 
-界面只与壳服务端通信,壳服务端把内核的接口代理给界面,转发时附上内核的口令,界面拿不到这个口令。两个服务都只监听 127.0.0.1,壳服务端只接受 GeoCode 自己的窗口(第 4 节)。
+界面只与壳服务端通信,壳服务端把内核的接口代理给界面,转发时附上内核的口令,界面拿不到这个口令。两个服务都只监听 127.0.0.1,壳服务端只接受 GeoCode 自己的窗口(第 5 节)。
 
 ## 2. 内核
 
@@ -31,25 +31,38 @@ GeoCode 是单机、单用户的应用,三类机制一律关闭:让其他设备�
 
 模型服务的连接是内核的正常工作,不在此列。
 
-对外机制之外,GeoCode 用不到的上游功能也按同样的方式关掉,其余上游功能的去留见 `DESIGN.md` 第 4 节。Linear 集成已经关掉:它把会话接到软件团队的任务管理上,地理数据处理用不到,授权还要经过 OpenChamber 的云端中转。关掉的除了连接 Linear 的设置,还有会话完成或出错时往关联 Issue 留言,以及扩展借用这份 Linear 登录。
+## 4. 屏蔽的上游功能
 
-OpenChamber 的扩展也关掉了。扩展从文件夹、压缩包或 git 地址安装,能往界面里加面板、菜单与命令,还能在本机起一个服务进程,这个进程没有沙箱,拥有用户的全部权限。它让第三方代码从界面这一侧进入应用,地理用户用不到,也不该随手装。设置里没有扩展页,也没有把内置浏览器交给扩展的选项,扩展装不进来;数据目录里已经装好的扩展,在 GeoCode 里既不显示也不运行。
+对外机制之外,GeoCode 用不到的上游功能也按同样的方式屏蔽:不启用、不显示,源码保留,入口在壳服务端、主进程与界面三层分别关掉。取舍逐项决定,贯穿其中的有两条:不让第三方代码与外部文件改变应用的行为,不在用户没有需要时把对话或凭据交给第三方。被关掉的设置页即使是上次停留的页面或链接指向的页面,打开设置时也显示「通用」。
 
-界面语言只提供英文、简体中文与繁体中文,GeoCode 自己的界面文字只写这三种;其他语言的翻译留在源码里,以前选过的退回英文,导读的撰写语言也只在这三种里选。
+### 4.1 第三方代码与外部配置
 
-路由也关掉了。它有两部分:选「Auto」模型时,每条消息连同最近几轮对话先交给第三方的判定模型 Jev 分类,再换成这一类配置的模型;「安全网」在自动接受权限之前,把请求交给 Jev 打分。两者都把对话或文件改动发到 opencode.ai 或 typesafe.ai;它的分类是为编程任务设计的,地理数据处理用不上,安全网在 GeoCode 用的内核上也读不到要执行的命令。GeoCode 里没有路由页,模型选择器里不提供 Auto,以前存下的路由配置不起作用;权限的安全要靠内核的权限规则。
+OpenChamber 的扩展关掉了。扩展从文件夹、压缩包或 git 地址安装,能往界面里加面板、菜单与命令,还能在本机起一个服务进程,这个进程没有沙箱,拥有用户的全部权限。它让第三方代码从界面这一侧进入应用,地理用户用不到,也不该随手装。设置里没有扩展页,也没有把内置浏览器交给扩展的选项,扩展装不进来;数据目录里已经装好的扩展,在 GeoCode 里既不显示也不运行。
 
-插件页也关掉了。OpenCode 的插件是在内核进程里以用户全部权限运行、不经权限确认的代码,这一页让人从 npm 装插件或直接手写一段插件代码,是给 agent 写扩展的开发者用的;地理用户写代码是为了处理数据,用不到它。GeoCode 里没有插件页,也不能从设置里增删插件。
+插件页关掉了。OpenCode 的插件是在内核进程里以用户全部权限运行、不经权限确认的代码,这一页让人从 npm 装插件或直接手写一段插件代码,是给 agent 写扩展的开发者用的;地理用户写代码是为了处理数据,用不到它。GeoCode 里没有插件页,也不能从设置里增删插件。
 
-魔法提示词页也关掉了。魔法提示词是界面内置的一批提示词模板,生成提交信息、解决冲突、斜杠命令与新聊天的起始按钮都靠它们,这些功能照常可用。这一页让人改写这些模板(发出的消息与附带的指令),是给调提示词的人用的,地理用户用不到,改坏了还会让这些功能失常。模板也不接受从外部改写:OpenChamber 把改写存在数据目录的 `magic-prompts.json` 里,GeoCode 不读这个文件,手改它、调用接口或让 agent 改它都不起作用,模板只用源码里内置的那一份。
+魔法提示词页关掉了。魔法提示词是界面内置的一批提示词模板,生成提交信息、解决冲突、斜杠命令与新聊天的起始按钮都靠它们,这些功能照常可用。这一页让人改写这些模板(发出的消息与附带的指令),是给调提示词的人用的,地理用户用不到,改坏了还会让这些功能失常。模板也不接受从外部改写:OpenChamber 把改写存在数据目录的 `magic-prompts.json` 里,GeoCode 不读这个文件,手改它、调用接口或让 agent 改它都不起作用,模板只用源码里内置的那一份。
 
-代码片段也停用了。它其实是提示词里的文本宏(中文界面的译名有误):消息里的 `#名字` 在发送前换成事先写好的一段文字,还能往消息前后插入内容。片段是全局配置目录与项目 `.opencode/` 里的文件,等于让外部文件改写用户发出的话,下载来的项目也能带上几段;输入框里打出 `#` 加任何词(比如一个编号)再按回车,消息不会发出,而是打开新建片段的设置页。GeoCode 里没有片段:`#` 不再弹出选择器,消息按输入的原样发出,计划任务与会话接口也不展开。
+代码片段停用了。它其实是提示词里的文本宏(中文界面的译名有误):消息里的 `#名字` 在发送前换成事先写好的一段文字,还能往消息前后插入内容。片段是全局配置目录与项目 `.opencode/` 里的文件,等于让外部文件改写用户发出的话,下载来的项目也能带上几段;输入框里打出 `#` 加任何词(比如一个编号)再按回车,消息不会发出,而是打开新建片段的设置页。GeoCode 里没有片段:`#` 不再弹出选择器,消息按输入的原样发出,计划任务与会话接口也不展开。
 
-OpenChamber 还在开发一个「隔离空间」功能:用 Docker 为项目起一个容器,在容器里另跑一个服务端,把这个项目的请求交给它处理。GeoCode 不需要它。它默认关闭,上游也藏起了设置里的开关,但设置文件里的一个键或一个接口仍能把它打开;打开后,发往空间的请求由容器里的服务端处理,本节关掉的接口在那里都不起作用。
+### 4.2 发给第三方的对话与凭据
+
+路由关掉了。它有两部分:选「Auto」模型时,每条消息连同最近几轮对话先交给第三方的判定模型 Jev 分类,再换成这一类配置的模型;「安全网」在自动接受权限之前,把请求交给 Jev 打分。两者都把对话或文件改动发到 opencode.ai 或 typesafe.ai;它的分类是为编程任务设计的,地理数据处理用不上,安全网在 GeoCode 用的内核上也读不到要执行的命令。GeoCode 里没有路由页,模型选择器里不提供 Auto,以前存下的路由配置不起作用;权限的安全要靠内核的权限规则。
+
+Linear 集成关掉了:它把会话接到软件团队的任务管理上,地理数据处理用不到,授权还要经过 OpenChamber 的云端中转。关掉的除了连接 Linear 的设置,还有会话完成或出错时往关联 Issue 留言,以及扩展借用这份 Linear 登录。
 
 用量页不查询 Claude 与 Cursor 的额度。这两家的订阅不能拿到第三方应用里用,查额度却要读别的应用的凭据:Claude 读 Claude Code 存在钥匙串里的登录信息,Cursor 读它本机数据库里的登录信息。其他服务商的额度照常显示。
 
-## 4. 本机访问控制
+### 4.3 界面语言
+
+界面语言只提供英文、简体中文与繁体中文,GeoCode 自己的界面文字只写这三种;其他语言的翻译留在源码里,以前选过的退回英文,导读的撰写语言也只在这三种里选。
+
+### 4.4 尚未关闭的
+
+OpenChamber 还在开发一个「隔离空间」功能:用 Docker 为项目起一个容器,在容器里另跑一个服务端,把这个项目的请求交给它处理。GeoCode 不需要它。它默认关闭,上游也藏起了设置里的开关,但设置文件里的一个键或一个接口仍能把它打开;打开后,发往空间的请求由容器里的服务端处理,第 3 节与本节关掉的接口在那里都不起作用。
+
+内核自己仍会加载外部来源的插件与命令:用户与项目配置里列出的插件、项目目录往上各级 `.opencode/` 里的插件与命令、全局配置目录里的插件,以及 npm 插件包(加载时联网安装)。插件是在内核进程里运行的代码,命令模板里的 `` !`命令` `` 在展开时直接执行 shell,都不经权限确认,下载来的项目也能带上它们。GeoCode 只加载内置的与自己注册的插件,这一层留到内核装配时关掉。
+## 5. 本机访问控制
 
 只监听 127.0.0.1 挡不住本机:任何程序都连得上壳服务端,浏览器里的网页也能,因为 WebSocket 不受跨域限制,DNS 重绑定还能让网页以同源的身份发请求。而壳服务端转发时替调用方附上内核的口令,能调用它,就能让 agent 以用户的身份执行命令、读写文件。防护的对象是浏览器里的网页、其他用户与沙箱内的程序、扫描本机端口的脚本。以用户身份运行、不受沙箱限制的程序不在此列,它本来就能修改用户的文件与配置。
 
@@ -59,7 +72,7 @@ OpenChamber 还在开发一个「隔离空间」功能:用 Docker 为项目起�
 
 口令模式也让上游「没有口令就不能开隧道、不能监听非本机地址」的两道保险不再起作用,第 3 节对隧道的关闭与只监听 127.0.0.1 因此不能放开。已知的例外有三个:文件预览里的 HTML 以壳服务端的来源运行,地址里带着 60 秒有效的临时令牌,页面脚本能用它读取壳服务端可读的任意文件,这是上游的设计;CORS 放行 `localhost` 与 `127.0.0.1` 的任意端口,这些端口上的网页能跨域读取不要求令牌的接口,其中健康检查会返回内核的路径与最近的错误输出;与本机安装的 OpenChamber 共用数据目录(见 `DESIGN.md` 第 4 节)时,两者的令牌记录在同一个文件里,互相有效,同时运行时还会无锁地互相覆盖,可能让 GeoCode 的窗口转到重启提示,也可能恢复 OpenChamber 刚撤销的设备。校验令牌时还会写这个文件,写不进去(磁盘满、文件无权限)时所有请求都被拒绝。
 
-## 5. 环境变量
+## 6. 环境变量
 
 GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环境里名字以 `OPENCODE_`、`OPENCHAMBER_`、`OTEL_`、`BUN_`、`ELECTRON_` 开头的变量,是内核、壳与两个运行时的设置:它们能把配置与数据改到别处、从指定路径加载程序、把数据发往别处(包括遥测)、打开未发布或调试用的功能,少数还会让内核起不来。打包出的应用不接受这些变量(挡不住的几个见本节末尾),按前缀认定,上游以后新增的同前缀变量也在内。其余变量是用户自己的环境,包括 `PATH`、语言、时区、代理、证书、SSH 与各种工具链的变量,照常交给内核、agent 执行的命令、MCP 与终端:agent 调用 conda、GDAL、PROJ 这些地理工具,靠的就是它们。
 
@@ -69,7 +82,7 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 
 还有几处没有处理。其余模型服务的密钥仍从环境里自动识别,配置文件里的 `{env:名字}` 仍能读取任意变量,两者留到内核装配时决定。有几个 `ELECTRON_` 变量由 Electron 在应用代码运行之前读取,清理挡不住:`ELECTRON_RUN_AS_NODE` 让应用根本不执行自己的代码,`ELECTRON_DISABLE_SANDBOX` 关掉渲染进程的沙箱,`ELECTRON_ENABLE_LOGGING` 等输出 Chromium 的日志。它们只在从终端启动、或以 `launchctl setenv` 设置时出现在启动环境里,写在 `.zshrc` 里的来得太晚,不起作用;留到打包那一站处理,其中 `ELECTRON_RUN_AS_NODE` 能用 Electron fuses 关掉,但本地听写靠它启动子进程,要先改用 `utilityProcess`(扩展的服务进程原本也靠它)。Windows 上壳服务端自己用 PowerShell 读取用户环境,不经过这里的清理,双平台打包时要补上。代理变量只有内核认,壳不认,这是上游的行为,保持原样。
 
-## 6. 实现与维护
+## 7. 实现与维护
 
 本节的路径以 `desktop/packages/` 为起点。GeoCode 自己的代码放在各包的 `geocode/` 目录里;对上游的补丁怎样标记、怎样列出,见 `CONVENTIONS.md` 第 3.4 节。
 
@@ -77,17 +90,37 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 
 关闭与访问控制依靠几份手写的清单,也依赖上游口令模式的行为,上游新增的内容不会自动被覆盖。合并 `chamber-upstream` 之后,重新推导并对照:
 
-- 关闭的接口(`web/server/geocode/closed-surface.js`):在壳服务端里找 `app.get`、`app.post` 等方法与 `app.use` 注册的路径,以及 `server.on('upgrade'` 的处理器,属于第 3 节关掉的机制或上游功能的,加进清单;新的 WebSocket 处理器在口令模式下要校验令牌。关闭的 IPC 命令(`electron/geocode/closed-commands.mjs`):`main.mjs` 里 `handleInvoke` 的命令,以及 `ipcMain.handle` 与 `ipcMain.on` 的频道。不接受的环境变量按前缀认定(`electron/geocode/inherited-env.mjs`),上游新增的同前缀变量自动在内,要找的是另一种前缀的配置变量,例如新引入的运行时或库自带的。隐藏的设置(`ui/src/geocode/settings.ts`):`SETTINGS_PAGE_METADATA` 与 `SETTINGS_SEARCH_ITEMS`;设置会重开上次的页面、也跟随 `?settings=` 链接,两者都不查页面是否可用,而带侧栏的页面只有主体受可用性约束,所以 `ui/src/components/views/SettingsView.tsx` 把停在 `CLOSED_PAGES` 里某一页上的设置转到「通用」,也不渲染它的侧栏、不为它加载数据(侧栏在跳转之前就会挂载并自己加载);路由页不在这份清单里,它由上游的可用性开关隐藏,没有侧栏,停在它上面时只显示「不可用」。侧栏面板(`ui/src/geocode/surface.ts` 的 `CLOSED_SURFACES`):`ui/src/lib/surfaces/registry.ts` 的 `CONTEXT_SURFACES`;被恢复或被扩展打开的 Linear 面板,靠 `ui/src/components/layout/ContextPanelRail.tsx` 里集成断开时关掉面板的那段逻辑关掉。用量的服务商(`ui/src/geocode/quota.ts` 与 `web/server/geocode/closed-quota.js`,两份要一致):界面的 `ui/src/lib/quota/providers/index.ts` 的 `QUOTA_PROVIDERS`,壳服务端的 `web/server/lib/quota/providers/index.js` 的 `registry` 与 `web/server/lib/quota/credentials/providers.js` 的 `normalizers`;上游新增的服务商要读别的应用的凭据时,加进两份清单;`web/server/lib/quota/index.js` 还直接导出 `fetchClaudeQuota`、`fetchCursorQuota`,现在没有调用者,以后有了会绕过 `registry`。插件页:界面里找 `usePluginsStore` 的调用处,写入与 npm 查询都经 `/api/config/plugins`;插件的更新检查与升级是内核的 `/api/plugin/check`、`/api/plugin/update`,经壳服务端转发,这两条也关了,只读的 `/api/plugin` 保留。代码片段:壳服务端的片段都经 `web/server/lib/opencode/snippets.js` 的 `loadSnippetRegistry` 读取(界面的展开、计划任务、会话接口的展开都经它),桌面应用里为空,`/api/config/snippets` 关闭;界面的 `#` 选择器有三处触发(在界面里找 `SnippetAutocomplete` 的使用处),`ui/src/components/chat/composer/language/triggers.ts`、`ui/src/components/multirun/MultiRunLauncher.tsx` 与 `ui/src/components/session/ScheduledTaskEditorDialog.tsx` 的 `updateAutocompleteState`,发送前的展开只经 `ui/src/stores/useSnippetsStore.ts` 的 `expandText`,桌面应用里都不起作用。魔法提示词:改写只经 `/api/magic-prompts` 读写,这组接口关闭;界面读改写只经 `ui/src/lib/magicPrompts.ts` 的 `fetchMagicPromptOverrides`,桌面应用里直接返回没有改写,不发请求。扩展按「一个也没装」关掉:壳服务端里凡是要找到一个扩展才能运行它的地方(面板页、服务进程、共享画面、内置浏览器的转交),都经 `web/server/lib/guests/catalog.js` 的 `listInstalledGuests`,它在桌面应用里返回空,新代码若直接读 `extensions.json`(`web/server/lib/guests/persist.js` 的 `readExtensionStore`)来启动扩展,就绕过了它;安装、上传与检查更新不经这份列表,靠关闭 `/api/guests` 挡住;界面的扩展入口都从 `ui/src/lib/guests/store.ts` 的扩展清单派生,清单只由 `ui/src/lib/guests/load-catalog.ts` 填入,桌面应用里填入空清单、不发请求。路由:界面的路由入口(设置页、搜索项、命令面板、Auto 选项)都看 `routingFeatureAvailable`,它由 `web/server/lib/opencode/settings-helpers.js` 下发,桌面应用里为假;在界面里找 `routingFeatureAvailable` 的读取处;壳服务端的路由逻辑(Auto 的解析、安全网)都经 `web/server/lib/routing/store.js` 的 `readConfig` 读配置,桌面应用里一律得到默认的关闭状态,新代码若直接读 `routing.json`(`routingConfigPath`),就绕过了它;`/api/routing` 关闭。自动外发:在壳服务端、界面与 `main.mjs` 里找 `openchamber.dev`、`github.com/openchamber` 等地址。
+- 关闭的接口(`web/server/geocode/closed-surface.js`):在壳服务端里找 `app.get`、`app.post` 等方法与 `app.use` 注册的路径,以及 `server.on('upgrade'` 的处理器,属于第 3、4 节关掉的机制或上游功能的,加进清单;新的 WebSocket 处理器在口令模式下要校验令牌。
+- 关闭的 IPC 命令(`electron/geocode/closed-commands.mjs`):`main.mjs` 里 `handleInvoke` 的命令,以及 `ipcMain.handle` 与 `ipcMain.on` 的频道。
+- 不接受的环境变量按前缀认定(`electron/geocode/inherited-env.mjs`),上游新增的同前缀变量自动在内,要找的是另一种前缀的配置变量,例如新引入的运行时或库自带的。
+- 隐藏的设置(`ui/src/geocode/settings.ts`):`SETTINGS_PAGE_METADATA` 与 `SETTINGS_SEARCH_ITEMS`;设置会重开上次的页面、也跟随 `?settings=` 链接,两者都不查页面是否可用,而带侧栏的页面只有主体受可用性约束,所以 `ui/src/components/views/SettingsView.tsx` 把停在 `CLOSED_PAGES` 里某一页上的设置转到「通用」,也不渲染它的侧栏、不为它加载数据(侧栏在跳转之前就会挂载并自己加载);路由页不在这份清单里,它由上游的可用性开关隐藏,没有侧栏,停在它上面时只显示「不可用」。
+- 侧栏面板(`ui/src/geocode/surface.ts` 的 `CLOSED_SURFACES`):`ui/src/lib/surfaces/registry.ts` 的 `CONTEXT_SURFACES`;被恢复或被扩展打开的 Linear 面板,靠 `ui/src/components/layout/ContextPanelRail.tsx` 里集成断开时关掉面板的那段逻辑关掉。
+- 扩展按「一个也没装」关掉:壳服务端里凡是要找到一个扩展才能运行它的地方(面板页、服务进程、共享画面、内置浏览器的转交),都经 `web/server/lib/guests/catalog.js` 的 `listInstalledGuests`,它在桌面应用里返回空,新代码若直接读 `extensions.json`(`web/server/lib/guests/persist.js` 的 `readExtensionStore`)来启动扩展,就绕过了它;安装、上传与检查更新不经这份列表,靠关闭 `/api/guests` 挡住;界面的扩展入口都从 `ui/src/lib/guests/store.ts` 的扩展清单派生,清单只由 `ui/src/lib/guests/load-catalog.ts` 填入,桌面应用里填入空清单、不发请求。
+- 插件页:界面里找 `usePluginsStore` 的调用处,写入与 npm 查询都经 `/api/config/plugins`;插件的更新检查与升级是内核的 `/api/plugin/check`、`/api/plugin/update`,经壳服务端转发,这两条也关了,只读的 `/api/plugin` 保留。
+- 魔法提示词:改写只经 `/api/magic-prompts` 读写,这组接口关闭;界面读改写只经 `ui/src/lib/magicPrompts.ts` 的 `fetchMagicPromptOverrides`,桌面应用里直接返回没有改写,不发请求。
+- 代码片段:壳服务端的片段都经 `web/server/lib/opencode/snippets.js` 的 `loadSnippetRegistry` 读取(界面的展开、计划任务、会话接口的展开都经它),桌面应用里为空,`/api/config/snippets` 关闭;界面的 `#` 选择器有三处触发(在界面里找 `SnippetAutocomplete` 的使用处),`ui/src/components/chat/composer/language/triggers.ts`、`ui/src/components/multirun/MultiRunLauncher.tsx` 与 `ui/src/components/session/ScheduledTaskEditorDialog.tsx` 的 `updateAutocompleteState`,发送前的展开只经 `ui/src/stores/useSnippetsStore.ts` 的 `expandText`,桌面应用里都不起作用。
+- 路由:界面的路由入口(设置页、搜索项、命令面板、Auto 选项)都看 `routingFeatureAvailable`,它由 `web/server/lib/opencode/settings-helpers.js` 下发,桌面应用里为假;在界面里找 `routingFeatureAvailable` 的读取处;壳服务端的路由逻辑(Auto 的解析、安全网)都经 `web/server/lib/routing/store.js` 的 `readConfig` 读配置,桌面应用里一律得到默认的关闭状态,新代码若直接读 `routing.json`(`routingConfigPath`),就绕过了它;`/api/routing` 关闭。
+- 用量的服务商(`ui/src/geocode/quota.ts` 与 `web/server/geocode/closed-quota.js`,两份要一致):界面的 `ui/src/lib/quota/providers/index.ts` 的 `QUOTA_PROVIDERS`,壳服务端的 `web/server/lib/quota/providers/index.js` 的 `registry` 与 `web/server/lib/quota/credentials/providers.js` 的 `normalizers`;上游新增的服务商要读别的应用的凭据时,加进两份清单;`web/server/lib/quota/index.js` 还直接导出 `fetchClaudeQuota`、`fetchCursorQuota`,现在没有调用者,以后有了会绕过 `registry`。
+- 自动外发:在壳服务端、界面与 `main.mjs` 里找 `openchamber.dev`、`github.com/openchamber` 等地址。
 - 唯一入口仍然唯一:推送只经 `web/server/lib/notifications/runtime.js` 的 `fanoutPush`,深链只经 `electron/main.mjs` 的 `handleDeepLinks`,窗口取令牌只经 `main.mjs` 的 `readDesktopLocalClientToken`,会话密钥只来自 `web/server/lib/ui-auth/ui-auth.js` 的 `getOrCreateJwtSecret` 与 `rotateJwtSecret`。用户环境只从两处进入:启动环境在 `electron/early-startup.mjs` 的模块顶层清理,在它之前执行的代码都不能在加载时读写 `process.env`,包括它 import 的外部模块(打包时不内联、先于它执行,如 `@openchamber/web/server/lib/inherited-env.js`)与打包产物 `electron/dist-bundle/early-startup.mjs` 里排在它前面的内联代码;登录 shell 的快照由 `main.mjs` 的 `inheritUserShellEnv` 清理,壳服务端只经 `provideLoginShellEnvSnapshot` 拿到它,不自己再读登录 shell(Windows 除外)。
 - 上游的行为没有变:`createClient` 不传 `expiresAt` 时不过期;令牌不经渲染进程的命令行参数(`electron/early-startup.mjs` 的 `buildRendererAdditionalArguments`);`ui/src/components/auth/SessionAuthGate.tsx` 只在 `locked` 状态显示口令表单;Linear 的界面入口大多以运行时模块 `linear` 是否存在为条件(如 `ui/src/components/sections/integrations/IntegrationsPage.tsx` 的 `hasLinear`),不以它为条件的新入口要另外关掉;侧栏里嵌入的会话聊天仍是主窗口里同源、没有 preload 的 iframe(`ui/src/geocode/surface.ts` 的 `isGeoCodeDesktop` 靠读它的父窗口判断);语言的选项只来自 `ui/src/lib/i18n/context.tsx` 的 `locales`(设置页与导读的选择器都用它),`setLocale` 只由 `ui/src/lib/i18n/store.ts` 的 `initializeLocale` 与设置页调用,桌面版读回保存的语言只经 `ui/src/lib/i18n/runtime.ts` 的 `readStoredLocale`(`ui/src/geocode/languages.ts` 在这两处过滤)。
 - `web/server/lib/opencode/compatibility.js` 的 `MINIMUM_OPENCODE_VERSION` 不高于 `kernel/` 的版本,否则壳会拒绝安装包里的内核。
 
-## 7. 验收
+## 8. 验收
 
 在没有安装 OpenCode 的环境里,打包出的应用启动后可以直接对话,用的是 `kernel/` 构建的内核,即使 `PATH`、设置或环境变量指向别的 `opencode` 也一样;内核缺失时报错。正常退出与强制结束之后,都没有残留的内核进程;agent 执行的命令与应用内的终端都读不到内核的口令。
 
-设置与界面里没有远程、局域网、配对、隧道、Linear 等入口(侧栏里嵌入的会话聊天也一样),对应的接口与 IPC 命令被拒绝,路径换了大小写也一样,`openchamber://` 链接不被处理,语言选择里只有英文、简体中文与繁体中文,保存过其他语言的,启动后显示英文;用量页里没有 Claude 与 Cursor,也不读取它们的凭据;设置里没有扩展页,数据目录里已经装好的扩展既不显示也不运行;设置里没有路由页,模型选择器里不提供 Auto,数据目录里开着路由的 `routing.json` 不起作用,不向 Jev 发请求;设置里没有插件页与魔法提示词页,生成提交信息、解决冲突、斜杠命令与新聊天的起始按钮照常可用,数据目录里的 `magic-prompts.json` 不起作用;设置里没有代码片段页,输入框里的 `#名字` 不弹出选择器、不展开,全局与项目的片段文件都不起作用。远程实例、隧道、扩展、插件、魔法提示词与代码片段页即使是上次停留的页面或链接指向的页面,打开设置时也显示「通用」。与本机 OpenChamber 共用数据目录时,它设置里的局域网开关、界面口令、主机列表,以及数据目录里的推送订阅,都不起作用。运行期间,应用不自动向 OpenChamber 的服务器发出请求,以监视应用进程的对外连接来确认。
+对外边界与屏蔽的上游功能:
+
+- 设置与界面里没有远程、局域网、配对、隧道等入口(侧栏里嵌入的会话聊天也一样),对应的接口与 IPC 命令被拒绝,路径换了大小写也一样;`openchamber://` 链接不被处理。
+- 设置与界面里没有 Linear、扩展、路由、插件、魔法提示词与代码片段的入口;远程实例、隧道、扩展、插件、魔法提示词与代码片段页即使是上次停留的页面或链接指向的页面,打开设置时也显示「通用」。
+- 数据目录里已经装好的扩展既不显示也不运行;开着路由的 `routing.json`、`magic-prompts.json` 与全局和项目的片段文件都不起作用:模型选择器里不提供 Auto,不向 Jev 发请求,输入框里的 `#名字` 不弹出选择器、不展开。
+- 生成提交信息、解决冲突、斜杠命令与新聊天的起始按钮照常可用。
+- 用量页里没有 Claude 与 Cursor,也不读取它们的凭据。
+- 语言选择里只有英文、简体中文与繁体中文,保存过其他语言的,启动后显示英文。
+- 与本机 OpenChamber 共用数据目录时,它设置里的局域网开关、界面口令、主机列表,以及数据目录里的推送订阅,都不起作用。
+- 运行期间,应用不自动向 OpenChamber 的服务器发出请求,以监视应用进程的对外连接来确认。
 
 不带令牌的 HTTP 请求与 WebSocket 连接(终端、事件流、听写等)都被拒绝,伪造的或 OpenChamber 签发的会话 cookie 不被接受,Host 不是 `127.0.0.1` 或 `localhost` 的 HTTP 请求被拒绝。窗口带着令牌时,对话、终端、文件预览、迷你聊天、内置浏览器与 agent 的工具回调都正常;令牌失效时显示重启提示,而不是登录页。
 
-打包出的应用从带着第 5 节那些前缀变量的环境启动(Electron 自己先读的几个 `ELECTRON_` 变量除外),或登录 shell 导出了它们,应用的行为都不变:内核照常启动(即使设了 `BUN_BE_BUN`、`OPENCODE_SSH_ASKPASS_PORT`),数据与配置留在原来的位置,内核与 agent 执行的命令里看不到这些变量,后台启动与内核重启之后也一样。其余变量与 `PATH` 照常到达内核与 agent 执行的命令。
+打包出的应用从带着第 6 节那些前缀变量的环境启动(Electron 自己先读的几个 `ELECTRON_` 变量除外),或登录 shell 导出了它们,应用的行为都不变:内核照常启动(即使设了 `BUN_BE_BUN`、`OPENCODE_SSH_ASKPASS_PORT`),数据与配置留在原来的位置,内核与 agent 执行的命令里看不到这些变量,后台启动与内核重启之后也一样。其余变量与 `PATH` 照常到达内核与 agent 执行的命令。
