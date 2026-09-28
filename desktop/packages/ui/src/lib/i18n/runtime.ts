@@ -1,3 +1,5 @@
+import { toGeoCodeLocale } from '@/geocode/languages'; // GeoCode: see readStoredLocale
+
 export type Locale = 'en' | 'de' | 'fr' | 'zh-CN' | 'zh-TW' | 'uk' | 'es' | 'pt-BR' | 'ko' | 'pl' | 'ja' | 'tr';
 
 export const LOCALES = ['en', 'de', 'fr', 'zh-CN', 'zh-TW', 'uk', 'es', 'pt-BR', 'ko', 'pl', 'ja', 'tr'] as const satisfies readonly Locale[];
@@ -84,7 +86,7 @@ function readStoredLocale(): Locale | undefined {
       return undefined;
     }
     const parsed = JSON.parse(raw) as StoredLocale;
-    return typeof parsed.locale === 'string' ? normalizeLocale(parsed.locale) : undefined;
+    return typeof parsed.locale === 'string' ? toGeoCodeLocale(normalizeLocale(parsed.locale)) : undefined; // GeoCode: languages the app does not offer fall back to English
   } catch {
     return undefined;
   }

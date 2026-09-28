@@ -3,6 +3,7 @@ import React from 'react';
 import { useI18nStore, formatMessage, type I18nKey, type I18nParams } from './store';
 import { I18nContext, type I18nContextValue } from './react-context';
 import { LOCALE_LABEL_KEYS, LOCALES } from './runtime';
+import { onlyGeoCodeLocales } from '@/geocode/languages'; // GeoCode: see I18nProvider
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const locale = useI18nStore((state) => state.locale);
@@ -20,7 +21,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const t = (key: I18nKey, params?: I18nParams) => formatMessage(dictionary, key, params);
     return {
       locale,
-      locales: LOCALES,
+      locales: onlyGeoCodeLocales(LOCALES), // GeoCode: only the app's languages are offered
       setLocale,
       label: (targetLocale) => t(LOCALE_LABEL_KEYS[targetLocale]),
       t,
