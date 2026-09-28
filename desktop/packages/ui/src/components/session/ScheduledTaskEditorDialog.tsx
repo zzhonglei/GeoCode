@@ -26,6 +26,7 @@ import { useI18n } from '@/lib/i18n';
 import { isValidCronExpression, getNextRuns, CRON_EXAMPLES } from '@/lib/cron';
 import { canonicalizeTimezone } from '@/lib/timezones';
 import { listModelVariantIds, type ModelVariantSource } from '@/lib/modelVariants';
+import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see updateAutocompleteState
 
 const WEEKDAY_INDEXES = [0, 1, 2, 3, 4, 5, 6] as const;
 
@@ -979,7 +980,7 @@ export function ScheduledTaskEditorDialog(props: {
 
     const textBeforeCursor = value.substring(0, cursorPosition);
     const lastHashSymbol = textBeforeCursor.lastIndexOf('#');
-    if (lastHashSymbol !== -1) {
+    if (lastHashSymbol !== -1 && !isGeoCodeDesktop()) { // GeoCode: the desktop app has no snippets
       const charBefore = lastHashSymbol > 0 ? textBeforeCursor[lastHashSymbol - 1] : null;
       const textAfterHash = textBeforeCursor.substring(lastHashSymbol + 1);
       const isWordBoundary = !charBefore || /\s/.test(charBefore);

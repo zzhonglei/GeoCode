@@ -66,7 +66,7 @@ import {
   type SettingsPageMeta,
 } from '@/lib/settings/metadata';
 import { buildSettingsSearchResults, type SettingsSearchResult } from '@/lib/settings/search';
-import { isClosedSettingsPage } from '@/geocode/settings'; // GeoCode: see the effect that leaves a closed page
+import { isClosedSettingsPage } from '@/geocode/settings'; // GeoCode: see the closed-page guards
 
 // UI Kit: fixed settings navigation width
 const SETTINGS_NAV_WIDTH = 256;
@@ -278,6 +278,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
     if (!isSettingsDialogOpen && !runtimeCtx.isVSCode && !isWindowed) {
       return;
     }
+    if (isDesktopShell() && isClosedSettingsPage(settingsSlug)) return; // GeoCode: the redirect runs in the same commit, so a closed page would still load its store
 
     if (settingsSlug === 'agents') {
       void useAgentsStore.getState().loadAgents(settingsDirectory);
@@ -615,6 +616,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
   }, [t]);
 
   const renderPageSidebar = React.useCallback((slug: SettingsPageSlug, opts: { onItemSelect?: () => void }) => {
+    if (isDesktopShell() && isClosedSettingsPage(slug)) return null; // GeoCode: a sidebar mounts and loads before the redirect away from a closed page
     switch (slug) {
       case 'projects':
         return <ProjectsSidebar onItemSelect={opts.onItemSelect} />;

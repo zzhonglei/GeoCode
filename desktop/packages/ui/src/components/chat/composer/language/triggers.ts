@@ -14,6 +14,7 @@
  * which outrank mentions. That precedence is the previous behavior, preserved.
  */
 
+import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see resolveAutocompleteTrigger
 import {
     getFileMentionAutocompleteQuery,
     type FileMentionAutocompleteInputSource,
@@ -98,7 +99,7 @@ export function resolveAutocompleteTrigger(
 
     return matchCommandPalette(value, cursorPosition)
         ?? matchInlineToken(value, cursorPosition, '/', 'skill')
-        ?? matchInlineToken(value, cursorPosition, '#', 'snippet')
+        ?? (isGeoCodeDesktop() ? null : matchInlineToken(value, cursorPosition, '#', 'snippet')) // GeoCode: the desktop app has no snippets
         ?? matchMention(value, cursorPosition, context);
 }
 
