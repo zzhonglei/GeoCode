@@ -1025,7 +1025,7 @@ export const createSettingsHelpers = (dependencies) => {
       agentMemoryFeatureAvailable: isAgentMemoryFeatureAvailable(),
       // Jev routing needs the OpenChamber server, so it is present here and
       // absent wherever this payload does not come from one (VS Code).
-      routingFeatureAvailable: true,
+      routingFeatureAvailable: !process.versions.electron, // GeoCode: the desktop app has no routing, so the UI hides its settings page and the Auto model
       ...(pwaAppName ? { pwaAppName } : {}),
       pwaOrientation,
       mobileKeyboardMode,

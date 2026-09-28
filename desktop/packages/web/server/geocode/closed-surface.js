@@ -20,6 +20,7 @@ const CLOSED_PATHS = Object.freeze([
   '/api/linear',
   '/linear/oauth',
   '/api/guests',
+  '/api/routing',
 ]);
 
 // Express matches routes case-insensitively, so the comparison must too.
