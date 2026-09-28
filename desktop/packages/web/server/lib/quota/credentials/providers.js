@@ -1,8 +1,9 @@
 import { deleteQuotaCredential, readQuotaCredential, writeQuotaCredential } from './store.js';
+import { withoutClosedQuotaProviders } from '../../../geocode/closed-quota.js'; // GeoCode: see normalizers
 
 const clean = (value) => typeof value === 'string' && !/[\r\n]/.test(value) ? value.trim() : '';
 
-export const normalizers = {
+export const normalizers = withoutClosedQuotaProviders({ // GeoCode: Cursor credentials can be neither imported nor stored
   'exe-dev': (value) => {
     const usageToken = clean(value?.usageToken);
     return usageToken ? { usageToken } : null;
@@ -16,7 +17,7 @@ export const normalizers = {
     const refreshToken = clean(value?.refreshToken);
     return accessToken || refreshToken ? { accessToken, refreshToken } : null;
   },
-};
+});
 
 export const readManagedCredential = (providerId) => {
   const normalize = normalizers[providerId];

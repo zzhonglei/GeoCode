@@ -1,11 +1,12 @@
 import type { QuotaProviderId } from '@/types';
+import { withoutClosedQuotaProviders } from '@/geocode/quota'; // GeoCode: see QUOTA_PROVIDERS
 
 export interface QuotaProviderMeta {
   id: QuotaProviderId;
   name: string;
 }
 
-export const QUOTA_PROVIDERS: QuotaProviderMeta[] = [
+export const QUOTA_PROVIDERS: QuotaProviderMeta[] = withoutClosedQuotaProviders([ // GeoCode: the desktop app neither lists nor queries Claude and Cursor
   { id: 'claude', name: 'Claude' },
   { id: 'cline-pass', name: 'ClinePass' },
   { id: 'codex', name: 'Codex' },
@@ -27,4 +28,4 @@ export const QUOTA_PROVIDERS: QuotaProviderMeta[] = [
   { id: 'hyper', name: 'Charm Hyper' },
   { id: 'neuralwatt', name: 'NeuralWatt' },
   { id: 'xai', name: 'xAI' },
-];
+]);

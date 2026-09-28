@@ -6,6 +6,7 @@
  */
 
 import { buildResult } from '../utils/index.js';
+import { withoutClosedQuotaProviders } from '../../../geocode/closed-quota.js'; // GeoCode: see registry
 
 import * as claude from './claude/index.js';
 import * as clinePass from './cline-pass.js';
@@ -30,7 +31,7 @@ import * as wafer from './wafer.js';
 import * as opencodeGo from './opencode-go.js';
 import * as xai from './xai.js';
 
-const registry = {
+const registry = withoutClosedQuotaProviders({ // GeoCode: the desktop app neither lists nor queries Claude and Cursor
   claude: {
     providerId: claude.providerId,
     providerName: claude.providerName,
@@ -163,7 +164,7 @@ const registry = {
     isConfigured: xai.isConfigured,
     fetchQuota: xai.fetchQuota
   }
-};
+});
 
 const pendingFetches = new Map();
 
