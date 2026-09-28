@@ -1,5 +1,5 @@
 // Kept free of runtime imports: the settings metadata that calls these is imported everywhere.
-const CLOSED_PAGES = new Set(['remote-instances', 'tunnel', 'extensions', 'plugins']);
+const CLOSED_PAGES = new Set(['remote-instances', 'tunnel', 'extensions', 'plugins', 'magic-prompts']);
 
 const CLOSED_SEARCH_ITEMS = new Set([
   'sessions.desktop-ui-password',
