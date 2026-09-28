@@ -15,7 +15,7 @@ describe('GeoCode: closedSurface', () => {
     process.versions.electron = 'test';
     const app = express();
     app.use(closedSurface);
-    for (const route of ['/api/openchamber/update-check', '/api/push/subscribe', '/connect', '/api/client-auth/clients', '/api/push/visibility']) {
+    for (const route of ['/api/openchamber/update-check', '/api/push/subscribe', '/connect', '/api/client-auth/clients', '/api/push/visibility', '/api/plugin', '/api/plugin/check']) {
       app.all(route, (_req, res) => res.status(200).send('upstream'));
     }
     server = http.createServer(app);
@@ -31,12 +31,13 @@ describe('GeoCode: closedSurface', () => {
   const statusOf = async (path) => (await fetch(`${baseUrl}${path}`)).status;
 
   it('refuses closed endpoints in any case and with a trailing slash', async () => {
-    for (const path of ['/api/openchamber/update-check', '/API/OpenChamber/Update-Check', '/api/push/subscribe/', '/CONNECT', '/API/Client-Auth/Clients']) {
+    for (const path of ['/api/openchamber/update-check', '/API/OpenChamber/Update-Check', '/api/push/subscribe/', '/CONNECT', '/API/Client-Auth/Clients', '/API/Plugin/Check']) {
       expect(await statusOf(path)).toBe(404);
     }
   });
 
   it('leaves the endpoints the desktop app still uses to upstream', async () => {
     expect(await statusOf('/api/push/visibility')).toBe(200);
+    expect(await statusOf('/api/plugin')).toBe(200);
   });
 });

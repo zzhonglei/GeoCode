@@ -66,6 +66,7 @@ import {
   type SettingsPageMeta,
 } from '@/lib/settings/metadata';
 import { buildSettingsSearchResults, type SettingsSearchResult } from '@/lib/settings/search';
+import { isClosedSettingsPage } from '@/geocode/settings'; // GeoCode: see the effect that leaves a closed page
 
 // UI Kit: fixed settings navigation width
 const SETTINGS_NAV_WIDTH = 256;
@@ -242,6 +243,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
   }, []);
 
   // keep platform check available for future window chrome tweaks
+
+  // --- GeoCode: a closed page goes to General; renderPageContent gates only the content, not a split page's sidebar ---
+  React.useEffect(() => {
+    if (isDesktopApp && isClosedSettingsPage(settingsSlug)) setSettingsPage('general');
+  }, [isDesktopApp, setSettingsPage, settingsSlug]);
+  // --- /GeoCode ---
 
   const routingAvailable = useUIStore((state) => state.routingFeatureAvailable);
   const runtimeCtx = React.useMemo(() => buildRuntimeContext(isDesktopApp, isMobile, routingAvailable), [isDesktopApp, isMobile, routingAvailable]);

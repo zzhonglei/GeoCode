@@ -1,5 +1,5 @@
 // Kept free of runtime imports: the settings metadata that calls these is imported everywhere.
-const CLOSED_PAGES = new Set(['remote-instances', 'tunnel', 'extensions']);
+const CLOSED_PAGES = new Set(['remote-instances', 'tunnel', 'extensions', 'plugins']);
 
 const CLOSED_SEARCH_ITEMS = new Set([
   'sessions.desktop-ui-password',
@@ -21,6 +21,8 @@ const hideInDesktop = <Context extends { isDesktop: boolean }>(entry: Gated<Cont
   const upstream = entry.isAvailable;
   entry.isAvailable = (ctx) => !ctx.isDesktop && (upstream ? upstream(ctx) : true);
 };
+
+export const isClosedSettingsPage = (slug: string) => CLOSED_PAGES.has(slug);
 
 export const closeSettingsPages = <Context extends { isDesktop: boolean }>(
   pages: readonly (Gated<Context> & { slug: string })[],
