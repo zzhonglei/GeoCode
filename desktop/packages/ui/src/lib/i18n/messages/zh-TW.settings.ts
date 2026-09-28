@@ -2352,7 +2352,7 @@ export const settingsDict = {
   ...guestIntegrationsI18n['zh-TW'],
   ...extensionsSettingsI18n['zh-TW'],
   'settings.page.integrations.title': '整合',
-  'settings.page.integrations.description': '連接 GitHub 和 Linear，讓 OpenChamber 可以處理你的 issue 和 pull request。',
+  'settings.page.integrations.description': '連接 GitHub，讓 OpenChamber 可以處理你的 issue 和 pull request。',
   'settings.agents.page.field.steps': '最大步數',
   'settings.agents.page.field.stepsTooltip': '代理在一輪中最多可以執行多少個工具步驟。',
   'settings.agents.page.field.clearStepsAria': '清除最大步數',

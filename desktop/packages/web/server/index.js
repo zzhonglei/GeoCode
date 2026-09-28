@@ -1041,7 +1041,7 @@ globalMessageStreamHub.subscribeEvent((event) => {
     sessionAssistRuntime.processPayload(payload, directory || payload.properties?.directory || '');
     sessionGoalRuntime.processPayload(payload, directory || payload.properties?.directory || '');
     contextObligatoryRuntime.processPayload(payload, directory || payload.properties?.directory || '');
-    linearSessionStatusRuntime.processPayload(payload);
+    if (!process.versions.electron) linearSessionStatusRuntime.processPayload(payload); // GeoCode: the desktop app offers no Linear integration
   }
 });
 

@@ -17,6 +17,8 @@ const CLOSED_PATHS = Object.freeze([
   '/auth/passkey',
   '/connect',
   '/manifest.webmanifest',
+  '/api/linear',
+  '/linear/oauth',
 ]);
 
 // Express matches routes case-insensitively, so the comparison must too.

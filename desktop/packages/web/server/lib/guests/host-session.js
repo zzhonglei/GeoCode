@@ -6,6 +6,7 @@ import { GuestOAuthError, toPublicGuestAuth } from './oauth.js';
 const isHostLinear = (integration) => (
   resolveIntegrationAuth(integration ?? {}) === 'host'
   && integration?.host?.provider === 'linear'
+  && !process.versions.electron // GeoCode: the desktop app offers no Linear integration for extensions to borrow
 );
 
 const linearAccountLabel = (auth) => (

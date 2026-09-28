@@ -8,6 +8,9 @@ const CLOSED_SEARCH_ITEMS = new Set([
   'sessions.opencode-restart',
   'sessions.opencode-update-notifications',
   'appearance.usage-reports',
+  'integrations.linear',
+  'integrations.linear.add-workspace',
+  'integrations.linear.mapping',
 ]);
 
 type Gated<Context> = { isAvailable?: (ctx: Context) => boolean };

@@ -17,6 +17,7 @@ import { createWebPushAPI } from './push';
 import { createWebGitHubAPI } from './github';
 import { createWebLinearAPI } from './linear';
 import { createWebClientAuthAPI } from './clientAuth';
+import { isGeoCodeDesktop } from '@openchamber/ui/geocode/surface'; // GeoCode: see createWebAPIs
 
 export interface WebAPIsOptions {
   urls?: RuntimeUrlResolver;
@@ -48,7 +49,7 @@ export const createWebAPIs = (options: WebAPIsOptions = {}): RuntimeAPIs => {
   permissions: createWebPermissionsAPI(),
   notifications: createWebNotificationsAPI(),
   github: createWebGitHubAPI({ urls: activeUrls }),
-  linear: createWebLinearAPI(),
+  linear: isGeoCodeDesktop() ? undefined : createWebLinearAPI(), // GeoCode: the desktop app offers no Linear integration
   push: createWebPushAPI(),
   clientAuth: createWebClientAuthAPI(),
   };

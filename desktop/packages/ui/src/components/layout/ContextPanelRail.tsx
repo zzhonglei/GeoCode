@@ -43,6 +43,7 @@ import { useGuestSurfaces } from '@/hooks/useGuestSurfaces';
 import { useGuestBadgeStore } from '@/lib/guests/badge-store';
 import { isPluginContextPanelMode, pluginIdFromMode } from '@/lib/surfaces/modes';
 import { ContextRailSurfacesDialog } from './ContextRailSurfacesDialog';
+import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see the effect that closes a disconnected Linear panel
 
 const RAIL_TOOLTIP_DELAY_MS = 150;
 // Hold the surface-switch modifier for this long before revealing the order
@@ -290,7 +291,7 @@ export const ContextPanelRail: React.FC = () => {
   // A surface whose integration disconnected closes rather than lingering as
   // an active panel with no rail icon.
   React.useEffect(() => {
-    if (!directoryKey || !linearAuthChecked || linearConnected || activeMode !== 'linear') {
+    if (!directoryKey || (!linearAuthChecked && !isGeoCodeDesktop()) || linearConnected || activeMode !== 'linear') { // GeoCode: without the Linear module this check never runs, so a restored or extension-opened Linear panel would stay
       return;
     }
     closeContextPanel(directoryKey);

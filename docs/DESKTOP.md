@@ -29,7 +29,9 @@ GeoCode 是单机、单用户的应用,三类机制一律关闭:让其他设备�
 
 关闭遵循 `DESIGN.md` 的「边界靠装配,不靠删除」:源码保留,入口在三层分别关掉。壳服务端对这些接口回 404,由它自己回答,因为未匹配的 `/api` 路径会落到内核代理;主进程拒绝相应的 IPC 命令;界面隐藏相应的设置页与入口,并在源头停掉自动发出的请求。界面的隐藏只是配合,拒绝发生在壳服务端与主进程。
 
-模型服务的连接是内核的正常工作,不在此列。其余上游功能的去留见 `DESIGN.md` 第 4 节。
+模型服务的连接是内核的正常工作,不在此列。
+
+对外机制之外,GeoCode 用不到的上游功能也按同样的方式关掉,其余上游功能的去留见 `DESIGN.md` 第 4 节。已经关掉的是 Linear 集成:它把会话接到软件团队的任务管理上,地理数据处理用不到,授权还要经过 OpenChamber 的云端中转。关掉的除了连接 Linear 的设置,还有会话完成或出错时往关联 Issue 留言,以及扩展借用这份 Linear 登录。
 
 ## 4. 本机访问控制
 
@@ -59,16 +61,16 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 
 关闭与访问控制依靠几份手写的清单,也依赖上游口令模式的行为,上游新增的内容不会自动被覆盖。合并 `chamber-upstream` 之后,重新推导并对照:
 
-- 关闭的接口(`web/server/geocode/closed-surface.js`):在壳服务端里找 `app.get`、`app.post` 等方法与 `app.use` 注册的路径,以及 `server.on('upgrade'` 的处理器,属于第 3 节机制的加进清单;新的 WebSocket 处理器在口令模式下要校验令牌。关闭的 IPC 命令(`electron/geocode/closed-commands.mjs`):`main.mjs` 里 `handleInvoke` 的命令,以及 `ipcMain.handle` 与 `ipcMain.on` 的频道。不接受的环境变量按前缀认定(`electron/geocode/inherited-env.mjs`),上游新增的同前缀变量自动在内,要找的是另一种前缀的配置变量,例如新引入的运行时或库自带的。隐藏的设置(`ui/src/geocode/settings.ts`):`SETTINGS_PAGE_METADATA` 与 `SETTINGS_SEARCH_ITEMS`。自动外发:在壳服务端、界面与 `main.mjs` 里找 `openchamber.dev`、`github.com/openchamber` 等地址。
+- 关闭的接口(`web/server/geocode/closed-surface.js`):在壳服务端里找 `app.get`、`app.post` 等方法与 `app.use` 注册的路径,以及 `server.on('upgrade'` 的处理器,属于第 3 节关掉的机制或上游功能的,加进清单;新的 WebSocket 处理器在口令模式下要校验令牌。关闭的 IPC 命令(`electron/geocode/closed-commands.mjs`):`main.mjs` 里 `handleInvoke` 的命令,以及 `ipcMain.handle` 与 `ipcMain.on` 的频道。不接受的环境变量按前缀认定(`electron/geocode/inherited-env.mjs`),上游新增的同前缀变量自动在内,要找的是另一种前缀的配置变量,例如新引入的运行时或库自带的。隐藏的设置(`ui/src/geocode/settings.ts`):`SETTINGS_PAGE_METADATA` 与 `SETTINGS_SEARCH_ITEMS`。侧栏面板(`ui/src/geocode/surface.ts` 的 `CLOSED_SURFACES`):`ui/src/lib/surfaces/registry.ts` 的 `CONTEXT_SURFACES`;被恢复或被扩展打开的 Linear 面板,靠 `ui/src/components/layout/ContextPanelRail.tsx` 里集成断开时关掉面板的那段逻辑关掉。自动外发:在壳服务端、界面与 `main.mjs` 里找 `openchamber.dev`、`github.com/openchamber` 等地址。
 - 唯一入口仍然唯一:推送只经 `web/server/lib/notifications/runtime.js` 的 `fanoutPush`,深链只经 `electron/main.mjs` 的 `handleDeepLinks`,窗口取令牌只经 `main.mjs` 的 `readDesktopLocalClientToken`,会话密钥只来自 `web/server/lib/ui-auth/ui-auth.js` 的 `getOrCreateJwtSecret` 与 `rotateJwtSecret`。用户环境只从两处进入:启动环境在 `electron/early-startup.mjs` 的模块顶层清理,在它之前执行的代码都不能在加载时读写 `process.env`,包括它 import 的外部模块(打包时不内联、先于它执行,如 `@openchamber/web/server/lib/inherited-env.js`)与打包产物 `electron/dist-bundle/early-startup.mjs` 里排在它前面的内联代码;登录 shell 的快照由 `main.mjs` 的 `inheritUserShellEnv` 清理,壳服务端只经 `provideLoginShellEnvSnapshot` 拿到它,不自己再读登录 shell(Windows 除外)。
-- 上游的行为没有变:`createClient` 不传 `expiresAt` 时不过期;令牌不经渲染进程的命令行参数(`electron/early-startup.mjs` 的 `buildRendererAdditionalArguments`);`ui/src/components/auth/SessionAuthGate.tsx` 只在 `locked` 状态显示口令表单。
+- 上游的行为没有变:`createClient` 不传 `expiresAt` 时不过期;令牌不经渲染进程的命令行参数(`electron/early-startup.mjs` 的 `buildRendererAdditionalArguments`);`ui/src/components/auth/SessionAuthGate.tsx` 只在 `locked` 状态显示口令表单;Linear 的界面入口大多以运行时模块 `linear` 是否存在为条件(如 `ui/src/components/sections/integrations/IntegrationsPage.tsx` 的 `hasLinear`),不以它为条件的新入口要另外关掉;侧栏里嵌入的会话聊天仍是主窗口里同源、没有 preload 的 iframe(`ui/src/geocode/surface.ts` 的 `isGeoCodeDesktop` 靠读它的父窗口判断)。
 - `web/server/lib/opencode/compatibility.js` 的 `MINIMUM_OPENCODE_VERSION` 不高于 `kernel/` 的版本,否则壳会拒绝安装包里的内核。
 
 ## 7. 验收
 
 在没有安装 OpenCode 的环境里,打包出的应用启动后可以直接对话,用的是 `kernel/` 构建的内核,即使 `PATH`、设置或环境变量指向别的 `opencode` 也一样;内核缺失时报错。正常退出与强制结束之后,都没有残留的内核进程;agent 执行的命令与应用内的终端都读不到内核的口令。
 
-设置与界面里没有远程、局域网、配对、隧道等入口,对应的接口与 IPC 命令被拒绝,路径换了大小写也一样,`openchamber://` 链接不被处理。与本机 OpenChamber 共用数据目录时,它设置里的局域网开关、界面口令、主机列表,以及数据目录里的推送订阅,都不起作用。运行期间,应用不自动向 OpenChamber 的服务器发出请求,以监视应用进程的对外连接来确认。
+设置与界面里没有远程、局域网、配对、隧道、Linear 等入口(侧栏里嵌入的会话聊天也一样),对应的接口与 IPC 命令被拒绝,路径换了大小写也一样,`openchamber://` 链接不被处理。与本机 OpenChamber 共用数据目录时,它设置里的局域网开关、界面口令、主机列表,以及数据目录里的推送订阅,都不起作用。运行期间,应用不自动向 OpenChamber 的服务器发出请求,以监视应用进程的对外连接来确认。
 
 不带令牌的 HTTP 请求与 WebSocket 连接(终端、事件流、听写等)都被拒绝,伪造的或 OpenChamber 签发的会话 cookie 不被接受,Host 不是 `127.0.0.1` 或 `localhost` 的 HTTP 请求被拒绝。窗口带着令牌时,对话、终端、文件预览、迷你聊天、内置浏览器与 agent 的工具回调都正常;令牌失效时显示重启提示,而不是登录页。
 
