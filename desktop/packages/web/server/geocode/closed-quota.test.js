@@ -4,10 +4,11 @@ import { withoutClosedQuotaProviders } from './closed-quota.js';
 
 // Guards against the upstream tables being rebuilt without the wrapper.
 describe('GeoCode: withoutClosedQuotaProviders', () => {
-  const hadElectron = Object.prototype.hasOwnProperty.call(process.versions, 'electron');
+  const originalElectron = process.versions.electron;
 
   afterEach(() => {
-    if (!hadElectron) delete process.versions.electron;
+    if (originalElectron === undefined) delete process.versions.electron;
+    else process.versions.electron = originalElectron;
     vi.doUnmock('../lib/quota/providers/claude/index.js');
     vi.doUnmock('../lib/quota/providers/cursor.js');
     vi.resetModules();

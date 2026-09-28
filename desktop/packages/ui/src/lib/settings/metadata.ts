@@ -234,7 +234,7 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
     isAvailable: (ctx) => !ctx.isVSCode && !ctx.isMobile,
   },
 ] as const;
-closeSettingsPages(SETTINGS_PAGE_METADATA); // GeoCode: remote instances and tunnels do not exist in the desktop app
+closeSettingsPages(SETTINGS_PAGE_METADATA); // GeoCode: see geocode/settings.ts
 
 const LEGACY_SIDEBAR_SECTION_TO_SETTINGS_SLUG: Record<SidebarSection, SettingsPageSlug> = {
   sessions: 'sessions',

@@ -2,6 +2,7 @@ import { isVSCodeRuntime } from '@/lib/desktop';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { isMobileSurfaceRuntime } from '@/lib/runtimeSurface';
 import { getRuntimeKey } from '@/lib/runtime-switch';
+import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see loadGuestCatalogOnce
 
 import { useGuestBadgeStore } from './badge-store.ts';
 import { parseGuestCatalogJson } from './parse.ts';
@@ -37,6 +38,7 @@ const loadGuestCatalogOnce = async (runtimeKey: string): Promise<void> => {
   alignCatalogRuntime(runtimeKey);
 
   const store = useGuestsStore.getState();
+  if (isGeoCodeDesktop()) return store.replaceCatalog([], runtimeKey); // GeoCode: the desktop app has no extensions; ready, not unsupported, so restored extension tabs close
   if (isVSCodeRuntime() || isMobileSurfaceRuntime()) {
     store.markUnsupported(runtimeKey);
     return;

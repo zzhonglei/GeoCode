@@ -1,5 +1,5 @@
 // Kept free of runtime imports: the settings metadata that calls these is imported everywhere.
-const CLOSED_PAGES = new Set(['remote-instances', 'tunnel']);
+const CLOSED_PAGES = new Set(['remote-instances', 'tunnel', 'extensions']);
 
 const CLOSED_SEARCH_ITEMS = new Set([
   'sessions.desktop-ui-password',
@@ -11,6 +11,8 @@ const CLOSED_SEARCH_ITEMS = new Set([
   'integrations.linear',
   'integrations.linear.add-workspace',
   'integrations.linear.mapping',
+  'integrations.guests',
+  'sessions.browser-provider',
 ]);
 
 type Gated<Context> = { isAvailable?: (ctx: Context) => boolean };
