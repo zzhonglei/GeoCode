@@ -21,6 +21,7 @@ GeoCode is a desktop AI application for geographic work, built on two upstreams 
 - Before trusting a locator, guard, or tripwire, prove that it can fail: feed it a known match, or revert the change it protects and confirm that it turns red.
 - Run `scripts/foreign-writes.sh before` and `after` around any operation that may write to disk, and around at least one real application session when a change affects runtime paths. It observes writes, not reads.
 - After an edit, run `node scripts/dead-code.mjs` on the touched files.
+- Before committing changes to `desktop/`, run `node scripts/own-anti-slop.mjs`.
 - Treat conclusions from delegated agents as leads, and verify the ones a decision depends on.
 
 ## Shell
