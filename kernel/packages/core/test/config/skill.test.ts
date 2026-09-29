@@ -414,3 +414,40 @@ describe("ConfigSkillPlugin.Plugin", () => {
     ),
   )
 })
+
+describe("GeoCode", () => {
+  it.live("GeoCode: loads skills only from config directories, not from paths or URLs a config lists", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const opencode = path.join(tmp.path, "opencode")
+          const directory = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(opencode, "skills", "kept"), { recursive: true })
+            await fs.mkdir(path.join(directory, "listed", "dropped"), { recursive: true })
+            await write(path.join(opencode, "skills"), "kept", "Kept.")
+            await write(path.join(directory, "listed"), "dropped", "Dropped.")
+          })
+          const pulled: string[] = []
+          const service = yield* startEntries(
+            [
+              new Directory({ type: "directory", path: AbsolutePath.make(opencode) }),
+              new Document({ type: "document", info: decode({ skills: ["./listed", "https://skills.example/"] }) }),
+            ],
+            directory,
+            directory,
+            SkillDiscovery.Service.of({
+              pull: (url) =>
+                Effect.sync(() => {
+                  pulled.push(url)
+                  return []
+                }),
+            }),
+          )
+          expect((yield* service.list()).map((skill) => skill.id)).toEqual([Skill.ID.make("kept")])
+          expect(pulled).toEqual([])
+        }),
+      ),
+    ),
+  )
+})

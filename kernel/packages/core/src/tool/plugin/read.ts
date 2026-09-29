@@ -88,6 +88,7 @@ export const Plugin = {
                 if (result.target.externalDirectory !== undefined) return
                 const resolved = yield* fs.resolve(result.target.absolute)
                 const root = yield* fs.resolve(location.directory)
+                if (!FSUtil.contains(root, resolved)) return // GeoCode: only AGENTS.md inside the location directory
                 // up() searches its stop directory, so the Location-root AGENTS.md (already
                 // supplied by core initial instructions) is dropped by the dirname filter.
                 const discovered = yield* fs.up({

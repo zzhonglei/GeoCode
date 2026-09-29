@@ -19,6 +19,7 @@ import { createRoutes } from "./routes"
 import { ServerInfo } from "./server-info"
 import { Status } from "./service-status"
 import type { ServerOptions } from "./options"
+import { GeoCodeProfile } from "./geocode/profile" // GeoCode: see the createRoutes call
 
 export interface Lifecycle<E = never, R = never> {
   readonly onListen: (
@@ -98,6 +99,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
           password,
         },
         urls,
+        GeoCodeProfile.replacements(options), // GeoCode: plugins only from the managed config, no remote config
       ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
       applicationScope,
     )

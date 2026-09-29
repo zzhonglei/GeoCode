@@ -1609,3 +1609,43 @@ describe("Config", () => {
     ),
   )
 })
+
+describe("GeoCode", () => {
+  it.live("GeoCode: reads config only from the global and location directories, and no other product's roots", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const home = path.join(global, "home")
+        const parent = path.join(home, "projects")
+        const project = path.join(parent, "demo")
+        return Effect.promise(async () => {
+          for (const directory of [
+            path.join(home, ".claude", "skills"),
+            path.join(home, ".agents", "skills"),
+            path.join(home, ".opencode"),
+            path.join(parent, ".opencode"),
+            path.join(project, ".opencode"),
+            path.join(project, ".claude", "skills"),
+            path.join(project, ".agents", "skills"),
+          ])
+            await fs.mkdir(directory, { recursive: true })
+          for (const directory of [global, home, parent, project])
+            await fs.writeFile(path.join(directory, "opencode.json"), "{}")
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              expect((yield* config.entries()).map((entry) => `${entry.type}:${entry.path}`)).toEqual([
+                `document:${path.join(global, "opencode.json")}`,
+                `directory:${global}`,
+                `document:${path.join(project, "opencode.json")}`,
+                `directory:${path.join(project, ".opencode")}`,
+              ])
+              expect(yield* config.compatibility!()).toEqual({ claude: [], agents: [] })
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+        )
+      }),
+    ),
+  )
+})

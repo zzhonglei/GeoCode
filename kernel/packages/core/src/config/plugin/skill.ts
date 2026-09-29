@@ -81,7 +81,12 @@ export const Plugin = define({
         result.push(source)
       }
       const directories = loaded.entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
+      // --- GeoCode: no skill paths or URLs from config ---
+      const items: string[] = []
+      /*
       const items = loaded.entries.flatMap((entry) => (entry.type === "document" ? (entry.info.skills ?? []) : []))
+      */
+      // --- /GeoCode ---
       for (const directory of directories) {
         add(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skill")) }))
         add(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }))

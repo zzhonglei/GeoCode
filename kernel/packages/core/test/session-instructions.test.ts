@@ -30,6 +30,7 @@ import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Tool } from "@opencode/core/tool"
 import { tempLocationLayer } from "./fixture/location"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
@@ -324,4 +325,28 @@ describe("SessionInstructions", () => {
     // Metadata is bookkeeping for the dedup ledger; the model must not see it.
     expect(messages[0]!.metadata).toBeUndefined()
   })
+})
+
+describe("GeoCode", () => {
+  it.live("GeoCode: a read through a link out of the Location injects no AGENTS.md from outside it", () =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const outside = yield* tmpdirScoped()
+      yield* mkdir(path.resolve(outside.path, "data"))
+      yield* writeAgents(path.resolve(outside.path, "AGENTS.md"), "outside-instructions")
+      yield* Effect.promise(() => fs.writeFile(path.resolve(outside.path, "data", "file.txt"), "file content"))
+      yield* Effect.promise(() =>
+        fs.symlink(path.resolve(outside.path, "data"), path.resolve(location.directory, "linked")),
+      )
+
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
+      const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: location.directory }) })).id
+      yield* executeTool(registry, readCall(sessionID, "call-linked", "linked/file.txt"))
+
+      expect((yield* synthetics(sessionID)).some((message) => message.text.includes("outside-instructions"))).toBe(
+        false,
+      )
+    }),
+  )
 })

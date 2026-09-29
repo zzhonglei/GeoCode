@@ -33,7 +33,12 @@ export const Plugin = define({
       const root = yield* fs.resolve(location.project.directory)
       const home = yield* fs.resolve(global.home)
       const project = discovery.project && FSUtil.contains(root, start)
+      // --- GeoCode: only the location directory's AGENTS.md, not its ancestors' ---
+      const stop = start
+      /*
       const stop = FSUtil.contains(home, start) ? home : root
+      */
+      // --- /GeoCode ---
       const globalFile = yield* fs.resolve(join(global.config, "AGENTS.md"))
       const loaded: { current: Loaded } = { current: { type: "available", files: [] } }
 

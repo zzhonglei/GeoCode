@@ -33,7 +33,8 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   const directories =
     (yield* fs.resolve(location.directory)) === globalRoots[0] || options?.project === false
       ? []
-      : yield* fs.up({ targets: ["."], start: location.directory }).pipe(Effect.orDie)
+      : // GeoCode: the location directory itself, not its ancestors
+        yield* fs.up({ targets: ["."], start: location.directory, stop: location.directory }).pipe(Effect.orDie)
   const discovered = yield* Effect.forEach(directories, (directory) =>
     Effect.gen(function* () {
       // Resolve the parent too: missing children must honor symlinked global roots.
@@ -68,6 +69,10 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
       visible.filter((item) => path.basename(item) === ".opencode").toReversed(),
       (directory) => fs.isDir(directory).pipe(Effect.map((present) => ({ path: directory, present }))),
     ),
+    // --- GeoCode: no other product's roots, so their skills are neither loaded nor watched ---
+    claude: [],
+    agents: [],
+    /*
     claude: [
       ...new Set([
         ...(globalEnabled ? [globalClaudeDirectory] : []),
@@ -80,5 +85,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
         ...visible.filter((item) => path.basename(item) === ".agents").toReversed(),
       ]),
     ],
+    */
+    // --- /GeoCode ---
   } satisfies Sources
 })

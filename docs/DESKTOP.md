@@ -23,6 +23,8 @@ Electron 主进程
 
 安装包里的内核由本仓库的 `kernel/` 构建,版本与 `kernel/` 一致。上游在打包时从 npm 下载 OpenCode 发布的内核,GeoCode 不用这一步,否则对内核的修改进不了安装包。壳只使用安装包里的内核,不读设置里的内核路径、环境变量指定的内核或 `PATH` 上的 `opencode`;内核缺失或起不来时报错,不引导用户安装 OpenCode。构建与暂存的方法见 `DEVELOPMENT.md` 第 4 节,暂存脚本是 POSIX sh,只有 macOS 的打包流程能用。
 
+内核只从两处读配置:全局配置目录,以及会话所在的目录本身。会话所在的目录是用户添加的项目文件夹或它的 worktree,「对话」则是它自己的聊天目录;OpenChamber 的项目级设置也写在会话目录里。两处读的是 `opencode.json(c)`、`AGENTS.md`,以及技能、agent 与命令的目录(全局配置目录里的,和会话目录 `.opencode/` 里的);壳交给内核的托管配置照常读。上游还会从会话目录一路往上找到文件系统的根目录,读每一级的配置与 `.opencode/`(`AGENTS.md` 在主目录下时找到主目录为止,否则找到项目根目录),读 Claude Code 等其他应用的技能目录(`~/.claude/skills`、`~/.agents/skills` 与各级的同名目录),读配置里 `skills` 列出的路径与网址,接入远程下发的配置,这些 GeoCode 都不读。插件的增减只看托管配置:壳注入的工具,以及壳关掉的内核自带插件;插件目录、配置里 `plugins` 列出的插件与 npm 插件包都不加载,其余只有编译进内核的插件。会话被 agent 用 `session_move` 搬到别的目录后,按新目录重新读取。agent 读取会话目录里的文件时,内核会顺带载入文件所在目录及其上各级(不含会话目录本身)的 `AGENTS.md`,这一点与上游相同;文件在会话目录之外时不载入,例如经符号链接读到的文件,或会话目录只是某个 git 仓库的子目录时读到的仓库里的其他文件。
+
 ## 3. 对外边界
 
 GeoCode 是单机、单用户的应用,三类机制一律关闭:让其他设备连进来的(局域网访问、用户设置的界面口令、设备配对与设备令牌、Private Relay、公网隧道),连到本机内核以外主机的(多主机与主机切换、SSH 远程实例、外部内核),以及不经用户操作就发往上游服务器的(OpenCode 的安装与升级、OpenChamber 的更新检查与使用上报、推送)。`openchamber://` 深链不注册也不处理。移动端、VS Code 扩展、独立的网页服务(包括安装为 PWA)与 `openchamber` 命令行不构建、不打包,用户只通过 GeoCode 的窗口操作应用。
@@ -45,7 +47,7 @@ OpenChamber 的扩展关掉了。扩展从文件夹、压缩包或 git 地址安
 
 代码片段停用了。它其实是提示词里的文本宏(中文界面的译名有误):消息里的 `#名字` 在发送前换成事先写好的一段文字,还能往消息前后插入内容。片段是全局配置目录与项目 `.opencode/` 里的文件,等于让外部文件改写用户发出的话,下载来的项目也能带上几段;输入框里打出 `#` 加任何词(比如一个编号)再按回车,消息不会发出,而是打开新建片段的设置页。GeoCode 里没有片段:`#` 不再弹出选择器,消息按输入的原样发出,计划任务与会话接口也不展开。
 
-技能目录关掉了。它从几个写死的 GitHub 仓库浏览、安装现成的技能,这些仓库里多是编程技能,与地理数据处理关系不大;打开「技能」页时,界面还会在后台请求目录,由壳服务端向 api.github.com 查询这些仓库。GeoCode 里没有「技能目录」页,界面不再加载目录,目录、扫描与安装的接口都被拒绝,也就不再为它联网或克隆仓库。技能本身照常可用:在「技能」页新建、编辑、删除技能,agent 照常载入它们。
+技能目录关掉了。它从几个写死的 GitHub 仓库浏览、安装现成的技能,这些仓库里多是编程技能,与地理数据处理关系不大;打开「技能」页时,界面还会在后台请求目录,由壳服务端向 api.github.com 查询这些仓库。GeoCode 里没有「技能目录」页,界面不再加载目录,目录、扫描与安装的接口都被拒绝,也就不再为它联网或克隆仓库。技能本身照常可用:在「技能」页新建、编辑、删除技能,agent 照常载入它们,读取的范围见第 2 节。
 
 ### 4.2 发给第三方的对话与凭据
 
@@ -65,7 +67,9 @@ OpenChamber 还在开发一个「隔离空间」功能:用 Docker 为项目起�
 
 ### 4.5 尚未关闭的
 
-内核自己仍会从外部来源加载插件、命令与技能。插件与命令来自用户与项目配置里列出的插件、项目目录往上各级 `.opencode/` 里的插件与命令、全局配置目录里的插件,以及 npm 插件包(加载时联网安装);技能除了全局与项目的技能目录,还来自 Claude Code 等其他应用的技能目录(`~/.claude/skills`、`~/.agents/skills` 与项目往上各级的同名目录),以及配置里列出的技能网址;接入过的远程服务还能下发整份配置。插件是在内核进程里运行的代码,命令模板里的 `` !`命令` `` 在展开时直接执行 shell,都不经权限确认,下载来的项目也能带上它们;其他应用目录里的技能会写进每次对话的指令。按 GeoCode 的规则,内核只读全局配置目录与项目目录本身两处,只加载内置的与自己注册的插件;这一层还没有在内核里关掉。
+内核只读全局配置目录与会话目录本身(见第 2 节),但这两处的内容仍能改变 agent 的行为,下载来的项目也能带上它们:命令模板里的 `` !`命令` `` 在展开时直接执行 shell,不经权限确认;项目配置能启动 MCP 服务与格式化命令、放宽权限、改模型服务的地址,`references` 还能让内核克隆 git 仓库。接入 OpenCode Console 账号后,内核还会从 opencode.ai 拉取组织下发的服务商、远程 MCP 服务与策略,这个内核插件受保护,托管配置关不掉它。打开带配置的项目时不询问是否信任,`` !`命令` `` 也照常执行。
+
+壳的「技能」页仍按上游的范围找技能:全局配置目录、`~/.opencode` 与会话目录往上到 git 仓库根目录各级 `.opencode/` 下的 `skills`(及旧名 `skill`),主目录与上述各级的 `.claude/skills`、`.agents/skills`,配置里 `skills` 列出的路径,以及网址技能的下载缓存,其中多数内核已经不读。它会列出这些技能,编辑时写进它们所在的目录,删除技能时还会连带删掉会话目录与主目录下 `.claude/skills`、`.agents/skills` 里的同名技能。
 
 ## 5. 本机访问控制
 
@@ -89,9 +93,9 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 
 ## 7. 实现与维护
 
-本节的路径以 `desktop/packages/` 为起点。GeoCode 自己的代码放在各包的 `geocode/` 目录里;对上游的补丁怎样标记、怎样列出,见 `CONVENTIONS.md` 第 3.4 节。
+本节的路径以 `desktop/packages/` 为起点,内核的路径从仓库根目录写起。GeoCode 自己的代码放在各包的 `geocode/` 目录里;对上游的补丁怎样标记、怎样列出,见 `CONVENTIONS.md` 第 3.4 节。
 
-壳服务端的补丁多数以 `process.versions.electron` 判断是否在桌面应用里,以 `serve --stdio` 启动内核的补丁(`web/server/lib/opencode/lifecycle.js`)例外,对 OpenChamber 的所有运行方式都生效;界面以 `ui/src/geocode/surface.ts` 的 `isGeoCodeDesktop` 判断,设置页与搜索项以设置上下文的 `isDesktop` 判断。`electron:dev` 在 Electron 之外另起一个壳服务端,壳服务端的这类补丁与访问控制在那里不生效,验证要用 `electron:dev:bundled` 或打包出的应用;环境变量的清理只在打包出的应用里生效。关闭接口、主机名检查、用量的服务商、扩展、路由与代码片段各有测试,运行方法见 `DEVELOPMENT.md` 第 7 节。
+壳服务端的补丁多数以 `process.versions.electron` 判断是否在桌面应用里,以 `serve --stdio` 启动内核的补丁(`web/server/lib/opencode/lifecycle.js`)例外,对 OpenChamber 的所有运行方式都生效;界面以 `ui/src/geocode/surface.ts` 的 `isGeoCodeDesktop` 判断,设置页与搜索项以设置上下文的 `isDesktop` 判断。`electron:dev` 在 Electron 之外另起一个壳服务端,壳服务端的这类补丁与访问控制在那里不生效,验证要用 `electron:dev:bundled` 或打包出的应用;环境变量的清理只在打包出的应用里生效。关闭接口、主机名检查、用量的服务商、扩展、路由与代码片段各有测试,运行方法见 `DEVELOPMENT.md` 第 7 节;内核的配置来源也有测试,是 `kernel/packages/core/test/` 下 `config/config.test.ts`、`config/skill.test.ts`、`instruction-discovery.test.ts`、`session-instructions.test.ts` 里的 `GeoCode:` 用例与 `kernel/packages/server/test/geocode/profile.test.ts`;上游测试里断言上游这些行为的几项会失败,见 `CONVENTIONS.md` 第 4 节。
 
 关闭与访问控制依靠几份手写的清单,也依赖上游口令模式的行为,上游新增的内容不会自动被覆盖。合并 `chamber-upstream` 之后,重新推导并对照:
 
@@ -107,6 +111,7 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 - 技能目录:界面加载目录经 `ui/src/stores/useSkillsCatalogStore.ts` 的 `loadCatalog`(`ui/src/components/views/SettingsView.tsx` 打开「技能」页时、`ui/src/stores/catalogRefresh.ts` 与 `ui/src/stores/useAgentsStore.ts` 刷新配置时都调用它),桌面应用里直接返回,不发请求;其余的目录请求(`loadSource`、`scanRepo`、`installSkills`)只由已隐藏的技能目录页及其对话框发出。壳服务端关闭 `/api/config/skills/catalog/source`,以及 `/api/config/skills/catalog` 的 GET、`/api/config/skills/scan` 与 `/api/config/skills/install` 的 POST:这三条路径上的其他方法和下级路径是对名叫 `catalog`、`scan`、`install` 的技能的读写,上游照常可用。「技能」页经 `/api/config/skills` 的其余接口读写技能,不受影响。
 - 路由:界面的路由入口(设置页、搜索项、命令面板、Auto 选项)都看 `routingFeatureAvailable`,它由 `web/server/lib/opencode/settings-helpers.js` 下发,桌面应用里为假;在界面里找 `routingFeatureAvailable` 的读取处;壳服务端的路由逻辑(Auto 的解析、安全网)都经 `web/server/lib/routing/store.js` 的 `readConfig` 读配置,桌面应用里一律得到默认的关闭状态,新代码若直接读 `routing.json`(`routingConfigPath`),就绕过了它;`/api/routing` 关闭。
 - 隔离空间:空间的一切行为都挂在 `web/server/index.js` 的 `spacesHost` 上(请求中间件、WebSocket 升级、会话列表的合并、目录的拒绝)。在 `index.js` 里找 `spacesHost` 的赋值处:启动时读 `isolatedSpacesEnabled` 后调用 `buildSpacesHost`,这一处在桌面应用里跳过;开关接口经 `createSwitchController` 的 `setHost`,开关所在的 `/api/openchamber/spaces` 与发往空间的 `/api/spaces` 关闭。新代码若不经 `spacesHost` 直接用 `web/server/lib/spaces/` 起空间或调用 Docker,就绕过了这层。设置里的开关现在由上游 `ui/src/lib/spaces/release.ts` 的 `ISOLATED_SPACES_RELEASED` 藏着,它变真之后,开关的设置行与搜索项要加进隐藏的设置。
+- 内核的配置来源:GeoCode 的替换清单在 `kernel/packages/server/src/geocode/profile.ts`,由 `kernel/packages/server/src/process.ts` 在启动时交给 `createRoutes`,换掉插件来源(`ConfigPluginSource`,只看托管配置)与远程配置(`WellKnown`,为空);另有四处补丁,在 `kernel/packages/core/src/` 下:`config/discovery.ts` 不往上找、不给其他应用的目录,`config/plugin/instruction.ts` 的 `AGENTS.md` 只读会话目录,`config/plugin/skill.ts` 不读配置里的 `skills` 列表,`tool/plugin/read.ts` 读到会话目录之外的文件时不载入附近的 `AGENTS.md`。托管配置由壳以 `OPENCODE_CONFIG` 传入,插件的规则靠这一点:开发模式下用户环境若已设了 `OPENCODE_CONFIG`,壳改用 `OPENCODE_CONFIG_CONTENT` 注入工具,内核就不加载壳的工具,却会按用户那份文件的 `plugins` 加载。合并 `kernel-upstream` 之后,在 `kernel/packages/core/src/config/` 与 `kernel/packages/core/src/plugin/` 里找新的读取目录、向上查找(`fs.up`)、增加技能(`ctx.skill.transform`)与加载插件的地方;替换掉的两个服务若改了接口,替换也跟着改。
 - 用量的服务商(`ui/src/geocode/quota.ts` 与 `web/server/geocode/closed-quota.js`,两份要一致):界面的 `ui/src/lib/quota/providers/index.ts` 的 `QUOTA_PROVIDERS`,壳服务端的 `web/server/lib/quota/providers/index.js` 的 `registry` 与 `web/server/lib/quota/credentials/providers.js` 的 `normalizers`;上游新增的服务商要读别的应用的凭据时,加进两份清单;`web/server/lib/quota/index.js` 还直接导出 `fetchClaudeQuota`、`fetchCursorQuota`,现在没有调用者,以后有了会绕过 `registry`。
 - 自动外发:在壳服务端、界面与 `main.mjs` 里找 `openchamber.dev`、`github.com/openchamber` 等地址。
 - 唯一入口仍然唯一:推送只经 `web/server/lib/notifications/runtime.js` 的 `fanoutPush`,深链只经 `electron/main.mjs` 的 `handleDeepLinks`,窗口取令牌只经 `main.mjs` 的 `readDesktopLocalClientToken`,会话密钥只来自 `web/server/lib/ui-auth/ui-auth.js` 的 `getOrCreateJwtSecret` 与 `rotateJwtSecret`。用户环境只从两处进入:启动环境在 `electron/early-startup.mjs` 的模块顶层清理,在它之前执行的代码都不能在加载时读写 `process.env`,包括它 import 的外部模块(打包时不内联、先于它执行,如 `@openchamber/web/server/lib/inherited-env.js`)与打包产物 `electron/dist-bundle/early-startup.mjs` 里排在它前面的内联代码;登录 shell 的快照由 `main.mjs` 的 `inheritUserShellEnv` 清理,壳服务端只经 `provideLoginShellEnvSnapshot` 拿到它,不自己再读登录 shell(Windows 除外)。
@@ -123,6 +128,7 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 - 设置文件里开着隔离空间时,应用也不建空间、不调用 Docker,开关与空间的接口被拒绝。
 - 设置与界面里没有 Linear、扩展、路由、插件、魔法提示词、代码片段与技能目录的入口;远程实例、隧道、扩展、插件、魔法提示词、代码片段与技能目录页即使是上次停留的页面或链接指向的页面,打开设置时也显示「通用」。
 - 数据目录里已经装好的扩展既不显示也不运行;开着路由的 `routing.json`、`magic-prompts.json` 与全局和项目的片段文件都不起作用:模型选择器里不提供 Auto,不向 Jev 发请求,输入框里的 `#名字` 不弹出选择器、不展开。
+- 对话里只有全局配置目录与会话目录本身的 `AGENTS.md` 与技能,以及读到会话目录里的文件时顺带载入的子目录 `AGENTS.md`:项目上级目录与主目录本身的配置、会话目录之外的 `AGENTS.md`、`.claude` 与 `.agents` 里的技能、配置列出的技能路径和网址都不进入对话,插件目录与配置列出的插件不执行;壳注入的工具照常,开关不用重启即生效。
 - 打开「技能」页不请求技能目录,不向 api.github.com 查询;技能照常新建、编辑、删除,名叫 `catalog`、`scan`、`install` 的技能,能做的与上游相同。
 - 生成提交信息、解决冲突、斜杠命令与新聊天的起始按钮照常可用。
 - 用量页里没有 Claude 与 Cursor,也不读取它们的凭据。

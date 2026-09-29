@@ -491,3 +491,56 @@ describe("ConfigInstructionPlugin.Plugin", () => {
     }),
   )
 })
+
+describe("GeoCode", () => {
+  it.live("GeoCode: loads the global and location AGENTS.md, not those of the location's ancestors", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const home = path.join(tmp.path, "home")
+        const project = path.join(home, "code", "repo")
+        const directory = path.join(project, "packages", "core")
+        const globalFile = path.join(global, "AGENTS.md")
+        const locationFile = path.join(directory, "AGENTS.md")
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(directory, { recursive: true })
+            await fs.writeFile(globalFile, "global")
+            await fs.writeFile(locationFile, "location")
+            for (const ancestor of [home, path.join(home, "code"), project])
+              await fs.writeFile(path.join(ancestor, "AGENTS.md"), "ancestor")
+          })
+          const discovery = yield* start()
+          const watcher = yield* Watcher.Test
+          expect(yield* watcher.subscriptions()).toEqual([
+            { path: globalFile, type: "file" },
+            { path: locationFile, type: "file" },
+          ])
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(
+            [`Instructions from: ${globalFile}\nglobal`, `Instructions from: ${locationFile}\nlocation`].join("\n\n"),
+          )
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: global,
+              home,
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of(
+                  location(
+                    { directory: AbsolutePath.make(directory) },
+                    { projectDirectory: AbsolutePath.make(project) },
+                  ),
+                ),
+              ),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+})
