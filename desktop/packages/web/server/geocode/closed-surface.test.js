@@ -15,7 +15,7 @@ describe('GeoCode: closedSurface', () => {
     process.versions.electron = 'test';
     const app = express();
     app.use(closedSurface);
-    for (const route of ['/api/openchamber/update-check', '/api/push/subscribe', '/connect', '/api/client-auth/clients', '/api/push/visibility', '/api/plugin', '/api/plugin/check', '/api/magic-prompts/:id', '/api/config/snippets/expand', '/api/openchamber/spaces/switch', '/api/spaces/:id/session']) {
+    for (const route of ['/api/openchamber/update-check', '/api/push/subscribe', '/connect', '/api/client-auth/clients', '/api/push/visibility', '/api/plugin', '/api/plugin/check', '/api/magic-prompts/:id', '/api/config/snippets/expand', '/api/openchamber/spaces/switch', '/api/spaces/:id/session', '/api/config/skills/catalog/source', '/api/config/skills/:name', '/api/config/skills/:name/files/*filePath']) {
       app.all(route, (_req, res) => res.status(200).send('upstream'));
     }
     server = http.createServer(app);
@@ -28,10 +28,10 @@ describe('GeoCode: closedSurface', () => {
     await new Promise((resolve) => server.close(resolve));
   });
 
-  const statusOf = async (path) => (await fetch(`${baseUrl}${path}`)).status;
+  const statusOf = async (path, method = 'GET') => (await fetch(`${baseUrl}${path}`, { method })).status;
 
   it('refuses closed endpoints in any case and with a trailing slash', async () => {
-    for (const path of ['/api/openchamber/update-check', '/API/OpenChamber/Update-Check', '/api/push/subscribe/', '/CONNECT', '/API/Client-Auth/Clients', '/API/Plugin/Check', '/API/Magic-Prompts/git.commit.generate.visible', '/API/Config/Snippets/Expand', '/API/OpenChamber/Spaces/Switch', '/API/Spaces/space-1/session']) {
+    for (const path of ['/api/openchamber/update-check', '/API/OpenChamber/Update-Check', '/api/push/subscribe/', '/CONNECT', '/API/Client-Auth/Clients', '/API/Plugin/Check', '/API/Magic-Prompts/git.commit.generate.visible', '/API/Config/Snippets/Expand', '/API/OpenChamber/Spaces/Switch', '/API/Spaces/space-1/session', '/API/Config/Skills/Catalog/Source/']) {
       expect(await statusOf(path)).toBe(404);
     }
   });
@@ -39,5 +39,14 @@ describe('GeoCode: closedSurface', () => {
   it('leaves the endpoints the desktop app still uses to upstream', async () => {
     expect(await statusOf('/api/push/visibility')).toBe(200);
     expect(await statusOf('/api/plugin')).toBe(200);
+  });
+
+  it('refuses the skill catalog read and the scan and install posts, not a skill of those names', async () => {
+    for (const [path, method] of [['/api/config/skills/catalog', 'GET'], ['/API/Config/Skills/Catalog/', 'HEAD'], ['/api/config/skills/scan', 'POST'], ['/API/Config/Skills/Install/', 'POST']]) {
+      expect(await statusOf(path, method)).toBe(404);
+    }
+    for (const [path, method] of [['/api/config/skills/scan', 'GET'], ['/API/Config/Skills/Install', 'PATCH'], ['/api/config/skills/scan', 'DELETE'], ['/api/config/skills/install/files/notes.md', 'PUT'], ['/api/config/skills/catalog', 'POST'], ['/api/config/skills/catalog', 'DELETE'], ['/api/config/skills/catalog/files/notes.md', 'GET'], ['/api/config/skills/geo', 'POST']]) {
+      expect(await statusOf(path, method)).toBe(200);
+    }
   });
 });

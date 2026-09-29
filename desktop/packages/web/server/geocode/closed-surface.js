@@ -28,16 +28,27 @@ const CLOSED_PATHS = Object.freeze([
   '/api/config/snippets',
   '/api/openchamber/spaces',
   '/api/spaces',
+  '/api/config/skills/catalog/source',
 ]);
 
-// Express matches routes case-insensitively, so the comparison must too.
-const isClosedPath = (pathname) => {
-  const path = pathname.toLowerCase();
-  return CLOSED_PATHS.some((closed) => path === closed || path.startsWith(`${closed}/`));
+// One method on the exact path only: other methods, and the paths below, address a skill of that name.
+const CLOSED_ROUTES = Object.freeze([
+  ['GET', '/api/config/skills/catalog'],
+  ['POST', '/api/config/skills/scan'],
+  ['POST', '/api/config/skills/install'],
+]);
+
+// Express matches routes case-insensitively, and runs GET routes for HEAD, so the comparison must too.
+const isClosed = (req) => {
+  const path = req.path.toLowerCase();
+  if (CLOSED_PATHS.some((closed) => path === closed || path.startsWith(`${closed}/`))) return true;
+  const method = req.method === 'HEAD' ? 'GET' : req.method;
+  const route = path.replace(/\/+$/, '');
+  return CLOSED_ROUTES.some(([closedMethod, closed]) => method === closedMethod && route === closed);
 };
 
 export const closedSurface = (req, res, next) => {
-  if (!process.versions.electron || !isClosedPath(req.path)) {
+  if (!process.versions.electron || !isClosed(req)) {
     next();
     return;
   }

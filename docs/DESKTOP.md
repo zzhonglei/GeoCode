@@ -45,6 +45,8 @@ OpenChamber 的扩展关掉了。扩展从文件夹、压缩包或 git 地址安
 
 代码片段停用了。它其实是提示词里的文本宏(中文界面的译名有误):消息里的 `#名字` 在发送前换成事先写好的一段文字,还能往消息前后插入内容。片段是全局配置目录与项目 `.opencode/` 里的文件,等于让外部文件改写用户发出的话,下载来的项目也能带上几段;输入框里打出 `#` 加任何词(比如一个编号)再按回车,消息不会发出,而是打开新建片段的设置页。GeoCode 里没有片段:`#` 不再弹出选择器,消息按输入的原样发出,计划任务与会话接口也不展开。
 
+技能目录关掉了。它从几个写死的 GitHub 仓库浏览、安装现成的技能,这些仓库里多是编程技能,与地理数据处理关系不大;打开「技能」页时,界面还会在后台请求目录,由壳服务端向 api.github.com 查询这些仓库。GeoCode 里没有「技能目录」页,界面不再加载目录,目录、扫描与安装的接口都被拒绝,也就不再为它联网或克隆仓库。技能本身照常可用:在「技能」页新建、编辑、删除技能,agent 照常载入它们。
+
 ### 4.2 发给第三方的对话与凭据
 
 路由关掉了。它有两部分:选「Auto」模型时,每条消息连同最近几轮对话先交给第三方的判定模型 Jev 分类,再换成这一类配置的模型;「安全网」在自动接受权限之前,把请求交给 Jev 打分。两者都把对话或文件改动发到 opencode.ai 或 typesafe.ai;它的分类是为编程任务设计的,地理数据处理用不上,安全网在 GeoCode 用的内核上也读不到要执行的命令。GeoCode 里没有路由页,模型选择器里不提供 Auto,以前存下的路由配置不起作用;权限的安全要靠内核的权限规则。
@@ -93,7 +95,7 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 
 关闭与访问控制依靠几份手写的清单,也依赖上游口令模式的行为,上游新增的内容不会自动被覆盖。合并 `chamber-upstream` 之后,重新推导并对照:
 
-- 关闭的接口(`web/server/geocode/closed-surface.js`):在壳服务端里找 `app.get`、`app.post` 等方法与 `app.use` 注册的路径,以及 `server.on('upgrade'` 的处理器,属于第 3、4 节关掉的机制或上游功能的,加进清单;新的 WebSocket 处理器在口令模式下要校验令牌。
+- 关闭的接口(`web/server/geocode/closed-surface.js`):在壳服务端里找 `app.get`、`app.post` 等方法与 `app.use` 注册的路径,以及 `server.on('upgrade'` 的处理器,属于第 3、4 节关掉的机制或上游功能的,加进清单;新的 WebSocket 处理器在口令模式下要校验令牌。同一路径上还有别的路由在用时,只关那一个方法、那一条完整路径,另列在 `CLOSED_ROUTES`。
 - 关闭的 IPC 命令(`electron/geocode/closed-commands.mjs`):`main.mjs` 里 `handleInvoke` 的命令,以及 `ipcMain.handle` 与 `ipcMain.on` 的频道。
 - 不接受的环境变量按前缀认定(`electron/geocode/inherited-env.mjs`),上游新增的同前缀变量自动在内,要找的是另一种前缀的配置变量,例如新引入的运行时或库自带的。
 - 隐藏的设置(`ui/src/geocode/settings.ts`):`SETTINGS_PAGE_METADATA` 与 `SETTINGS_SEARCH_ITEMS`;设置会重开上次的页面、也跟随 `?settings=` 链接,两者都不查页面是否可用,而带侧栏的页面只有主体受可用性约束,所以 `ui/src/components/views/SettingsView.tsx` 把停在 `CLOSED_PAGES` 里某一页上的设置转到「通用」,也不渲染它的侧栏、不为它加载数据(侧栏在跳转之前就会挂载并自己加载);路由页不在这份清单里,它由上游的可用性开关隐藏,没有侧栏,停在它上面时只显示「不可用」。
@@ -102,6 +104,7 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 - 插件页:界面里找 `usePluginsStore` 的调用处,写入与 npm 查询都经 `/api/config/plugins`;插件的更新检查与升级是内核的 `/api/plugin/check`、`/api/plugin/update`,经壳服务端转发,这两条也关了,只读的 `/api/plugin` 保留。
 - 魔法提示词:改写只经 `/api/magic-prompts` 读写,这组接口关闭;界面读改写只经 `ui/src/lib/magicPrompts.ts` 的 `fetchMagicPromptOverrides`,桌面应用里直接返回没有改写,不发请求。
 - 代码片段:壳服务端的片段都经 `web/server/lib/opencode/snippets.js` 的 `loadSnippetRegistry` 读取(界面的展开、计划任务、会话接口的展开都经它),桌面应用里为空,`/api/config/snippets` 关闭;界面的 `#` 选择器有三处触发(在界面里找 `SnippetAutocomplete` 的使用处),`ui/src/components/chat/composer/language/triggers.ts`、`ui/src/components/multirun/MultiRunLauncher.tsx` 与 `ui/src/components/session/ScheduledTaskEditorDialog.tsx` 的 `updateAutocompleteState`,发送前的展开只经 `ui/src/stores/useSnippetsStore.ts` 的 `expandText`,桌面应用里都不起作用。
+- 技能目录:界面加载目录经 `ui/src/stores/useSkillsCatalogStore.ts` 的 `loadCatalog`(`ui/src/components/views/SettingsView.tsx` 打开「技能」页时、`ui/src/stores/catalogRefresh.ts` 与 `ui/src/stores/useAgentsStore.ts` 刷新配置时都调用它),桌面应用里直接返回,不发请求;其余的目录请求(`loadSource`、`scanRepo`、`installSkills`)只由已隐藏的技能目录页及其对话框发出。壳服务端关闭 `/api/config/skills/catalog/source`,以及 `/api/config/skills/catalog` 的 GET、`/api/config/skills/scan` 与 `/api/config/skills/install` 的 POST:这三条路径上的其他方法和下级路径是对名叫 `catalog`、`scan`、`install` 的技能的读写,上游照常可用。「技能」页经 `/api/config/skills` 的其余接口读写技能,不受影响。
 - 路由:界面的路由入口(设置页、搜索项、命令面板、Auto 选项)都看 `routingFeatureAvailable`,它由 `web/server/lib/opencode/settings-helpers.js` 下发,桌面应用里为假;在界面里找 `routingFeatureAvailable` 的读取处;壳服务端的路由逻辑(Auto 的解析、安全网)都经 `web/server/lib/routing/store.js` 的 `readConfig` 读配置,桌面应用里一律得到默认的关闭状态,新代码若直接读 `routing.json`(`routingConfigPath`),就绕过了它;`/api/routing` 关闭。
 - 隔离空间:空间的一切行为都挂在 `web/server/index.js` 的 `spacesHost` 上(请求中间件、WebSocket 升级、会话列表的合并、目录的拒绝)。在 `index.js` 里找 `spacesHost` 的赋值处:启动时读 `isolatedSpacesEnabled` 后调用 `buildSpacesHost`,这一处在桌面应用里跳过;开关接口经 `createSwitchController` 的 `setHost`,开关所在的 `/api/openchamber/spaces` 与发往空间的 `/api/spaces` 关闭。新代码若不经 `spacesHost` 直接用 `web/server/lib/spaces/` 起空间或调用 Docker,就绕过了这层。设置里的开关现在由上游 `ui/src/lib/spaces/release.ts` 的 `ISOLATED_SPACES_RELEASED` 藏着,它变真之后,开关的设置行与搜索项要加进隐藏的设置。
 - 用量的服务商(`ui/src/geocode/quota.ts` 与 `web/server/geocode/closed-quota.js`,两份要一致):界面的 `ui/src/lib/quota/providers/index.ts` 的 `QUOTA_PROVIDERS`,壳服务端的 `web/server/lib/quota/providers/index.js` 的 `registry` 与 `web/server/lib/quota/credentials/providers.js` 的 `normalizers`;上游新增的服务商要读别的应用的凭据时,加进两份清单;`web/server/lib/quota/index.js` 还直接导出 `fetchClaudeQuota`、`fetchCursorQuota`,现在没有调用者,以后有了会绕过 `registry`。
@@ -118,8 +121,9 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 
 - 设置与界面里没有远程、局域网、配对、隧道等入口(侧栏里嵌入的会话聊天也一样),对应的接口与 IPC 命令被拒绝,路径换了大小写也一样;`openchamber://` 链接不被处理。
 - 设置文件里开着隔离空间时,应用也不建空间、不调用 Docker,开关与空间的接口被拒绝。
-- 设置与界面里没有 Linear、扩展、路由、插件、魔法提示词与代码片段的入口;远程实例、隧道、扩展、插件、魔法提示词与代码片段页即使是上次停留的页面或链接指向的页面,打开设置时也显示「通用」。
+- 设置与界面里没有 Linear、扩展、路由、插件、魔法提示词、代码片段与技能目录的入口;远程实例、隧道、扩展、插件、魔法提示词、代码片段与技能目录页即使是上次停留的页面或链接指向的页面,打开设置时也显示「通用」。
 - 数据目录里已经装好的扩展既不显示也不运行;开着路由的 `routing.json`、`magic-prompts.json` 与全局和项目的片段文件都不起作用:模型选择器里不提供 Auto,不向 Jev 发请求,输入框里的 `#名字` 不弹出选择器、不展开。
+- 打开「技能」页不请求技能目录,不向 api.github.com 查询;技能照常新建、编辑、删除,名叫 `catalog`、`scan`、`install` 的技能,能做的与上游相同。
 - 生成提交信息、解决冲突、斜杠命令与新聊天的起始按钮照常可用。
 - 用量页里没有 Claude 与 Cursor,也不读取它们的凭据。
 - 语言选择里只有英文、简体中文与繁体中文,保存过其他语言的,启动后显示英文。
