@@ -468,6 +468,7 @@ function getAncestors(startDir, stopDir) {
 
 function findWorktreeRoot(startDir) {
   if (!startDir) return null;
+  if (process.versions.electron) return path.resolve(startDir); // GeoCode: upward config scans stop at the session directory, as in the kernel
   let current = path.resolve(startDir);
 
   while (true) {

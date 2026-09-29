@@ -20,6 +20,7 @@ import {
   getAncestors,
   findWorktreeRoot,
 } from './shared.js';
+import { discoverKernelSkills, isKernelSkillPath } from '../../geocode/kernel-skills.js'; // GeoCode: see discoverSkills and updateSkill
 
 const BUILT_IN_SKILL_LOCATION = '<built-in>';
 
@@ -60,6 +61,7 @@ function getUserSkillPath(skillName) {
 }
 
 function getClaudeSkillDir(workingDirectory, skillName) {
+  if (process.versions.electron) return getProjectSkillDir(workingDirectory, skillName); // GeoCode: OpenCode's location instead, so nothing reaches .claude or .agents
   return path.join(workingDirectory, '.claude', 'skills', skillName);
 }
 
@@ -68,6 +70,7 @@ function getClaudeSkillPath(workingDirectory, skillName) {
 }
 
 function getUserClaudeSkillDir(skillName) {
+  if (process.versions.electron) return getUserSkillDir(skillName); // GeoCode: see getClaudeSkillDir
   return path.join(os.homedir(), '.claude', 'skills', skillName);
 }
 
@@ -76,6 +79,7 @@ function getUserClaudeSkillPath(skillName) {
 }
 
 function getUserAgentsSkillDir(skillName) {
+  if (process.versions.electron) return getUserSkillDir(skillName); // GeoCode: see getClaudeSkillDir
   return path.join(os.homedir(), '.agents', 'skills', skillName);
 }
 
@@ -84,6 +88,7 @@ function getUserAgentsSkillPath(skillName) {
 }
 
 function getProjectAgentsSkillDir(workingDirectory, skillName) {
+  if (process.versions.electron) return getProjectSkillDir(workingDirectory, skillName); // GeoCode: see getClaudeSkillDir
   return path.join(workingDirectory, '.agents', 'skills', skillName);
 }
 
@@ -150,6 +155,7 @@ function getSkillWritePath(skillName, workingDirectory, requestedScope) {
 }
 
 function discoverSkills(workingDirectory) {
+  if (process.versions.electron) return discoverKernelSkills(workingDirectory); // GeoCode: only the skill directories the kernel reads
   const skills = new Map();
 
   for (const externalRootName of ['.claude', '.agents']) {
@@ -496,6 +502,11 @@ function updateSkill(skillName, updates, workingDirectory, targetPath = null) {
   const requestedPath = typeof targetPath === 'string' && targetPath.trim()
     ? path.resolve(targetPath.trim())
     : null;
+  // --- GeoCode: a target path only inside the skill directories the kernel reads ---
+  if (requestedPath && process.versions.electron && !isKernelSkillPath(requestedPath, workingDirectory)) {
+    throw new Error(`Skill "${skillName}" target is outside the skill directories`);
+  }
+  // --- /GeoCode ---
   const existing = requestedPath && fs.existsSync(requestedPath)
     ? { scope: null, path: requestedPath, source: null }
     : getSkillScope(skillName, workingDirectory);
