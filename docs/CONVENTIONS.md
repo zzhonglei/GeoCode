@@ -92,6 +92,8 @@ git diff --name-status chamber-upstream main:desktop
 
 GeoCode 只有桌面应用一种形式,补丁不判断运行方式。提前返回之后的上游代码里,TypeScript 不再沿用前面的类型收窄,可能报类型错误,这时把后面的上游代码也包进块注释;包住之后没人用的导入与变量 lint 会报,各自再包一次,与仍在用的名字同在一行的,在上面加 `eslint-disable-next-line @typescript-eslint/no-unused-vars`。界面上要藏起的一段 JSX,包进 `desktop/packages/ui/src/geocode/Closed.tsx` 的 `Closed`:它什么都不渲染,包住的上游行不变,里面用到的变量也仍有引用。
 
+补丁调用的自有模块与它们的测试,放在所在包的 `geocode/` 目录里,与上游文件分开,补丁本身只留调用的那一两行。GeoCode 自己的功能模块放在哪里,做那一部分时按它的设计决定。
+
 指向上游代码时写符号名,不写行号。行号会随合并漂移,而漂移了也没有任何提示。
 
 ## 4. 测试与检查
@@ -104,7 +106,7 @@ GeoCode 只有桌面应用一种形式,补丁不判断运行方式。提前返�
 - 上游测试文件里新加的用例,名称以 `GeoCode: ` 开头,可以用 `bun test <文件> -t "GeoCode:"` 单独运行。
 - 凡是「写入配置、期望某个服务读到」的改动,追到读取方,在运行时确认。
 
-写入检测:`scripts/foreign-writes.sh` 在操作前后各运行一次(`before`、`after`),检查 OpenCode、OpenChamber 与 Claude 的目录有没有被写入。可能写盘的操作都要套上它;影响运行时路径的改动,还要在它的监视下跑一次真实会话。它只看写入,不看读取。
+可能写盘的操作,前后都要运行写入检测(用法见 `DEVELOPMENT.md` 第 8 节);影响运行时路径的改动,还要在它的监视下跑一次真实会话。它只看写入,不看读取。
 
 改完代码后,用 `node scripts/dead-code.mjs <文件…>` 检查动过的文件里有没有失去用途的函数与导入。它也会报出上游本来就有的死代码,所以只作参考。
 
