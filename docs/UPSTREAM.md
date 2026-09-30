@@ -54,7 +54,7 @@ git commit
 
 一次只升级一个上游。同时升级两个,API 变化、上游的问题与补丁的失效会混在一起,分不清原因。
 
-1. 确认版本。最新版本以上游的发布为准(OpenCode 看 git tag 与 npm 的 `latest`,OpenChamber 看 GitHub Release),不看本地某个旧 clone。
+1. 确认版本。最新版本以上游的发布为准(OpenCode 看 git tag 与 npm 上 `@opencode/cli` 的 `latest`,OpenChamber 看 GitHub Release;npm 上的 `opencode-ai` 是 OpenCode 1 的包),不看本地某个旧 clone。
 2. 记下现在的补丁面,供第 8 步对比:
 
    ```bash
