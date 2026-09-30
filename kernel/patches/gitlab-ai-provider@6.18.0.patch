@@ -1,0 +1,76 @@
+diff --git a/dist/index.js b/dist/index.js
+index 1304af37398a8b39a32d97d3f4c266086fbd460e..f3315464fe0a5a576066c8745d9e5bc553f6d262 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -3656,7 +3656,7 @@ var crypto = __toESM(require("crypto"));
+ var DISCOVERY_TTL_MS = 10 * 60 * 1e3;
+ function getCacheFilePath() {
+   const cacheHome = process.env.XDG_CACHE_HOME || path3.join(os.homedir(), ".cache");
+-  return path3.join(cacheHome, "opencode", "gitlab-workflow-model-cache.json");
++  return path3.join(cacheHome, "geocode", "gitlab-workflow-model-cache.json");
+ }
+ function computeCacheKey(workDir, instanceUrl, scope) {
+   const normalizedUrl = (instanceUrl || "https://gitlab.com").replace(/\/$/, "");
+@@ -5450,12 +5450,12 @@ function getOpenCodeAuthPath() {
+   const homeDir = os2.homedir();
+   const xdgDataHome = process.env.XDG_DATA_HOME;
+   if (xdgDataHome) {
+-    return path4.join(xdgDataHome, "opencode", "auth.json");
++    return path4.join(xdgDataHome, "geocode", "auth.json");
+   }
+   if (process.platform !== "win32") {
+-    return path4.join(homeDir, ".local", "share", "opencode", "auth.json");
++    return path4.join(homeDir, ".local", "share", "geocode", "auth.json");
+   }
+-  return path4.join(homeDir, ".opencode", "auth.json");
++  return path4.join(homeDir, ".local", "share", "geocode", "auth.json");
+ }
+ async function loadOpenCodeAuth(instanceUrl) {
+   try {
+@@ -5747,7 +5747,7 @@ var DEFAULT_CONTEXT = 2e5;
+ var DEFAULT_OUTPUT = 64e3;
+ function getCacheFilePath2() {
+   const cacheHome = process.env.XDG_CACHE_HOME || path5.join(os3.homedir(), ".cache");
+-  return path5.join(cacheHome, "opencode", "gitlab-model-configs.json");
++  return path5.join(cacheHome, "geocode", "gitlab-model-configs.json");
+ }
+ function readCacheFile() {
+   try {
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 6ee167989304b478ec321540585a7a36b37d51f5..fbf7c6f2fadb3d07775f9c315cdcbde8f45eed6d 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -3577,7 +3577,7 @@ import * as crypto from "crypto";
+ var DISCOVERY_TTL_MS = 10 * 60 * 1e3;
+ function getCacheFilePath() {
+   const cacheHome = process.env.XDG_CACHE_HOME || path3.join(os.homedir(), ".cache");
+-  return path3.join(cacheHome, "opencode", "gitlab-workflow-model-cache.json");
++  return path3.join(cacheHome, "geocode", "gitlab-workflow-model-cache.json");
+ }
+ function computeCacheKey(workDir, instanceUrl, scope) {
+   const normalizedUrl = (instanceUrl || "https://gitlab.com").replace(/\/$/, "");
+@@ -5371,12 +5371,12 @@ function getOpenCodeAuthPath() {
+   const homeDir = os2.homedir();
+   const xdgDataHome = process.env.XDG_DATA_HOME;
+   if (xdgDataHome) {
+-    return path4.join(xdgDataHome, "opencode", "auth.json");
++    return path4.join(xdgDataHome, "geocode", "auth.json");
+   }
+   if (process.platform !== "win32") {
+-    return path4.join(homeDir, ".local", "share", "opencode", "auth.json");
++    return path4.join(homeDir, ".local", "share", "geocode", "auth.json");
+   }
+-  return path4.join(homeDir, ".opencode", "auth.json");
++  return path4.join(homeDir, ".local", "share", "geocode", "auth.json");
+ }
+ async function loadOpenCodeAuth(instanceUrl) {
+   try {
+@@ -5668,7 +5668,7 @@ var DEFAULT_CONTEXT = 2e5;
+ var DEFAULT_OUTPUT = 64e3;
+ function getCacheFilePath2() {
+   const cacheHome = process.env.XDG_CACHE_HOME || path5.join(os3.homedir(), ".cache");
+-  return path5.join(cacheHome, "opencode", "gitlab-model-configs.json");
++  return path5.join(cacheHome, "geocode", "gitlab-model-configs.json");
+ }
+ function readCacheFile() {
+   try {
