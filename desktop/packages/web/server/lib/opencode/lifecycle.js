@@ -792,8 +792,6 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
           // we send with openCodePassword would get 401.
           OPENCODE_PASSWORD: openCodePassword,
           OPENCODE_SERVER_PASSWORD: openCodePassword,
-          // GeoCode: the kernel prefers this name, so it must carry the shell's password
-          OPENCODE_PASSWORD: openCodePassword,
         })),
       });
 
