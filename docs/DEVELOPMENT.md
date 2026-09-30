@@ -40,7 +40,7 @@ desktop/     OpenChamber 的源码(见 UPSTREAM.md)
 
 ## 5. 在沙箱里启动应用
 
-开发时在沙箱主目录里启动。开发机上往往装着 OpenCode 与 OpenChamber:壳会读写 `~/.config/openchamber`,内核会读写 `~/.config/opencode`、`~/.local/share/opencode` 等目录,直接启动就会改动它们的设置与数据。
+开发时在沙箱主目录里启动。应用把配置、数据与缓存放在主目录下的 `geocode` 目录里(见 `PATHS.md`),在沙箱里启动,开发与测试留下的会话、登录与设置就不会混进真实主目录里的那一份,删掉沙箱即可从头再来。
 
 ```bash
 SANDBOX=<一个空目录,放在仓库外>
@@ -51,7 +51,7 @@ OPENCHAMBER_DESKTOP_USER_DATA_DIR="$SANDBOX/electron-user-data" \
 bun run electron:dev:bundled
 ```
 
-壳与内核都从 `HOME` 推导自己的数据、配置与缓存目录,前提是环境里没有设 `XDG_*` 变量,设了的话内核会改用它们。Electron 自己的配置目录在 macOS 上按系统账户找主目录,不看 `HOME`,所以要用 `OPENCHAMBER_DESKTOP_USER_DATA_DIR` 单独指定。Electron 的日志写在 `$SANDBOX/Library/Logs/` 下,跟着 `HOME` 走。
+壳与内核都从 `HOME` 推导自己的数据、配置与缓存目录,前提是环境里没有设 `XDG_*` 变量,设了的话内核会改用它们。Electron 自己的配置目录在 macOS 上按系统账户找主目录,不看 `HOME`,所以要用 `OPENCHAMBER_DESKTOP_USER_DATA_DIR` 单独指定。系统的偏好设置同样按系统账户存放,沙箱挡不住:开发时写进 Electron 通用的 `~/Library/Preferences/com.github.Electron.plist`,打包出的应用写进 `~/Library/Preferences/io.github.zzhonglei.geocode.plist`,里面只有文件对话框的位置这类系统记下的状态。Electron 的日志写在 `$SANDBOX/Library/Logs/` 下,跟着 `HOME` 走。
 
 `electron:dev:bundled` 先构建界面,再用构建好的界面启动,壳使用第 4 节暂存的内核;没有暂存时,启动日志提示「bundled OpenCode CLI missing」,内核起不来。`electron:dev` 用热更新的界面,适合改界面时快速查看,但它另起的壳服务端不在 Electron 里,访问控制(`DESKTOP.md` 第 4 节)在那里不生效,验证访问控制要用 `electron:dev:bundled` 或打包出的应用。
 
@@ -64,13 +64,13 @@ cd desktop/packages/electron
 CSC_IDENTITY_AUTO_DISCOVERY=false bun run package -- --dir -c.mac.identity=- -c.mac.notarize=false
 ```
 
-`package` 依次构建界面、暂存内核(第 4 节)、打包主进程、重建原生模块,再调用 electron-builder。`--dir` 只生成应用目录 `dist/mac-arm64/<应用名>.app`,不生成 dmg 与 zip;`-c.mac.identity=-` 用临时签名(ad-hoc),不需要开发者证书;`-c.mac.notarize=false` 不公证。不要单独运行上游的 `verify:opencode-cli`:它按上游固定的 npm 版本核对暂存的内核,与 `kernel/` 的版本不符。
+`package` 依次构建界面、暂存内核(第 4 节)、打包主进程、重建原生模块,再调用 electron-builder。`--dir` 只生成应用目录 `dist/mac-arm64/GeoCode.app`,不生成 dmg 与 zip;`-c.mac.identity=-` 用临时签名(ad-hoc),不需要开发者证书;`-c.mac.notarize=false` 不公证。不要单独运行上游的 `verify:opencode-cli`:它按上游固定的 npm 版本核对暂存的内核,与 `kernel/` 的版本不符。
 
 在沙箱里运行打包出的应用,直接执行 `.app/Contents/MacOS/` 下的可执行文件,带上第 5 节的 `HOME`,Electron 的配置目录改用参数 `--user-data-dir=<沙箱里的目录>` 指定:打包出的应用不接受 `OPENCHAMBER_` 开头的环境变量(见 `DESKTOP.md` 第 5 节)。这个参数来自 Chromium,Electron 的文档没有列出,升级 Electron 后要确认它仍然有效。再加上 `--remote-debugging-port=<端口>`,就能以 DevTools 协议从外部检查各个窗口,例如读取页面状态、记录网络请求,或取出窗口的令牌来测试壳服务端的接口。
 
 ## 7. 检查与测试
 
-类型检查与 lint 的命令见 `CONVENTIONS.md` 第 2 节,测试写什么、怎么证明它会失败见第 4 节。`desktop/` 里 GeoCode 自己的测试放在各包的 `geocode/` 目录,壳服务端的那些在 `desktop/packages/web` 里以 `bun run test -- server/geocode/` 运行。上游的测试不保证只写临时目录,`web` 包里就有测试会在主目录下建 OpenCode 与 OpenChamber 的目录、写 npm 缓存,所以跑上游测试时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉,不要设成空值,否则 Bun 会把转译缓存写到当前目录下。`kernel/` 里的用例怎样命名、怎样单独运行,见 `CONVENTIONS.md` 第 4 节;它们写在上游的测试文件里、借用上游的夹具,同样换临时主目录运行,并把 `TMPDIR` 也指向临时目录:内核的测试会在系统临时目录下建 `opencode` 目录。
+类型检查与 lint 的命令见 `CONVENTIONS.md` 第 2 节,测试写什么、怎么证明它会失败见第 4 节。`desktop/` 里 GeoCode 自己的测试放在各包的 `geocode/` 目录,壳服务端的那些在 `desktop/packages/web` 里以 `bun run test -- server/geocode/` 运行。上游的测试不保证只写临时目录,`web` 包里就有测试会在主目录下建目录、写 npm 缓存,所以跑上游测试时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉,不要设成空值,否则 Bun 会把转译缓存写到当前目录下。`kernel/` 里的用例怎样命名、怎样单独运行,见 `CONVENTIONS.md` 第 4 节;它们写在上游的测试文件里、借用上游的夹具,同样换临时主目录运行,并把 `TMPDIR` 也指向临时目录:内核的测试会在系统临时目录下建 `geocode` 目录。
 
 ## 8. 写入检测
 
@@ -82,4 +82,4 @@ CSC_IDENTITY_AUTO_DISCOVERY=false bun run package -- --dir -c.mac.identity=- -c.
 ./scripts/foreign-writes.sh after
 ```
 
-它检查 OpenCode、OpenChamber 与 Claude 的目录有没有被写入,文件的新增、修改与权限变化都算。用沙箱启动时,结果应当是干净的。退出码:0 干净;1 发现写入;3 需要人确认,表示本机的 OpenChamber 在这段时间里运行过,它自己的写入被单独列出,要得到干净的结论就关掉它重跑。
+它检查 OpenCode、OpenChamber(包括它在 `~/Library` 下的窗口数据与日志)与 Claude 的目录有没有被写入,文件的新增、修改与权限变化都算。无论在沙箱里还是在真实主目录下启动,结果都应当是干净的。退出码:0 干净;1 发现写入;3 需要人确认,表示本机的 OpenChamber 在这段时间里运行过,它自己的写入被单独列出,要得到干净的结论就关掉它重跑。

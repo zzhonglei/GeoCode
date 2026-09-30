@@ -19,7 +19,7 @@
 
 ## 2. 配置目录
 
-只放用户自己编辑的配置,GeoCode 启动时建立这个目录,不往里面放别的文件。
+放用户自己编辑的配置。GeoCode 启动时建立这个目录;在设置里修改配置时,会在配置文件旁边留一份改动前的副本(如 `geocode.json.geocode.backup`),只供手动恢复,此外不往里面放别的文件。
 
 ```
 ~/.config/geocode/
@@ -90,6 +90,8 @@
 
 临时目录 `$TMPDIR/geocode/` 是提示 agent 存放临时文件的地方,agent 可以不经询问读写。系统临时目录下另有几类以 `geocode-` 开头的短期文件:终端的通信套接字(`geocode-pty-*`)、agent 用浏览器时的截图(`geocode-browser-*`)、查看 git 差异与暂存部分修改时的中间文件(`geocode-branch-diff-*`、`geocode-hunk-*`、`geocode-snapshot-*`),macOS 上还有转换应用图标时的 `geocode-icon-*.png`。每次启动时,运行时还会在系统临时目录解出一个 `.bun-*.dylib` 库文件。这些都是临时文件,删除不影响使用。
 
+内核的运行时(Bun)另把插件的转译结果缓存在它自己的共享缓存目录里(macOS 是 `~/Library/Caches/bun`),与本机其他使用 Bun 的程序共用,按内容命名,删除不影响使用。
+
 ## 5. 窗口数据、日志与系统登记
 
 窗口数据目录是 Electron 的存储:界面记住的状态(打开的标签页、草稿、折叠状态等)、网页缓存,以及内置浏览器面板的 Cookie 与网站数据(`Partitions/geocode-browser`)。删掉它,界面回到初始的布局,浏览器面板里登录过的网站需要重新登录,会话与设置不受影响。
@@ -103,22 +105,25 @@
 
 ## 6. 项目里
 
-GeoCode 在项目文件夹里读取的配置,都要用户自己建立;GeoCode 自己写入的只有下面标明的几处。
+项目里的配置由用户建立:手写,或在设置里把 agent、命令、技能、MCP 服务等设为项目范围时写入。除此之外,GeoCode 自己写入的只有下面标明的截图与 git 里的几处。
 
 ```
 <项目>/
-├── geocode.json        项目配置,覆盖全局配置(用户自己建立)
-├── AGENTS.md           写给这个项目的指示(用户自己建立)
+├── geocode.json        项目配置,覆盖全局配置
+├── AGENTS.md           写给这个项目的指示
 ├── .geocode/
 │   ├── geocode.json    项目配置的另一个位置
-│   ├── agents/  commands/  skills/   项目专属的 agent、命令与技能(用户自己建立)
+│   ├── agents/  commands/  skills/   项目专属的 agent、命令与技能
 │   └── screenshots/    agent 使用浏览器时保存的截图
 └── .git/
     ├── geocode         项目标识,GeoCode 用它把会话归到这个项目
-    └── worktrees/      git 为工作树记录的信息,建立工作树时由 git 写入
+    ├── worktrees/      git 为工作树记录的信息,建立工作树时由 git 写入
+    └── refs/
+        ├── heads/geocode/   新建工作树而没有指定分支名时建立的分支
+        └── geocode/runs/    多方案运行里选定一个后,其余方案的工作树删除前留下的快照
 ```
 
-agent 按任务修改的文件与运行命令产生的文件,由任务本身决定,不在此列;哪些操作要先征得用户同意,由权限设置决定。GeoCode 只认上面这些名字,给其他工具准备的配置(如 `.opencode/`、`.claude/`)不会改变 GeoCode 的行为。
+在设置里修改项目配置时,项目配置旁边同样会留一份 `.geocode.backup` 副本。agent 按任务修改的文件与运行命令产生的文件,由任务本身决定,不在此列;哪些操作要先征得用户同意,由权限设置决定。GeoCode 只认上面这些名字,给其他工具准备的配置(如 `.opencode/`、`.claude/`)不会改变 GeoCode 的行为。
 
 ## 7. 读取的用户环境
 
