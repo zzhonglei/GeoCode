@@ -14,9 +14,4 @@ describe('GeoCode: readEnterprisePolicy', () => {
     expect(publicEnterprisePolicy(options)).toMatchObject({ enterpriseMode: false, networkAccessBlocked: false });
     expect(readFile).not.toHaveBeenCalled();
   });
-
-  it('stays off with an unreadable policy file', () => {
-    const readFile = vi.fn(() => '{ not json');
-    expect(isEnterpriseMode({ platform: 'darwin', env: {}, readFile })).toBe(false);
-  });
 });

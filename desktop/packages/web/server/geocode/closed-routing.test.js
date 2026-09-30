@@ -7,7 +7,7 @@ import { createRoutingRuntime } from '../lib/routing/runtime.js';
 import { createRoutingStore, resolveEffectiveConfig } from '../lib/routing/store.js';
 
 // Guards against routing files left by OpenChamber sending turns or permissions to Jev.
-describe('GeoCode: readClassifierSource', () => {
+describe('GeoCode: routing store', () => {
   let dir;
 
   afterAll(async () => {
@@ -27,7 +27,7 @@ describe('GeoCode: readClassifierSource', () => {
     expect(JSON.parse(await fs.readFile(path.join(dir, 'classification.json'), 'utf8'))).toMatchObject({ source: 'openrouter' });
 
     const jev = { ask: vi.fn(async () => ({ answers: {}, ms: 1 })) };
-    // Every source is usable, so only the stored pick decides.
+    // Keys for every source, so a stored pick that got through would reach Jev.
     const runtime = createRoutingRuntime({
       dataDir: dir,
       buildOpenCodeUrl: () => 'http://127.0.0.1:1/',
