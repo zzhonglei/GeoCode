@@ -50,10 +50,11 @@ not_theirs() {
   done
 }
 
+# The mode too: a chmod leaves mtime and size alone.
 snapshot() {
   for root in $ROOTS; do
     [ -e "$root" ] || continue
-    find "$root" -not -path '*/.git/*' -not -path "$PRUNE" -exec stat -f '%N %m %z' {} \; 2>/dev/null
+    find "$root" -not -path '*/.git/*' -not -path "$PRUNE" -exec stat -f '%N %m %z %p' {} \; 2>/dev/null
   done | sort
 }
 
