@@ -19,10 +19,13 @@
 
 import fs from 'fs';
 import path from 'path';
+/* --- GeoCode: unused once OPENCODE_DATA_DIR comes from the kernel paths ---
 import os from 'os';
+--- /GeoCode --- */
 import { readCredentialsFromDb, resolveCredentialDbPath } from './credential-db.js';
+import { kernelDataDir } from '../../geocode/kernel-paths.js'; // GeoCode: see OPENCODE_DATA_DIR
 
-const OPENCODE_DATA_DIR = path.join(os.homedir(), '.local', 'share', 'opencode');
+const OPENCODE_DATA_DIR = kernelDataDir(); // GeoCode: the bundled kernel's, which follows XDG_DATA_HOME
 const AUTH_FILE = path.join(OPENCODE_DATA_DIR, 'auth.json');
 
 function readLegacyAuthFile(authFile, fileSystem) {

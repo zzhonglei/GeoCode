@@ -3,6 +3,7 @@ import { createSerialRefresh } from './serial-refresh.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { kernelDataDir, KERNEL_PROJECT_ID_FILE } from '../../geocode/kernel-paths.js'; // GeoCode: see getOpenCodeDataPath and ensureOpenCodeProjectId
 import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import { createRequire } from 'module';
@@ -721,6 +722,7 @@ const OPENCODE_NOUNS = [
 const OPENCODE_WORKTREE_ATTEMPTS = 26;
 
 const getOpenCodeDataPath = () => {
+  return kernelDataDir(); // GeoCode: the bundled kernel's data directory
   const xdgDataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
   return path.join(xdgDataHome, 'opencode');
 };
@@ -1638,7 +1640,7 @@ export async function continueIntegrate(stateInput = {}) {
 
 const ensureOpenCodeProjectId = async (primaryWorktree) => {
   const gitDir = path.join(primaryWorktree, '.git');
-  const idFile = path.join(gitDir, 'opencode');
+  const idFile = path.join(gitDir, KERNEL_PROJECT_ID_FILE);
   const existing = await fsp.readFile(idFile, 'utf8').then((value) => value.trim()).catch(() => '');
   if (existing) {
     return existing;

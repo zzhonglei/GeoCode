@@ -1,4 +1,5 @@
 import path from 'path';
+import { KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-paths.js'; // GeoCode: see PROJECT_CONFIG_NAMES
 import fs from 'fs';
 import {
   AGENT_SCOPE,
@@ -48,10 +49,10 @@ export function getWebSearchSource(directory) {
 }
 
 const PROJECT_CONFIG_NAMES = [
-  path.join('.opencode', 'opencode.jsonc'),
-  path.join('.opencode', 'opencode.json'),
-  'opencode.jsonc',
-  'opencode.json',
+  path.join(KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSONC),
+  path.join(KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSON),
+  KERNEL_CONFIG_JSONC,
+  KERNEL_CONFIG_JSON,
 ];
 
 /**

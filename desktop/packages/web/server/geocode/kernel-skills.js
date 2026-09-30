@@ -1,11 +1,12 @@
 import path from 'path';
 import { OPENCODE_CONFIG_DIR, SKILL_SCOPE, walkSkillMdFiles, addSkillFromMdFile } from '../lib/opencode/shared.js';
+import { KERNEL_PROJECT_DIR } from './kernel-paths.js';
 
 // The skill directories the kernel reads, in its order: a later root wins a duplicate name.
 const kernelSkillRoots = (workingDirectory) => [
   ...['skill', 'skills'].map((name) => ({ root: path.join(OPENCODE_CONFIG_DIR, name), scope: SKILL_SCOPE.USER })),
   ...(workingDirectory
-    ? ['skill', 'skills'].map((name) => ({ root: path.join(workingDirectory, '.opencode', name), scope: SKILL_SCOPE.PROJECT }))
+    ? ['skill', 'skills'].map((name) => ({ root: path.join(workingDirectory, KERNEL_PROJECT_DIR, name), scope: SKILL_SCOPE.PROJECT }))
     : []),
 ];
 

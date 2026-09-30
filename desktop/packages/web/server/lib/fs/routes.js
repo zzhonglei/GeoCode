@@ -2,6 +2,7 @@ import { createRealpathCache } from '../path-realpath-cache.js';
 import { resolveByteRange } from './byte-range.js';
 import nodeFsPromises from 'node:fs/promises';
 import nodePath from 'node:path';
+import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-paths.js'; // GeoCode: see isPlansDirectory
 
 const EXEC_JOB_TTL_MS = 30 * 60 * 1000;
 const OUTSIDE_FILE_GRANT_TTL_MS = 10 * 60 * 1000;
@@ -1652,7 +1653,7 @@ export const registerFsRoutes = (app, dependencies) => {
     const isPlansDirectory = (value) => {
       if (!value || typeof value !== 'string') return false;
       const normalized = value.replace(/\\/g, '/').replace(/\/+$/, '');
-      return normalized.endsWith('/.opencode/plans') || normalized.endsWith('.opencode/plans');
+      return normalized.endsWith(`/${KERNEL_PROJECT_DIR}/plans`) || normalized.endsWith(`${KERNEL_PROJECT_DIR}/plans`);
     };
 
     try {

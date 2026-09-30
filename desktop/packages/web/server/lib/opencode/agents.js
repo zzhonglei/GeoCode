@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-paths.js'; // GeoCode: the project directory, used below
 import {
   getAncestors,
   findWorktreeRoot,
@@ -43,7 +44,7 @@ const PROJECT_AGENT_DIR_NAMES = ['agents', 'agent', 'modes', 'mode'];
 
 /** Ensure the v2 project agent directory exists. */
 function ensureProjectAgentDir(workingDirectory) {
-  const projectAgentDir = path.join(workingDirectory, '.opencode', 'agents');
+  const projectAgentDir = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'agents');
   if (!fs.existsSync(projectAgentDir)) {
     fs.mkdirSync(projectAgentDir, { recursive: true });
   }
@@ -55,14 +56,14 @@ function ensureProjectAgentDir(workingDirectory) {
  * v2 `agents/` location.
  */
 function getProjectAgentPath(workingDirectory, agentName) {
-  const preferred = path.join(workingDirectory, '.opencode', 'agents', `${agentName}.md`);
+  const preferred = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'agents', `${agentName}.md`);
   // OpenCode 2 discovers `.opencode` from the working directory up to the
   // project root, so a definition in a parent directory of a monorepo
   // package counts; nested ids (`team/reviewer`) map onto the path.
   const worktreeRoot = findWorktreeRoot(workingDirectory) || path.resolve(workingDirectory);
   for (const base of getAncestors(workingDirectory, worktreeRoot)) {
     for (const dirName of PROJECT_AGENT_DIR_NAMES) {
-      const candidate = path.join(base, '.opencode', dirName, `${agentName}.md`);
+      const candidate = path.join(base, KERNEL_PROJECT_DIR, dirName, `${agentName}.md`);
       if (fs.existsSync(candidate)) return candidate;
     }
   }
@@ -351,7 +352,7 @@ function createAgent(agentName, config, workingDirectory, scope) {
 
   const layers = readConfigLayers(workingDirectory);
   if (getJsonEntrySource(layers, 'agents', agentName).exists) {
-    throw new Error(`Agent ${agentName} already exists in opencode.json`);
+    throw new Error(`Agent ${agentName} already exists in geocode.json`); // GeoCode: its config file
   }
 
   let targetPath;

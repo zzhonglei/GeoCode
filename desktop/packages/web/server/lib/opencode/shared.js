@@ -4,6 +4,7 @@ import os from 'os';
 import yaml from 'yaml';
 import { parse as parseJsonc, printParseErrorCode } from 'jsonc-parser';
 import { readSectionEntry, readMcpEntry } from './config-v2.js';
+import { kernelConfigDir, KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-paths.js'; // GeoCode: the bundled kernel's directory and names, used below
 
 // ============== PATH CONSTANTS ==============
 
@@ -11,13 +12,13 @@ import { readSectionEntry, readMcpEntry } from './config-v2.js';
 // when set, else `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`.
 const OPENCODE_CONFIG_DIR = process.env.OPENCODE_CONFIG_DIR?.trim()
   ? path.resolve(process.env.OPENCODE_CONFIG_DIR.trim())
-  : path.join(process.env.XDG_CONFIG_HOME?.trim() || path.join(os.homedir(), '.config'), 'opencode');
+  : kernelConfigDir();
 const AGENT_DIR = path.join(OPENCODE_CONFIG_DIR, 'agents');
 const COMMAND_DIR = path.join(OPENCODE_CONFIG_DIR, 'commands');
 const SKILL_DIR = path.join(OPENCODE_CONFIG_DIR, 'skills');
 // OpenCode 2 reads only `opencode.json(c)`; the v1-era `config.json` is not
 // discovered any more, so it is neither read nor written here.
-const CONFIG_FILE = path.join(OPENCODE_CONFIG_DIR, 'opencode.json');
+const CONFIG_FILE = path.join(OPENCODE_CONFIG_DIR, KERNEL_CONFIG_JSON);
 const PROMPT_FILE_PATTERN = /^\{file:(.+)\}$/i;
 
 // ============== SCOPE TYPE CONSTANTS ==============
@@ -137,10 +138,10 @@ function writeMdFile(filePath, frontmatter, body) {
 function getProjectConfigCandidates(workingDirectory) {
   if (!workingDirectory) return [];
   return [
-    path.join(workingDirectory, '.opencode', 'opencode.json'),
-    path.join(workingDirectory, '.opencode', 'opencode.jsonc'),
-    path.join(workingDirectory, 'opencode.json'),
-    path.join(workingDirectory, 'opencode.jsonc'),
+    path.join(workingDirectory, KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSON),
+    path.join(workingDirectory, KERNEL_PROJECT_DIR, KERNEL_CONFIG_JSONC),
+    path.join(workingDirectory, KERNEL_CONFIG_JSON),
+    path.join(workingDirectory, KERNEL_CONFIG_JSONC),
   ];
 }
 
@@ -162,8 +163,8 @@ function getProjectConfigPath(workingDirectory) {
 function getConfigPaths(workingDirectory) {
   return {
     userPaths: [
-      path.join(OPENCODE_CONFIG_DIR, 'opencode.json'),
-      path.join(OPENCODE_CONFIG_DIR, 'opencode.jsonc'),
+      path.join(OPENCODE_CONFIG_DIR, KERNEL_CONFIG_JSON),
+      path.join(OPENCODE_CONFIG_DIR, KERNEL_CONFIG_JSONC),
     ],
     projectPath: getProjectConfigPath(workingDirectory),
     // Resolve at call time so OPENCODE_CONFIG changes (and tests) take effect.
@@ -622,11 +623,11 @@ function resolveSkillSearchDirectories(workingDirectory) {
   if (workingDirectory) {
     const worktreeRoot = findWorktreeRoot(workingDirectory) || path.resolve(workingDirectory);
     const projectDirs = getAncestors(workingDirectory, worktreeRoot)
-      .map((dir) => path.join(dir, '.opencode'));
+      .map((dir) => path.join(dir, KERNEL_PROJECT_DIR));
     projectDirs.forEach(pushDir);
   }
 
-  pushDir(path.join(os.homedir(), '.opencode'));
+  pushDir(path.join(os.homedir(), KERNEL_PROJECT_DIR));
 
   const customConfigDir = process.env.OPENCODE_CONFIG_DIR
     ? path.resolve(process.env.OPENCODE_CONFIG_DIR)

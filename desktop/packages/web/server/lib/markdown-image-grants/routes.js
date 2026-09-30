@@ -2,6 +2,7 @@ import express from 'express';
 import { constants as fsConstants } from 'node:fs';
 import { mintOutsideFileGrant } from '../fs/routes.js';
 import { unwrapOpenCodeResponse } from '../opencode/response-envelope.js';
+import { kernelTmpDir } from '../../geocode/kernel-paths.js'; // GeoCode: see approvedTempRoot
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGE_SOURCES = 12;
@@ -268,12 +269,14 @@ export const registerMarkdownImageGrantRoutes = (app, dependencies) => {
   const {
     fsPromises,
     path,
+    /* --- GeoCode: unused once approvedTempRoot comes from the kernel paths ---
     os,
+    --- /GeoCode --- */
     crypto,
     validateDirectoryPath,
     buildOpenCodeUrl,
     getOpenCodeAuthHeaders,
-    approvedTempRoot = path.join(os.tmpdir(), 'opencode'),
+    approvedTempRoot = kernelTmpDir(),
   } = dependencies;
 
   app.post(

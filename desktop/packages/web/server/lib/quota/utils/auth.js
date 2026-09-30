@@ -1,9 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+/* --- GeoCode: unused once OPENCODE_DATA_DIR comes from the kernel paths ---
 import os from 'os';
+--- /GeoCode --- */
 import { OPENCODE_CONFIG_DIR } from '../../opencode/shared.js';
+import { kernelDataDir } from '../../../geocode/kernel-paths.js'; // GeoCode: see OPENCODE_DATA_DIR
 
-const OPENCODE_DATA_DIR = path.join(os.homedir(), '.local', 'share', 'opencode');
+const OPENCODE_DATA_DIR = kernelDataDir(); // GeoCode: the bundled kernel's data directory
 
 export const ANTIGRAVITY_ACCOUNTS_PATHS = [
   path.join(OPENCODE_CONFIG_DIR, 'antigravity-accounts.json'),

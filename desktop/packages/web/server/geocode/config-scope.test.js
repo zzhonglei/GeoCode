@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 // Guards against the shell reading, writing or deleting config where the kernel does not look: above the session
-// directory, or in another product's `.claude` or `.agents` directory.
+// directory, or in another product's `.claude`, `.agents` or `.opencode` directory.
 const saved = { HOME: process.env.HOME, OPENCODE_CONFIG_DIR: process.env.OPENCODE_CONFIG_DIR, OPENCODE_CONFIG: process.env.OPENCODE_CONFIG };
 let root;
 let home;
@@ -36,12 +36,14 @@ beforeAll(async () => {
   for (const dir of [path.join(config, 'skills'), path.join(home, '.claude', 'skills'), path.join(home, '.agents', 'skills'), path.join(session, '.claude', 'skills'), path.join(session, '.agents', 'skills')]) {
     skill(dir, 'dup');
   }
-  skill(path.join(session, '.opencode', 'skills'), 'own');
+  skill(path.join(session, '.geocode', 'skills'), 'own');
+  skill(path.join(session, '.opencode', 'skills'), 'opencode-only');
   skill(path.join(config, 'skill'), 'legacy');
   skill(path.join(home, '.claude', 'skills'), 'claude-only');
-  skill(path.join(home, '.opencode', 'skills'), 'home-opencode');
-  skill(path.join(repo, '.opencode', 'skills'), 'above');
-  fs.writeFileSync(path.join(repo, '.opencode', 'opencode.json'), '{ "websearch": false }\n');
+  skill(path.join(home, '.geocode', 'skills'), 'home-geocode');
+  skill(path.join(repo, '.geocode', 'skills'), 'above');
+  fs.writeFileSync(path.join(repo, '.geocode', 'geocode.json'), '{ "websearch": false }\n');
+  fs.writeFileSync(path.join(session, '.opencode', 'opencode.json'), '{ "websearch": false }\n');
   // Imported only now: shared.js reads OPENCODE_CONFIG_DIR when it loads.
   skills = await import('../lib/opencode/skills.js');
   websearch = await import('../lib/opencode/websearch-config.js');
@@ -63,7 +65,7 @@ describe('GeoCode: skill directories', () => {
     expect(skills.discoverSkills(session).map((found) => found.path).sort()).toEqual([
       path.join(config, 'skill', 'legacy', 'SKILL.md'),
       path.join(config, 'skills', 'dup', 'SKILL.md'),
-      path.join(session, '.opencode', 'skills', 'own', 'SKILL.md'),
+      path.join(session, '.geocode', 'skills', 'own', 'SKILL.md'),
     ]);
   });
 
@@ -73,7 +75,7 @@ describe('GeoCode: skill directories', () => {
     expect(() => skills.updateSkill('dup', { description: 'changed' }, session, foreign)).toThrow(/outside the skill directories/);
     expect(fs.readFileSync(foreign, 'utf8')).toBe(before);
 
-    for (const target of [path.join(session, '.opencode', 'skills', 'own', 'SKILL.md'), path.join(config, 'skill', 'legacy', 'SKILL.md')]) {
+    for (const target of [path.join(session, '.geocode', 'skills', 'own', 'SKILL.md'), path.join(config, 'skill', 'legacy', 'SKILL.md')]) {
       skills.updateSkill(path.basename(path.dirname(target)), { description: 'changed' }, session, target);
       expect(fs.readFileSync(target, 'utf8')).toContain('changed');
     }
@@ -89,7 +91,7 @@ describe('GeoCode: skill directories', () => {
     skills.createSkill('made-user', { source: 'agents', description: 'made' }, session, 'user');
     skills.createSkill('made-project', { source: 'agents', description: 'made' }, session, 'project');
     expect(fs.existsSync(path.join(config, 'skills', 'made-user', 'SKILL.md'))).toBe(true);
-    expect(fs.existsSync(path.join(session, '.opencode', 'skills', 'made-project', 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(session, '.geocode', 'skills', 'made-project', 'SKILL.md'))).toBe(true);
     expect(fs.existsSync(path.join(home, '.agents', 'skills', 'made-user'))).toBe(false);
     expect(fs.existsSync(path.join(session, '.agents', 'skills', 'made-project'))).toBe(false);
   });

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { KERNEL_CONFIG_JSON, KERNEL_PROJECT_DIR } from '../../geocode/kernel-paths.js'; // GeoCode: see ensureProjectMcpConfigPath
 import {
   CONFIG_FILE,
   AGENT_SCOPE,
@@ -41,11 +42,11 @@ function resolveMcpScopeFromPath(layers, sourcePath) {
 }
 
 function ensureProjectMcpConfigPath(workingDirectory) {
-  const configDir = path.join(workingDirectory, '.opencode');
+  const configDir = path.join(workingDirectory, KERNEL_PROJECT_DIR);
   if (!fs.existsSync(configDir)) {
     fs.mkdirSync(configDir, { recursive: true });
   }
-  return path.join(configDir, 'opencode.json');
+  return path.join(configDir, KERNEL_CONFIG_JSON);
 }
 
 /** Same precedence as `getJsonEntrySource`: custom > project > user override > user. */

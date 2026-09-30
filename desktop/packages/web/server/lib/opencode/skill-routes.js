@@ -1,6 +1,7 @@
 import { OpenCode } from '@opencode/client';
 import { buildAppliedResponse } from './config-mutation-response.js';
 import { OPENCODE_CONFIG_DIR } from './shared.js';
+import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-paths.js'; // GeoCode: the project directory, used below
 
 /**
  * Matches how OpenCode reads its own boolean env flags: any value other than
@@ -99,7 +100,7 @@ export const registerSkillRoutes = (app, dependencies) => {
     const projectAncestors = getSkillProjectAncestors(workingDirectory);
     const isProjectScoped = projectAncestors.some((ancestor) => {
       const candidates = [
-        path.join(ancestor, '.opencode'),
+        path.join(ancestor, KERNEL_PROJECT_DIR),
         path.join(ancestor, '.claude', 'skills'),
         path.join(ancestor, '.agents', 'skills'),
       ];
@@ -112,7 +113,7 @@ export const registerSkillRoutes = (app, dependencies) => {
 
     const userRoots = [
       OPENCODE_CONFIG_DIR,
-      path.join(home, '.opencode'),
+      path.join(home, KERNEL_PROJECT_DIR),
       path.join(home, '.claude', 'skills'),
       path.join(home, '.agents', 'skills'),
       process.env.OPENCODE_CONFIG_DIR ? path.resolve(process.env.OPENCODE_CONFIG_DIR) : null,

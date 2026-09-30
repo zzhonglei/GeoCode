@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-paths.js'; // GeoCode: the project directory, used below
 import {
   getAncestors,
   findWorktreeRoot,
@@ -39,7 +40,7 @@ const PROJECT_COMMAND_DIR_NAMES = ['commands', 'command'];
 
 /** Ensure the v2 project command directory exists. */
 function ensureProjectCommandDir(workingDirectory) {
-  const projectCommandDir = path.join(workingDirectory, '.opencode', 'commands');
+  const projectCommandDir = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'commands');
   if (!fs.existsSync(projectCommandDir)) {
     fs.mkdirSync(projectCommandDir, { recursive: true });
   }
@@ -47,13 +48,13 @@ function ensureProjectCommandDir(workingDirectory) {
 }
 
 function getProjectCommandPath(workingDirectory, commandName) {
-  const preferred = path.join(workingDirectory, '.opencode', 'commands', `${commandName}.md`);
+  const preferred = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'commands', `${commandName}.md`);
   // Same walk as agents: every `.opencode` from the working directory up to
   // the project root is a source; nested names (`team/review`) map onto paths.
   const worktreeRoot = findWorktreeRoot(workingDirectory) || path.resolve(workingDirectory);
   for (const base of getAncestors(workingDirectory, worktreeRoot)) {
     for (const dirName of PROJECT_COMMAND_DIR_NAMES) {
-      const candidate = path.join(base, '.opencode', dirName, `${commandName}.md`);
+      const candidate = path.join(base, KERNEL_PROJECT_DIR, dirName, `${commandName}.md`);
       if (fs.existsSync(candidate)) return candidate;
     }
   }
@@ -222,7 +223,7 @@ function createCommand(commandName, config, workingDirectory, scope) {
 
   const layers = readConfigLayers(workingDirectory);
   if (getJsonEntrySource(layers, 'commands', commandName).exists) {
-    throw new Error(`Command ${commandName} already exists in opencode.json`);
+    throw new Error(`Command ${commandName} already exists in geocode.json`); // GeoCode: its config file
   }
 
   let targetPath;

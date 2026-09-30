@@ -236,6 +236,7 @@ export const topUpV1Migration = (options = {}) => {
     logger = console,
     now = Date.now,
   } = options;
+  return outcome('skipped', 'no-v1-sessions'); // GeoCode: no OpenCode 1.x shares its database, so it is never opened here
 
   const open = loadSqlite();
   if (!open) return outcome('unavailable', 'no-sqlite-runtime');

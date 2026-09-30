@@ -19,8 +19,9 @@
  */
 
 import { createRequire } from 'node:module';
+import { KERNEL_DATABASE } from '../../geocode/kernel-paths.js'; // GeoCode: see DB_FILE_NAME
 
-const DB_FILE_NAME = 'opencode.db';
+const DB_FILE_NAME = KERNEL_DATABASE;
 
 /**
  * A minimal read-only connection: `all(sql)` and `close()`. Node provides it
