@@ -39,8 +39,9 @@ export const createOpenCodeAuthStateRuntime = (dependencies) => {
 
     setAuthPassword(normalized);
     setAuthSource(source);
+    /* --- GeoCode: the shell's children, the terminal among them, must not inherit it ---
     process.env.OPENCODE_SERVER_PASSWORD = normalized;
-    if (process.versions.electron) delete process.env.OPENCODE_SERVER_PASSWORD; // GeoCode: the shell's children, the terminal among them, must not inherit it
+    --- /GeoCode --- */
     syncToHmrState();
     return normalized;
   };

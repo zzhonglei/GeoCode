@@ -22,7 +22,7 @@ import { updateDesktopSettings } from '@/lib/persistence';
 import { useAgentMemoryStore } from '@/stores/useAgentMemoryStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { useI18n } from '@/lib/i18n';
-import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see the browser provider row
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the browser provider row
 
 /**
  * Which OpenChamber capabilities agents are given.
@@ -123,7 +123,8 @@ export const OpenChamberToolsSettings: React.FC = () => {
           info={t('settings.openchamber.tools.field.agentWebToolInfo')}
         />
 
-        {!isGeoCodeDesktop() && ( // GeoCode: the only other providers are extensions, which the desktop app does not run
+        {/* --- GeoCode: the only other providers are extensions, which the app does not run --- */}
+        <Closed>
         <SettingsFieldRow
           settingsItem="sessions.browser-provider"
           label={t('settings.openchamber.tools.browserProvider.label')}
@@ -157,7 +158,8 @@ export const OpenChamberToolsSettings: React.FC = () => {
             </SelectContent>
           </Select>
         </SettingsFieldRow>
-        )}
+        </Closed>
+        {/* --- /GeoCode --- */}
 
         <SettingsCheckboxRow
           settingsItem="sessions.agent-notify-tool"

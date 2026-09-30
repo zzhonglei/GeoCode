@@ -9,10 +9,8 @@ import { closedSurface } from './closed-surface.js';
 describe('GeoCode: closedSurface', () => {
   let server;
   let baseUrl;
-  const hadElectron = Object.prototype.hasOwnProperty.call(process.versions, 'electron');
 
   beforeAll(async () => {
-    process.versions.electron = 'test';
     const app = express();
     app.use(closedSurface);
     for (const route of ['/api/openchamber/update-check', '/api/push/subscribe', '/connect', '/api/client-auth/clients', '/api/push/visibility', '/api/plugin', '/api/plugin/check', '/api/magic-prompts/:id', '/api/config/snippets/expand', '/api/openchamber/spaces/switch', '/api/spaces/:id/session', '/api/config/skills/catalog/source', '/api/config/skills/:name', '/api/config/skills/:name/files/*filePath']) {
@@ -24,7 +22,6 @@ describe('GeoCode: closedSurface', () => {
   });
 
   afterAll(async () => {
-    if (!hadElectron) delete process.versions.electron;
     await new Promise((resolve) => server.close(resolve));
   });
 
@@ -36,7 +33,7 @@ describe('GeoCode: closedSurface', () => {
     }
   });
 
-  it('leaves the endpoints the desktop app still uses to upstream', async () => {
+  it('leaves the endpoints the app still uses to upstream', async () => {
     expect(await statusOf('/api/push/visibility')).toBe(200);
     expect(await statusOf('/api/plugin')).toBe(200);
   });

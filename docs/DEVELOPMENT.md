@@ -53,7 +53,7 @@ bun run electron:dev:bundled
 
 壳与内核都从 `HOME` 推导自己的数据、配置与缓存目录,前提是环境里没有设 `XDG_*` 变量,设了的话内核会改用它们。Electron 自己的配置目录在 macOS 上按系统账户找主目录,不看 `HOME`,所以要用 `OPENCHAMBER_DESKTOP_USER_DATA_DIR` 单独指定。Electron 的日志写在 `$SANDBOX/Library/Logs/` 下,跟着 `HOME` 走。
 
-`electron:dev:bundled` 先构建界面,再用构建好的界面启动,壳使用第 4 节暂存的内核;没有暂存时,启动日志提示「bundled OpenCode CLI missing」,内核起不来。`electron:dev` 用热更新的界面,适合改界面时快速查看,但它另起的壳服务端不在 Electron 里,GeoCode 对壳服务端的改动与访问控制在那里不生效,验证这些要用 `electron:dev:bundled` 或打包出的应用(见 `DESKTOP.md` 第 6 节)。
+`electron:dev:bundled` 先构建界面,再用构建好的界面启动,壳使用第 4 节暂存的内核;没有暂存时,启动日志提示「bundled OpenCode CLI missing」,内核起不来。`electron:dev` 用热更新的界面,适合改界面时快速查看,但它另起的壳服务端不在 Electron 里,访问控制在那里不生效,验证访问控制要用 `electron:dev:bundled` 或打包出的应用(见 `DESKTOP.md` 第 7 节)。
 
 沙箱里没有登录信息,可以用 OpenCode 提供的免费模型,也可以在沙箱里登录。测完删掉沙箱目录即可。
 

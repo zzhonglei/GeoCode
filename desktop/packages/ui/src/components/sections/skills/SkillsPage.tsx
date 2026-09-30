@@ -60,7 +60,6 @@ import { useUIStore } from '@/stores/useUIStore';
 import { cn } from '@/lib/utils';
 import { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
-import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see the location picker
 
 export interface SkillsPageProps {
   view?: 'installed' | 'catalog';
@@ -623,7 +622,7 @@ const SkillsInstalledPage: React.FC = () => {
                     <span>{locationLabelText(locationValueFrom(draftScope, draftSource))}</span>
                   </SelectTrigger>
                   <SelectContent align="start">
-                    {SKILL_LOCATION_OPTIONS.filter((option) => !isGeoCodeDesktop() || option.source === 'opencode').map((option) => ( // GeoCode: the kernel reads no .agents location
+                    {SKILL_LOCATION_OPTIONS.filter((option) => option.source === 'opencode').map((option) => ( // GeoCode: the kernel reads no .agents location
                       <SelectItem key={option.value} value={option.value}>
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-2">

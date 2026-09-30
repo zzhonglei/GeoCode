@@ -16,9 +16,10 @@ import { formatMessage, useI18nStore } from '@/lib/i18n/store';
 import { getUpdateInstallErrorMessage } from '@/lib/updateInstallError';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { getClientPlatform, isCapacitorApp } from '@/lib/platform';
-import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see checkForUpdates
 
+/* --- GeoCode: see checkForUpdates ---
 declare const __APP_VERSION__: string | undefined;
+--- /GeoCode --- */
 
 type UpdateState = {
   checking: boolean;
@@ -169,6 +170,7 @@ function parseUpdateCheckResponse(data: {
   };
 }
 
+/* --- GeoCode: see checkForUpdates ---
 async function checkForWebUpdates(runtime: ClientRuntime, currentVersion?: string): Promise<UpdateInfo | null> {
   try {
     const params = mapRuntimeParams(runtime);
@@ -194,6 +196,7 @@ async function checkForWebUpdates(runtime: ClientRuntime, currentVersion?: strin
     return null;
   }
 }
+--- /GeoCode --- */
 
 const updateCheckFailure = z.object({ error: z.string().trim().min(1) });
 
@@ -255,9 +258,10 @@ export const useUpdateStore = create<UpdateStore>()((set, get) => ({
   checkForUpdates: async () => {
     const runtime = detectRuntimeType();
     if (!runtime) return null;
-    // GeoCode: no OpenChamber update check, and with it no usage report
-    if (isGeoCodeDesktop()) return null;
 
+    // --- GeoCode: no OpenChamber update check, and with it no usage report ---
+    return null;
+    /*
     set({ checking: true, error: null, runtimeType: runtime });
 
     try {
@@ -310,6 +314,8 @@ export const useUpdateStore = create<UpdateStore>()((set, get) => ({
       });
       return null;
     }
+    */
+    // --- /GeoCode ---
   },
 
   downloadUpdate: async () => {

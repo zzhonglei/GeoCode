@@ -8,10 +8,8 @@ import { loopbackHostOnly } from './loopback-host.js';
 describe('GeoCode: loopbackHostOnly', () => {
   let server;
   let port;
-  const hadElectron = Object.prototype.hasOwnProperty.call(process.versions, 'electron');
 
   beforeAll(async () => {
-    process.versions.electron = 'test';
     const app = express();
     app.set('trust proxy', true);
     app.use(loopbackHostOnly);
@@ -22,7 +20,6 @@ describe('GeoCode: loopbackHostOnly', () => {
   });
 
   afterAll(async () => {
-    if (!hadElectron) delete process.versions.electron;
     await new Promise((resolve) => server.close(resolve));
   });
 
@@ -42,7 +39,7 @@ describe('GeoCode: loopbackHostOnly', () => {
     expect(await statusOf({ Host: `evil.example:${port}`, 'X-Forwarded-Host': `127.0.0.1:${port}` })).toBe(403);
   });
 
-  it('serves the loopback names the desktop app uses', async () => {
+  it('serves the loopback names the app uses', async () => {
     for (const host of [`127.0.0.1:${port}`, `localhost:${port}`, `LOCALHOST:${port}`]) {
       expect(await statusOf({ Host: host })).toBe(200);
     }

@@ -228,7 +228,12 @@ export const createRoutingStore = ({ dataDir }) => {
 
   return {
     /** Effective config; a missing file is the defaults, a broken file throws. */
-    readConfig: async () => resolveEffectiveConfig(process.versions.electron ? null : await readJsonFile(configFile, fileSchema)), // GeoCode: routing.json is ignored in the desktop app, so routing and the safety net stay off
+    // --- GeoCode: routing.json is ignored, so routing and the safety net stay off ---
+    readConfig: async () => resolveEffectiveConfig(null),
+    /*
+    readConfig: async () => resolveEffectiveConfig(await readJsonFile(configFile, fileSchema)),
+    */
+    // --- /GeoCode ---
     writeConfig: (config) => serialize(async () => {
       await writeJsonFile(configFile, toStoredConfig(config));
       return config;

@@ -48,7 +48,7 @@ const isClosed = (req) => {
 };
 
 export const closedSurface = (req, res, next) => {
-  if (!process.versions.electron || !isClosed(req)) {
+  if (!isClosed(req)) {
     next();
     return;
   }

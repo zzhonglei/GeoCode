@@ -5,7 +5,7 @@ import path from 'node:path';
 
 // Guards against the shell reading, writing or deleting config where the kernel does not look: above the session
 // directory, or in another product's `.claude` or `.agents` directory.
-const saved = { electron: process.versions.electron, HOME: process.env.HOME, OPENCODE_CONFIG_DIR: process.env.OPENCODE_CONFIG_DIR, OPENCODE_CONFIG: process.env.OPENCODE_CONFIG };
+const saved = { HOME: process.env.HOME, OPENCODE_CONFIG_DIR: process.env.OPENCODE_CONFIG_DIR, OPENCODE_CONFIG: process.env.OPENCODE_CONFIG };
 let root;
 let home;
 let config;
@@ -29,7 +29,6 @@ beforeAll(async () => {
   config = path.join(root, 'config');
   const repo = path.join(root, 'repo');
   session = path.join(repo, 'sub');
-  process.versions.electron = 'test';
   process.env.HOME = home;
   process.env.OPENCODE_CONFIG_DIR = config;
   delete process.env.OPENCODE_CONFIG;
@@ -49,7 +48,6 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
-  restore(process.versions, 'electron', saved.electron);
   for (const key of ['HOME', 'OPENCODE_CONFIG_DIR', 'OPENCODE_CONFIG']) restore(process.env, key, saved[key]);
   if (root) fs.rmSync(root, { recursive: true, force: true });
 });

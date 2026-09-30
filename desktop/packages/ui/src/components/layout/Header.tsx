@@ -81,7 +81,7 @@ import { useIsSessionAiRenamePending } from '@/sync/use-session-ai-rename';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { buildSessionTreeMoveMessages, requestSessionTreeMove, useIsSessionWorktreeMovePending } from '@/lib/worktrees/sessionWorktreeMove';
-import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see DesktopServicesMenu
+import { Closed } from '@/geocode/Closed'; // GeoCode: see DesktopServicesMenu
 
 const DESKTOP_HEADER_ICON_BUTTON_CLASS = 'app-region-no-drag inline-flex h-8 w-8 items-center justify-center gap-2 rounded-md typography-ui-label font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-interactive-hover transition-colors';
 
@@ -1252,8 +1252,9 @@ export const Header: React.FC = () => {
       {/* Instances only exist in the desktop app. On web the menu was left
           holding a single dev-only shutdown action, which is not a reason to
           keep a dropdown in the header. */}
-      {/* GeoCode: the desktop app has one local instance, so there is nothing to switch to */}
-      {isDesktopApp && !isGeoCodeDesktop() ? (
+      {/* --- GeoCode: the app has one local instance, so there is nothing to switch to --- */}
+      <Closed>
+      {isDesktopApp ? (
       <DesktopServicesMenu
         isDesktopApp={isDesktopApp}
         currentInstanceLabel={currentInstanceLabel}
@@ -1268,6 +1269,8 @@ export const Header: React.FC = () => {
         onOpenRemoteUpdate={openRemoteInstanceUpdate}
       />
       ) : null}
+      </Closed>
+      {/* --- /GeoCode --- */}
     </>
   );
 

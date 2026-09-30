@@ -5,7 +5,6 @@ import { opencodeClient } from '@/lib/opencode/client';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
-import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see expandText
 
 export type SnippetScope = 'global' | 'project';
 
@@ -159,7 +158,9 @@ export const useSnippetsStore = create<SnippetsStore>()(
       },
 
       expandText: async (text) => {
-        if (isGeoCodeDesktop()) return text; // GeoCode: the desktop app has no snippets, so text is sent as typed
+        // --- GeoCode: the app has no snippets, so text is sent as typed ---
+        return text;
+        /*
         if (!/#[a-z0-9_-]+/i.test(text)) return text;
         const directory = getRequestDirectory();
         const queryParams = directory ? `?directory=${encodeURIComponent(directory)}` : '';
@@ -170,6 +171,8 @@ export const useSnippetsStore = create<SnippetsStore>()(
         });
         if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Failed to expand snippets');
         return (await response.json()).text ?? text;
+        */
+        // --- /GeoCode ---
       },
 
       getSnippetByName: (name) => get().snippets.find((snippet) => snippet.name === name || snippet.aliases.includes(name)),

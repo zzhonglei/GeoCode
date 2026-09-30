@@ -23,7 +23,7 @@ import {
   SETTINGS_OPTION_STACK_CLASS,
   SettingsStackedField,
 } from '@/components/sections/shared/SettingsSection';
-import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see the password and LAN fields
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the password and LAN fields
 
 export const DesktopNetworkSettings: React.FC = () => {
   const { t } = useI18n();
@@ -406,8 +406,8 @@ export const DesktopNetworkSettings: React.FC = () => {
           </div>
         ) : null}
 
-        {/* --- GeoCode: the desktop app has no LAN access and no UI password --- */}
-        {!isGeoCodeDesktop() && (<>
+        {/* --- GeoCode: the app has no LAN access and no UI password --- */}
+        <Closed>
         <SettingsStackedField
           settingsItem="sessions.desktop-ui-password"
           label={(
@@ -467,7 +467,7 @@ export const DesktopNetworkSettings: React.FC = () => {
             ariaLabel={t('settings.openchamber.desktopNetwork.field.allowLanAccessAria')}
           />
         </div>
-        </>)}
+        </Closed>
         {/* --- /GeoCode --- */}
 
         {error ? (

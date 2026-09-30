@@ -6,7 +6,7 @@ export interface QuotaProviderMeta {
   name: string;
 }
 
-export const QUOTA_PROVIDERS: QuotaProviderMeta[] = withoutClosedQuotaProviders([ // GeoCode: the desktop app neither lists nor queries Claude and Cursor
+export const QUOTA_PROVIDERS: QuotaProviderMeta[] = withoutClosedQuotaProviders([ // GeoCode: the app neither lists nor queries Claude and Cursor
   { id: 'claude', name: 'Claude' },
   { id: 'cline-pass', name: 'ClinePass' },
   { id: 'codex', name: 'Codex' },

@@ -1,11 +1,14 @@
+/* --- GeoCode: see loadGuestCatalogOnce ---
 import { isVSCodeRuntime } from '@/lib/desktop';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { isMobileSurfaceRuntime } from '@/lib/runtimeSurface';
+--- /GeoCode --- */
 import { getRuntimeKey } from '@/lib/runtime-switch';
-import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see loadGuestCatalogOnce
 
 import { useGuestBadgeStore } from './badge-store.ts';
+/* --- GeoCode: see loadGuestCatalogOnce ---
 import { parseGuestCatalogJson } from './parse.ts';
+--- /GeoCode --- */
 import { useGuestsStore } from './store.ts';
 
 const alignCatalogRuntime = (runtimeKey: string): void => {
@@ -38,7 +41,9 @@ const loadGuestCatalogOnce = async (runtimeKey: string): Promise<void> => {
   alignCatalogRuntime(runtimeKey);
 
   const store = useGuestsStore.getState();
-  if (isGeoCodeDesktop()) return store.replaceCatalog([], runtimeKey); // GeoCode: the desktop app has no extensions; ready, not unsupported, so restored extension tabs close
+  // --- GeoCode: the app has no extensions; ready, not unsupported, so restored extension tabs close ---
+  return store.replaceCatalog([], runtimeKey);
+  /*
   if (isVSCodeRuntime() || isMobileSurfaceRuntime()) {
     store.markUnsupported(runtimeKey);
     return;
@@ -67,4 +72,6 @@ const loadGuestCatalogOnce = async (runtimeKey: string): Promise<void> => {
   } catch {
     useGuestsStore.getState().markFailed(runtimeKey, { method: 'GET', path: '/api/guests', kind: 'network' });
   }
+  */
+  // --- /GeoCode ---
 };

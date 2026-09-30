@@ -107,7 +107,7 @@ function registerSnippet(registry, snippet, canonicalNames) {
 }
 
 function loadSnippetRegistry(workingDirectory) {
-  if (process.versions.electron) return new Map(); // GeoCode: the desktop app has no snippets; scheduled tasks and sessions expand through here too
+  return new Map(); // GeoCode: the app has no snippets; scheduled tasks and sessions expand through here too
   const registry = new Map();
   const canonicalNames = new Set();
   for (const { dir, source } of getLoadDirs(workingDirectory)) {

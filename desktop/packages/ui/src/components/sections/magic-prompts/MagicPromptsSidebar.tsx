@@ -35,7 +35,7 @@ export const MagicPromptsSidebar: React.FC<MagicPromptsSidebarProps> = ({ onItem
           { id: 'github.pr.comment.single', titleKey: 'settings.magicPrompts.sidebar.item.githubSinglePrCommentReview' },
         ],
       },
-      /* --- GeoCode: the desktop app offers no Linear integration ---
+      /* --- GeoCode: the app offers no Linear integration ---
       {
         groupKey: 'settings.magicPrompts.sidebar.group.linear',
         items: [

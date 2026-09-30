@@ -1041,7 +1041,9 @@ globalMessageStreamHub.subscribeEvent((event) => {
     sessionAssistRuntime.processPayload(payload, directory || payload.properties?.directory || '');
     sessionGoalRuntime.processPayload(payload, directory || payload.properties?.directory || '');
     contextObligatoryRuntime.processPayload(payload, directory || payload.properties?.directory || '');
-    if (!process.versions.electron) linearSessionStatusRuntime.processPayload(payload); // GeoCode: the desktop app offers no Linear integration
+    /* --- GeoCode: the app offers no Linear integration ---
+    linearSessionStatusRuntime.processPayload(payload);
+    --- /GeoCode --- */
   }
 });
 
@@ -1891,7 +1893,8 @@ async function main(options = {}) {
     },
   });
   const startupSettings = await readSettingsFromDiskMigrated().catch(() => null);
-  if (startupSettings?.isolatedSpacesEnabled === true && !process.versions.electron) { // GeoCode: the desktop app never builds the spaces host; the switch route is closed, see geocode/closed-surface.js
+  /* --- GeoCode: the app never builds the spaces host; the switch route is closed, see geocode/closed-surface.js ---
+  if (startupSettings?.isolatedSpacesEnabled === true) {
     try {
       spacesHost = buildSpacesHost();
     } catch (error) {
@@ -1900,6 +1903,7 @@ async function main(options = {}) {
       spacesHost = null;
     }
   }
+  --- /GeoCode --- */
 
   const app = express();
   app.use(loopbackHostOnly); // GeoCode: refuses DNS rebinding, see geocode/loopback-host.js

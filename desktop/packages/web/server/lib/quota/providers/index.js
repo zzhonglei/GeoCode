@@ -31,7 +31,7 @@ import * as wafer from './wafer.js';
 import * as opencodeGo from './opencode-go.js';
 import * as xai from './xai.js';
 
-const registry = withoutClosedQuotaProviders({ // GeoCode: the desktop app neither lists nor queries Claude and Cursor
+const registry = withoutClosedQuotaProviders({ // GeoCode: the app neither lists nor queries Claude and Cursor
   claude: {
     providerId: claude.providerId,
     providerName: claude.providerName,

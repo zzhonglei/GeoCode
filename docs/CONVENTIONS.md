@@ -90,6 +90,8 @@ git diff --name-status chamber-upstream main:desktop
 
 屏蔽上游代码时,原来的行必须逐字节不变:整段包进块注释,或在前面提前返回。不要逐行加行注释:在 git 看来那是改了每一行,上游再改这些行就会冲突。
 
+GeoCode 只有桌面应用一种形式,补丁不判断运行方式。提前返回之后的上游代码里,TypeScript 不再沿用前面的类型收窄,可能报类型错误,这时把后面的上游代码也包进块注释;包住之后没人用的导入与变量 lint 会报,各自再包一次,与仍在用的名字同在一行的,在上面加 `eslint-disable-next-line @typescript-eslint/no-unused-vars`。界面上要藏起的一段 JSX,包进 `desktop/packages/ui/src/geocode/Closed.tsx` 的 `Closed`:它什么都不渲染,包住的上游行不变,里面用到的变量也仍有引用。
+
 指向上游代码时写符号名,不写行号。行号会随合并漂移,而漂移了也没有任何提示。
 
 ## 4. 测试与检查

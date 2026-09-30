@@ -246,8 +246,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
 
   // --- GeoCode: a closed page goes to General; renderPageContent gates only the content, not a split page's sidebar ---
   React.useEffect(() => {
-    if (isDesktopApp && isClosedSettingsPage(settingsSlug)) setSettingsPage('general');
-  }, [isDesktopApp, setSettingsPage, settingsSlug]);
+    if (isClosedSettingsPage(settingsSlug)) setSettingsPage('general');
+  }, [setSettingsPage, settingsSlug]);
   // --- /GeoCode ---
 
   const routingAvailable = useUIStore((state) => state.routingFeatureAvailable);
@@ -278,7 +278,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
     if (!isSettingsDialogOpen && !runtimeCtx.isVSCode && !isWindowed) {
       return;
     }
-    if (isDesktopShell() && isClosedSettingsPage(settingsSlug)) return; // GeoCode: the redirect runs in the same commit, so a closed page would still load its store
+    if (isClosedSettingsPage(settingsSlug)) return; // GeoCode: the redirect runs in the same commit, so a closed page would still load its store
 
     if (settingsSlug === 'agents') {
       void useAgentsStore.getState().loadAgents(settingsDirectory);
@@ -616,7 +616,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
   }, [t]);
 
   const renderPageSidebar = React.useCallback((slug: SettingsPageSlug, opts: { onItemSelect?: () => void }) => {
-    if (isDesktopShell() && isClosedSettingsPage(slug)) return null; // GeoCode: a sidebar mounts and loads before the redirect away from a closed page
+    if (isClosedSettingsPage(slug)) return null; // GeoCode: a sidebar mounts and loads before the redirect away from a closed page
     switch (slug) {
       case 'projects':
         return <ProjectsSidebar onItemSelect={opts.onItemSelect} />;

@@ -78,8 +78,7 @@ export const createRelayService = ({
   allowPassiveHost = true,
   logger = console,
 }) => {
-  // GeoCode: the desktop app never hosts or joins the relay
-  if (process.versions.electron) return createInertRelayService();
+  return createInertRelayService(); // GeoCode: the app never hosts or joins the relay
   const identityRuntime = createRelayIdentityRuntime({ crypto, readSettingsFromDiskMigrated, writeSettingsToDisk, readSettingsStrict });
 
   let hostClient = null;

@@ -18,7 +18,6 @@ import { opencodeClient } from '@/lib/opencode/client';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { startConfigUpdate } from '@/lib/configUpdate';
 import { runtimeFetch } from '@/lib/runtime-fetch';
-import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see loadCatalog
 
 const FALLBACK_SOURCES: SkillsCatalogSource[] = [
   {
@@ -132,7 +131,7 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
       setSelectedSource: (id) => set({ selectedSourceId: id }),
 
       loadCatalog: async (options) => {
-        if (isGeoCodeDesktop()) return false; // GeoCode: the desktop app has no skills catalog; the installed skills page and config refreshes call this too
+        return false; // GeoCode: the app has no skills catalog; the installed skills page and config refreshes call this too
         const currentDirectory = getRequestDirectory();
         const cacheKey = getSkillsCatalogCacheKey(currentDirectory);
         const now = Date.now();

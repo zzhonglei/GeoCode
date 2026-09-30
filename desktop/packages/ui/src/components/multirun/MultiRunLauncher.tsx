@@ -30,7 +30,6 @@ import { PROJECT_ICON_MAP, PROJECT_COLOR_MAP, ProjectIconImage } from '@/lib/pro
 import type { ProjectEntry } from '@/lib/api/types';
 import { startDesktopWindowDrag } from '@/lib/desktopNative';
 import { useI18n } from '@/lib/i18n';
-import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see updateAutocompleteState
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -761,8 +760,9 @@ const RunGroupCard: React.FC<RunGroupCardProps> = ({
     setShowCommandAutocomplete(false);
 
     const textBeforeCursor = value.substring(0, cursorPosition);
+    /* --- GeoCode: the app has no snippets ---
     const lastHashSymbol = textBeforeCursor.lastIndexOf('#');
-    if (lastHashSymbol !== -1 && !isGeoCodeDesktop()) { // GeoCode: the desktop app has no snippets
+    if (lastHashSymbol !== -1) {
       const charBefore = lastHashSymbol > 0 ? textBeforeCursor[lastHashSymbol - 1] : null;
       const textAfterHash = textBeforeCursor.substring(lastHashSymbol + 1);
       const isWordBoundary = !charBefore || /\s/.test(charBefore);
@@ -773,6 +773,7 @@ const RunGroupCard: React.FC<RunGroupCardProps> = ({
         return;
       }
     }
+    --- /GeoCode --- */
 
     setShowSnippetAutocomplete(false);
 

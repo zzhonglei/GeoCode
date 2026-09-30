@@ -1,7 +1,9 @@
 import { isDesktopShell, isElectronShell } from '@/lib/desktop';
 import {
   desktopHostProbe,
+  /* --- GeoCode: see warmDesktopHostStatuses ---
   desktopHostsGet,
+  --- /GeoCode --- */
   desktopLocalClientTokenGet,
   getDesktopHostApiUrl,
   normalizeHostUrl,
@@ -9,8 +11,8 @@ import {
   type DesktopHost,
   type HostProbeResult,
 } from '@/lib/desktopHosts';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- GeoCode: buildLocalDesktopHost is used only in the closed part of warmDesktopHostStatuses
 import { LOCAL_HOST_ID, buildLocalDesktopHost } from '@/lib/desktopCurrentHost';
-import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see warmDesktopHostStatuses
 
 export type DesktopHostStatus = {
   status: HostProbeResult['status'];
@@ -166,7 +168,9 @@ export const probeDesktopHosts = async (hosts: readonly DesktopHost[]): Promise<
   }
 };
 
+/* --- GeoCode: see warmDesktopHostStatuses ---
 let warmUpStarted = false;
+--- /GeoCode --- */
 
 /**
  * Learn every instance's status once at startup, so the switcher opens on real
@@ -178,11 +182,15 @@ let warmUpStarted = false;
  * traffic — but the machine's network is still busiest right at launch.
  */
 export const warmDesktopHostStatuses = async (): Promise<void> => {
+  // --- GeoCode: one local instance, nothing to probe ---
+  return;
+  /*
   if (warmUpStarted || !isDesktopShell()) return;
-  if (isGeoCodeDesktop()) return; // GeoCode: one local instance, nothing to probe
   warmUpStarted = true;
   const config = await desktopHostsGet().catch(() => null);
   if (!config) return;
   pruneDesktopHostStatuses(config.hosts.map((host) => host.id));
   await probeDesktopHosts([buildLocalDesktopHost(config.localOrigin), ...config.hosts]);
+  */
+  // --- /GeoCode ---
 };

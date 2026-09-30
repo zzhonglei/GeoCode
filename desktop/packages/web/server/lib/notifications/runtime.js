@@ -96,8 +96,7 @@ export const createNotificationTriggerRuntime = (deps) => {
   // payload) and native iOS APNs (generic model-based text). Both share the dedup tag and
   // `requireNoSse` focus gate; a failure in one channel must not block the other.
   const fanoutPush = (payload, options) => {
-    // GeoCode: the desktop app sends no web push and no APNs, whatever subscriptions are on disk
-    if (process.versions.electron) return Promise.resolve();
+    return Promise.resolve(); // GeoCode: the app sends no web push and no APNs, whatever subscriptions are on disk
     // Presence-aware routing: if any interactive (non-mobile) client — desktop/web/vscode — is
     // currently visible, it already shows the in-app notification, so skip the native push to the
     // phone. Gated on the desktop's visibility (reliable), never the phone's own. When we skip we

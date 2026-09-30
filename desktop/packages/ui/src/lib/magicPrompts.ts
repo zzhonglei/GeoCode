@@ -1,5 +1,4 @@
 import { runtimeFetch } from './runtime-fetch';
-import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see fetchMagicPromptOverrides
 
 export type MagicPromptId =
   | 'git.commit.generate.visible'
@@ -1062,7 +1061,9 @@ const LEGACY_PROMPT_KEY_MAP: Record<string, { visible: MagicPromptId; instructio
 };
 
 let cachedOverrides: Record<string, string> | null = null;
+/* --- GeoCode: see fetchMagicPromptOverrides ---
 let inFlightOverridesRequest: Promise<Record<string, string>> | null = null;
+--- /GeoCode --- */
 
 const replaceTemplateVariables = (template: string, variables: Record<string, string>) => {
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => {
@@ -1109,7 +1110,9 @@ const normalizeOverridesPayload = (payload: unknown): Record<string, string> => 
 };
 
 export const fetchMagicPromptOverrides = async (): Promise<Record<string, string>> => {
-  if (isGeoCodeDesktop()) return {}; // GeoCode: no overrides in the desktop app; a failed read is not cached, so relying on the closed endpoint would re-request on every use
+  // --- GeoCode: no overrides; a failed read is not cached, so relying on the closed endpoint would re-request on every use ---
+  return {};
+  /*
   if (cachedOverrides) {
     return cachedOverrides;
   }
@@ -1134,6 +1137,8 @@ export const fetchMagicPromptOverrides = async (): Promise<Record<string, string
   }
 
   return inFlightOverridesRequest;
+  */
+  // --- /GeoCode ---
 };
 
 export const getMagicPromptDefinition = (id: MagicPromptId): MagicPromptDefinition => {

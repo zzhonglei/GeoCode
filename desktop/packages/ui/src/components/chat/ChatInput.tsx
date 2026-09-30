@@ -1,5 +1,4 @@
 import React from 'react';
-import { isGeoCodeDesktop } from '@/geocode/surface'; // GeoCode: see the two shell-mode triggers
 import { ComposerDictation } from '@/components/dictation/ComposerDictation';
 // sessionStore removed — currentSessionId comes from useSessionUIStore
 import { useConfigStore } from '@/stores/useConfigStore';
@@ -2248,7 +2247,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         // Enter shell mode before CodeMirror inserts the trigger. Keeping the
         // document unchanged also keeps the caret at the start for the first
         // command character.
-        if (!isBtwActive && inputMode === 'normal' && e.key === '!' && !isGeoCodeDesktop()) { // GeoCode: the desktop app has no shell mode
+        /* --- GeoCode: the app has no shell mode ---
+        if (!isBtwActive && inputMode === 'normal' && e.key === '!') {
             const selection = composerRef.current?.getSelection();
             if (selection?.start === 0 && selection.end === 0) {
                 e.preventDefault();
@@ -2257,6 +2257,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
                 return;
             }
         }
+        --- /GeoCode --- */
 
         if (inputMode === 'shell' && e.key === 'Escape') {
             e.preventDefault();
@@ -2566,7 +2567,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         // Mobile keyboards and paste may update the document without a usable
         // keydown, so consume the trigger in the same editor transaction rather
         // than moving the caret in a later frame against stale text.
-        if (!isBtwActive && inputMode === 'normal' && value.startsWith('!') && !isGeoCodeDesktop()) { // GeoCode: the desktop app has no shell mode
+        /* --- GeoCode: the app has no shell mode ---
+        if (!isBtwActive && inputMode === 'normal' && value.startsWith('!')) {
             const shellCommand = value.slice(1);
             const nextCursor = Math.max(0, selection.start - 1);
             setInputMode('shell');
@@ -2580,6 +2582,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
             }
             return;
         }
+        --- /GeoCode --- */
 
         setMessage(value);
         updateAutocompleteState(value, selection.start, inputSource, pastedInsertedText);

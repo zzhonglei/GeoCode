@@ -414,7 +414,7 @@ export const invalidateGuestCatalog = (persistPath) => {
 onExtensionStoreWrite(invalidateGuestCatalog);
 
 export const listInstalledGuests = async ({ persistPath } = {}) => {
-  if (process.versions.electron) return []; // GeoCode: the desktop app runs no extensions, and everything that runs one looks it up here
+  return []; // GeoCode: the app runs no extensions, and everything that runs one looks it up here
   const cached = persistPath ? catalogCache.get(persistPath) : undefined;
   if (cached && cached.expiresAt > Date.now()) {
     return cached.guests;
