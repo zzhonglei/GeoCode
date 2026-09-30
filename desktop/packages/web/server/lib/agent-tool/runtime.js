@@ -11,7 +11,7 @@ import {
 } from '../openchamber-control/actions.js';
 
 const TOOL_SCHEMA_VERSION = 1;
-const PLUGIN_ID = 'openchamber-agent-tool';
+const PLUGIN_ID = 'geocode-agent-tool'; // GeoCode: its own name, also the package name below
 // Everything either managed tool may ask for; the agent allowlist stays
 // narrower than the full control surface.
 const ACTIONS = new Set([
@@ -332,7 +332,7 @@ ${entries.join('')}    })
 // A configured plugin has to be a directory carrying a package.json that
 // resolves an entrypoint; OpenCode skips a plain .js path.
 const PLUGIN_PACKAGE_JSON = `${JSON.stringify({
-  name: 'openchamber-agent-tool',
+  name: 'geocode-agent-tool',
   version: '0.0.0',
   private: true,
   type: 'module',

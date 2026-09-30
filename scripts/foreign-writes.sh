@@ -4,10 +4,12 @@
 # changed. It observes writes, not reads.
 set -e
 # `.claude` is narrowed to the paths the kernel or the shell can reach: Claude
-# Code itself writes elsewhere under it continuously.
+# Code itself writes elsewhere under it continuously. The list is split on
+# spaces, so `?` stands for the one in "Application Support"; the loop expands it.
 ROOTS="$HOME/.config/opencode $HOME/.local/share/opencode $HOME/.cache/opencode
        $HOME/.local/state/opencode $HOME/Library/Caches/opencode
        $HOME/.opencode $HOME/.config/openchamber $HOME/.agents
+       $HOME/Library/Application?Support/OpenChamber $HOME/Library/Logs/OpenChamber
        $HOME/.claude/skills $HOME/.claude/CLAUDE.md $HOME/.claude/.credentials.json
        ${TMPDIR:-/tmp}/opencode"
 
@@ -27,6 +29,7 @@ openchamber_pid() {
 # The roots OpenChamber and the OpenCode it runs write for themselves.
 THEIRS="$HOME/.config/openchamber $HOME/.config/opencode $HOME/.local/share/opencode
         $HOME/.cache/opencode $HOME/.local/state/opencode $HOME/Library/Caches/opencode
+        $HOME/Library/Application?Support/OpenChamber $HOME/Library/Logs/OpenChamber
         ${TMPDIR:-/tmp}/opencode"
 
 # pgrep at `before` and `after` misses an OpenChamber opened and closed in

@@ -1422,9 +1422,10 @@ export async function computeIntegratePlan(input = {}) {
 }
 
 const createIntegrateTempWorktree = async (repoRoot, targetBranch) => {
-  const tmpParent = path.join(os.homedir(), '.config', 'openchamber', 'tmp');
+  // GeoCode: under the shell's data directory, with its own name
+  const tmpParent = path.join(process.env.OPENCHAMBER_DATA_DIR ? path.resolve(process.env.OPENCHAMBER_DATA_DIR) : path.join(os.homedir(), '.config', 'openchamber'), 'tmp');
   await fsp.mkdir(tmpParent, { recursive: true });
-  const tmpDir = await fsp.mkdtemp(path.join(tmpParent, 'oc-integrate-'));
+  const tmpDir = await fsp.mkdtemp(path.join(tmpParent, 'geocode-integrate-'));
   try {
     await runGitCommandOrThrow(repoRoot, ['worktree', 'add', '--force', tmpDir, targetBranch], 'Failed to create temp worktree');
     return tmpDir;
@@ -1735,7 +1736,7 @@ const resolveCandidateDirectory = async (worktreeRoot, preferredName, explicitBr
       return { name, directory, branch: explicitBranchName };
     }
 
-    const branch = `openchamber/${name}`;
+    const branch = `geocode/${name}`; // GeoCode: its own branch names in the user's repository
     const branchRef = `refs/heads/${branch}`;
     const branchExists = await runGitCommand(primaryWorktree, ['show-ref', '--verify', '--quiet', branchRef]);
     if (branchExists.success) {
@@ -3006,7 +3007,7 @@ async function runWorkingTreeRangeDiff(context, baseRef, headRef, args, paths = 
   const untracked = await git.raw(['ls-files', '--others', '--exclude-standard', '-z', '--', ...paths]);
   if (!untracked) return readDiff(git);
 
-  const temporaryDirectory = await fsp.mkdtemp(path.join(os.tmpdir(), 'openchamber-branch-diff-'));
+  const temporaryDirectory = await fsp.mkdtemp(path.join(os.tmpdir(), 'geocode-branch-diff-')); // GeoCode: its own temp names, also below
   try {
     const indexPath = (await git.raw(['rev-parse', '--git-path', 'index'])).trim();
     const temporaryIndex = path.join(temporaryDirectory, 'index');
@@ -3508,7 +3509,7 @@ const extractPatchTargetPath = (patch) => {
 
 const writeTempPatchFile = async (patch) => {
   const tmpDir = os.tmpdir();
-  const tmpPath = path.join(tmpDir, `openchamber-hunk-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`);
+  const tmpPath = path.join(tmpDir, `geocode-hunk-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`);
   await fsp.writeFile(tmpPath, patch, 'utf8');
   return tmpPath;
 };
@@ -5198,7 +5199,7 @@ export async function removeWorktree(directory, input = {}) {
 
 // Run snapshots live under a private namespace so they never show up as
 // branches or tags, yet stay reachable (and safe from gc) until deleted.
-const RUN_SNAPSHOT_REF_PATTERN = /^refs\/openchamber\/runs\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+const RUN_SNAPSHOT_REF_PATTERN = /^refs\/geocode\/runs\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/; // GeoCode: its own refs, as runSnapshotRef in the UI's lib/multirun/keep.ts makes them
 
 const assertRunSnapshotRef = (ref) => {
   const value = typeof ref === 'string' ? ref.trim() : '';
@@ -5209,10 +5210,12 @@ const assertRunSnapshotRef = (ref) => {
 };
 
 const SNAPSHOT_IDENTITY_ENV = {
-  GIT_AUTHOR_NAME: 'OpenChamber',
-  GIT_AUTHOR_EMAIL: 'snapshot@openchamber.local',
-  GIT_COMMITTER_NAME: 'OpenChamber',
-  GIT_COMMITTER_EMAIL: 'snapshot@openchamber.local',
+  // --- GeoCode: its own name on snapshot commits in the user's repository ---
+  GIT_AUTHOR_NAME: 'GeoCode',
+  GIT_AUTHOR_EMAIL: 'snapshot@geocode.local',
+  GIT_COMMITTER_NAME: 'GeoCode',
+  GIT_COMMITTER_EMAIL: 'snapshot@geocode.local',
+  // --- /GeoCode ---
 };
 
 /**
@@ -5228,7 +5231,7 @@ export async function snapshotWorktree(directory, input = {}) {
   const ref = assertRunSnapshotRef(input?.ref);
   const head = (await runGitCommandOrThrow(worktreeDirectory, ['rev-parse', '--verify', 'HEAD'], 'Worktree has no HEAD commit')).stdout.trim();
 
-  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'openchamber-snapshot-'));
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'geocode-snapshot-'));
   const indexEnv = { GIT_INDEX_FILE: path.join(tempDir, 'index') };
   try {
     const run = async (args, message, env = indexEnv) => {

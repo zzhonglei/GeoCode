@@ -355,10 +355,10 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
   if (isDesktop) {
     const isMacDesktop = /Mac OS X|Macintosh/.test(platform);
     lines.push(`- OpenChamber desktop: ${isWindows
-      ? '%APPDATA%\\OpenChamber\\logs\\main.log'
+      ? '%APPDATA%\\GeoCode\\logs\\main.log'
       : isMacDesktop
-        ? '~/Library/Logs/OpenChamber/main.log'
-        : '~/.config/OpenChamber/logs/main.log'}`);
+        ? '~/Library/Logs/GeoCode/main.log'
+        : '~/.config/GeoCode/logs/main.log'}`); // GeoCode: the app's own log directory
   }
 
   if (typeof window !== 'undefined') {

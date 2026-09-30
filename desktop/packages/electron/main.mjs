@@ -969,7 +969,7 @@ const injectRuntimeConfigIntoHtml = (html) => {
  * lets a dev-server login persist between sessions without touching the app's
  * own storage.
  */
-const BROWSER_PANEL_PARTITION = 'persist:openchamber-browser';
+const BROWSER_PANEL_PARTITION = 'persist:geocode-browser'; // GeoCode: its own name, also in the UI's BrowserPane
 
 /**
  * Denies device and location access to pages shown in the browser panel.
@@ -2944,7 +2944,7 @@ const isAppBundleInstalled = async (appName) => Boolean(await resolveAppBundlePa
 const iconToDataUrl = async (iconPath, appName) => {
   if (!iconPath || !(await pathExists(iconPath))) return null;
   const safeName = String(appName || 'app').replace(/[^a-z0-9]/gi, '_');
-  const tempPath = path.join(os.tmpdir(), `openchamber-icon-${safeName}-${Date.now()}.png`);
+  const tempPath = path.join(os.tmpdir(), `geocode-icon-${safeName}-${Date.now()}.png`); // GeoCode: its own temp name
   try {
     await execFileAsync('sips', ['-s', 'format', 'png', '-Z', '32', iconPath, '--out', tempPath], { stdio: 'ignore' });
   } catch {

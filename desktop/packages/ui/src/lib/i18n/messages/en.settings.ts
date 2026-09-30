@@ -2065,7 +2065,7 @@ export const settingsDict = {
   'settings.openchamber.visual.actions.saveAndRestart': 'Save & restart',
   'settings.openchamber.visual.actions.restarting': 'Restarting…',
   'settings.openchamber.visual.field.themeImportInfoAria': 'Theme import info',
-  'settings.openchamber.visual.field.themeImportInfoTooltip': 'Import custom themes from ~/.config/openchamber/themes/',
+  'settings.openchamber.visual.field.themeImportInfoTooltip': 'Import custom themes from ~/.local/share/geocode/desktop/themes/',
   'settings.openchamber.visual.field.installAppName': 'Install App Name',
   'settings.openchamber.visual.field.installAppNameHint': 'Used by PWA installation process.',
   'settings.openchamber.visual.field.pwaInstallAppNameAria': 'PWA install app name',

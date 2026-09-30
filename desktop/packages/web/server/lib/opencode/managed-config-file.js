@@ -1,6 +1,6 @@
 import { appendManagedPlugin } from './managed-plugin-config.js';
 
-export const MANAGED_CONFIG_FILE_NAME = 'opencode.managed.json';
+export const MANAGED_CONFIG_FILE_NAME = 'geocode.managed.json'; // GeoCode: its own file name
 
 /**
  * Built-in OpenCode plugins OpenChamber switches off for its managed child.

@@ -2042,7 +2042,7 @@ export const settingsDict = {
   'settings.openchamber.visual.actions.restarting': '正在重启…',
   'settings.openchamber.visual.actions.reloadingThemes': '正在重新加载主题...',
   'settings.openchamber.visual.field.themeImportInfoAria': '主题导入说明',
-  'settings.openchamber.visual.field.themeImportInfoTooltip': '从 ~/.config/openchamber/themes/ 导入自定义主题',
+  'settings.openchamber.visual.field.themeImportInfoTooltip': '从 ~/.local/share/geocode/desktop/themes/ 导入自定义主题',
   'settings.openchamber.visual.field.installAppName': '安装应用名称',
   'settings.openchamber.visual.field.installAppNameHint': '用于 PWA 安装流程。',
   'settings.openchamber.visual.field.pwaInstallAppNameAria': 'PWA 安装应用名称',

@@ -27,16 +27,19 @@ import { fileURLToPath } from 'node:url';
 import { createShellEnvironmentLoader } from './shell-environment.mjs';
 import { clearAppImageArgv0FromProcessEnv } from '@openchamber/web/server/lib/inherited-env.js';
 import { dropInheritedAppVariables } from './geocode/inherited-env.mjs'; // GeoCode: see below
+import { useGeoCodeDataDir } from './geocode/data-dir.mjs'; // GeoCode: see below
 
 dropInheritedAppVariables(process.env); // GeoCode: must run before anything reads or writes process.env
+useGeoCodeDataDir(process.env); // GeoCode: after the line above, which would drop it
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const isDev = process.env.OPENCHAMBER_ELECTRON_DEV === '1' || !app.isPackaged;
 
 export const DEEP_LINK_PROTOCOL = 'openchamber';
 export const UI_PROTOCOL = 'openchamber-ui';
-const PACKAGED_APP_USER_MODEL_ID = 'dev.openchamber.desktop';
-const DEV_APP_USER_MODEL_ID = 'dev.openchamber.desktop.dev';
+// GeoCode: its own app id, the build block's appId
+const PACKAGED_APP_USER_MODEL_ID = 'io.github.zzhonglei.geocode';
+const DEV_APP_USER_MODEL_ID = 'io.github.zzhonglei.geocode.dev';
 export const APP_USER_MODEL_ID = app.isPackaged ? PACKAGED_APP_USER_MODEL_ID : DEV_APP_USER_MODEL_ID;
 export const BACKGROUND_START_ARG = '--background';
 

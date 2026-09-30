@@ -28,7 +28,7 @@ export const runSnapshotRef = (run: Pick<MultiRunSummary, 'key' | 'groupSlug' | 
   const member = [...run.lanes, ...run.fusions].find((entry) => entry.sessionId === sessionId);
   const group = member?.identity.group;
   const groupPart = group?.kind === 'id' ? group.id : run.groupSlug.replace(/[^A-Za-z0-9._-]+/g, '-') || 'legacy';
-  return `refs/openchamber/runs/${groupPart}/${sessionId.replace(/[^A-Za-z0-9._-]+/g, '-')}`;
+  return `refs/geocode/runs/${groupPart}/${sessionId.replace(/[^A-Za-z0-9._-]+/g, '-')}`; // GeoCode: must match RUN_SNAPSHOT_REF_PATTERN in web/server/lib/git/service.js
 };
 
 const projectRefFor = (path: string): ProjectRef => {

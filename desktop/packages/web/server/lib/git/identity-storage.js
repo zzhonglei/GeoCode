@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-const STORAGE_DIR = path.join(os.homedir(), '.config', 'openchamber');
+const STORAGE_DIR = process.env.OPENCHAMBER_DATA_DIR ? path.resolve(process.env.OPENCHAMBER_DATA_DIR) : path.join(os.homedir(), '.config', 'openchamber'); // GeoCode: the shell's data directory, like its other files
 const STORAGE_FILE = path.join(STORAGE_DIR, 'git-identities.json');
 
 function ensureStorageDir() {

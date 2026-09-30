@@ -21,6 +21,7 @@ const exists = async (fsPromises, target) => fsPromises.access(target).then(() =
  * server keeps starting, reading the (empty) new location.
  */
 export const migrateLegacyUserDirs = async ({ fsPromises, path, dataDir, legacyRoot, warn = () => {}, entries = USER_DIR_ENTRIES }) => {
+  return []; // GeoCode: nothing is copied from OpenChamber's own directory
   if (path.resolve(dataDir) === path.resolve(legacyRoot)) return [];
   const moved = [];
   for (const entry of entries) {

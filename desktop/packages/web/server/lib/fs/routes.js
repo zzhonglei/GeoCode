@@ -741,12 +741,15 @@ export const registerFsRoutes = (app, dependencies) => {
       }
       const [canonicalChatsRoot, canonicalLegacyChatsRoot] = await Promise.all([
         canonicalDirectoryPath(chatsRoot, fsPromises, path),
+        undefined, // GeoCode: no alias into OpenChamber's own ~/.config/openchamber
+        /* --- GeoCode: see above ---
         canonicalDirectoryPath(path.join(home, '.config', 'openchamber', 'chats'), fsPromises, path).catch((error) => {
           // A relocated root must remain usable if the old root is inaccessible.
           // Omit only this optional alias; clients retain exact legacy matching.
           console.warn('Failed to resolve legacy chats root:', error);
           return undefined;
         }),
+        --- /GeoCode --- */
       ]);
       return res.json({ home, chatsRoot, canonicalChatsRoot, canonicalLegacyChatsRoot });
     } catch (error) {
