@@ -9,7 +9,7 @@ import { roots } from "#global-roots"
 import { Flock } from "./flock.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 
-const app = "opencode"
+const app = "geocode" // GeoCode: its own directories, apart from an installed OpenCode
 const { data, cache, config, state, tmp } = roots(app)
 
 const paths = {

@@ -20,7 +20,7 @@ export class Repository extends Schema.Class<Repository>("Git.Repository")({
 
 // Included from $GIT_DIR/config via include.path (git >= 1.7.10); OpenCode owns
 // this file entirely, so updates are plain rewrites with no config parsing.
-const snapshotConfigFile = "opencode.gitconfig"
+const snapshotConfigFile = "geocode.gitconfig" // GeoCode: its own file name
 const snapshotConfigInclude = `[include]
 	path = ${snapshotConfigFile}
 `

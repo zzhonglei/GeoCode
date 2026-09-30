@@ -14,16 +14,16 @@ async function install(
   bin: string,
   input: { readonly path: string; readonly version: string; readonly sha256: string },
 ) {
-  const root = path.join(bin, "opencode-pty")
+  const root = path.join(bin, "geocode-pty") // GeoCode: this and the two names below
   await privateDirectory(root)
   const directory = path.join(root, `${input.version}-${input.sha256.slice(0, 16)}`)
   await privateDirectory(directory)
-  const destination = path.join(directory, "opencode-pty")
+  const destination = path.join(directory, "geocode-pty")
   if (await validateIfPresent(destination, input.sha256)) return destination
 
   const bytes = new Uint8Array(await Bun.file(input.path).arrayBuffer())
   if (sha256(bytes) !== input.sha256) throw new Error("Embedded opencode-pty checksum mismatch")
-  const temporary = path.join(directory, `opencode-pty.${process.pid}.${crypto.randomUUID()}.tmp`)
+  const temporary = path.join(directory, `geocode-pty.${process.pid}.${crypto.randomUUID()}.tmp`)
   try {
     const file = await open(temporary, "wx", 0o700)
     try {

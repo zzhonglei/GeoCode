@@ -386,10 +386,11 @@ const runtimeDirectory = () => {
   const root =
     process.env.OPENCODE_PTY_RUNTIME_DIR ??
     (process.env.XDG_RUNTIME_DIR
-      ? path.join(process.env.XDG_RUNTIME_DIR, "opencode-pty")
+      ? // GeoCode: geocode-pty, here and below
+        path.join(process.env.XDG_RUNTIME_DIR, "geocode-pty")
       : path.join(
           os.tmpdir(),
-          `opencode-pty-${typeof process.getuid === "function" ? process.getuid() : process.env.USER || "unknown"}`,
+          `geocode-pty-${typeof process.getuid === "function" ? process.getuid() : process.env.USER || "unknown"}`,
         ))
   return path.join(root, crypto.randomUUID())
 }

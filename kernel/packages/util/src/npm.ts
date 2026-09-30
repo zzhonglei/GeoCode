@@ -212,6 +212,7 @@ const layer = Layer.effect(
         const add = input.add ?? []
         const options = {
           ...(yield* NpmConfig.load(input.config ?? input.dir)),
+          cache: path.join(global.cache, "npm-cache"), // GeoCode: not the user's ~/.npm, here and in check
           ...(input.update ? { preferOnline: true, noGitRevCache: true } : {}),
           // Audit reports are unused here, but Arborist waits for them before completing an install.
           audit: false,
@@ -372,7 +373,7 @@ const layer = Layer.effect(
       if (!installed)
         return yield* new InstallFailedError({ dir: root, cause: new Error(`Package is not installed: ${pkg}`) })
       const { manifest, resolve } = yield* Effect.promise(() => import("pacote"))
-      const options = { ...(yield* NpmConfig.load(root)), preferOnline: true, noGitRevCache: true, ignoreScripts: true }
+      const options = { ...(yield* NpmConfig.load(root)), cache: path.join(global.cache, "npm-cache"), preferOnline: true, noGitRevCache: true, ignoreScripts: true }
       const available = yield* Effect.tryPromise({
         try: async () =>
           target.type === "git" ? gitRevision(await resolve(pkg, options)) : (await manifest(pkg, options)).version,

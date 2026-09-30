@@ -27,10 +27,10 @@ const seed = async (root: string) => {
     await fs.mkdir(path.join(directory, "plugins"), { recursive: true })
     await fs.writeFile(path.join(directory, "plugins", "discovered.js"), "export default {}\n")
   }
-  await fs.mkdir(path.join(project, ".opencode", "plugins"), { recursive: true })
-  await fs.writeFile(path.join(project, ".opencode", "plugins", "discovered.js"), "export default {}\n")
-  await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ plugins: ["global-npm-plugin"] }))
-  await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ plugins: ["project-npm-plugin"] }))
+  await fs.mkdir(path.join(project, ".geocode", "plugins"), { recursive: true })
+  await fs.writeFile(path.join(project, ".geocode", "plugins", "discovered.js"), "export default {}\n")
+  await fs.writeFile(path.join(global, "geocode.json"), JSON.stringify({ plugins: ["global-npm-plugin"] }))
+  await fs.writeFile(path.join(project, "geocode.json"), JSON.stringify({ plugins: ["project-npm-plugin"] }))
   await fs.writeFile(
     path.join(root, "managed.json"),
     JSON.stringify({ plugins: [path.join(root, "shell-tool"), "-opencode.browser"] }),

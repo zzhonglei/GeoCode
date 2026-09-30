@@ -69,7 +69,7 @@ export const save = Effect.fn("BrowserFiles.save")((files: readonly Browser.File
       const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises")
       const { join } = await import("node:path")
       const { tmpdir } = await import("node:os")
-      const directory = await mkdtemp(join(tmpdir(), "opencode-browser-"))
+      const directory = await mkdtemp(join(tmpdir(), "geocode-browser-")) // GeoCode: its own temp names
       return Promise.all(
         files.map(async (file, index) => {
           const name = captureName(file.name)
