@@ -12,6 +12,7 @@ import { GitHubIntegration } from './GitHubIntegration';
 import { LinearSettings } from './LinearSettings';
 import { ThirdPartyIntegrationsSection } from './ThirdPartyIntegrationsSection';
 import { CatalogExtensionsSection } from './CatalogExtensionsSection';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the plugin and extension catalog sections
 
 export const IntegrationsPage: React.FC = () => {
   const { t } = useI18n();
@@ -45,8 +46,12 @@ export const IntegrationsPage: React.FC = () => {
           {builtInGuests.map((guest) => <GuestIntegrationCard key={`${runtimeKey}:${guest.id}`} guest={guest} />)}
         </SettingsSection>
       ) : null}
+      {/* --- GeoCode: both install from outside the app, a plugin from npm and extensions from git --- */}
+      <Closed>
       <ThirdPartyIntegrationsSection divider={hasBuiltIn} />
       <CatalogExtensionsSection />
+      </Closed>
+      {/* --- /GeoCode --- */}
       <GuestIntegrationsSection />
     </SettingsPageLayout>
   );

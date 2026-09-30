@@ -101,6 +101,7 @@ import { useI18n } from '@/lib/i18n';
 import { sessionEvents } from '@/lib/sessionEvents';
 import { syncScheduledTaskLoops } from '@/lib/scheduledTasksApi';
 import { useProjectsStore } from '@/stores/useProjectsStore';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the Excalidraw hint
 
 
 type FileNode = {
@@ -4474,6 +4475,8 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
 
       </div>
 
+      {/* --- GeoCode: users do not install extensions --- */}
+      <Closed>
       {suggestExcalidrawExtension ? (
         <div className="flex flex-shrink-0 items-center gap-2 border-b border-border/40 bg-[var(--surface-muted)] px-3 py-1.5 typography-ui text-muted-foreground">
           <Icon name="information" className="size-4 shrink-0" />
@@ -4483,6 +4486,8 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
           </Button>
         </div>
       ) : null}
+      </Closed>
+      {/* --- /GeoCode --- */}
       <div className="flex-1 min-h-0 min-w-0 relative">
         <ScrollableOverlay ref={setMainPreviewScroller} outerClassName="h-full min-w-0" className={cn('h-full min-w-0', isLargeFile && '[overflow-anchor:none]')}>
           {!selectedFile ? (
