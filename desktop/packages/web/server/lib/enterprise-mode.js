@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { z } from 'zod';
+import { noEnterprisePolicy } from '../geocode/no-enterprise.js'; // GeoCode: see readEnterprisePolicy
 
 /**
  * Enterprise mode: an administrator's promise that conversation content goes
@@ -173,6 +174,7 @@ const envList = (env, name) => (env[name] ?? '').split(',').map((entry) => entry
  * came from, for the UI and the logs.
  */
 export const readEnterprisePolicy = (options = {}) => {
+  return noEnterprisePolicy(); // GeoCode: no enterprise mode, so neither the machine policy file nor its variables are read
   const env = options.env ?? process.env;
   const file = readPolicyFile(options);
 
