@@ -1053,6 +1053,7 @@ export const createSettingsHelpers = (dependencies) => {
       routingFeatureAvailable: true,
       */
       // --- /GeoCode ---
+      isolatedSpacesEnabled: false, // GeoCode: spaces are closed, so the UI offers none even when settings.json turns them on
       ...(pwaAppName ? { pwaAppName } : {}),
       pwaOrientation,
       mobileKeyboardMode,
