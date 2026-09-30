@@ -7,7 +7,7 @@ import { createRoutingRuntime } from '../lib/routing/runtime.js';
 import { createRoutingStore, resolveEffectiveConfig } from '../lib/routing/store.js';
 
 // Guards against routing files left by OpenChamber sending turns or permissions to Jev.
-describe('GeoCode: routing store', () => {
+describe('GeoCode: readClassifierSource', () => {
   let dir;
 
   afterAll(async () => {
@@ -43,8 +43,8 @@ describe('GeoCode: routing store', () => {
 
     expect(await runtime.classifierEndpoint()).toBeNull();
     expect(await runtime.evaluatePermission(permission, dir)).toMatchObject({ action: 'hold', unavailable: true });
-    await expect(runtime.resolveAutoSelection({ sessionId: 'ses_1', directory: dir, model: { providerID: 'openchamber', id: 'auto' } }))
-      .rejects.toThrow();
+    const auto = await runtime.resolveAutoSelection({ sessionId: 'ses_1', directory: dir, model: { providerID: 'openchamber', id: 'auto' } });
+    expect(auto.decision).toMatchObject({ reason: 'not-ready', providerID: 'anthropic' });
     expect(jev.ask).not.toHaveBeenCalled();
   });
 });

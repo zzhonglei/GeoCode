@@ -256,12 +256,7 @@ export const createRoutingStore = ({ dataDir }) => {
 
   return {
     /** Effective config; a missing file is the defaults, a broken file throws. */
-    // --- GeoCode: routing.json is ignored, so a stored routing setup has no effect ---
-    readConfig: async () => resolveEffectiveConfig(null),
-    /*
     readConfig: async () => resolveEffectiveConfig(await readJsonFile(configFile, fileSchema)),
-    */
-    // --- /GeoCode ---
     writeConfig: (config) => serialize(async () => {
       await writeJsonFile(configFile, toStoredConfig(config));
       return config;
