@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/i18n';
 import { isVSCodeRuntime } from '@/lib/desktop';
 import { useUIStore } from '@/stores/useUIStore';
 import { selectSafetyNetAvailable, useRoutingStore } from '@/stores/useRoutingStore';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the auto-open row
 
 /**
  * "In work": the sidebar block and the Track / Done actions, and whether Jev
@@ -33,6 +34,8 @@ export const SessionWorkSettings: React.FC = () => {
         label={t('settings.openchamber.sessionWork.field.enabled')}
         ariaLabel={t('settings.openchamber.sessionWork.field.enabled')}
       />
+      {/* --- GeoCode: sessions move in on their own only through Jev, which is off --- */}
+      <Closed>
       {!isVSCode ? (
         <SettingsInset className="space-y-0">
           <SettingsCheckboxRow
@@ -47,6 +50,8 @@ export const SessionWorkSettings: React.FC = () => {
           <JevAccessNote />
         </SettingsInset>
       ) : null}
+      </Closed>
+      {/* --- /GeoCode --- */}
     </SettingsSection>
   );
 };

@@ -115,7 +115,9 @@ export const PermissionDefaultModeField: React.FC<PermissionDefaultModeFieldProp
           onChange={handleChange}
           options={[
             chip('ask', t('settings.sessions.permissions.mode.ask')),
+            /* --- GeoCode: the safety net needs Jev, which is off ---
             chip('safety', t('settings.sessions.permissions.mode.safety')),
+            --- /GeoCode --- */
             chip('auto', t('settings.sessions.permissions.mode.auto')),
           ]}
         />

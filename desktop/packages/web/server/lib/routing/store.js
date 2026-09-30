@@ -256,7 +256,7 @@ export const createRoutingStore = ({ dataDir }) => {
 
   return {
     /** Effective config; a missing file is the defaults, a broken file throws. */
-    // --- GeoCode: routing.json is ignored, so routing and the safety net stay off ---
+    // --- GeoCode: routing.json is ignored, so a stored routing setup has no effect ---
     readConfig: async () => resolveEffectiveConfig(null),
     /*
     readConfig: async () => resolveEffectiveConfig(await readJsonFile(configFile, fileSchema)),
@@ -284,6 +284,7 @@ export const createRoutingStore = ({ dataDir }) => {
      * serves, and the next pick rewrites it.
      */
     readClassifierSource: async () => {
+      return 'off'; // GeoCode: Jev is off whatever was stored, so no request goes to a classification provider
       try {
         return (await readJsonFile(classifierFile, classifierSchema))?.source ?? null;
       } catch (error) {

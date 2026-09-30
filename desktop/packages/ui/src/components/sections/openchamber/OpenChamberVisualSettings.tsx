@@ -74,6 +74,7 @@ import { subscribeRuntimeEndpointChanged } from '@/lib/runtime-switch';
 import { formatShortcutForDisplay } from '@/lib/shortcuts';
 import { useInputHistoryStore } from '@/stores/useInputHistoryStore';
 import { SessionGoalCheckerField } from './SessionGoalCheckerField';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the goal checker row
 
 interface Option<T extends string> {
     id: T;
@@ -1946,7 +1947,11 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                             ariaLabel={t('settings.openchamber.visual.field.sessionGoalAria')}
                                             settingsItem="chat.session-goal"
                                         />
+                                        {/* --- GeoCode: without Jev the small model is the only checker --- */}
+                                        <Closed>
                                         <SessionGoalCheckerField disabled={!sessionGoalEnabled} />
+                                        </Closed>
+                                        {/* --- /GeoCode --- */}
                                         <div data-settings-item="chat.session-goal-budget" className="flex items-center gap-2">
                                             <SettingsCheckboxRow
                                                 checked={sessionGoalDefaultBudgetEnabled}

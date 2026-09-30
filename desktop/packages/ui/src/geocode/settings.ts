@@ -17,6 +17,8 @@ const CLOSED_SEARCH_ITEMS = new Set([
   'integrations.linear.mapping',
   'integrations.guests',
   'sessions.browser-provider',
+  'sessions.work-auto-open',
+  'chat.session-goal-checker',
 ]);
 
 type Gated = { isAvailable?: (ctx: never) => boolean };
