@@ -30,6 +30,14 @@ const STATUS_BY_CODE = new Map([
   ['invalid_branch_name', 400],
   ['invalid_space_id', 400],
   ['invalid_request_body', 400],
+  ['invalid_grant_request', 400],
+  ['provider_not_supported', 400],
+  ['invalid_domain', 400],
+  ['invalid_idle_stop', 400],
+  ['network_is_open', 409],
+  ['too_many_domains', 409],
+  ['secret_source_missing', 409],
+  ['space_record_unreadable', 409],
   ['space_preparing', 409],
   ['space_creation_failed', 409],
   ['space_busy', 409],
@@ -48,6 +56,9 @@ const STATUS_BY_CODE = new Map([
   ['nothing_to_apply', 409],
   ['place_cannot_restrict_network', 409],
   ['space_remove_incomplete', 502],
+  ['gatekeeper_missing', 409],
+  ['invalid_setup_commands', 400],
+  ['space_setup_running', 409],
 ]);
 
 /** One JSON answer per failure, with a stable code. Details travel as data; a stack never does. */
@@ -165,6 +176,14 @@ export function registerSpaceRoutes(app, { getJourney, getPlaces = () => [], rea
     }
   });
 
+  // The idle stop setting (decision 11): kept in the settings and told to every running space.
+  app.get(`${SPACES_ROUTE}/idle-stop`, withJourney(async (journey, _req, res) => {
+    res.json(await journey.readIdleStopSetting());
+  }));
+  app.put(`${SPACES_ROUTE}/idle-stop`, withJourney(async (journey, req, res) => {
+    res.json(await journey.changeIdleStop(requireBody(req)));
+  }));
+
   // The places funnel: each place asked what it can do, now, because the user is looking.
   app.get(`${SPACES_ROUTE}/places`, withJourney(async (_journey, _req, res) => {
     const places = await Promise.all(getPlaces().map(async (place) => ({ id: place.id, ...(await place.check()) })));
@@ -172,7 +191,7 @@ export function registerSpaceRoutes(app, { getJourney, getPlaces = () => [], rea
   }));
 
   app.get(SPACES_ROUTE, withJourney(async (journey, _req, res) => {
-    res.json({ spaces: await journey.listSpaces() });
+    res.json({ spaces: await journey.listSpaces({ access: true }) });
   }));
 
   // Answers as soon as the space has an id; the steps follow as `openchamber:space-progress` events.
@@ -188,8 +207,37 @@ export function registerSpaceRoutes(app, { getJourney, getPlaces = () => [], rea
     res.json(await journey.stopSpace(spaceIdOf(req)));
   }));
 
+  // The repair actions, from soft to hard: OpenCode inside, then the container with a fresh token.
+  app.post(`${SPACES_ROUTE}/:id/restart-opencode`, withJourney(async (journey, req, res) => {
+    res.json(await journey.restartOpenCode(spaceIdOf(req)));
+  }));
+
+  app.post(`${SPACES_ROUTE}/:id/restart`, withJourney(async (journey, req, res) => {
+    res.json(await journey.restartSpace(spaceIdOf(req)));
+  }));
+
   app.delete(`${SPACES_ROUTE}/:id`, withJourney(async (journey, req, res) => {
     res.json(await journey.removeSpace(spaceIdOf(req)));
+  }));
+
+  // A grant for a running space; the key in the body goes to the gatekeeper and nowhere else.
+  app.post(`${SPACES_ROUTE}/:id/grants`, withJourney(async (journey, req, res) => {
+    res.json(await journey.grantAccess(spaceIdOf(req), requireBody(req)));
+  }));
+
+  // A domain added to the allowlist of a running space, live; the record keeps it for the next start.
+  app.post(`${SPACES_ROUTE}/:id/network/domains`, withJourney(async (journey, req, res) => {
+    res.json(await journey.openDomain(spaceIdOf(req), requireBody(req)));
+  }));
+
+  // The project's setup commands, again: answers once they began; each step follows as an event.
+  app.post(`${SPACES_ROUTE}/:id/setup`, withJourney(async (journey, req, res) => {
+    res.json(await journey.runSetup(spaceIdOf(req), requireBody(req)));
+  }));
+
+  // How the last run went, with the end of the output of the command that failed.
+  app.get(`${SPACES_ROUTE}/:id/setup`, withJourney(async (journey, req, res) => {
+    res.json(await journey.readSetup(spaceIdOf(req)));
   }));
 
   app.get(`${SPACES_ROUTE}/:id/journal`, withJourney(async (journey, req, res) => {

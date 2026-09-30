@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test"
+import { z } from "zod"
 
 // The generated `@opencode/client` runs for real here; only the runtime
 // transport (`runtimeFetch`) and runtime identity are replaced. That keeps
@@ -280,6 +281,21 @@ describe("sendMessage", () => {
       agents: [{ name: "explore", mention: { start: 0, end: 8, text: "@explore" } }],
     })
     expect(requests.every((r) => r.headers.get("x-opencode-directory") === encodeURIComponent("/repo/app"))).toBe(true)
+  })
+
+  test("context ids travel with the synthetic messages and sort below the prompt id", async () => {
+    responses.push(json({ id: "a" }), json({ id: "b" }), json({ id: "c" }))
+    const id = await opencodeClient.sendMessage({
+      id: "ses_1",
+      providerID: "openai",
+      text: "",
+      context: [{ id: "msg_given", text: "first" }, { text: "second" }],
+    })
+    const [first, second] = requests.slice(0, 2).map((request) => request.body)
+    expect(first).toMatchObject({ id: "msg_given", text: "first" })
+    expect(second).toMatchObject({ text: "second" })
+    const mintedID = z.object({ id: z.string().startsWith("msg_") }).parse(second).id
+    expect(mintedID < id).toBe(true)
   })
 
   test("without a selection change only the prompt is sent, with files as URIs", async () => {
@@ -589,6 +605,31 @@ describe("messages and config", () => {
     expect(catalog.providers).toEqual([{ id: "openai", name: "OpenAI" }])
     expect(catalog.models).toHaveLength(1)
     expect(catalog.default).toEqual({ id: "x", providerID: "openai" })
+  })
+})
+
+describe("providers of an isolated space", () => {
+  test("are the host's, asked with no directory, while models come from the space", async () => {
+    const space = "/spaces/a1b2c3d4e5f6/app"
+    const answer = (request: CapturedRequest) =>
+      request.url.pathname.endsWith("/provider")
+        ? json({ location: {}, data: [{ id: "anthropic", name: "Anthropic" }] })
+        : request.url.pathname.endsWith("/model")
+          ? json({ location: {}, data: [{ id: "anthropic/x", modelID: "x", providerID: "anthropic" }] })
+          : json({ location: {}, data: { id: "anthropic/x", modelID: "x", providerID: "anthropic" } })
+    responses.push(answer, answer, answer)
+    const before = requests.length
+    const catalog = await opencodeClient.getProvidersForConfig(space)
+    expect(catalog.providers).toEqual([{ id: "anthropic", name: "Anthropic" }])
+    const made = requests.slice(before)
+    const provider = made.find((request) => request.url.pathname.endsWith("/provider"))
+    const model = made.find((request) => request.url.pathname.endsWith("/model"))
+    // The host refuses its provider routes across the boundary, and a space directory without the
+    // prefix; the provider list names neither.
+    expect(provider?.url.pathname).toBe("/api/provider")
+    expect(provider?.headers.get("x-opencode-directory")).toBeNull()
+    expect(provider?.url.searchParams.get("directory")).toBeNull()
+    expect(model?.url.pathname.includes("/spaces/a1b2c3d4e5f6/") || model?.headers.get("x-opencode-directory") === encodeURIComponent(space)).toBe(true)
   })
 })
 
