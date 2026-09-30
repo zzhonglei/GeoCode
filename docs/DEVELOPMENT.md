@@ -70,7 +70,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false bun run package -- --dir -c.mac.identity=- -c.
 
 ## 7. 检查与测试
 
-类型检查与 lint 的命令见 `CONVENTIONS.md` 第 2 节,测试写什么、怎么证明它会失败见第 4 节。`desktop/` 里 GeoCode 自己的测试放在各包的 `geocode/` 目录,壳服务端的那些在 `desktop/packages/web` 里以 `bun run test -- server/geocode/` 运行。上游的测试不保证只写临时目录,`web` 包里就有测试会在主目录下建 OpenCode 与 OpenChamber 的目录、写 npm 缓存,所以跑上游测试时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉,不要设成空值,否则 Bun 会把转译缓存写到当前目录下。`kernel/` 里的用例怎样命名、怎样单独运行,见 `CONVENTIONS.md` 第 4 节;它们写在上游的测试文件里、借用上游的夹具,同样换临时主目录运行。
+类型检查与 lint 的命令见 `CONVENTIONS.md` 第 2 节,测试写什么、怎么证明它会失败见第 4 节。`desktop/` 里 GeoCode 自己的测试放在各包的 `geocode/` 目录,壳服务端的那些在 `desktop/packages/web` 里以 `bun run test -- server/geocode/` 运行。上游的测试不保证只写临时目录,`web` 包里就有测试会在主目录下建 OpenCode 与 OpenChamber 的目录、写 npm 缓存,所以跑上游测试时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉,不要设成空值,否则 Bun 会把转译缓存写到当前目录下。`kernel/` 里的用例怎样命名、怎样单独运行,见 `CONVENTIONS.md` 第 4 节;它们写在上游的测试文件里、借用上游的夹具,同样换临时主目录运行,并把 `TMPDIR` 也指向临时目录:内核的测试会在系统临时目录下建 `opencode` 目录。
 
 ## 8. 写入检测
 
@@ -82,4 +82,4 @@ CSC_IDENTITY_AUTO_DISCOVERY=false bun run package -- --dir -c.mac.identity=- -c.
 ./scripts/foreign-writes.sh after
 ```
 
-它检查 OpenCode、OpenChamber 与 Claude 的目录有没有被写入。用沙箱启动时,结果应当是干净的。退出码:0 干净;1 发现写入;3 需要人确认,表示本机的 OpenChamber 在这段时间里运行过,它自己的写入被单独列出,要得到干净的结论就关掉它重跑。
+它检查 OpenCode、OpenChamber 与 Claude 的目录有没有被写入,文件的新增、修改与权限变化都算。用沙箱启动时,结果应当是干净的。退出码:0 干净;1 发现写入;3 需要人确认,表示本机的 OpenChamber 在这段时间里运行过,它自己的写入被单独列出,要得到干净的结论就关掉它重跑。
