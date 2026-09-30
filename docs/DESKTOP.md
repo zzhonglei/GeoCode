@@ -37,7 +37,7 @@ GeoCode 是单机、单用户的应用,三类机制一律关闭:让其他设备�
 
 ## 4. 屏蔽的上游功能
 
-对外机制之外,GeoCode 用不到的上游功能也按同样的方式屏蔽:不启用、不显示,源码保留,入口在壳服务端、主进程与界面三层分别关掉。取舍逐项决定,贯穿其中的有两条:不让第三方代码与外部文件改变应用的行为,不在用户没有需要时把对话或凭据交给第三方。被关掉的设置页即使是上次停留的页面或链接指向的页面,打开设置时也显示「通用」。
+对外机制之外,GeoCode 用不到的上游功能也按同样的方式屏蔽:不启用、不显示,源码保留,入口在它所在的壳服务端、主进程或界面关掉;挡在接口上收窄不了什么的,只在界面关。取舍逐项决定,贯穿其中的有两条:不让第三方代码与外部文件改变应用的行为,不在用户没有需要时把对话或凭据交给第三方。被关掉的设置页即使是上次停留的页面或链接指向的页面,打开设置时也显示「通用」。
 
 ### 4.1 第三方代码与外部配置
 
@@ -67,7 +67,11 @@ Linear 集成关掉了:它把会话接到软件团队的任务管理上,地理�
 
 OpenChamber 还在开发一个「隔离空间」功能:用 Docker 为项目起一个容器,在容器里另跑一个服务端,把这个项目的请求交给它处理。GeoCode 不需要它,而且它一打开,发往空间的请求就由容器里的服务端处理,第 3、4 节关掉的接口在那里都不起作用。上游默认关着它,也藏起了设置里的开关,但设置文件里的一个键或一个接口仍能把它打开。GeoCode 把这两条路都堵上:设置文件里即使开着,应用也不建空间、不调用 Docker,开关与空间的接口都被拒绝。
 
-### 4.5 尚未关闭的
+### 4.5 输入框的 shell 模式
+
+OpenChamber 的输入框在开头打 `!` 就切成 shell 模式,回车后在会话目录里直接执行这条命令,不经过模型。GeoCode 的用户通过 agent 或终端执行命令,用不到它,所以输入框里的 `!` 只是一个普通字符,输入框的提示里也不再介绍 `!` 与已经停用的 `#`。它只在界面关掉:内核执行命令的接口仍在,但终端本来就能在同一目录执行同样的命令,agent 的命令工具也不经过这个接口,拒绝它收窄不了什么。终端照常可用。
+
+### 4.6 尚未关闭的
 
 内核只读全局配置目录与会话目录本身(见第 2 节),但这两处的内容仍能改变 agent 的行为,下载来的项目也能带上它们:命令模板里的 `` !`命令` `` 在展开时直接执行 shell,不经权限确认;项目配置能启动 MCP 服务与格式化命令、放宽权限、改模型服务的地址,`references` 还能让内核克隆 git 仓库。接入 OpenCode Console 账号后,内核还会从 opencode.ai 拉取组织下发的服务商、远程 MCP 服务与策略,这个内核插件受保护,托管配置关不掉它。打开带配置的项目时不询问是否信任,`` !`命令` `` 也照常执行。
 
@@ -108,6 +112,7 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 - 换了分组的设置页(`ui/src/geocode/settings.ts` 的 `MOVED_PAGES`):页面名与组名由类型检查把关;还要核对目标组仍在 `ui/src/components/views/SettingsView.tsx` 的 `NAV_GROUP_ORDER` 里,不在就会从导航上消失,组内的位置由同一文件的 `pageOrder` 决定;上游往「资源库」(`content`)加了新页的话,这个分组会带着新页重新出现。
 - 侧栏面板(`ui/src/geocode/surface.ts` 的 `CLOSED_SURFACES`):`ui/src/lib/surfaces/registry.ts` 的 `CONTEXT_SURFACES`;被恢复或被扩展打开的 Linear 面板,靠 `ui/src/components/layout/ContextPanelRail.tsx` 里集成断开时关掉面板的那段逻辑关掉。
 - 扩展按「一个也没装」关掉:壳服务端里凡是要找到一个扩展才能运行它的地方(面板页、服务进程、共享画面、内置浏览器的转交),都经 `web/server/lib/guests/catalog.js` 的 `listInstalledGuests`,它在桌面应用里返回空,新代码若直接读 `extensions.json`(`web/server/lib/guests/persist.js` 的 `readExtensionStore`)来启动扩展,就绕过了它;安装、上传与检查更新不经这份列表,靠关闭 `/api/guests` 挡住;界面的扩展入口都从 `ui/src/lib/guests/store.ts` 的扩展清单派生,清单只由 `ui/src/lib/guests/load-catalog.ts` 填入,桌面应用里填入空清单、不发请求。
+- 输入框的 shell 模式:`ui/src/components/chat/ChatInput.tsx` 里切进 shell 模式的两处(按下 `!` 与内容以 `!` 开头)在桌面应用里不触发;合并后在界面里找新的 `setInputMode('shell')` 与 `shellSession` 的调用处,目前后者只有 `ui/src/sync/session-ui-store.ts` 里由 `inputMode` 决定的那一条。输入框提示的文字直接改在英文、简体与繁体中文的字典里(`chat.chatInput.placeholder.chat`、`chat.chatInput.placeholder.chatCompact`)。
 - 插件页:界面里找 `usePluginsStore` 的调用处,写入与 npm 查询都经 `/api/config/plugins`;插件的更新检查与升级是内核的 `/api/plugin/check`、`/api/plugin/update`,经壳服务端转发,这两条也关了,只读的 `/api/plugin` 保留。
 - 魔法提示词:改写只经 `/api/magic-prompts` 读写,这组接口关闭;界面读改写只经 `ui/src/lib/magicPrompts.ts` 的 `fetchMagicPromptOverrides`,桌面应用里直接返回没有改写,不发请求。
 - 代码片段:壳服务端的片段都经 `web/server/lib/opencode/snippets.js` 的 `loadSnippetRegistry` 读取(界面的展开、计划任务、会话接口的展开都经它),桌面应用里为空,`/api/config/snippets` 关闭;界面的 `#` 选择器有三处触发(在界面里找 `SnippetAutocomplete` 的使用处),`ui/src/components/chat/composer/language/triggers.ts`、`ui/src/components/multirun/MultiRunLauncher.tsx` 与 `ui/src/components/session/ScheduledTaskEditorDialog.tsx` 的 `updateAutocompleteState`,发送前的展开只经 `ui/src/stores/useSnippetsStore.ts` 的 `expandText`,桌面应用里都不起作用。
@@ -115,7 +120,7 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 - 路由:界面的路由入口(设置页、搜索项、命令面板、Auto 选项)都看 `routingFeatureAvailable`,它由 `web/server/lib/opencode/settings-helpers.js` 下发,桌面应用里为假;在界面里找 `routingFeatureAvailable` 的读取处;壳服务端的路由逻辑(Auto 的解析、安全网)都经 `web/server/lib/routing/store.js` 的 `readConfig` 读配置,桌面应用里一律得到默认的关闭状态,新代码若直接读 `routing.json`(`routingConfigPath`),就绕过了它;`/api/routing` 关闭。
 - 隔离空间:空间的一切行为都挂在 `web/server/index.js` 的 `spacesHost` 上(请求中间件、WebSocket 升级、会话列表的合并、目录的拒绝)。在 `index.js` 里找 `spacesHost` 的赋值处:启动时读 `isolatedSpacesEnabled` 后调用 `buildSpacesHost`,这一处在桌面应用里跳过;开关接口经 `createSwitchController` 的 `setHost`,开关所在的 `/api/openchamber/spaces` 与发往空间的 `/api/spaces` 关闭。新代码若不经 `spacesHost` 直接用 `web/server/lib/spaces/` 起空间或调用 Docker,就绕过了这层。设置里的开关现在由上游 `ui/src/lib/spaces/release.ts` 的 `ISOLATED_SPACES_RELEASED` 藏着,它变真之后,开关的设置行与搜索项要加进隐藏的设置。
 - 内核的配置来源:GeoCode 的替换清单在 `kernel/packages/server/src/geocode/profile.ts`,由 `kernel/packages/server/src/process.ts` 在启动时交给 `createRoutes`,换掉插件来源(`ConfigPluginSource`,只看托管配置)与远程配置(`WellKnown`,为空);另有四处补丁,在 `kernel/packages/core/src/` 下:`config/discovery.ts` 不往上找、不给其他应用的目录,`config/plugin/instruction.ts` 的 `AGENTS.md` 只读会话目录,`config/plugin/skill.ts` 不读配置里的 `skills` 列表,`tool/plugin/read.ts` 读到会话目录之外的文件时不载入附近的 `AGENTS.md`。托管配置由壳以 `OPENCODE_CONFIG` 传入,插件的规则靠这一点:开发模式下用户环境若已设了 `OPENCODE_CONFIG`,壳改用 `OPENCODE_CONFIG_CONTENT` 注入工具,内核就不加载壳的工具,却会按用户那份文件的 `plugins` 加载。合并 `kernel-upstream` 之后,在 `kernel/packages/core/src/config/` 与 `kernel/packages/core/src/plugin/` 里找新的读取目录、向上查找(`fs.up`)、增加技能(`ctx.skill.transform`)与加载插件的地方;替换掉的两个服务若改了接口,替换也跟着改。
-- 壳的配置范围:`web/server/lib/opencode/shared.js` 的 `findWorktreeRoot` 在桌面应用里直接返回会话目录,它的调用处都拿它当往上查找的终点(技能、agent、命令、网页搜索设置里的项目覆盖,以及计划任务读取的 `.agents/loops`),所以都只看起点目录本身:会话目录,计划任务则是项目文件夹。`web/server/lib/opencode/skills.js` 里 `getClaudeSkillDir`、`getUserClaudeSkillDir`、`getUserAgentsSkillDir`、`getProjectAgentsSkillDir` 在桌面应用里指向 OpenCode 的对应目录,查找、显示来源、新建与删除都经它们;列表(`discoverSkills`)直接拼路径,改由 `web/server/geocode/kernel-skills.js` 给出;`updateSkill` 拒绝两处之外的目标路径(界面只传列表里的路径,接口能传任意路径)。有一处连带:一个技能同时有 `skills/` 与旧名 `skill/` 两份时,删除会两份都删,日志把第二份标成 claude-compat 或 agents 的目录。界面的新建位置在 `ui/src/components/sections/skills/SkillsPage.tsx` 里只留 OpenCode 的两个。合并 `chamber-upstream` 之后,在壳服务端找新的 `.claude`、`.agents` 路径、`os.homedir()` 下的配置目录,以及不经 `findWorktreeRoot` 的往上查找;已知的几处不必再改:`web/server/lib/opencode/skills.js` 的 `getManagedSkillRoots` 只判断 `discoverSkills` 找到的技能能否改名,`web/server/lib/opencode/shared.js` 的 `resolveSkillSearchDirectories` 只被 `discoverSkills` 里已跳过的上游代码使用,`web/server/lib/opencode/skill-routes.js` 的 `findWorktreeRootForSkills` 与 `inferSkillScopeAndSourceFromPath` 只给内核列出的技能标注来源,`web/server/lib/scheduled-tasks/loops.js` 的 `~/.agents/loops` 见第 4.5 节,`web/server/lib/skills-catalog/install.js` 的接口已关闭。
+- 壳的配置范围:`web/server/lib/opencode/shared.js` 的 `findWorktreeRoot` 在桌面应用里直接返回会话目录,它的调用处都拿它当往上查找的终点(技能、agent、命令、网页搜索设置里的项目覆盖,以及计划任务读取的 `.agents/loops`),所以都只看起点目录本身:会话目录,计划任务则是项目文件夹。`web/server/lib/opencode/skills.js` 里 `getClaudeSkillDir`、`getUserClaudeSkillDir`、`getUserAgentsSkillDir`、`getProjectAgentsSkillDir` 在桌面应用里指向 OpenCode 的对应目录,查找、显示来源、新建与删除都经它们;列表(`discoverSkills`)直接拼路径,改由 `web/server/geocode/kernel-skills.js` 给出;`updateSkill` 拒绝两处之外的目标路径(界面只传列表里的路径,接口能传任意路径)。有一处连带:一个技能同时有 `skills/` 与旧名 `skill/` 两份时,删除会两份都删,日志把第二份标成 claude-compat 或 agents 的目录。界面的新建位置在 `ui/src/components/sections/skills/SkillsPage.tsx` 里只留 OpenCode 的两个。合并 `chamber-upstream` 之后,在壳服务端找新的 `.claude`、`.agents` 路径、`os.homedir()` 下的配置目录,以及不经 `findWorktreeRoot` 的往上查找;已知的几处不必再改:`web/server/lib/opencode/skills.js` 的 `getManagedSkillRoots` 只判断 `discoverSkills` 找到的技能能否改名,`web/server/lib/opencode/shared.js` 的 `resolveSkillSearchDirectories` 只被 `discoverSkills` 里已跳过的上游代码使用,`web/server/lib/opencode/skill-routes.js` 的 `findWorktreeRootForSkills` 与 `inferSkillScopeAndSourceFromPath` 只给内核列出的技能标注来源,`web/server/lib/scheduled-tasks/loops.js` 的 `~/.agents/loops` 见第 4.6 节,`web/server/lib/skills-catalog/install.js` 的接口已关闭。
 - 用量的服务商(`ui/src/geocode/quota.ts` 与 `web/server/geocode/closed-quota.js`,两份要一致):界面的 `ui/src/lib/quota/providers/index.ts` 的 `QUOTA_PROVIDERS`,壳服务端的 `web/server/lib/quota/providers/index.js` 的 `registry` 与 `web/server/lib/quota/credentials/providers.js` 的 `normalizers`;上游新增的服务商要读别的应用的凭据时,加进两份清单;`web/server/lib/quota/index.js` 还直接导出 `fetchClaudeQuota`、`fetchCursorQuota`,现在没有调用者,以后有了会绕过 `registry`。
 - 自动外发:在壳服务端、界面与 `main.mjs` 里找 `openchamber.dev`、`github.com/openchamber` 等地址。
 - 唯一入口仍然唯一:推送只经 `web/server/lib/notifications/runtime.js` 的 `fanoutPush`,深链只经 `electron/main.mjs` 的 `handleDeepLinks`,窗口取令牌只经 `main.mjs` 的 `readDesktopLocalClientToken`,会话密钥只来自 `web/server/lib/ui-auth/ui-auth.js` 的 `getOrCreateJwtSecret` 与 `rotateJwtSecret`。用户环境只从两处进入:启动环境在 `electron/early-startup.mjs` 的模块顶层清理,在它之前执行的代码都不能在加载时读写 `process.env`,包括它 import 的外部模块(打包时不内联、先于它执行,如 `@openchamber/web/server/lib/inherited-env.js`)与打包产物 `electron/dist-bundle/early-startup.mjs` 里排在它前面的内联代码;登录 shell 的快照由 `main.mjs` 的 `inheritUserShellEnv` 清理,壳服务端只经 `provideLoginShellEnvSnapshot` 拿到它,不自己再读登录 shell(Windows 除外)。
@@ -131,6 +136,7 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 - 设置与界面里没有远程、局域网、配对、隧道等入口(侧栏里嵌入的会话聊天也一样),对应的接口与 IPC 命令被拒绝,路径换了大小写也一样;`openchamber://` 链接不被处理。
 - 设置文件里开着隔离空间时,应用也不建空间、不调用 Docker,开关与空间的接口被拒绝。
 - 设置与界面里没有 Linear、扩展、路由、插件、魔法提示词、代码片段与技能目录的入口;远程实例、隧道、扩展、插件、魔法提示词、代码片段与技能目录页即使是上次停留的页面或链接指向的页面,打开设置时也显示「通用」。设置里没有「资源库」分组,「技能」在「OpenCode」分组的最后。
+- 在输入框开头打 `!` 或粘贴以 `!` 开头的文字,不进入 shell 模式,`!` 留在消息里;输入框的提示只介绍 `@` 与 `/`。
 - 数据目录里已经装好的扩展既不显示也不运行;开着路由的 `routing.json`、`magic-prompts.json` 与全局和项目的片段文件都不起作用:模型选择器里不提供 Auto,不向 Jev 发请求,输入框里的 `#名字` 不弹出选择器、不展开。
 - 对话里只有全局配置目录与会话目录本身的 `AGENTS.md` 与技能,以及读到会话目录里的文件时顺带载入的子目录 `AGENTS.md`:项目上级目录与主目录本身的配置、会话目录之外的 `AGENTS.md`、`.claude` 与 `.agents` 里的技能、配置列出的技能路径和网址都不进入对话,插件目录与配置列出的插件不执行;壳注入的工具照常,开关不用重启即生效。
 - 「技能」页只列出全局配置目录与会话目录 `.opencode/` 里的技能和内核自带的技能;删除技能不碰 `.claude`、`.agents` 里的同名技能,新建时只有 OpenCode 的两个位置;agent、命令与网页搜索设置不读会话目录上级的配置。
