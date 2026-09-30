@@ -23,6 +23,9 @@ const CLOSED_SEARCH_ITEMS = new Set([
   'sessions.browser-provider',
   'sessions.work-auto-open',
   'chat.session-goal-checker',
+  'projects.worktree.setup.replace',
+  'projects.shared',
+  'projects.shared.plansDir',
 ]);
 
 type Gated = { isAvailable?: (ctx: never) => boolean };

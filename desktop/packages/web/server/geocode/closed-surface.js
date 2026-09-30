@@ -38,13 +38,19 @@ const CLOSED_ROUTES = Object.freeze([
   ['POST', '/api/config/skills/install'],
 ]);
 
+// One method on paths that carry an id; the project's other config routes stay open.
+const CLOSED_PATTERNS = Object.freeze([
+  ['PUT', /^\/api\/projects\/[^/]+\/config\/shared$/],
+]);
+
 // Express matches routes case-insensitively, and runs GET routes for HEAD, so the comparison must too.
 const isClosed = (req) => {
   const path = req.path.toLowerCase();
   if (CLOSED_PATHS.some((closed) => path === closed || path.startsWith(`${closed}/`))) return true;
   const method = req.method === 'HEAD' ? 'GET' : req.method;
   const route = path.replace(/\/+$/, '');
-  return CLOSED_ROUTES.some(([closedMethod, closed]) => method === closedMethod && route === closed);
+  return CLOSED_ROUTES.some(([closedMethod, closed]) => method === closedMethod && route === closed)
+    || CLOSED_PATTERNS.some(([closedMethod, pattern]) => method === closedMethod && pattern.test(route));
 };
 
 export const closedSurface = (req, res, next) => {

@@ -31,6 +31,7 @@ import {
 } from '@/components/sections/projects/ProjectSettingsSubsection';
 import { useI18n } from '@/lib/i18n';
 import { useProjectWorktrees } from './useProjectWorktrees';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the share button
 
 export interface WorktreeSectionContentProps {
   projectRef?: { id: string; path: string } | null;
@@ -462,6 +463,8 @@ export const WorktreeSectionContent: React.FC<WorktreeSectionContentProps> = ({ 
                   placeholder={t('settings.openchamber.worktrees.setup.commandPlaceholder')}
                   className="h-7 min-w-0 flex-1 font-mono text-xs"
                 />
+                {/* --- GeoCode: no team-shared project setup --- */}
+                <Closed>
                 {command.trim() ? (
                   <Button
                     type="button"
@@ -475,6 +478,8 @@ export const WorktreeSectionContent: React.FC<WorktreeSectionContentProps> = ({ 
                     {t('settings.projects.shared.actions.share')}
                   </Button>
                 ) : null}
+                </Closed>
+                {/* --- /GeoCode --- */}
                 <Button
                   type="button"
                   variant="ghost"

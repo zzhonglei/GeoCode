@@ -169,6 +169,7 @@ const walkLoopMdFiles = (rootDir) => {
  * worktree root (project scope).
  */
 export const discoverLoopFiles = (projectPath) => {
+  return []; // GeoCode: .agents belongs to other agent tools, so loops there are neither read nor changed
   const files = [];
   for (const filePath of walkLoopMdFiles(USER_LOOP_ROOT())) {
     files.push({ filePath, scope: 'user' });

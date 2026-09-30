@@ -13,7 +13,7 @@ describe('GeoCode: closedSurface', () => {
   beforeAll(async () => {
     const app = express();
     app.use(closedSurface);
-    for (const route of ['/api/openchamber/update-check', '/api/push/subscribe', '/connect', '/api/client-auth/clients', '/api/push/visibility', '/api/plugin', '/api/plugin/check', '/api/magic-prompts/:id', '/api/config/snippets/expand', '/api/openchamber/spaces/switch', '/api/spaces/:id/session', '/api/config/skills/catalog/source', '/api/config/skills/:name', '/api/config/skills/:name/files/*filePath']) {
+    for (const route of ['/api/openchamber/update-check', '/api/push/subscribe', '/connect', '/api/client-auth/clients', '/api/push/visibility', '/api/plugin', '/api/plugin/check', '/api/magic-prompts/:id', '/api/config/snippets/expand', '/api/openchamber/spaces/switch', '/api/spaces/:id/session', '/api/config/skills/catalog/source', '/api/config/skills/:name', '/api/config/skills/:name/files/*filePath', '/api/projects/:projectId/config', '/api/projects/:projectId/config/shared']) {
       app.all(route, (_req, res) => res.status(200).send('upstream'));
     }
     server = http.createServer(app);
@@ -45,5 +45,13 @@ describe('GeoCode: closedSurface', () => {
     for (const [path, method] of [['/api/config/skills/scan', 'GET'], ['/API/Config/Skills/Install', 'PATCH'], ['/api/config/skills/scan', 'DELETE'], ['/api/config/skills/install/files/notes.md', 'PUT'], ['/api/config/skills/catalog', 'POST'], ['/api/config/skills/catalog', 'DELETE'], ['/api/config/skills/catalog/files/notes.md', 'GET'], ['/api/config/skills/geo', 'POST']]) {
       expect(await statusOf(path, method)).toBe(200);
     }
+  });
+
+  it('refuses writing the team-shared project setup, not the personal one', async () => {
+    for (const path of ['/api/projects/path_L3JlcG8/config/shared', '/API/Projects/path_L3JlcG8/Config/Shared/']) {
+      expect(await statusOf(path, 'PUT')).toBe(404);
+    }
+    expect(await statusOf('/api/projects/path_L3JlcG8/config', 'PUT')).toBe(200);
+    expect(await statusOf('/api/projects/path_L3JlcG8/config/shared', 'GET')).toBe(200);
   });
 });

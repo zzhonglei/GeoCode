@@ -49,6 +49,7 @@ import {
 import { SettingsInfoHint } from '@/components/sections/shared/SettingsInfoHint';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the share button
 
 type EditableProjectAction = OpenChamberProjectAction;
 
@@ -403,6 +404,8 @@ export const ProjectActionsSection: React.FC<ProjectActionsSectionProps> = ({ pr
                     </div>
                   </CollapsibleTrigger>
 
+                  {/* --- GeoCode: no team-shared project setup --- */}
+                  <Closed>
                   {action.name.trim() && action.command.trim() ? (
                     <Button
                       type="button"
@@ -416,6 +419,8 @@ export const ProjectActionsSection: React.FC<ProjectActionsSectionProps> = ({ pr
                       {t('settings.projects.shared.actions.share')}
                     </Button>
                   ) : null}
+                  </Closed>
+                  {/* --- /GeoCode --- */}
                   <Button
                     type="button"
                     variant="ghost"

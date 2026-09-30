@@ -33,6 +33,7 @@ export const getClaudeCliAuthStatus = ({
   env = process.env,
   platform = process.platform,
 } = {}) => {
+  return { connected: false, reason: 'unavailable' }; // GeoCode: never reads another app's login
   const childEnv = { ...env };
   delete childEnv.ANTHROPIC_API_KEY;
   delete childEnv.ANTHROPIC_AUTH_TOKEN;

@@ -968,6 +968,7 @@ export const createProjectConfigRuntime = (deps) => {
   const sharedConfigPathOf = (projectPath) => path.join(projectPath, ...SHARED_CONFIG_RELATIVE_PATH.split('/'));
 
   const readSharedProjectConfig = async (projectID, personalRaw) => {
+    return { status: 'missing' }; // GeoCode: no team-shared setup, so a checked-in file adds no commands
     const projectPath = projectPathOf(projectID, personalRaw);
     if (!projectPath) return { status: 'missing' };
     let raw;
@@ -1055,6 +1056,7 @@ export const createProjectConfigRuntime = (deps) => {
    * checkout cannot be located.
    */
   const resolveSharedPlansDir = async (projectID) => {
+    return null; // GeoCode: plans stay in the data directory, never in the checkout
     const personalRaw = await readRawProjectConfigFromDisk(projectID);
     const projectPath = projectPathOf(projectID, personalRaw);
     if (!projectPath) return null;

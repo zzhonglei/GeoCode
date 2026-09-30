@@ -3,6 +3,7 @@ import { WorktreeSectionContent } from '@/components/sections/openchamber/Worktr
 import { ProjectActionsSection } from '@/components/sections/projects/ProjectActionsSection';
 import { ProjectIdentityFields } from '@/components/sections/projects/ProjectIdentityFields';
 import { SharedProjectConfigSection } from '@/components/sections/projects/SharedProjectConfigSection';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the shared section
 import {
   useProjectIdentityForm,
   type ProjectIdentitySaveData,
@@ -50,7 +51,11 @@ export const ProjectSettingsPanel: React.FC<ProjectSettingsPanelProps> = ({
       <ProjectIdentityFields form={form} />
       <ProjectActionsSection projectRef={projectRef} />
       {showWorktrees ? <WorktreeSectionContent projectRef={projectRef} /> : null}
+      {/* --- GeoCode: no team-shared project setup --- */}
+      <Closed>
       <SharedProjectConfigSection projectRef={projectRef} />
+      </Closed>
+      {/* --- /GeoCode --- */}
     </div>
   );
 };
