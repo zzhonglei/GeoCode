@@ -79,7 +79,7 @@ export const getToolIcon = (toolName: string, presentation?: GuestToolRule | nul
         return <Icon name="ai-agent" className={iconClass} />;
     }
     if (tool === 'geocode') { // GeoCode: its agent tools, under their own names, also the three below
-        return <Icon name="openchamber" className={iconClass} />;
+        return <Icon name="geocode" className={iconClass} />; // GeoCode: its own icon
     }
     if (tool === 'linear' || tool.startsWith('linear_')) {
         return <Icon name="linear" className={iconClass} />;
