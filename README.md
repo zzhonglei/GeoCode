@@ -23,7 +23,7 @@ GeoCode 建在两个开源项目之上:
 | [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) | 开发规范:写代码、改上游代码、测试、文档与提交 |
 | [`docs/UPSTREAM.md`](docs/UPSTREAM.md) | 两个上游怎么导入与升级 |
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | 安装、构建、运行、打包与检查 |
-| [`docs/DESKTOP.md`](docs/DESKTOP.md) | 桌面应用:组成、内核、边界、本机访问控制、环境变量 |
+| [`docs/DESKTOP.md`](docs/DESKTOP.md) | 桌面应用:组成、内核、边界、本机访问控制、环境变量、名字与标识 |
 | [`docs/PATHS.md`](docs/PATHS.md) | 路径与存储:GeoCode 在用户电脑上的目录 |
 
 ## 许可
