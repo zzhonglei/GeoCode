@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { clearAppImageArgv0FromProcessEnv } from '../inherited-env.js';
 import { mergePathValues } from './path-utils.js';
+import { KERNEL_BINARY } from '../../geocode/kernel-paths.js'; // GeoCode: the file name of its bundled kernel
 
 // Login-shell probes source the user's rc files. A slow or interactive rc
 // (nvm, pyenv, a prompt waiting for input) must not hold server startup
@@ -318,7 +319,7 @@ export const createOpenCodeEnvRuntime = (deps) => {
   };
 
   const bundledOpenCodeCliCandidates = () => {
-    const names = process.platform === 'win32' ? ['opencode.exe'] : ['opencode'];
+    const names = [KERNEL_BINARY]; // GeoCode: the bundled kernel has its own file name
     const roots = [
       process.env.OPENCHAMBER_BUNDLED_OPENCODE_CLI_DIR,
       typeof process.resourcesPath === 'string' ? path.join(process.resourcesPath, 'opencode-cli') : null,

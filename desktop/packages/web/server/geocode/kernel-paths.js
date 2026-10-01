@@ -10,6 +10,10 @@ export const kernelConfigDir = () => path.join(root('XDG_CONFIG_HOME', '.config'
 export const kernelDataDir = () => path.join(root('XDG_DATA_HOME', '.local', 'share'), KERNEL_APP);
 export const kernelTmpDir = () => path.join(os.tmpdir(), KERNEL_APP);
 
+// The file name scripts/stage-kernel.sh gives the bundled kernel, which is the process name the system shows.
+export const KERNEL_PROCESS = 'geocode-kernel';
+export const KERNEL_BINARY = process.platform === 'win32' ? `${KERNEL_PROCESS}.exe` : KERNEL_PROCESS;
+
 // kernel/packages/core/src/config/discovery.ts
 export const KERNEL_CONFIG_JSON = 'geocode.json';
 export const KERNEL_CONFIG_JSONC = 'geocode.jsonc';

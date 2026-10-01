@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { KERNEL_BINARY } from '@openchamber/web/server/geocode/kernel-paths.js'; // GeoCode: see resolveBundledOpenCodeCliEnv
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -52,7 +53,7 @@ function spawnProcess(command, args, options = {}) {
 // staged directory to the backend explicitly: the dev app must run the same
 // OpenCode the release ships, not whatever `opencode` sits on PATH.
 function resolveBundledOpenCodeCliEnv() {
-  const binary = path.join(bundledOpenCodeCliDir, process.platform === 'win32' ? 'opencode.exe' : 'opencode');
+  const binary = path.join(bundledOpenCodeCliDir, KERNEL_BINARY); // GeoCode: the bundled kernel has its own file name
   if (!fs.existsSync(binary)) {
     console.warn(
       `[electron:dev] bundled OpenCode CLI missing at ${binary}; falling back to PATH. ` +
