@@ -59,7 +59,10 @@
     "appId": "io.github.zzhonglei.geocode",
     "productName": "GeoCode",
     "extraMetadata": {
-      "name": "geocode"
+      "name": "geocode",
+      "version": "1.0.0",
+      "description": "GeoCode",
+      "author": "GeoCode"
     },
     "asarUnpack": [
       "node_modules/@openchamber/web/server/built-in-extensions/**/*"
@@ -105,7 +108,7 @@
       "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "extendInfo": {
         "CFBundleIconName": "AppIcon",
-        "NSLocalNetworkUsageDescription": "OpenChamber needs access to devices and services on your local network."
+        "NSLocalNetworkUsageDescription": "GeoCode needs access to devices and services on your local network."
       },
       "hardenedRuntime": true,
       "gatekeeperAssess": false,

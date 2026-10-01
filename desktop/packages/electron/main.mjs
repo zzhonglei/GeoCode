@@ -211,9 +211,11 @@ const LOCAL_DESKTOP_CLIENT_DEDUPE_KEY = 'desktop-local';
 // connecting to someone else's server).
 const REMOTE_DESKTOP_CLIENT_KIND = 'desktop';
 const ENV_OVERRIDE_HOST_ID = '__env';
-const GITHUB_BUG_REPORT_URL = 'https://github.com/openchamber/openchamber/issues/new?template=bug_report.yml';
+const GITHUB_BUG_REPORT_URL = 'https://github.com/zzhonglei/GeoCode/issues/new'; // GeoCode: issues go to its own repository
+/* --- GeoCode: no links to OpenChamber's community ---
 const GITHUB_IDEAS_URL = 'https://github.com/openchamber/openchamber/discussions/categories/ideas';
 const DISCORD_INVITE_URL = 'https://discord.gg/ZYRSdnwwKA';
+--- /GeoCode --- */
 const INSTALLED_APPS_CACHE_TTL_SECS = 60 * 60 * 24;
 const INSTALLED_APPS_CACHE_FILE = 'discovered-apps.json';
 // Bump when discovery results change shape or matching semantics change, so cached
@@ -333,7 +335,7 @@ const quitConfirmationMessage = () => {
   if (reasons.length === 0) {
     return 'Background processes (sidecar, SSH sessions) will be stopped.';
   }
-  return `OpenChamber detected ${reasons.join(', ')}. Quitting now will stop sidecar/background processes and may interrupt pending work.`;
+  return `GeoCode detected ${reasons.join(', ')}. Quitting now will stop sidecar/background processes and may interrupt pending work.`;
 };
 
 const shutdownBackgroundServices = () => {
@@ -451,8 +453,8 @@ const requestQuitWithConfirmation = async () => {
   try {
     const result = await dialog.showMessageBox({
       type: 'warning',
-      title: 'Quit OpenChamber?',
-      message: 'Quit OpenChamber?',
+      title: 'Quit GeoCode?', // GeoCode: product name, also in message and quitConfirmationMessage
+      message: 'Quit GeoCode?',
       detail: quitConfirmationMessage(),
       buttons: ['Quit', 'Cancel'],
       defaultId: 1,
@@ -1170,7 +1172,7 @@ const maybeShowNativeNotification = (rawInput) => {
 
   const title = typeof payload.title === 'string' && payload.title.trim()
     ? payload.title.trim()
-    : 'OpenChamber';
+    : 'GeoCode'; // GeoCode: product name
   const body = typeof payload.body === 'string' ? payload.body : '';
   const sessionId = typeof payload.sessionId === 'string' && payload.sessionId.trim()
     ? payload.sessionId.trim()
@@ -2515,7 +2517,7 @@ const createMiniChatWindow = async ({ mode, sessionId = '', directory = '', proj
   const desktopClientToken = effectiveRuntimeConfig.clientToken || '';
   const desktopRequestHeaders = effectiveRuntimeConfig.requestHeaders || {};
   const browserWindow = new BrowserWindow({
-    title: 'OpenChamber Mini Chat',
+    title: 'GeoCode Mini Chat', // GeoCode: product name
     width: MINI_CHAT_WINDOW_WIDTH,
     height: MINI_CHAT_WINDOW_HEIGHT,
     minWidth: MINI_CHAT_MIN_WINDOW_WIDTH,
@@ -4543,7 +4545,7 @@ const buildMacMenu = () => {
     {
       label: app.name,
       submenu: [
-        { label: 'About OpenChamber', click: () => dispatchAction('about') },
+        { label: 'About GeoCode', click: () => dispatchAction('about') }, // GeoCode: product name
         /* --- GeoCode: OpenChamber's release feed does not update this app ---
         {
           label: 'Check for Updates',
@@ -4636,9 +4638,11 @@ const buildMacMenu = () => {
         { label: 'Clear Cache', click: () => void handleInvoke(null, 'desktop_clear_cache') },
         { type: 'separator' },
         { label: 'Report a Bug', click: () => shell.openExternal(GITHUB_BUG_REPORT_URL) },
+        /* --- GeoCode: no links to OpenChamber's community ---
         { label: 'Discuss an Idea', click: () => shell.openExternal(GITHUB_IDEAS_URL) },
         { type: 'separator' },
         { label: 'Join Discord', click: () => shell.openExternal(DISCORD_INVITE_URL) },
+        --- /GeoCode --- */
       ],
     },
   ]);
@@ -4653,9 +4657,9 @@ const buildAutoHiddenMenu = () => {
 
   return Menu.buildFromTemplate([
     {
-      label: 'OpenChamber',
+      label: 'GeoCode', // GeoCode: product name
       submenu: [
-        { label: 'About OpenChamber', click: () => dispatchAction('about') },
+        { label: 'About GeoCode', click: () => dispatchAction('about') }, // GeoCode: product name
         /* --- GeoCode: OpenChamber's release feed does not update this app ---
         {
           label: 'Check for Updates',
@@ -4755,9 +4759,11 @@ const buildAutoHiddenMenu = () => {
         { label: 'Clear Cache', click: () => void handleInvoke(null, 'desktop_clear_cache') },
         { type: 'separator' },
         { label: 'Report a Bug', click: () => shell.openExternal(GITHUB_BUG_REPORT_URL) },
+        /* --- GeoCode: no links to OpenChamber's community ---
         { label: 'Discuss an Idea', click: () => shell.openExternal(GITHUB_IDEAS_URL) },
         { type: 'separator' },
         { label: 'Join Discord', click: () => shell.openExternal(DISCORD_INVITE_URL) },
+        --- /GeoCode --- */
       ],
     },
   ]);

@@ -294,7 +294,7 @@ const buildStartupSplashHtml = () => {
   </head>
   <body>
     <div class="stack">
-      <svg width="120" height="120" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OpenChamber loading icon">
+      <svg width="120" height="120" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GeoCode loading icon">
         <path d="M50 50 L8.432 26 L8.432 74 L50 98 Z" fill="var(--splash-face-fill)" stroke="var(--splash-stroke)" stroke-width="2" stroke-linejoin="round"/>
         <path d="M50 50 L39.608 44 L39.608 56 L50 62 Z" fill="var(--splash-cell-fill)" opacity="0.2"/>
         <path d="M39.608 44 L29.216 38 L29.216 50 L39.608 56 Z" fill="var(--splash-cell-fill)" opacity="0.45"/>
@@ -396,7 +396,7 @@ export const usesFramelessChrome = process.platform === 'win32' || process.platf
 export const buildMainWindowOptions = ({ bounds, backgroundColor, additionalArguments }) => {
   const usesCustomTitleBar = process.platform === 'darwin' || usesFramelessChrome;
   const options = {
-    title: 'OpenChamber',
+    title: 'GeoCode', // GeoCode: product name
     width: bounds?.width ?? DEFAULT_WINDOW_WIDTH,
     height: bounds?.height ?? DEFAULT_WINDOW_HEIGHT,
     minWidth: MIN_WINDOW_WIDTH,
