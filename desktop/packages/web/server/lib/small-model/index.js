@@ -105,7 +105,7 @@ const clampPromptToModelLimit = ({ prompt, modelInfo, providerID, modelID, onOve
 };
 
 const noClientError = () => Object.assign(
-  new Error('No small model available — OpenCode is not reachable'),
+  new Error('No small model available — the kernel is not reachable'), // GeoCode: the kernel, not OpenCode
   { statusCode: 404 },
 );
 
@@ -248,7 +248,7 @@ export async function generateSmallModelText({ prompt, system, maxOutputTokens, 
 
   if (!resolved) {
     throw Object.assign(
-      new Error('No small model available — OpenCode reports no default model'),
+      new Error('No small model available — the kernel reports no default model'), // GeoCode: the kernel, not OpenCode
       { statusCode: 404 },
     );
   }

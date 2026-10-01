@@ -198,29 +198,29 @@ const TOOL_METADATA: Record<string, ToolMetadata> = {
        ]
      },
 
-    openchamber: {
-      displayName: 'OpenChamber',
+    geocode: { // GeoCode: its agent tools, under their own names, also the three below
+      displayName: 'GeoCode',
       category: 'system',
       outputLanguage: 'json',
       inputFields: []
     },
 
-    openchamber_web: {
-      displayName: 'OpenChamber Web',
+    geocode_web: {
+      displayName: 'GeoCode Web',
       category: 'system',
       outputLanguage: 'json',
       inputFields: []
     },
 
-    openchamber_memory: {
-      displayName: 'OpenChamber Memory',
+    geocode_memory: {
+      displayName: 'GeoCode Memory',
       category: 'system',
       outputLanguage: 'json',
       inputFields: []
     },
 
-    openchamber_notify: {
-      displayName: 'OpenChamber Notify',
+    geocode_notify: {
+      displayName: 'GeoCode Notify',
       category: 'system',
       outputLanguage: 'json',
       inputFields: []

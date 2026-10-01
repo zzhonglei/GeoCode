@@ -1122,7 +1122,7 @@ const formatWorktreePopulateError = (message) => {
   return [
     text,
     'The worktree checkout path exceeds this system\'s path-length limit.',
-    'OpenChamber enables Git `core.longpaths` for worktree population; if this still fails on Windows, enable OS long paths (LongPathsEnabled) or open the repository from a shorter absolute path.',
+    'GeoCode enables Git `core.longpaths` for worktree population; if this still fails on Windows, enable OS long paths (LongPathsEnabled) or open the repository from a shorter absolute path.',
   ].join('\n');
 };
 
@@ -3667,7 +3667,7 @@ export async function stashPush(directory, options = {}) {
   const { git } = await createRepositoryGitContext(directory);
   const message = typeof options.message === 'string' && options.message.trim()
     ? options.message.trim()
-    : `OpenChamber stash ${new Date().toISOString()}`;
+    : `GeoCode stash ${new Date().toISOString()}`; // GeoCode: its own name in the user's repository
   const output = await git.raw(['stash', 'push', '--include-untracked', '-m', message]);
   return {
     success: true,
@@ -5245,7 +5245,7 @@ export async function snapshotWorktree(directory, input = {}) {
     await run(['add', '-A'], 'Failed to collect worktree changes');
     const tree = await run(['write-tree'], 'Failed to write snapshot tree');
     const commit = await run(
-      ['commit-tree', tree, '-p', head, '-m', 'OpenChamber run snapshot'],
+      ['commit-tree', tree, '-p', head, '-m', 'GeoCode run snapshot'], // GeoCode: its own name in the user's repository
       'Failed to write snapshot commit',
       { ...indexEnv, ...SNAPSHOT_IDENTITY_ENV },
     );

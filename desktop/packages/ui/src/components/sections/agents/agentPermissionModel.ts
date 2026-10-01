@@ -43,7 +43,7 @@ export const BUILTIN_ACTIONS = [
 ] as const;
 
 /** OpenChamber's own agent tools, shown so their rules are discoverable. */
-export const OPENCHAMBER_ACTIONS = ['openchamber', 'openchamber_web', 'openchamber_memory', 'openchamber_notify'] as const;
+export const OPENCHAMBER_ACTIONS = ['geocode', 'geocode_web', 'geocode_memory', 'geocode_notify'] as const; // GeoCode: the names its agent tools are registered under
 
 /**
  * v1 permission keys OpenCode 2 no longer checks. Rules on them are inert, so

@@ -1392,8 +1392,8 @@ const openCodeLifecycleRuntime = createOpenCodeLifecycleRuntime({
         broadcastUiNotification({
           title: multiple ? 'Chats interrupted' : 'Chat interrupted',
           body: multiple
-            ? 'OpenCode restarted during running responses. Send a message in each chat to continue.'
-            : 'OpenCode restarted during a running response. Send a message to continue.',
+            ? 'The kernel restarted during running responses. Send a message in each chat to continue.' // GeoCode: the kernel, not OpenCode, in both messages
+            : 'The kernel restarted during a running response. Send a message to continue.',
           tag: 'opencode-restart-interrupted',
           kind: 'opencode-restart-interrupted',
           sessionId: sessionIds[0],
@@ -1646,7 +1646,7 @@ const openChamberControlService = createOpenChamberControlService({
   notifyUser: async (input) => {
     const settings = await readSettingsFromDiskMigrated().catch(() => null);
     if (settings?.agentNotifyToolEnabled !== true) {
-      return { status: 403, body: { error: 'The notify tool is turned off in OpenChamber settings' } };
+      return { status: 403, body: { error: 'The notify tool is turned off in GeoCode settings' } }; // GeoCode: product name
     }
     return pluginNotificationEmitter.emit(input);
   },

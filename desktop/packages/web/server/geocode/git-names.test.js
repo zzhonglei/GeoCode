@@ -33,6 +33,7 @@ describe('GeoCode: git names', () => {
     const result = await snapshotWorktree(repo, { ref });
     expect(git(repo, ['rev-parse', ref]).trim()).toBe(result.commit);
     expect(git(repo, ['log', '-1', '--format=%an <%ae> %cn <%ce>', result.commit]).trim()).toBe('GeoCode <snapshot@geocode.local> GeoCode <snapshot@geocode.local>');
+    expect(git(repo, ['log', '-1', '--format=%s', result.commit]).trim()).toBe('GeoCode run snapshot');
   });
 
   it('refuses refs under OpenChamber\'s name', async () => {

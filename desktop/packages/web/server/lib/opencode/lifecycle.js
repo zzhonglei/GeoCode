@@ -537,7 +537,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
         const appBundleHint = process.platform === 'darwin' && /\/OpenCode\.app\/Contents\/MacOS\/(?:OpenCode|opencode-cli)$/i.test(binary)
           ? ' The configured binary appears to point at the macOS desktop app bundle; OpenChamber needs the standalone opencode CLI.'
           : '';
-        finish(reject, new Error(`OpenCode process exited before serving with ${reason}. Binary used: ${binary}.${appBundleHint} ${formatCapturedOutput({ stdout, stderr })}`));
+        finish(reject, new Error(`The kernel process exited before serving with ${reason}. Binary used: ${binary}.${appBundleHint} ${formatCapturedOutput({ stdout, stderr })}`)); // GeoCode: the kernel, not OpenCode
       };
 
       const onError = (error) => {
@@ -545,7 +545,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
       };
 
       const timer = setTimeout(() => {
-        finish(reject, new Error(`Timeout waiting for OpenCode to start after ${timeout}ms`));
+        finish(reject, new Error(`Timeout waiting for the kernel to start after ${timeout}ms`)); // GeoCode: the kernel, not OpenCode
       }, timeout);
 
       child.stdout?.on('data', onStdout);
@@ -1038,7 +1038,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
       throw lastError;
     }
 
-    const timeoutError = new Error('Timed out waiting for OpenCode to become ready');
+    const timeoutError = new Error('Timed out waiting for the kernel to become ready'); // GeoCode: the kernel, not OpenCode
     state.lastOpenCodeError = timeoutError.message;
     throw timeoutError;
   };

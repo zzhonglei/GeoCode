@@ -403,7 +403,7 @@ async function runGeneration({ directory, source, repoRoot, key, force, explicit
   }
   if (model.hasLogin === false) {
     throw fail(
-      `No OpenCode login found for provider "${model.providerID}" — sign in or choose a different model`,
+      `No login found for provider "${model.providerID}" — sign in or choose a different model`, // GeoCode: no product name
       401,
       { code: 'no-provider-login', model },
     );

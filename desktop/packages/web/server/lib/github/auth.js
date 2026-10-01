@@ -10,8 +10,8 @@ const STORAGE_DIR = OPENCHAMBER_DATA_DIR;
 const STORAGE_FILE = path.join(STORAGE_DIR, 'github-auth.json');
 const SETTINGS_FILE = path.join(OPENCHAMBER_DATA_DIR, 'settings.json');
 
-const DEFAULT_GITHUB_CLIENT_ID = 'Ov23lizomPOC3eFYo56r';
-const DEFAULT_GITHUB_SCOPES = 'repo read:org workflow read:user user:email';
+const DEFAULT_GITHUB_CLIENT_ID = 'Ov23liGGsghsdLRXeIil'; // GeoCode: its own OAuth application
+const DEFAULT_GITHUB_SCOPES = 'repo read:org read:user user:email'; // GeoCode: no workflow-file edits
 export const GH_CLI_ACCOUNT_ID = 'gh-cli';
 
 function ensureStorageDir() {

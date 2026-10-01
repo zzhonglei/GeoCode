@@ -78,7 +78,7 @@ export const getToolIcon = (toolName: string, presentation?: GuestToolRule | nul
     if (tool === 'subagent') {
         return <Icon name="ai-agent" className={iconClass} />;
     }
-    if (tool === 'openchamber') {
+    if (tool === 'geocode') { // GeoCode: its agent tools, under their own names, also the three below
         return <Icon name="openchamber" className={iconClass} />;
     }
     if (tool === 'linear' || tool.startsWith('linear_')) {
@@ -87,13 +87,13 @@ export const getToolIcon = (toolName: string, presentation?: GuestToolRule | nul
     if (tool === 'cloudflare' || tool.startsWith('cloudflare_') || tool === 'claudflare' || tool.startsWith('claudflare_')) {
         return <Icon name="cloudflare" className={iconClass} />;
     }
-    if (tool === 'openchamber_web') {
+    if (tool === 'geocode_web') {
         return <Icon name="global" className={iconClass} />;
     }
-    if (tool === 'openchamber_notify') {
+    if (tool === 'geocode_notify') {
         return <Icon name="notification-3" className={iconClass} />;
     }
-    if (tool === 'openchamber_memory') {
+    if (tool === 'geocode_memory') {
         return <Icon name="brain-4" className={iconClass} />;
     }
     if (tool === 'question') {

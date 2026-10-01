@@ -528,7 +528,7 @@ export const registerOpenCodeProxy = (app, deps) => {
     if (!res || res.headersSent || res.writableEnded || typeof res.status !== 'function') {
       return false;
     }
-    res.status(statusCode).json({ error: statusCode === 504 ? 'OpenCode upstream timed out' : 'OpenCode service unavailable' });
+    res.status(statusCode).json({ error: statusCode === 504 ? 'The kernel timed out' : 'The kernel is unavailable' }); // GeoCode: the kernel, not OpenCode, also in the responses below
     return true;
   };
 
@@ -703,7 +703,7 @@ export const registerOpenCodeProxy = (app, deps) => {
       }
       console.error('[proxy] OpenCode SSE proxy error:', error?.message ?? error);
       if (!res.headersSent) {
-        res.status(503).json({ error: 'OpenCode service unavailable' });
+        res.status(503).json({ error: 'The kernel is unavailable' });
       } else {
         res.end();
       }
@@ -806,7 +806,7 @@ export const registerOpenCodeProxy = (app, deps) => {
       }
       console.error(`[proxy] OpenCode ${logLabel} proxy error:`, error?.message ?? error);
       if (!res.headersSent) {
-        res.status(503).json({ error: 'OpenCode service unavailable' });
+        res.status(503).json({ error: 'The kernel is unavailable' });
         return;
       }
       next(error);
@@ -893,7 +893,7 @@ export const registerOpenCodeProxy = (app, deps) => {
     });
     if (!res.headersSent) {
       res.status(503).json({
-        error: 'OpenCode is restarting',
+        error: 'The kernel is restarting',
         restarting: true,
       });
     }
@@ -967,7 +967,7 @@ export const registerOpenCodeProxy = (app, deps) => {
       if (isAbortError(error)) return;
       console.error('[proxy] OpenCode session.get proxy error:', error?.message ?? error);
       if (!res.headersSent) {
-        res.status(503).json({ error: 'OpenCode service unavailable' });
+        res.status(503).json({ error: 'The kernel is unavailable' });
         return;
       }
       next(error);

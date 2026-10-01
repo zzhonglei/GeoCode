@@ -90,7 +90,7 @@ export const createBrowserControlRouter = ({
       settings = await readSettings();
     } catch {
       throw new BrowserControlError(
-        'OpenChamber could not read which browser answers agent actions, so the action was not run. Try again.',
+        'GeoCode could not read which browser answers agent actions, so the action was not run. Try again.',
         503,
       );
     }
@@ -183,7 +183,7 @@ export const createBrowserControlRouter = ({
         // The catalog could not be read; that says nothing about the
         // extension, so neither the choice nor the target browser changes.
         throw new BrowserControlError(
-          'OpenChamber could not read the extension catalog, so the action was not run. Try again.',
+          'GeoCode could not read the extension catalog, so the action was not run. Try again.',
           503,
         );
       }

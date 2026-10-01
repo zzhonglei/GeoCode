@@ -49,7 +49,7 @@ export const createFileOpenRequester = ({ emit, stat = (target) => fsPromises.st
 
     const delivered = emit({ path: absolute, directory: directory ?? null, sessionId: sessionId ?? null });
     if (delivered === 0) {
-      throw new OpenChamberControlError('No OpenChamber window is connected to show the file', 503);
+      throw new OpenChamberControlError('No GeoCode window is connected to show the file', 503);
     }
 
     return { path: absolute, size: stats.size, opened: true };

@@ -195,7 +195,7 @@ function formatJsoncParseError(filePath, errors) {
   const location = first && Number.isFinite(first.offset)
     ? ` (${printParseErrorCode(first.error)} at offset ${first.offset})`
     : '';
-  return `OpenCode configuration at ${filePath} contains invalid JSONC and cannot be loaded safely${location}`;
+  return `GeoCode configuration at ${filePath} contains invalid JSONC and cannot be loaded safely${location}`;
 }
 
 function isCommentOnlyParse(parsed, errors) {

@@ -869,7 +869,7 @@ export const createOpenCodeEnvRuntime = (deps) => {
   const resolveManagedOpenCodeLaunchSpec = (opencodePath) => {
     // --- GeoCode: without its bundled kernel the app fails rather than run whatever `opencode` is on PATH ---
     if (!opencodePath) {
-      throw new Error('The OpenCode kernel bundled with this app is missing.');
+      throw new Error('The kernel bundled with GeoCode is missing.');
     }
     // --- /GeoCode ---
     const fallbackBinary = typeof opencodePath === 'string' && opencodePath.trim().length > 0

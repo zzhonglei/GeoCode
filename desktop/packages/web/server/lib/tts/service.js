@@ -104,7 +104,7 @@ class TTSService {
     }
 
     if (!client) {
-      throw new Error('TTS service not available. Configure OpenAI in OpenCode, provide an API key, or set a custom server URL in settings.');
+      throw new Error('TTS service not available. Configure OpenAI in GeoCode, provide an API key, or set a custom server URL in settings.');
     }
 
     if (!text.trim()) {
@@ -145,7 +145,7 @@ class TTSService {
   async generateSpeechBuffer(options) {
     const client = await this._getClient();
     if (!client) {
-      throw new Error('OpenAI API key not configured. Set OPENAI_API_KEY environment variable or configure OpenAI in OpenCode.');
+      throw new Error('OpenAI API key not configured. Set OPENAI_API_KEY environment variable or configure OpenAI in GeoCode.');
     }
 
     const {

@@ -1273,10 +1273,10 @@ const ToolExpandedContent: React.FC<ToolExpandedContentProps> = React.memo(({
     );
     const hasVisualDiffEntry = diffEntries.some((entry) => entry.renderMode === 'diff');
     // `execute` renders its script and its call list itself, below.
-    const hideToolInputPreview = part.tool === 'openchamber'
-        || part.tool === 'openchamber_web'
-        || part.tool === 'openchamber_memory'
-        || part.tool === 'openchamber_notify'
+    const hideToolInputPreview = part.tool === 'geocode' // GeoCode: its agent tools, under their own names
+        || part.tool === 'geocode_web'
+        || part.tool === 'geocode_memory'
+        || part.tool === 'geocode_notify'
         || isPatchTool(part.tool)
         || isEditTool(part.tool)
         || isExecuteTool(part.tool);
