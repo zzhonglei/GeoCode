@@ -21,9 +21,8 @@ describe("OauthCallbackPage", () => {
       OauthCallbackPage.bootstrap({ provider: "Example", tokenPath: "/token" }),
     ]
     for (const html of pages) {
-      expect(html).toContain("GeoCode")
-      // The wordmark keeps OpenCode's drawing and label.
-      expect(html.replace('aria-label="OpenCode"', "")).not.toContain("OpenCode")
+      expect(html).toContain('aria-label="GeoCode"')
+      expect(html).not.toContain("OpenCode")
     }
   })
 })

@@ -11,6 +11,8 @@
 // the wordmark is the same geometry as `packages/ui/src/components/logo.tsx`.
 // Keep this file in sync with those sources when the brand changes.
 
+import { WORDMARK } from "../geocode/wordmark" // GeoCode: its own wordmark, in place of the one closed below
+
 export interface CallbackPageOptions {
   /** Friendly integration name shown as a subtitle, e.g. "xAI", "Snowflake", "MCP". */
   provider?: string
@@ -249,6 +251,7 @@ const STYLES = `
   @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 `
 
+/* --- GeoCode: the pages show the imported wordmark ---
 // OpenCode wordmark — same path geometry as packages/ui/src/components/logo.tsx (Logo).
 const WORDMARK = `<svg class="wordmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 234 42" fill="none" aria-label="OpenCode" role="img">
         <path d="M18 30H6V18H18V30Z" fill="var(--oc-icon-weak)" />
@@ -268,6 +271,7 @@ const WORDMARK = `<svg class="wordmark" xmlns="http://www.w3.org/2000/svg" viewB
         <path d="M234 24V30H216V24H234Z" fill="var(--oc-icon-weak)" />
         <path d="M216 12V18H228V12H216ZM234 24H216V30H234V36H210V6H234V24Z" fill="var(--oc-icon-strong)" />
       </svg>`
+--- /GeoCode --- */
 
 const ICON_CHECK = `<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="m8.5 12.5 2.4 2.4 4.6-5.4" /></svg>`
 
