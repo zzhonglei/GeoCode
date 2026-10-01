@@ -8,7 +8,7 @@ import { runtimeFetch } from '@/lib/runtime-fetch';
 type ProviderId = 'exe-dev' | 'ollama-cloud' | 'cursor';
 type Status = { configured: boolean; secretMasked?: string };
 type CredentialPayload = { usageToken?: string; cookie?: string; accessToken?: string; refreshToken?: string };
-const EXE_DEV_TOKEN_COMMAND = `ssh exe.dev "ssh-key generate-api-key --label=openchamber --exp=30d --cmds='billing credits usage'"`;
+const EXE_DEV_TOKEN_COMMAND = `ssh exe.dev "ssh-key generate-api-key --label=geocode --exp=30d --cmds='billing credits usage'"`;
 
 export const QuotaCredentials: React.FC<{ providerId: ProviderId; providerName: string }> = ({ providerId, providerName }) => {
   const { t } = useI18n();

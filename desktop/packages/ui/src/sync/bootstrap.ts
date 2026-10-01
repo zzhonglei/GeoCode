@@ -63,7 +63,7 @@ export async function bootstrapGlobal(set: (patch: Partial<GlobalState>) => void
         if (health.lastOpenCodeError) {
           message = health.lastOpenCodeError
         } else if (!health.openCodeRunning) {
-          message = "OpenCode process is not running"
+          message = "The kernel process is not running" // GeoCode: the kernel, not OpenCode
         }
       }
     } catch {

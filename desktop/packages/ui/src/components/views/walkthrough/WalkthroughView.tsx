@@ -40,6 +40,7 @@ import { WalkthroughStream } from './WalkthroughStream';
 import { WalkthroughToc } from './WalkthroughToc';
 import { NestedRepoResolutionStates } from '@/components/views/git/NestedRepoResolutionStates';
 import { NestedRepoPicker } from '@/components/views/git/NestedRepoPicker';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the guide button
 
 interface WalkthroughViewProps {
   directory: string;
@@ -619,6 +620,8 @@ export const WalkthroughView = ({ directory: rootDirectory, visible = true }: Wa
             <Icon name="arrow-left-right" className="size-4" />
             {!compactHeader && t('contextPanel.mode.diff')}
           </Button>}
+          {/* --- GeoCode: the guide is on OpenChamber's documentation site --- */}
+          <Closed>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -637,6 +640,7 @@ export const WalkthroughView = ({ directory: rootDirectory, visible = true }: Wa
               <p className="typography-micro leading-tight">{t('walkthrough.help.guide')}</p>
             </TooltipContent>
           </Tooltip>
+          </Closed>
 
           {/* A walkthrough nobody can read is worth nothing, so the prose
               language is a per-review choice like the model — defaulting to the

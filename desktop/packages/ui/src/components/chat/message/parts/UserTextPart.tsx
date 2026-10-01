@@ -17,6 +17,7 @@ import { prepareUserMarkdownContent, SKILL_TOKEN_PATTERN } from './userTextPartC
 import { extractTerminalContexts } from '@/lib/messages/terminalContext';
 import { readContextPart } from '@/lib/messages/contextParts';
 import UserContextPart from './UserContextPart';
+import { withoutUpstreamSite } from '@/geocode/brand'; // GeoCode: see the agent mention
 
 type PartWithText = Part & { text?: string; content?: string; value?: string };
 
@@ -237,7 +238,7 @@ const UserTextPart: React.FC<UserTextPartProps> = ({ part, messageId, agentMenti
                 node.slice(0, idx),
                 <a
                     key={`agent-${index}`}
-                    href={buildAgentMentionUrl(agentMention.name)}
+                    href={withoutUpstreamSite(buildAgentMentionUrl(agentMention.name))} // GeoCode: a mention does not link to OpenCode's documentation
                     dir="ltr"
                     className="text-primary hover:underline [unicode-bidi:isolate]"
                     target="_blank"

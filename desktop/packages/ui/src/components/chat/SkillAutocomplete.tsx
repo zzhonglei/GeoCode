@@ -6,6 +6,7 @@ import { useUIStore } from '@/stores/useUIStore';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { useMobileAutocompleteMaxHeight } from './useMobileAutocompleteMaxHeight';
 import { AutocompleteRowTooltip } from './composer/ui/AutocompleteRowTooltip';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the source badge
 
 interface SkillInfo {
   name: string;
@@ -159,9 +160,12 @@ export const SkillAutocomplete = React.forwardRef<SkillAutocompleteHandle, Skill
             )}>
               {skill.scope}
             </span>
+            {/* --- GeoCode: skills come from one source --- */}
+            <Closed>
             <span className="text-[10px] leading-none uppercase font-bold tracking-tight px-1.5 py-1 rounded border flex-shrink-0 bg-[var(--surface-muted)] text-muted-foreground border-[var(--interactive-border)]/60">
               {source}
             </span>
+            </Closed>
           </div>
         </div>
       </div>

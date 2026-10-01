@@ -6,6 +6,8 @@ import { opencodeClient } from './opencode/client';
 import { runtimeFetch } from './runtime-fetch';
 import { getRecentSendFailures } from '@/sync/send-failure-log';
 import { getRecentSessionErrors } from '@/sync/session-error-log';
+import { toGeoCodeReport } from '@/geocode/brand'; // GeoCode: see buildOpenCodeStatusReport
+import { getDesktopAppVersion } from './desktopNative';
 
 declare const __APP_VERSION__: string | undefined;
 
@@ -285,7 +287,7 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
 
   const lines: string[] = [];
   lines.push(`Time: ${now.toISOString()}`);
-  lines.push(`OpenChamber version: ${appVersion}`);
+  lines.push(`GeoCode version: ${(await getDesktopAppVersion()) ?? '(unknown)'} (shell ${appVersion})`); // GeoCode: its own version, then the OpenChamber one it builds on
   lines.push(`Runtime: ${origin || '(unknown)'} (api=${apiBase || '(unknown)'})`);
   lines.push(`OpenCode SDK base: ${opencodeClient.getBaseUrl()}`);
   lines.push(`Event stream: ${eventStreamStatus}`);
@@ -480,7 +482,7 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
 
   lines.push('');
   lines.push(`Generated: ${formatIso(Date.now())}`);
-  return lines.join('\n');
+  return toGeoCodeReport(lines).join('\n'); // GeoCode: the labels name GeoCode and its kernel
 };
 
 export const showOpenCodeStatus = async (): Promise<void> => {

@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 
-import { dict as enDict, type I18nKey } from './messages/en';
+import { dict as upstreamEnDict, type I18nKey } from './messages/en';
+import { toGeoCodeDictionary } from '@/geocode/brand';
 import { DEFAULT_LOCALE, detectInitialLocale, type Locale, writeStoredLocale } from './runtime';
 
 export type I18nParams = Record<string, string | number | boolean | null | undefined>;
 export type I18nDictionary = Record<I18nKey, string>;
+
+const enDict = toGeoCodeDictionary(DEFAULT_LOCALE, upstreamEnDict); // GeoCode: every dictionary names GeoCode, see loadDictionary
 
 type I18nState = {
   locale: Locale;
@@ -51,8 +54,9 @@ async function loadDictionary(locale: Locale): Promise<I18nDictionary> {
                     : locale === 'tr'
                       ? await import('./messages/tr') as { dict: I18nDictionary }
                       : { dict: enDict };
-  dictionaries.set(locale, mod.dict);
-  return mod.dict;
+  const dictionary = toGeoCodeDictionary(locale, mod.dict); // GeoCode: the upstream dictionaries stay as they are
+  dictionaries.set(locale, dictionary);
+  return dictionary;
 }
 
 export const useI18nStore = create<I18nState>()((set, get) => ({

@@ -4,6 +4,7 @@ import remend from 'remend';
 import katex from 'katex';
 import DOMPurify, { type DOMPurify as DOMPurifyInstance } from 'dompurify';
 import { buildAgentMentionUrl, parseAgentHref, parseSkillHref } from '@/lib/messages/inlineMessageLinks';
+import { withoutUpstreamSite } from '@/geocode/brand'; // GeoCode: see the link renderer
 import { isAppLinkUrl } from '@/lib/url';
 import { isVSCodeRuntime } from '@/lib/desktop';
 import { contentFingerprint, HighlightResultCache, utf16Bytes } from './highlightResultCache';
@@ -560,6 +561,7 @@ const createParser = (imageMode: MarkdownImageMode, rawHtml: MarkdownRawHtmlMode
           const target = href ?? '';
           const agentName = parseAgentHref(target);
           if (agentName) {
+            if (!withoutUpstreamSite(buildAgentMentionUrl(agentName))) return `<a data-openchamber-agent-mention="true" class="text-primary">${text}</a>`; // GeoCode: a mention does not link to OpenCode's documentation
             return `<a href="${escapeAttr(buildAgentMentionUrl(agentName))}" data-openchamber-agent-mention="true" class="text-primary hover:underline" target="_blank" rel="noopener noreferrer">${text}</a>`;
           }
           const skillName = parseSkillHref(target);

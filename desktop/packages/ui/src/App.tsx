@@ -50,7 +50,7 @@ import { resumeAutoReviewRun } from '@/lib/reviewFlow';
 import { SyncProvider } from '@/sync/sync-context';
 import { useSync } from '@/sync/use-sync';
 import { ConfigUpdateOverlay } from '@/components/ui/ConfigUpdateOverlay';
-import { AboutDialog } from '@/components/ui/AboutDialog';
+import { AboutDialog } from '@/geocode/AboutDialog'; // GeoCode: its own About dialog
 import { RuntimeAPIProvider } from '@/contexts/RuntimeAPIProvider';
 import { registerRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { useUIStore } from '@/stores/useUIStore';

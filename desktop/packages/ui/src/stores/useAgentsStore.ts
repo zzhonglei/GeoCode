@@ -761,7 +761,7 @@ async function waitForOpenCodeConnection(delayMs?: number) {
       if (isHealthy) {
         return;
       }
-      lastError = new Error("OpenCode health check reported not ready");
+      lastError = new Error("The kernel health check reported not ready"); // GeoCode: the kernel, not OpenCode
     } catch (error) {
       lastError = error;
     }
@@ -780,7 +780,7 @@ async function waitForOpenCodeConnection(delayMs?: number) {
     await sleep(waitMs);
   }
 
-  throw lastError || new Error("OpenCode did not become ready in time");
+  throw lastError || new Error("The kernel did not become ready in time"); // GeoCode: the kernel, not OpenCode
 }
 
 type ConfigRefreshMode = "active" | "projects";
@@ -919,7 +919,7 @@ export async function reloadOpenCodeConfiguration(options?: {
     if (payload?.requiresManualRestart) {
       finishConfigUpdate();
       const error = new Error(
-        payload?.message || 'Restart your connected OpenCode server to apply the changes.',
+        payload?.message || 'Restart GeoCode to apply the changes.', // GeoCode: one app, no server to restart
       );
       (error as Error & { requiresManualRestart?: boolean }).requiresManualRestart = true;
       throw error;

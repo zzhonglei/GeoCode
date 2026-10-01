@@ -344,7 +344,7 @@ export const createRuntimeOpencodeClient = (config: RuntimeOpencodeClientConfig)
         return response
       } catch (error) {
         if (timeout.signal.aborted && !callerSignal?.aborted) {
-          throw new Error(`OpenCode request timed out after ${requestTimeoutMs}ms`)
+          throw new Error(`Kernel request timed out after ${requestTimeoutMs}ms`) // GeoCode: the kernel, not OpenCode
         }
         throw error
       } finally {
@@ -2008,7 +2008,7 @@ class OpencodeService {
       if (!response.ok) {
         const error = payload ?? {}
         const message =
-          typeof error.error === "string" && error.error.length > 0 ? error.error : "Failed to update OpenCode working directory"
+          typeof error.error === "string" && error.error.length > 0 ? error.error : "Failed to update the kernel working directory"
         throw new Error(message)
       }
 
