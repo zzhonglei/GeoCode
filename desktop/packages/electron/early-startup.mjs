@@ -28,6 +28,7 @@ import { createShellEnvironmentLoader } from './shell-environment.mjs';
 import { clearAppImageArgv0FromProcessEnv } from '@openchamber/web/server/lib/inherited-env.js';
 import { dropInheritedAppVariables } from './geocode/inherited-env.mjs'; // GeoCode: see below
 import { useGeoCodeDataDir } from './geocode/data-dir.mjs'; // GeoCode: see below
+import { LOADING_MARK, LOADING_MARK_CLOCK, LOADING_MARK_STYLE } from './geocode/loading-mark.mjs'; // GeoCode: the splash below draws it
 
 dropInheritedAppVariables(process.env); // GeoCode: must run before anything reads or writes process.env
 useGeoCodeDataDir(process.env); // GeoCode: after the line above, which would drop it
@@ -294,7 +295,11 @@ const buildStartupSplashHtml = () => {
   </head>
   <body>
     <div class="stack">
-      <svg width="120" height="120" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GeoCode loading icon">
+      <!-- --- GeoCode: its own loading mark; upstream's cube stays inert in the template --- -->
+      ${LOADING_MARK_STYLE}
+      ${LOADING_MARK}
+      <template>
+      <svg width="120" height="120" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OpenChamber loading icon">
         <path d="M50 50 L8.432 26 L8.432 74 L50 98 Z" fill="var(--splash-face-fill)" stroke="var(--splash-stroke)" stroke-width="2" stroke-linejoin="round"/>
         <path d="M50 50 L39.608 44 L39.608 56 L50 62 Z" fill="var(--splash-cell-fill)" opacity="0.2"/>
         <path d="M39.608 44 L29.216 38 L29.216 50 L39.608 56 Z" fill="var(--splash-cell-fill)" opacity="0.45"/>
@@ -335,6 +340,9 @@ const buildStartupSplashHtml = () => {
           <path d="M-8 -4 L8 -4 L8 12 L-8 12 Z" fill="var(--splash-logo-fill)" fill-opacity="0.4"/>
         </g>
       </svg>
+      </template>
+      ${LOADING_MARK_CLOCK}
+      <!-- --- /GeoCode --- -->
     </div>
   </body>
   </html>`;

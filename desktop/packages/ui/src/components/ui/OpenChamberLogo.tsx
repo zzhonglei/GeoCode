@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 import { useOptionalThemeSystem } from '@/contexts/useThemeSystem';
 import { useI18n } from '@/lib/i18n';
+import { BrandMark } from '@/geocode/BrandMark'; // GeoCode: drawn below in place of the cube
+import { Closed } from '@/geocode/Closed'; // GeoCode: keeps the cube out of the page
 
 const LEFT_FACE_CELL_OPACITIES = [
   0.2, 0.45, 0.15, 0.55,
@@ -196,6 +198,10 @@ export const OpenChamberLogo: React.FC<OpenChamberLogoProps> = ({
   const rightFaceCells = generateFaceGrid(center, right, bottomRight, bottom);
 
   return (
+    // --- GeoCode: its own mark, moving wherever a startup screen shows it; upstream's cube is not drawn ---
+    <>
+    <BrandMark className={className} width={width} height={height} isAnimated={isAnimated || variant === 'splash'} />
+    <Closed>
     <svg
       width={width}
       height={height}
@@ -284,5 +290,8 @@ export const OpenChamberLogo: React.FC<OpenChamberLogoProps> = ({
         </g>
       </g>
     </svg>
+    </Closed>
+    </>
+    // --- /GeoCode ---
   );
 };
