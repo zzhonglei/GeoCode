@@ -34,7 +34,7 @@ desktop/     OpenChamber 的源码(见 UPSTREAM.md)
 ./scripts/stage-kernel.sh
 ```
 
-它在 `kernel/packages/cli` 执行 `bun run script/build.ts --single --skip-web-ui --skip-install`:只构建本机平台,不打包 OpenCode 自带的网页界面(GeoCode 的界面来自 OpenChamber,那份网页界面不在本仓库里),也跳过只有全平台构建才需要的依赖安装。产物放到 `desktop/packages/electron/resources/opencode-cli/opencode`,脚本随后核对它报出的版本。版本取 `kernel/package.json` 的 `version`,以 `OPENCODE_VERSION` 注入;不注入时,内核报的是 `0.0.0-<分支>-…` 这样的预览版本号,过不了壳启动内核前的版本检查。
+它在 `kernel/packages/cli` 执行 `bun run script/build.ts --single --skip-web-ui --skip-install`:只构建本机平台,不打包 OpenCode 自带的网页界面(GeoCode 的界面来自 OpenChamber,那份网页界面不在本仓库里),也跳过只有全平台构建才需要的依赖安装。产物放到 `desktop/packages/electron/resources/opencode-cli/geocode-kernel`(改成 GeoCode 自己的文件名,见 `DESKTOP.md` 第 6 节),脚本随后核对它报出的版本。版本取 `kernel/package.json` 的 `version`,以 `OPENCODE_VERSION` 注入;不注入时,内核报的是 `0.0.0-<分支>-…` 这样的预览版本号,过不了壳启动内核前的版本检查。
 
 改动 `kernel/` 之后要重新运行它,应用才会用上新的内核。
 
