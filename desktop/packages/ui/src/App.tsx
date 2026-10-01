@@ -51,6 +51,9 @@ import { SyncProvider } from '@/sync/sync-context';
 import { useSync } from '@/sync/use-sync';
 import { ConfigUpdateOverlay } from '@/components/ui/ConfigUpdateOverlay';
 import { AboutDialog } from '@/geocode/AboutDialog'; // GeoCode: its own About dialog
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the startup failure pages
+import { KernelStartupFailure, StartupFailure } from '@/geocode/StartupFailure';
+import { useKernelStartFailed } from '@/geocode/kernelStart';
 import { RuntimeAPIProvider } from '@/contexts/RuntimeAPIProvider';
 import { registerRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { useUIStore } from '@/stores/useUIStore';
@@ -297,6 +300,7 @@ function App({ apis }: AppProps) {
   // and steal keyboard input from the main chat.
   const [isEmbeddedVisible, setIsEmbeddedVisible] = React.useState(false);
   const [initRetryExhausted, setInitRetryExhausted] = React.useState(false);
+  const kernelStartFailed = useKernelStartFailed(!isInitialized); // GeoCode: a kernel that failed to start is reported before the retries run out
   const [initRetryEpoch, setInitRetryEpoch] = React.useState(0);
   const [runtimeEndpointEpoch, setRuntimeEndpointEpoch] = React.useState(0);
   const [manualInitRetrying, setManualInitRetrying] = React.useState(false);
@@ -896,6 +900,8 @@ function App({ apis }: AppProps) {
   // Desktop boot view routing.
   // When the boot outcome resolves to a non-main screen (chooser, recovery),
   // render OnboardingScreen with appropriate mode/variant.
+  // GeoCode: a local service that did not start leaves nothing to install, choose or connect to
+  if (isDesktopRuntime && bootView && bootView.screen !== 'main') return <ErrorBoundary><StartupFailure cause="service" /></ErrorBoundary>;
   if (isDesktopRuntime && bootView && bootView.screen !== 'main') {
     // First-launch chooser
     if (bootView.screen === 'chooser') {
@@ -961,14 +967,18 @@ function App({ apis }: AppProps) {
     );
   }
 
-  if (initRetryExhausted && !isInitialized && !isVSCodeRuntime && !embeddedSessionChat) {
+  if ((initRetryExhausted || kernelStartFailed) && !isInitialized && !isVSCodeRuntime && !embeddedSessionChat) { // GeoCode: see kernelStartFailed
     return (
       <ErrorBoundary>
+        {/* --- GeoCode: its own failure page in place of upstream's --- */}
+        <KernelStartupFailure key={runtimeEndpointEpoch} onRetry={() => { void handleManualInitRetry(); }} isRetrying={manualInitRetrying} />
+        <Closed>
         <StartupInitializationRecovery
           key={runtimeEndpointEpoch}
           onRetry={() => { void handleManualInitRetry(); }}
           isRetrying={manualInitRetrying}
         />
+        </Closed>
       </ErrorBoundary>
     );
   }

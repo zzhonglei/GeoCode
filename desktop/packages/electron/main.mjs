@@ -5325,5 +5325,7 @@ app.whenReady().then(async () => {
 }).catch((error) => {
   if (state.quitInProgress) return;
   log.error('[electron] startup failed:', error);
+  // GeoCode: say why, instead of a window that never appears
+  dialog.showErrorBox('GeoCode could not start', `${error instanceof Error ? error.message : String(error)}\n\nLog: ${log.transports.file.getFile().path}`);
   app.exit(1);
 });

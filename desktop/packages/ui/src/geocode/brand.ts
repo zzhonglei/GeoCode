@@ -5,6 +5,7 @@ import type { I18nDictionary } from '@/lib/i18n/store';
 type Messages = Partial<Record<I18nKey, string>>;
 
 export const GEOCODE_RELEASES_URL = 'https://github.com/zzhonglei/GeoCode-Release';
+export const GEOCODE_ISSUES_URL = 'https://github.com/zzhonglei/GeoCode/issues/new';
 
 // Links into the sites of OpenCode and OpenChamber are not offered.
 export const withoutUpstreamSite = (url: string): string | undefined =>
@@ -40,6 +41,8 @@ const MESSAGES = {
     'settings.common.legacyFormat.note': 'This file still uses an older format. The next save rewrites it in the current one.',
     'settings.voice.page.tooltip.localTts': 'On-device synthesis on this computer (Kokoro for English; models for other languages download on first use). No API key needed.',
     'settings.voice.page.tooltip.sttLocal': 'On-device transcription on this computer. Models download automatically; no API key needed.',
+    'sessionAuth.error.networkTitle': 'The local service is not responding',
+    'sessionAuth.error.networkDescription': 'GeoCode could not verify this window with its local service. Retry, or restart GeoCode.',
   },
   'zh-CN': {
     'settings.view.nav.group.opencode': '内核',
@@ -58,6 +61,8 @@ const MESSAGES = {
     'settings.common.legacyFormat.note': '该文件仍使用旧格式，下次保存会重写为当前格式。',
     'settings.voice.page.tooltip.localTts': '在本机合成语音（英语使用 Kokoro；其他语言的模型在首次使用时下载）。无需 API 密钥。',
     'settings.voice.page.tooltip.sttLocal': '在本机转写。模型自动下载，无需 API 密钥。',
+    'sessionAuth.error.networkTitle': '本地服务没有响应',
+    'sessionAuth.error.networkDescription': 'GeoCode 无法向本地服务验证此窗口。请重试，或重启 GeoCode。',
   },
   'zh-TW': {
     'settings.view.nav.group.opencode': '核心',
@@ -76,6 +81,8 @@ const MESSAGES = {
     'settings.common.legacyFormat.note': '此檔案仍使用舊格式，下次儲存會改寫為目前格式。',
     'settings.voice.page.tooltip.localTts': '在本機合成語音（英文使用 Kokoro；其他語言的模型在首次使用時下載）。不需要 API 金鑰。',
     'settings.voice.page.tooltip.sttLocal': '在本機轉寫。模型會自動下載，無需 API 金鑰。',
+    'sessionAuth.error.networkTitle': '本機服務沒有回應',
+    'sessionAuth.error.networkDescription': 'GeoCode 無法向本機服務驗證此視窗。請重試，或重新啟動 GeoCode。',
   },
 } satisfies Partial<Record<Locale, Messages>>;
 

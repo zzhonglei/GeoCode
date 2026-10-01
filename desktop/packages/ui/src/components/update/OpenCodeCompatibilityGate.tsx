@@ -8,6 +8,8 @@ import { useI18n } from '@/lib/i18n';
 import { hasCompatibleManagedDesktopOpenCode } from '@/lib/desktop';
 import { subscribeRuntimeEndpointChanged } from '@/lib/runtime-switch';
 import { fetchOpenCodeCompatibility, recoverOpenCode, type OpenCodeCompatibility } from '@/lib/opencode/compatibility';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the incompatible state
+import { StartupFailure } from '@/geocode/StartupFailure';
 
 export const OpenCodeCompatibilityGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   const { t } = useI18n();
@@ -86,6 +88,10 @@ export const OpenCodeCompatibilityGate: React.FC<React.PropsWithChildren> = ({ c
       ? external ? 'opencodeCompatibility.outdatedExternal' : 'opencodeCompatibility.outdatedLocal'
       : external ? 'opencodeCompatibility.external' : 'opencodeCompatibility.local';
   return (
+    <>
+    {/* --- GeoCode: the kernel ships inside the app, so there is nothing to install or reconnect --- */}
+    <StartupFailure cause="install" kernelVersion={compatibility.version} />
+    <Closed>
     <section className="app-region-drag flex h-full min-h-0 items-center justify-center overflow-y-auto bg-background px-6 py-10 text-foreground select-none" aria-labelledby={titleId}>
       <div className="flex w-full max-w-sm flex-col items-center text-center">
         <OpenChamberLogo width={48} height={48} />
@@ -128,5 +134,7 @@ export const OpenCodeCompatibilityGate: React.FC<React.PropsWithChildren> = ({ c
         </div>
       </div>
     </section>
+    </Closed>
+    </>
   );
 };
