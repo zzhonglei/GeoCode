@@ -25,6 +25,7 @@ GeoCode 建在两个开源项目之上:
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | 安装、构建、运行、打包与检查 |
 | [`docs/DESKTOP.md`](docs/DESKTOP.md) | 桌面应用:组成、内核、边界、本机访问控制、环境变量、名字与标识 |
 | [`docs/PATHS.md`](docs/PATHS.md) | 路径与存储:GeoCode 在用户电脑上的目录 |
+| [`docs/GEOENGINE.md`](docs/GEOENGINE.md) | 地理引擎:定位、在应用中的位置、结构、边界、约束、验收与待定问题 |
 
 ## 许可
 
