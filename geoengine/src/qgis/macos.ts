@@ -1,6 +1,7 @@
 export * as Macos from "./macos.ts"
 
 import fsp from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 
 export interface Install {
@@ -56,6 +57,67 @@ export async function locate(configured: string): Promise<Located> {
     }
   }
   return { ok: true, install: { app, interpreter, version } }
+}
+
+export interface Found {
+  readonly app: string
+  readonly version: string | undefined
+  /** False for a QGIS with an older layout, which is listed but cannot be chosen. */
+  readonly supported: boolean
+}
+
+/** The Spotlight query for every QGIS, whatever its bundle is called or wherever it is. */
+export const SPOTLIGHT_QUERY = "kMDItemCFBundleIdentifier == 'org.qgis.*'"
+
+/**
+ * The QGIS apps in the application folders and those Spotlight found, newest first. One under /Volumes, on a disk
+ * image or an external drive, is left out: it can be gone by the next start.
+ */
+export async function installs(
+  spotlight: readonly string[],
+  folders = ["/Applications", path.join(os.homedir(), "Applications")],
+): Promise<Found[]> {
+  const listed = await Promise.all(
+    folders.map((folder) =>
+      fsp.readdir(folder).then(
+        (names) => names.filter((name) => name.toLowerCase().endsWith(".app")).map((name) => path.join(folder, name)),
+        () => [],
+      ),
+    ),
+  )
+  const candidates = [...new Set([...listed.flat(), ...spotlight])].filter(
+    (candidate) => path.isAbsolute(candidate) && !candidate.startsWith("/Volumes/") && !candidate.includes("/.Trash/"),
+  )
+  const found = new Map<string, Found>()
+  for (const located of await Promise.all(candidates.map(locate))) {
+    const entry = foundOf(located)
+    if (!entry) continue
+    // A symlinked bundle and its target are one install; the folder listing, which comes first, names it.
+    const key = await fsp.realpath(entry.app).catch(() => entry.app)
+    if (!found.has(key)) found.set(key, entry)
+  }
+  return [...found.values()].sort((a, b) => newer(a.version, b.version) || a.app.localeCompare(b.app))
+}
+
+function foundOf(located: Located): Found | undefined {
+  if (located.ok) return { app: located.install.app, version: located.install.version, supported: true }
+  if (located.status === "unsupported" && located.app) {
+    return { app: located.app, version: located.version, supported: false }
+  }
+  return undefined
+}
+
+/** Negative when a is the newer version; an unknown version sorts last. */
+function newer(a: string | undefined, b: string | undefined) {
+  const parts = (version: string | undefined) =>
+    (version ?? "").split(".").map((part) => Number.parseInt(part, 10) || 0)
+  const left = parts(a)
+  const right = parts(b)
+  for (let index = 0; index < Math.max(left.length, right.length); index++) {
+    const difference = (right[index] ?? 0) - (left[index] ?? 0)
+    if (difference !== 0) return difference
+  }
+  return 0
 }
 
 /** What a task adds to the engine's environment. */

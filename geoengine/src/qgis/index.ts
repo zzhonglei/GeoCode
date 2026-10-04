@@ -1,7 +1,8 @@
 export * as Qgis from "./index.ts"
 
 import fsp from "node:fs/promises"
-import { Cause, Effect, Exit, Option, Schema, Stream } from "effect"
+import path from "node:path"
+import { Cause, Effect, Exit, Option, PubSub, Schema, Stream } from "effect"
 import { Config } from "../config.ts"
 import { Engine } from "../engine.ts"
 import { Runtime } from "../runtime.ts"
@@ -16,6 +17,8 @@ const PROBE_TIMEOUT = "2 minutes"
 
 /** How long a run waits for a check in progress; longer than the probe may take. */
 const SETTLE_TIMEOUT = "150 seconds"
+
+const SPOTLIGHT_TIMEOUT = "10 seconds"
 
 const DEFAULT_IDLE_SECONDS = 600
 const MIN_IDLE_SECONDS = 30
@@ -63,6 +66,7 @@ const Event = Schema.Union([
   }),
 ])
 
+const decodeBlock = Schema.decodeUnknownExit(Block)
 const decodeReport = Schema.decodeUnknownExit(Report)
 const decodeRunParams = Schema.decodeUnknownExit(RunParams)
 const decodeEvent = Schema.decodeUnknownExit(Event)
@@ -123,7 +127,7 @@ const HINTS: Record<Failed | "unconfigured", string> = {
   "processing-failed":
     "QGIS loads but its Processing framework does not start, so no algorithm can run. Suggest reinstalling QGIS.",
   "probe-timeout":
-    "Checking QGIS took too long. The computer may be busy; the check runs again when the configuration changes.",
+    "Checking QGIS took too long; the computer may be busy. Ask the user to check again under Settings, Geo environment.",
   "probe-failed": "QGIS's Python failed while being checked. Suggest reinstalling QGIS and report the diagnostics.",
 }
 
@@ -187,8 +191,59 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       if (next) yield* writer.commit(token, next)
     })
 
-  // A new configuration interrupts the check still running for the old one, ending its probe.
-  yield* Effect.forkScoped(Stream.runDrain(Stream.switchMap(block.watch, (state) => Stream.fromEffect(check(state)))))
+  // Subscribed now, so a recheck asked for right after startup is not lost.
+  const rechecks = yield* PubSub.unbounded<void>()
+  const asked = yield* PubSub.subscribe(rechecks)
+  const triggers = Stream.merge(block.watch, Stream.fromSubscription(asked).pipe(Stream.mapEffect(() => block.current)))
+  // A new configuration or recheck interrupts the check still running, ending its probe.
+  yield* Effect.forkScoped(Stream.runDrain(Stream.switchMap(triggers, (state) => Stream.fromEffect(check(state)))))
+
+  const discover: Engine.Method = (_raw, context) =>
+    Effect.gen(function* () {
+      if (process.platform !== "darwin") return { installs: [] }
+      // Spotlight may be off or still indexing; the application folders are listed regardless.
+      const spotlight = yield* runtime
+        .run({
+          command: "/usr/bin/mdfind",
+          args: [Macos.SPOTLIGHT_QUERY],
+          delivery: { mode: "collect" },
+          clocks: { total: SPOTLIGHT_TIMEOUT },
+          signal: context.signal,
+        })
+        .pipe(
+          Effect.map((result) => (result.reason === "exit" && result.code === 0 ? result.stdout.split("\n") : [])),
+          Effect.catch(() => Effect.succeed([])),
+        )
+      return { installs: yield* Effect.promise(() => Macos.installs(spotlight.filter(Boolean))) }
+    })
+
+  const configure: Engine.Method = (raw) =>
+    Effect.gen(function* () {
+      const decoded = decodeBlock(raw)
+      if (Exit.isFailure(decoded)) {
+        return yield* new Engine.Failure({ code: "invalid-params", message: String(decoded.cause) })
+      }
+      if (!path.isAbsolute(decoded.value.path)) {
+        return yield* new Engine.Failure({
+          code: "invalid-params",
+          message: `${decoded.value.path} is not an absolute path`,
+        })
+      }
+      // Refused before the write, whose own message would carry the file's location.
+      if (!(yield* block.current).ok) {
+        return yield* new Engine.Failure({
+          code: "config-unreadable",
+          message: "machine.json cannot be read, so it is left as it is",
+        })
+      }
+      // The write reaches the watch, which starts the check.
+      yield* block
+        .write({ path: decoded.value.path })
+        .pipe(Effect.mapError((error) => new Engine.Failure({ code: "write-failed", message: error.message })))
+      return {}
+    })
+
+  const recheck: Engine.Method = () => PubSub.publish(rechecks, undefined).pipe(Effect.as({}))
 
   const run: Engine.Method = (raw, context) =>
     Effect.gen(function* () {
@@ -214,7 +269,7 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       return yield* execute(runtime, current, params, idle, context)
     })
 
-  return { domain: DOMAIN, methods: { run } }
+  return { domain: DOMAIN, methods: { run, discover, configure, recheck } }
 })
 
 /** The state a configuration settles on at once, or `checking` when it names a QGIS to probe. */

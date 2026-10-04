@@ -388,6 +388,105 @@ test("a run before QGIS is ready is refused with the state and its hint", async 
   }
 })
 
+// Guards against listing by name, which misses a renamed QGIS, against offering one that cannot be used, and against
+// listing a symlinked QGIS twice.
+test("the QGIS installs are found by identity, newest first, with old layouts marked", { skip: !darwin }, async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
+  try {
+    const folder = path.join(directory, "Applications")
+    const renamed = await fakeApp(folder, { name: "QGIS 4.2.app", version: "4.2.3", python: "exit 0" })
+    const ltr = await fakeApp(folder, { name: "QGIS-LTR.app", version: "3.44.15", python: "exit 0" })
+    const old = await fakeApp(folder, { name: "QGIS 3.28.app", version: "3.28.0" })
+    await fakeApp(folder, { name: "Other.app", identifier: "com.example.other", python: "exit 0" })
+    const elsewhere = await fakeApp(path.join(directory, "Tools"), {
+      name: "Geo.app",
+      version: "3.44.2",
+      python: "exit 0",
+    })
+    const linked = path.join(folder, "Geo.app")
+    await fs.symlink(elsewhere, linked)
+    const trashed = await fakeApp(path.join(directory, ".Trash"), { version: "4.0.0", python: "exit 0" })
+    const spotlight = [path.join(renamed, "Contents", "MacOS", "python"), elsewhere, trashed]
+    const found = await Macos.installs(spotlight, [folder, path.join(directory, "missing")])
+    assert.deepEqual(found, [
+      { app: renamed, version: "4.2.3", supported: true },
+      { app: ltr, version: "3.44.15", supported: true },
+      { app: linked, version: "3.44.2", supported: true },
+      { app: old, version: "3.28.0", supported: false },
+    ])
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
+// Guards against a choice made in the settings that never reaches machine.json, or reaches it without a check.
+test("choosing a QGIS writes it to machine.json and checks it", { skip: !darwin }, async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
+  try {
+    const app = await fakeApp(directory, { python: READY })
+    const engine = await start(undefined)
+    try {
+      assert.equal((await engine.settled()).status, "unconfigured")
+      engine.deliver({ type: "request", id: 100, method: "qgis.configure", params: { path: "QGIS.app" } })
+      assert.equal(((await engine.response(100)) as { error?: { code: string } }).error?.code, "invalid-params")
+      engine.deliver({ type: "request", id: 101, method: "qgis.configure", params: { path: app } })
+      assert.ok((await engine.response(101)).ok)
+      await until(() => engine.states().at(-1)?.status === "ready", 5000, "the check of the chosen QGIS")
+      const written = JSON.parse(await fs.readFile(path.join(engine.directory, "machine.json"), "utf-8"))
+      assert.deepEqual(written, { qgis: { path: app } })
+    } finally {
+      await engine.stop()
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
+// Guards against a choice overwriting a machine.json the user broke by hand, or its refusal naming where the file is.
+test("a choice is refused while machine.json cannot be read", { skip: !darwin }, async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
+  try {
+    const app = await fakeApp(directory, { python: READY })
+    const engine = await start(undefined)
+    try {
+      const machine = path.join(engine.directory, "machine.json")
+      await fs.writeFile(machine, '{ "qgis": ')
+      await until(() => engine.states().at(-1)?.status === "config-error", 5000, "the broken file to be read")
+      engine.deliver({ type: "request", id: 100, method: "qgis.configure", params: { path: app } })
+      const response = (await engine.response(100)) as { error?: { code: string; message: string } }
+      assert.equal(response.error?.code, "config-unreadable")
+      assert.ok(!response.error?.message.includes(engine.directory))
+      assert.equal(await fs.readFile(machine, "utf-8"), '{ "qgis": ')
+    } finally {
+      await engine.stop()
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
+// Guards against a QGIS repaired in place staying failed until the app restarts.
+test("a recheck probes the configured QGIS again", { skip: !darwin }, async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
+  try {
+    const repaired = path.join(directory, "repaired")
+    const broken = mark({ python: "3.12.11", failed: "core", error: "No module named 'qgis'" })
+    const app = await fakeApp(directory, { python: `if [ -e '${repaired}' ]; then ${READY}; else ${broken}; fi` })
+    const engine = await start(app)
+    try {
+      assert.equal((await engine.settled()).status, "core-missing")
+      await fs.writeFile(repaired, "")
+      engine.deliver({ type: "request", id: 100, method: "qgis.recheck" })
+      assert.ok((await engine.response(100)).ok)
+      await until(() => engine.states().at(-1)?.status === "ready", 5000, "the recheck")
+    } finally {
+      await engine.stop()
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
 /** Real installations: GEOENGINE_QGIS_APPS (colon-separated), or every supported /Applications/QGIS*.app. */
 const realApps = async () => {
   if (!darwin) return []
