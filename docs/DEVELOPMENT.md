@@ -6,7 +6,7 @@
 
 ```
 docs/        设计与规范
-scripts/     上游导入(vendor.sh 与圈选清单)、内核构建与暂存、写入检测、补丁面统计、死代码检查、GeoCode 自有文件的 anti-slop 检查
+scripts/     上游导入(vendor.sh 与圈选清单)、内核与 GeoEngine 的构建与暂存、写入检测、补丁面统计、死代码检查、GeoCode 自有文件的 anti-slop 检查
 kernel/      OpenCode 的源码(见 UPSTREAM.md)
 desktop/     OpenChamber 的源码(见 UPSTREAM.md)
 geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
@@ -30,7 +30,7 @@ geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
 
 `desktop/` 的安装会下载 Electron,并构建 SDK 与内置扩展。
 
-## 4. 构建内核
+## 4. 构建内核与 GeoEngine
 
 ```bash
 ./scripts/stage-kernel.sh
@@ -39,6 +39,8 @@ geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
 它在 `kernel/packages/cli` 执行 `bun run script/build.ts --single --skip-web-ui --skip-install`:只构建本机平台,不打包 OpenCode 自带的网页界面(GeoCode 的界面来自 OpenChamber,那份网页界面不在本仓库里),也跳过只有全平台构建才需要的依赖安装。产物放到 `desktop/packages/electron/resources/opencode-cli/geocode-kernel`(改成 GeoCode 自己的文件名,见 `DESKTOP.md` 第 6 节),脚本随后核对它报出的版本。版本取 `kernel/package.json` 的 `version`,以 `OPENCODE_VERSION` 注入;不注入时,内核报的是 `0.0.0-<分支>-…` 这样的预览版本号,过不了壳启动内核前的版本检查。
 
 改动 `kernel/` 之后要重新运行它,应用才会用上新的内核。
+
+GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/packages/electron/resources/geoengine/geoengine.mjs`,打包时收进 `app.asar`。开发模式的启动脚本每次启动前都运行它,打包流程也运行它,平时不用手动执行;`geoengine/` 没装依赖时它报错退出。
 
 ## 5. 在沙箱里启动应用
 
@@ -66,7 +68,7 @@ cd desktop/packages/electron
 CSC_IDENTITY_AUTO_DISCOVERY=false bun run package -- --dir -c.mac.identity=- -c.mac.notarize=false
 ```
 
-`package` 依次构建界面、暂存内核(第 4 节)、打包主进程、重建原生模块,再调用 electron-builder。`--dir` 只生成应用目录 `dist/mac-arm64/GeoCode.app`,不生成 dmg 与 zip;`-c.mac.identity=-` 用临时签名(ad-hoc),不需要开发者证书;`-c.mac.notarize=false` 不公证。不要单独运行上游的 `verify:opencode-cli`:它按上游固定的 npm 版本核对暂存的内核,与 `kernel/` 的版本不符。
+`package` 依次构建界面、暂存内核与 GeoEngine(第 4 节)、打包主进程、重建原生模块,再调用 electron-builder。`--dir` 只生成应用目录 `dist/mac-arm64/GeoCode.app`,不生成 dmg 与 zip;`-c.mac.identity=-` 用临时签名(ad-hoc),不需要开发者证书;`-c.mac.notarize=false` 不公证。不要单独运行上游的 `verify:opencode-cli`:它按上游固定的 npm 版本核对暂存的内核,与 `kernel/` 的版本不符。
 
 macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是它的源(Icon Composer 的文档,图层在其中的 `Assets/` 里),编译出的 `resources/icons/Assets.car` 提交在仓库里,打包只把它拷进应用,缺了它打包会失败。改了图层或 `icon.json` 之后,在 `desktop/packages/electron` 运行 `bun run generate:macos-icon` 重新生成(需要 Xcode),与源一起提交。浅色与深色两张图层沿用上游的文件名,灰度的一张是 GeoCode 加的。
 

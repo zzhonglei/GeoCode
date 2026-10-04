@@ -19,11 +19,12 @@
 
 ## 2. 配置目录
 
-放用户自己编辑的配置。GeoCode 启动时建立这个目录;在设置里修改配置时,会在配置文件旁边留一份改动前的副本(如 `geocode.json.geocode.backup`),只供手动恢复,此外不往里面放别的文件。
+放用户自己编辑的配置。GeoCode 启动时建立这个目录;在设置里修改配置时,会在配置文件旁边留一份改动前的副本(如 `geocode.json.geocode.backup`),只供手动恢复;GeoEngine 写入 `machine.json` 时先写同目录的 `machine.json.tmp` 再改名;写到一半时应用崩溃,它会留到下一次写入。此外不往里面放别的文件。
 
 ```
 ~/.config/geocode/
 ├── geocode.json        全局配置:模型与服务商、权限、MCP 服务、网页搜索等。也可以写成 geocode.jsonc(允许注释)
+├── machine.json        本机地理执行环境的配置:QGIS、Python 等软件的位置,GeoEngine 写入,也可以手改(见 GEOENGINE.md 第 3.2 节)
 ├── AGENTS.md           写给所有项目的指示,每次对话都会带上
 ├── agents/             自定义 agent,每个一份 .md
 ├── commands/           自定义命令,每个一份 .md
