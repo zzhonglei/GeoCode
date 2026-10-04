@@ -40,11 +40,19 @@ OpenCode 的完整风格指南在它仓库根目录的开发指南里(不在本�
 
 上游另有一套 anti-slop 规则(`bun run lint:anti-slop`),专挑 AI 生成代码的常见毛病。上游自己的代码也没有完全遵守这套规则,而上游文件不做顺手清理(见第 3.1 节),所以只查 GeoCode 自己的文件,即原味分支上没有的那些,还没加入 git 的也算。对上游文件打的补丁不查,交给提交前的审阅。有的规则和本项目的需要相冲突,确实要保留的违规写进脚本的例外清单,注明原因与处数。
 
-### 2.3 `scripts/`
+### 2.3 `geoengine/`
+
+GeoEngine 是 GeoCode 自己的代码,用 TypeScript 与 Effect 编写,写法照 `kernel/`(第 2.1 节),只有「优先用 Bun 的 API」一条不适用。格式用它自己目录下的 prettier,配置与内核相同。
+
+它在 Electron 的辅助进程里以 Node 运行,所以 `src/` 只用 Node 的 API,不用 Bun 的;Bun 只用来安装依赖与打包,只有 `script/` 下的构建脚本能用 Bun 的 API,也只有它的类型检查带着 Bun 的类型。相对导入写 `.ts` 扩展名,只用能直接擦除的类型语法,测试因此由 Node 直接运行。
+
+检查在 `geoengine/` 执行 `bun run typecheck` 与 `bun run test`。
+
+### 2.4 `scripts/`
 
 shell 脚本用 POSIX sh(`#!/bin/sh`),要能在 macOS 自带的 sh 上运行。
 
-### 2.4 注释
+### 2.5 注释
 
 - 只为不明显的约束和出人意料的行为写注释:一句短从句,写在会被改错的那一行旁边。
 - 理由、历史、测量数据写进文档,不写进代码。

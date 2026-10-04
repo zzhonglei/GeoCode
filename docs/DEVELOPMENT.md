@@ -9,14 +9,15 @@ docs/        设计与规范
 scripts/     上游导入(vendor.sh 与圈选清单)、内核构建与暂存、写入检测、补丁面统计、死代码检查、GeoCode 自有文件的 anti-slop 检查
 kernel/      OpenCode 的源码(见 UPSTREAM.md)
 desktop/     OpenChamber 的源码(见 UPSTREAM.md)
+geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
 ```
 
-`kernel/` 与 `desktop/` 各自独立安装依赖。上游的项目介绍类文件(README、CHANGELOG 等)不在本仓库里,要看上游某个包的说明,到上游仓库对应的版本查看。
+`kernel/`、`desktop/` 与 `geoengine/` 各自独立安装依赖。上游的项目介绍类文件(README、CHANGELOG 等)不在本仓库里,要看上游某个包的说明,到上游仓库对应的版本查看。
 
 ## 2. 工具链
 
-- bun:版本以 `kernel/package.json` 与 `desktop/package.json` 的 `packageManager` 为准,两者应当一致。版本不对时,内核的构建脚本会拒绝运行。
-- Node:22 或更新。
+- bun:版本以 `kernel/package.json`、`desktop/package.json` 与 `geoengine/package.json` 的 `packageManager` 为准,三者应当一致。版本不对时,内核的构建脚本会拒绝运行。
+- Node:22.18 或更新,`geoengine/` 的测试命令需要这个版本。
 - gh:`scripts/vendor.sh` 用它下载上游源码。
 
 ## 3. 安装依赖
@@ -24,6 +25,7 @@ desktop/     OpenChamber 的源码(见 UPSTREAM.md)
 ```bash
 (cd kernel && bun install)
 (cd desktop && bun install)
+(cd geoengine && bun install)
 ```
 
 `desktop/` 的安装会下载 Electron,并构建 SDK 与内置扩展。
@@ -72,7 +74,7 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 
 ## 7. 检查与测试
 
-类型检查与 lint 的命令见 `CONVENTIONS.md` 第 2 节,测试写什么、怎么证明它会失败见第 4 节。`desktop/` 里 GeoCode 自己的测试放在各包的 `geocode/` 目录,壳服务端的那些在 `desktop/packages/web` 里以 `bun run test -- server/geocode/` 运行。上游的测试不保证只写临时目录,`web` 包里就有测试会在主目录下建目录、写 npm 缓存,所以跑上游测试时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉,不要设成空值,否则 Bun 会把转译缓存写到当前目录下。`kernel/` 里的用例怎样命名、怎样单独运行,见 `CONVENTIONS.md` 第 4 节;它们写在上游的测试文件里、借用上游的夹具,同样换临时主目录运行,并把 `TMPDIR` 也指向临时目录:内核的测试会在系统临时目录下建 `geocode` 目录。
+类型检查与 lint 的命令见 `CONVENTIONS.md` 第 2 节,测试写什么、怎么证明它会失败见第 4 节。`desktop/` 里 GeoCode 自己的测试放在各包的 `geocode/` 目录,壳服务端的那些在 `desktop/packages/web` 里以 `bun run test -- server/geocode/` 运行。上游的测试不保证只写临时目录,`web` 包里就有测试会在主目录下建目录、写 npm 缓存,所以跑上游测试时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉,不要设成空值,否则 Bun 会把转译缓存写到当前目录下。`geoengine/` 的测试在系统临时目录下建以 `geoengine-` 开头的临时目录,结束时删掉;有的测试会启动外部进程并验证它们被结束,所以按顺序逐个运行。`kernel/` 里的用例怎样命名、怎样单独运行,见 `CONVENTIONS.md` 第 4 节;它们写在上游的测试文件里、借用上游的夹具,同样换临时主目录运行,并把 `TMPDIR` 也指向临时目录:内核的测试会在系统临时目录下建 `geocode` 目录。
 
 ## 8. 写入检测
 
