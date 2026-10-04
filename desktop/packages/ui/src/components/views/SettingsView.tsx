@@ -65,6 +65,8 @@ import {
 } from '@/lib/settings/metadata';
 import { buildSettingsSearchResults, type SettingsSearchResult } from '@/lib/settings/search';
 import { isClosedSettingsPage } from '@/geocode/settings'; // GeoCode: see the closed-page guards
+import { GeoEnvironmentPage } from '@/geocode/GeoEnvironmentPage'; // GeoCode: see renderPageContent
+import { geoEnvironmentTitle } from '@/geocode/qgisText'; // GeoCode: see getPageTitle
 
 // UI Kit: fixed settings navigation width
 const SETTINGS_NAV_WIDTH = 256;
@@ -96,6 +98,7 @@ interface SettingsViewProps {
 const pageOrder: SettingsPageSlug[] = [
   // 'general' group — OpenChamber
   'general',
+  'geo-environment', // GeoCode: the Geo environment page, after General
   'appearance',
   'chat',
   'notifications',
@@ -397,6 +400,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
         return t('settings.page.tunnel.title');
       case 'about':
         return t('settings.page.about.title');
+      case 'geo-environment': // GeoCode: its title is in the page's own three languages
+        return geoEnvironmentTitle();
       case 'home':
       default:
         return t('settings.view.home.title');
@@ -695,6 +700,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
         return <ProvidersPage />;
       case 'web-search':
         return <WebSearchPage />;
+      case 'geo-environment': // GeoCode: see geocode/GeoEnvironmentPage.tsx
+        return <GeoEnvironmentPage />;
       case 'usage':
         return <UsagePage />;
       case 'about':

@@ -5,6 +5,7 @@ import { subscribeRuntimeEndpointChanged } from './runtime-switch';
 import { isVSCodeRuntime } from './desktop';
 import { messageQueueUpdatedEventSchema, type MessageQueueUpdatedEvent } from '@/stores/messageQueueStore';
 import { z } from 'zod';
+import { GEO_STATUS_EVENT, geoStatusEventSchema, type GeoStatusEvent } from '@/geocode/geoStatus'; // GeoCode: see dispatchFromEnvelope
 
 type ScheduledTaskRanEvent = {
   type: 'scheduled-task-ran';
@@ -138,6 +139,7 @@ const notificationPropertiesSchema = z.object({
 type OpenChamberEvent =
   | { type: 'notification'; payload: z.infer<typeof notificationPropertiesSchema> }
   | { type: 'event-stream-ready' }
+  | GeoStatusEvent // GeoCode: GeoEngine's statuses
   | RoutingUpdatedEvent
   | RoutingDecisionEvent
   | RoutingPermissionHeldEvent
@@ -318,6 +320,14 @@ const dispatchFromEnvelope = (envelope: { type: string; properties: unknown }) =
   if (envelope.type === 'openchamber:heartbeat') {
     return;
   }
+
+  // --- GeoCode: GeoEngine's statuses, see geocode/GeoStatusButton.tsx ---
+  if (envelope.type === GEO_STATUS_EVENT) {
+    const parsed = geoStatusEventSchema.safeParse(envelope.properties);
+    if (parsed.success) for (const listener of listeners) listener({ type: 'geo-status', ...parsed.data });
+    return;
+  }
+  // --- /GeoCode ---
 
   if (envelope.type === 'openchamber:routing.updated') {
     const parsed = routingUpdatedSchema.safeParse(envelope.properties);

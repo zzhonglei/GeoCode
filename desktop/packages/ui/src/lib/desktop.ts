@@ -66,6 +66,7 @@ const getDesktopBridge = (): DesktopBridgeGlobal | null => {
   if (typeof window === 'undefined') return null;
   return (window as unknown as { __OPENCHAMBER_DESKTOP__?: DesktopBridgeGlobal }).__OPENCHAMBER_DESKTOP__ ?? null;
 };
+export { getDesktopBridge }; // GeoCode: the QGIS picker opens the file dialog through it, see geocode/geoEngineClient.ts
 
 export const isElectronShell = (): boolean => getElectronRuntime()?.runtime === 'electron';
 

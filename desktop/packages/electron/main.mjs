@@ -1215,7 +1215,7 @@ import { provideLoginShellEnvSnapshot } from '@openchamber/web/server/lib/openco
 import { dropInheritedAppVariables } from './geocode/inherited-env.mjs'; // GeoCode: see inheritUserShellEnv
 import { assertDesktopCommandOpen } from './geocode/closed-commands.mjs'; // GeoCode: see handleInvoke
 import { localClientToken, localServerPassword, mintLocalClientToken } from './geocode/local-access.mjs'; // GeoCode: see spawnLocalServer and readDesktopLocalClientToken
-import { geoEngineFailure, startGeoEngine, stopGeoEngine } from './geocode/geoengine.mjs'; // GeoCode: see resolveInitialUrl, shutdownBackgroundServices and handleInvoke
+import { geoEngineFailure, geoEngineRequest, geoEngineStatuses, onGeoEngineStatus, startGeoEngine, stopGeoEngine } from './geocode/geoengine.mjs'; // GeoCode: see resolveInitialUrl, shutdownBackgroundServices, handleInvoke and startWebUiServer
 
 // Merge the user's login-shell env (PATH, etc.) into this process before we
 // import/start the server in-process. The server and its children (opencode
@@ -1342,6 +1342,7 @@ const spawnLocalServer = async () => {
       ? path.join(app.getAppPath().endsWith('.asar') ? `${app.getAppPath()}.unpacked` : app.getAppPath(), 'node_modules/@openchamber/web/server/built-in-extensions')
       : undefined,
     onDesktopNotification: (payload) => maybeShowNativeNotification(payload),
+    geoEngine: { statuses: geoEngineStatuses, onStatus: onGeoEngineStatus, request: geoEngineRequest }, // GeoCode: GeoEngine for the interface, see web/server/geocode/geoengine.js
     getIsWindowFocused: isAnyWindowFocused,
     getDesktopRuntimeConfig: () => ({
       apiBaseUrl: state.apiBaseUrl || '',

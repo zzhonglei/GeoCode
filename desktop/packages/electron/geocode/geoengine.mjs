@@ -60,13 +60,32 @@ export const killTree = (pid, { force }) => {
 
 let supervisor = null;
 let stopped = false;
+const statusListeners = new Set();
 
 /** Starts GeoEngine once per launch; onFailure runs if it cannot start or dies on its own. */
 export const startGeoEngine = ({ log, onFailure }) => {
   // A quit can come before startup gets this far.
   if (stopped) return;
-  supervisor ??= createSupervisor({ fork, killTree, log, onFailure });
+  if (!supervisor) {
+    supervisor = createSupervisor({ fork, killTree, log, onFailure });
+    supervisor.onStatus((domain, value) => {
+      for (const listener of statusListeners) listener(domain, value);
+    });
+  }
   supervisor.start();
+};
+
+/** Resolves with GeoEngine's response; rejects when it is not there to answer. */
+export const geoEngineRequest = (method, params, options) =>
+  supervisor ? supervisor.request(method, params, options) : Promise.reject(new Error('GeoEngine has not started.'));
+
+/** The latest status of each domain, empty until GeoEngine reports one. */
+export const geoEngineStatuses = () => supervisor?.statuses() ?? {};
+
+// Taken before GeoEngine starts too: the shell server can start first.
+export const onGeoEngineStatus = (listener) => {
+  statusListeners.add(listener);
+  return () => statusListeners.delete(listener);
 };
 
 export const stopGeoEngine = () => {

@@ -144,6 +144,7 @@ import { createFileOpenRequester } from './lib/openchamber-control/file-open.js'
 import { applyConnectAttemptTimeout } from './lib/network-defaults.js';
 import { closedSurface } from './geocode/closed-surface.js'; // GeoCode: see main
 import { loopbackHostOnly } from './geocode/loopback-host.js'; // GeoCode: see main
+import { registerGeoEngine } from './geocode/geoengine.js'; // GeoCode: see main
 
 // Background CLI launches enter here in a fresh process, without CLI defaults.
 applyConnectAttemptTimeout();
@@ -2165,6 +2166,7 @@ async function main(options = {}) {
     readSwitch: spacesSwitch.readSwitch,
     setSwitch: spacesSwitch.setSwitch,
   });
+  registerGeoEngine(app, { geoEngine: options.geoEngine, broadcast: broadcastOpenChamberUiEvent }); // GeoCode: behind the API auth gate, before the OpenCode proxy
   realtimeProxyRuntime = attachRealtimeProxy({
     app,
     server,

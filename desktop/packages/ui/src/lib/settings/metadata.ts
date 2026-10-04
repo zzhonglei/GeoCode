@@ -29,6 +29,7 @@ export type SettingsPageSlug =
   | 'voice'
   | 'tunnel'
   | 'about'
+  | 'geo-environment' // GeoCode: see geocode/GeoEnvironmentPage.tsx
   | 'integrations'
   | 'extensions';
 
@@ -77,6 +78,15 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
     kind: 'single',
     keywords: ['general', 'startup', 'launch at login', 'autostart', 'tray', 'password', 'passkey', 'security', 'privacy', 'telemetry', 'transport', 'network', 'lan', 'binary', 'cli'],
   },
+  // --- GeoCode: the software GeoEngine runs, see geocode/GeoEnvironmentPage.tsx ---
+  {
+    slug: 'geo-environment',
+    title: 'Geo environment',
+    group: 'general',
+    kind: 'single',
+    keywords: ['qgis', 'gis', 'geo', 'geoengine', 'environment', '地理', '環境', '环境'],
+  },
+  // --- /GeoCode ---
   {
     slug: 'projects',
     title: 'Projects',
@@ -303,6 +313,8 @@ export function getSettingsNavIcon(slug: SettingsPageSlug): IconName | null {
       return 'chat-history';
     case 'routing':
       return 'signpost';
+    case 'geo-environment': // GeoCode: the Geo environment page
+      return 'compass-3';
 
     case 'providers':
       return 'cloud';
