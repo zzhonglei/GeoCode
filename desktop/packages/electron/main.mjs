@@ -346,6 +346,7 @@ const shutdownBackgroundServices = () => {
       startShellEnvironmentProbe().catch(() => {}),
       killSidecar(),
       shutdownSshSessions(),
+      stopGeoEngine(), // GeoCode: GeoEngine ends its tasks before the app exits
     ]).finally(() => {
       state.backgroundShutdownComplete = true;
     });
@@ -1214,6 +1215,7 @@ import { provideLoginShellEnvSnapshot } from '@openchamber/web/server/lib/openco
 import { dropInheritedAppVariables } from './geocode/inherited-env.mjs'; // GeoCode: see inheritUserShellEnv
 import { assertDesktopCommandOpen } from './geocode/closed-commands.mjs'; // GeoCode: see handleInvoke
 import { localClientToken, localServerPassword, mintLocalClientToken } from './geocode/local-access.mjs'; // GeoCode: see spawnLocalServer and readDesktopLocalClientToken
+import { geoEngineFailure, startGeoEngine, stopGeoEngine } from './geocode/geoengine.mjs'; // GeoCode: see resolveInitialUrl, shutdownBackgroundServices and handleInvoke
 
 // Merge the user's login-shell env (PATH, etc.) into this process before we
 // import/start the server in-process. The server and its children (opencode
@@ -2651,6 +2653,7 @@ const resolveInitialUrl = async () => {
   const hmrUiUrl = `http://127.0.0.1:${hmrUiPort}`;
   const usePackagedUi = shouldUsePackagedUi();
   const skipLocalServer = await shouldSkipLocalServer();
+  startGeoEngine({ log, onFailure: () => emitToAllWindows('geocode:geoengine-failed') }); // GeoCode: after the login shell's environment is merged, in parallel with the kernel
   const startupProbePlan = resolveStartupUrlProbePlan({
     development: isDev,
     packagedUi: usePackagedUi,
@@ -3589,6 +3592,9 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
 
     case 'desktop_get_app_version':
       return APP_VERSION;
+
+    case 'geocode_geoengine_failure': // GeoCode: why GeoEngine stopped, for the failure page
+      return geoEngineFailure();
 
     case 'desktop_get_launch_at_login': {
       if (process.platform === 'linux') {

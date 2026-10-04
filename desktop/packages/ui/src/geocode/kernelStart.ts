@@ -3,7 +3,7 @@ import React from 'react';
 import { fetchStartupDiagnostics, type StartupDiagnostics } from '@/lib/startupDiagnostics';
 import type { InitFailure } from '@/stores/useConfigStore';
 
-export type StartupCause = 'kernel' | 'settings' | 'service' | 'install';
+export type StartupCause = 'kernel' | 'settings' | 'service' | 'install' | 'geoengine';
 
 /** What the local service reports outranks what the interface guessed from its own failed step. */
 export const startupCause = (step: InitFailure['step'] | undefined, reported: StartupDiagnostics | null): StartupCause => {

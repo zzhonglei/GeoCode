@@ -54,6 +54,7 @@ import { AboutDialog } from '@/geocode/AboutDialog'; // GeoCode: its own About d
 import { Closed } from '@/geocode/Closed'; // GeoCode: see the startup failure pages
 import { KernelStartupFailure, StartupFailure } from '@/geocode/StartupFailure';
 import { useKernelStartFailed } from '@/geocode/kernelStart';
+import { geoEngineFailureText, useGeoEngineFailure } from '@/geocode/geoengine'; // GeoCode: see geoEngineFailure
 import { RuntimeAPIProvider } from '@/contexts/RuntimeAPIProvider';
 import { registerRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { useUIStore } from '@/stores/useUIStore';
@@ -301,6 +302,7 @@ function App({ apis }: AppProps) {
   const [isEmbeddedVisible, setIsEmbeddedVisible] = React.useState(false);
   const [initRetryExhausted, setInitRetryExhausted] = React.useState(false);
   const kernelStartFailed = useKernelStartFailed(!isInitialized); // GeoCode: a kernel that failed to start is reported before the retries run out
+  const geoEngineFailure = useGeoEngineFailure(); // GeoCode: GeoEngine stopping means the app itself is broken, so the whole window says so
   const [initRetryEpoch, setInitRetryEpoch] = React.useState(0);
   const [runtimeEndpointEpoch, setRuntimeEndpointEpoch] = React.useState(0);
   const [manualInitRetrying, setManualInitRetrying] = React.useState(false);
@@ -902,6 +904,7 @@ function App({ apis }: AppProps) {
   // render OnboardingScreen with appropriate mode/variant.
   // GeoCode: a local service that did not start leaves nothing to install, choose or connect to
   if (isDesktopRuntime && bootView && bootView.screen !== 'main') return <ErrorBoundary><StartupFailure cause="service" /></ErrorBoundary>;
+  if (geoEngineFailure) return <ErrorBoundary><StartupFailure cause="geoengine" error={geoEngineFailureText(geoEngineFailure)} /></ErrorBoundary>; // GeoCode: only restarting the app, which starts a new GeoEngine
   if (isDesktopRuntime && bootView && bootView.screen !== 'main') {
     // First-launch chooser
     if (bootView.screen === 'chooser') {
