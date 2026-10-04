@@ -1,6 +1,7 @@
 import { Cause, Effect, Exit, Layer } from "effect"
 import { Config } from "./config.ts"
 import { Engine } from "./engine.ts"
+import { Qgis } from "./qgis/index.ts"
 import { Runtime } from "./runtime.ts"
 import { Status } from "./status.ts"
 import { Transport } from "./transport.ts"
@@ -13,7 +14,7 @@ const transport = Transport.parentPort()
 
 const layer = Layer.mergeAll(Runtime.layer(Engine.ledger(transport)), Status.layer, Config.layer(machine))
 
-const fiber = Effect.runFork(Effect.scoped(Engine.run(transport, [])).pipe(Effect.provide(layer)))
+const fiber = Effect.runFork(Effect.scoped(Engine.run(transport, [Qgis.capability])).pipe(Effect.provide(layer)))
 
 // Exiting is what lets the main process notice: a utility process stays alive with nothing left to do.
 fiber.addObserver((exit) => {
