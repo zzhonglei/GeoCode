@@ -13,7 +13,9 @@ GeoCode 建在两个开源项目之上:
 - [OpenCode](https://github.com/anomalyco/opencode):Agent 引擎,位于 `kernel/`;
 - [OpenChamber](https://github.com/openchamber/openchamber):桌面应用,位于 `desktop/`。
 
-两者的源码放在本仓库里,并持续合并上游的新版本(见 [`docs/UPSTREAM.md`](docs/UPSTREAM.md))。GeoCode 尽量通过配置与装配来定制它们,做不到时才修改上游源码;修改处带有注释标记,对上游的全部修改都能用 git 列出来。
+地理能力由 GeoCode 自己的地理引擎 GeoEngine 提供,位于 `geoengine/`(见 [`docs/GEOENGINE.md`](docs/GEOENGINE.md))。
+
+两个上游的源码放在本仓库里,并持续合并上游的新版本(见 [`docs/UPSTREAM.md`](docs/UPSTREAM.md))。GeoCode 尽量通过配置与装配来定制它们,做不到时才修改上游源码;修改处带有注释标记,对上游的全部修改都能用 git 列出来。
 
 ## 文档
 
