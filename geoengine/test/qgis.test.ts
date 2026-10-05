@@ -47,7 +47,27 @@ const mark = (payload: unknown) => `echo '${Python.MARKER}${JSON.stringify(paylo
 const READY = mark({ python: "3.12.11", gdal: "3.13.3", qgis: "3.44.15-Solothurn", algorithms: 440 })
 
 /** A fake interpreter: `probe` answers the probe script, `run` the run script (its request is in "$3"). */
-const fake = (probe: string, run: string) => `case "$2" in *processing.run*) ${run} ;; *) ${probe} ;; esac`
+const fake = (probe: string, run: string, catalog = "exit 9") =>
+  `case "$2" in *processing.run*) ${run} ;; *parameterTypes*) ${catalog} ;; *) ${probe} ;; esac`
+
+const CATALOG = {
+  ok: true,
+  qgis: "3.44.15-Solothurn",
+  algorithms: [
+    {
+      id: "native:buffer",
+      name: "Buffer",
+      group: "Vector geometry",
+      description: "Computes a buffer area.",
+      help: "",
+      tags: [],
+      notes: 0,
+      parameters: [],
+      outputs: [],
+    },
+  ],
+  excluded: [],
+}
 
 type Response = Extract<Protocol.Outbound, { type: "response" }>
 
@@ -97,12 +117,12 @@ const start = async (configured: string | undefined) => {
     return find()!
   }
   let nextId = 0
-  const send = (params: unknown) => {
+  const send = (params: unknown, method = "qgis.run") => {
     nextId += 1
-    deliver({ type: "request", id: nextId, method: "qgis.run", params })
+    deliver({ type: "request", id: nextId, method, params })
     return nextId
   }
-  const request = (params: unknown, ms = 10000) => response(send(params), ms)
+  const request = (params: unknown, ms = 10000, method = "qgis.run") => response(send(params, method), ms)
   const stop = async () => {
     await Effect.runPromise(Fiber.interrupt(fiber))
     await fs.rm(directory, { recursive: true, force: true })
@@ -487,6 +507,114 @@ test("a recheck probes the configured QGIS again", { skip: !darwin }, async () =
   }
 })
 
+test(
+  "QGIS lists its algorithms once for every documentation request, and again for another QGIS",
+  {
+    skip: !darwin,
+  },
+  async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
+    try {
+      const listings = path.join(directory, "listings")
+      const catalog = `echo listed >> '${listings}'; sleep 0.3; ${mark(CATALOG)}`
+      const app = await fakeApp(directory, { python: fake(READY, "exit 9", catalog) })
+      const other = await fakeApp(directory, { name: "Other.app", python: fake(READY, "exit 9", catalog) })
+      const engine = await start(app)
+      const count = async () => (await fs.readFile(listings, "utf-8")).split("\n").filter(Boolean).length
+      try {
+        assert.equal((await engine.settled()).status, "ready")
+        const [groups, help] = await Promise.all([
+          engine.request({ action: "groups" }, 10000, "qgis.doc"),
+          engine.request({ action: "help", algorithm: "buffer" }, 10000, "qgis.doc"),
+        ])
+        assert.ok(groups.ok && help.ok, JSON.stringify([groups, help]))
+        const text = (response: Response) => (response.ok ? (response.result as { text: string }).text : "")
+        assert.equal(text(groups), "QGIS 3.44.15-Solothurn\n\n1 groups, 1 algorithms:\nVector geometry (1)")
+        assert.ok(text(help).includes("Buffer (native:buffer)"))
+        assert.ok((await engine.request({ action: "search", query: "buffer" }, 10000, "qgis.doc")).ok)
+        assert.equal(await count(), 1)
+
+        assert.ok((await engine.request({ path: other }, 10000, "qgis.configure")).ok)
+        await until(() => engine.states().at(-1)?.status === "checking", 5000, "the new check")
+        assert.equal((await engine.settled()).status, "ready")
+        assert.ok((await engine.request({ action: "groups" }, 10000, "qgis.doc")).ok)
+        // Guards against documenting another installation from the first one's list.
+        assert.equal(await count(), 2)
+      } finally {
+        await engine.stop()
+      }
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  },
+)
+
+test(
+  "a request cancelled while QGIS lists its algorithms leaves the listing to the next one",
+  { skip: !darwin },
+  async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
+    try {
+      const listings = path.join(directory, "listings")
+      const gate = path.join(directory, "gate")
+      const catalog = `echo listed >> '${listings}'; while [ ! -e '${gate}' ]; do sleep 0.05; done; ${mark(CATALOG)}`
+      const app = await fakeApp(directory, { python: fake(READY, "exit 9", catalog) })
+      const engine = await start(app)
+      try {
+        assert.equal((await engine.settled()).status, "ready")
+        const first = engine.send({ action: "groups" }, "qgis.doc")
+        await until(async () => (await fs.readFile(listings, "utf-8").catch(() => "")) !== "", 5000, "the listing")
+        engine.deliver({ type: "cancel", id: first })
+        const cancelled = await engine.response(first)
+        assert.ok(!cancelled.ok && cancelled.cancelled, JSON.stringify(cancelled))
+        const second = engine.send({ action: "groups" }, "qgis.doc")
+        await fs.writeFile(gate, "")
+        assert.ok((await engine.response(second)).ok)
+        // Guards against the cancel stopping the listing, or leaving the next request waiting on it forever.
+        assert.equal((await fs.readFile(listings, "utf-8")).split("\n").filter(Boolean).length, 1)
+      } finally {
+        await engine.stop()
+      }
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  },
+)
+
+test("a listing that fails is reported and made again on the next request", { skip: !darwin }, async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
+  try {
+    const failedOnce = path.join(directory, "failed-once")
+    const catalog = `if [ -e '${failedOnce}' ]; then ${mark(CATALOG)}; else touch '${failedOnce}'; echo 'Traceback: boom' >&2; exit 1; fi`
+    const app = await fakeApp(directory, { python: fake(READY, "exit 9", catalog) })
+    const engine = await start(app)
+    try {
+      assert.equal((await engine.settled()).status, "ready")
+      const first = await engine.request({ action: "groups" }, 10000, "qgis.doc")
+      assert.ok(!first.ok && first.error.code === "catalog-failed", JSON.stringify(first))
+      assert.deepEqual(first.error.details, { stderr: "Traceback: boom\n" })
+      assert.ok((await engine.request({ action: "groups" }, 10000, "qgis.doc")).ok)
+    } finally {
+      await engine.stop()
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("documentation of a QGIS that is not ready answers with the state and what to do", async () => {
+  const engine = await start(undefined)
+  try {
+    const response = await engine.request({ action: "groups" }, 10000, "qgis.doc")
+    assert.ok(!response.ok && response.error.code === "not-ready", JSON.stringify(response))
+    assert.ok(response.error.message.startsWith("QGIS is not configured."))
+    const invalid = await engine.request({ action: "read" }, 10000, "qgis.doc")
+    assert.ok(!invalid.ok && invalid.error.code === "invalid-params")
+  } finally {
+    await engine.stop()
+  }
+})
+
 /** Real installations: GEOENGINE_QGIS_APPS (colon-separated), or every supported /Applications/QGIS*.app. */
 const realApps = async () => {
   if (!darwin) return []
@@ -534,6 +662,39 @@ for (const app of await realApps()) {
       // Guards against attribute text reaching QGIS through a codec other than UTF-8.
       const value = execFileSync("sqlite3", [output, 'SELECT "名称" FROM "缓冲区"'], { encoding: "utf-8" })
       assert.equal(value.trim(), "台北")
+    } finally {
+      await engine.stop()
+    }
+  })
+
+  test(`QGIS at ${app} documents the algorithms GeoCode offers from its own definitions`, async () => {
+    const engine = await start(app)
+    try {
+      const state = await engine.settled(150000)
+      assert.ok(state.status === "ready", JSON.stringify(state))
+      const doc = async (params: unknown) => {
+        const response = await engine.request(params, 120000, "qgis.doc")
+        assert.ok(response.ok, JSON.stringify(response))
+        return (response.result as { text: string }).text
+      }
+      const buffer = await doc({ action: "help", algorithm: "native:buffer" })
+      assert.ok(buffer.startsWith(`QGIS ${state.versions.qgis}\n\nBuffer (native:buffer)`))
+      assert.ok(buffer.includes("\tArgument type:\tdistance in the units of INPUT's CRS"))
+      assert.ok(buffer.includes("\t\t- Path to a vector layer"))
+      assert.ok(!buffer.includes("field:FIELD_NAME"))
+      const join = await doc({ action: "help", algorithm: "native:joinattributesbylocation" })
+      assert.ok(join.includes("\tArgument type:\tfield of JOIN, multiple values allowed"))
+      assert.ok(join.includes("\tArgument type:\tenum, multiple values allowed"))
+      // Guards against numbering the options of an enum that refuses numbers.
+      const dxf = await doc({ action: "help", algorithm: "native:dxfexport" })
+      assert.ok(dxf.includes("\tAvailable values:\n\t\t- ISO-8859-1\n") && !dxf.includes("- 0: ISO-8859-1"))
+      // Guards against offering an algorithm that needs QGIS's interface.
+      assert.match(
+        await doc({ action: "help", algorithm: "native:selectbyexpression" }),
+        /^\w+:selectbyexpression is not available\.$/,
+      )
+      // Guards against the interface counting algorithms GeoAgent cannot use.
+      assert.ok((await doc({ action: "groups" })).includes(` groups, ${state.algorithms} algorithms:\n`))
     } finally {
       await engine.stop()
     }

@@ -2,11 +2,13 @@ export * as Qgis from "./index.ts"
 
 import fsp from "node:fs/promises"
 import path from "node:path"
-import { Cause, Effect, Exit, Option, PubSub, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Option, PubSub, Schema, Stream } from "effect"
 import { Config } from "../config.ts"
 import { Engine } from "../engine.ts"
 import { Runtime } from "../runtime.ts"
 import { Status } from "../status.ts"
+import { Catalog } from "./catalog.ts"
+import { Doc } from "./doc.ts"
 import { Macos } from "./macos.ts"
 import { Python } from "./python.ts"
 
@@ -19,6 +21,9 @@ const PROBE_TIMEOUT = "2 minutes"
 const SETTLE_TIMEOUT = "150 seconds"
 
 const SPOTLIGHT_TIMEOUT = "10 seconds"
+
+/** Listing takes seconds; as long as a probe, for a cold disk. */
+const CATALOG_TIMEOUT = PROBE_TIMEOUT
 
 const DEFAULT_IDLE_SECONDS = 600
 const MIN_IDLE_SECONDS = 30
@@ -66,10 +71,19 @@ const Event = Schema.Union([
   }),
 ])
 
+const DocParams = Schema.Struct({
+  action: Schema.Literals(["groups", "algorithms", "help", "search"]),
+  group: Schema.optionalKey(Schema.String),
+  algorithm: Schema.optionalKey(Schema.String),
+  query: Schema.optionalKey(Schema.String),
+})
+
 const decodeBlock = Schema.decodeUnknownExit(Block)
 const decodeReport = Schema.decodeUnknownExit(Report)
 const decodeRunParams = Schema.decodeUnknownExit(RunParams)
 const decodeEvent = Schema.decodeUnknownExit(Event)
+const decodeDocParams = Schema.decodeUnknownExit(DocParams)
+const decodeCatalog = Schema.decodeUnknownExit(Catalog.Report)
 
 export type Failed =
   | "config-error"
@@ -130,6 +144,8 @@ const HINTS: Record<Failed | "unconfigured", string> = {
     "Checking QGIS took too long; the computer may be busy. Ask the user to check again under Settings, Geo environment.",
   "probe-failed": "QGIS's Python failed while being checked. Suggest reinstalling QGIS and report the diagnostics.",
 }
+
+type Ready = Extract<State, { readonly status: "ready" }>
 
 const failed = (status: Failed, diagnostics: Diagnostics): State => ({ status, diagnostics, hint: HINTS[status] })
 
@@ -245,6 +261,20 @@ export const capability: Engine.Capability = Effect.gen(function* () {
 
   const recheck: Engine.Method = () => PubSub.publish(rechecks, undefined).pipe(Effect.as({}))
 
+  /** The ready QGIS, once a check in progress settles; otherwise the state and what GeoAgent should do about it. */
+  const ready = (signal: AbortSignal) =>
+    Effect.gen(function* () {
+      const current = yield* Effect.raceFirst(settledState(status), cancelled(signal))
+      if (current?.status !== "ready") {
+        return yield* new Engine.Failure({
+          code: "not-ready",
+          message: current && "hint" in current ? current.hint : "QGIS is still being checked.",
+          details: current,
+        })
+      }
+      return current
+    })
+
   const run: Engine.Method = (raw, context) =>
     Effect.gen(function* () {
       const decoded = decodeRunParams(raw)
@@ -257,19 +287,55 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       if (cwd !== undefined && !(yield* Effect.promise(() => isDirectory(cwd)))) {
         return yield* new Engine.Failure({ code: "invalid-params", message: `${cwd} is not a directory` })
       }
-      const current = yield* Effect.raceFirst(settledState(status), cancelled(context.signal))
-      if (current?.status !== "ready") {
-        return yield* new Engine.Failure({
-          code: "not-ready",
-          message: current && "hint" in current ? current.hint : "QGIS is still being checked.",
-          details: current,
-        })
-      }
+      const current = yield* ready(context.signal)
       const idle = Math.max(MIN_IDLE_SECONDS, params.idleTimeoutSeconds ?? DEFAULT_IDLE_SECONDS)
       return yield* execute(runtime, current, params, idle, context)
     })
 
-  return { domain: DOMAIN, methods: { run, discover, configure, recheck } }
+  // One listing per QGIS, shared by the requests that arrive while it is made; a failed one is made again next time.
+  const scope = yield* Effect.scope
+  let listing:
+    | { readonly key: string; readonly catalog: Deferred.Deferred<Catalog.Catalog, Engine.Failure> }
+    | undefined
+
+  const catalogFor = (install: Ready) =>
+    Effect.gen(function* () {
+      const key = `${install.interpreter}\n${install.versions.qgis}`
+      const current =
+        listing?.key === key ? listing : { key, catalog: yield* Deferred.make<Catalog.Catalog, Engine.Failure>() }
+      if (current !== listing) {
+        listing = current
+        // Forked, so a caller that gives up does not stop the listing the others wait for.
+        yield* list(runtime, install).pipe(
+          Effect.exit,
+          Effect.tap((exit) =>
+            Effect.sync(() => {
+              if (Exit.isFailure(exit) && listing === current) listing = undefined
+            }),
+          ),
+          Effect.flatMap((exit) => Deferred.done(current.catalog, exit)),
+          Effect.forkIn(scope),
+        )
+      }
+      return current.catalog
+    }).pipe(
+      // A listing recorded is a listing started, or every later request would wait on it.
+      Effect.uninterruptible,
+      Effect.flatMap(Deferred.await),
+    )
+
+  const doc: Engine.Method = (raw, context) =>
+    Effect.gen(function* () {
+      const decoded = decodeDocParams(raw)
+      if (Exit.isFailure(decoded)) {
+        return yield* new Engine.Failure({ code: "invalid-params", message: String(decoded.cause) })
+      }
+      const current = yield* ready(context.signal)
+      const catalog = yield* Effect.raceFirst(catalogFor(current), cancelled(context.signal))
+      return { text: Doc.answer(catalog, decoded.value) }
+    })
+
+  return { domain: DOMAIN, methods: { run, doc, discover, configure, recheck } }
 })
 
 /** The state a configuration settles on at once, or `checking` when it names a QGIS to probe. */
@@ -334,6 +400,32 @@ function judge(configured: string, install: Macos.Install, result: Runtime.Resul
     versions: { qgis: report.qgis, gdal: report.gdal, python: report.python },
     algorithms: report.algorithms,
   }
+}
+
+/** Lists the offered algorithms of a ready QGIS, from QGIS's own definitions. */
+function list(runtime: Runtime.Interface, install: Ready) {
+  return runtime
+    .run({
+      command: install.interpreter,
+      args: ["-c", Python.CATALOG],
+      env: Macos.environment(install),
+      delivery: { mode: "collect" },
+      clocks: { total: CATALOG_TIMEOUT },
+    })
+    .pipe(
+      Effect.mapError((error) => new Engine.Failure({ code: "catalog-failed", message: error.message })),
+      Effect.flatMap((result) => {
+        const fail = (message: string) =>
+          Effect.fail(new Engine.Failure({ code: "catalog-failed", message, details: { stderr: tail(result.stderr) } }))
+        if (result.reason === "timeout") return fail(`listing the algorithms did not finish within ${CATALOG_TIMEOUT}`)
+        if (result.reason !== "exit") return fail("listing the algorithms was stopped")
+        const last = Python.marked(result.stdout).at(-1)
+        const decoded = last === undefined ? undefined : decodeCatalog(last)
+        if (!decoded || Exit.isFailure(decoded)) return fail("QGIS's Python ended without a valid list of algorithms")
+        if (!decoded.value.ok) return fail(decoded.value.error)
+        return Effect.succeed(decoded.value)
+      }),
+    )
 }
 
 async function isDirectory(target: string) {

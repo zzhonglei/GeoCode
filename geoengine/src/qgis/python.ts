@@ -45,6 +45,18 @@ def start_qgis():
     from processing.core.Processing import Processing
 
     Processing.initialize()
+
+
+# The providers GeoCode offers.
+PROVIDERS = ("native", "qgis", "gdal")
+
+
+def offered(algorithm):
+    from qgis.core import Qgis
+
+    # Left out as qgis_process leaves them out: they need QGIS's interface or an open project.
+    standalone = not algorithm.flags() & Qgis.ProcessingAlgorithmFlag.NotAvailableInStandaloneTool
+    return algorithm.provider().id() in PROVIDERS and standalone
 `
 
 /** Checks, in order, what running an algorithm depends on; the first failure ends the probe. */
@@ -92,13 +104,87 @@ try:
     start_qgis()
     from qgis.core import QgsApplication
 
-    report["algorithms"] = len(QgsApplication.processingRegistry().algorithms())
+    report["algorithms"] = sum(1 for algorithm in QgsApplication.processingRegistry().algorithms() if offered(algorithm))
     if report["algorithms"] == 0:
         raise RuntimeError("Processing started with no algorithms")
 except Exception:
     fail("processing")
 
 finish(report)
+`
+
+/** Describes every offered algorithm from QGIS's own definitions, the facts `qgis_process help` prints and more. */
+export const CATALOG =
+  prelude +
+  String.raw`
+try:
+    start_qgis()
+    from qgis.core import Qgis, QgsApplication
+except Exception:
+    finish({"ok": False, "error": traceback.format_exc()})
+
+registry = QgsApplication.processingRegistry()
+# What QGIS says each type accepts as text, as qgis_process help prints it.
+accepted = {kind.id(): list(kind.acceptedStringValues()) for kind in registry.parameterTypes()}
+
+
+def parameter(definition):
+    flags = definition.flags()
+    entry = {
+        "name": definition.name(),
+        "description": definition.description(),
+        "type": definition.type(),
+        "optional": bool(flags & Qgis.ProcessingParameterFlag.Optional),
+        "advanced": bool(flags & Qgis.ProcessingParameterFlag.Advanced),
+        "destination": definition.isDestination(),
+        "help": definition.help() or "",
+        "default": definition.defaultValue(),
+        "accepted": accepted.get(definition.type(), []),
+    }
+    if definition.type() == "enum":
+        entry["options"] = list(definition.options())
+        if definition.usesStaticStrings():
+            entry["static"] = True
+    if hasattr(definition, "allowMultiple") and definition.allowMultiple():
+        entry["multiple"] = True
+    # The layer a field, band or expression belongs to, or whose CRS gives a distance its units.
+    for getter in ("parentLayerParameterName", "parentParameterName"):
+        if hasattr(definition, getter) and getattr(definition, getter)():
+            entry["parent"] = getattr(definition, getter)()
+            break
+    return entry
+
+
+algorithms = []
+excluded = []
+for algorithm in registry.algorithms():
+    if algorithm.provider().id() not in PROVIDERS:
+        continue
+    if not offered(algorithm):
+        excluded.append({"id": algorithm.id(), "name": algorithm.displayName()})
+        continue
+    algorithms.append(
+        {
+            "id": algorithm.id(),
+            "name": algorithm.displayName(),
+            "group": algorithm.group(),
+            "description": algorithm.shortDescription() or "",
+            "help": algorithm.shortHelpString() or "",
+            "tags": list(algorithm.tags()),
+            "notes": int(algorithm.documentationFlags()),
+            "parameters": [
+                parameter(definition)
+                for definition in algorithm.parameterDefinitions()
+                if not definition.flags() & Qgis.ProcessingParameterFlag.Hidden
+            ],
+            "outputs": [
+                {"name": output.name(), "type": output.type(), "description": output.description()}
+                for output in algorithm.outputDefinitions()
+            ],
+        }
+    )
+
+finish({"ok": True, "qgis": Qgis.version(), "algorithms": algorithms, "excluded": excluded})
 `
 
 /** Runs one algorithm; the request arrives as JSON in the first argument. */
