@@ -228,8 +228,8 @@ test("an algorithm's documentation follows qgis_process help and adds what a cal
   assert.ok(text.includes("Outputs\n----------------\n\nOUTPUT: <outputVector>\n\tBuffered"))
   assert.ok(
     text.endsWith(
-      'webfetch(url="https://docs.qgis.org/latest/en/docs/user_manual/processing_algs/qgis/vectorgeometry.html#buffer", format="markdown")\n' +
-        'If the link does not lead to it, search the page for "Algorithm ID: native:buffer".',
+      "\n\nIf anything here is unclear or incomplete, read this algorithm's section of the official QGIS documentation:\n" +
+        'webfetch(url="https://docs.qgis.org/3.44/en/docs/user_manual/processing_algs/qgis/vectorgeometry.html#buffer")',
     ),
   )
 })
@@ -248,15 +248,21 @@ test("multiple values and the layer a parameter belongs to are stated, and a lis
   assert.ok(!text.includes("Description") && !text.includes("Notes") && !text.includes("Outputs"))
 })
 
-test("the manual's link slugs the display name, and a group-less algorithm links to the index", () => {
+test("the manual's link is the release's, slugs the display name, and goes to the index without a group", () => {
   assert.equal(
     Doc.docsUrl(
       algorithm({ id: "gdal:cliprasterbymasklayer", name: "Clip raster by mask layer", group: "Raster extraction" }),
+      "4.2.3-Firenze",
     ),
-    "https://docs.qgis.org/latest/en/docs/user_manual/processing_algs/gdal/rasterextraction.html#clip-raster-by-mask-layer",
+    "https://docs.qgis.org/4.2/en/docs/user_manual/processing_algs/gdal/rasterextraction.html#clip-raster-by-mask-layer",
   )
   assert.equal(
-    Doc.docsUrl(algorithm({ id: "native:orphan", name: "Orphan", group: "" })),
+    Doc.docsUrl(algorithm({ id: "native:orphan", name: "Orphan", group: "" }), "3.44.15-Solothurn"),
+    "https://docs.qgis.org/3.44/en/docs/user_manual/processing_algs/index.html",
+  )
+  // Guards against a version QGIS words otherwise breaking the link.
+  assert.equal(
+    Doc.docsUrl(algorithm({ id: "native:orphan", name: "Orphan", group: "" }), "unknown"),
     "https://docs.qgis.org/latest/en/docs/user_manual/processing_algs/index.html",
   )
 })

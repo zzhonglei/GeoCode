@@ -682,6 +682,9 @@ for (const app of await realApps()) {
       assert.ok(buffer.includes("\tArgument type:\tdistance in the units of INPUT's CRS"))
       assert.ok(buffer.includes("\t\t- Path to a vector layer"))
       assert.ok(!buffer.includes("field:FIELD_NAME"))
+      // Guards against linking another release's manual.
+      const release = /^\d+\.\d+/.exec(state.versions.qgis)?.[0]
+      assert.ok(buffer.includes(`webfetch(url="https://docs.qgis.org/${release}/en/`), buffer.slice(-300))
       const join = await doc({ action: "help", algorithm: "native:joinattributesbylocation" })
       assert.ok(join.includes("\tArgument type:\tfield of JOIN, multiple values allowed"))
       assert.ok(join.includes("\tArgument type:\tenum, multiple values allowed"))

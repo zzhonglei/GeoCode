@@ -5,7 +5,9 @@ import { Catalog } from "./catalog.ts"
 /** Search hits shown; the total is reported, so a model knows to narrow the query. */
 export const SEARCH_LIMIT = 10
 
-const DOCS = "https://docs.qgis.org/latest/en/docs/user_manual/processing_algs"
+/** A release's manual: docs.qgis.org sends a release it has none for to the nearest one, and `latest` to the LTR. */
+const manual = (qgis: string) =>
+  `https://docs.qgis.org/${/^\d+\.\d+/.exec(qgis)?.[0] ?? "latest"}/en/docs/user_manual/processing_algs`
 
 const RULE = "----------------"
 
@@ -26,17 +28,17 @@ const MEASURES = new Set(["distance", "area", "volume"])
  * The page of the official manual that documents an algorithm. Its anchor slugs the display name, never the id:
  * the id-shaped anchors on those pages are placeholders, so an id-based link breaks for every multi-word name.
  */
-export const docsUrl = (algorithm: Catalog.Algorithm) => {
+export const docsUrl = (algorithm: Catalog.Algorithm, qgis: string) => {
   const provider = algorithm.id.startsWith("gdal:") ? "gdal" : "qgis"
   // The page name deletes what the anchor below turns into dashes.
   const page = algorithm.group.toLowerCase().replace(/[^a-z0-9]/g, "")
-  if (!page) return `${DOCS}/index.html`
+  if (!page) return `${manual(qgis)}/index.html`
   const anchor = algorithm.name
     .toLowerCase()
     .replace(/&/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
-  return `${DOCS}/${provider}/${page}.html#${anchor}`
+  return `${manual(qgis)}/${provider}/${page}.html#${anchor}`
 }
 
 /**
@@ -87,7 +89,7 @@ export const help = (catalog: Catalog.Catalog, text: string) => {
   const resolution = Catalog.resolve(catalog, text)
   switch (resolution.kind) {
     case "found":
-      return framed(catalog, document(resolution.algorithm))
+      return framed(catalog, document(resolution.algorithm, catalog.qgis))
     case "ambiguous":
       return (
         `"${text}" names several algorithms. Call again with one of these IDs:\n` +
@@ -132,7 +134,7 @@ export const answer = (catalog: Catalog.Catalog, request: Request) => {
 }
 
 /** `qgis_process help`, with what a call needs and its text leaves out: multiple values, parent layers, advanced. */
-function document(algorithm: Catalog.Algorithm) {
+function document(algorithm: Catalog.Algorithm, qgis: string) {
   const sections = [`${algorithm.name} (${algorithm.id})`]
   const description = [algorithm.description, algorithm.help].filter(Boolean).join("\n")
   if (description) sections.push(section("Description", description))
@@ -142,9 +144,8 @@ function document(algorithm: Catalog.Algorithm) {
   const outputs = algorithm.outputs.map((output) => `${output.name}: <${output.type}>\n\t${output.description}`)
   if (outputs.length) sections.push(section("Outputs", `\n${outputs.join("\n")}`))
   sections.push(
-    `If anything here is unclear or incomplete, read the official QGIS documentation for this algorithm:\n` +
-      `webfetch(url="${docsUrl(algorithm)}", format="markdown")\n` +
-      `If the link does not lead to it, search the page for "Algorithm ID: ${algorithm.id}".`,
+    `If anything here is unclear or incomplete, read this algorithm's section of the official QGIS documentation:\n` +
+      `webfetch(url="${docsUrl(algorithm, qgis)}")`,
   )
   return sections.join("\n\n")
 }
