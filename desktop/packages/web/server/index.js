@@ -145,6 +145,7 @@ import { applyConnectAttemptTimeout } from './lib/network-defaults.js';
 import { closedSurface } from './geocode/closed-surface.js'; // GeoCode: see main
 import { loopbackHostOnly } from './geocode/loopback-host.js'; // GeoCode: see main
 import { registerGeoEngine } from './geocode/geoengine.js'; // GeoCode: see main
+import { registerGeoTools } from './geocode/geo-tools.js'; // GeoCode: see main
 
 // Background CLI launches enter here in a fresh process, without CLI defaults.
 applyConnectAttemptTimeout();
@@ -2003,6 +2004,7 @@ async function main(options = {}) {
     next();
   });
   app.use(closedSurface); // GeoCode: after CORS so the UI reads the 404; see geocode/closed-surface.js
+  registerGeoTools(app, { geoEngine: options.geoEngine, authorize: (req) => agentToolRuntime?.authorizeRequest(req) === true }); // GeoCode: the kernel's geo tools, before the API auth gate and before compression, which would hold back their streamed progress
   app.use(compression({
     filter: (req, res) => {
       if (shouldSkipCompression(req, res)) return false;
