@@ -101,6 +101,8 @@ import { parseWebSearchOutput, webSearchProviderOf } from '@/lib/opencode/websea
 import { ApplyPatchFileButtons } from './ApplyPatchFileButtons';
 import { openApplyPatchFileInEditor } from './applyPatchEditorAction';
 import { WebSearchResults } from './WebSearchResults';
+import { QgisManualPage } from '@/geocode/QgisManualPage'; // GeoCode: see renderResultContent
+import { qgisManualUrl } from '@/geocode/geoTools'; // GeoCode: see renderResultContent
 
 type ToolJsonViewMode = 'summary' | 'formatted' | 'raw';
 
@@ -1307,7 +1309,9 @@ const ToolExpandedContent: React.FC<ToolExpandedContentProps> = React.memo(({
 
         return formatInputForDisplay(input, part.tool);
     }, [input, part.tool]);
-    const hasInputText = !hideToolInputPreview && inputTextContent.trim().length > 0;
+    const [qgisManualShown, setQgisManualShown] = React.useState(false); // GeoCode: see QgisManualPage below
+    const showQgisManual = React.useCallback(() => setQgisManualShown(true), []); // GeoCode: see QgisManualPage below
+    const hasInputText = !hideToolInputPreview && inputTextContent.trim().length > 0 && !qgisManualShown; // GeoCode: a shown manual page needs no summary of its address
     // `null` keeps the plain text renderer for a result OpenCode formatted differently.
     const webSearchOutput = React.useMemo(
         () => (isWebSearchTool(part.tool) && state.status === 'completed' && hasStringOutput ? parseWebSearchOutput(outputString) : null),
@@ -1588,6 +1592,11 @@ const ToolExpandedContent: React.FC<ToolExpandedContentProps> = React.memo(({
                     isStreaming={isStreamingBash}
                 />
             );
+
+            // --- GeoCode: a page of the QGIS manual shows as the manual draws it, the text standing in until it loads ---
+            const qgisManual = qgisManualUrl(part.tool, input);
+            if (qgisManual) return <QgisManualPage url={qgisManual} onShown={showQgisManual}>{renderScrollableBlock(output, { className: 'p-1' })}</QgisManualPage>;
+            // --- /GeoCode ---
 
             return renderScrollableBlock(
                 output,
