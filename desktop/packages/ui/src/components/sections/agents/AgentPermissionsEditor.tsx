@@ -39,6 +39,7 @@ import {
   type KeyState,
   type PermissionModel,
 } from './agentPermissionModel';
+import { geoActionLabel } from '@/geocode/geoTools'; // GeoCode: see the tool rows
 
 /**
  * Tool permissions for one agent.
@@ -431,7 +432,8 @@ export const AgentPermissionsEditor: React.FC<AgentPermissionsEditorProps> = ({
       </div>
 
       <div>
-        {toolKeys.map((key) => renderRow(key, formatKeyLabel(key), null))}
+        {/* GeoCode: the geo tools' rows carry their names, not their keys capitalised */}
+        {toolKeys.map((key) => renderRow(key, geoActionLabel(key) ?? formatKeyLabel(key), null))}
       </div>
 
       {mcpKeys.length > 0 && (

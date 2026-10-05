@@ -16,6 +16,7 @@ import { toolFileDiffs } from '@/lib/opencode/tools';
 import { getPermissionToolPresentation, getToolDisplayName } from './permissionToolPresentation';
 import { describeSavePatterns, permissionSummaryMetadataSchema, summarizePermission, type PermissionTarget } from './permissionSummary';
 import { usePermissionFromSubagent, usePermissionResponse } from './usePermissionResponse';
+import { geoPermissionTitle } from '@/geocode/geoTools'; // GeoCode: see PermissionRequestContent
 
 const PERMISSION_BASH_CUSTOM_STYLE: React.CSSProperties = {
   margin: 0,
@@ -317,7 +318,8 @@ export const PermissionRequestContent: React.FC<{ permission: PermissionRequest 
 
         <div className="mb-2">
           <div className="typography-meta font-medium text-foreground">
-            {summary.tool ? t(summary.titleKey, { tool: summary.tool }) : t(summary.titleKey)}
+            {/* GeoCode: a geo tool's own summary, in place of "Use <tool>" */}
+            {geoPermissionTitle(permission.action) ?? (summary.tool ? t(summary.titleKey, { tool: summary.tool }) : t(summary.titleKey))}
             {summary.scope ? (
               <span className="font-normal text-muted-foreground"> {t('chat.permissionCard.summary.inPath', { path: formatPathForDisplay(summary.scope, homeDirectory) })}</span>
             ) : null}

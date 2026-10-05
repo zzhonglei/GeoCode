@@ -1,4 +1,5 @@
 import type { PermissionEffect, PermissionRule } from '@/stores/useAgentsStore';
+import { GEO_TOOL_ACTIONS } from '@/geocode/geoTools'; // GeoCode: see BUILTIN_ACTIONS
 
 /**
  * Editor model for an agent's permissions.
@@ -40,6 +41,7 @@ export const BUILTIN_ACTIONS = [
   'subagent',
   'question',
   'external_directory',
+  ...GEO_TOOL_ACTIONS, // GeoCode: the geo tools are built in too
 ] as const;
 
 /** OpenChamber's own agent tools, shown so their rules are discoverable. */
