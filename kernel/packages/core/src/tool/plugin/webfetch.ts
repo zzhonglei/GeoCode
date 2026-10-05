@@ -8,7 +8,7 @@ import { Parser } from "htmlparser2"
 import { Permission } from "../../permission.js"
 import { convertHTMLToMarkdown, MAX_MARKDOWN_BYTES } from "../html-markdown.js"
 import { collectBoundedResponseBody } from "../http-body.js"
-import { WebFetchSection } from "../../geocode/webfetch-section.js" // GeoCode: see execute
+import { QgisManual } from "../../geocode/qgis-manual.js" // GeoCode: see the tool's execute
 
 export const name = "webfetch"
 export const MAX_RESPONSE_BYTES = MAX_MARKDOWN_BYTES
@@ -149,8 +149,8 @@ export const Plugin = {
                   orElse: () => Effect.fail(new Error("Request timed out")),
                 }),
               )
-              // GeoCode: only the section a #fragment names, as a browser would scroll to it
-              const content = WebFetchSection.of(input.url, contentType, new TextDecoder().decode(body))
+              // GeoCode: a page of the QGIS manual without the site around it, or only the section its #fragment names
+              const content = QgisManual.of(input.url, contentType, new TextDecoder().decode(body))
               const output = yield* Effect.try({
                 try: () => convert(content, contentType, input.format),
                 catch: (error) => error,
