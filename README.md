@@ -2,10 +2,6 @@
 
 GeoCode 是面向地理数据处理任务的桌面端智能体应用。用自然语言描述地理任务,内置的 GeoAgent 会调用 QGIS、GDAL、Google Earth Engine 与 OpenStreetMap 等工具或者 Python 代码,完成各种 GIS 与遥感数据的处理分析。
 
-## 状态
-
-GeoCode 正在基于 OpenCode V2 与 OpenChamber 2 重建,目前还没有可用的安装包。
-
 ## 构成
 
 GeoCode 建在两个开源项目之上:
