@@ -67,6 +67,8 @@ import { isCapacitorMobileApp } from '@/apps/mobileNativeChrome';
 import { shareFileFromNativeApp } from '@/lib/nativeFileShare';
 import { WorktreeRequiresGitRepositoryError } from '@/lib/worktrees/worktreeCreate';
 import { cloneMessageImageExportSource } from './imageExport';
+import { QgisDocRow } from '@/geocode/QgisDocRow'; // GeoCode: see the tool parts
+import { isQgisDocTool } from '@/geocode/qgisDocRuns'; // GeoCode: see the tool parts
 
 
 const CONTAIN_LAYOUT_STYLE = { contain: 'layout' as const, transform: 'translateZ(0)' };
@@ -1911,6 +1913,15 @@ const AssistantMessageBody = React.memo(({
                     i++;
                     continue;
                 }
+
+                // --- GeoCode: side-by-side qgisdoc calls show as one row that does not open ---
+                if (isQgisDocTool(toolName)) {
+                    rendered.push(<QgisDocRow key={`tool-${toolPart.id}`} part={toolPart} />);
+                    flushSegmentsAfterTool(toolPartId);
+                    i++;
+                    continue;
+                }
+                // --- /GeoCode ---
 
                 // Expandable tools: bash, edit, write, task, question — individual rows
                 if (isExpandableTool(toolName)) {

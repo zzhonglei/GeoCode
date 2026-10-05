@@ -26,6 +26,7 @@ import { useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
 import { useSessionPartsForMessages } from '@/sync/sync-context';
 import type { ReviewTransferDirection } from '@/lib/reviewFlow';
 import { resolveTimelineIsAtEnd } from './lib/scroll/timelineScrollAnchoring';
+import { usePublishQgisDocRuns } from '@/geocode/qgisDocRuns'; // GeoCode: see TurnBlock
 
 const EMPTY_STATIC_ENTRY_MESSAGES: ChatMessageEntry[] = [];
 const EMPTY_UNGROUPED_MESSAGE_IDS = new Set<string>();
@@ -336,6 +337,7 @@ const TurnBlock = React.memo(({
         const firstAssistant = turn.assistantMessages[0];
         return firstAssistant ? [firstAssistant] : [];
     }, [chatRenderMode, streamingAssistantMessageId, turn.assistantMessages]);
+    usePublishQgisDocRuns(visibleAssistantMessages, showReasoningTraces, isLastTurn && sessionIsWorking); // GeoCode: side-by-side qgisdoc calls show as one row
 
     const completedAssistantMessages = React.useMemo(() => {
         if (chatRenderMode !== 'sorted') {

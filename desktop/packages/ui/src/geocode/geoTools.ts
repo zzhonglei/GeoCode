@@ -17,20 +17,31 @@ type GeoToolText = {
   asks: string;
 };
 
-type Texts = Record<GeoTool, GeoToolText> & { allGroups: string };
+type Texts = Record<GeoTool, GeoToolText> & {
+  allGroups: string;
+  /** The title of a row of qgisdoc calls, while the model may still read on and once it has moved on. */
+  reading: string;
+  read: string;
+};
 
 const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
   en: {
     qgisdoc: { title: 'QGIS Docs', asks: 'Look up QGIS algorithms' },
     allGroups: 'All groups',
+    reading: 'Reading QGIS Documentation',
+    read: 'QGIS Documentation Read',
   },
   'zh-CN': {
     qgisdoc: { title: 'QGIS 文档', asks: '查阅 QGIS 算法' },
     allGroups: '全部分组',
+    reading: '正在阅读 QGIS 文档',
+    read: '已阅读 QGIS 文档',
   },
   'zh-TW': {
     qgisdoc: { title: 'QGIS 文件', asks: '查閱 QGIS 演算法' },
     allGroups: '全部分組',
+    reading: '正在閱讀 QGIS 文件',
+    read: '已閱讀 QGIS 文件',
   },
 };
 
@@ -54,9 +65,20 @@ export const geoToolDescription = (toolName: string, input: ToolInput | undefine
   const parsed = qgisdocInput.safeParse(input);
   if (!parsed.success) return null;
   const { action, algorithm, group, query } = parsed.data;
-  const value = action === 'groups' ? text().allGroups : algorithm ?? group ?? query;
+  // Each action's own field, as the kernel asks permission for it.
+  const values = new Map([['groups', text().allGroups], ['algorithms', group], ['help', algorithm], ['search', query]]);
+  const value = action ? values.get(action) : undefined;
   return value ? { kind: 'text', value } : null;
 };
+
+const webfetchInput = z.object({ url: z.url({ protocol: /^https$/, hostname: /^docs\.qgis\.org$/ }) });
+
+/** The page of the QGIS manual a webfetch call read; undefined for any other call. */
+export const qgisManualUrl = (toolName: string, input: ToolInput | undefined): string | undefined =>
+  toolName === 'webfetch' ? webfetchInput.safeParse(input).data?.url : undefined;
+
+/** The title of a row of qgisdoc calls. */
+export const qgisDocRunTitle = (reading: boolean) => (reading ? text().reading : text().read);
 
 /** The permission card's summary for a geo tool's own action; undefined for any other action. */
 export const geoPermissionTitle = (action: string): string | undefined => (isGeoTool(action) ? text()[action].asks : undefined);
