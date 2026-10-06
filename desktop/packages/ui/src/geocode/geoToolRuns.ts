@@ -4,8 +4,8 @@ import { create } from 'zustand';
 import type { ChatMessageEntry } from '@/components/chat/lib/turns/types';
 import type { Part, ToolPart } from '@/lib/opencode/model';
 
-/** qgisdoc calls with nothing shown between them, which the conversation shows as one row. */
-type QgisDocRun = {
+/** Calls of one geo tool with nothing shown between them, which the conversation shows as one row. */
+type GeoToolRun = {
   /**
    * The call whose row stands for the run, the last: a collapsed activity group keeps its latest rows, so the
    * row survives whenever any of the run does. The others draw nothing.
@@ -14,15 +14,18 @@ type QgisDocRun = {
   /** The run's first call, which stays the same as calls join it. */
   readonly first: string;
   readonly parts: readonly ToolPart[];
-  /** Nothing shown follows it yet in a turn still working, so the model may yet read on. */
+  /** Nothing shown follows it yet in a turn still working, so the model may yet go on. */
   readonly open: boolean;
 };
 
-type Runs = ReadonlyMap<string, QgisDocRun>;
+type Runs = ReadonlyMap<string, GeoToolRun>;
 
-export const isQgisDocTool = (toolName: string) => toolName === 'qgisdoc';
+/** The geo tools whose side-by-side calls the conversation shows as one row. */
+const MERGED = new Set(['qgisdoc', 'readgeodata']);
 
-export const isQgisDocPart = (part: Part): part is ToolPart => part.type === 'tool' && isQgisDocTool(part.tool);
+export const isMergedGeoTool = (toolName: string) => MERGED.has(toolName);
+
+export const isMergedGeoPart = (part: Part): part is ToolPart => part.type === 'tool' && isMergedGeoTool(part.tool);
 
 /** Whether a part shows in the conversation, and so parts the calls on either side of it. */
 const shows = (part: Part, showReasoningTraces: boolean) => {
@@ -32,17 +35,18 @@ const shows = (part: Part, showReasoningTraces: boolean) => {
   return false;
 };
 
-const same = (left: QgisDocRun, right: QgisDocRun) =>
+const same = (left: GeoToolRun, right: GeoToolRun) =>
   left.open === right.open &&
   left.parts.length === right.parts.length &&
   left.parts.every((part, index) => part === right.parts[index]);
 
 /**
- * Every qgisdoc call of a turn, by its id, with the run it belongs to; runs cross steps but nothing shown. A run that
- * has not changed keeps its object, so its row does not render again for every token streamed elsewhere.
+ * Every merged geo tool call of a turn, by its id, with the run it belongs to; runs cross steps but nothing shown, and
+ * a call of another tool ends one. A run that has not changed keeps its object, so its row does not render again for
+ * every token streamed elsewhere.
  */
-const qgisDocRuns = (messages: readonly ChatMessageEntry[], showReasoningTraces: boolean, working: boolean, previous: Runs) => {
-  const runs = new Map<string, QgisDocRun>();
+const geoToolRuns = (messages: readonly ChatMessageEntry[], showReasoningTraces: boolean, working: boolean, previous: Runs) => {
+  const runs = new Map<string, GeoToolRun>();
   let current: ToolPart[] = [];
   const close = (open: boolean) => {
     const first = current[0];
@@ -56,8 +60,10 @@ const qgisDocRuns = (messages: readonly ChatMessageEntry[], showReasoningTraces:
   };
   for (const message of messages) {
     for (const part of message.parts) {
-      if (isQgisDocPart(part)) current.push(part);
-      else if (shows(part, showReasoningTraces)) close(false);
+      if (isMergedGeoPart(part)) {
+        if (current[0] && current[0].tool !== part.tool) close(false);
+        current.push(part);
+      } else if (shows(part, showReasoningTraces)) close(false);
     }
   }
   close(working);
@@ -71,7 +77,7 @@ type RunState = {
 };
 
 // Turns publish their runs here, so a call's row knows its run without the timeline passing it down.
-export const useQgisDocRunStore = create<RunState>()((set) => ({
+export const useGeoToolRunStore = create<RunState>()((set) => ({
   runs: new Map(),
   publish: (runs, previous) =>
     set((state) => {
@@ -86,17 +92,17 @@ const unchanged = (left: Runs, right: Runs) =>
   left.size === right.size && [...right].every(([id, run]) => left.get(id) === run);
 
 /** Publishes a turn's runs; before paint, so a row left out of its run never shows for a frame. */
-export const usePublishQgisDocRuns = (
+export const usePublishGeoToolRuns = (
   messages: readonly ChatMessageEntry[],
   showReasoningTraces: boolean,
   working: boolean,
 ) => {
   const published = React.useRef<Runs>(new Map());
-  const computed = qgisDocRuns(messages, showReasoningTraces, working, published.current);
+  const computed = geoToolRuns(messages, showReasoningTraces, working, published.current);
   const runs = unchanged(published.current, computed) ? published.current : computed;
   React.useLayoutEffect(() => {
     if (runs.size === 0) return;
-    const publish = useQgisDocRunStore.getState().publish;
+    const publish = useGeoToolRunStore.getState().publish;
     published.current = runs;
     publish(runs, new Map());
     return () => publish(new Map(), runs);

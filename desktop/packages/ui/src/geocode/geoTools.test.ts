@@ -30,11 +30,23 @@ describe('GeoCode: the geo tools in the interface', () => {
     expect(describe({ action: 'help' })).toBeNull();
   });
 
+  test('a readgeodata row names the file it reads, with the layer', () => {
+    useI18nStore.setState({ locale: 'zh-TW' });
+    expect(getToolMetadata('readgeodata').displayName).toBe('讀取地理資料');
+    const describe = (input: ToolInput) => toolDescription('readgeodata', input, undefined);
+    expect(describe({ path: '/data/河北/县.shp' })).toEqual({ kind: 'text', value: '县.shp' });
+    expect(describe({ path: 'data\\multi.gpkg', layer: 'county' })).toEqual({ kind: 'text', value: 'multi.gpkg · county' });
+    expect(describe({})).toBeNull();
+  });
+
   // Guards against the geo tools' rules being missing from Settings, where the native tools' rules are.
   test('the geo tools have permission rows of their own, named and summarised', () => {
     expect(BUILTIN_ACTIONS).toContain('qgisdoc');
     expect(geoActionLabel('qgisdoc')).toBe('QGIS Docs');
     expect(geoActionLabel('shell')).toBeUndefined();
+    // Asks as read asks, under read's rule.
+    expect(BUILTIN_ACTIONS).not.toContain('readgeodata');
+    expect(geoActionLabel('readgeodata')).toBeUndefined();
     useI18nStore.setState({ locale: 'zh-TW' });
     expect(geoPermissionTitle('qgisdoc')).toBe('查閱 QGIS 演算法');
     expect(geoPermissionTitle('read')).toBeUndefined();
