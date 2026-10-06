@@ -27,6 +27,11 @@ export const isMergedGeoTool = (toolName: string) => MERGED.has(toolName);
 
 export const isMergedGeoPart = (part: Part): part is ToolPart => part.type === 'tool' && isMergedGeoTool(part.tool);
 
+/** Whether a tool's calls show as a geo tool's own rows: runs of merged calls, or a QGIS run each. */
+export const hasGeoRow = (toolName: string) => isMergedGeoTool(toolName) || toolName === 'qgisrun';
+
+export const isGeoRowPart = (part: Part): part is ToolPart => part.type === 'tool' && hasGeoRow(part.tool);
+
 /** Whether a part shows in the conversation, and so parts the calls on either side of it. */
 const shows = (part: Part, showReasoningTraces: boolean) => {
   if (part.type === 'tool') return true;

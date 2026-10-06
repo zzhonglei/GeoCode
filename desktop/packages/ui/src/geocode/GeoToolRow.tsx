@@ -12,6 +12,7 @@ import { EarthIcon } from './EarthIcon';
 import { geoDataPath, geoFileCount, geoRunTitle, geoToolDescription } from './geoTools';
 import { useGeoToolRunStore } from './geoToolRuns';
 import { QgisLogo } from './QgisLogo';
+import { QgisRunRow } from './QgisRunRow';
 
 /** How long what the row reads stays before the next call replaces it, so it can be read. */
 const HOLD_MS = 400;
@@ -181,3 +182,7 @@ export const GeoToolRow: React.FC<{ part: ToolPart }> = ({ part }) => {
     </div>
   );
 };
+
+/** A geo tool call's own row. */
+export const GeoRow: React.FC<{ part: ToolPart }> = ({ part }) =>
+  part.tool === 'qgisrun' ? <QgisRunRow part={part} /> : <GeoToolRow part={part} />;

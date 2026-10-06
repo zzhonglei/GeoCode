@@ -26,8 +26,8 @@ import JustificationBlock from './JustificationBlock';
 import { areRenderRelevantPartsEqual } from '../renderCompare';
 import { getExternalFaviconUrl } from '@/lib/url';
 import { getDirectoryForFilePath, getRelativeFilePath, isFilePathWithinDirectory, normalizeFilePath, toAbsoluteFilePath } from '@/lib/path-utils';
-import { GeoToolRow } from '@/geocode/GeoToolRow'; // GeoCode: see the tool-expandable rows
-import { isMergedGeoPart } from '@/geocode/geoToolRuns'; // GeoCode: see the tool-expandable rows
+import { GeoRow } from '@/geocode/GeoToolRow'; // GeoCode: see the tool-expandable rows
+import { isGeoRowPart } from '@/geocode/geoToolRuns'; // GeoCode: see the tool-expandable rows
 
 const TOOL_ROW_TEXT_CLASS = '!text-[length:var(--text-meta)] !leading-5 sm:!leading-6 tracking-normal';
 const TOOL_ROW_TITLE_CLASS = cn('typography-meta font-medium', TOOL_ROW_TEXT_CLASS);
@@ -778,7 +778,7 @@ const ProgressiveGroup: React.FC<ProgressiveGroupProps> = ({
                 );
 
             case 'tool-expandable':
-                if (isMergedGeoPart(row.activity.part)) return <GeoToolRow key={row.activity.id} part={row.activity.part} />; // GeoCode: side-by-side calls of a geo tool show as one row
+                if (isGeoRowPart(row.activity.part)) return <GeoRow key={row.activity.id} part={row.activity.part} />; // GeoCode: side-by-side calls of a geo tool show as one row, as does a QGIS run
                 return (
                     <MemoExpandableToolRow
                         key={row.activity.id}

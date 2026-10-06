@@ -17,6 +17,7 @@ import { getPermissionToolPresentation, getToolDisplayName } from './permissionT
 import { describeSavePatterns, permissionSummaryMetadataSchema, summarizePermission, type PermissionTarget } from './permissionSummary';
 import { usePermissionFromSubagent, usePermissionResponse } from './usePermissionResponse';
 import { geoPermissionTitle } from '@/geocode/geoTools'; // GeoCode: see PermissionRequestContent
+import { geoPermissionContent } from '@/geocode/geoPermission'; // GeoCode: see PermissionCard's body
 
 const PERMISSION_BASH_CUSTOM_STYLE: React.CSSProperties = {
   margin: 0,
@@ -487,7 +488,8 @@ export const PermissionCard: React.FC<PermissionCardProps> = ({ permission, onRe
             </div>
           </div>
 
-          <PermissionRequestContent permission={permission} />
+          {/* GeoCode: a geo tool's own card body, in place of the generic one */}
+          {geoPermissionContent(permission) ?? <PermissionRequestContent permission={permission} />}
 
           <PermissionActions permission={permission} isResponding={isResponding} onRespond={(response) => void respond(response)} variant="inline" />
         </div>

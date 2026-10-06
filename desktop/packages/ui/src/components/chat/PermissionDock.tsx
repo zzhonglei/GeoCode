@@ -12,6 +12,7 @@ import {
 } from './PermissionCard';
 import { getPermissionToolPresentation } from './permissionToolPresentation';
 import { usePermissionFromSubagent, usePermissionResponse } from './usePermissionResponse';
+import { geoPermissionContent } from '@/geocode/geoPermission'; // GeoCode: a geo tool's own card body, in place of the generic one
 
 /**
  * The agent's permission requests, docked above the composer in the same
@@ -130,9 +131,10 @@ const PermissionDockRequest: React.FC<{
                         })}
                     </div>
                 ) : null}
-                <span className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
+                {/* GeoCode: min-w-0 and truncate, as qgisrun names its algorithm here and the name can run long */}
+                <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
                     {tool.icon}
-                    <span className="typography-meta font-medium">{tool.name}</span>
+                    <span className="typography-meta min-w-0 truncate font-medium" title={tool.name}>{tool.name}</span>
                 </span>
             </>}
         >
@@ -143,7 +145,8 @@ const PermissionDockRequest: React.FC<{
                         className="max-h-[50vh] overflow-y-auto overscroll-contain px-1.5"
                         style={availableMaxHeight === undefined ? undefined : { maxHeight: Math.max(120, availableMaxHeight - 96) }}
                     >
-                        <PermissionRequestContent permission={permission} />
+                        {/* GeoCode: see the import */}
+                        {geoPermissionContent(permission) ?? <PermissionRequestContent permission={permission} />}
                     </div>
                     <PermissionActions
                         permission={permission}

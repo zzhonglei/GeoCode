@@ -114,5 +114,6 @@ export const summarizePermission = (
  */
 export const describeSavePatterns = (action: string, save: readonly string[]): string[] => {
   if (save.length === 0 || save.every((pattern) => pattern === '*')) return [];
+  if (action === 'qgisrun') return []; // GeoCode: its card names the algorithm and the directories, never their IDs and globs
   return action.toLowerCase() === 'external_directory' ? save.map(stripDirectoryGlob) : [...save];
 };

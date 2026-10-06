@@ -67,8 +67,8 @@ import { isCapacitorMobileApp } from '@/apps/mobileNativeChrome';
 import { shareFileFromNativeApp } from '@/lib/nativeFileShare';
 import { WorktreeRequiresGitRepositoryError } from '@/lib/worktrees/worktreeCreate';
 import { cloneMessageImageExportSource } from './imageExport';
-import { GeoToolRow } from '@/geocode/GeoToolRow'; // GeoCode: see the tool parts
-import { isMergedGeoTool } from '@/geocode/geoToolRuns'; // GeoCode: see the tool parts
+import { GeoRow } from '@/geocode/GeoToolRow'; // GeoCode: see the tool parts
+import { hasGeoRow } from '@/geocode/geoToolRuns'; // GeoCode: see the tool parts
 
 
 const CONTAIN_LAYOUT_STYLE = { contain: 'layout' as const, transform: 'translateZ(0)' };
@@ -1914,9 +1914,9 @@ const AssistantMessageBody = React.memo(({
                     continue;
                 }
 
-                // --- GeoCode: side-by-side calls of a geo tool show as one row of its own ---
-                if (isMergedGeoTool(toolName)) {
-                    rendered.push(<GeoToolRow key={`tool-${toolPart.id}`} part={toolPart} />);
+                // --- GeoCode: side-by-side calls of a geo tool show as one row of its own, as does a QGIS run ---
+                if (hasGeoRow(toolName)) {
+                    rendered.push(<GeoRow key={`tool-${toolPart.id}`} part={toolPart} />);
                     flushSegmentsAfterTool(toolPartId);
                     i++;
                     continue;
