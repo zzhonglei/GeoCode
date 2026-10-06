@@ -731,4 +731,288 @@ for (const app of await realApps()) {
       await engine.stop()
     }
   })
+
+  test(`QGIS at ${app} reads geographic data as GDAL finds it, and leaves nothing beside it`, async () => {
+    const engine = await start(app)
+    const data = path.join(engine.directory, "数据 目录")
+    try {
+      assert.equal((await engine.settled(150000)).status, "ready")
+      await fs.mkdir(data)
+      await makeData(app, data)
+      const before = await snapshot(data)
+      const read = async (params: Record<string, unknown>) => {
+        const response = await engine.request(
+          { ...params, path: path.join(data, params.path as string) },
+          120000,
+          "qgis.read",
+        )
+        assert.ok(response.ok, JSON.stringify(response))
+        return response.result as { text: string; image?: string }
+      }
+
+      const gbk = (await read({ path: "县.shp" })).text
+      // Guards against reading a shapefile that declares no encoding as bytes, which garbles Chinese text.
+      assert.ok(gbk.includes("\nEncoding: GB18030, detected; the file declares none."), gbk)
+      assert.ok(gbk.includes('\n1. {"name":"鄂城区"}\n'), gbk)
+      assert.ok(gbk.includes("\nLayer: 县, MultiPolygon, 20 features\n"), gbk)
+      const miscoded = (await read({ path: "乡.shp" })).text
+      // Guards against taking a .cpg at its word when the text proves it wrong.
+      assert.ok(miscoded.includes("\nEncoding: GB18030, detected; the .cpg file says UTF-8, but the text"), miscoded)
+      assert.ok(miscoded.includes('\n1. {"name":"鄂城区"}\n'), miscoded)
+      const names = (await read({ path: "统计.shp" })).text
+      // Guards against detecting the encoding from the values alone, which leaves Chinese field names garbled.
+      assert.ok(names.includes('\n- 生产总值 (String): one value: "12"\n'), names)
+      // Guards against GDAL failing the read when asked to move past the last feature.
+      const past = (await read({ path: "县.shp", offset: 21 })).text
+      assert.ok(past.endsWith("\nOffset 21 is past the last of the 20 features."), past)
+      assert.equal(
+        (await read({ path: "县.shp", encoding: "NOPE" })).text,
+        'GDAL does not know the encoding "NOPE". Use a name such as GBK, Big5, CP1251, Shift_JIS or ISO-8859-1.',
+      )
+
+      const mixed = (await read({ path: "mixed.geojson" })).text
+      assert.ok(
+        mixed.includes("\nLayer: mixed, mixed geometry, 4 features: 2 points, 1 line, 1 without geometry\n"),
+        mixed,
+      )
+      assert.ok(mixed.includes('\nLines (1 feature):\n- name (String): one value: "长江大桥"\n'), mixed)
+      // Guards against GDAL's spelling of a number it had to keep as text, which reading in order brings out.
+      const ratings = (await read({ path: "ratings.geojson" })).text
+      assert.ok(ratings.includes('\n- rating (JSON): "4.8" ×2, "5" ×1\n'), ratings)
+      assert.ok(ratings.includes('\n1. {"rating":"4.8"}\n'), ratings)
+      const codes = (await read({ path: "codes.geojson" })).text
+      // Guards against respelling text that only looks like a number, and against JavaScript rounding a 64-bit id.
+      assert.ok(codes.includes('\n- code (JSON): "007" ×2, "5" ×1\n'), codes)
+      assert.ok(codes.includes('\n- id (Integer64): one value: "612345678901234567"\n'), codes)
+
+      // Guards against the extent of zeros GDAL gives a GeoJSON layer whose features have no geometry.
+      const unplaced = (await read({ path: "unplaced.geojson" })).text
+      assert.ok(
+        unplaced.includes("\nLayer: unplaced, no geometry, 1 feature\n") && !unplaced.includes("Extent"),
+        unplaced,
+      )
+
+      const unused = (await read({ path: "metres.geojson", encoding: "GBK" })).text
+      assert.ok(unused.includes("\nencoding was not used: it applies only to Shapefiles.\n"), unused)
+
+      const metres = (await read({ path: "metres.geojson" })).text
+      assert.ok(metres.includes("\nCRS: unknown. GeoJSON coordinates are longitudes and latitudes"), metres)
+      assert.ok((await read({ path: "roads.gml" })).text.includes("\nLayer: roads, LineString, 1 feature\n"))
+
+      const layers = (await read({ path: "multi.gpkg" })).text
+      assert.equal(
+        layers,
+        [
+          "multi.gpkg: GeoPackage, 3 layers",
+          "- points: vector, Point, 1 feature, EPSG:4326 (WGS 84)",
+          "- population: table without geometry, 1 row",
+          "- dem: raster, 4 × 3 pixels, 1 band, EPSG:4326 (WGS 84)",
+          'Read one with layer="<name>".',
+        ].join("\n"),
+      )
+      const table = (await read({ path: "multi.gpkg", layer: "population" })).text
+      assert.ok(table.includes("\n- pop (Integer64): one value: 668000\n"), table)
+      const dem = (await read({ path: "multi.gpkg", layer: "dem" })).text
+      assert.ok(dem.startsWith("multi.gpkg, layer dem: raster, GeoPackage\nSize: 4 × 3 pixels, 1 band"), dem)
+
+      const landcover = (await read({ path: "landcover.tif" })).text
+      // Guards against taking the approximate statistics cached in the .aux.xml for the raster's own.
+      assert.ok(
+        landcover.includes(
+          "\n1. landcover (Byte), no data 0, 91.7% valid: 3 values: 1 ×5 (45.5%), 2 ×4 (36.4%), 9 ×2 (18.2%)",
+        ),
+        landcover,
+      )
+      const blank = await read({ path: "blank.tif", preview: true })
+      assert.deepEqual(blank, { text: "Band 1 has no valid pixels, so there is no picture." })
+      const preview = await read({ path: "landcover.tif", preview: true })
+      assert.ok(preview.image?.startsWith("iVBORw0KGgo"), "a PNG")
+      assert.ok(
+        preview.text.includes(
+          "\nBand 1 (landcover), one colour per value: 1 rgb(0, 100, 0), 2 rgb(250, 230, 160), 9 rgb(0, 0, 0).",
+        ),
+        preview.text,
+      )
+      assert.equal(
+        (await read({ path: "photo.png" })).text,
+        "photo.png has no georeferencing: no transform, control points, RPC coefficients, geolocation arrays or CRS. It is an image, not geographic data.",
+      )
+
+      // Guards against a read writing beside the data: a .aux.xml, a .gfs, or a changed GeoPackage.
+      assert.deepEqual(await snapshot(data), before)
+    } finally {
+      await engine.stop()
+    }
+  })
+}
+
+test("reading before QGIS is ready answers with the state, and a relative path is refused", async () => {
+  const engine = await start(undefined)
+  try {
+    const response = await engine.request({ path: "/data/x.tif" }, 10000, "qgis.read")
+    assert.ok(!response.ok && response.error.code === "not-ready", JSON.stringify(response))
+    const relative = await engine.request({ path: "x.tif" }, 10000, "qgis.read")
+    assert.ok(!relative.ok && relative.error.code === "invalid-params", JSON.stringify(relative))
+    const limit = await engine.request({ path: "/data/x.tif", limit: 51 }, 10000, "qgis.read")
+    assert.ok(!limit.ok && limit.error.code === "invalid-params", JSON.stringify(limit))
+  } finally {
+    await engine.stop()
+  }
+})
+
+/** Every file under a directory with its content, to compare before and after. */
+async function snapshot(directory: string) {
+  const files = await fs.readdir(directory, { recursive: true })
+  const entries = await Promise.all(
+    files.sort().map(async (name) => [name, (await fs.readFile(path.join(directory, name))).toString("base64")]),
+  )
+  return Object.fromEntries(entries)
+}
+
+/** Writes the test data with QGIS's own GDAL: what each reader case needs, in the shapes real files take. */
+async function makeData(app: string, directory: string) {
+  const located = await Macos.locate(app)
+  assert.ok(located.ok)
+  const point = (name: string, coordinates: unknown, properties: object) => ({
+    type: "Feature",
+    properties,
+    geometry: name === "none" ? null : { type: name, coordinates },
+  })
+  await fs.writeFile(
+    path.join(directory, "mixed.geojson"),
+    JSON.stringify({
+      type: "FeatureCollection",
+      features: [
+        point("Point", [114.3, 30.59], { name: "黄鹤楼", rating: 4.8 }),
+        point("MultiPoint", [[114.28, 30.58]], { name: "出口", rating: "5" }),
+        point(
+          "LineString",
+          [
+            [114.25, 30.55],
+            [114.35, 30.62],
+          ],
+          { name: "长江大桥" },
+        ),
+        point("none", [], { name: "无几何" }),
+      ],
+    }),
+  )
+  await fs.writeFile(
+    path.join(directory, "ratings.geojson"),
+    JSON.stringify({
+      type: "FeatureCollection",
+      features: [4.8, "5", 4.8].map((rating) => point("Point", [114.3, 30.5], { rating })),
+    }),
+  )
+  // Written as text: JSON.stringify cannot spell an integer past 2^53.
+  const coded = (code: string) =>
+    `{"type":"Feature","properties":{"id":612345678901234567,"code":${code}},"geometry":{"type":"Point","coordinates":[114.3,30.5]}}`
+  await fs.writeFile(
+    path.join(directory, "codes.geojson"),
+    `{"type":"FeatureCollection","features":[${['"007"', '"007"', "5"].map(coded).join(",")}]}`,
+  )
+  await fs.writeFile(
+    path.join(directory, "unplaced.geojson"),
+    JSON.stringify({ type: "FeatureCollection", features: [point("none", [], { name: "无几何" })] }),
+  )
+  await fs.writeFile(
+    path.join(directory, "metres.geojson"),
+    JSON.stringify({ type: "FeatureCollection", features: [point("Point", [-621020, 3946706], { name: "四川" })] }),
+  )
+  const script = String.raw`
+import os, sqlite3, sys
+from osgeo import gdal, ogr, osr
+gdal.UseExceptions()
+os.chdir(sys.argv[1])
+wgs84 = osr.SpatialReference()
+wgs84.ImportFromEPSG(4326)
+
+# In GBK, the one without a .cpg, the other with a .cpg that says UTF-8.
+for county in ("县", "乡"):
+    shapefile = ogr.GetDriverByName("ESRI Shapefile").CreateDataSource(county + ".shp")
+    layer = shapefile.CreateLayer(county, wgs84, ogr.wkbPolygon, options=["ENCODING=CP936"])
+    layer.CreateField(ogr.FieldDefn("name", ogr.OFTString))
+    # Enough text to tell GBK from Big5, as a real table of names has.
+    for name in "鄂城区 龙里县 华容区 梁子湖区 光明区 高陵区 洪山区 江夏区 黄陂区 新洲区 蔡甸区 汉南区 武昌区 青山区 硚口区 汉阳区 江岸区 江汉区 东西湖区 黄石港区".split():
+        feature = ogr.Feature(layer.GetLayerDefn())
+        feature.SetField("name", name)
+        feature.SetGeometry(ogr.CreateGeometryFromWkt("POLYGON ((114.6 30.2, 115 30.2, 115 30.4, 114.6 30.2))"))
+        layer.CreateFeature(feature)
+    shapefile = None
+os.remove("县.cpg")
+with open("乡.cpg", "w") as cpg:
+    cpg.write("UTF-8")
+
+# Chinese only in the field names.
+shapefile = ogr.GetDriverByName("ESRI Shapefile").CreateDataSource("统计.shp")
+layer = shapefile.CreateLayer("统计", wgs84, ogr.wkbPoint, options=["ENCODING=CP936"])
+for name in ("人口", "面积", "生产总值"):
+    layer.CreateField(ogr.FieldDefn(name, ogr.OFTString))
+feature = ogr.Feature(layer.GetLayerDefn())
+for name in ("人口", "面积", "生产总值"):
+    feature.SetField(name, "12")
+feature.SetGeometry(ogr.CreateGeometryFromWkt("POINT (114.3 30.59)"))
+layer.CreateFeature(feature)
+shapefile = None
+os.remove("统计.cpg")
+
+package = ogr.GetDriverByName("GPKG").CreateDataSource("multi.gpkg")
+points = package.CreateLayer("points", wgs84, ogr.wkbPoint)
+feature = ogr.Feature(points.GetLayerDefn())
+feature.SetGeometry(ogr.CreateGeometryFromWkt("POINT (114.3 30.59)"))
+points.CreateFeature(feature)
+table = package.CreateLayer("population", None, ogr.wkbNone)
+table.CreateField(ogr.FieldDefn("pop", ogr.OFTInteger64))
+feature = ogr.Feature(table.GetLayerDefn())
+feature.SetField("pop", 668000)
+table.CreateFeature(feature)
+styles = package.CreateLayer("layer_styles", None, ogr.wkbNone)
+styles.CreateField(ogr.FieldDefn("styleQML", ogr.OFTString))
+package = None
+memory = gdal.GetDriverByName("MEM").Create("", 4, 3, 1, gdal.GDT_Int16)
+memory.SetGeoTransform([114, 0.01, 0, 31, 0, -0.01])
+memory.SetSpatialRef(wgs84)
+memory.GetRasterBand(1).WriteArray(__import__("numpy").arange(12, dtype="int16").reshape(3, 4))
+gdal.Translate("multi.gpkg", memory, format="GPKG", creationOptions=["APPEND_SUBDATASET=YES", "RASTER_TABLE=dem"])
+# As a GeoPackage QGIS has edited is left; reading one would put a -wal and a -shm beside it.
+connection = sqlite3.connect("multi.gpkg")
+connection.execute("PRAGMA journal_mode=WAL")
+connection.close()
+
+tif = gdal.GetDriverByName("GTiff").Create("landcover.tif", 4, 3, 1, gdal.GDT_Byte)
+tif.SetGeoTransform([114, 0.01, 0, 31, 0, -0.01])
+tif.SetSpatialRef(wgs84)
+band = tif.GetRasterBand(1)
+band.SetDescription("landcover")
+colors = gdal.ColorTable()
+colors.SetColorEntry(1, (0, 100, 0, 255))
+colors.SetColorEntry(2, (250, 230, 160, 255))
+band.SetColorTable(colors)
+band.WriteArray(__import__("numpy").array([[1, 1, 1, 2], [1, 1, 2, 2], [9, 9, 2, 0]], dtype="uint8"))
+tif = None
+# No data kept only beside the raster, and statistics QGIS once cached, approximate and wrong.
+with open("landcover.tif.aux.xml", "w") as aux:
+    aux.write('<PAMDataset><PAMRasterBand band="1"><NoDataValue>0</NoDataValue><Metadata><MDI key="STATISTICS_APPROXIMATE">YES</MDI><MDI key="STATISTICS_MAXIMUM">2</MDI><MDI key="STATISTICS_MINIMUM">1</MDI><MDI key="STATISTICS_MEAN">1.5</MDI><MDI key="STATISTICS_STDDEV">0.5</MDI></Metadata></PAMRasterBand></PAMDataset>')
+
+gml = ogr.GetDriverByName("GML").CreateDataSource("roads.gml", options=["XSISCHEMA=OFF"])
+roads = gml.CreateLayer("roads", wgs84, ogr.wkbLineString)
+feature = ogr.Feature(roads.GetLayerDefn())
+feature.SetGeometry(ogr.CreateGeometryFromWkt("LINESTRING (114.25 30.55, 114.35 30.62)"))
+roads.CreateFeature(feature)
+gml = None
+
+blank = gdal.GetDriverByName("GTiff").Create("blank.tif", 3, 3, 1, gdal.GDT_Float32)
+blank.SetGeoTransform([114, 0.01, 0, 31, 0, -0.01])
+blank.SetSpatialRef(wgs84)
+blank.GetRasterBand(1).SetNoDataValue(-1)
+blank.GetRasterBand(1).Fill(-1)
+blank = None
+
+png = gdal.GetDriverByName("MEM").Create("", 2, 2, 3, gdal.GDT_Byte)
+gdal.GetDriverByName("PNG").CreateCopy("photo.png", png)
+`
+  execFileSync(located.install.interpreter, ["-c", script, directory], {
+    env: { ...process.env, ...Macos.environment(located.install) },
+    stdio: ["ignore", "ignore", "pipe"],
+  })
 }

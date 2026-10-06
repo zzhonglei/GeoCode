@@ -5,7 +5,7 @@ export const MARKER = "__GEOCODE_QGIS__"
 
 // Embedded, since the engine is bundled into one file. String.raw keeps Python's backslashes, so the Python must not
 // contain a backtick or "${" of its own.
-const prelude = String.raw`
+export const prelude = String.raw`
 import faulthandler
 import json
 import os

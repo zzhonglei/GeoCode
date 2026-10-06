@@ -9,8 +9,10 @@ import { Runtime } from "../runtime.ts"
 import { Status } from "../status.ts"
 import { Catalog } from "./catalog.ts"
 import { Doc } from "./doc.ts"
+import { Geodata } from "./geodata.ts"
 import { Macos } from "./macos.ts"
 import { Python } from "./python.ts"
+import { Reader } from "./reader.ts"
 
 const DOMAIN = "qgis"
 
@@ -37,6 +39,15 @@ const LINE_LIMIT = 1024 * 1024
 
 /** Messages an algorithm reported, kept for its result; all of them reach the caller as progress. */
 const MESSAGE_LIMIT = 200
+
+/** A read reports every two seconds while it works; this long without a word means it is stuck. */
+const READ_IDLE = "5 minutes"
+
+/** A preview of a large multiband raster runs to several megabytes of base64. */
+const READ_OUTPUT_LIMIT = 64 * 1024 * 1024
+
+/** As many sample features as a read returns at most. */
+const SAMPLE_LIMIT = 50
 
 const Block = Schema.Struct({ path: Schema.String })
 
@@ -78,12 +89,26 @@ const DocParams = Schema.Struct({
   query: Schema.optionalKey(Schema.String),
 })
 
+const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))
+
+const ReadParams = Schema.Struct({
+  path: Schema.String,
+  layer: Schema.optionalKey(Schema.String),
+  offset: Schema.optionalKey(Count),
+  limit: Schema.optionalKey(Count.check(Schema.isLessThanOrEqualTo(SAMPLE_LIMIT))),
+  encoding: Schema.optionalKey(Schema.String),
+  preview: Schema.optionalKey(Schema.Boolean),
+  bands: Schema.optionalKey(Schema.Array(Count)),
+})
+
 const decodeBlock = Schema.decodeUnknownExit(Block)
 const decodeReport = Schema.decodeUnknownExit(Report)
 const decodeRunParams = Schema.decodeUnknownExit(RunParams)
 const decodeEvent = Schema.decodeUnknownExit(Event)
 const decodeDocParams = Schema.decodeUnknownExit(DocParams)
 const decodeCatalog = Schema.decodeUnknownExit(Catalog.Report)
+const decodeReadParams = Schema.decodeUnknownExit(ReadParams)
+const decodeReading = Schema.decodeUnknownExit(Reader.Report)
 
 export type Failed =
   | "config-error"
@@ -335,7 +360,23 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       return { text: Doc.answer(catalog, decoded.value) }
     })
 
-  return { domain: DOMAIN, methods: { run, doc, discover, configure, recheck } }
+  const read: Engine.Method = (raw, context) =>
+    Effect.gen(function* () {
+      const decoded = decodeReadParams(raw)
+      if (Exit.isFailure(decoded)) {
+        return yield* new Engine.Failure({ code: "invalid-params", message: String(decoded.cause) })
+      }
+      if (!path.isAbsolute(decoded.value.path)) {
+        return yield* new Engine.Failure({
+          code: "invalid-params",
+          message: `${decoded.value.path} is not an absolute path`,
+        })
+      }
+      const current = yield* ready(context.signal)
+      return yield* readData(runtime, current, decoded.value, context.signal)
+    })
+
+  return { domain: DOMAIN, methods: { run, doc, read, discover, configure, recheck } }
 })
 
 /** The state a configuration settles on at once, or `checking` when it names a QGIS to probe. */
@@ -509,6 +550,56 @@ function execute(
           )
         }
         return Effect.succeed({ outputs: outcome.outputs, messages })
+      }),
+    )
+}
+
+/** Reads a dataset with QGIS's GDAL, and words what it found for GeoAgent. */
+function readData(
+  runtime: Runtime.Interface,
+  install: Macos.Install,
+  params: typeof ReadParams.Type,
+  signal: AbortSignal,
+) {
+  return runtime
+    .run({
+      command: install.interpreter,
+      args: ["-c", Reader.READ, JSON.stringify(params)],
+      env: Macos.environment(install),
+      delivery: { mode: "collect", limit: READ_OUTPUT_LIMIT },
+      clocks: { idle: READ_IDLE },
+      signal,
+    })
+    .pipe(
+      Effect.mapError((error) => new Engine.Failure({ code: "start-failed", message: error.message })),
+      Effect.flatMap((result) => {
+        const details = { stderr: tail(result.stderr) }
+        if (result.reason === "abort") {
+          return Effect.fail(new Engine.Failure({ code: "cancelled", message: "the read was cancelled", details }))
+        }
+        if (result.reason === "idle") {
+          const message = `reading reported nothing for ${READ_IDLE}`
+          return Effect.fail(new Engine.Failure({ code: "timeout", message, details }))
+        }
+        if (result.reason === "output-limit") {
+          const message = `reading wrote more than ${READ_OUTPUT_LIMIT} bytes`
+          return Effect.fail(new Engine.Failure({ code: "crashed", message, details }))
+        }
+        const decoded = decodeReading(Python.marked(result.stdout).at(-1))
+        if (Exit.isFailure(decoded)) {
+          const ending = result.signal ? `signal ${result.signal}` : `code ${result.code}`
+          const message = `QGIS's Python exited with ${ending} without a valid report`
+          return Effect.fail(
+            new Engine.Failure({ code: "crashed", message, details: { ...details, report: String(decoded.cause) } }),
+          )
+        }
+        const report = decoded.value
+        if (report.kind === "error") {
+          return Effect.fail(
+            new Engine.Failure({ code: "read-failed", message: report.message, details: { error: report.error } }),
+          )
+        }
+        return Effect.succeed(Geodata.answer(report, params))
       }),
     )
 }
