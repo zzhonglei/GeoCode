@@ -56,6 +56,14 @@ describe('GeoCode: the geo tools reach GeoEngine', () => {
     expect(requests).toEqual([]);
   });
 
+  // Guards against qgisrun failing at the shell server on any of its three steps.
+  it('lets each step of a run through', async () => {
+    for (const method of ['qgis.locate', 'qgis.prepare', 'qgis.run']) {
+      expect((await call({ method, params: { algorithm: 'native:buffer' } })).status).toBe(200);
+    }
+    expect(requests.splice(0).map((request) => request.method)).toEqual(['qgis.locate', 'qgis.prepare', 'qgis.run']);
+  });
+
   it('streams the progress and then the result, refusals included', async () => {
     const response = await call({ method: 'qgis.doc', params: { action: 'groups' } });
     expect(response.headers.get('content-type')).toContain('application/x-ndjson');
