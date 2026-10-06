@@ -46,8 +46,7 @@ const decodeAnswer = Schema.decodeUnknownExit(Answer)
 const failureMessage = (failure: GeoEngine.Failure, path: string) => {
   if (failure.code === "not-ready") return failure.message
   if (failure.code === "read-failed") return `GDAL failed while reading ${path}: ${failure.message}`
-  if (failure.code === "timeout" || failure.code === "crashed")
-    return `Reading ${path} stopped without an answer. Tell the user.`
+  if (failure.code === "timeout" || failure.code === "crashed") return `Reading ${path} stopped without an answer.`
   return GeoEngine.UNAVAILABLE
 }
 

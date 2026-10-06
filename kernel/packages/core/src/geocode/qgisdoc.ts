@@ -40,7 +40,7 @@ const decodeAnswer = Schema.decodeUnknownExit(Answer)
 /** What GeoAgent reads when GeoEngine cannot answer; a QGIS that is not ready comes with what to do about it. */
 const failureMessage = (failure: GeoEngine.Failure) => {
   if (failure.code === "not-ready") return failure.message
-  if (failure.code === "catalog-failed") return "QGIS could not list its algorithms. Tell the user."
+  if (failure.code === "catalog-failed") return "QGIS could not list its algorithms."
   return GeoEngine.UNAVAILABLE
 }
 

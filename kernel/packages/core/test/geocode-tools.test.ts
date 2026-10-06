@@ -152,7 +152,7 @@ describe("GeoCode: qgisdoc", () => {
         }),
       ]
       const listing = yield* executeTool(yield* Tool.Service, call({ action: "groups" }))
-      expect(listing.error?.message).toBe("QGIS could not list its algorithms. Tell the user.")
+      expect(listing.error?.message).toBe("QGIS could not list its algorithms.")
     }),
   )
 })
@@ -338,10 +338,10 @@ describe("GeoCode: readgeodata", () => {
         "GDAL failed while reading dem.tif: TIFFReadDirectory: Not a TIFF file",
       )
       expect((yield* failing("timeout", "reading reported nothing for 5 minutes")).error?.message).toBe(
-        "Reading dem.tif stopped without an answer. Tell the user.",
+        "Reading dem.tif stopped without an answer.",
       )
       expect((yield* failing("crashed", "exited with signal SIGSEGV")).error?.message).toBe(
-        "Reading dem.tif stopped without an answer. Tell the user.",
+        "Reading dem.tif stopped without an answer.",
       )
       expect((yield* failing("not-ready", "QGIS is not configured. Ask the user.")).error?.message).toBe(
         "QGIS is not configured. Ask the user.",
