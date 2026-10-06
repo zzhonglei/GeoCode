@@ -29,6 +29,10 @@ export const Algorithm = Schema.Struct({
   tags: Schema.Array(Schema.String),
   /** QGIS's documentation flags, which `qgis_process help` prints as notes. */
   notes: Schema.Number,
+  /** The name and description in Chinese, by the interface's language codes, as the user's own QGIS shows them. */
+  translations: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.Struct({ name: Schema.String, description: Schema.String })),
+  ),
   parameters: Schema.Array(Parameter),
   outputs: Schema.Array(Schema.Struct({ name: Schema.String, type: Schema.String, description: Schema.String })),
 })
@@ -42,6 +46,8 @@ export const Report = Schema.Union([
     algorithms: Schema.Array(Algorithm),
     /** Left out because they need QGIS's interface; named so a request for one is answered, not reported missing. */
     excluded: Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
+    /** The extensions QGIS writes vectors by; to any other output name it adds ".gpkg". */
+    vectorExtensions: Schema.Array(Schema.String),
   }),
   Schema.Struct({ ok: Schema.Literal(false), error: Schema.String }),
 ])

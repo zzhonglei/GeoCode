@@ -130,6 +130,8 @@ export function environment(install: Install): Record<string, string> {
     // Inherited from a login shell, it can put another Python's packages ahead of QGIS's own; Python ignores it empty.
     PYTHONPATH: "",
     PYTHONIOENCODING: "utf-8",
+    // Off: Qt's own diagnostics, which a run would pass on with what QGIS, GDAL and PROJ write.
+    QT_LOGGING_RULES: "qt.*=false",
   }
 }
 

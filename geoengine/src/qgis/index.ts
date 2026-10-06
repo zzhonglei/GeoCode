@@ -2,7 +2,7 @@ export * as Qgis from "./index.ts"
 
 import fsp from "node:fs/promises"
 import path from "node:path"
-import { Cause, Deferred, Effect, Exit, Option, PubSub, Schema, Stream } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Option, PubSub, Schema, Semaphore, Stream } from "effect"
 import { Config } from "../config.ts"
 import { Engine } from "../engine.ts"
 import { Runtime } from "../runtime.ts"
@@ -11,6 +11,7 @@ import { Catalog } from "./catalog.ts"
 import { Doc } from "./doc.ts"
 import { Geodata } from "./geodata.ts"
 import { Macos } from "./macos.ts"
+import { Plan } from "./plan.ts"
 import { Python } from "./python.ts"
 import { Reader } from "./reader.ts"
 
@@ -27,9 +28,8 @@ const SPOTLIGHT_TIMEOUT = "10 seconds"
 /** Listing takes seconds; as long as a probe, for a cold disk. */
 const CATALOG_TIMEOUT = PROBE_TIMEOUT
 
-const DEFAULT_IDLE_SECONDS = 600
-const MIN_IDLE_SECONDS = 30
-const MAX_IDLE_SECONDS = 24 * 60 * 60
+/** Asking QGIS about coordinate reference systems takes the second or two it needs to start. */
+const CRS_TIMEOUT = PROBE_TIMEOUT
 
 /** Characters kept of output nobody parses, for the diagnostics. */
 const OUTPUT_TAIL = 16 * 1024
@@ -37,11 +37,14 @@ const OUTPUT_TAIL = 16 * 1024
 /** Characters held while waiting for the end of a line; longer output without one is noise. */
 const LINE_LIMIT = 1024 * 1024
 
-/** Messages an algorithm reported, kept for its result; all of them reach the caller as progress. */
-const MESSAGE_LIMIT = 200
-
 /** A read reports every two seconds while it works; this long without a word means it is stuck. */
 const READ_IDLE = "5 minutes"
+
+/** How long a checked run's output names stay taken if it never runs, as when the user refuses it. */
+const RESERVATION_MS = 60 * 60 * 1000
+
+/** Marks the line QGIS adds with the outputs, which the end of the answer lists. */
+const RESULTS = /^Results: \{/
 
 /** A preview of a large multiband raster runs to several megabytes of base64. */
 const READ_OUTPUT_LIMIT = 64 * 1024 * 1024
@@ -61,16 +64,22 @@ const Report = Schema.Union([
   Schema.Struct({ python: Schema.String, gdal: Schema.String, qgis: Schema.String, algorithms: Schema.Number }),
 ])
 
-const RunParams = Schema.Struct({
+const LocateParams = Schema.Struct({
   algorithm: Schema.String,
   parameters: Schema.Record(Schema.String, Schema.Unknown),
-  cwd: Schema.optionalKey(Schema.String),
-  idleTimeoutSeconds: Schema.optionalKey(
-    Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: MAX_IDLE_SECONDS, exclusiveMinimum: true })),
-  ),
 })
 
+/** The files `locate` found, resolved by the caller, in the same order; `cwd` as the run will have it. */
+const PrepareParams = Schema.Struct({
+  ...LocateParams.fields,
+  files: Schema.Array(Schema.String),
+  cwd: Schema.optionalKey(Schema.String),
+})
+
+const RunParams = Schema.Struct({ ...LocateParams.fields, cwd: Schema.optionalKey(Schema.String) })
+
 const Event = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("begin") }),
   Schema.Struct({ type: Schema.Literal("progress"), percent: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("message"), level: Schema.String, text: Schema.String }),
   Schema.Struct({
@@ -80,6 +89,11 @@ const Event = Schema.Union([
     stage: Schema.optionalKey(Schema.String),
     error: Schema.optionalKey(Schema.String),
   }),
+])
+
+const CrsReport = Schema.Union([
+  Schema.Struct({ ok: Schema.Literal(true), read: Schema.Array(Schema.Boolean) }),
+  Schema.Struct({ ok: Schema.Literal(false), error: Schema.String }),
 ])
 
 const DocParams = Schema.Struct({
@@ -103,8 +117,12 @@ const ReadParams = Schema.Struct({
 
 const decodeBlock = Schema.decodeUnknownExit(Block)
 const decodeReport = Schema.decodeUnknownExit(Report)
+const decodeLocateParams = Schema.decodeUnknownExit(LocateParams)
+const decodePrepareParams = Schema.decodeUnknownExit(PrepareParams)
 const decodeRunParams = Schema.decodeUnknownExit(RunParams)
+const decodeInspection = Schema.decodeUnknownExit(Reader.Inspection)
 const decodeEvent = Schema.decodeUnknownExit(Event)
+const decodeCrsReport = Schema.decodeUnknownExit(CrsReport)
 const decodeDocParams = Schema.decodeUnknownExit(DocParams)
 const decodeCatalog = Schema.decodeUnknownExit(Catalog.Report)
 const decodeReadParams = Schema.decodeUnknownExit(ReadParams)
@@ -300,23 +318,6 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       return current
     })
 
-  const run: Engine.Method = (raw, context) =>
-    Effect.gen(function* () {
-      const decoded = decodeRunParams(raw)
-      if (Exit.isFailure(decoded)) {
-        return yield* new Engine.Failure({ code: "invalid-params", message: String(decoded.cause) })
-      }
-      const params = decoded.value
-      // Checked here, or a missing one reads as a missing interpreter.
-      const cwd = params.cwd
-      if (cwd !== undefined && !(yield* Effect.promise(() => isDirectory(cwd)))) {
-        return yield* new Engine.Failure({ code: "invalid-params", message: `${cwd} is not a directory` })
-      }
-      const current = yield* ready(context.signal)
-      const idle = Math.max(MIN_IDLE_SECONDS, params.idleTimeoutSeconds ?? DEFAULT_IDLE_SECONDS)
-      return yield* execute(runtime, current, params, idle, context)
-    })
-
   // One listing per QGIS, shared by the requests that arrive while it is made; a failed one is made again next time.
   const scope = yield* Effect.scope
   let listing:
@@ -360,6 +361,113 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       return { text: Doc.answer(catalog, decoded.value) }
     })
 
+  /**
+   * The output names checked runs have taken, with when they lapse, so two runs never take one name. Taken one at a
+   * time: choosing a name and taking it are separated by reading folders.
+   */
+  const reservations = new Map<string, number>()
+  const numbering = yield* Semaphore.make(1)
+
+  const reserved = () => {
+    const now = Date.now()
+    for (const [key, lapses] of reservations) if (lapses <= now) reservations.delete(key)
+    return new Set(reservations.keys())
+  }
+
+  // The first of the three steps of a run, then the second; the kernel resolves the files in between and asks the user
+  // after. Neither runs anything of the algorithm's.
+  const locate: Engine.Method = (raw, context) =>
+    Effect.gen(function* () {
+      const decoded = decodeLocateParams(raw)
+      if (Exit.isFailure(decoded)) {
+        return yield* new Engine.Failure({ code: "invalid-params", message: String(decoded.cause) })
+      }
+      const current = yield* ready(context.signal)
+      const catalog = yield* Effect.raceFirst(catalogFor(current), cancelled(context.signal))
+      const located = Plan.locate(catalog, decoded.value)
+      if (located.kind === "refused") return { refused: located.text }
+      return { files: located.slots.map((slot) => slot.file) }
+    })
+
+  const prepare: Engine.Method = (raw, context) =>
+    Effect.gen(function* () {
+      const decoded = decodePrepareParams(raw)
+      if (Exit.isFailure(decoded)) {
+        return yield* new Engine.Failure({ code: "invalid-params", message: String(decoded.cause) })
+      }
+      const request = decoded.value
+      const relative = request.files.find((file) => !path.isAbsolute(file))
+      if (relative !== undefined) {
+        return yield* new Engine.Failure({ code: "invalid-params", message: `${relative} is not an absolute path` })
+      }
+      const current = yield* ready(context.signal)
+      const catalog = yield* Effect.raceFirst(catalogFor(current), cancelled(context.signal))
+      const located = Plan.locate(catalog, request)
+      if (located.kind === "refused") return { refused: located.text }
+      if (located.slots.length !== request.files.length) {
+        const message = `the parameters name ${located.slots.length} files, not ${request.files.length}`
+        return yield* new Engine.Failure({ code: "invalid-params", message })
+      }
+      const { slots } = Plan.substitute(request.parameters, located.slots, request.files)
+      const survey = Plan.survey(slots)
+      const systems = Plan.coordinateSystems(located.algorithm, request.parameters)
+      const [inspection, read] = yield* Effect.all(
+        [
+          survey.layers.length || survey.tables.length
+            ? inspectData(runtime, current, survey.request, context.signal)
+            : Effect.succeed({ layers: [], tables: [] }),
+          systems.length
+            ? readCoordinateSystems(runtime, current, systems, request.cwd, context.signal)
+            : Effect.succeed([]),
+        ],
+        { concurrency: "unbounded" },
+      )
+      const reasons = [...Plan.unread(systems, read), ...Plan.mixed(survey.layers, inspection.layers)]
+      if (reasons.length) return { refused: Plan.refusal(catalog, located.algorithm, reasons) }
+      const tables = new Map(survey.tables.map((slot, index) => [slot.file, inspection.tables[index] ?? null]))
+      const numbered = yield* numbering.withPermit(
+        Effect.gen(function* () {
+          const numbered = yield* Effect.promise(() => Plan.number(slots, tables, reserved()))
+          for (const key of numbered.claimed) reservations.set(key, Date.now() + RESERVATION_MS)
+          return numbered
+        }),
+      )
+      return { plan: Plan.plan(catalog, located.algorithm, request, numbered) }
+    })
+
+  /** The last step: runs what `prepare` planned, as the user allowed it. */
+  const run: Engine.Method = (raw, context) =>
+    Effect.gen(function* () {
+      const decoded = decodeRunParams(raw)
+      if (Exit.isFailure(decoded)) {
+        return yield* new Engine.Failure({ code: "invalid-params", message: String(decoded.cause) })
+      }
+      const params = decoded.value
+      const current = yield* ready(context.signal)
+      const catalog = yield* Effect.raceFirst(catalogFor(current), cancelled(context.signal))
+      const located = Plan.locate(catalog, params)
+      if (located.kind === "refused") {
+        return yield* new Engine.Failure({ code: "invalid-params", message: located.text })
+      }
+      // The names it holds are kept while it runs, however long, and let go however it ends, refused here included.
+      const claims = Plan.claims(located.slots)
+      for (const key of claims) reservations.set(key, Number.POSITIVE_INFINITY)
+      return yield* Effect.gen(function* () {
+        // Checked here, or a missing one reads as a missing interpreter.
+        const cwd = params.cwd
+        if (cwd !== undefined && !(yield* Effect.promise(() => isDirectory(cwd)))) {
+          return yield* new Engine.Failure({ code: "invalid-params", message: `${cwd} is not a directory` })
+        }
+        return yield* execute(runtime, current, params, located.algorithm, located.slots, context)
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            for (const key of claims) reservations.delete(key)
+          }),
+        ),
+      )
+    })
+
   const read: Engine.Method = (raw, context) =>
     Effect.gen(function* () {
       const decoded = decodeReadParams(raw)
@@ -376,7 +484,7 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       return yield* readData(runtime, current, decoded.value, context.signal)
     })
 
-  return { domain: DOMAIN, methods: { run, doc, read, discover, configure, recheck } }
+  return { domain: DOMAIN, methods: { locate, prepare, run, doc, read, discover, configure, recheck } }
 })
 
 /** The state a configuration settles on at once, or `checking` when it names a QGIS to probe. */
@@ -476,44 +584,142 @@ async function isDirectory(target: string) {
   )
 }
 
+/**
+ * Asks QGIS whether it reads each value given for a CRS, before the user is asked. A check that cannot answer lets the
+ * run go on.
+ */
+function readCoordinateSystems(
+  runtime: Runtime.Interface,
+  install: Macos.Install,
+  given: ReturnType<typeof Plan.coordinateSystems>,
+  cwd: string | undefined,
+  signal: AbortSignal,
+) {
+  return Effect.gen(function* () {
+    const unknown = given.map(() => true)
+    const ran = yield* Effect.exit(
+      runtime.run({
+        command: install.interpreter,
+        args: ["-c", Python.CRS, JSON.stringify({ values: given.map((entry) => entry.value) })],
+        // A layer's path is read from where the run will read it.
+        cwd,
+        env: Macos.environment(install),
+        delivery: { mode: "collect" },
+        clocks: { total: CRS_TIMEOUT },
+        signal,
+      }),
+    )
+    if (Exit.isFailure(ran)) {
+      yield* Effect.logWarning("the CRS check did not start", { cause: String(ran.cause) })
+      return unknown
+    }
+    const result = ran.value
+    if (result.reason === "abort") {
+      return yield* new Engine.Failure({ code: "cancelled", message: "the check was cancelled" })
+    }
+    const decoded = decodeCrsReport(Python.marked(result.stdout).at(-1))
+    if (Exit.isSuccess(decoded) && decoded.value.ok && decoded.value.read.length === given.length) {
+      return decoded.value.read
+    }
+    yield* Effect.logWarning("the CRS check gave no answer", { reason: result.reason, stderr: tail(result.stderr) })
+    return unknown
+  })
+}
+
+/** Surveys the data a run names before the user is asked, with QGIS's GDAL. */
+function inspectData(
+  runtime: Runtime.Interface,
+  install: Macos.Install,
+  request: ReturnType<typeof Plan.survey>["request"],
+  signal: AbortSignal,
+) {
+  return runtime
+    .run({
+      command: install.interpreter,
+      args: ["-c", Reader.INSPECT, JSON.stringify(request)],
+      env: Macos.environment(install),
+      delivery: { mode: "collect" },
+      clocks: { idle: READ_IDLE },
+      signal,
+    })
+    .pipe(
+      Effect.mapError((error) => new Engine.Failure({ code: "start-failed", message: error.message })),
+      Effect.flatMap((result) => {
+        const details = { stderr: tail(result.stderr) }
+        if (result.reason === "abort") {
+          return Effect.fail(new Engine.Failure({ code: "cancelled", message: "the check was cancelled", details }))
+        }
+        if (result.reason === "idle") {
+          const message = `checking the data reported nothing for ${READ_IDLE}`
+          return Effect.fail(new Engine.Failure({ code: "timeout", message, details }))
+        }
+        const decoded = decodeInspection(Python.marked(result.stdout).at(-1))
+        if (Exit.isFailure(decoded)) {
+          const ending = result.signal ? `signal ${result.signal}` : `code ${result.code}`
+          const message = `QGIS's Python exited with ${ending} without a valid report`
+          return Effect.fail(new Engine.Failure({ code: "crashed", message, details }))
+        }
+        return Effect.succeed(decoded.value)
+      }),
+    )
+}
+
 function execute(
   runtime: Runtime.Interface,
   install: Macos.Install,
   params: typeof RunParams.Type,
-  idle: number,
+  algorithm: Catalog.Algorithm,
+  slots: readonly Plan.Slot[],
   context: Engine.MethodContext,
 ) {
-  const messages: { readonly level: string; readonly text: string }[] = []
+  // The parameters QGIS's errors name, for the answer to describe.
+  const named = new Set<string>()
   let noise = ""
-  let pending = ""
+  let stderr = ""
+  const pending = { stdout: "", stderr: "" }
+  // From the algorithm's start on each stream, to the process's end: the result can overtake what the other stream
+  // still carries.
+  const running = { stdout: false, stderr: false }
   let outcome: Extract<typeof Event.Type, { type: "result" }> | undefined
 
-  const line = (text: string) => {
+  /** A line the process wrote itself, as GDAL and PROJ do: told as it is, by when it came, never by what it says. */
+  const written = (text: string, stream: "stdout" | "stderr") => {
+    if (!text.trim()) return
+    noise = tail(`${noise}${text}\n`)
+    if (running[stream]) context.progress({ level: "console", text })
+  }
+
+  const line = (text: string, stream: "stdout" | "stderr") => {
+    if (stream === "stderr") stderr = tail(`${stderr}${text}\n`)
     const payload = Python.marked(text)[0]
     const decoded = payload === undefined ? undefined : decodeEvent(payload)
-    if (!decoded || Exit.isFailure(decoded)) {
-      if (text.trim()) noise = tail(`${noise}${text}\n`)
+    if (!decoded || Exit.isFailure(decoded)) return written(text, stream)
+    const event = decoded.value
+    if (event.type === "begin") {
+      running[stream] = true
+      // The caller's clock for silence starts here: QGIS says nothing while it starts.
+      if (stream === "stdout") context.progress({ begun: true })
       return
     }
-    const event = decoded.value
+    if (stream === "stderr") return
     if (event.type === "result") {
       outcome = event
       return
     }
-    if (event.type === "message") {
-      messages.push({ level: event.level, text: event.text })
-      if (messages.length > MESSAGE_LIMIT) messages.shift()
-    }
-    context.progress(event.type === "progress" ? { percent: event.percent } : { level: event.level, text: event.text })
+    if (event.type === "progress") return context.progress({ percent: event.percent })
+    if (event.level === "info" && RESULTS.test(event.text)) return
+    if (event.level === "error") for (const name of Plan.named(algorithm, event.text)) named.add(name)
+    context.progress({ level: event.level, text: event.text })
   }
 
-  const onChunk = (chunk: string) => {
-    const lines = (pending + chunk).split(/\r?\n/)
-    pending = lines.pop() ?? ""
-    for (const text of lines) line(text)
-    if (pending.length <= LINE_LIMIT) return
-    noise = tail(`${noise}${pending}`)
-    pending = ""
+  // Each stream breaks into lines of its own: a line one leaves unfinished is not finished by the other.
+  const onChunk = (chunk: string, stream: "stdout" | "stderr") => {
+    const lines = (pending[stream] + chunk).split(/\r?\n/)
+    pending[stream] = lines.pop() ?? ""
+    for (const text of lines) line(text, stream)
+    if (pending[stream].length <= LINE_LIMIT) return
+    noise = tail(`${noise}${pending[stream]}`)
+    pending[stream] = ""
   }
 
   return runtime
@@ -522,35 +728,45 @@ function execute(
       args: ["-c", Python.RUN, JSON.stringify({ algorithm: params.algorithm, parameters: params.parameters })],
       cwd: params.cwd,
       env: Macos.environment(install),
-      delivery: { mode: "incremental", onChunk },
-      clocks: { idle: `${idle} seconds` },
+      delivery: { mode: "incremental", source: "all", onChunk },
+      // The caller ends a run: how long one may take, only GeoAgent can judge.
+      clocks: { total: Duration.infinity },
       signal: context.signal,
     })
     .pipe(
       Effect.mapError((error) => new Engine.Failure({ code: "start-failed", message: error.message })),
-      Effect.flatMap((result) => {
-        if (pending) line(pending)
-        const details = { messages, stderr: tail(result.stderr), output: noise }
-        if (result.reason === "abort") {
-          return Effect.fail(new Engine.Failure({ code: "cancelled", message: "the run was cancelled", details }))
-        }
-        if (result.reason === "idle") {
-          const message = `QGIS reported nothing for ${idle} seconds`
-          return Effect.fail(new Engine.Failure({ code: "timeout", message, details }))
-        }
-        if (!outcome) {
-          const ending = result.signal ? `signal ${result.signal}` : `code ${result.code}`
-          const message = `QGIS's Python exited with ${ending} before reporting a result`
-          return Effect.fail(new Engine.Failure({ code: "crashed", message, details }))
-        }
-        if (!outcome.ok) {
+      Effect.flatMap((result) =>
+        Effect.gen(function* () {
+          if (pending.stdout) line(pending.stdout, "stdout")
+          if (pending.stderr) line(pending.stderr, "stderr")
+          const details = { stderr, output: noise }
+          if (result.reason === "abort") {
+            return yield* new Engine.Failure({ code: "cancelled", message: "the run was cancelled", details })
+          }
+          if (outcome?.ok) {
+            const outputs = (outcome.outputs ?? {}) as Record<string, unknown>
+            return { ending: Plan.finished(result.durationMs, outputs) }
+          }
+          const left = yield* Effect.promise(() => Plan.written(slots))
+          if (!outcome) {
+            const ending = result.signal ? `signal ${result.signal}` : `code ${result.code}`
+            const message = `QGIS's Python exited with ${ending} before reporting a result`
+            return yield* new Engine.Failure({
+              code: "crashed",
+              message,
+              details: { ...details, ending: Plan.crashed(result.durationMs, left) },
+            })
+          }
           const message = outcome.error ?? "the algorithm failed"
-          return Effect.fail(
-            new Engine.Failure({ code: "algorithm-failed", message, details: { ...details, stage: outcome.stage } }),
-          )
-        }
-        return Effect.succeed({ outputs: outcome.outputs, messages })
-      }),
+          for (const name of Plan.named(algorithm, message)) named.add(name)
+          const ending = Plan.failed(result.durationMs, algorithm, named, left)
+          return yield* new Engine.Failure({
+            code: "algorithm-failed",
+            message,
+            details: { ...details, stage: outcome.stage, ending },
+          })
+        }),
+      ),
     )
 }
 

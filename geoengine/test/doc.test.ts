@@ -90,6 +90,7 @@ const catalog: Catalog.Catalog = {
     algorithm({ id: "qgis:orphan", name: "Orphan", group: "" }),
   ],
   excluded: [{ id: "native:selectbyexpression", name: "Select by expression" }],
+  vectorExtensions: ["gpkg", "shp"],
 }
 
 test("an algorithm is found however the caller spells its ID or name", () => {

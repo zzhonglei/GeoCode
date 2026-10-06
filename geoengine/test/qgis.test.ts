@@ -46,9 +46,18 @@ const mark = (payload: unknown) => `echo '${Python.MARKER}${JSON.stringify(paylo
 
 const READY = mark({ python: "3.12.11", gdal: "3.13.3", qgis: "3.44.15-Solothurn", algorithms: 440 })
 
-/** A fake interpreter: `probe` answers the probe script, `run` the run script (its request is in "$3"). */
-const fake = (probe: string, run: string, catalog = "exit 9") =>
-  `case "$2" in *processing.run*) ${run} ;; *parameterTypes*) ${catalog} ;; *) ${probe} ;; esac`
+const parameter = (name: string, type: string, fields: Record<string, unknown> = {}) => ({
+  name,
+  description: name,
+  type,
+  optional: false,
+  advanced: false,
+  destination: false,
+  help: "",
+  default: null,
+  accepted: [],
+  ...fields,
+})
 
 const CATALOG = {
   ok: true,
@@ -62,12 +71,46 @@ const CATALOG = {
       help: "",
       tags: [],
       notes: 0,
-      parameters: [],
+      parameters: [
+        parameter("INPUT", "source"),
+        parameter("DISTANCE", "distance", { default: 10 }),
+        parameter("OUTPUT", "sink", { destination: true }),
+      ],
       outputs: [],
     },
   ],
-  excluded: [],
+  excluded: [{ id: "native:openurl", name: "Open file or URL" }],
+  vectorExtensions: ["gpkg", "shp", "geojson"],
 }
+
+// Without the quotes QGIS writes around its examples, which the fake's shell would take as its own.
+const REPROJECT = {
+  id: "native:reprojectlayer",
+  name: "Reproject layer",
+  group: "Vector general",
+  description: "Reprojects a layer.",
+  help: "",
+  tags: [],
+  notes: 0,
+  parameters: [
+    parameter("INPUT", "source"),
+    parameter("TARGET_CRS", "crs", {
+      default: "EPSG:4326",
+      accepted: ["CRS as an auth ID (e.g. EPSG:3111)", "CRS as a PROJ4 string (e.g. PROJ4:…)"],
+    }),
+    parameter("OUTPUT", "sink", { destination: true }),
+  ],
+  outputs: [],
+}
+
+/**
+ * A fake interpreter: `probe` answers the probe script, `run` the run script, `inspect` the survey of the data and
+ * `crs` the check of coordinate reference systems (their requests are in "$3"), `catalog` the listing of the
+ * algorithms.
+ */
+const fake = (probe: string, run: string, catalog = mark(CATALOG), inspect = "exit 9", crs = "exit 9") =>
+  `case "$2" in *parameterAsCrs*) ${crs} ;; *processing.run*) ${run} ;; *parameterTypes*) ${catalog} ;; ` +
+  `*GT_IsSurface*) ${inspect} ;; *) ${probe} ;; esac`
 
 type Response = Extract<Protocol.Outbound, { type: "response" }>
 
@@ -275,14 +318,33 @@ test("quitting during a check publishes no failure", { skip: !darwin }, async ()
   }
 })
 
-test("a run streams progress and messages, and returns the outputs", { skip: !darwin }, async () => {
+test("a run streams progress and messages, and ends its answer with the outputs", { skip: !darwin }, async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
   try {
+    // Paused between lines of the two streams, which keep no order between them; each marks the start on its own.
     const run = [
       "echo 'noise from a library'",
+      "echo 'QGIS starting' >&2",
+      mark({ type: "begin" }),
+      "sleep 0.2",
+      "echo 'reaching its pipe after the start on the other' >&2",
+      `${mark({ type: "begin" })} >&2`,
       mark({ type: "progress", percent: 50 }),
       mark({ type: "message", level: "info", text: "half way" }),
+      "sleep 0.2",
+      "echo 'ERROR 1: what GDAL wrote' >&2",
+      "sleep 0.2",
+      "echo '  printed by the algorithm  '",
+      "echo '' >&2",
+      "printf 'one half, '",
+      "sleep 0.2",
+      "echo 'between the halves' >&2",
+      "sleep 0.2",
+      "echo 'the other half'",
+      "sleep 0.2",
+      mark({ type: "message", level: "info", text: "Results: {'OUTPUT': '/data/out.gpkg'}" }),
       mark({ type: "result", ok: true, outputs: { OUTPUT: "/data/out.gpkg" } }),
+      "echo 'reaching its pipe after the result' >&2",
     ].join("; ")
     const app = await fakeApp(directory, { python: `case "$1" in -c) ;; *) exit 9 ;; esac\n${fake(READY, run)}` })
     const engine = await start(app)
@@ -290,14 +352,25 @@ test("a run streams progress and messages, and returns the outputs", { skip: !da
       assert.equal((await engine.settled()).status, "ready")
       const response = await engine.request({ algorithm: "native:buffer", parameters: { DISTANCE: 1 } })
       assert.ok(response.ok, JSON.stringify(response))
-      assert.deepEqual(response.ok && response.result, {
-        outputs: { OUTPUT: "/data/out.gpkg" },
-        messages: [{ level: "info", text: "half way" }],
-      })
+      assert.match(
+        (response.result as { ending: string }).ending,
+        /^Finished in [\d.]+ s\.\nOutputs:\n- OUTPUT: \/data\/out\.gpkg$/,
+      )
       const progress = engine.sent.flatMap((message) =>
         message.type === "progress" && message.id === response.id ? [message.data] : [],
       )
-      assert.deepEqual(progress, [{ percent: 50 }, { level: "info", text: "half way" }])
+      // The outputs QGIS lists as it ends are left to the end of the answer. Guards against losing what the process
+      // writes itself while the algorithm runs, or telling what QGIS writes as it starts.
+      assert.deepEqual(progress, [
+        { begun: true },
+        { percent: 50 },
+        { level: "info", text: "half way" },
+        { level: "console", text: "ERROR 1: what GDAL wrote" },
+        { level: "console", text: "  printed by the algorithm  " },
+        { level: "console", text: "between the halves" },
+        { level: "console", text: "one half, the other half" },
+        { level: "console", text: "reaching its pipe after the result" },
+      ])
     } finally {
       await engine.stop()
     }
@@ -364,24 +437,46 @@ test("a cancelled run answers at once and ends its process, checked or not", { s
   }
 })
 
-test("a run that fails says how", { skip: !darwin }, async () => {
+test("a run that fails says how, and which outputs it may have left half written", { skip: !darwin }, async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
   try {
-    const missing = mark({ type: "result", ok: false, stage: "run", error: "Algorithm not found" })
-    const run = `case "$3" in *native:missing*) ${missing} ;; *) echo 'Segmentation fault' >&2; exit 139 ;; esac`
+    // On one line: the fake's echo would break a line at an escaped newline.
+    const error = "Incorrect parameter value for DISTANCE"
+    const refused = [
+      mark({ type: "message", level: "error", text: error }),
+      mark({ type: "result", ok: false, stage: "run", error }),
+    ].join("; ")
+    const run = `case "$3" in *bad*) ${refused} ;; *) echo 'Segmentation fault' >&2; exit 139 ;; esac`
     const app = await fakeApp(directory, { python: fake(READY, run) })
     const engine = await start(app)
+    const half = path.join(directory, "half.gpkg")
+    await fs.writeFile(half, "")
     try {
       assert.equal((await engine.settled()).status, "ready")
-      const failed = await engine.request({ algorithm: "native:missing", parameters: {} })
-      assert.equal(!failed.ok && failed.error.code, "algorithm-failed")
-      assert.equal(!failed.ok && failed.error.message, "Algorithm not found")
+      const failed = await engine.request({
+        algorithm: "native:buffer",
+        parameters: { DISTANCE: "bad", OUTPUT: half },
+      })
+      assert.ok(!failed.ok && failed.error.code === "algorithm-failed", JSON.stringify(failed))
+      assert.equal(failed.error.message, error)
+      assert.match(
+        (failed.error.details as { ending: string }).ending,
+        new RegExp(
+          `^Failed after [\\d.]+ s\\.\\nDISTANCE: DISTANCE \\(distance, default 10\\)\\n` +
+            `These outputs may be incomplete:\\n- ${half.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+        ),
+      )
       const crashed = await engine.request({ algorithm: "native:buffer", parameters: {} })
-      assert.equal(!crashed.ok && crashed.error.code, "crashed")
-      assert.match(JSON.stringify(!crashed.ok && crashed.error.details), /Segmentation fault/)
+      assert.ok(!crashed.ok && crashed.error.code === "crashed", JSON.stringify(crashed))
+      assert.match(JSON.stringify(crashed.error.details), /Segmentation fault/)
+      assert.match((crashed.error.details as { ending: string }).ending, /^QGIS exited unexpectedly after [\d.]+ s\.$/)
+      // Guards against running what the checks before asking would refuse, should a caller skip them.
+      const unchecked = await engine.request({ algorithm: "native:openurl", parameters: {} })
+      assert.ok(!unchecked.ok && unchecked.error.code === "invalid-params", JSON.stringify(unchecked))
+      assert.match(unchecked.error.message, /native:openurl is not available\.$/)
       for (const params of [
         { algorithm: 42 },
-        { algorithm: "native:buffer", parameters: {}, idleTimeoutSeconds: Number.POSITIVE_INFINITY },
+        { algorithm: "native:buffer" },
         { algorithm: "native:buffer", parameters: {}, cwd: path.join(directory, "no such folder") },
       ]) {
         const invalid = await engine.request(params)
@@ -394,6 +489,116 @@ test("a run that fails says how", { skip: !darwin }, async () => {
     await fs.rm(directory, { recursive: true, force: true })
   }
 })
+
+test(
+  "a run is checked before it is asked about: refused, or planned with its outputs named anew",
+  { skip: !darwin },
+  async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
+    try {
+      const surveyed = path.join(directory, "surveyed")
+      const inspect =
+        `echo "$3" >> '${surveyed}'; case "$3" in *mixed*) ${mark({ layers: [["line", "point"]], tables: [] })} ;; ` +
+        `*) ${mark({ layers: [["point"]], tables: [] })} ;; esac`
+      const asked = path.join(directory, "asked")
+      const crs =
+        `echo "$(pwd) $3" >> '${asked}'; case "$3" in *tmerc*) ${mark({ ok: true, read: [false] })} ;; ` +
+        `*broken*) exit 9 ;; *) ${mark({ ok: true, read: [true] })} ;; esac`
+      const run = mark({ type: "result", ok: true, outputs: {} })
+      const catalog = mark({ ...CATALOG, algorithms: [...CATALOG.algorithms, REPROJECT] })
+      const app = await fakeApp(directory, { python: fake(READY, run, catalog, inspect, crs) })
+      const engine = await start(app)
+      const at = (name: string) => path.join(directory, name)
+      await fs.writeFile(at("out.gpkg"), "")
+      try {
+        assert.equal((await engine.settled()).status, "ready")
+        const locate = async (parameters: unknown) => {
+          const response = await engine.request({ algorithm: "native:buffer", parameters }, 10000, "qgis.locate")
+          assert.ok(response.ok, JSON.stringify(response))
+          return response.result
+        }
+        const prepare = async (parameters: unknown, files: string[]) => {
+          const response = await engine.request(
+            { algorithm: "native:buffer", parameters, files },
+            10000,
+            "qgis.prepare",
+          )
+          assert.ok(response.ok, JSON.stringify(response))
+          return response.result as { refused?: string; plan?: { parameters: { OUTPUT: string }; header: string } }
+        }
+
+        assert.deepEqual(await locate({ INPUT: "in.geojson", OUTPUT: "out.gpkg" }), {
+          files: ["in.geojson", "out.gpkg"],
+        })
+        const wrong = (await locate({ INPUT: "in.geojson", distance: 5 })) as { refused: string }
+        assert.match(wrong.refused, /^QGIS 3\.44\.15-Solothurn\nnative:buffer — Buffer: Computes a buffer area\.\n\n/)
+        assert.match(wrong.refused, /\ndistance is written DISTANCE\.\n/)
+
+        for (const files of [["in.geojson", at("out.gpkg")], [at("in.geojson")]]) {
+          const response = await engine.request(
+            { algorithm: "native:buffer", parameters: { INPUT: "in.geojson", OUTPUT: "out.gpkg" }, files },
+            10000,
+            "qgis.prepare",
+          )
+          assert.ok(!response.ok && response.error.code === "invalid-params", JSON.stringify(response))
+        }
+
+        const mixed = await prepare({ INPUT: "mixed.geojson", OUTPUT: "x.gpkg" }, [at("mixed.geojson"), at("x.gpkg")])
+        assert.match(mixed.refused ?? "", /\n\nmixed\.geojson mixes points and lines in one layer, so nothing was run/)
+
+        const parameters = { INPUT: "in.geojson", OUTPUT: "out.gpkg" }
+        const files = [at("in.geojson"), at("out.gpkg")]
+        const first = await prepare(parameters, files)
+        assert.equal(first.plan?.parameters.OUTPUT, at("out_1.gpkg"))
+        // Guards against two runs checked side by side writing to one name.
+        assert.equal((await prepare(parameters, files)).plan?.parameters.OUTPUT, at("out_2.gpkg"))
+        assert.ok((await engine.request({ algorithm: "native:buffer", parameters: first.plan?.parameters })).ok)
+        // Its run over, the name is free again; this fake run wrote nothing there.
+        assert.equal((await prepare(parameters, files)).plan?.parameters.OUTPUT, at("out_1.gpkg"))
+
+        // A layer whose geometry type is chosen after the path, and a run with no input, are not surveyed.
+        const before = (await fs.readFile(surveyed, "utf-8")).split("\n").filter(Boolean).length
+        await prepare({ INPUT: "in.geojson|geometrytype=Point", OUTPUT: "y.gpkg" }, [at("in.geojson"), at("y.gpkg")])
+        await prepare({ OUTPUT: "z.gpkg" }, [at("z.gpkg")])
+        assert.equal((await fs.readFile(surveyed, "utf-8")).split("\n").filter(Boolean).length, before)
+
+        // A CRS QGIS does not read is refused with what QGIS says it accepts; QGIS is asked from where the run runs.
+        const reproject = async (target: string | undefined) => {
+          const parameters = {
+            INPUT: "in.gpkg|layername=a",
+            OUTPUT: "r.gpkg",
+            ...(target ? { TARGET_CRS: target } : {}),
+          }
+          const response = await engine.request(
+            { algorithm: "native:reprojectlayer", parameters, files: [at("in.gpkg"), at("r.gpkg")], cwd: directory },
+            10000,
+            "qgis.prepare",
+          )
+          assert.ok(response.ok, JSON.stringify(response))
+          return response.result as { refused?: string; plan?: unknown }
+        }
+        assert.equal(
+          (await reproject("+proj=tmerc +lon_0=121")).refused?.split("\n\n")[1],
+          'TARGET_CRS is "+proj=tmerc +lon_0=121", which QGIS does not read as a coordinate reference system, so ' +
+            "nothing was run: QGIS would run as if it were not given.\nQGIS accepts:\n" +
+            "- CRS as an auth ID (e.g. EPSG:3111)\n- CRS as a PROJ4 string (e.g. PROJ4:…)",
+        )
+        assert.ok((await reproject("EPSG:3826")).plan)
+        // A check that cannot answer lets the run go on, for the run to say what is wrong.
+        assert.ok((await reproject("broken")).plan)
+        // A CRS left to its default is not asked about.
+        assert.ok((await reproject(undefined)).plan)
+        const lines = (await fs.readFile(asked, "utf-8")).split("\n").filter(Boolean)
+        assert.equal(lines.length, 3)
+        assert.equal(lines[0], `${await fs.realpath(directory)} {"values":["+proj=tmerc +lon_0=121"]}`)
+      } finally {
+        await engine.stop()
+      }
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  },
+)
 
 test("a run before QGIS is ready is refused with the state and its hint", async () => {
   const engine = await start(path.join(os.tmpdir(), "geoengine-no-such-qgis", "QGIS.app"))
@@ -655,13 +860,160 @@ for (const app of await realApps()) {
         120000,
       )
       assert.ok(response.ok, JSON.stringify(response))
-      const result = response.result as { outputs: { OUTPUT: string }; messages: unknown[] }
-      assert.equal(result.outputs.OUTPUT, output)
-      // Guards against QGIS renaming the feedback methods the run script overrides, which would drop every message.
-      assert.ok(result.messages.length > 0)
+      assert.ok((response.result as { ending: string }).ending.endsWith(`\n- OUTPUT: ${output}`))
       // Guards against attribute text reaching QGIS through a codec other than UTF-8.
       const value = execFileSync("sqlite3", [output, 'SELECT "名称" FROM "缓冲区"'], { encoding: "utf-8" })
       assert.equal(value.trim(), "台北")
+    } finally {
+      await engine.stop()
+    }
+  })
+
+  test(`QGIS at ${app} checks a run as the kernel does, and measures on the WGS 84 ellipsoid`, async () => {
+    const engine = await start(app)
+    const at = (name: string) => path.join(engine.directory, name)
+    const square = (south: number) => ({
+      type: "Feature",
+      properties: { south },
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [0, south],
+            [1, south],
+            [1, south + 1],
+            [0, south + 1],
+            [0, south],
+          ],
+        ],
+      },
+    })
+    try {
+      assert.equal((await engine.settled(150000)).status, "ready")
+      await fs.writeFile(
+        at("cells.geojson"),
+        JSON.stringify({ type: "FeatureCollection", features: [square(0), square(60)] }),
+      )
+      await fs.writeFile(
+        at("mixed.geojson"),
+        JSON.stringify({
+          type: "FeatureCollection",
+          features: [square(0), { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [0, 0] } }],
+        }),
+      )
+      await fs.writeFile(at("area.gpkg"), "")
+      const step = async (method: string, params: unknown) => {
+        const response = await engine.request(params, 120000, method)
+        assert.ok(response.ok, JSON.stringify(response))
+        return response.result as Record<string, any>
+      }
+      const request = {
+        algorithm: "native:fieldcalculator",
+        parameters: { INPUT: "cells.geojson", FIELD_NAME: "a", FIELD_TYPE: 0, FORMULA: "$area", OUTPUT: "area.gpkg" },
+      }
+      const located = await step("qgis.locate", request)
+      assert.deepEqual(located.files, ["cells.geojson", "area.gpkg"])
+      const prepared = await step("qgis.prepare", { ...request, files: [at("cells.geojson"), at("area.gpkg")] })
+      const plan = prepared.plan
+      assert.ok(plan, JSON.stringify(prepared))
+      assert.equal(plan.parameters.OUTPUT, at("area_1.gpkg"))
+      assert.match(plan.header, /\nDefaults used: FIELD_LENGTH=0, FIELD_PRECISION=0$/)
+      assert.ok(plan.algorithm.translations["zh-CN"].name && plan.algorithm.translations["zh-TW"].name)
+      assert.notEqual(plan.algorithm.translations["zh-CN"].name, plan.algorithm.name)
+      const ran = await step("qgis.run", { algorithm: request.algorithm, parameters: plan.parameters })
+      assert.match(ran.ending, /^Finished in /)
+      const areas = execFileSync("sqlite3", [at("area_1.gpkg"), 'SELECT "a" FROM "area_1" ORDER BY "south"'], {
+        encoding: "utf-8",
+      })
+        .trim()
+        .split("\n")
+        .map(Number)
+      // A planar measure gives the two cells one area; on the ellipsoid the one at 60° N is about half.
+      assert.ok(Math.abs(areas[0]! / 1.2308e10 - 1) < 0.01, String(areas))
+      assert.ok(Math.abs(areas[1]! / areas[0]! - 0.493) < 0.02, String(areas))
+
+      // Guards against QGIS renaming the feedback methods the run script overrides, which would drop every message.
+      const buffered = await engine.request(
+        {
+          algorithm: "gdal:buffervectors",
+          parameters: { INPUT: at("cells.geojson"), DISTANCE: 0.1, OUTPUT: at("b.gpkg") },
+        },
+        120000,
+      )
+      assert.ok(buffered.ok, JSON.stringify(buffered))
+      const messages = engine.sent.flatMap((message) =>
+        message.type === "progress" && message.id === buffered.id && "level" in (message.data as object)
+          ? [message.data as { level: string; text: string }]
+          : [],
+      )
+      assert.ok(
+        messages.some((message) => message.level === "command" && message.text.includes("ogr2ogr")),
+        JSON.stringify(messages),
+      )
+
+      // An algorithm that changes its input answers with the layer; the answer names its file, not the object.
+      await fs.copyFile(at("cells.geojson"), at("scratch.geojson"))
+      const truncated = await step("qgis.run", {
+        algorithm: "native:truncatetable",
+        parameters: { INPUT: at("scratch.geojson") },
+      })
+      assert.match(
+        truncated.ending,
+        new RegExp(`\\n- OUTPUT: ${at("scratch.geojson").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+      )
+
+      const mixed = await step("qgis.prepare", {
+        algorithm: "native:buffer",
+        parameters: { INPUT: "mixed.geojson", DISTANCE: 1, OUTPUT: "m.gpkg" },
+        files: [at("mixed.geojson"), at("m.gpkg")],
+      })
+      assert.match(mixed.refused, /\n\nmixed\.geojson mixes points and polygons in one layer/)
+      assert.deepEqual(
+        await fs.readdir(engine.directory).then((names) => names.filter((name) => name.startsWith("mixed"))),
+        ["mixed.geojson"],
+      )
+
+      // A PROJ string without its prefix QGIS does not read, and would reproject nothing: refused with QGIS's own
+      // forms. With the prefix it reads it, and a layer's path from where the run runs.
+      const reproject = (target: string) =>
+        step("qgis.prepare", {
+          algorithm: "native:reprojectlayer",
+          parameters: { INPUT: "cells.geojson", TARGET_CRS: target, OUTPUT: "p.gpkg" },
+          files: [at("cells.geojson"), at("p.gpkg")],
+          cwd: engine.directory,
+        })
+      const tmerc = "+proj=tmerc +lat_0=0 +lon_0=121 +k=0.9999 +x_0=250000 +y_0=0 +ellps=GRS80 +units=m +no_defs"
+      assert.match(
+        (await reproject(tmerc)).refused,
+        /\n\nTARGET_CRS is "\+proj=tmerc [^"]+", which QGIS does not read as a coordinate reference system, so nothing was run: QGIS would run as if it were not given\.\nQGIS accepts:\n- CRS as an auth ID /,
+      )
+      assert.ok((await reproject(`PROJ:${tmerc}`)).plan)
+      assert.ok((await reproject("cells.geojson")).plan)
+
+      // Guards against losing what PROJ and GDAL write themselves while the algorithm runs, and against telling
+      // Qt's own diagnostics as QGIS starts.
+      const unread = await engine.request(
+        {
+          algorithm: "native:reprojectlayer",
+          parameters: { INPUT: at("cells.geojson"), TARGET_CRS: "EPSG:999999", OUTPUT: at("q.gpkg") },
+        },
+        120000,
+      )
+      assert.ok(unread.ok, JSON.stringify(unread))
+      const written = engine.sent.flatMap((message) =>
+        message.type === "progress" && message.id === unread.id && "level" in (message.data as object)
+          ? [message.data as { level: string; text: string }]
+          : [],
+      )
+      assert.ok(
+        written.some((message) => message.level === "console" && message.text.includes("EPSG:999999")),
+        JSON.stringify(written),
+      )
+      assert.ok(!written.some((message) => message.text.startsWith("qt.")), JSON.stringify(written))
+      assert.match(
+        (await step("qgis.locate", { algorithm: "native:openurl", parameters: {} })).refused,
+        /\n\nnative:openurl is not available\.$/,
+      )
     } finally {
       await engine.stop()
     }
@@ -814,6 +1166,9 @@ for (const app of await realApps()) {
       assert.ok(table.includes("\n- pop (Integer64): one value: 668000\n"), table)
       const dem = (await read({ path: "multi.gpkg", layer: "dem" })).text
       assert.ok(dem.startsWith("multi.gpkg, layer dem: raster, GeoPackage\nSize: 4 × 3 pixels, 1 band"), dem)
+      // Guards against reading a raster table of a GeoPackage open elsewhere without the changes in its -wal.
+      const held = (await read({ path: "open.gpkg", layer: "dem" })).text
+      assert.ok(held.includes("\nExtent: 115, 30.97 to 115.04, 31 (xmin, ymin to xmax, ymax)\n"), held)
 
       const landcover = (await read({ path: "landcover.tif" })).text
       // Guards against taking the approximate statistics cached in the .aux.xml for the raster's own.
@@ -838,8 +1193,11 @@ for (const app of await realApps()) {
         "photo.png has no georeferencing: no transform, control points, RPC coefficients, geolocation arrays or CRS. It is an image, not geographic data.",
       )
 
-      // Guards against a read writing beside the data: a .aux.xml, a .gfs, or a changed GeoPackage.
-      assert.deepEqual(await snapshot(data), before)
+      // Guards against a read writing beside the data: a .aux.xml, a .gfs, or a changed GeoPackage. SQLite indexes the
+      // -wal of the one open elsewhere in its -shm, as that program does.
+      const after = await snapshot(data)
+      delete after["open.gpkg-shm"]
+      assert.deepEqual(after, before)
     } finally {
       await engine.stop()
     }
@@ -920,7 +1278,7 @@ async function makeData(app: string, directory: string) {
     JSON.stringify({ type: "FeatureCollection", features: [point("Point", [-621020, 3946706], { name: "四川" })] }),
   )
   const script = String.raw`
-import os, sqlite3, sys
+import os, shutil, sqlite3, sys
 from osgeo import gdal, ogr, osr
 gdal.UseExceptions()
 os.chdir(sys.argv[1])
@@ -978,6 +1336,21 @@ gdal.Translate("multi.gpkg", memory, format="GPKG", creationOptions=["APPEND_SUB
 connection = sqlite3.connect("multi.gpkg")
 connection.execute("PRAGMA journal_mode=WAL")
 connection.close()
+# As one another program holds open is left: its last change, a raster moved a degree east, only in the -wal. Two
+# rasters, so each opens as a subdataset.
+shutil.copy("multi.gpkg", "held.gpkg")
+gdal.Translate("held.gpkg", memory, format="GPKG", creationOptions=["APPEND_SUBDATASET=YES", "RASTER_TABLE=slope"])
+connection = sqlite3.connect("held.gpkg")
+connection.execute("PRAGMA wal_autocheckpoint=0")
+for table in ("gpkg_tile_matrix_set", "gpkg_contents"):
+    connection.execute(f"UPDATE {table} SET min_x = min_x + 1, max_x = max_x + 1 WHERE table_name = 'dem'")
+connection.commit()
+shutil.copy("held.gpkg", "open.gpkg")
+shutil.copy("held.gpkg-wal", "open.gpkg-wal")
+connection.close()
+for name in ("held.gpkg", "held.gpkg-wal", "held.gpkg-shm"):
+    if os.path.exists(name):
+        os.remove(name)
 
 tif = gdal.GetDriverByName("GTiff").Create("landcover.tif", 4, 3, 1, gdal.GDT_Byte)
 tif.SetGeoTransform([114, 0.01, 0, 31, 0, -0.01])

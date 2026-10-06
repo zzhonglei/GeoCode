@@ -4,6 +4,32 @@ import { Schema } from "effect"
 import { Python } from "./python.ts"
 
 /**
+ * Opens a dataset read-only and leaves nothing beside it; needs `gdal` and `os`. `file` is the file on disk, which a
+ * subdataset's target only names.
+ */
+const OPENING = String.raw`
+def untouched(target, flags, file):
+    identified = gdal.IdentifyDriverEx(target, flags)
+    driver = identified.ShortName if identified is not None else None
+    # Without an .xsd the GML driver writes a .gfs beside the data.
+    if driver == "GML":
+        return ["WRITE_GFS=NO"]
+    # SQLite would write a -wal and a -shm beside a GeoPackage in WAL mode. Without a -wal there, the file holds all of
+    # its data; with one, another program has it open, and its changes are read too.
+    if driver == "GPKG" and not os.path.exists(file + "-wal"):
+        return ["IMMUTABLE=YES"]
+    return []
+
+
+def open_dataset(target, flags, options=(), file=None):
+    try:
+        opening = untouched(target, flags, file or target) + list(options)
+        return gdal.OpenEx(target, flags | gdal.OF_READONLY, open_options=opening)
+    except Exception:
+        return None
+`
+
+/**
  * Reads a dataset with QGIS's own GDAL, never starting QGIS itself, and reports the facts as JSON; `Geodata` words
  * them. The request arrives as JSON in the first argument.
  */
@@ -103,26 +129,9 @@ path = request["path"]
 if not os.path.exists(path):
     done({"kind": "missing"})
 
-
-def untouched(target, flags):
-    identified = gdal.IdentifyDriverEx(target, flags)
-    driver = identified.ShortName if identified is not None else None
-    # Without an .xsd the GML driver writes a .gfs beside the data.
-    if driver == "GML":
-        return ["WRITE_GFS=NO"]
-    # SQLite would write a -wal and a -shm beside a GeoPackage in WAL mode. Without a -wal there, the file holds all of
-    # its data; with one, another program has it open, and its changes are read too.
-    if driver == "GPKG" and not os.path.exists(path + "-wal"):
-        return ["IMMUTABLE=YES"]
-    return []
-
-
-def open_dataset(target, flags, options=()):
-    try:
-        return gdal.OpenEx(target, flags | gdal.OF_READONLY, open_options=untouched(target, flags) + list(options))
-    except Exception:
-        return None
-
+` +
+  OPENING +
+  String.raw`
 
 vector = open_dataset(path, gdal.OF_VECTOR)
 raster = open_dataset(path, gdal.OF_RASTER)
@@ -232,7 +241,7 @@ def listed():
             entry.update({"kind": "vector", "geometry": declared(layer), "crs": crs_facts(layer.GetSpatialRef())})
         entries.append(entry)
     for name, target, options in raster_layers():
-        dataset = open_dataset(target, gdal.OF_RASTER, options)
+        dataset = open_dataset(target, gdal.OF_RASTER, options, path)
         if dataset is not None:
             entries.append(
                 {
@@ -659,7 +668,7 @@ def measure(target, options, bands):
     # From every pixel, worked out afresh: a .aux.xml may hold approximate statistics, and GDAL would save these in one.
     gdal.SetConfigOption("GDAL_PAM_ENABLED", "NO")
     dataset = gdal.OpenEx(
-        target, gdal.OF_RASTER | gdal.OF_READONLY, open_options=untouched(target, gdal.OF_RASTER) + options
+        target, gdal.OF_RASTER | gdal.OF_READONLY, open_options=untouched(target, gdal.OF_RASTER, path) + options
     )
     pixels = dataset.RasterXSize * dataset.RasterYSize
     for facts in bands:
@@ -694,7 +703,7 @@ def raster_dataset():
 
 def read_raster():
     target, options = raster_dataset()
-    dataset = open_dataset(target, gdal.OF_RASTER, options)
+    dataset = open_dataset(target, gdal.OF_RASTER, options, path)
     verdict = georeferencing(dataset)
     if verdict == "none":
         done(dict(common, kind="not-geographic"))
@@ -1071,3 +1080,98 @@ export const Report = Schema.Union([
   Preview,
 ])
 export type Report = typeof Report.Type
+
+/**
+ * What a run checks in the data before it asks: the kinds of geometry in each layer that declares no single type, and
+ * the tables of each GeoPackage an output adds a table to. Never starts QGIS itself.
+ */
+export const INSPECT =
+  Python.prelude +
+  String.raw`
+import time
+
+from osgeo import gdal, ogr
+
+gdal.UseExceptions()
+request = json.loads(sys.argv[1])
+` +
+  OPENING +
+  String.raw`
+
+beat = [time.monotonic()]
+
+
+# A line now and then, so the task's idle clock does not end a long survey.
+def heartbeat():
+    now = time.monotonic()
+    if now - beat[0] >= 2:
+        beat[0] = now
+        emit({"alive": True})
+
+
+def kind(geometry):
+    flat = ogr.GT_Flatten(geometry.GetGeometryType())
+    if flat in (ogr.wkbPoint, ogr.wkbMultiPoint):
+        return "point"
+    if ogr.GT_IsCurve(flat) or ogr.GT_IsSubClassOf(flat, ogr.wkbMultiCurve):
+        return "line"
+    if ogr.GT_IsSurface(flat) or ogr.GT_IsSubClassOf(flat, ogr.wkbMultiSurface):
+        return "polygon"
+    return "collection"
+
+
+# The layer QGIS takes for the path: the one named or numbered after it, otherwise the first.
+def kinds(entry):
+    dataset = open_dataset(entry["path"], gdal.OF_VECTOR)
+    if dataset is None or dataset.GetLayerCount() == 0:
+        return None
+    if "name" in entry:
+        layer = dataset.GetLayerByName(entry["name"])
+    elif "id" in entry:
+        layer = dataset.GetLayer(entry["id"]) if 0 <= entry["id"] < dataset.GetLayerCount() else None
+    else:
+        layer = dataset.GetLayer(0)
+    if layer is None or ogr.GT_Flatten(layer.GetGeomType()) != ogr.wkbUnknown:
+        return None
+    definition = layer.GetLayerDefn()
+    layer.SetIgnoredFields([definition.GetFieldDefn(index).GetName() for index in range(definition.GetFieldCount())])
+    found = set()
+    for feature in layer:
+        heartbeat()
+        geometry = feature.GetGeometryRef()
+        if geometry is not None and not geometry.IsEmpty():
+            found.add(kind(geometry))
+            if len(found) == 4:
+                break
+    return sorted(found)
+
+
+def tables(target):
+    dataset = open_dataset(target, gdal.OF_VECTOR)
+    if dataset is None:
+        return None
+    return [dataset.GetLayer(index).GetName() for index in range(dataset.GetLayerCount())]
+
+
+# Data GDAL cannot read through is left unknown: QGIS says what is wrong with it when it runs.
+def surveyed(survey, item):
+    try:
+        return survey(item)
+    except Exception:
+        return None
+
+
+finish(
+    {
+        "layers": [surveyed(kinds, entry) for entry in request["layers"]],
+        "tables": [surveyed(tables, target) for target in request["tables"]],
+    }
+)
+`
+
+/** What the inspect script reports, in the order asked; null where the data could not be opened or needs no survey. */
+export const Inspection = Schema.Struct({
+  layers: Schema.Array(Schema.NullOr(Schema.Array(Schema.Literals(["collection", "line", "point", "polygon"])))),
+  tables: Schema.Array(Schema.NullOr(Schema.Array(Schema.String))),
+})
+export type Inspection = typeof Inspection.Type

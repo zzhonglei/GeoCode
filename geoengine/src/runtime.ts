@@ -32,7 +32,7 @@ export type Delivery =
        * The idle clock is refreshed before it runs, so its own time is never billed. If it throws, the run is ended
        * and fails with that error.
        */
-      readonly onChunk: (chunk: string) => void
+      readonly onChunk: (chunk: string, stream: "stdout" | "stderr") => void
       /** Whether stderr is delivered through onChunk too, or only accumulated. */
       readonly source?: "stdout" | "all"
     }
@@ -249,7 +249,7 @@ function execute(options: Options, ledger: Ledger): Execution {
       if (incremental && (target === "stdout" || interleaved)) {
         if (consumerError !== undefined) return
         try {
-          return incremental.onChunk(chunk)
+          return incremental.onChunk(chunk, target)
         } catch (error) {
           consumerError = error
           return stop("abort")

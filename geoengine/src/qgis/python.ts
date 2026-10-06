@@ -50,13 +50,16 @@ def start_qgis():
 # The providers GeoCode offers.
 PROVIDERS = ("native", "qgis", "gdal")
 
+# Opens a file or web address in the system's default program, which GeoAgent has no use for.
+WITHHELD = ("native:openurl",)
+
 
 def offered(algorithm):
     from qgis.core import Qgis
 
     # Left out as qgis_process leaves them out: they need QGIS's interface or an open project.
     standalone = not algorithm.flags() & Qgis.ProcessingAlgorithmFlag.NotAvailableInStandaloneTool
-    return algorithm.provider().id() in PROVIDERS and standalone
+    return algorithm.provider().id() in PROVIDERS and standalone and algorithm.id() not in WITHHELD
 `
 
 /** Checks, in order, what running an algorithm depends on; the first failure ends the probe. */
@@ -155,6 +158,27 @@ def parameter(definition):
     return entry
 
 
+# The names and descriptions the user's own QGIS shows in Chinese, by the interface's language codes; QGIS answers with
+# the English for what it has not translated.
+def translated(language):
+    from qgis.PyQt.QtCore import QTranslator
+
+    translator = QTranslator()
+    if not translator.load(os.path.join(QgsApplication.i18nPath(), "qgis_" + language + ".qm")):
+        return {}
+    QgsApplication.installTranslator(translator)
+    try:
+        return {
+            algorithm.id(): {"name": algorithm.displayName(), "description": algorithm.shortDescription() or ""}
+            for algorithm in registry.algorithms()
+            if offered(algorithm)
+        }
+    finally:
+        QgsApplication.removeTranslator(translator)
+
+
+translations = {"zh-CN": translated("zh-Hans"), "zh-TW": translated("zh-Hant")}
+
 algorithms = []
 excluded = []
 for algorithm in registry.algorithms():
@@ -172,6 +196,9 @@ for algorithm in registry.algorithms():
             "help": algorithm.shortHelpString() or "",
             "tags": list(algorithm.tags()),
             "notes": int(algorithm.documentationFlags()),
+            "translations": {
+                language: names[algorithm.id()] for language, names in translations.items() if algorithm.id() in names
+            },
             "parameters": [
                 parameter(definition)
                 for definition in algorithm.parameterDefinitions()
@@ -184,7 +211,17 @@ for algorithm in registry.algorithms():
         }
     )
 
-finish({"ok": True, "qgis": Qgis.version(), "algorithms": algorithms, "excluded": excluded})
+from qgis.core import QgsVectorFileWriter
+
+finish(
+    {
+        "ok": True,
+        "qgis": Qgis.version(),
+        "algorithms": algorithms,
+        "excluded": excluded,
+        "vectorExtensions": list(QgsVectorFileWriter.supportedFormatExtensions()),
+    }
+)
 `
 
 /** Runs one algorithm; the request arrives as JSON in the first argument. */
@@ -197,8 +234,13 @@ try:
     start_qgis()
     from qgis.core import QgsProcessingException, QgsProcessingFeedback
     import processing
+    from processing.tools import dataobjects
 except Exception:
+    emit({"type": "message", "level": "error", "text": traceback.format_exc()})
     finish({"type": "result", "ok": False, "stage": "start", "error": traceback.format_exc()})
+
+# The errors already reported, so the one an algorithm raises is not told twice.
+reported_errors = set()
 
 
 class Feedback(QgsProcessingFeedback):
@@ -209,6 +251,7 @@ class Feedback(QgsProcessingFeedback):
         emit({"type": "message", "level": "warning", "text": warning})
 
     def reportError(self, error, fatalError=False):
+        reported_errors.add(error)
         emit({"type": "message", "level": "error", "text": error})
 
     def pushCommandInfo(self, info):
@@ -235,13 +278,56 @@ def progress(percent):
 
 feedback.progressChanged.connect(progress)
 
+# Without a project there is no ellipsoid, and measurements come out planar.
+context = dataobjects.createContext(feedback)
+context.setEllipsoid("EPSG:7030")
+
+
+def failed(error):
+    if error not in reported_errors:
+        emit({"type": "message", "level": "error", "text": error})
+    finish({"type": "result", "ok": False, "stage": "run", "error": error})
+
+
 try:
-    outputs = processing.run(request["algorithm"], request["parameters"], feedback=feedback)
+    from qgis.core import QgsMapLayer
+
+    # From here, whatever the process writes is the algorithm's; on each stream, which keep no order between them.
+    emit({"type": "begin"})
+    sys.stderr.write(MARKER + json.dumps({"type": "begin"}) + "\n")
+    sys.stderr.flush()
+    outputs = processing.run(request["algorithm"], request["parameters"], context=context, feedback=feedback)
+    # An algorithm that changes its input in place answers with the layer itself; its source says where.
+    outputs = {name: value.source() if isinstance(value, QgsMapLayer) else value for name, value in outputs.items()}
     finish({"type": "result", "ok": True, "outputs": outputs})
 except QgsProcessingException as error:
-    finish({"type": "result", "ok": False, "stage": "run", "error": str(error)})
+    failed(str(error))
 except Exception:
-    finish({"type": "result", "ok": False, "stage": "run", "error": traceback.format_exc()})
+    failed(traceback.format_exc())
+`
+
+/**
+ * Whether QGIS reads each value given for a coordinate reference system as one, as an algorithm reads it: an authority
+ * code, PROJ or WKT text, or the CRS of a layer at that path.
+ */
+export const CRS =
+  prelude +
+  String.raw`
+request = json.loads(sys.argv[1])
+
+try:
+    from qgis.core import QgsApplication, QgsProcessingContext, QgsProcessingParameterCrs, QgsProcessingParameters
+
+    application = QgsApplication([], False)
+    application.initQgis()
+    context = QgsProcessingContext()
+    definition = QgsProcessingParameterCrs("CRS")
+    read = [
+        QgsProcessingParameters.parameterAsCrs(definition, {"CRS": value}, context).isValid() for value in request["values"]
+    ]
+    finish({"ok": True, "read": read})
+except Exception:
+    finish({"ok": False, "error": traceback.format_exc()})
 `
 
 /** The payloads of the marked lines in some output, in order; a line that does not parse is left out. */

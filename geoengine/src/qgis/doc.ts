@@ -47,7 +47,8 @@ export const docsUrl = (algorithm: Catalog.Algorithm, qgis: string) => {
  */
 const framed = (catalog: Catalog.Catalog, body: string) => `QGIS ${catalog.qgis}\n\n${body}`
 
-const line = (algorithm: Catalog.Algorithm, withGroup = false) => {
+/** An algorithm in a list: its ID, name and summary. */
+export const line = (algorithm: Catalog.Algorithm, withGroup = false) => {
   const group = withGroup ? ` (${Catalog.groupOf(algorithm)})` : ""
   const description = algorithm.description ? `: ${algorithm.description}` : ""
   return `${algorithm.id} — ${algorithm.name}${group}${description}`

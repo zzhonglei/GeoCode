@@ -189,6 +189,21 @@ test("incremental mode hands output to the consumer and keeps stderr", async () 
   assert.equal(result.stderr, "problem")
 })
 
+test("incremental mode can hand stderr over too, saying which stream each chunk came from", async () => {
+  const chunks: string[] = []
+  const result = await run(
+    node(`process.stdout.write("one"); setTimeout(() => process.stderr.write("problem"), 50)`, {
+      delivery: {
+        mode: "incremental",
+        source: "all",
+        onChunk: (chunk, stream) => void chunks.push(`${stream}:${chunk}`),
+      },
+    }),
+  )
+  assert.deepEqual(chunks, ["stdout:one", "stderr:problem"])
+  assert.equal(result.stderr, "")
+})
+
 test("a consumer that throws ends the run, which fails with that error", async () => {
   let pid = 0
   const outcome = await run(
