@@ -37,14 +37,11 @@ export const Input = Schema.Struct({
 const Answer = Schema.Struct({ text: Schema.String })
 const decodeAnswer = Schema.decodeUnknownExit(Answer)
 
-/** What GeoAgent can do about a failure inside GeoCode, whose details are for the log, not for it. */
-const UNAVAILABLE = "The QGIS tools are not available right now. Tell the user; restarting GeoCode may fix it."
-
 /** What GeoAgent reads when GeoEngine cannot answer; a QGIS that is not ready comes with what to do about it. */
 const failureMessage = (failure: GeoEngine.Failure) => {
   if (failure.code === "not-ready") return failure.message
   if (failure.code === "catalog-failed") return "QGIS could not list its algorithms. Tell the user."
-  return UNAVAILABLE
+  return GeoEngine.UNAVAILABLE
 }
 
 const failed = (failure: GeoEngine.Failure) =>
