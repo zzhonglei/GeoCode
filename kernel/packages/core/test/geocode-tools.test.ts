@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect } from "bun:test"
 import path from "path"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { FileAccess } from "@opencode/core/file-access"
 import { GeoTools } from "@opencode/core/geocode/tools"
@@ -9,6 +9,8 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Permission } from "@opencode/core/permission"
+import { PermissionSaved } from "@opencode/core/permission/saved"
+import type { PermissionEvaluation } from "@opencode/plugin/effect/permission"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { location } from "./fixture/location"
@@ -21,9 +23,12 @@ const sessionID = Session.ID.make("ses_geocode_tools_test")
 
 const assertions: Permission.AssertInput[] = []
 const calls: Array<{ readonly authorization: string | null; readonly body: unknown }> = []
-let answer = (_body: { method: string; params: Record<string, unknown> }): string[] => [
+/** The shell server's answer: its lines at once, or a stream that is written as the test goes. */
+let answer = (_body: { method: string; params: Record<string, unknown> }): string[] | ReadableStream => [
   JSON.stringify({ type: "result", ok: true, result: { text: "QGIS 4.2.3\n\nBuffer (native:buffer)" } }),
 ]
+/** Calls whose request the kernel broke off, as it does to end a task. */
+const aborted: string[] = []
 
 let server: ReturnType<typeof Bun.serve>
 beforeAll(() => {
@@ -31,11 +36,17 @@ beforeAll(() => {
   server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
+    // As the shell server, which leaves a silent run's stream open.
+    idleTimeout: 0,
     fetch: async (request) => {
       if (new URL(request.url).pathname !== "/api/geocode/geo-tool") return new Response("not found", { status: 404 })
       const body = (await request.json()) as { method: string; params: Record<string, unknown> }
       calls.push({ authorization: request.headers.get("authorization"), body })
-      return new Response(answer(body).join("\n") + "\n", { headers: { "content-type": "application/x-ndjson" } })
+      request.signal.addEventListener("abort", () => aborted.push(body.method))
+      const lines = answer(body)
+      return new Response(Array.isArray(lines) ? lines.join("\n") + "\n" : lines, {
+        headers: { "content-type": "application/x-ndjson" },
+      })
     },
   })
   process.env.OPENCHAMBER_AGENT_TOOL_URL = `http://127.0.0.1:${server.port}/api/openchamber/agent-tool`
@@ -49,10 +60,31 @@ afterAll(() => {
 
 const PROJECT = AbsolutePath.make(path.join(path.parse(process.cwd()).root, "geocode-test-project"))
 
+/** The evaluate hook the plugin registers, for the tests to call as the permission rules would. */
+let evaluate: ((event: PermissionEvaluation) => Effect.Effect<void>) | undefined
+/** What "always allow" saved for the project. */
+let saved: Array<{ action: string; resource: string }> = []
+
 const geoToolsNode = makeLocationNode({
   name: "test/geocode-tools-plugin",
-  layer: Layer.effectDiscard(registerToolPlugin(GeoTools.Plugin)),
-  deps: [Tool.node, Permission.node, FileAccess.node],
+  layer: Layer.effectDiscard(
+    registerToolPlugin(GeoTools.Plugin, {
+      permission: {
+        hook: (_name, callback) =>
+          Effect.sync(() => {
+            evaluate = callback as typeof evaluate
+            return { dispose: Effect.void }
+          }),
+        list: () => Effect.die("unused permission.list"),
+        get: () => Effect.die("unused permission.get"),
+        reply: () => Effect.die("unused permission.reply"),
+      },
+    }),
+  ),
+  deps: [Tool.node, Permission.node, FileAccess.node, Location.node, PermissionSaved.node],
+})
+const permissionSaved = Layer.mock(PermissionSaved.Service, {
+  list: () => Effect.sync(() => saved.map((item) => ({ ...item }) as unknown as PermissionSaved.Info)),
 })
 let refused: string | undefined
 /** Holds every asking until it is done, as a user who has not answered yet does. */
@@ -73,6 +105,7 @@ const permission = permissionLayer({
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Tool.node, geoToolsNode]), [
     Permission.node.replace(permission),
+    PermissionSaved.node.replace(permissionSaved),
     Location.node.replace(Layer.succeed(Location.Service, Location.Service.of(location({ directory: PROJECT })))),
   ]),
 )
@@ -80,8 +113,10 @@ const it = testEffect(
 const reset = () => {
   assertions.length = 0
   calls.length = 0
+  aborted.length = 0
   refused = undefined
   pending = undefined
+  saved = []
 }
 
 const call = (input: Record<string, unknown>) => ({
@@ -349,6 +384,383 @@ describe("GeoCode: readgeodata", () => {
       expect((yield* failing("start-failed", "spawn ENOENT")).error?.message).toBe(
         "The QGIS tools are not available right now. Tell the user; restarting GeoCode may fix it.",
       )
+    }),
+  )
+})
+
+const runs = (input: Record<string, unknown>) => ({
+  sessionID,
+  ...toolIdentity,
+  call: { type: "tool-call" as const, id: "call-qgisrun", name: "qgisrun", input },
+})
+
+const HEADER = "QGIS 4.2.3\nnative:buffer — Buffer: Computes a buffer area.\nDefaults used: SEGMENTS=5"
+
+const plan = (fields: Record<string, unknown> = {}) => ({
+  header: HEADER,
+  notes: ["Defaults used: SEGMENTS=5"],
+  parameters: { INPUT: path.join(PROJECT, "roads.shp"), DISTANCE: 100, OUTPUT: path.join(PROJECT, "out_1.gpkg") },
+  algorithm: {
+    id: "native:buffer",
+    name: "Buffer",
+    description: "Computes a buffer area.",
+    translations: { "zh-CN": { name: "缓冲区", description: "计算缓冲区。" } },
+  },
+  inputs: [{ name: "INPUT", value: path.join(PROJECT, "roads.shp") }],
+  outputs: [
+    {
+      name: "OUTPUT",
+      value: path.join(PROJECT, "out_1.gpkg"),
+      files: [path.join(PROJECT, "out_1.gpkg")],
+      folder: false,
+    },
+  ],
+  options: [{ name: "DISTANCE", value: 100 }],
+  ...fields,
+})
+
+/** GeoEngine's three steps; `run` gives the lines of the last. */
+const engine = (steps: {
+  locate?: unknown
+  prepare?: unknown
+  run?: (params: Record<string, unknown>) => string[] | ReadableStream
+}) => {
+  answer = (body) => {
+    if (body.method === "qgis.locate") return result(steps.locate ?? { files: ["roads.shp", "out.gpkg"] })
+    if (body.method === "qgis.prepare") return result(steps.prepare ?? { plan: plan() })
+    return steps.run?.(body.params) ?? result({ ending: "Finished in 1 s." })
+  }
+}
+
+const progress = (data: unknown) => JSON.stringify({ type: "progress", data })
+
+/** As the kernel's events hold a tool's metadata. */
+const isJsonRecord = Schema.is(Schema.Record(Schema.String, Schema.Json))
+
+describe("GeoCode: qgisrun", () => {
+  it.effect("checks the run, asks once about it, runs it, and answers with every line in order", () =>
+    Effect.gen(function* () {
+      reset()
+      engine({
+        run: () => [
+          progress({ percent: 50 }),
+          progress({ level: "info", text: "half way" }),
+          progress({ level: "warning", text: "1 feature skipped" }),
+          ...result({ ending: `Finished in 1 s.\nOutputs:\n- OUTPUT: ${path.join(PROJECT, "out_1.gpkg")}` }),
+        ],
+      })
+      const registry = yield* Tool.Service
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toContain("qgisrun")
+      const parameters = { INPUT: "roads.shp", DISTANCE: 100, OUTPUT: "out.gpkg" }
+      const ran = yield* executeTool(
+        registry,
+        runs({ algorithm: "native:buffer", parameters, description: "缓冲道路" }),
+      )
+      expect(ran).toMatchObject({
+        status: "completed",
+        content: [
+          {
+            type: "text",
+            text:
+              `${HEADER}\n\nhalf way\n1 feature skipped\n\n` +
+              `Finished in 1 s.\nOutputs:\n- OUTPUT: ${path.join(PROJECT, "out_1.gpkg")}`,
+          },
+        ],
+      })
+      // Guards against resolving paths otherwise than read and write do, and running other parameters than checked.
+      expect(calls.map((call) => call.body)).toEqual([
+        { method: "qgis.locate", params: { algorithm: "native:buffer", parameters } },
+        {
+          method: "qgis.prepare",
+          params: {
+            algorithm: "native:buffer",
+            parameters,
+            files: [path.join(PROJECT, "roads.shp"), path.join(PROJECT, "out.gpkg")],
+            cwd: PROJECT,
+          },
+        },
+        { method: "qgis.run", params: { algorithm: "native:buffer", parameters: plan().parameters, cwd: PROJECT } },
+      ])
+      expect(assertions).toMatchObject([
+        {
+          action: "qgisrun",
+          resources: ["native:buffer"],
+          save: ["*"],
+          metadata: {
+            description: "缓冲道路",
+            algorithm: { id: "native:buffer", translations: { "zh-CN": { name: "缓冲区" } } },
+            outputs: [{ name: "OUTPUT", external: false }],
+            options: [{ name: "DISTANCE", value: 100 }],
+            external: [],
+            guarded: false,
+            guards: [],
+          },
+        },
+      ])
+    }),
+  )
+
+  it.effect("asks about a listed algorithm and every directory outside the project in one asking", () =>
+    Effect.gen(function* () {
+      reset()
+      const elsewhere = path.join(path.parse(PROJECT).root, "exports")
+      engine({
+        prepare: {
+          plan: plan({
+            algorithm: { id: "native:truncatetable", name: "Truncate table", description: "", translations: {} },
+            outputs: [
+              { name: "OUTPUT", value: "x", files: [path.join(elsewhere, "a.gpkg")], folder: false },
+              { name: "REPORT", value: "y", files: [path.join(elsewhere, "b.html")], folder: false },
+              { name: "INSIDE", value: "z", files: [path.join(PROJECT, "c.gpkg")], folder: false },
+            ],
+          }),
+        },
+      })
+      yield* executeTool(yield* Tool.Service, runs({ algorithm: "native:truncatetable", parameters: {} }))
+      // Guards against a second card: the directory is not asked about apart, as other tools ask.
+      expect(assertions).toHaveLength(1)
+      expect(assertions[0]).toMatchObject({
+        action: "qgisrun",
+        resources: ["native:truncatetable", path.join(elsewhere, "*")],
+        metadata: {
+          guarded: true,
+          external: [elsewhere],
+          outputs: [{ external: true }, { external: true }, { external: false }],
+        },
+      })
+    }),
+  )
+
+  it.effect("asks about every database a run writes to, once each, as it asks about a listed algorithm", () =>
+    Effect.gen(function* () {
+      reset()
+      const roads = `postgis:dbname='gis' host=db table="public"."roads" (geom)`
+      const lakes = `postgis:dbname='gis' host=db table="public"."lakes" (geom)`
+      const database = "postgres: host=db dbname=gis"
+      engine({
+        prepare: {
+          plan: plan({
+            outputs: [
+              { name: "OUTPUT", value: roads, files: [], folder: false, place: database },
+              { name: "OTHER", value: lakes, files: [], folder: false, place: database },
+              { name: "INSIDE", value: "z", files: [path.join(PROJECT, "c.gpkg")], folder: false },
+            ],
+          }),
+        },
+      })
+      yield* executeTool(yield* Tool.Service, runs({ algorithm: "native:buffer", parameters: {} }))
+      expect(assertions).toHaveLength(1)
+      // Guards against "always allow" for this database reaching the whole tool, or another database, and against the
+      // rules written for the algorithm not holding where it writes.
+      expect(assertions[0]).toMatchObject({
+        resources: ["native:buffer", database],
+        save: [database],
+        metadata: { guarded: false, external: [], elsewhere: [roads, lakes], guards: [database] },
+      })
+    }),
+  )
+
+  it.effect("asks about a guarded run where the rules allow the tool, unless each guard was always allowed", () =>
+    Effect.gen(function* () {
+      reset()
+      expect(evaluate).toBeDefined()
+      const verdict = (event: Partial<PermissionEvaluation>) =>
+        Effect.gen(function* () {
+          const full = { sessionID, action: "qgisrun", resources: [], effect: "allow" as const, ...event }
+          yield* evaluate!(full)
+          return full.effect
+        })
+      const guards = { guards: ["native:truncatetable", "/exports/*"] }
+      expect(yield* verdict({ metadata: { guards: [] } })).toBe("allow")
+      expect(yield* verdict({ metadata: guards })).toBe("ask")
+      // Guards against "always allow" for the tool as a whole reaching what the list and outside writes guard.
+      saved = [
+        { action: "qgisrun", resource: "*" },
+        { action: "qgisrun", resource: "native:truncatetable" },
+      ]
+      expect(yield* verdict({ metadata: guards })).toBe("ask")
+      saved.push({ action: "qgisrun", resource: "/*" })
+      expect(yield* verdict({ metadata: guards })).toBe("allow")
+      // Leaves a refusal, an asking and other tools as the rules made them.
+      saved = []
+      expect(yield* verdict({ metadata: guards, effect: "deny" })).toBe("deny")
+      expect(yield* verdict({ metadata: guards, action: "read" })).toBe("allow")
+    }),
+  )
+
+  it.effect("refuses before asking a run that cannot work, and says why", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      engine({ locate: { refused: "QGIS 4.2.3\n\nnative:openurl is not available." } })
+      const excluded = yield* executeTool(registry, runs({ algorithm: "native:openurl", parameters: {} }))
+      expect(excluded).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "QGIS 4.2.3\n\nnative:openurl is not available." }],
+      })
+      engine({ prepare: { refused: `${HEADER}\n\nmixed.geojson mixes points and lines in one layer` } })
+      const mixed = yield* executeTool(registry, runs({ algorithm: "native:buffer", parameters: {} }))
+      expect(mixed.status).toBe("completed")
+      // Guards against a call without a label never completing: the kernel stores metadata as JSON, refusing undefined.
+      expect(isJsonRecord(excluded.metadata) && isJsonRecord(mixed.metadata)).toBe(true)
+      expect(assertions).toEqual([])
+      expect(calls.map((call) => (call.body as { method: string }).method)).toEqual([
+        "qgis.locate",
+        "qgis.locate",
+        "qgis.prepare",
+      ])
+    }),
+  )
+
+  // Guards against telling GeoAgent the tools are down when only the data could not be checked.
+  it.effect("says the data could not be checked when the survey before asking stops without an answer", () =>
+    Effect.gen(function* () {
+      reset()
+      answer = (body) =>
+        body.method === "qgis.locate"
+          ? result({ files: ["data/broken.geojson"] })
+          : [JSON.stringify({ type: "result", ok: false, error: { code: "crashed", message: "signal SIGSEGV" } })]
+      const crashed = yield* executeTool(yield* Tool.Service, runs({ algorithm: "native:buffer", parameters: {} }))
+      expect(crashed.error?.message).toBe(
+        "Checking the data the parameters name stopped without an answer, so nothing was run.",
+      )
+      expect(assertions).toEqual([])
+    }),
+  )
+
+  it.effect("keeps everything QGIS said when a run fails or crashes, and ends the answer with how", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      const failing = (code: string, ending: string) => {
+        engine({
+          run: () => [
+            progress({ level: "error", text: "Incorrect parameter value for DISTANCE" }),
+            JSON.stringify({ type: "result", ok: false, error: { code, message: "boom", details: { ending } } }),
+          ],
+        })
+        return executeTool(registry, runs({ algorithm: "native:buffer", parameters: {} }))
+      }
+      const failed = yield* failing(
+        "algorithm-failed",
+        "Failed after 0.4 s.\nDISTANCE: Distance (distance, default 10)",
+      )
+      expect(failed).toMatchObject({
+        status: "completed",
+        content: [
+          {
+            text: `${HEADER}\n\nIncorrect parameter value for DISTANCE\n\nFailed after 0.4 s.\nDISTANCE: Distance (distance, default 10)`,
+          },
+        ],
+      })
+      const crashed = yield* failing("crashed", "QGIS exited unexpectedly after 5 s.")
+      expect(crashed.status).toBe("completed")
+      expect(isJsonRecord(failed.metadata) && isJsonRecord(crashed.metadata)).toBe(true)
+      // Guards against GeoAgent reading GeoCode's internals when the chain itself fails.
+      const broken = yield* failing("start-failed", "")
+      expect(broken.error?.message).toBe(
+        "The QGIS tools are not available right now. Tell the user; restarting GeoCode may fix it.",
+      )
+    }),
+  )
+
+  it.live(
+    "stops a run that reports nothing for its timeout, keeping what it said",
+    () =>
+      Effect.gen(function* () {
+        reset()
+        const half = path.join(PROJECT, "half.gpkg")
+        engine({
+          prepare: { plan: plan({ outputs: [{ name: "OUTPUT", value: half, files: [half], folder: false }] }) },
+          run: () =>
+            new ReadableStream({
+              start: (controller) =>
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    `${progress({ begun: true })}\n${progress({ level: "info", text: "started" })}\n`,
+                  ),
+                ),
+            }),
+        })
+        const started = Date.now()
+        const stopped = yield* executeTool(
+          yield* Tool.Service,
+          runs({ algorithm: "native:buffer", parameters: {}, timeout: 1 }),
+        )
+        // The least timeout holds however short GeoAgent asks for.
+        expect(Date.now() - started).toBeGreaterThanOrEqual(10000)
+        expect(stopped).toMatchObject({
+          status: "completed",
+          content: [
+            {
+              text: expect.stringMatching(
+                new RegExp(`^${HEADER}\\n\\nstarted\\n\\nStopped after 1\\d s, with no progress for the last 10 s\\.$`),
+              ),
+            },
+          ],
+        })
+        // Guards against leaving the task running in GeoEngine after giving up on it.
+        for (let turn = 0; turn < 100 && !aborted.includes("qgis.run"); turn++) yield* Effect.sleep("10 millis")
+        expect(aborted).toContain("qgis.run")
+      }),
+    20000,
+  )
+
+  // Guards against stopping a run for the silence of QGIS starting, which reports nothing until the algorithm begins.
+  it.live(
+    "counts the silence from when the algorithm begins, not while QGIS starts",
+    () =>
+      Effect.gen(function* () {
+        reset()
+        const encoder = new TextEncoder()
+        engine({
+          run: () =>
+            new ReadableStream({
+              start: (controller) => {
+                setTimeout(() => {
+                  controller.enqueue(encoder.encode(`${progress({ begun: true })}\n`))
+                  controller.enqueue(encoder.encode(`${result({ ending: "Finished in 12 s." }).join("\n")}\n`))
+                  controller.close()
+                }, 11500)
+              },
+            }),
+        })
+        const ran = yield* executeTool(
+          yield* Tool.Service,
+          runs({ algorithm: "native:buffer", parameters: {}, timeout: 10 }),
+        )
+        expect(ran).toMatchObject({ status: "completed", metadata: { outcome: "finished" } })
+      }),
+    20000,
+  )
+
+  it.effect("gives the interface the latest messages only, and GeoAgent every one", () =>
+    Effect.gen(function* () {
+      reset()
+      const lines = Array.from({ length: 600 }, (_, index) => progress({ level: "info", text: `line ${index}` }))
+      engine({ run: () => [...lines, ...result({ ending: "Finished in 1 s." })] })
+      const ran = yield* executeTool(yield* Tool.Service, runs({ algorithm: "native:buffer", parameters: {} }))
+      const shown = (ran.metadata as { messages: { text: string }[] }).messages
+      expect([shown.length, shown[0]?.text, shown.at(-1)?.text]).toEqual([500, "line 100", "line 599"])
+      expect(ran.content).toMatchObject([{ text: expect.stringContaining("\nline 0\n") }])
+    }),
+  )
+
+  // Guards against the row counting the wait for the user's answer as the run's time.
+  it.live("tells the interface when the run began, after the user answered", () =>
+    Effect.gen(function* () {
+      reset()
+      engine({})
+      pending = yield* Deferred.make<void>()
+      const asking = yield* Effect.forkChild(
+        executeTool(yield* Tool.Service, runs({ algorithm: "native:buffer", parameters: {} })),
+      )
+      for (let turn = 0; turn < 100 && !assertions.length; turn++) yield* Effect.sleep("10 millis")
+      yield* Effect.sleep("50 millis")
+      const answered = Date.now()
+      yield* Deferred.succeed(pending, undefined)
+      const ran = yield* Fiber.join(asking)
+      expect(ran.metadata?.started).toBeGreaterThanOrEqual(answered)
     }),
   )
 })

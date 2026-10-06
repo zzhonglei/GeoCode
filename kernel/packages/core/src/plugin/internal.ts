@@ -86,6 +86,7 @@ import { WebSearchTool } from "../tool/plugin/websearch.js"
 import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
 import { GeoTools } from "../geocode/tools.js" // GeoCode: the geo tools, built in as the tools above are
+import { PermissionSaved } from "../permission/saved.js" // GeoCode: qgisrun's asking reads what "always allow" saved
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
@@ -135,6 +136,7 @@ const services = [
   Mcp.Service,
   Npm.Service,
   Permission.Service,
+  PermissionSaved.Service, // GeoCode: see the import
   Form.Service,
   ReadToolFileSystem.Service,
   Reference.Service,
@@ -188,6 +190,7 @@ export const requirements = LayerNode.group([
   Mcp.node,
   Npm.node,
   Permission.node,
+  PermissionSaved.node, // GeoCode: see the import
   Form.node,
   ReadToolFileSystem.node,
   Reference.node,
