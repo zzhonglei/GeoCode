@@ -43,7 +43,7 @@ export const QGIS_FAILURES = [
   'platform-unsupported',
   'path-missing',
   'not-qgis',
-  'unsupported',
+  'python-missing',
   'gdal-missing',
   'proj-broken',
   'core-missing',

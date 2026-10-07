@@ -15,13 +15,13 @@ export type Located =
   | { readonly ok: true; readonly install: Install }
   | {
       readonly ok: false
-      readonly status: "path-missing" | "not-qgis" | "unsupported"
+      readonly status: "path-missing" | "not-qgis" | "python-missing"
       readonly message: string
       readonly app?: string
       readonly version?: string
     }
 
-/** Finds the QGIS app bundle a configured path points at or into, and checks it has the layout this supports. */
+/** Finds the QGIS app bundle a configured path points at or into, and QGIS's launcher for its Python inside it. */
 export async function locate(configured: string): Promise<Located> {
   // A relative path in a configuration file is almost always a mistake, and would resolve against the engine's own
   // working directory.
@@ -50,8 +50,8 @@ export async function locate(configured: string): Promise<Located> {
   if (!(await exists(interpreter))) {
     return {
       ok: false,
-      status: "unsupported",
-      message: `${app} has no Contents/MacOS/python, the layout of QGIS 3.44 and 4.x; older releases are not supported`,
+      status: "python-missing",
+      message: `${app} has no Contents/MacOS/python to start its Python with`,
       app,
       version,
     }
@@ -59,15 +59,17 @@ export async function locate(configured: string): Promise<Located> {
   return { ok: true, install: { app, interpreter, version } }
 }
 
+/** Every QGIS found can be chosen: whether it runs is for the check to find out, not for its version to decide. */
 export interface Found {
   readonly app: string
   readonly version: string | undefined
-  /** False for a QGIS with an older layout, which is listed but cannot be chosen. */
-  readonly supported: boolean
 }
 
 /** The Spotlight query for every QGIS, whatever its bundle is called or wherever it is. */
 export const SPOTLIGHT_QUERY = "kMDItemCFBundleIdentifier == 'org.qgis.*'"
+
+/** How GeoAgent finds QGIS on this computer, for setting it up itself. */
+export const FINDING = `Find QGIS on this computer: QGIS apps are usually in /Applications or ~/Applications, and mdfind "${SPOTLIGHT_QUERY}" finds them anywhere. If there is more than one, ask the user which to use.`
 
 /**
  * The QGIS apps in the application folders and those Spotlight found, newest first. One under /Volumes, on a disk
@@ -100,10 +102,8 @@ export async function installs(
 }
 
 function foundOf(located: Located): Found | undefined {
-  if (located.ok) return { app: located.install.app, version: located.install.version, supported: true }
-  if (located.status === "unsupported" && located.app) {
-    return { app: located.app, version: located.version, supported: false }
-  }
+  if (located.ok) return { app: located.install.app, version: located.install.version }
+  if (located.status === "python-missing" && located.app) return { app: located.app, version: located.version }
   return undefined
 }
 

@@ -41,7 +41,7 @@ describe('GeoCode: GeoEngine for the interface', () => {
   it('counts every change in both the snapshot and the change it sends', async () => {
     expect(await snapshot()).toEqual({ revision: 0, statuses });
 
-    statuses.qgis = { status: 'unconfigured', hint: 'set it' };
+    statuses.qgis = { status: 'unconfigured' };
     for (const listener of listeners) listener('qgis', statuses.qgis);
 
     expect(sent).toEqual([{ type: GEO_STATUS_EVENT, properties: { revision: 1, domain: 'qgis', value: statuses.qgis } }]);

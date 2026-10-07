@@ -28,17 +28,15 @@ export const QgisStatusDetails: React.FC<{
   if (status.status === 'checking') {
     return withApp ? <p className="typography-micro truncate font-mono text-muted-foreground" title={status.path}>{status.path}</p> : null;
   }
-  const advice = text.advice[status.status];
-  if (status.status === 'unconfigured') return advice ? <p className="typography-meta text-muted-foreground">{advice}</p> : null;
+  if (status.status === 'unconfigured') return null;
 
-  const diagnostics = diagnosticsOf(status, text);
+  const diagnostics = diagnosticsOf(status);
   const message = 'diagnostics' in status ? status.diagnostics.message : null;
   const handleCopy = async () => setCopied((await copyTextToClipboard(diagnostics)).ok);
 
   return (
     <div className="min-w-0 space-y-1">
       {message ? <p className="typography-meta break-words text-foreground">{message}</p> : null}
-      {advice ? <p className="typography-meta text-muted-foreground">{advice}</p> : null}
       <div className="-ml-1.5 flex items-center gap-1">
         <button type="button" aria-expanded={expanded} onClick={() => setExpanded((open) => !open)} className={LINK_CLASS}>
           {text.details}

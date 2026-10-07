@@ -212,7 +212,7 @@ test("each kind of wrong path settles on its own state", { skip: !darwin }, asyn
       [path.join(directory, "Missing.app"), "path-missing"],
       [directory, "not-qgis"],
       [other, "not-qgis"],
-      [old, "unsupported"],
+      [old, "python-missing"],
     ]
     for (const [configured, expected] of cases) {
       const located = await Macos.locate(configured)
@@ -225,12 +225,11 @@ test("each kind of wrong path settles on its own state", { skip: !darwin }, asyn
   }
 })
 
-test("no configuration settles on unconfigured, with a hint", async () => {
+test("no configuration settles on unconfigured", async () => {
   const engine = await start(undefined)
   try {
     const state = await engine.settled()
     assert.equal(state.status, "unconfigured")
-    assert.ok("hint" in state && state.hint.length > 0)
   } finally {
     await engine.stop()
   }
@@ -600,7 +599,7 @@ test(
   },
 )
 
-test("a run before QGIS is ready is refused with the state and its hint", async () => {
+test("a run before QGIS is ready is refused with the state", async () => {
   const engine = await start(path.join(os.tmpdir(), "geoengine-no-such-qgis", "QGIS.app"))
   try {
     await engine.settled()
@@ -613,9 +612,78 @@ test("a run before QGIS is ready is refused with the state and its hint", async 
   }
 })
 
-// Guards against listing by name, which misses a renamed QGIS, against offering one that cannot be used, and against
-// listing a symlinked QGIS twice.
-test("the QGIS installs are found by identity, newest first, with old layouts marked", { skip: !darwin }, async () => {
+// Guards against GeoAgent being told QGIS is not configured right after writing machine.json, as it is told a saved file
+// takes effect at once: the call comes within the watch's debounce.
+test("a call right after machine.json is written sees the QGIS it names", { skip: !darwin }, async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
+  try {
+    const app = await fakeApp(directory, { python: fake(READY, "exit 9") })
+    const engine = await start(undefined)
+    try {
+      assert.equal((await engine.settled()).status, "unconfigured")
+      await fs.writeFile(path.join(engine.directory, "machine.json"), JSON.stringify({ qgis: { path: app } }))
+      const response = await engine.request({ action: "groups" }, 10000, "qgis.doc")
+      assert.ok(response.ok, JSON.stringify(response))
+    } finally {
+      await engine.stop()
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
+// Guards against GeoEngine's own words about a failed check being shown as what QGIS printed.
+test("a check that fails without output says so in its own words", { skip: !darwin }, async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
+  try {
+    const app = await fakeApp(directory, { python: "exit 1" })
+    const engine = await start(app)
+    try {
+      assert.equal((await engine.settled()).status, "probe-failed")
+      const response = await engine.request({ action: "groups" }, 10000, "qgis.doc")
+      assert.ok(!response.ok, JSON.stringify(response))
+      const [first, second] = response.error.message.split("\n")
+      assert.equal(first, `The configured QGIS, ${app} (3.44.15), does not work: it failed while being checked.`)
+      assert.equal(second, "The check failed: QGIS's Python exited with code 1 without a valid report")
+    } finally {
+      await engine.stop()
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
+// Guards against a version deciding what GeoAgent is told: it hears what went wrong, as with any other QGIS.
+test("a QGIS whose Python cannot be found is reported as what went wrong", { skip: !darwin }, async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
+  try {
+    const app = await fakeApp(directory, { version: "3.28.0" })
+    const engine = await start(app)
+    try {
+      assert.equal((await engine.settled()).status, "python-missing")
+      const response = await engine.request({ action: "groups" }, 10000, "qgis.doc")
+      assert.ok(!response.ok && response.error.code === "not-ready", JSON.stringify(response))
+      const [first, second] = response.error.message.split("\n")
+      assert.equal(
+        first,
+        `The configured QGIS, ${app} (3.28.0), does not work: it has no Contents/MacOS/python to start its Python with.`,
+      )
+      assert.ok(second?.startsWith("Ask the user to reinstall QGIS"), second)
+      // A QGIS installed where it was is seen by the next call.
+      await fakeApp(directory, { version: "3.44.15", python: fake(READY, "exit 9") })
+      assert.ok((await engine.request({ action: "groups" }, 10000, "qgis.doc")).ok)
+    } finally {
+      await engine.stop()
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
+// Guards against listing by name, which misses a renamed QGIS, against offering an app that is not QGIS, against
+// leaving out a QGIS whose Python cannot be found, which the check, not the list, has to report, and against listing a
+// symlinked QGIS twice.
+test("the QGIS installs are found by identity, newest first", { skip: !darwin }, async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
   try {
     const folder = path.join(directory, "Applications")
@@ -634,10 +702,10 @@ test("the QGIS installs are found by identity, newest first, with old layouts ma
     const spotlight = [path.join(renamed, "Contents", "MacOS", "python"), elsewhere, trashed]
     const found = await Macos.installs(spotlight, [folder, path.join(directory, "missing")])
     assert.deepEqual(found, [
-      { app: renamed, version: "4.2.3", supported: true },
-      { app: ltr, version: "3.44.15", supported: true },
-      { app: linked, version: "3.44.2", supported: true },
-      { app: old, version: "3.28.0", supported: false },
+      { app: renamed, version: "4.2.3" },
+      { app: ltr, version: "3.44.15" },
+      { app: linked, version: "3.44.2" },
+      { app: old, version: "3.28.0" },
     ])
   } finally {
     await fs.rm(directory, { recursive: true, force: true })
@@ -704,6 +772,54 @@ test("a recheck probes the configured QGIS again", { skip: !darwin }, async () =
       engine.deliver({ type: "request", id: 100, method: "qgis.recheck" })
       assert.ok((await engine.response(100)).ok)
       await until(() => engine.states().at(-1)?.status === "ready", 5000, "the recheck")
+    } finally {
+      await engine.stop()
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
+// Guards against GeoAgent being stuck with a QGIS reinstalled where it was, which changes nothing in machine.json, and
+// against each of the calls GeoAgent sends together starting a check of its own.
+test("each tool call checks a broken QGIS again, once for calls sent together", { skip: !darwin }, async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
+  try {
+    const repaired = path.join(directory, "repaired")
+    const probes = path.join(directory, "probes")
+    const broken = mark({ python: "3.12.11", failed: "core", error: "No module named qgis" })
+    const probe = `echo probe >> '${probes}'; sleep 0.5; if [ -e '${repaired}' ]; then ${READY}; else ${broken}; fi`
+    const app = await fakeApp(directory, { python: fake(probe, "exit 9") })
+    const engine = await start(app)
+    const count = async () => (await fs.readFile(probes, "utf-8")).split("\n").filter(Boolean).length
+    try {
+      assert.equal((await engine.settled()).status, "core-missing")
+      assert.equal(await count(), 1)
+      const ids = [engine.send({ action: "groups" }, "qgis.doc"), engine.send({ path: "/data/x.tif" }, "qgis.read")]
+      // The last arrives while that check runs, as calls a few milliseconds apart do.
+      await until(async () => (await count()) === 2, 5000, "the second check")
+      ids.push(engine.send({ algorithm: "native:buffer", parameters: {} }, "qgis.locate"))
+      for (const id of ids) {
+        const response = await engine.response(id)
+        assert.ok(!response.ok && response.error.code === "not-ready", JSON.stringify(response))
+        const message = response.error.message
+        assert.ok(
+          message.startsWith(
+            `The configured QGIS, ${app} (3.44.15), does not work: its Python cannot load QGIS itself.`,
+          ),
+        )
+        assert.ok(
+          message.includes(
+            `The check ran ${path.join(app, "Contents", "MacOS", "python")} and printed:\nNo module named qgis\n`,
+          ),
+        )
+      }
+      assert.equal(await count(), 2)
+      await fs.writeFile(repaired, "")
+      assert.ok((await engine.request({ action: "groups" }, 10000, "qgis.doc")).ok)
+      assert.ok((await engine.request({ action: "groups" }, 10000, "qgis.doc")).ok)
+      // Guards against a ready QGIS being checked on every call.
+      assert.equal(await count(), 3)
     } finally {
       await engine.stop()
     }
@@ -812,15 +928,22 @@ test("documentation of a QGIS that is not ready answers with the state and what 
   try {
     const response = await engine.request({ action: "groups" }, 10000, "qgis.doc")
     assert.ok(!response.ok && response.error.code === "not-ready", JSON.stringify(response))
-    assert.ok(response.error.message.startsWith("QGIS is not configured."))
+    const machine = path.join(engine.directory, "machine.json")
+    // Guards against GeoAgent being left to guess where the file is and how to find QGIS, as it once wrote elsewhere.
+    assert.ok(response.error.message.startsWith(`QGIS is not configured.\nIts configuration is in ${machine}, as`))
+    assert.ok(response.error.message.includes(Macos.FINDING))
     const invalid = await engine.request({ action: "read" }, 10000, "qgis.doc")
     assert.ok(!invalid.ok && invalid.error.code === "invalid-params")
+    await fs.writeFile(machine, "{ broken")
+    await until(() => engine.states().at(-1)?.status === "config-error", 5000, "the broken file")
+    const unreadable = await engine.request({ action: "groups" }, 10000, "qgis.doc")
+    assert.ok(!unreadable.ok && unreadable.error.message.startsWith(`${machine} cannot be read: `))
   } finally {
     await engine.stop()
   }
 })
 
-/** Real installations: GEOENGINE_QGIS_APPS (colon-separated), or every supported /Applications/QGIS*.app. */
+/** Real installations: GEOENGINE_QGIS_APPS (colon-separated), or every /Applications/QGIS*.app whose Python is found. */
 const realApps = async () => {
   if (!darwin) return []
   if (process.env.GEOENGINE_QGIS_APPS) return process.env.GEOENGINE_QGIS_APPS.split(":").filter(Boolean)

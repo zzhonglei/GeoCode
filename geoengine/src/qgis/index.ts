@@ -133,7 +133,7 @@ export type Failed =
   | "platform-unsupported"
   | "path-missing"
   | "not-qgis"
-  | "unsupported"
+  | "python-missing"
   | "gdal-missing"
   | "proj-broken"
   | "core-missing"
@@ -155,7 +155,7 @@ export interface Diagnostics {
 }
 
 export type State =
-  | { readonly status: "unconfigured"; readonly hint: string }
+  | { readonly status: "unconfigured" }
   | { readonly status: "checking"; readonly path: string }
   | {
       readonly status: "ready"
@@ -165,32 +165,39 @@ export type State =
       readonly versions: { readonly qgis: string; readonly gdal: string; readonly python: string }
       readonly algorithms: number
     }
-  | { readonly status: Failed; readonly diagnostics: Diagnostics; readonly hint: string }
-
-/** What GeoAgent should do next, by state. */
-const HINTS: Record<Failed | "unconfigured", string> = {
-  unconfigured:
-    'QGIS is not configured. Ask the user for the location of their QGIS installation and set "qgis": { "path": ... } in machine.json.',
-  "config-error": "machine.json cannot be read. Ask the user to fix the file at the reported location.",
-  "platform-unsupported": "GeoCode cannot run QGIS on this operating system. Tell the user QGIS tools are unavailable.",
-  "path-missing": "The configured QGIS path does not exist. Ask the user where QGIS is installed.",
-  "not-qgis": "The configured path is not a QGIS installation. Ask the user for the path of the QGIS app.",
-  unsupported:
-    "This QGIS release is not supported. GeoCode supports the official QGIS 3.44 LTR and 4.x packages; suggest installing one.",
-  "gdal-missing": "QGIS's Python cannot load GDAL; the installation is incomplete. Suggest reinstalling QGIS.",
-  "proj-broken":
-    "QGIS cannot transform coordinates; its projection data is missing or broken. Suggest reinstalling QGIS.",
-  "core-missing": "QGIS's Python cannot load QGIS itself; the installation is incomplete. Suggest reinstalling QGIS.",
-  "processing-failed":
-    "QGIS loads but its Processing framework does not start, so no algorithm can run. Suggest reinstalling QGIS.",
-  "probe-timeout":
-    "Checking QGIS took too long; the computer may be busy. Ask the user to check again under Settings, Geo environment.",
-  "probe-failed": "QGIS's Python failed while being checked. Suggest reinstalling QGIS and report the diagnostics.",
-}
+  | { readonly status: Failed; readonly diagnostics: Diagnostics }
 
 type Ready = Extract<State, { readonly status: "ready" }>
 
-const failed = (status: Failed, diagnostics: Diagnostics): State => ({ status, diagnostics, hint: HINTS[status] })
+/**
+ * What looking at QGIS found, which can change with nothing in machine.json changing, as when QGIS is reinstalled
+ * where it was; each tool call checks again.
+ */
+const RECHECKED: ReadonlySet<State["status"]> = new Set([
+  "path-missing",
+  "not-qgis",
+  "python-missing",
+  "gdal-missing",
+  "proj-broken",
+  "core-missing",
+  "processing-failed",
+  "probe-timeout",
+  "probe-failed",
+])
+
+const SYMPTOMS = {
+  "python-missing": "it has no Contents/MacOS/python to start its Python with",
+  "gdal-missing": "its Python cannot load GDAL",
+  "proj-broken": "it cannot transform coordinates, so its projection data is missing or broken",
+  "core-missing": "its Python cannot load QGIS itself",
+  "processing-failed": "its Processing framework does not start, so no algorithm can run",
+  "probe-failed": "it failed while being checked",
+} as const
+
+/** Lines of the check's output GeoAgent is given when QGIS does not work. */
+const PRINTED_LINES = 20
+
+const failed = (status: Failed, diagnostics: Diagnostics): State => ({ status, diagnostics })
 
 export const capability: Engine.Capability = Effect.gen(function* () {
   const status = yield* Status.Service
@@ -253,7 +260,11 @@ export const capability: Engine.Capability = Effect.gen(function* () {
   // Subscribed now, so a recheck asked for right after startup is not lost.
   const rechecks = yield* PubSub.unbounded<void>()
   const asked = yield* PubSub.subscribe(rechecks)
-  const triggers = Stream.merge(block.watch, Stream.fromSubscription(asked).pipe(Stream.mapEffect(() => block.current)))
+  // The file is read again first: its watch may have died, and then the configuration in memory is stale.
+  const triggers = Stream.merge(
+    block.watch,
+    Stream.fromSubscription(asked).pipe(Stream.mapEffect(() => config.reload().pipe(Effect.andThen(block.current)))),
+  )
   // A new configuration or recheck interrupts the check still running, ending its probe.
   yield* Effect.forkScoped(Stream.runDrain(Stream.switchMap(triggers, (state) => Stream.fromEffect(check(state)))))
 
@@ -304,14 +315,32 @@ export const capability: Engine.Capability = Effect.gen(function* () {
 
   const recheck: Engine.Method = () => PubSub.publish(rechecks, undefined).pipe(Effect.as({}))
 
-  /** The ready QGIS, once a check in progress settles; otherwise the state and what GeoAgent should do about it. */
+  // The state a recheck was last asked from. Calls that find the same one ask once: a second ask would restart the
+  // check, killing a probe that may have begun while the file was read again.
+  let rechecked: State | undefined
+
+  /**
+   * The ready QGIS, once a check in progress settles; otherwise the state and what GeoAgent should do about it. A
+   * state found by looking at QGIS is checked again first; calls arriving once it has begun find it checking and wait
+   * for it. Without a QGIS to look at, the file is read again instead, since GeoAgent is told it takes effect as soon
+   * as it is saved: a call can come within the watch's debounce, or after the watch died.
+   */
   const ready = (signal: AbortSignal) =>
     Effect.gen(function* () {
-      const current = yield* Effect.raceFirst(settledState(status), cancelled(signal))
+      const found = (yield* status.current(DOMAIN)) as State
+      let stale = RECHECKED.has(found.status) ? found : undefined
+      if (stale && rechecked !== stale) {
+        rechecked = stale
+        yield* PubSub.publish(rechecks, undefined)
+      } else if (found.status === "unconfigured" || found.status === "config-error") {
+        yield* config.reload()
+        if (settledOrChecking(yield* block.current).status !== found.status) stale = found
+      }
+      const current = yield* Effect.raceFirst(settledState(status, stale), cancelled(signal))
       if (current?.status !== "ready") {
         return yield* new Engine.Failure({
           code: "not-ready",
-          message: current && "hint" in current ? current.hint : "QGIS is still being checked.",
+          message: current ? hint(current, config.file) : "QGIS is still being checked.",
           details: current,
         })
       }
@@ -490,15 +519,15 @@ export const capability: Engine.Capability = Effect.gen(function* () {
 /** The state a configuration settles on at once, or `checking` when it names a QGIS to probe. */
 function settledOrChecking(state: Config.BlockState<typeof Block.Type>): State {
   if (!state.ok) return failed("config-error", { message: state.failure.message, file: state.failure.file })
-  if (state.value === undefined) return { status: "unconfigured", hint: HINTS.unconfigured }
+  if (state.value === undefined) return { status: "unconfigured" }
   return { status: "checking", path: state.value.path }
 }
 
-/** Waits for a check in progress to settle, within a limit; undefined when it has not. */
-function settledState(status: Status.Interface) {
+/** Waits for a check in progress, or one replacing `stale`, to settle, within a limit; undefined when it has not. */
+function settledState(status: Status.Interface, stale?: State) {
   return status.watch(DOMAIN).pipe(
     Stream.map((value) => value as State),
-    Stream.filter((state) => state.status !== "checking"),
+    Stream.filter((state) => state.status !== "checking" && state !== stale),
     Stream.runHead,
     Effect.timeoutOption(SETTLE_TIMEOUT),
     Effect.map((found) => Option.getOrUndefined(Option.flatten(found))),
@@ -513,6 +542,65 @@ function cancelled(signal: AbortSignal) {
     signal.addEventListener("abort", abort, { once: true })
     return Effect.sync(() => signal.removeEventListener("abort", abort))
   })
+}
+
+/**
+ * What GeoAgent is told when QGIS is not ready: the facts, and how to set QGIS up itself when it can. The settings page
+ * is the user's way and is not mentioned.
+ */
+function hint(state: Exclude<State, Ready>, file: string): string {
+  if (state.status === "checking") return "QGIS is still being checked."
+  if (state.status === "platform-unsupported") return "GeoCode cannot run QGIS on this operating system."
+  if (state.status === "config-error") {
+    const at = state.diagnostics.file ?? file
+    return `${at} cannot be read: ${state.diagnostics.message}. No QGIS tool works until it is fixed; it is checked as soon as the file is saved.`
+  }
+  const configured = `Its configuration is in ${file}, as {"qgis": {"path": "<QGIS app>"}}.`
+  const write =
+    "Write its path to the file; QGIS is checked as soon as the file is saved. Then call qgisdoc to see whether QGIS is ready."
+  const forbidden =
+    "Do not install QGIS yourself, wrap it in a script, or run its Python: GeoCode sets up and checks QGIS from the path alone."
+  const setup = (opening: string) =>
+    [
+      opening,
+      configured,
+      `${Macos.FINDING} If there is none, ask the user to install one from https://qgis.org/download/.`,
+      write,
+      forbidden,
+    ].join("\n")
+  if (state.status === "unconfigured") return setup("QGIS is not configured.")
+  const { diagnostics } = state
+  const app = diagnostics.app ?? diagnostics.path
+  if (state.status === "path-missing") return setup(`The configured QGIS cannot be found: ${diagnostics.message}.`)
+  if (state.status === "not-qgis") return setup(`The configured path is not a QGIS app: ${diagnostics.message}.`)
+  if (state.status === "probe-timeout") {
+    return [
+      `Checking the configured QGIS, ${app}, took longer than ${PROBE_TIMEOUT}, so the computer may be busy; it is checked again the next time a QGIS tool is called.`,
+      forbidden,
+    ].join("\n")
+  }
+  const named = diagnostics.version ? `${app} (${diagnostics.version})` : app
+  const last = (text: string) => text.split("\n").slice(-PRINTED_LINES).join("\n")
+  const output = diagnostics.output?.trim()
+  // Without output, a failed check has only GeoEngine's own message, which says what stopped it; the other failures'
+  // messages repeat the symptom.
+  const printed = output
+    ? [
+        diagnostics.interpreter ? `The check ran ${diagnostics.interpreter} and printed:` : "The check printed:",
+        last(output),
+      ]
+    : state.status === "probe-failed"
+      ? [`The check failed: ${last(diagnostics.message)}`]
+      : []
+  return [
+    `The configured QGIS, ${named}, does not work: ${SYMPTOMS[state.status]}.`,
+    ...printed,
+    "Ask the user to reinstall QGIS from https://qgis.org/download/, or to use another QGIS on this computer; QGIS is checked again each time a QGIS tool is called. Do not try to repair QGIS.",
+    configured,
+    Macos.FINDING,
+    write,
+    forbidden,
+  ].join("\n")
 }
 
 function where(configured: string, install: Macos.Install) {

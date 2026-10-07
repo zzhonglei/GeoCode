@@ -11,7 +11,7 @@ import { useGeoSettingsStore } from './geoSettingsStore';
 import { DOT_CLASS, lightOf, qgisStatusOf } from './geoStatus';
 import { QgisLogo } from './QgisLogo';
 import { QgisStatusDetails } from './QgisStatusDetails';
-import { qgisText } from './qgisText';
+import { QGIS_STATUS, qgisText } from './qgisText';
 
 /** The QGIS indicator in the window header; nothing until GeoEngine has reported QGIS. */
 export const GeoStatusButton: React.FC<{ className?: string }> = ({ className }) => {
@@ -23,7 +23,7 @@ export const GeoStatusButton: React.FC<{ className?: string }> = ({ className })
   if (!status) return null;
 
   const light = lightOf(status.status);
-  const label = text.status[status.status];
+  const label = QGIS_STATUS[status.status];
 
   const manage = () => {
     setOpen(false);

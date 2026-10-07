@@ -19,7 +19,7 @@ const QGIS_PATH = '/api/geocode/qgis';
 const refusalSchema = z.object({ error: z.string() });
 
 const installsSchema = z.object({
-  installs: z.array(z.object({ app: z.string(), version: z.string().optional(), supported: z.boolean() })),
+  installs: z.array(z.object({ app: z.string(), version: z.string().optional() })),
 });
 
 const doneSchema = z.object({});

@@ -13,7 +13,7 @@ import { useGeoSettingsStore } from './geoSettingsStore';
 import { lightOf, qgisStatusOf, type Light, type QgisView } from './geoStatus';
 import { QgisLogo } from './QgisLogo';
 import { QgisStatusDetails } from './QgisStatusDetails';
-import { qgisText, releaseOf, summaryOf, type QgisText } from './qgisText';
+import { QGIS_STATUS, qgisText, releaseOf, summaryOf, type QgisText } from './qgisText';
 
 const TONE = {
   ready: 'success',
@@ -50,8 +50,8 @@ const configuredOf = (status: QgisView | undefined): Configured => {
 const lineOf = (status: QgisView | undefined, text: QgisText) =>
   status?.status === 'ready' ? summaryOf(status, text) : text.qgisDescription;
 
-const StatusPill: React.FC<{ status: QgisView | undefined; text: QgisText }> = ({ status, text }) => (
-  status ? <SettingsCardPill tone={TONE[lightOf(status.status)]}>{text.status[status.status]}</SettingsCardPill> : null
+const StatusPill: React.FC<{ status: QgisView | undefined }> = ({ status }) => (
+  status ? <SettingsCardPill tone={TONE[lightOf(status.status)]}>{QGIS_STATUS[status.status]}</SettingsCardPill> : null
 );
 
 export const GeoEnvironmentPage: React.FC = () => {
@@ -80,7 +80,7 @@ export const GeoEnvironmentPage: React.FC = () => {
           <QgisLogo className="size-5 shrink-0" />
           <span className="typography-ui-label shrink-0 font-medium text-foreground">QGIS</span>
           <span className="typography-meta min-w-0 flex-1 truncate text-muted-foreground">{lineOf(status, text)}</span>
-          <StatusPill status={status} text={text} />
+          <StatusPill status={status} />
           <Icon name="arrow-right-s" className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         </button>
       </div>
@@ -97,7 +97,7 @@ const QgisDetails: React.FC<{ text: QgisText; status: QgisView | undefined; revi
   const isConfigured = (app: string) => app === configured.path || app === configured.app;
   const isChosen = (app: string) => (pending ? app === pending.app : isConfigured(app));
   const light = status ? lightOf(status.status) : 'idle';
-  // GeoEngine refuses to write over a file it cannot read; the advice above says what to do instead.
+  // GeoEngine refuses to write over a file it cannot read; the diagnostics above name the file and where it breaks.
   const locked = status?.status === 'config-error';
 
   const scan = React.useCallback(() => {
@@ -147,7 +147,6 @@ const QgisDetails: React.FC<{ text: QgisText; status: QgisView | undefined; revi
     ? [{
       app: shown,
       version: status?.status === 'ready' ? releaseOf(status.versions.qgis) : undefined,
-      supported: status?.status !== 'unsupported',
     }, ...listed]
     : listed;
 
@@ -155,7 +154,7 @@ const QgisDetails: React.FC<{ text: QgisText; status: QgisView | undefined; revi
     <SettingsPageLayout
       title="QGIS"
       titleLeading={<SettingsBackButton label={text.back} onClick={onBack} />}
-      titleAccessory={<StatusPill status={status} text={text} />}
+      titleAccessory={<StatusPill status={status} />}
       description={lineOf(status, text)}
       headerEnd={shown ? (
         <Button variant="outline" size="xs" disabled={status?.status === 'checking'} onClick={recheck}>
@@ -223,20 +222,17 @@ const InstallRow: React.FC<{
   locked: boolean;
   onSelect: () => void;
 }> = ({ install, text, selected, tone, locked, onSelect }) => {
-  // Kept focusable, so keyboard and screen reader users still reach why it cannot be chosen.
-  const unavailable = locked || !install.supported;
   return (
     <button
       type="button"
       role="radio"
       aria-checked={selected}
-      aria-disabled={unavailable || undefined}
-      title={install.supported ? undefined : text.oldReleaseHint}
-      onClick={unavailable ? undefined : onSelect}
+      aria-disabled={locked || undefined}
+      onClick={locked ? undefined : onSelect}
       className={cn(
         ROW_CLASS,
         selected ? 'bg-[var(--interactive-selection)]/25' : 'hover:bg-[var(--interactive-hover)]/50',
-        unavailable && 'cursor-not-allowed opacity-60 hover:bg-transparent',
+        locked && 'cursor-not-allowed opacity-60 hover:bg-transparent',
       )}
     >
       <span
@@ -251,7 +247,6 @@ const InstallRow: React.FC<{
       <span className="typography-ui-label shrink-0 font-medium text-foreground">{install.version ? `QGIS ${install.version}` : 'QGIS'}</span>
       <span className="typography-micro min-w-0 flex-1 truncate font-mono text-muted-foreground" title={install.app}>{install.app}</span>
       {selected ? <SettingsCardPill tone={tone}>{text.inUse}</SettingsCardPill> : null}
-      {install.supported ? null : <SettingsCardPill tone="neutral">{text.oldRelease}</SettingsCardPill>}
     </button>
   );
 };

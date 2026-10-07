@@ -31,6 +31,8 @@ export interface Block<A> {
 }
 
 export interface Interface {
+  /** The file's absolute path. */
+  readonly file: string
   /** Registers a domain's block under its own name; twice is a defect. */
   readonly block: <S extends Schema.Codec<unknown, unknown>>(name: string, schema: S) => Effect.Effect<Block<S["Type"]>>
   /** Reads the file now: for after a write elsewhere, and for when the watch has died. */
@@ -147,7 +149,7 @@ export const layer = (file: string) =>
       yield* Effect.addFinalizer(() => Effect.sync(() => watcher.close()))
       yield* reload()
 
-      return Service.of({ block, reload })
+      return Service.of({ file, block, reload })
     }),
   )
 

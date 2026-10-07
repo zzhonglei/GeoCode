@@ -155,12 +155,12 @@ describe("GeoCode: qgisdoc", () => {
         JSON.stringify({
           type: "result",
           ok: false,
-          error: { code: "not-ready", message: "QGIS is not configured. Ask the user for the location of their QGIS." },
+          error: { code: "not-ready", message: "QGIS is not configured.\nIts configuration is in machine.json." },
         }),
       ]
       const result = yield* executeTool(yield* Tool.Service, call({ action: "groups", algorithm: "native:buffer" }))
       expect(result.status).toBe("error")
-      expect(JSON.stringify(result.error)).toContain("QGIS is not configured. Ask the user for the location")
+      expect(JSON.stringify(result.error)).toContain("QGIS is not configured.\\nIts configuration is in machine.json.")
       // Guards against asking about a field the action does not use.
       expect(assertions).toMatchObject([{ resources: ["groups"] }])
     }),
@@ -378,9 +378,7 @@ describe("GeoCode: readgeodata", () => {
       expect((yield* failing("crashed", "exited with signal SIGSEGV")).error?.message).toBe(
         "Reading dem.tif stopped without an answer.",
       )
-      expect((yield* failing("not-ready", "QGIS is not configured. Ask the user.")).error?.message).toBe(
-        "QGIS is not configured. Ask the user.",
-      )
+      expect((yield* failing("not-ready", "QGIS is not configured.")).error?.message).toBe("QGIS is not configured.")
       expect((yield* failing("start-failed", "spawn ENOENT")).error?.message).toBe(
         "The QGIS tools are not available right now. Tell the user; restarting GeoCode may fix it.",
       )
