@@ -13,6 +13,7 @@ import { PermissionSaved } from "@opencode/core/permission/saved"
 import type { PermissionEvaluation } from "@opencode/plugin/effect/permission"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
+import { ToolOutput } from "@opencode/core/tool-output"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
@@ -759,6 +760,157 @@ describe("GeoCode: qgisrun", () => {
       yield* Deferred.succeed(pending, undefined)
       const ran = yield* Fiber.join(asking)
       expect(ran.metadata?.started).toBeGreaterThanOrEqual(answered)
+    }),
+  )
+})
+
+const gee = (input: Record<string, unknown>) => ({
+  sessionID,
+  ...toolIdentity,
+  call: { type: "tool-call" as const, id: "call-geerun", name: "geerun", input },
+})
+
+/** A finished run of GeoEngine's, with what the script printed. */
+const ran = (fields: Record<string, unknown> = {}) =>
+  result({ outcome: "finished", output: "images: 73\n", truncated: false, durationMs: 1200, ...fields })
+
+describe("GeoCode: geerun", () => {
+  it.effect("asks as the shell is asked, runs the script in the project, and answers with what it printed", () =>
+    Effect.gen(function* () {
+      reset()
+      answer = () => ran()
+      const registry = yield* Tool.Service
+      const definition = (yield* toolDefinitions(registry)).find((tool) => tool.name === "geerun")
+      expect(definition).toBeDefined()
+      const done = yield* executeTool(registry, gee({ script: "print(1)", description: "统计影像" }))
+      expect(done).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "images: 73\n\nFinished in 1 s." }],
+        metadata: { description: "统计影像", outcome: "finished" },
+      })
+      expect(assertions).toMatchObject([
+        { action: "geerun", resources: ["*"], save: ["*"], metadata: { description: "统计影像", script: "print(1)" } },
+      ])
+      // Guards against the run reaching GeoEngine without the kernel's token, or outside the project's directory.
+      expect(calls).toEqual([
+        { authorization: `Bearer ${TOKEN}`, body: { method: "gee.run", params: { script: "print(1)", cwd: PROJECT } } },
+      ])
+    }),
+  )
+
+  it.effect("runs a file at its absolute path, asking first about its directory when it is outside the project", () =>
+    Effect.gen(function* () {
+      reset()
+      answer = () => ran()
+      const registry = yield* Tool.Service
+      yield* executeTool(registry, gee({ path: "scripts/ndvi.py" }))
+      expect(assertions.map((input) => input.action)).toEqual(["geerun"])
+      expect(assertions[0]?.metadata).toEqual({ path: path.join(PROJECT, "scripts/ndvi.py") })
+      expect(calls.map((call) => call.body)).toEqual([
+        { method: "gee.run", params: { file: path.join(PROJECT, "scripts/ndvi.py"), cwd: PROJECT } },
+      ])
+
+      reset()
+      const outside = path.join(path.parse(PROJECT).root, "elsewhere", "ndvi.py")
+      yield* executeTool(registry, gee({ path: outside }))
+      // Guards against running a file outside the project without asking about its directory, as the shell asks.
+      expect(assertions.map((input) => [input.action, input.resources])).toEqual([
+        ["external_directory", [path.join(path.dirname(outside), "*")]],
+        ["geerun", ["*"]],
+      ])
+    }),
+  )
+
+  it.effect("runs nothing without exactly one of the script and the path, or when the user refuses", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      for (const input of [{}, { script: "print(1)", path: "a.py" }]) {
+        const refusal = yield* executeTool(registry, gee(input))
+        expect(refusal.error?.message).toBe('Give exactly one of "script" and "path".')
+      }
+      refused = "geerun"
+      expect((yield* executeTool(registry, gee({ script: "print(1)" }))).status).toBe("error")
+      expect(calls).toEqual([])
+    }),
+  )
+
+  it.effect("ends the answer with how the run ended", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      const cases: [Record<string, unknown>, string][] = [
+        [
+          { outcome: "failed", output: "Traceback (most recent call last):\nZeroDivisionError\n" },
+          "Traceback (most recent call last):\nZeroDivisionError\n\nThe script failed after 1 s.",
+        ],
+        [
+          { outcome: "idle", output: "", durationMs: 125000, idleSeconds: 120 },
+          "(The script printed nothing.)\n\nStopped after 125 s: for the last 120 s the script printed nothing and waited for no request to Earth Engine.",
+        ],
+        [
+          { outcome: "crashed", output: "Segmentation fault\n", exit: "signal SIGSEGV", durationMs: 300 },
+          "Segmentation fault\n\nThe Python ended with signal SIGSEGV after 0.3 s, before the script finished.",
+        ],
+        [
+          { output: "line 9999\n", truncated: true },
+          "(The output was too long; only its end is kept.)\n\nline 9999\n\nFinished in 1 s.",
+        ],
+      ]
+      for (const [fields, text] of cases) {
+        answer = () => ran(fields)
+        const done = yield* executeTool(registry, gee({ script: "x" }))
+        expect(done).toMatchObject({ status: "completed", content: [{ type: "text", text }] })
+      }
+    }),
+  )
+
+  // Guards against the kernel's own cut, which keeps the start, losing a long run's traceback and how it ended.
+  it.effect("keeps the end of a long output, within the kernel's bounds, and marks the answer as cut", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      const lines = Array.from({ length: 3000 }, (_, index) => `image ${index}`)
+      const huge = "x".repeat(ToolOutput.MAX_BYTES * 2)
+      for (const output of [[...lines, "ZeroDivisionError"].join("\n"), `${huge}ZeroDivisionError`]) {
+        answer = () => ran({ outcome: "failed", output })
+        const done = yield* executeTool(registry, gee({ script: "x" }))
+        const first = done.content?.[0]
+        const text = first?.type === "text" ? first.text : ""
+        expect(text.startsWith("(The output was too long; only its end is kept.)\n\n")).toBe(true)
+        expect(text.endsWith("ZeroDivisionError\n\nThe script failed after 1 s.")).toBe(true)
+        expect(text.split("\n").length).toBeLessThanOrEqual(ToolOutput.MAX_LINES)
+        expect(Buffer.byteLength(text, "utf-8")).toBeLessThanOrEqual(ToolOutput.MAX_BYTES)
+        expect(done.metadata).toMatchObject({ truncated: true })
+      }
+    }),
+  )
+
+  it.effect("tells GeoAgent what to do when Earth Engine is not ready, and only that when GeoCode cannot answer", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      const cases: [Record<string, unknown>, string][] = [
+        [
+          { code: "not-ready", message: "Google Earth Engine is not configured.\nThe configuration is the gee block." },
+          "Google Earth Engine is not configured.\nThe configuration is the gee block.",
+        ],
+        [{ code: "invalid-params", message: "/project/none.py is not a file" }, "/project/none.py is not a file"],
+        [
+          { code: "initialize-failed", message: "EEException: Not signed up for Earth Engine" },
+          "Earth Engine could not be initialized, so the script did not run: EEException: Not signed up for Earth Engine",
+        ],
+        [
+          { code: "start-failed", message: "spawn EACCES", details: { stderr: "x" } },
+          "Google Earth Engine is not available right now. Tell the user; restarting GeoCode may fix it.",
+        ],
+      ]
+      for (const [error, message] of cases) {
+        answer = () => [JSON.stringify({ type: "result", ok: false, error })]
+        const done = yield* executeTool(registry, gee({ script: "x" }))
+        expect(done.status).toBe("error")
+        expect(done.error?.message).toBe(message)
+      }
     }),
   )
 })

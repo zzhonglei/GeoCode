@@ -64,6 +64,13 @@ describe('GeoCode: the geo tools reach GeoEngine', () => {
     expect(requests.splice(0).map((request) => request.method)).toEqual(['qgis.locate', 'qgis.prepare', 'qgis.run']);
   });
 
+  // Guards against geerun failing at the shell server, and GEE's settings reaching GeoEngine through a tool's route.
+  it('lets a GEE run through, and nothing else of GEE', async () => {
+    expect((await call({ method: 'gee.run', params: { script: 'print(1)' } })).status).toBe(200);
+    expect((await call({ method: 'gee.recheck', params: {} })).status).toBe(400);
+    expect(requests.splice(0).map((request) => request.method)).toEqual(['gee.run']);
+  });
+
   it('streams the progress and then the result, refusals included', async () => {
     const response = await call({ method: 'qgis.doc', params: { action: 'groups' } });
     expect(response.headers.get('content-type')).toContain('application/x-ndjson');

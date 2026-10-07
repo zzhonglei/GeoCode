@@ -6,6 +6,7 @@ import { FileAccess } from "../file-access.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
 import { PermissionSaved } from "../permission/saved.js"
+import { GeeRunTool } from "./geerun.js"
 import { QgisDocTool } from "./qgisdoc.js"
 import { QgisRunTool } from "./qgisrun.js"
 import { ReadGeodataTool } from "./readgeodata.js"
@@ -26,6 +27,7 @@ export const Plugin = {
         editor.add(QgisDocTool.make(permission))
         editor.add(ReadGeodataTool.make(access))
         editor.add(QgisRunTool.make(permission, access, location))
+        editor.add(GeeRunTool.make(permission, access, location))
       })
       .pipe(Effect.orDie)
     // Where the rules allow qgisrun, a run of a listed algorithm, outside the project or into a database still asks.
