@@ -87,14 +87,20 @@ export const recheckQgis = () => request(`${QGIS_PATH}/recheck`, doneSchema, { m
 
 const pickedSchema = z.string().min(1);
 
-/** The app the user picks in the system's file dialog; null when they cancel or there is no dialog. */
-export const pickQgisApp = async (title: string): Promise<string | null> => {
-  const picked = pickedSchema.safeParse(await getDesktopBridge()?.openDialog?.({
-    title,
-    directory: false,
-    multiple: false,
-    defaultPath: '/Applications',
-    filters: [{ name: 'QGIS', extensions: ['app'] }],
-  }));
+/**
+ * The QGIS the user picks in the system's file dialog: its app on macOS, its folder on Windows, where GeoEngine finds
+ * the QGIS anywhere inside one; null when they cancel or there is no dialog.
+ */
+export const pickQgisApp = async (titles: { app: string; folder: string }): Promise<string | null> => {
+  const windows = window.__OPENCHAMBER_PLATFORM__ === 'win32';
+  const picked = pickedSchema.safeParse(await getDesktopBridge()?.openDialog?.(windows
+    ? { title: titles.folder, directory: true, multiple: false, defaultPath: 'C:\\Program Files' }
+    : {
+      title: titles.app,
+      directory: false,
+      multiple: false,
+      defaultPath: '/Applications',
+      filters: [{ name: 'QGIS', extensions: ['app'] }],
+    }));
   return picked.success ? picked.data : null;
 };

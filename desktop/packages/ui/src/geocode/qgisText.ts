@@ -16,6 +16,7 @@ export const QGIS_STATUS = {
   'platform-unsupported': 'Not on this system yet',
   'path-missing': 'App not found',
   'not-qgis': 'Not a QGIS app',
+  ambiguous: 'Several in one folder',
   'python-missing': 'Python not found',
   'gdal-missing': 'Cannot load GDAL',
   'proj-broken': 'PROJ data broken',
@@ -43,6 +44,8 @@ export type QgisText = {
   inUse: string;
   chooseOther: string;
   pickTitle: string;
+  /** On Windows, where a QGIS is a folder rather than an app. */
+  pickFolderTitle: string;
   recheck: string;
   chooseFailed: (reason: string) => string;
   recheckFailed: (reason: string) => string;
@@ -66,6 +69,7 @@ const TEXT: { en: QgisText } & Partial<Record<Locale, QgisText>> = {
     inUse: 'In use',
     chooseOther: 'Other location…',
     pickTitle: 'Choose the QGIS app',
+    pickFolderTitle: 'Choose the QGIS folder',
     recheck: 'Check again',
     chooseFailed: (reason) => `Could not use this QGIS: ${reason}`,
     recheckFailed: (reason) => `Could not check QGIS again: ${reason}`,
@@ -87,6 +91,7 @@ const TEXT: { en: QgisText } & Partial<Record<Locale, QgisText>> = {
     inUse: '正在使用',
     chooseOther: '其他位置…',
     pickTitle: '选择 QGIS 应用',
+    pickFolderTitle: '选择 QGIS 所在的文件夹',
     recheck: '重新检查',
     chooseFailed: (reason) => `无法使用这套 QGIS：${reason}`,
     recheckFailed: (reason) => `无法重新检查 QGIS：${reason}`,
@@ -108,6 +113,7 @@ const TEXT: { en: QgisText } & Partial<Record<Locale, QgisText>> = {
     inUse: '正在使用',
     chooseOther: '其他位置…',
     pickTitle: '選擇 QGIS 應用程式',
+    pickFolderTitle: '選擇 QGIS 所在的資料夾',
     recheck: '重新檢查',
     chooseFailed: (reason) => `無法使用這套 QGIS：${reason}`,
     recheckFailed: (reason) => `無法重新檢查 QGIS：${reason}`,
@@ -135,10 +141,17 @@ export const diagnosticsOf = (status: QgisView): string => {
     `QGIS: ${QGIS_STATUS[status.status]} (${status.status})`,
     diagnostics.message,
     diagnostics.file ? `File: ${diagnostics.file}` : null,
-    diagnostics.path ? `Chosen app: ${diagnostics.path}` : null,
+    diagnostics.path ? `Chosen path: ${diagnostics.path}` : null,
     diagnostics.app && diagnostics.app !== diagnostics.path ? `App: ${diagnostics.app}` : null,
     diagnostics.version ? `Version: ${diagnostics.version}` : null,
     diagnostics.interpreter ? `Interpreter: ${diagnostics.interpreter}` : null,
+    diagnostics.folder && diagnostics.folder !== diagnostics.path ? `Folder: ${diagnostics.folder}` : null,
+    diagnostics.choices?.length
+      ? `QGIS in it:\n${diagnostics.choices.map((choice) => (choice.version ? `${choice.app} (${choice.version})` : choice.app)).join('\n')}`
+      : null,
+    diagnostics.environment && Object.keys(diagnostics.environment).length
+      ? `Environment:\n${Object.entries(diagnostics.environment).map(([name, value]) => `${name}=${value}`).join('\n')}`
+      : null,
     diagnostics.output?.trim() ? `Output:\n${diagnostics.output.trim()}` : null,
   ].filter(Boolean).join('\n');
 };

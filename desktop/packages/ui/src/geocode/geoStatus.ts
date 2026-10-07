@@ -43,6 +43,7 @@ export const QGIS_FAILURES = [
   'platform-unsupported',
   'path-missing',
   'not-qgis',
+  'ambiguous',
   'python-missing',
   'gdal-missing',
   'proj-broken',
@@ -60,6 +61,9 @@ const diagnosticsSchema = z.object({
   version: z.string().optional(),
   interpreter: z.string().optional(),
   output: z.string().optional(),
+  folder: z.string().optional(),
+  choices: z.array(z.object({ app: z.string(), version: z.string().optional() })).optional(),
+  environment: z.record(z.string(), z.string()).optional(),
 });
 
 const qgisSchema = z.union([

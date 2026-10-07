@@ -130,7 +130,7 @@ const QgisDetails: React.FC<{ text: QgisText; status: QgisView | undefined; revi
   };
 
   const chooseElsewhere = async () => {
-    const picked = await pickQgisApp(text.pickTitle);
+    const picked = await pickQgisApp({ app: text.pickTitle, folder: text.pickFolderTitle });
     if (picked) choose(picked);
   };
 

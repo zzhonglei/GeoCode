@@ -10,12 +10,24 @@ import { Status } from "../status.ts"
 import { Catalog } from "./catalog.ts"
 import { Doc } from "./doc.ts"
 import { Geodata } from "./geodata.ts"
+import { Installs } from "./installs.ts"
 import { Macos } from "./macos.ts"
 import { Plan } from "./plan.ts"
 import { Python } from "./python.ts"
 import { Reader } from "./reader.ts"
+import { Windows } from "./windows.ts"
 
 const DOMAIN = "qgis"
+
+/** How this system's QGIS is found, started and described to GeoAgent; none where GeoCode cannot run QGIS. */
+const PLATFORM = process.platform === "darwin" ? Macos : process.platform === "win32" ? Windows : undefined
+
+/** What GeoAgent is told of finding and configuring QGIS, which differs between the systems. */
+export interface Guide {
+  readonly FINDING: string
+  readonly CONFIGURED: string
+  readonly NO_PYTHON: string
+}
 
 /** Generous: the probe only has to finish, and a first start from a cold disk is slow. */
 const PROBE_TIMEOUT = "2 minutes"
@@ -24,6 +36,9 @@ const PROBE_TIMEOUT = "2 minutes"
 const SETTLE_TIMEOUT = "150 seconds"
 
 const SPOTLIGHT_TIMEOUT = "10 seconds"
+
+/** Listing the fixed drives starts PowerShell, which takes a second or two. */
+const DRIVES_TIMEOUT = "10 seconds"
 
 /** Listing takes seconds; as long as a probe, for a cold disk. */
 const CATALOG_TIMEOUT = PROBE_TIMEOUT
@@ -60,6 +75,7 @@ const Report = Schema.Union([
     python: Schema.String,
     failed: Schema.Literals(["gdal", "proj", "core", "processing"]),
     error: Schema.String,
+    environment: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   }),
   Schema.Struct({ python: Schema.String, gdal: Schema.String, qgis: Schema.String, algorithms: Schema.Number }),
 ])
@@ -133,6 +149,7 @@ export type Failed =
   | "platform-unsupported"
   | "path-missing"
   | "not-qgis"
+  | "ambiguous"
   | "python-missing"
   | "gdal-missing"
   | "proj-broken"
@@ -152,6 +169,14 @@ export interface Diagnostics {
   readonly version?: string
   readonly interpreter?: string
   readonly output?: string
+  /** The folder the configured path is in, when it holds more than one QGIS, and those of them that can start. */
+  readonly folder?: string
+  readonly choices?: readonly Installs.Found[]
+  /**
+   * Where QGIS's launcher pointed Python, QGIS and Qt, when a step of the check failed. For the user's diagnostics
+   * only: GeoAgent's message goes to the model's provider, and the user's PATH names their folders.
+   */
+  readonly environment?: Readonly<Record<string, string>>
 }
 
 export type State =
@@ -176,6 +201,7 @@ type Ready = Extract<State, { readonly status: "ready" }>
 const RECHECKED: ReadonlySet<State["status"]> = new Set([
   "path-missing",
   "not-qgis",
+  "ambiguous",
   "python-missing",
   "gdal-missing",
   "proj-broken",
@@ -186,7 +212,6 @@ const RECHECKED: ReadonlySet<State["status"]> = new Set([
 ])
 
 const SYMPTOMS = {
-  "python-missing": "it has no Contents/MacOS/python to start its Python with",
   "gdal-missing": "its Python cannot load GDAL",
   "proj-broken": "it cannot transform coordinates, so its projection data is missing or broken",
   "core-missing": "its Python cannot load QGIS itself",
@@ -206,7 +231,7 @@ export const capability: Engine.Capability = Effect.gen(function* () {
   const block = yield* config.block(DOMAIN, Block)
   const writer = yield* status.register<State>(DOMAIN, settledOrChecking(yield* block.current))
 
-  const probe = (configured: string, install: Macos.Install) =>
+  const probe = (configured: string, install: Installs.Install) =>
     runtime
       .run({
         ...python(install, Python.PROBE),
@@ -223,16 +248,17 @@ export const capability: Engine.Capability = Effect.gen(function* () {
   /** Undefined when the check was stopped, as at shutdown, which says nothing about QGIS. */
   const inspect = (configured: string) =>
     Effect.gen(function* () {
-      if (process.platform !== "darwin") {
+      if (!PLATFORM) {
         return failed("platform-unsupported", { message: `no QGIS support for ${process.platform}`, path: configured })
       }
-      const located = yield* Effect.promise(() => Macos.locate(configured))
+      const located = yield* Effect.promise<Macos.Located | Windows.Located>(() => PLATFORM.locate(configured))
       if (!located.ok) {
         return failed(located.status, {
           message: located.message,
           path: configured,
           app: located.app,
           version: located.version,
+          ...("choices" in located && { folder: located.folder, choices: located.choices }),
         })
       }
       return yield* probe(configured, located.install)
@@ -268,6 +294,23 @@ export const capability: Engine.Capability = Effect.gen(function* () {
 
   const discover: Engine.Method = (_raw, context) =>
     Effect.gen(function* () {
+      if (process.platform === "win32") {
+        // Without the list, the system drive alone is looked at.
+        const drives = yield* runtime
+          .run({
+            ...Windows.drivesCommand(),
+            delivery: { mode: "collect" },
+            clocks: { total: DRIVES_TIMEOUT },
+            signal: context.signal,
+          })
+          .pipe(
+            Effect.map((result) =>
+              result.reason === "exit" && result.code === 0 ? Windows.drives(result.stdout) : [],
+            ),
+            Effect.catch(() => Effect.succeed([])),
+          )
+        return { installs: yield* Effect.promise(() => Windows.installs(drives)) }
+      }
       if (process.platform !== "darwin") return { installs: [] }
       // Spotlight may be off or still indexing; the application folders are listed regardless.
       const spotlight = yield* runtime
@@ -546,14 +589,14 @@ function cancelled(signal: AbortSignal) {
  * What GeoAgent is told when QGIS is not ready: the facts, and how to set QGIS up itself when it can. The settings page
  * is the user's way and is not mentioned.
  */
-function hint(state: Exclude<State, Ready>, file: string): string {
+export function hint(state: Exclude<State, Ready>, file: string, guide: Guide | undefined = PLATFORM): string {
   if (state.status === "checking") return "QGIS is still being checked."
-  if (state.status === "platform-unsupported") return "GeoCode cannot run QGIS on this operating system."
   if (state.status === "config-error") {
     const at = state.diagnostics.file ?? file
     return `${at} cannot be read: ${state.diagnostics.message}. No QGIS tool works until it is fixed; it is checked as soon as the file is saved.`
   }
-  const configured = `Its configuration is in ${file}, as {"qgis": {"path": "<QGIS app>"}}.`
+  if (state.status === "platform-unsupported" || !guide) return "GeoCode cannot run QGIS on this operating system."
+  const configured = `Its configuration is in ${file}, ${guide.CONFIGURED}`
   const write =
     "Write its path to the file; QGIS is checked as soon as the file is saved. Then call qgisdoc to see whether QGIS is ready."
   const forbidden =
@@ -562,7 +605,7 @@ function hint(state: Exclude<State, Ready>, file: string): string {
     [
       opening,
       configured,
-      `${Macos.FINDING} If there is none, ask the user to install one from https://qgis.org/download/.`,
+      `${guide.FINDING} If there is none, ask the user to install one from https://qgis.org/download/.`,
       write,
       forbidden,
     ].join("\n")
@@ -570,7 +613,20 @@ function hint(state: Exclude<State, Ready>, file: string): string {
   const { diagnostics } = state
   const app = diagnostics.app ?? diagnostics.path
   if (state.status === "path-missing") return setup(`The configured QGIS cannot be found: ${diagnostics.message}.`)
-  if (state.status === "not-qgis") return setup(`The configured path is not a QGIS app: ${diagnostics.message}.`)
+  if (state.status === "not-qgis") {
+    return setup(`The configured path is not a QGIS installation: ${diagnostics.message}.`)
+  }
+  if (state.status === "ambiguous") {
+    const choices = (diagnostics.choices ?? []).map((choice) =>
+      choice.version ? `${choice.app} (${choice.version})` : choice.app,
+    )
+    return [
+      `The configured folder, ${diagnostics.folder ?? diagnostics.path}, holds more than one QGIS: ${choices.join(", ")}. Ask the user which to use, and write its folder.`,
+      configured,
+      write,
+      forbidden,
+    ].join("\n")
+  }
   if (state.status === "probe-timeout") {
     return [
       `Checking the configured QGIS, ${app}, took longer than ${PROBE_TIMEOUT}, so the computer may be busy; it is checked again the next time a QGIS tool is called.`,
@@ -591,21 +647,21 @@ function hint(state: Exclude<State, Ready>, file: string): string {
       ? [`The check failed: ${last(diagnostics.message)}`]
       : []
   return [
-    `The configured QGIS, ${named}, does not work: ${SYMPTOMS[state.status]}.`,
+    `The configured QGIS, ${named}, does not work: ${state.status === "python-missing" ? guide.NO_PYTHON : SYMPTOMS[state.status]}.`,
     ...printed,
     "Ask the user to reinstall QGIS from https://qgis.org/download/, or to use another QGIS on this computer; QGIS is checked again each time a QGIS tool is called. Do not try to repair QGIS.",
     configured,
-    Macos.FINDING,
+    guide.FINDING,
     write,
     forbidden,
   ].join("\n")
 }
 
-function where(configured: string, install: Macos.Install) {
+function where(configured: string, install: Installs.Install) {
   return { path: configured, app: install.app, version: install.version, interpreter: install.interpreter }
 }
 
-function judge(configured: string, install: Macos.Install, result: Runtime.Result): State | undefined {
+function judge(configured: string, install: Installs.Install, result: Runtime.Result): State | undefined {
   if (result.reason === "abort") return
   const output = tail(`${result.stdout}\n${result.stderr}`.trim())
   if (result.reason === "timeout") {
@@ -625,7 +681,8 @@ function judge(configured: string, install: Macos.Install, result: Runtime.Resul
       { gdal: "gdal-missing", proj: "proj-broken", core: "core-missing", processing: "processing-failed" } as const
     )[report.failed]
     const message = `the ${report.failed} check failed`
-    return failed(status, { ...where(configured, install), message, output: tail(report.error) })
+    const output = tail(report.error)
+    return failed(status, { ...where(configured, install), message, output, environment: report.environment })
   }
   return {
     status: "ready",
@@ -638,12 +695,12 @@ function judge(configured: string, install: Macos.Install, result: Runtime.Resul
 }
 
 /** How a task starts QGIS's Python with a script, and the request it reads, if any. */
-function python(install: Macos.Install, script: string, request?: unknown) {
+function python(install: Installs.Install, script: string, request?: unknown) {
   return {
     command: install.interpreter,
     args: ["-"],
     input: Python.program(script, request),
-    env: Macos.environment(install),
+    env: PLATFORM?.environment(install),
   }
 }
 
@@ -684,7 +741,7 @@ async function isDirectory(target: string) {
  */
 function readCoordinateSystems(
   runtime: Runtime.Interface,
-  install: Macos.Install,
+  install: Installs.Install,
   given: ReturnType<typeof Plan.coordinateSystems>,
   cwd: string | undefined,
   signal: AbortSignal,
@@ -721,7 +778,7 @@ function readCoordinateSystems(
 /** Surveys the data a run names before the user is asked, with QGIS's GDAL. */
 function inspectData(
   runtime: Runtime.Interface,
-  install: Macos.Install,
+  install: Installs.Install,
   request: ReturnType<typeof Plan.survey>["request"],
   signal: AbortSignal,
 ) {
@@ -756,7 +813,7 @@ function inspectData(
 
 function execute(
   runtime: Runtime.Interface,
-  install: Macos.Install,
+  install: Installs.Install,
   params: typeof RunParams.Type,
   algorithm: Catalog.Algorithm,
   slots: readonly Plan.Slot[],
@@ -861,7 +918,7 @@ function execute(
 /** Reads a dataset with QGIS's GDAL, and words what it found for GeoAgent. */
 function readData(
   runtime: Runtime.Interface,
-  install: Macos.Install,
+  install: Installs.Install,
   params: typeof ReadParams.Type,
   signal: AbortSignal,
 ) {

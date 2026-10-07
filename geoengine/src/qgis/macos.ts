@@ -3,16 +3,10 @@ export * as Macos from "./macos.ts"
 import fsp from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-
-export interface Install {
-  readonly app: string
-  /** QGIS's own launcher for its interpreter, which sets the interpreter's home inside the bundle. */
-  readonly interpreter: string
-  readonly version: string | undefined
-}
+import { Installs } from "./installs.ts"
 
 export type Located =
-  | { readonly ok: true; readonly install: Install }
+  | { readonly ok: true; readonly install: Installs.Install }
   | {
       readonly ok: false
       readonly status: "path-missing" | "not-qgis" | "python-missing"
@@ -46,6 +40,7 @@ export async function locate(configured: string): Promise<Located> {
     return { ok: false, status: "not-qgis", message: `${app} is not a QGIS app bundle`, app }
   }
 
+  // A launcher that sets the interpreter's home inside the bundle.
   const interpreter = path.join(app, "Contents", "MacOS", "python")
   if (!(await exists(interpreter))) {
     return {
@@ -59,17 +54,17 @@ export async function locate(configured: string): Promise<Located> {
   return { ok: true, install: { app, interpreter, version } }
 }
 
-/** Every QGIS found can be chosen: whether it runs is for the check to find out, not for its version to decide. */
-export interface Found {
-  readonly app: string
-  readonly version: string | undefined
-}
-
 /** The Spotlight query for every QGIS, whatever its bundle is called or wherever it is. */
 export const SPOTLIGHT_QUERY = "kMDItemCFBundleIdentifier == 'org.qgis.*'"
 
 /** How GeoAgent finds QGIS on this computer, for setting it up itself. */
 export const FINDING = `Find QGIS on this computer: QGIS apps are usually in /Applications or ~/Applications, and mdfind "${SPOTLIGHT_QUERY}" finds them anywhere. If there is more than one, ask the user which to use.`
+
+/** How GeoAgent writes the path into machine.json, after "Its configuration is in <file>, ". */
+export const CONFIGURED = 'as {"qgis": {"path": "<QGIS app>"}}.'
+
+/** Why a QGIS without its launcher does not work, for GeoAgent. */
+export const NO_PYTHON = "it has no Contents/MacOS/python to start its Python with"
 
 /**
  * The QGIS apps in the application folders and those Spotlight found, newest first. One under /Volumes, on a disk
@@ -78,7 +73,7 @@ export const FINDING = `Find QGIS on this computer: QGIS apps are usually in /Ap
 export async function installs(
   spotlight: readonly string[],
   folders = ["/Applications", path.join(os.homedir(), "Applications")],
-): Promise<Found[]> {
+): Promise<Installs.Found[]> {
   const listed = await Promise.all(
     folders.map((folder) =>
       fsp.readdir(folder).then(
@@ -90,7 +85,7 @@ export async function installs(
   const candidates = [...new Set([...listed.flat(), ...spotlight])].filter(
     (candidate) => path.isAbsolute(candidate) && !candidate.startsWith("/Volumes/") && !candidate.includes("/.Trash/"),
   )
-  const found = new Map<string, Found>()
+  const found = new Map<string, Installs.Found>()
   for (const located of await Promise.all(candidates.map(locate))) {
     const entry = foundOf(located)
     if (!entry) continue
@@ -98,30 +93,17 @@ export async function installs(
     const key = await fsp.realpath(entry.app).catch(() => entry.app)
     if (!found.has(key)) found.set(key, entry)
   }
-  return [...found.values()].sort((a, b) => newer(a.version, b.version) || a.app.localeCompare(b.app))
+  return Installs.newestFirst([...found.values()])
 }
 
-function foundOf(located: Located): Found | undefined {
+function foundOf(located: Located): Installs.Found | undefined {
   if (located.ok) return { app: located.install.app, version: located.install.version }
   if (located.status === "python-missing" && located.app) return { app: located.app, version: located.version }
   return undefined
 }
 
-/** Negative when a is the newer version; an unknown version sorts last. */
-function newer(a: string | undefined, b: string | undefined) {
-  const parts = (version: string | undefined) =>
-    (version ?? "").split(".").map((part) => Number.parseInt(part, 10) || 0)
-  const left = parts(a)
-  const right = parts(b)
-  for (let index = 0; index < Math.max(left.length, right.length); index++) {
-    const difference = (right[index] ?? 0) - (left[index] ?? 0)
-    if (difference !== 0) return difference
-  }
-  return 0
-}
-
 /** What a task adds to the engine's environment. */
-export function environment(install: Install): Record<string, string> {
+export function environment(install: Installs.Install): Record<string, string> {
   const resources = path.join(install.app, "Contents", "Resources", "qgis")
   return {
     // QGIS's launcher sets only the interpreter's home; without these GDAL cannot find the projection database.

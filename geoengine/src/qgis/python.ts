@@ -83,10 +83,14 @@ export const PROBE =
   String.raw`
 report = {"python": sys.version.split()[0]}
 
+# Where QGIS's launcher points Python, QGIS and Qt, to tell what of it went wrong; no others, which can hold secrets.
+LAUNCHED = ("QGIS_PREFIX_PATH", "PYTHONHOME", "QT_PLUGIN_PATH", "O4W_QT_PREFIX", "PATH")
+
 
 def fail(step):
     report["failed"] = step
     report["error"] = traceback.format_exc()
+    report["environment"] = {name: os.environ[name] for name in LAUNCHED if name in os.environ}
     finish(report)
 
 

@@ -243,7 +243,16 @@ test("each probe report settles on its own state", { skip: !darwin }, async () =
       [READY, "ready"],
       [mark({ python: "3.12", failed: "gdal", error: "No module named osgeo" }), "gdal-missing"],
       [mark({ python: "3.12", gdal: "3.13", failed: "proj", error: "Cannot find proj.db" }), "proj-broken"],
-      [mark({ python: "3.12", gdal: "3.13", failed: "core", error: "No module named qgis" }), "core-missing"],
+      [
+        mark({
+          python: "3.12",
+          gdal: "3.13",
+          failed: "core",
+          error: "No module named qgis",
+          environment: { QT_PLUGIN_PATH: "/Applications/QGIS.app/Contents/PlugIns" },
+        }),
+        "core-missing",
+      ],
       [
         mark({ python: "3.12", gdal: "3.13", qgis: "3.44", algorithms: 0, failed: "processing", error: "x" }),
         "processing-failed",
@@ -259,6 +268,14 @@ test("each probe report settles on its own state", { skip: !darwin }, async () =
       try {
         const state = await engine.settled()
         assert.equal(state.status, expected, python)
+        // Guards against the variables QGIS's launcher set up not reaching the user's diagnostics, or reaching
+        // GeoAgent's message, which goes to the model's provider.
+        if (expected === "core-missing") {
+          assert.ok("diagnostics" in state && state.status === "core-missing")
+          assert.deepEqual(state.diagnostics.environment, { QT_PLUGIN_PATH: "/Applications/QGIS.app/Contents/PlugIns" })
+          assert.equal(state.diagnostics.output, "No module named qgis")
+          assert.ok(!Qgis.hint(state, "machine.json").includes("PlugIns"))
+        }
         if (expected === "probe-failed" && python.includes("Fatal")) {
           assert.ok("diagnostics" in state)
           assert.match(state.diagnostics.output ?? "", /init_fs_encoding/)
@@ -1204,6 +1221,29 @@ for (const app of await realApps()) {
       assert.ok((await doc({ action: "groups" })).includes(` groups, ${state.algorithms} algorithms:\n`))
     } finally {
       await engine.stop()
+    }
+  })
+
+  // Guards against a failed check losing where QGIS's launcher pointed Python, which tells a broken install apart.
+  test(`QGIS at ${app} reports where its launcher pointed Python when a check fails`, async () => {
+    const located = await Macos.locate(app)
+    assert.ok(located.ok)
+    const empty = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-proj-"))
+    try {
+      const output = execFileSync(located.install.interpreter, ["-"], {
+        input: Python.program(Python.PROBE),
+        env: { ...process.env, ...Macos.environment(located.install), PROJ_DATA: empty },
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      })
+      const report = Python.marked(output).at(-1) as { failed: string; environment: Record<string, string> }
+      assert.equal(report.failed, "proj")
+      // As the launcher writes it.
+      assert.equal(report.environment.PYTHONHOME, `${app}/Contents/MacOS/../Frameworks`)
+      assert.ok(report.environment.PATH)
+      assert.equal(report.environment.HOME, undefined)
+    } finally {
+      await fs.rm(empty, { recursive: true, force: true })
     }
   })
 
