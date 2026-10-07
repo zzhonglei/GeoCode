@@ -321,7 +321,7 @@ const dispatchFromEnvelope = (envelope: { type: string; properties: unknown }) =
     return;
   }
 
-  // --- GeoCode: GeoEngine's statuses, see geocode/GeoStatusButton.tsx ---
+  // --- GeoCode: GeoEngine's statuses, see geocode/GeoStatusButtons.tsx ---
   if (envelope.type === GEO_STATUS_EVENT) {
     const parsed = geoStatusEventSchema.safeParse(envelope.properties);
     if (parsed.success) for (const listener of listeners) listener({ type: 'geo-status', ...parsed.data });

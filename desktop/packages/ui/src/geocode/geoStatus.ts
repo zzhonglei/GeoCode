@@ -92,6 +92,54 @@ export const qgisStatusOf = (statuses: GeoStatuses): QgisView | undefined => {
   return parsed.success ? parsed.data : { status: 'unreadable', value: held.value };
 };
 
+// The failures of State in geoengine/src/gee/index.ts, and why Earth Engine refused; geoStatus.test.ts holds them together.
+export const GEE_FAILURES = [
+  'config-error',
+  'python-missing',
+  'packages-missing',
+  'packages-broken',
+  'signed-out',
+  'project-missing',
+  'unreachable',
+  'rejected',
+  'check-timeout',
+  'check-failed',
+] as const;
+
+export const GEE_REFUSALS = ['credentials-invalid', 'project-not-found', 'no-permission', 'api-disabled', 'other'] as const;
+
+const geeDiagnosticsSchema = z.object({
+  message: z.string(),
+  file: z.string().optional(),
+  python: z.string().optional(),
+  project: z.string().optional(),
+  missing: z.array(z.string()).optional(),
+  broken: z.array(z.object({ package: z.string(), error: z.string() })).optional(),
+  refusal: z.enum(GEE_REFUSALS).optional(),
+  said: z.string().optional(),
+  output: z.string().optional(),
+  traceback: z.string().optional(),
+});
+
+const geeSchema = z.union([
+  z.object({ status: z.literal('unconfigured') }),
+  z.object({ status: z.literal('checking'), python: z.string(), project: z.string().optional() }),
+  z.object({ status: z.literal('ready'), python: z.string(), project: z.string(), versions: z.record(z.string(), z.string()) }),
+  z.object({ status: z.enum(GEE_FAILURES), diagnostics: geeDiagnosticsSchema }),
+]);
+
+export type GeeStatus = z.infer<typeof geeSchema>;
+
+export type GeeView = GeeStatus | { status: 'unreadable'; value: unknown };
+
+/** As qgisStatusOf, for Google Earth Engine. */
+export const geeStatusOf = (statuses: GeoStatuses): GeeView | undefined => {
+  const held = statuses.gee;
+  if (!held) return undefined;
+  const parsed = geeSchema.safeParse(held.value);
+  return parsed.success ? parsed.data : { status: 'unreadable', value: held.value };
+};
+
 export type Light = 'ready' | 'checking' | 'idle' | 'failed';
 
 export const DOT_CLASS = {
@@ -101,10 +149,16 @@ export const DOT_CLASS = {
   failed: 'bg-[var(--status-error)]',
 } satisfies Record<Light, string>;
 
-// Not configured is no fault: a new user should not meet a red light.
+/**
+ * Setup not yet finished rather than broken, as Earth Engine before the user signs in or names a project. By name, for
+ * every domain: a domain's own state named so is grey too.
+ */
+const UNFINISHED: ReadonlySet<string> = new Set(['unconfigured', 'signed-out', 'project-missing']);
+
+// Not configured is no fault: a new user should not meet a red light, nor one still setting up.
 export const lightOf = (status: string): Light => {
   if (status === 'ready') return 'ready';
   if (status === 'checking') return 'checking';
-  if (status === 'unconfigured') return 'idle';
+  if (UNFINISHED.has(status)) return 'idle';
   return 'failed';
 };

@@ -1,7 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 
-import { GEO_STATUS_EVENT, NO_GEO_STATUSES, QGIS_FAILURES, withGeoStatusEvent, withGeoStatusSnapshot } from './geoStatus';
+import {
+  GEE_FAILURES,
+  GEE_REFUSALS,
+  GEO_STATUS_EVENT,
+  NO_GEO_STATUSES,
+  QGIS_FAILURES,
+  geeStatusOf,
+  lightOf,
+  withGeoStatusEvent,
+  withGeoStatusSnapshot,
+} from './geoStatus';
 
 const checking = { status: 'checking', path: '/Applications/QGIS.app' };
 const ready = { status: 'ready' };
@@ -36,4 +46,71 @@ test('GeoCode: the interface knows every QGIS failure GeoEngine reports', () => 
   const failures = [...union.matchAll(/"([a-z-]+)"/g)].map((match) => match[1]);
   expect(failures.length).toBeGreaterThan(0);
   expect([...QGIS_FAILURES].sort()).toEqual(failures.sort());
+});
+
+/** The literals of a type union declared in GeoEngine's source, as `export type <name> =`. */
+const unionIn = (file: string, name: string) => {
+  const source = fs.readFileSync(new URL(`../../../../../geoengine/src/${file}`, import.meta.url), 'utf8');
+  const union = source.match(new RegExp(`export type ${name} =([\\s\\S]*?)\\n\\n`))?.[1] ?? '';
+  return [...union.matchAll(/"([a-z-]+)"/g)].map((match) => match[1]).sort();
+};
+
+// Guards against an Earth Engine failure or refusal GeoEngine reports that the interface cannot read.
+test('GeoCode: the interface knows every Earth Engine failure and refusal GeoEngine reports', () => {
+  const failures = unionIn('gee/index.ts', 'Failed');
+  const refusals = unionIn('gee/index.ts', 'Refusal');
+  expect(failures.length).toBeGreaterThan(0);
+  expect(refusals.length).toBeGreaterThan(0);
+  expect([...GEE_FAILURES].sort()).toEqual(failures);
+  expect([...GEE_REFUSALS].sort()).toEqual(refusals);
+});
+
+// Guards against a user still setting Earth Engine up meeting a red light, as a broken environment shows.
+test('GeoCode: Earth Engine not set up, not signed in or without a project is grey, a failure red', () => {
+  expect(['unconfigured', 'signed-out', 'project-missing'].map(lightOf)).toEqual(['idle', 'idle', 'idle']);
+  expect(['packages-missing', 'unreachable', 'rejected', 'check-failed'].map(lightOf)).toEqual(['failed', 'failed', 'failed', 'failed']);
+  expect([lightOf('ready'), lightOf('checking')]).toEqual(['ready', 'checking']);
+});
+
+test('GeoCode: an Earth Engine status the interface cannot read is kept whole', () => {
+  const statuses = withGeoStatusEvent(NO_GEO_STATUSES, { type: 'geo-status', revision: 1, domain: 'gee', value: { status: 'new-state' } });
+  expect(geeStatusOf(statuses)).toEqual({ status: 'unreadable', value: { status: 'new-state' } });
+  expect(geeStatusOf(NO_GEO_STATUSES)).toBeUndefined();
+});
+
+// Guards against the interface's copy of Earth Engine's state drifting from GeoEngine's, which would show a real state
+// as unknown: one of each shape GeoEngine produces, as it reaches the interface, through JSON.
+test('GeoCode: the interface reads every shape of Earth Engine state GeoEngine produces', () => {
+  const python = '/opt/anaconda3/envs/map/bin/python';
+  const states = [
+    { status: 'unconfigured' },
+    { status: 'checking', python },
+    { status: 'checking', python, project: 'p' },
+    { status: 'ready', python, project: 'p', versions: { python: '3.11.15', 'earthengine-api': '1.7.19', requests: '' } },
+    { status: 'config-error', diagnostics: { message: 'Unexpected token at line 1, column 2', file: '/machine.json' } },
+    { status: 'python-missing', diagnostics: { python, message: 'spawn ENOENT' } },
+    { status: 'packages-missing', diagnostics: { python, project: 'p', message: 'not installed: geedim', missing: ['geedim'] } },
+    {
+      status: 'packages-broken',
+      diagnostics: { python, message: 'installed but failing to import: geedim', broken: [{ package: 'geedim', error: 'ImportError: x' }], missing: [] },
+    },
+    { status: 'signed-out', diagnostics: { python, message: 'no Earth Engine credentials on this computer' } },
+    { status: 'project-missing', diagnostics: { python, message: 'no Google Cloud project is configured' } },
+    { status: 'unreachable', diagnostics: { python, project: 'p', message: 'TransportError: x', said: 'unavailable', traceback: 'Traceback' } },
+    {
+      status: 'rejected',
+      diagnostics: { python, project: 'p', message: 'EEException: x', refusal: 'no-permission', said: 'Caller does not have permission', traceback: 'Traceback' },
+    },
+    { status: 'check-timeout', diagnostics: { python, project: 'p', message: 'the check did not finish within 90 seconds', output: '' } },
+    { status: 'check-failed', diagnostics: { python, message: 'the Python exited with code 9 without a report', output: 'Python was not found' } },
+  ];
+  for (const state of states) {
+    const statuses = withGeoStatusEvent(NO_GEO_STATUSES, {
+      type: 'geo-status',
+      revision: 1,
+      domain: 'gee',
+      value: JSON.parse(JSON.stringify(state)),
+    });
+    expect(geeStatusOf(statuses)?.status).toBe(state.status);
+  }
 });

@@ -1,10 +1,8 @@
 import React from 'react';
 
-import { copyTextToClipboard } from '@/lib/clipboard';
 import type { QgisView } from './geoStatus';
 import { diagnosticsOf, summaryOf, type QgisText } from './qgisText';
-
-const LINK_CLASS = 'typography-micro rounded px-1.5 py-0.5 text-muted-foreground hover:bg-interactive-hover hover:text-foreground';
+import { StatusFailure } from './StatusFailure';
 
 /** What the indicator's popover and the settings page show of a QGIS status: a line or two, more only on a failure. */
 export const QgisStatusDetails: React.FC<{
@@ -13,9 +11,6 @@ export const QgisStatusDetails: React.FC<{
   /** False on the settings page, which lists the app itself. */
   withApp?: boolean;
 }> = ({ status, text, withApp = true }) => {
-  const [expanded, setExpanded] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
-
   if (status.status === 'ready') {
     const summary = summaryOf(status, text);
     return (
@@ -30,24 +25,6 @@ export const QgisStatusDetails: React.FC<{
   }
   if (status.status === 'unconfigured') return null;
 
-  const diagnostics = diagnosticsOf(status);
   const message = 'diagnostics' in status ? status.diagnostics.message : null;
-  const handleCopy = async () => setCopied((await copyTextToClipboard(diagnostics)).ok);
-
-  return (
-    <div className="min-w-0 space-y-1">
-      {message ? <p className="typography-meta break-words text-foreground">{message}</p> : null}
-      <div className="-ml-1.5 flex items-center gap-1">
-        <button type="button" aria-expanded={expanded} onClick={() => setExpanded((open) => !open)} className={LINK_CLASS}>
-          {text.details}
-        </button>
-        <button type="button" onClick={() => { void handleCopy(); }} className={LINK_CLASS}>
-          {copied ? text.copied : text.copy}
-        </button>
-      </div>
-      {expanded ? (
-        <pre className="typography-micro max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md bg-[var(--surface-muted)] p-2 font-mono text-foreground">{diagnostics}</pre>
-      ) : null}
-    </div>
-  );
+  return <StatusFailure message={message} diagnostics={diagnosticsOf(status)} text={text} />;
 };
