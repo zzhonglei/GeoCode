@@ -56,52 +56,182 @@ sys.path[:] = [entry for entry in sys.path if entry not in ("", ".")]
 `
 
 /**
- * Checks that earthengine-api and requests, which the run watches, import and, given a project, that Earth Engine
- * answers a minimal computation with it; the first failure ends the check. Python 2 and the oldest Python 3 still read
- * it, so they fail as a report.
+ * Checks, in order, what a run depends on: the packages it is given, then whether the user is signed in, both without
+ * the network; then, given a project, whether Google accepts the credentials and Earth Engine answers a minimal
+ * computation. The first failure ends the check. Python 2 and the oldest Python 3 still read it, so they fail as a
+ * report.
  */
 export const CHECK =
   SAFE_PATH +
   String.raw`
 import json
+import os
 import traceback
 
 request = json.loads(REQUEST)
+report = {"python": sys.version.split()[0]}
 
 
-def finish(report):
+def finish():
     sys.stdout.write("${MARKER}" + json.dumps(report) + "\n")
     sys.stdout.flush()
     sys.exit(0)
 
 
-def fail(step, error):
+def describe(error):
+    return "%s: %s" % (type(error).__name__, error)
+
+
+def fail(step, error, said=None, **facts):
+    """Ends the check on the step that failed, with what Google said in its own words when it answered."""
     report["failed"] = step
-    report["error"] = "%s: %s" % (type(error).__name__, error)
+    report["error"] = describe(error)
     report["traceback"] = traceback.format_exc()
-    finish(report)
+    if said:
+        report["said"] = said
+    report.update(facts)
+    finish()
 
 
-report = {"python": sys.version.split()[0]}
+import importlib
+import importlib.util
 
-try:
-    import ee
-    import requests
+# Each package on its own, so every missing one is named at once. Found but failing to import means installed but
+# broken, which installing it again rarely fixes; a folder an uninstall left behind is found with no origin.
+missing = []
+broken = []
+report["versions"] = {}
+for package in request["packages"]:
+    spec = importlib.util.find_spec(package["module"])
+    if spec is None or spec.origin is None:
+        missing.append(package["name"])
+        continue
+    try:
+        module = importlib.import_module(package["module"])
+        report["versions"][package["name"]] = str(getattr(module, "__version__", ""))
+    except Exception as error:
+        broken.append({"package": package["name"], "error": describe(error)})
+if broken or missing:
+    report.update(failed="broken" if broken else "missing", missing=missing, broken=broken)
+    finish()
 
-    report["ee"] = ee.__version__
-except Exception as error:
-    fail("import", error)
+import socket
+import ssl
+import urllib.error
+
+import ee
+import google.auth.exceptions
+import google.auth.transport.requests
+import google.oauth2.credentials
+import googleapiclient.errors
+import requests
+from ee import oauth
+from google.auth import _cloud_sdk
+
+
+def stored():
+    """The arguments of earthengine-api's own credentials, when they hold a refresh token."""
+    try:
+        arguments = oauth.get_credentials_arguments()
+    except Exception:
+        return None
+    return arguments if arguments.get("refresh_token") else None
+
+
+def signed_in():
+    """By files alone, where earthengine-api looks: its own credentials, then Google Cloud's default credentials."""
+    if stored():
+        return True
+    named = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if named and os.path.exists(named):
+        return True
+    try:
+        return os.path.exists(_cloud_sdk.get_application_default_credentials_path())
+    except Exception:
+        return False
+
+
+if not signed_in():
+    report["failed"] = "signed-out"
+    finish()
 
 if request.get("project") is None:
-    finish(report)
+    finish()
+
+NETWORK = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    google.auth.exceptions.TransportError,
+    urllib.error.URLError,
+    socket.gaierror,
+    socket.timeout,
+    ConnectionError,
+    TimeoutError,
+    ssl.SSLError,
+)
+
+
+def chain(error):
+    while error is not None:
+        yield error
+        error = error.__cause__ or error.__context__
+
+
+def refreshing(error):
+    """A refused refresh, by Google's own words, and whether trying again may get through."""
+    for link in chain(error):
+        if isinstance(link, google.auth.exceptions.RefreshError):
+            said = link.args[0] if link.args else str(link)
+            return {"said": str(said), "retryable": bool(getattr(link, "retryable", False))}
+
+
+def unreachable(error):
+    refused = refreshing(error)
+    return any(isinstance(link, NETWORK) for link in chain(error)) or bool(refused and refused["retryable"])
+
+
+def refusal(error):
+    """What Earth Engine's answer says of a refusal: its errors carry the server's answer as their context."""
+    for link in chain(error):
+        if isinstance(link, googleapiclient.errors.HttpError):
+            details = link.error_details if isinstance(link.error_details, list) else []
+            reasons = [detail.get("reason") for detail in details if isinstance(detail, dict)]
+            return {
+                "status": getattr(getattr(link, "resp", None), "status", None),
+                "reasons": [reason for reason in reasons if isinstance(reason, str)],
+                "said": str(getattr(link, "reason", "") or error),
+            }
+
+
+def classify(error):
+    refused = refusal(error)
+    if refused is not None:
+        fail("rejected", error, said=refused.pop("said"), **refused)
+    if unreachable(error):
+        fail("unreachable", error)
+    sign_in = refreshing(error)
+    if sign_in is not None:
+        fail("credentials", error, said=sign_in["said"])
+
+
+# Refreshed here, not left to earthengine-api, which words a refused refresh as if there were no credentials at all.
+try:
+    arguments = stored()
+    if arguments:
+        google.oauth2.credentials.Credentials(None, **arguments).refresh(google.auth.transport.requests.Request())
+    credentials = ee.data.get_persistent_credentials()
+except Exception as error:
+    classify(error)
+    fail("credentials", error)
 
 try:
-    ee.Initialize(project=request["project"])
+    ee.Initialize(credentials, project=request["project"])
     ee.Number(1).getInfo()
 except Exception as error:
+    classify(error)
     fail("earthengine", error)
 
-finish(report)
+finish()
 `
 
 /**
