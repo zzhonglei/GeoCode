@@ -31,7 +31,7 @@ def open_dataset(target, flags, options=(), file=None):
 
 /**
  * Reads a dataset with QGIS's own GDAL, never starting QGIS itself, and reports the facts as JSON; `Geodata` words
- * them. The request arrives as JSON in the first argument.
+ * them.
  */
 export const READ =
   Python.prelude +
@@ -43,7 +43,7 @@ import time
 from osgeo import gdal, ogr, osr
 
 gdal.UseExceptions()
-request = json.loads(sys.argv[1])
+request = json.loads(REQUEST)
 
 
 # JSON has no NaN or infinity, which nodata values and statistics can be; and JavaScript rounds an integer past 2^53,
@@ -1093,7 +1093,7 @@ import time
 from osgeo import gdal, ogr
 
 gdal.UseExceptions()
-request = json.loads(sys.argv[1])
+request = json.loads(REQUEST)
 ` +
   OPENING +
   String.raw`

@@ -209,9 +209,7 @@ export const capability: Engine.Capability = Effect.gen(function* () {
   const probe = (configured: string, install: Macos.Install) =>
     runtime
       .run({
-        command: install.interpreter,
-        args: ["-c", Python.PROBE],
-        env: Macos.environment(install),
+        ...python(install, Python.PROBE),
         delivery: { mode: "collect" },
         clocks: { total: PROBE_TIMEOUT },
       })
@@ -639,13 +637,21 @@ function judge(configured: string, install: Macos.Install, result: Runtime.Resul
   }
 }
 
+/** How a task starts QGIS's Python with a script, and the request it reads, if any. */
+function python(install: Macos.Install, script: string, request?: unknown) {
+  return {
+    command: install.interpreter,
+    args: ["-"],
+    input: Python.program(script, request),
+    env: Macos.environment(install),
+  }
+}
+
 /** Lists the offered algorithms of a ready QGIS, from QGIS's own definitions. */
 function list(runtime: Runtime.Interface, install: Ready) {
   return runtime
     .run({
-      command: install.interpreter,
-      args: ["-c", Python.CATALOG],
-      env: Macos.environment(install),
+      ...python(install, Python.CATALOG),
       delivery: { mode: "collect" },
       clocks: { total: CATALOG_TIMEOUT },
     })
@@ -687,11 +693,9 @@ function readCoordinateSystems(
     const unknown = given.map(() => true)
     const ran = yield* Effect.exit(
       runtime.run({
-        command: install.interpreter,
-        args: ["-c", Python.CRS, JSON.stringify({ values: given.map((entry) => entry.value) })],
+        ...python(install, Python.CRS, { values: given.map((entry) => entry.value) }),
         // A layer's path is read from where the run will read it.
         cwd,
-        env: Macos.environment(install),
         delivery: { mode: "collect" },
         clocks: { total: CRS_TIMEOUT },
         signal,
@@ -723,9 +727,7 @@ function inspectData(
 ) {
   return runtime
     .run({
-      command: install.interpreter,
-      args: ["-c", Reader.INSPECT, JSON.stringify(request)],
-      env: Macos.environment(install),
+      ...python(install, Reader.INSPECT, request),
       delivery: { mode: "collect" },
       clocks: { idle: READ_IDLE },
       signal,
@@ -812,10 +814,8 @@ function execute(
 
   return runtime
     .run({
-      command: install.interpreter,
-      args: ["-c", Python.RUN, JSON.stringify({ algorithm: params.algorithm, parameters: params.parameters })],
+      ...python(install, Python.RUN, { algorithm: params.algorithm, parameters: params.parameters }),
       cwd: params.cwd,
-      env: Macos.environment(install),
       delivery: { mode: "incremental", source: "all", onChunk },
       // The caller ends a run: how long one may take, only GeoAgent can judge.
       clocks: { total: Duration.infinity },
@@ -867,9 +867,7 @@ function readData(
 ) {
   return runtime
     .run({
-      command: install.interpreter,
-      args: ["-c", Reader.READ, JSON.stringify(params)],
-      env: Macos.environment(install),
+      ...python(install, Reader.READ, params),
       delivery: { mode: "collect", limit: READ_OUTPUT_LIMIT },
       clocks: { idle: READ_IDLE },
       signal,

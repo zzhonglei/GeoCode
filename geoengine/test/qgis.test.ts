@@ -104,12 +104,13 @@ const REPROJECT = {
 }
 
 /**
- * A fake interpreter: `probe` answers the probe script, `run` the run script, `inspect` the survey of the data and
- * `crs` the check of coordinate reference systems (their requests are in "$3"), `catalog` the listing of the
- * algorithms.
+ * A fake interpreter, which reads its program from stdin: `probe` answers the probe script, `run` the run script,
+ * `inspect` the survey of the data and `crs` the check of coordinate reference systems (their requests are the
+ * program's first line, in "$request"), `catalog` the listing of the algorithms.
  */
 const fake = (probe: string, run: string, catalog = mark(CATALOG), inspect = "exit 9", crs = "exit 9") =>
-  `case "$2" in *parameterAsCrs*) ${crs} ;; *processing.run*) ${run} ;; *parameterTypes*) ${catalog} ;; ` +
+  `program=$(cat); request=$(printf '%s\\n' "$program" | head -n 1)\n` +
+  `case "$program" in *parameterAsCrs*) ${crs} ;; *processing.run*) ${run} ;; *parameterTypes*) ${catalog} ;; ` +
   `*GT_IsSurface*) ${inspect} ;; *) ${probe} ;; esac`
 
 type Response = Extract<Protocol.Outbound, { type: "response" }>
@@ -345,7 +346,7 @@ test("a run streams progress and messages, and ends its answer with the outputs"
       mark({ type: "result", ok: true, outputs: { OUTPUT: "/data/out.gpkg" } }),
       "echo 'reaching its pipe after the result' >&2",
     ].join("; ")
-    const app = await fakeApp(directory, { python: `case "$1" in -c) ;; *) exit 9 ;; esac\n${fake(READY, run)}` })
+    const app = await fakeApp(directory, { python: `case "$1" in -) ;; *) exit 9 ;; esac\n${fake(READY, run)}` })
     const engine = await start(app)
     try {
       assert.equal((await engine.settled()).status, "ready")
@@ -445,7 +446,7 @@ test("a run that fails says how, and which outputs it may have left half written
       mark({ type: "message", level: "error", text: error }),
       mark({ type: "result", ok: false, stage: "run", error }),
     ].join("; ")
-    const run = `case "$3" in *bad*) ${refused} ;; *) echo 'Segmentation fault' >&2; exit 139 ;; esac`
+    const run = `case "$request" in *bad*) ${refused} ;; *) echo 'Segmentation fault' >&2; exit 139 ;; esac`
     const app = await fakeApp(directory, { python: fake(READY, run) })
     const engine = await start(app)
     const half = path.join(directory, "half.gpkg")
@@ -497,11 +498,11 @@ test(
     try {
       const surveyed = path.join(directory, "surveyed")
       const inspect =
-        `echo "$3" >> '${surveyed}'; case "$3" in *mixed*) ${mark({ layers: [["line", "point"]], tables: [] })} ;; ` +
+        `echo "$request" >> '${surveyed}'; case "$request" in *mixed*) ${mark({ layers: [["line", "point"]], tables: [] })} ;; ` +
         `*) ${mark({ layers: [["point"]], tables: [] })} ;; esac`
       const asked = path.join(directory, "asked")
       const crs =
-        `echo "$(pwd) $3" >> '${asked}'; case "$3" in *tmerc*) ${mark({ ok: true, read: [false] })} ;; ` +
+        `echo "$(pwd) $request" >> '${asked}'; case "$request" in *tmerc*) ${mark({ ok: true, read: [false] })} ;; ` +
         `*broken*) exit 9 ;; *) ${mark({ ok: true, read: [true] })} ;; esac`
       const run = mark({ type: "result", ok: true, outputs: {} })
       const catalog = mark({ ...CATALOG, algorithms: [...CATALOG.algorithms, REPROJECT] })
@@ -589,7 +590,10 @@ test(
         assert.ok((await reproject(undefined)).plan)
         const lines = (await fs.readFile(asked, "utf-8")).split("\n").filter(Boolean)
         assert.equal(lines.length, 3)
-        assert.equal(lines[0], `${await fs.realpath(directory)} {"values":["+proj=tmerc +lon_0=121"]}`)
+        assert.equal(
+          lines[0],
+          `${await fs.realpath(directory)} REQUEST = ${JSON.stringify(JSON.stringify({ values: ["+proj=tmerc +lon_0=121"] }))}`,
+        )
       } finally {
         await engine.stop()
       }
@@ -956,7 +960,9 @@ const realApps = async () => {
 for (const app of await realApps()) {
   test(`QGIS at ${app} gets ready and runs a built-in algorithm on Chinese paths and values`, async () => {
     const engine = await start(app)
-    const data = path.join(engine.directory, "数据 目录")
+    // Guards against a request reaching QGIS's Python changed: quotes and backslashes are escapes in the program it
+    // reads, and %, ^, & and ! are what Windows's command interpreter would rewrite on a command line.
+    const data = path.join(engine.directory, String.raw`数据 目录 "%PATH%" ^&! \n 😀`)
     try {
       const state = await engine.settled(150000)
       assert.equal(state.status, "ready", JSON.stringify(state))

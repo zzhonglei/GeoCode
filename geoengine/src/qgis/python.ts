@@ -66,6 +66,17 @@ def offered(algorithm):
     return algorithm.provider().id() in PROVIDERS and standalone and algorithm.id() not in WITHHELD
 `
 
+/**
+ * What QGIS's Python reads from standard input, given as `-`: on the command line the program would pass through
+ * whatever starts that Python, and Windows's command interpreter rewrites it there. A request, as JSON text in a
+ * string, comes first as `REQUEST`.
+ */
+export function program(script: string, request?: unknown) {
+  if (request === undefined) return script
+  // The escapes JSON.stringify writes are all Python's too, so the text it quotes is a Python string.
+  return `REQUEST = ${JSON.stringify(JSON.stringify(request))}\n${script}`
+}
+
 /** Checks, in order, what running an algorithm depends on; the first failure ends the probe. */
 export const PROBE =
   prelude +
@@ -228,11 +239,11 @@ finish(
 )
 `
 
-/** Runs one algorithm; the request arrives as JSON in the first argument. */
+/** Runs one algorithm, as the request names it. */
 export const RUN =
   prelude +
   String.raw`
-request = json.loads(sys.argv[1])
+request = json.loads(REQUEST)
 
 try:
     start_qgis()
@@ -324,7 +335,7 @@ except Exception:
 export const CRS =
   prelude +
   String.raw`
-request = json.loads(sys.argv[1])
+request = json.loads(REQUEST)
 
 try:
     from qgis.core import QgsApplication, QgsProcessingContext, QgsProcessingParameterCrs, QgsProcessingParameters
