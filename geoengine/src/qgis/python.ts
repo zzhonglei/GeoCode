@@ -241,6 +241,9 @@ except Exception:
 
 # The errors already reported, so the one an algorithm raises is not told twice.
 reported_errors = set()
+# QGIS reports a GDAL command's non-zero exit only in these words, untranslated, and still finishes the algorithm.
+GDAL_FAILED = "Process returned error code "
+gdal_failures = []
 
 
 class Feedback(QgsProcessingFeedback):
@@ -252,6 +255,8 @@ class Feedback(QgsProcessingFeedback):
 
     def reportError(self, error, fatalError=False):
         reported_errors.add(error)
+        if error.startswith(GDAL_FAILED):
+            gdal_failures.append(error)
         emit({"type": "message", "level": "error", "text": error})
 
     def pushCommandInfo(self, info):
@@ -297,6 +302,8 @@ try:
     sys.stderr.write(MARKER + json.dumps({"type": "begin"}) + "\n")
     sys.stderr.flush()
     outputs = processing.run(request["algorithm"], request["parameters"], context=context, feedback=feedback)
+    if gdal_failures:
+        failed(gdal_failures[0])
     # An algorithm that changes its input in place answers with the layer itself; its source says where.
     outputs = {name: value.source() if isinstance(value, QgsMapLayer) else value for name, value in outputs.items()}
     finish({"type": "result", "ok": True, "outputs": outputs})

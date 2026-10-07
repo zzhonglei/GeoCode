@@ -1074,6 +1074,18 @@ for (const app of await realApps()) {
         JSON.stringify(messages),
       )
 
+      // Guards against a GDAL command that exits with an error reading as finished: QGIS only reports its exit code.
+      const unknown = await engine.request(
+        {
+          algorithm: "gdal:buffervectors",
+          parameters: { INPUT: at("cells.geojson"), DISTANCE: 0.1, OPTIONS: "-nosuchoption", OUTPUT: at("c.gpkg") },
+        },
+        120000,
+      )
+      assert.ok(!unknown.ok && unknown.error.code === "algorithm-failed", JSON.stringify(unknown))
+      assert.equal(unknown.error.message, "Process returned error code 1")
+      assert.match((unknown.error.details as { ending: string }).ending, /^Failed after [\d.]+ s\./)
+
       // An algorithm that changes its input answers with the layer; the answer names its file, not the object.
       await fs.copyFile(at("cells.geojson"), at("scratch.geojson"))
       const truncated = await step("qgis.run", {
