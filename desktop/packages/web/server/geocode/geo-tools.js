@@ -3,7 +3,7 @@ import express from 'express';
 export const GEO_TOOL_PATH = '/api/geocode/geo-tool';
 
 // The GeoEngine methods the kernel's geo tools call; nothing else reaches GeoEngine this way.
-const TOOL_METHODS = new Set(['qgis.doc', 'qgis.read', 'qgis.locate', 'qgis.prepare', 'qgis.run', 'gee.run']);
+const TOOL_METHODS = new Set(['qgis.doc', 'qgis.read', 'qgis.locate', 'qgis.prepare', 'qgis.run', 'gee.check', 'gee.run']);
 
 /**
  * GeoAgent's geo tools reach GeoEngine here. Like the agent tools' callback, it is registered before the API auth gate

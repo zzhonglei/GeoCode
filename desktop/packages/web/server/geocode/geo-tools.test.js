@@ -65,10 +65,11 @@ describe('GeoCode: the geo tools reach GeoEngine', () => {
   });
 
   // Guards against geerun failing at the shell server, and GEE's settings reaching GeoEngine through a tool's route.
-  it('lets a GEE run through, and nothing else of GEE', async () => {
+  it('lets a GEE run and its check through, and nothing else of GEE', async () => {
+    expect((await call({ method: 'gee.check', params: { cwd: '/tmp' } })).status).toBe(200);
     expect((await call({ method: 'gee.run', params: { script: 'print(1)' } })).status).toBe(200);
     expect((await call({ method: 'gee.recheck', params: {} })).status).toBe(400);
-    expect(requests.splice(0).map((request) => request.method)).toEqual(['gee.run']);
+    expect(requests.splice(0).map((request) => request.method)).toEqual(['gee.check', 'gee.run']);
   });
 
   it('streams the progress and then the result, refusals included', async () => {

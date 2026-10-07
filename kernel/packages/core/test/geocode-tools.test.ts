@@ -793,7 +793,25 @@ describe("GeoCode: geerun", () => {
       ])
       // Guards against the run reaching GeoEngine without the kernel's token, or outside the project's directory.
       expect(calls).toEqual([
+        { authorization: `Bearer ${TOKEN}`, body: { method: "gee.check", params: { cwd: PROJECT } } },
         { authorization: `Bearer ${TOKEN}`, body: { method: "gee.run", params: { script: "print(1)", cwd: PROJECT } } },
+      ])
+    }),
+  )
+
+  // Guards against asking the user about a run that cannot start, as while Earth Engine is not set up.
+  it.effect("asks nothing and runs nothing when the check finds Earth Engine not ready", () =>
+    Effect.gen(function* () {
+      reset()
+      answer = (body) =>
+        body.method === "gee.check"
+          ? [JSON.stringify({ type: "result", ok: false, error: { code: "not-ready", message: "Not signed in." } })]
+          : ran()
+      const done = yield* executeTool(yield* Tool.Service, gee({ path: "scripts/ndvi.py" }))
+      expect(done.error?.message).toBe("Not signed in.")
+      expect(assertions).toEqual([])
+      expect(calls.map((call) => call.body)).toEqual([
+        { method: "gee.check", params: { cwd: PROJECT, file: path.join(PROJECT, "scripts/ndvi.py") } },
       ])
     }),
   )
@@ -807,6 +825,7 @@ describe("GeoCode: geerun", () => {
       expect(assertions.map((input) => input.action)).toEqual(["geerun"])
       expect(assertions[0]?.metadata).toEqual({ path: path.join(PROJECT, "scripts/ndvi.py") })
       expect(calls.map((call) => call.body)).toEqual([
+        { method: "gee.check", params: { cwd: PROJECT, file: path.join(PROJECT, "scripts/ndvi.py") } },
         { method: "gee.run", params: { file: path.join(PROJECT, "scripts/ndvi.py"), cwd: PROJECT } },
       ])
 
@@ -818,6 +837,19 @@ describe("GeoCode: geerun", () => {
         ["external_directory", [path.join(path.dirname(outside), "*")]],
         ["geerun", ["*"]],
       ])
+      // Guards against GeoEngine looking at a file outside the project before the user allows its directory.
+      expect(calls.map((call) => call.body)).toEqual([
+        { method: "gee.check", params: { cwd: PROJECT } },
+        { method: "gee.run", params: { file: outside, cwd: PROJECT } },
+      ])
+
+      reset()
+      answer = (body) =>
+        body.method === "gee.check"
+          ? [JSON.stringify({ type: "result", ok: false, error: { code: "not-ready", message: "Not signed in." } })]
+          : ran()
+      expect((yield* executeTool(registry, gee({ path: outside }))).error?.message).toBe("Not signed in.")
+      expect(assertions).toEqual([])
     }),
   )
 
@@ -829,9 +861,10 @@ describe("GeoCode: geerun", () => {
         const refusal = yield* executeTool(registry, gee(input))
         expect(refusal.error?.message).toBe('Give exactly one of "script" and "path".')
       }
+      expect(calls).toEqual([])
       refused = "geerun"
       expect((yield* executeTool(registry, gee({ script: "print(1)" }))).status).toBe("error")
-      expect(calls).toEqual([])
+      expect(calls.map((call) => call.body)).toMatchObject([{ method: "gee.check" }])
     }),
   )
 
@@ -895,7 +928,10 @@ describe("GeoCode: geerun", () => {
           { code: "not-ready", message: "Google Earth Engine is not configured.\nThe configuration is the gee block." },
           "Google Earth Engine is not configured.\nThe configuration is the gee block.",
         ],
-        [{ code: "invalid-params", message: "/project/none.py is not a file" }, "/project/none.py is not a file"],
+        [
+          { code: "invalid-params", message: "/project/none.py is not a file" },
+          "/project/none.py is not a file, so the script did not run.",
+        ],
         [
           { code: "initialize-failed", message: "EEException: Not signed up for Earth Engine" },
           "Earth Engine could not be initialized, so the script did not run: EEException: Not signed up for Earth Engine",

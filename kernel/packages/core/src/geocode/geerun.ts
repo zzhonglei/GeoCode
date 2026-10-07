@@ -40,7 +40,8 @@ const decodeRan = Schema.decodeUnknownExit(Ran)
 
 /** What GeoAgent reads when the script did not run; an environment that is not ready comes with what to do about it. */
 const failureMessage = (failure: GeoEngine.Failure) => {
-  if (failure.code === "not-ready" || failure.code === "invalid-params") return failure.message
+  if (failure.code === "not-ready") return failure.message
+  if (failure.code === "invalid-params") return `${failure.message}, so the script did not run.`
   if (failure.code === "initialize-failed")
     return `Earth Engine could not be initialized, so the script did not run: ${failure.message}`
   return "Google Earth Engine is not available right now. Tell the user; restarting GeoCode may fix it."
@@ -109,9 +110,15 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
         return yield* new ToolFailure({ message: 'Give exactly one of "script" and "path".' })
       }
       const target = input.path === undefined ? undefined : yield* access.resolve({ path: input.path, kind: "file" })
+      const file = target?.absolute
+      // Checked before asking, so the user is never asked about a run that cannot start. A file outside the project is
+      // left to the run, after the user allows its directory: looking at it first would answer whether it is there.
+      const inside = target !== undefined && target.externalDirectory === undefined
+      yield* GeoEngine.call("gee.check", { cwd: location.directory, ...(inside ? { file } : {}) }).pipe(
+        Effect.catch(failed),
+      )
       // As the shell asks about the directories its command names: a file outside the project, by its directory.
       if (target) yield* access.authorizeExternal([target], context)
-      const file = target?.absolute
       // As the shell is asked about: the script can do anything the user can.
       yield* permission.assert({
         action: name,
