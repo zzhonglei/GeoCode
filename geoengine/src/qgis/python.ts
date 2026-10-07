@@ -25,9 +25,13 @@ def emit(payload):
 
 
 def finish(payload):
+    global application
     emit(payload)
     sys.stderr.flush()
-    # Skips QGIS's teardown, which crashes on some versions after the work has succeeded.
+    # QGIS's teardown, with the application released, removes the temporary files QGIS made when it started.
+    if application is not None:
+        application.exitQgis()
+        application = None
     os._exit(0)
 
 

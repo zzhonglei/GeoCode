@@ -993,6 +993,9 @@ for (const app of await realApps()) {
   })
 
   test(`QGIS at ${app} checks a run as the kernel does, and measures on the WGS 84 ellipsoid`, async () => {
+    const inherited = process.env.TMPDIR
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-tmp-"))
+    process.env.TMPDIR = temporary
     const engine = await start(app)
     const at = (name: string) => path.join(engine.directory, name)
     const square = (south: number) => ({
@@ -1149,8 +1152,16 @@ for (const app of await realApps()) {
         (await step("qgis.locate", { algorithm: "native:openurl", parameters: {} })).refused,
         /\n\nnative:openurl is not available\.$/,
       )
+      // Guards against QGIS's temporary files piling up: they are its own, removed only by its teardown.
+      assert.deepEqual(
+        (await fs.readdir(temporary)).filter((name) => name.startsWith("QGIS")),
+        [],
+      )
     } finally {
       await engine.stop()
+      if (inherited === undefined) delete process.env.TMPDIR
+      else process.env.TMPDIR = inherited
+      await fs.rm(temporary, { recursive: true, force: true })
     }
   })
 
