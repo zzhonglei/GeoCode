@@ -7,7 +7,7 @@ import { cn, formatPathForDisplay } from '@/lib/utils';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import type { PermissionRequest } from '@/types/permission';
 
-import { qgisAlgorithm, qgisAlgorithmText, qgisCardText } from './geoTools';
+import { geoCardText, qgisAlgorithm, qgisAlgorithmText } from './geoTools';
 
 /** A parameter's value as the card writes it: text as it is, anything else as JSON. */
 const shown = z.union([z.string(), z.json().transform((value) => JSON.stringify(value))]);
@@ -30,7 +30,8 @@ const asking = z.object({
 
 const LINE_CLASS = 'typography-meta min-w-0 truncate whitespace-nowrap';
 
-const Labelled: React.FC<{
+/** A line of a geo tool's permission card: its label, then the value, cut short where it runs long. */
+export const Labelled: React.FC<{
   label: string;
   children: React.ReactNode;
   mono?: boolean;
@@ -60,7 +61,7 @@ export const QgisRunPermission: React.FC<{ permission: PermissionRequest }> = ({
   const parsed = asking.safeParse(permission.metadata ?? {});
   if (!parsed.success) return null;
   const run = parsed.data;
-  const text = qgisCardText(locale);
+  const text = geoCardText(locale);
   const algorithm = run.algorithm && qgisAlgorithmText(run.algorithm, locale);
   const colon = text.colon;
   const path = (value: string) => formatPathForDisplay(value, home);

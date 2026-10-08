@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { plugin } from 'bun';
+import { pathToFileURL } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { getPermissionToolPresentation } from '@/components/chat/permissionToolPresentation';
@@ -10,10 +12,22 @@ import { toolDescription } from '@/lib/opencode/tools';
 import { getToolMetadata } from '@/lib/toolHelpers';
 import type { PermissionRequest } from '@/types/permission';
 
-import { geoPermissionContent } from './geoPermission';
 import { geoActionLabel } from './geoTools';
 import { qgisRunView } from './qgisRun';
 import { QgisRunRow } from './QgisRunRow';
+
+// As the upstream tests do: Bun does not implement Vite's worker asset-query imports, which geerun's card reaches.
+plugin({
+  name: 'geo-permission-worker-url',
+  setup(build) {
+    build.onLoad({ filter: /markdown-shiki\.worker\.ts\?worker&url$/ }, ({ path }) => ({
+      contents: `export default ${JSON.stringify(pathToFileURL(path.split('?')[0]).href)};`,
+      loader: 'js',
+    }));
+  },
+});
+
+const { geoPermissionContent } = await import('./geoPermission');
 
 const english = useI18nStore.getState().locale;
 afterEach(() => useI18nStore.setState({ locale: english }));

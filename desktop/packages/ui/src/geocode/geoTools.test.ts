@@ -44,11 +44,15 @@ describe('GeoCode: the geo tools in the interface', () => {
     expect(BUILTIN_ACTIONS).toContain('qgisdoc');
     expect(geoActionLabel('qgisdoc')).toBe('QGIS Docs');
     expect(geoActionLabel('shell')).toBeUndefined();
+    // Its rule follows the shell's by default; the row is there to change it.
+    expect(BUILTIN_ACTIONS).toContain('geerun');
+    expect(geoActionLabel('geerun')).toBe('Run Earth Engine Script');
     // Asks as read asks, under read's rule.
     expect(BUILTIN_ACTIONS).not.toContain('readgeodata');
     expect(geoActionLabel('readgeodata')).toBeUndefined();
     useI18nStore.setState({ locale: 'zh-TW' });
     expect(geoPermissionTitle('qgisdoc')).toBe('查閱 QGIS 演算法');
+    expect(geoPermissionTitle('geerun')).toBe('請求執行 Earth Engine 腳本');
     expect(geoPermissionTitle('read')).toBeUndefined();
   });
 });

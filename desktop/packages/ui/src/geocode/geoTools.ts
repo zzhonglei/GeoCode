@@ -7,9 +7,9 @@ import type { ToolMetadata } from '@/lib/toolHelpers';
 import type { PermissionRequest } from '@/types/permission';
 
 /** The permission actions of the geo tools that have a rule of their own; readgeodata asks as read. */
-export const GEO_TOOL_ACTIONS = ['qgisdoc', 'qgisrun'] as const;
+export const GEO_TOOL_ACTIONS = ['qgisdoc', 'qgisrun', 'geerun'] as const;
 
-/** The geo tools, which the conversation shows with their own icons and titles. */
+/** The geo tools, which the conversation shows with their own icons and titles; geerun, so far, with its icon only. */
 const GEO_TOOLS = ['qgisdoc', 'readgeodata', 'qgisrun'] as const;
 
 type GeoTool = (typeof GEO_TOOLS)[number];
@@ -21,7 +21,7 @@ type MergedTool = Exclude<GeoTool, 'qgisrun'>;
 
 type Texts = {
   /** Each tool's title, which is also its settings row's label. */
-  titles: Record<GeoTool, string>;
+  titles: Record<GeoTool | GeoAction, string>;
   /** The permission card's summary of what the tool asks to do. */
   asks: Record<GeoAction, string>;
   allGroups: string;
@@ -31,7 +31,7 @@ type Texts = {
   files: (count: number) => string;
   /** qgisrun's row while it runs, naming the algorithm. */
   runs: (algorithm: string) => string;
-  /** The lines of qgisrun's permission card. */
+  /** The lines of qgisrun's and geerun's permission cards. */
   card: {
     /** What follows a label on the card's first lines. */
     colon: string;
@@ -44,13 +44,16 @@ type Texts = {
     input: string;
     parameters: string;
     output: string;
+    file: string;
+    /** Under a script's first lines, what is left out. */
+    rest: (count: number) => string;
   };
 };
 
 const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
   en: {
-    titles: { qgisdoc: 'QGIS Docs', readgeodata: 'Read Geodata', qgisrun: 'Run QGIS Algorithm' },
-    asks: { qgisdoc: 'Look up QGIS algorithms', qgisrun: 'Request to run QGIS algorithm' },
+    titles: { qgisdoc: 'QGIS Docs', readgeodata: 'Read Geodata', qgisrun: 'Run QGIS Algorithm', geerun: 'Run Earth Engine Script' },
+    asks: { qgisdoc: 'Look up QGIS algorithms', qgisrun: 'Request to run QGIS algorithm', geerun: 'Request to run Earth Engine script' },
     allGroups: 'All groups',
     running: { qgisdoc: 'Reading QGIS Documentation', readgeodata: 'Reading Geospatial Data' },
     done: { qgisdoc: 'QGIS Documentation Read', readgeodata: 'Geospatial Data Read' },
@@ -66,11 +69,13 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
       input: 'Input',
       parameters: 'Parameters',
       output: 'Output',
+      file: 'Script file',
+      rest: (count) => `… ${count} more ${count === 1 ? 'line' : 'lines'}`,
     },
   },
   'zh-CN': {
-    titles: { qgisdoc: 'QGIS 文档', readgeodata: '读取地理数据', qgisrun: '运行 QGIS 算法' },
-    asks: { qgisdoc: '查阅 QGIS 算法', qgisrun: '请求执行 QGIS 算法' },
+    titles: { qgisdoc: 'QGIS 文档', readgeodata: '读取地理数据', qgisrun: '运行 QGIS 算法', geerun: '运行 Earth Engine 脚本' },
+    asks: { qgisdoc: '查阅 QGIS 算法', qgisrun: '请求执行 QGIS 算法', geerun: '请求执行 Earth Engine 脚本' },
     allGroups: '全部分组',
     running: { qgisdoc: '正在阅读 QGIS 文档', readgeodata: '正在读取地理数据' },
     done: { qgisdoc: '已阅读 QGIS 文档', readgeodata: '已读取地理数据' },
@@ -86,11 +91,13 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
       input: '输入',
       parameters: '参数',
       output: '输出',
+      file: '脚本文件',
+      rest: (count) => `…… 其余 ${count} 行`,
     },
   },
   'zh-TW': {
-    titles: { qgisdoc: 'QGIS 文件', readgeodata: '讀取地理資料', qgisrun: '執行 QGIS 演算法' },
-    asks: { qgisdoc: '查閱 QGIS 演算法', qgisrun: '請求執行 QGIS 演算法' },
+    titles: { qgisdoc: 'QGIS 文件', readgeodata: '讀取地理資料', qgisrun: '執行 QGIS 演算法', geerun: '執行 Earth Engine 腳本' },
+    asks: { qgisdoc: '查閱 QGIS 演算法', qgisrun: '請求執行 QGIS 演算法', geerun: '請求執行 Earth Engine 腳本' },
     allGroups: '全部分組',
     running: { qgisdoc: '正在閱讀 QGIS 文件', readgeodata: '正在讀取地理資料' },
     done: { qgisdoc: '已閱讀 QGIS 文件', readgeodata: '已讀取地理資料' },
@@ -106,6 +113,8 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
       input: '輸入',
       parameters: '參數',
       output: '輸出',
+      file: '腳本檔案',
+      rest: (count) => `…… 其餘 ${count} 行`,
     },
   },
 };
@@ -199,8 +208,17 @@ export const qgisRunTitle = (locale: Locale) => textIn(locale).titles.qgisrun;
 /** What qgisrun's row says while the algorithm runs. */
 export const qgisRunning = (algorithm: string, locale: Locale) => textIn(locale).runs(algorithm);
 
-/** The labels and warnings of qgisrun's permission card. */
-export const qgisCardText = (locale: Locale) => textIn(locale).card;
+/** The labels and warnings of qgisrun's and geerun's permission cards. */
+export const geoCardText = (locale: Locale) => textIn(locale).card;
+
+/** How many of a script's lines geerun's card shows; scripts run long, so the rest is only counted. */
+const EXCERPT_LINES = 4;
+
+/** A script's first lines, past any blank ones, and how many lines follow them. */
+export const excerptOf = (script: string) => {
+  const lines = script.replace(/^(?:[ \t]*\r?\n)+/, '').trimEnd().split(/\r?\n/);
+  return { shown: lines.slice(0, EXCERPT_LINES).join('\n'), rest: Math.max(0, lines.length - EXCERPT_LINES) };
+};
 
 /** How many files a row of readgeodata calls read. */
 export const geoFileCount = (count: number) => text().files(count);
@@ -210,8 +228,12 @@ export const geoPermissionTitle = (action: string): string | undefined => (isGeo
 
 const askingAlgorithm = z.object({ algorithm: qgisAlgorithm.optional().catch(undefined) });
 
-/** The name a permission request shows beside its tool's icon: qgisrun's asks to run the algorithm it names. */
+/**
+ * The name a permission request shows beside its tool's icon: qgisrun's asks to run the algorithm it names, geerun's to
+ * run a script.
+ */
 export const geoPermissionName = (permission: PermissionRequest): string => {
+  if (permission.action === 'geerun') return text().asks.geerun;
   if (permission.action !== 'qgisrun') return permission.action;
   const algorithm = askingAlgorithm.safeParse(permission.metadata ?? {}).data?.algorithm;
   const locale = useI18nStore.getState().locale;
