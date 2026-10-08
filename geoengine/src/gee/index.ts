@@ -9,6 +9,7 @@ import { Engine } from "../engine.ts"
 import { Runtime } from "../runtime.ts"
 import { Status } from "../status.ts"
 import { Python } from "./python.ts"
+import { Pythons } from "./pythons.ts"
 
 const DOMAIN = "gee"
 
@@ -40,7 +41,29 @@ const STILL_CHECKING = "Google Earth Engine is still being checked. Call geerun 
 /** Lines of an error GeoAgent is given. */
 const PRINTED_LINES = 20
 
-const Block = Schema.Struct({ python: Schema.String, project: Schema.optionalKey(Schema.String) })
+/** Either may come first: the user can name the project in the settings before choosing the Python. */
+const Block = Schema.Struct({ python: Schema.optionalKey(Schema.String), project: Schema.optionalKey(Schema.String) })
+
+/** What the settings page writes, one at a time; the rest of the block is kept. */
+const ConfigureParams = Schema.Union([
+  Schema.Struct({ python: Schema.String }),
+  /** A folder the Python is found in, as the file dialog gives one: it would resolve the interpreter's links. */
+  Schema.Struct({ environment: Schema.String }),
+  Schema.Struct({ project: Schema.String }),
+])
+
+/**
+ * How long a sign-in waits for the user in the browser. Long enough to find the account and read the consent page;
+ * a sign-in given up on, with the page closed, ends then.
+ */
+const SIGN_IN_TIMEOUT = "10 minutes"
+
+const SignInEvent = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("url"), url: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("denied"), error: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("failed"), error: Schema.String, traceback: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("signed-in") }),
+])
 
 /**
  * What a run needs in the Python, by the name it is installed under and the module it is imported as. requests is
@@ -95,6 +118,8 @@ const decodeReport = Schema.decodeUnknownExit(Report)
 const decodeRunParams = Schema.decodeUnknownExit(RunParams)
 const decodeCheckParams = Schema.decodeUnknownExit(CheckParams)
 const decodeEvent = Schema.decodeUnknownExit(Event)
+const decodeConfigureParams = Schema.decodeUnknownExit(ConfigureParams)
+const decodeSignInEvent = Schema.decodeUnknownExit(SignInEvent)
 
 export type Failed =
   | "config-error"
@@ -132,7 +157,8 @@ export interface Diagnostics {
 }
 
 export type State =
-  | { readonly status: "unconfigured" }
+  /** The project, when it was named before the Python, so the settings show it. */
+  | { readonly status: "unconfigured"; readonly project?: string }
   | { readonly status: "checking"; readonly python: string; readonly project?: string }
   | {
       readonly status: "ready"
@@ -193,11 +219,12 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       yield* writer.commit(token, settled)
       if (settled.status !== "checking") return
       // An unexpected error would otherwise end the watch for good, leaving the domain checking forever.
+      const where = { python: settled.python, ...(settled.project === undefined ? {} : { project: settled.project }) }
       const next = yield* inspect(settled.python, settled.project).pipe(
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.failCause(cause)
-            : Effect.succeed(failed("check-failed", { message: Cause.pretty(cause), python: settled.python })),
+            : Effect.succeed(failed("check-failed", { ...where, message: Cause.pretty(cause) })),
         ),
       )
       if (next) yield* writer.commit(token, next)
@@ -255,6 +282,160 @@ export const capability: Engine.Capability = Effect.gen(function* () {
 
   const recheck: Engine.Method = () => PubSub.publish(rechecks, undefined).pipe(Effect.as({}))
 
+  /**
+   * The Pythons on this computer with earthengine-api installed, found without starting any, with the configured one
+   * marked whatever path names it; `configured` is the path it was compared with, so a page whose configuration has
+   * changed since does not trust the mark.
+   */
+  const discover: Engine.Method = () =>
+    Effect.gen(function* () {
+      const current = yield* block.current
+      const configured = current.ok ? current.value?.python : undefined
+      const pythons = yield* Effect.promise(async () =>
+        Pythons.mark(await Pythons.discover(await Pythons.places()), configured),
+      )
+      return configured === undefined ? { pythons } : { pythons, configured }
+    })
+
+  /** Writes the Python or the project chosen in the settings, keeping the other; the watch then checks again. */
+  const configure: Engine.Method = (raw) =>
+    Effect.gen(function* () {
+      const decoded = decodeConfigureParams(raw)
+      if (Exit.isFailure(decoded)) {
+        return yield* new Engine.Failure({ code: "invalid-params", message: String(decoded.cause) })
+      }
+      const params = decoded.value
+      const chosen = "project" in params ? undefined : "python" in params ? params.python : params.environment
+      if (chosen !== undefined && !path.isAbsolute(chosen)) {
+        return yield* new Engine.Failure({ code: "invalid-params", message: `${chosen} is not an absolute path` })
+      }
+      // In ASCII, as a request header carries it; with a domain and a colon before it for some older projects. Anything
+      // else is left to Earth Engine to accept or refuse.
+      if ("project" in params && !/^[A-Za-z0-9][A-Za-z0-9.:_-]*$/.test(params.project)) {
+        return yield* new Engine.Failure({ code: "invalid-params", message: `"${params.project}" is not a project ID` })
+      }
+      let setting: { readonly python: string } | { readonly project: string }
+      if ("environment" in params) {
+        const python = yield* Effect.promise(() => Pythons.interpreterIn(params.environment))
+        if (python === undefined) {
+          return yield* new Engine.Failure({
+            code: "invalid-params",
+            message: `no Python environment found in ${params.environment}`,
+          })
+        }
+        setting = { python }
+      } else setting = params
+      // Refused before the write, whose own message would carry the file's location.
+      const held = yield* block.current
+      if (!held.ok) {
+        return yield* new Engine.Failure({
+          code: "config-unreadable",
+          message: `${held.failure.message}; machine.json is left as it is`,
+        })
+      }
+      // From the file as it is now, keeping a change GeoAgent made a moment ago that the watch has not read yet.
+      yield* block
+        .update((current) => ({ ...current, ...setting }))
+        .pipe(Effect.mapError((error) => new Engine.Failure({ code: "write-failed", message: error.message })))
+      // The Python written, as found in a folder: the same as before writes nothing new, and no status follows.
+      return "python" in setting ? { python: setting.python } : {}
+    })
+
+  // One sign-in at a time: one started from another window ends the one before, whose browser page is then stale.
+  let signing: AbortController | undefined
+
+  /**
+   * Signs the user in with the configured Python, reporting the address the browser is to open; the check that follows
+   * finds the credentials. Ends when the user finishes or denies access in the browser, or after SIGN_IN_TIMEOUT.
+   */
+  const signIn: Engine.Method = (_raw, context) =>
+    Effect.gen(function* () {
+      const current = yield* block.current
+      if (!current.ok) {
+        return yield* new Engine.Failure({ code: "config-unreadable", message: current.failure.message })
+      }
+      const python = current.value?.python
+      if (python === undefined) {
+        return yield* new Engine.Failure({ code: "invalid-params", message: "no Python is configured to sign in with" })
+      }
+      signing?.abort()
+      const mine = new AbortController()
+      signing = mine
+      let outcome: Exclude<typeof SignInEvent.Type, { readonly type: "url" }> | undefined
+      let printed = ""
+      let pending = ""
+      const onChunk = (chunk: string, stream: "stdout" | "stderr") => {
+        if (stream === "stderr") {
+          printed = tail(printed + chunk)
+          return
+        }
+        const lines = (pending + chunk).split(/\r?\n/)
+        pending = lines.pop() ?? ""
+        for (const line of lines) {
+          const payload = Python.markedLine(line)
+          const decoded = payload === undefined ? undefined : decodeSignInEvent(payload)
+          if (!decoded || Exit.isFailure(decoded)) printed = tail(`${printed}${line}\n`)
+          else if (decoded.value.type === "url") context.progress({ url: decoded.value.url })
+          else outcome = decoded.value
+        }
+        if (pending.length <= LINE_LIMIT) return
+        printed = tail(printed + pending)
+        pending = ""
+      }
+      const result = yield* runtime
+        .run({
+          command: python,
+          args: ["-"],
+          input: Python.program(Python.SIGN_IN, {}),
+          env: Python.ENVIRONMENT,
+          delivery: { mode: "incremental", source: "all", onChunk },
+          clocks: { total: SIGN_IN_TIMEOUT },
+          signal: AbortSignal.any([context.signal, mine.signal]),
+        })
+        .pipe(
+          Effect.mapError((error) => new Engine.Failure({ code: "start-failed", message: error.message })),
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (signing === mine) signing = undefined
+            }),
+          ),
+        )
+      if (outcome?.type === "signed-in") {
+        yield* PubSub.publish(rechecks, undefined)
+        return {}
+      }
+      if (result.reason === "abort") {
+        const replaced = mine.signal.aborted && !context.signal.aborted
+        return yield* new Engine.Failure(
+          replaced
+            ? { code: "replaced", message: "another sign-in was started" }
+            : { code: "cancelled", message: "the sign-in was cancelled" },
+        )
+      }
+      if (result.reason === "timeout") {
+        return yield* new Engine.Failure({
+          code: "timeout",
+          message: `the sign-in was not finished in the browser within ${SIGN_IN_TIMEOUT}`,
+        })
+      }
+      if (outcome?.type === "denied") {
+        return yield* new Engine.Failure({ code: "denied", message: `Google did not grant access: ${outcome.error}` })
+      }
+      if (outcome?.type === "failed") {
+        return yield* new Engine.Failure({
+          code: "sign-in-failed",
+          message: outcome.error,
+          details: { traceback: outcome.traceback },
+        })
+      }
+      const ending = result.signal ? `signal ${result.signal}` : `code ${result.code}`
+      return yield* new Engine.Failure({
+        code: "sign-in-failed",
+        message: `the Python exited with ${ending} before the sign-in finished`,
+        details: { output: printed },
+      })
+    })
+
   /** The ready environment, once the folders and file a run names are found to be there. */
   const admit = (params: { readonly cwd: string; readonly file?: string }, signal: AbortSignal) =>
     Effect.gen(function* () {
@@ -306,15 +487,16 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       )
     })
 
-  return { domain: DOMAIN, methods: { check: precheck, run, recheck } }
+  return { domain: DOMAIN, methods: { check: precheck, run, recheck, discover, configure, signIn } }
 })
 
 /** The state a configuration settles on at once, or `checking` when it names a Python to look at. */
 function settledOrChecking(state: Config.BlockState<typeof Block.Type>): State {
   if (!state.ok) return failed("config-error", { message: state.failure.message, file: state.failure.file })
-  if (state.value === undefined) return { status: "unconfigured" }
-  const python = state.value.python
-  const project = state.value.project
+  const python = state.value?.python
+  const project = state.value?.project
+  if (python === undefined)
+    return project === undefined ? { status: "unconfigured" } : { status: "unconfigured", project }
   return project === undefined ? { status: "checking", python } : { status: "checking", python, project }
 }
 
@@ -423,11 +605,13 @@ export function hint(state: Exclude<State, Ready>, file: string): string {
   const finding =
     "Look for a Python on this computer with earthengine-api installed, such as a conda environment, and let the user choose if there are several. If there is none, offer to create one; a conda environment installs every package from conda-forge, without pip."
   if (state.status === "unconfigured") {
+    // A project the user named in the settings first is kept, and not asked for again.
+    const named = state.project
     return [
       `Google Earth Engine is not set up. Setting it up takes, in order: a Python with ${NAMED} installed; signing in with the user's Google account; and the user's Google Cloud project.`,
       configured,
       finding,
-      projectId,
+      named === undefined ? projectId : `The project is already set to ${named}; keep it when adding the Python.`,
     ].join("\n")
   }
   const diagnostics = state.diagnostics
@@ -435,7 +619,7 @@ export function hint(state: Exclude<State, Ready>, file: string): string {
   const last = (text: string) => text.trim().split("\n").slice(-PRINTED_LINES).join("\n")
   const said = diagnostics.said === undefined ? [] : [`Google said: ${last(diagnostics.said)}`]
   const signIn = (force: boolean) =>
-    `The user must sign in with their Google account. Ask them to get it ready; once they say so, run \`${signInCommand(python, force)}\` with a timeout of 10 minutes. It opens their browser and ends when they finish there.`
+    `The user must sign in with their Google account. They can do it themselves in GeoCode's settings, under Geo environment, Google Earth Engine. Or ask them to get it ready; once they say so, run \`${signInCommand(python, force)}\` with a timeout of 10 minutes. It opens their browser and ends when they finish there.`
   if (state.status === "python-missing") {
     return [`The configured Python, ${python}, cannot be started: ${diagnostics.message}.`, configured, finding].join(
       "\n",

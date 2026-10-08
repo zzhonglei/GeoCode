@@ -123,13 +123,63 @@ __version__ = "2.0.0"
   "ee/ee_exception.py": `class EEException(Exception):
     pass
 `,
-  "ee/oauth.py": `import flags
+  "ee/oauth.py": `import http.server
+import os
+import urllib.parse
+
+import flags
 
 
 def get_credentials_arguments():
     if flags.raised("signed-out") or flags.raised("adc"):
         raise IOError("no credentials file")
     return {"refresh_token": "token"}
+
+
+def _obtain_and_write_token(code, verifier, scopes, redirect_uri):
+    """Records what the credentials would be fetched with, in place of the network, and signs the user in."""
+    with open(os.path.join(flags.FOLDER, "token"), "w") as record:
+        record.write("%s %s" % (code, redirect_uri))
+    os.remove(os.path.join(flags.FOLDER, "signed-out"))
+
+
+class Flow:
+    """earthengine-api's localhost sign-in, shaped as its own is where GeoCode relies on it."""
+
+    def __init__(self, auth_mode="notebook", scopes=None):
+        port = int(auth_mode.split(":", 1)[1])
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            code = None
+
+            def do_GET(self):
+                Handler.code = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)["code"][0]
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"signed in")
+
+            def log_message(self, *_):
+                pass
+
+        class Server:
+            def __init__(self):
+                self.server = http.server.HTTPServer(("localhost", port), Handler)
+                self.url = "http://localhost:%s" % self.server.server_address[1]
+
+            def fetch_code(self):
+                self.server.handle_request()
+                self.server.server_close()
+                return Handler.code
+
+        self.server = Server()
+        self.auth_url = "https://accounts.google.com/o/oauth2/auth?redirect_uri=" + self.server.url
+
+    def save_code(self, code=None):
+        redirect_uri = None
+        if self.server and not code:
+            redirect_uri = self.server.url
+            code = self.server.fetch_code()
+        _obtain_and_write_token(code, "verifier", None, redirect_uri)
 `,
   "ee/data.py": `def get_persistent_credentials():
     return "credentials"
@@ -269,7 +319,18 @@ const start = async (block?: (directory: string) => Promise<unknown>) => {
     await stop()
     throw error
   }
-  return { directory, machine, states, settled, send, response, progress, deliver: (m: unknown) => deliver(m), stop }
+  return {
+    directory,
+    machine,
+    sent,
+    states,
+    settled,
+    send,
+    response,
+    progress,
+    deliver: (m: unknown) => deliver(m),
+    stop,
+  }
 }
 
 const result = (response: Response) => {
@@ -355,7 +416,7 @@ const CONFIGURED = (file: string) =>
   `The configuration is the "gee" block of ${file}: {"python": "<absolute path of the Python>", "project": "<Google Cloud project ID>"}. It is checked as soon as the file is saved; then call geerun again.`
 const AGAIN = "It is checked again the next time geerun is called."
 const SIGN_IN = (command: string) =>
-  `The user must sign in with their Google account. Ask them to get it ready; once they say so, run \`${command}\` with a timeout of 10 minutes. It opens their browser and ends when they finish there.`
+  `The user must sign in with their Google account. They can do it themselves in GeoCode's settings, under Geo environment, Google Earth Engine. Or ask them to get it ready; once they say so, run \`${command}\` with a timeout of 10 minutes. It opens their browser and ends when they finish there.`
 const REVOKED = (python: string) =>
   [
     "Google refused the Earth Engine credentials on this computer: they have expired, been revoked, or do not cover Earth Engine.",
@@ -816,6 +877,134 @@ test("a cancelled run answers at once and ends its process", { skip: !python3 },
       10000,
       "the process to end",
     )
+  } finally {
+    await engine.stop()
+  }
+})
+
+const machineGee = async (machine: string) => JSON.parse(await fs.readFile(machine, "utf-8")).gee
+
+// Guards against the settings page losing the project when it chooses a Python, or the Python when it names a project.
+test("the settings write the Python or the project, keeping the other, and refuse what is not one", async () => {
+  const engine = await start(async () => ({ project: "majestic" }))
+  try {
+    // A project before any Python is no configuration yet, though the settings show it.
+    assert.deepEqual(await engine.settled(), { status: "unconfigured", project: "majestic" })
+    // Guards against GeoAgent asking again for a project the user has already named in the settings.
+    const refused = await engine.response(engine.send({ script: "print(1)", cwd: engine.directory }))
+    const hint = !refused.ok ? refused.error.message : ""
+    assert.match(hint, /The project is already set to majestic; keep it when adding the Python\./)
+    assert.doesNotMatch(hint, /never guess it/)
+
+    // Guards against a virtual environment chosen by its folder being configured as the Python it was made from.
+    const base = path.join(engine.directory, "base", "python3.12")
+    await fs.mkdir(path.dirname(base), { recursive: true })
+    await fs.writeFile(base, "")
+    const venv = path.join(engine.directory, "project", ".venv", "bin", "python")
+    await fs.mkdir(path.dirname(venv), { recursive: true })
+    await fs.symlink(base, venv)
+    const chosen = await engine.response(
+      engine.send({ environment: path.join(engine.directory, "project") }, "gee.configure"),
+    )
+    // The Python found is answered, for a page to tell a choice of the folder already configured from a new one.
+    assert.deepEqual(chosen.ok && chosen.result, { python: venv })
+    assert.deepEqual(await machineGee(engine.machine), { project: "majestic", python: venv })
+    const empty = await engine.response(
+      engine.send({ environment: path.join(engine.directory, "base") }, "gee.configure"),
+    )
+    assert.equal(!empty.ok && empty.error.code, "invalid-params")
+
+    const python = path.join(engine.directory, "missing", "python")
+    assert.ok((await engine.response(engine.send({ python }, "gee.configure"))).ok)
+    assert.deepEqual(await machineGee(engine.machine), { project: "majestic", python })
+    assert.ok((await engine.response(engine.send({ project: "other-project" }, "gee.configure"))).ok)
+    assert.deepEqual(await machineGee(engine.machine), { project: "other-project", python })
+    // Guards against a project ID the request to Earth Engine cannot carry, as one with a full-width comma typed into it.
+    const refusedProjects = [{ project: "has space" }, { project: "" }, { project: "majestic-v4、5" }]
+    for (const params of [{ python: "bin/python" }, ...refusedProjects, { other: 1 }]) {
+      const response = await engine.response(engine.send(params, "gee.configure"))
+      assert.equal(!response.ok && response.error.code, "invalid-params", JSON.stringify(params))
+    }
+    assert.deepEqual(await machineGee(engine.machine), { project: "other-project", python })
+  } finally {
+    await engine.stop()
+  }
+})
+
+/** Starts a sign-in and comes back from the browser with `query`, as Google sends the user back. */
+const signIn = async (engine: Awaited<ReturnType<typeof start>>, query: string) => {
+  const id = engine.send({}, "gee.signIn")
+  await until(() => engine.progress(id).length > 0, 10000, "the address to open")
+  const { url } = engine.progress(id)[0] as { url: string }
+  const back = new URL(url).searchParams.get("redirect_uri")
+  assert.match(back ?? "", /^http:\/\/localhost:\d+$/)
+  // Guards against a request that is not the sign-in coming back, as the browser's for the page's icon, ending it.
+  assert.equal((await fetch(`${back}/favicon.ico`)).status, 404)
+  assert.ok(!engine.sent.some((message) => message.type === "response" && message.id === id))
+  const page = await fetch(`${back}/?${query}`).then((answer) => answer.text())
+  return { response: await engine.response(id), page, back: back ?? "" }
+}
+
+test("signing in through the browser checks again, and finds the user signed in", { skip: !python3 }, async () => {
+  const engine = await start(async (directory) => ({
+    python: await stubbedPython(directory, ["signed-out"]),
+    project: "majestic",
+  }))
+  try {
+    assert.equal((await engine.settled()).status, "signed-out")
+    const { response, back } = await signIn(engine, "code=granted")
+    assert.ok(response.ok, JSON.stringify(response))
+    // Guards against the code reaching earthengine-api without the address Google sent it to, which Google refuses.
+    assert.equal(await fs.readFile(path.join(engine.directory, "stubs", "flags", "token"), "utf-8"), `granted ${back}`)
+    await until(() => engine.states().at(-1)?.status === "ready", 10000, "the check after signing in")
+  } finally {
+    await engine.stop()
+  }
+})
+
+// Guards against a denied sign-in hanging until its time is up, as earthengine-api then waits for a code typed in.
+test("access denied in the browser ends the sign-in at once, saying so there too", { skip: !python3 }, async () => {
+  const engine = await start(async (directory) => ({ python: await stubbedPython(directory, ["signed-out"]) }))
+  try {
+    assert.equal((await engine.settled()).status, "signed-out")
+    const { response, page } = await signIn(engine, "error=access_denied")
+    assert.equal(!response.ok && response.error.code, "denied")
+    assert.match(!response.ok ? response.error.message : "", /access_denied/)
+    assert.match(page, /did not complete \(access_denied\)/)
+    assert.equal(engine.states().at(-1)?.status, "signed-out")
+  } finally {
+    await engine.stop()
+  }
+})
+
+test(
+  "a sign-in is cancelled, or ended by another one, without waiting for the browser",
+  { skip: !python3 },
+  async () => {
+    const engine = await start(async (directory) => ({ python: await stubbedPython(directory, ["signed-out"]) }))
+    try {
+      await engine.settled()
+      const first = engine.send({}, "gee.signIn")
+      await until(() => engine.progress(first).length > 0, 10000, "the first sign-in")
+      const second = engine.send({}, "gee.signIn")
+      const replaced = await engine.response(first, 10000)
+      assert.equal(!replaced.ok && replaced.error.code, "replaced")
+      await until(() => engine.progress(second).length > 0, 10000, "the second sign-in")
+      engine.deliver({ type: "cancel", id: second })
+      const cancelled = await engine.response(second, 10000)
+      assert.equal(!cancelled.ok && cancelled.error.code, "cancelled")
+    } finally {
+      await engine.stop()
+    }
+  },
+)
+
+test("signing in without a configured Python is refused", async () => {
+  const engine = await start()
+  try {
+    await engine.settled()
+    const response = await engine.response(engine.send({}, "gee.signIn"))
+    assert.equal(!response.ok && response.error.code, "invalid-params")
   } finally {
     await engine.stop()
   }

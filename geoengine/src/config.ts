@@ -28,6 +28,11 @@ export interface Block<A> {
   readonly watch: Stream.Stream<BlockState<A>>
   /** Refused while the file cannot be read or parsed, so a hand-written file is never overwritten. */
   readonly write: (value: A) => Effect.Effect<void, Error>
+  /**
+   * Writes what `change` makes of the block as the file holds it at that moment, so a change made elsewhere since the
+   * last read is kept; refused as `write` is, and while the block itself is written wrong.
+   */
+  readonly update: (change: (current: A | undefined) => A) => Effect.Effect<void, Error>
 }
 
 export interface Interface {
@@ -110,15 +115,18 @@ export const layer = (file: string) =>
             }),
           ) as Stream.Stream<BlockState<S["Type"]>>
 
-          const write = (value: S["Type"]) =>
+          /** Writes the value made from the block's raw form in the file as read under the lock. */
+          const save = (valueOf: (raw: unknown) => Exit.Exit<S["Type"], Error>) =>
             serialized.withPermits(1)(
               Effect.gen(function* () {
                 const current = yield* Effect.promise(() => load(file))
                 if (!current.ok) {
                   return yield* Effect.fail(new Error(`${file} cannot be read or parsed, so it is left as it is`))
                 }
+                const value = valueOf(current.data[name])
+                if (Exit.isFailure(value)) return yield* value
                 // The file holds the encoded form, which the next read decodes.
-                const encoded = encodeValue(value)
+                const encoded = encodeValue(value.value)
                 if (Exit.isFailure(encoded)) {
                   return yield* Effect.fail(new Error(`"${name}": ${messageOf(Cause.squash(encoded.cause))}`))
                 }
@@ -131,10 +139,22 @@ export const layer = (file: string) =>
               }),
             )
 
+          // Over a block written wrong too: writing a right one is how it gets fixed.
+          const write = (value: S["Type"]) => save(() => Exit.succeed(value))
+
+          const update = (change: (current: S["Type"] | undefined) => S["Type"]) =>
+            save((raw) => {
+              const held = decode(raw)
+              return held.ok
+                ? Exit.succeed(change(held.value))
+                : Exit.fail(new Error(`${held.failure.message}, so it is left as it is`))
+            })
+
           return {
             current: Effect.sync(() => entry.state as BlockState<S["Type"]>),
             watch,
             write,
+            update,
           } satisfies Block<S["Type"]>
         })
 

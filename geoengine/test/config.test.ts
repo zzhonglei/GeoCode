@@ -217,3 +217,39 @@ test("a leading byte order mark is accepted", () =>
     )
     assert.deepEqual(state, { ok: true, value: { path: "/a" } })
   }))
+
+const Pair = Schema.Struct({ python: Schema.optionalKey(Schema.String), project: Schema.optionalKey(Schema.String) })
+
+// Guards against a setting saved in the interface dropping one GeoAgent wrote a moment before, not yet read back.
+test("an update changes the block as the file holds it, keeping what was written elsewhere since", () =>
+  withFile(JSON.stringify({ gee: { project: "p" } }), async (file) => {
+    const state = await run(
+      file,
+      Effect.gen(function* () {
+        const config = yield* Config.Service
+        const block = yield* config.block("gee", Pair)
+        yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ gee: { project: "p", python: "/python" } })))
+        yield* block.update((current) => ({ ...current, project: "q" }))
+        return yield* block.current
+      }),
+    )
+    assert.deepEqual(state, { ok: true, value: { project: "q", python: "/python" } })
+  }))
+
+test("an update leaves a block written wrong as it is, where a write replaces it", () =>
+  withFile(JSON.stringify({ gee: { python: 3 } }), async (file) => {
+    const outcome = await run(
+      file,
+      Effect.gen(function* () {
+        const config = yield* Config.Service
+        const block = yield* config.block("gee", Pair)
+        const updated = yield* block.update((current) => ({ ...current, project: "q" })).pipe(Effect.exit)
+        const kept = JSON.parse(yield* Effect.promise(() => fs.readFile(file, "utf-8")))
+        yield* block.write({ python: "/python" })
+        return { updated, kept }
+      }),
+    )
+    assert.equal(outcome.updated._tag, "Failure")
+    assert.deepEqual(outcome.kept, { gee: { python: 3 } })
+    assert.deepEqual(JSON.parse(await fs.readFile(file, "utf-8")), { gee: { python: "/python" } })
+  }))

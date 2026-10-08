@@ -386,3 +386,88 @@ except BaseException:
 
 emit({"type": "end", "ok": True})
 `
+
+/**
+ * Signs the user in with earthengine-api's own browser sign-in, on any free port where its default may be taken. The
+ * address to open is reported first; the browser comes back to this Python, which saves the credentials where
+ * earthengine-api keeps them. Coming back without a code, as when the user denies access, ends the sign-in with its
+ * reason and a page saying so, where earthengine-api's own would fail reading a code from standard input and leave the
+ * browser without a page; a stray request, as for the page's icon, is answered and the wait goes on.
+ */
+export const SIGN_IN =
+  SAFE_PATH +
+  String.raw`
+import json
+import socket
+import traceback
+import urllib.parse
+
+
+def emit(payload):
+    sys.stdout.write("${MARKER}" + json.dumps(payload) + "\n")
+    sys.stdout.flush()
+
+
+def fail(error):
+    emit({"type": "failed", "error": "%s: %s" % (type(error).__name__, error), "traceback": traceback.format_exc()})
+    sys.exit(1)
+
+
+answer = {}
+
+# All of earthengine-api's flow GeoCode relies on, so a version shaped otherwise fails with what it lacks.
+try:
+    from ee import oauth
+
+    flow = oauth.Flow("localhost:0")
+    server = flow.server.server
+
+    class Answer(server.RequestHandlerClass):
+        """earthengine-api's page when the browser brings a code; a page saying the sign-in ended when it brings an error."""
+
+        # A connection sending nothing, as a browser's preconnection, would hold the server, which answers one at a time.
+        timeout = 5
+
+        def do_GET(self):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            if "code" in query:
+                # Kept first: the browser may be gone before its page is written.
+                answer["code"] = query["code"][0]
+                super().do_GET()
+                return
+            if "error" not in query:
+                self.send_response(404)
+                self.end_headers()
+                return
+            answer["error"] = query["error"][0]
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain; charset=utf-8")
+            self.end_headers()
+            message = "Google Earth Engine sign-in did not complete (%s). You can close this window.\n" % answer["error"]
+            self.wfile.write(message.encode("utf-8"))
+
+    server.RequestHandlerClass = Answer
+
+    def fetch_code():
+        while not answer:
+            server.handle_request()
+        server.server_close()
+        if "error" in answer:
+            emit({"type": "denied", "error": answer["error"]})
+            sys.exit(1)
+        return answer["code"]
+
+    flow.server.fetch_code = fetch_code
+    url = flow.auth_url
+except Exception as error:
+    fail(error)
+
+emit({"type": "url", "url": url})
+# The code is exchanged for credentials with urllib, which would wait for ever on a connection that stalls.
+socket.setdefaulttimeout(60)
+try:
+    flow.save_code()
+except Exception as error:
+    fail(error)
+emit({"type": "signed-in"})
+`
