@@ -104,3 +104,107 @@ export const pickQgisApp = async (titles: { app: string; folder: string }): Prom
     }));
   return picked.success ? picked.data : null;
 };
+
+const GEE_PATH = '/api/geocode/gee';
+
+const pythonsSchema = z.object({
+  pythons: z.array(z.object({
+    python: z.string(),
+    name: z.string(),
+    version: z.string().optional(),
+    earthengine: z.string().optional(),
+    missing: z.array(z.string()),
+    /** The configured Python, by what it is, whatever path names it. */
+    configured: z.boolean().optional(),
+  })),
+  /** The configured path the mark was made against: a mark is stale once the configuration names another. */
+  configured: z.string().optional(),
+});
+
+export type GeePython = z.infer<typeof pythonsSchema>['pythons'][number];
+
+export type GeePythons = z.infer<typeof pythonsSchema>;
+
+export const fetchGeePythons = (): Promise<Outcome<GeePythons>> => request(`${GEE_PATH}/pythons`, pythonsSchema);
+
+/** The Python a write named, as GeoEngine found it in a folder; nothing for a project. */
+const configuredSchema = z.object({ python: z.string().optional() });
+
+/**
+ * GeoEngine writes the one setting given, keeps the other, and checks again; the outcome arrives as a status. An
+ * environment is a folder GeoEngine finds the Python in.
+ */
+export const configureGee = (setting: { python: string } | { environment: string } | { project: string }) => request(GEE_PATH, configuredSchema, {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(setting),
+});
+
+export const recheckGee = () => request(`${GEE_PATH}/recheck`, doneSchema, { method: 'POST' });
+
+const signInLineSchema = z.union([
+  z.object({ type: z.literal('progress'), data: z.object({ url: z.string() }) }),
+  z.object({ type: z.literal('result'), ok: z.literal(true) }),
+  z.object({ type: z.literal('result'), ok: z.literal(false), error: z.object({ code: z.string(), message: z.string() }) }),
+]);
+
+type SignInLine = z.infer<typeof signInLineSchema>;
+
+/** A line of the sign-in's answer; null for one this interface cannot read. */
+const signInLine = (text: string): SignInLine | null => {
+  try {
+    const line = signInLineSchema.safeParse(JSON.parse(text));
+    return line.success ? line.data : null;
+  } catch {
+    return null;
+  }
+};
+
+/** How a sign-in ended: GeoEngine's code says why it failed, as "denied" or "timeout"; "aborted" is this page's own. */
+export type SignInEnd = { ok: true } | { ok: false; code: string; reason: string };
+
+/**
+ * Signs in with the configured Python, handing on the address the browser is to open as soon as GeoEngine has it.
+ * Aborting the signal ends the sign-in in GeoEngine too.
+ */
+export const signInGee = async (onUrl: (url: string) => void, signal: AbortSignal): Promise<SignInEnd> => {
+  const response = await runtimeFetch(`${GEE_PATH}/sign-in`, { method: 'POST', signal })
+    .catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
+  if ('error' in response) return { ok: false, code: signal.aborted ? 'aborted' : 'unavailable', reason: response.error };
+  if (!response.ok || !response.body) return { ok: false, code: 'unavailable', reason: `GeoEngine request failed (${response.status})` };
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  const ended = (line: Extract<SignInLine, { type: 'result' }>): SignInEnd => {
+    void reader.cancel().catch(() => {});
+    return line.ok ? { ok: true } : { ok: false, code: line.error.code, reason: line.error.message };
+  };
+  let pending = '';
+  for (;;) {
+    const chunk = await reader.read().catch(() => ({ done: true as const, value: undefined }));
+    // The last line may come without its newline.
+    const lines = chunk.done ? [pending] : (pending + chunk.value).split('\n');
+    pending = chunk.done ? '' : lines.pop() ?? '';
+    for (const text of lines) {
+      const line = signInLine(text);
+      if (!line) continue;
+      if (line.type === 'progress') onUrl(line.data.url);
+      else return ended(line);
+    }
+    if (chunk.done) break;
+  }
+  return { ok: false, code: signal.aborted ? 'aborted' : 'unavailable', reason: 'the connection to GeoEngine ended' };
+};
+
+/**
+ * The folder of a Python environment the user picks in the system's file dialog, from `near` when given; null when they
+ * cancel. A folder rather than the interpreter: on macOS the dialog resolves links, which would turn a virtual
+ * environment's python into the Python it was made from.
+ */
+export const pickPythonFolder = async (title: string, near?: string): Promise<string | null> => {
+  const picked = pickedSchema.safeParse(await getDesktopBridge()?.openDialog?.({
+    title,
+    directory: true,
+    multiple: false,
+    defaultPath: near,
+  }));
+  return picked.success ? picked.data : null;
+};

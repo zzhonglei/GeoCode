@@ -122,7 +122,7 @@ const geeDiagnosticsSchema = z.object({
 });
 
 const geeSchema = z.union([
-  z.object({ status: z.literal('unconfigured') }),
+  z.object({ status: z.literal('unconfigured'), project: z.string().optional() }),
   z.object({ status: z.literal('checking'), python: z.string(), project: z.string().optional() }),
   z.object({ status: z.literal('ready'), python: z.string(), project: z.string(), versions: z.record(z.string(), z.string()) }),
   z.object({ status: z.enum(GEE_FAILURES), diagnostics: geeDiagnosticsSchema }),

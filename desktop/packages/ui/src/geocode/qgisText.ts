@@ -35,7 +35,6 @@ export type QgisText = {
   manage: string;
   pageTitle: string;
   pageDescription: string;
-  qgisDescription: string;
   back: string;
   installsHeading: string;
   rescan: string;
@@ -60,7 +59,6 @@ const TEXT: { en: QgisText } & Partial<Record<Locale, QgisText>> = {
     manage: 'Manage in Settings',
     pageTitle: 'Geo environment',
     pageDescription: 'The software on this computer that GeoCode runs geographic tasks with.',
-    qgisDescription: 'Spatial analysis with the QGIS Processing algorithms',
     back: 'Back to Geo environment',
     installsHeading: 'Installations',
     rescan: 'Scan again',
@@ -82,7 +80,6 @@ const TEXT: { en: QgisText } & Partial<Record<Locale, QgisText>> = {
     manage: '在设置中管理',
     pageTitle: '地理环境',
     pageDescription: 'GeoCode 用这台电脑上的这些软件执行地理任务。',
-    qgisDescription: '用 QGIS 的处理算法做空间分析',
     back: '返回地理环境',
     installsHeading: '已安装',
     rescan: '重新扫描',
@@ -104,7 +101,6 @@ const TEXT: { en: QgisText } & Partial<Record<Locale, QgisText>> = {
     manage: '在設定中管理',
     pageTitle: '地理環境',
     pageDescription: 'GeoCode 用這台電腦上的這些軟體執行地理任務。',
-    qgisDescription: '用 QGIS 的處理演算法做空間分析',
     back: '返回地理環境',
     installsHeading: '已安裝',
     rescan: '重新掃描',

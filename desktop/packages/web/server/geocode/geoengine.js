@@ -1,5 +1,7 @@
 import express from 'express';
 
+import { streamGeoEngine } from './geo-tools.js';
+
 export const GEO_STATUS_EVENT = 'geocode:geo-status';
 
 const STATUS_BY_CODE = new Map([['invalid-params', 400], ['config-unreadable', 409], ['unavailable', 503]]);
@@ -31,4 +33,15 @@ export const registerGeoEngine = (app, { geoEngine, broadcast }) => {
   app.get('/api/geocode/qgis/installs', (_req, res) => answer(res, 'qgis.discover'));
   app.put('/api/geocode/qgis', express.json({ limit: '64kb' }), (req, res) => answer(res, 'qgis.configure', { path: req.body?.path }));
   app.post('/api/geocode/qgis/recheck', (_req, res) => answer(res, 'qgis.recheck'));
+
+  app.get('/api/geocode/gee/pythons', (_req, res) => answer(res, 'gee.discover'));
+  // One setting at a time, so writing one never sends another along empty; an environment is a folder holding a Python.
+  app.put('/api/geocode/gee', express.json({ limit: '64kb' }), (req, res) => {
+    const body = req.body ?? {};
+    const setting = ['python', 'environment', 'project'].find((key) => key in body) ?? 'project';
+    answer(res, 'gee.configure', { [setting]: body[setting] });
+  });
+  app.post('/api/geocode/gee/recheck', (_req, res) => answer(res, 'gee.recheck'));
+  // Waits for the user in the browser, reporting the address to open first; leaving the page's request cancels it.
+  app.post('/api/geocode/gee/sign-in', (_req, res) => streamGeoEngine(res, geoEngine, 'gee.signIn', {}));
 };

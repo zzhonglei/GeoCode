@@ -81,15 +81,15 @@ export const GeoStatusButtons: React.FC<{ className?: string }> = ({ className }
   const qgis = React.useMemo(() => qgisStatusOf(statuses), [statuses]);
   const gee = React.useMemo(() => geeStatusOf(statuses), [statuses]);
 
-  const manageQgis = {
+  const manage = (domain: 'qgis' | 'gee') => ({
     text: text.manage,
     open: () => {
-      useGeoSettingsStore.getState().request('qgis');
+      useGeoSettingsStore.getState().request(domain);
       const ui = useUIStore.getState();
       ui.setSettingsPage('geo-environment');
       ui.setSettingsDialogOpen(true);
     },
-  };
+  });
 
   return (
     <>
@@ -100,7 +100,7 @@ export const GeoStatusButtons: React.FC<{ className?: string }> = ({ className }
           status={qgis.status}
           label={QGIS_STATUS[qgis.status]}
           details={<QgisStatusDetails status={qgis} text={text} />}
-          manage={manageQgis}
+          manage={manage('qgis')}
           className={className}
         />
       ) : null}
@@ -112,6 +112,7 @@ export const GeoStatusButtons: React.FC<{ className?: string }> = ({ className }
           status={gee.status}
           label={geeLabel(gee)}
           details={<GeeStatusDetails status={gee} text={text} />}
+          manage={manage('gee')}
           className={className}
         />
       ) : null}

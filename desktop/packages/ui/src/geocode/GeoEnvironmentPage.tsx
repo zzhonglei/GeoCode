@@ -8,22 +8,16 @@ import { toast } from '@/components/ui';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { GeeDetails } from './GeeDetails';
+import { GeeLogo } from './GeeLogo';
+import { geeLabel, geeSummaryOf, geeText } from './geeText';
 import { chooseQgis, fetchQgisInstalls, pickQgisApp, recheckQgis, useGeoStatuses, type QgisInstall } from './geoEngineClient';
 import { useGeoSettingsStore } from './geoSettingsStore';
-import { lightOf, qgisStatusOf, type Light, type QgisView } from './geoStatus';
+import { geeStatusOf, lightOf, qgisStatusOf, type GeeView, type QgisView } from './geoStatus';
 import { QgisLogo } from './QgisLogo';
 import { QgisStatusDetails } from './QgisStatusDetails';
 import { QGIS_STATUS, qgisText, releaseOf, summaryOf, type QgisText } from './qgisText';
-
-const TONE = {
-  ready: 'success',
-  checking: 'warning',
-  idle: 'neutral',
-  failed: 'error',
-} satisfies Record<Light, SettingsCardTone>;
-
-const LIST_CLASS = 'divide-y divide-[var(--interactive-border)] overflow-hidden rounded-lg border border-[var(--interactive-border)]';
-const ROW_CLASS = 'flex w-full items-center gap-3 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:bg-[var(--interactive-hover)]';
+import { LIST_CLASS, ROW_CLASS, TONE } from './settingsList';
 
 type Installs = { kind: 'loading' } | { kind: 'found'; installs: QgisInstall[] } | { kind: 'failed'; reason: string };
 
@@ -46,12 +40,18 @@ const configuredOf = (status: QgisView | undefined): Configured => {
   return { path: status.diagnostics.path, app: status.diagnostics.app };
 };
 
-/** One line under a name: what runs when it is ready, what it is for otherwise. */
+/** Beside a name in the list, in a row whose size it does not change: what runs, once it is ready. */
 const lineOf = (status: QgisView | undefined, text: QgisText) =>
-  status?.status === 'ready' ? summaryOf(status, text) : text.qgisDescription;
+  status?.status === 'ready' ? summaryOf(status, text) : undefined;
+
+const geeLineOf = (status: GeeView | undefined) => (status?.status === 'ready' ? geeSummaryOf(status) : undefined);
 
 const StatusPill: React.FC<{ status: QgisView | undefined }> = ({ status }) => (
   status ? <SettingsCardPill tone={TONE[lightOf(status.status)]}>{QGIS_STATUS[status.status]}</SettingsCardPill> : null
+);
+
+const GeeStatusPill: React.FC<{ status: GeeView | undefined }> = ({ status }) => (
+  status ? <SettingsCardPill tone={TONE[lightOf(status.status)]}>{geeLabel(status)}</SettingsCardPill> : null
 );
 
 export const GeoEnvironmentPage: React.FC = () => {
@@ -62,6 +62,7 @@ export const GeoEnvironmentPage: React.FC = () => {
   const [open, setOpen] = React.useState(requested);
   const statuses = useGeoStatuses();
   const status = React.useMemo(() => qgisStatusOf(statuses), [statuses]);
+  const gee = React.useMemo(() => geeStatusOf(statuses), [statuses]);
 
   React.useEffect(() => {
     if (requested === null) return;
@@ -72,6 +73,17 @@ export const GeoEnvironmentPage: React.FC = () => {
   if (open === 'qgis') {
     return <QgisDetails text={text} status={status} revision={statuses.qgis?.revision ?? -1} onBack={() => setOpen(null)} />;
   }
+  if (open === 'gee') {
+    return (
+      <GeeDetails
+        text={geeText(locale)}
+        shared={text}
+        status={gee}
+        revision={statuses.gee?.revision ?? -1}
+        onBack={() => setOpen(null)}
+      />
+    );
+  }
 
   return (
     <SettingsPageLayout title={text.pageTitle} description={text.pageDescription}>
@@ -81,6 +93,13 @@ export const GeoEnvironmentPage: React.FC = () => {
           <span className="typography-ui-label shrink-0 font-medium text-foreground">QGIS</span>
           <span className="typography-meta min-w-0 flex-1 truncate text-muted-foreground">{lineOf(status, text)}</span>
           <StatusPill status={status} />
+          <Icon name="arrow-right-s" className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        </button>
+        <button type="button" onClick={() => setOpen('gee')} className={cn(ROW_CLASS, 'py-2.5 hover:bg-[var(--interactive-hover)]/50')}>
+          <GeeLogo className="size-5 shrink-0" />
+          <span className="typography-ui-label shrink-0 font-medium text-foreground">Google Earth Engine</span>
+          <span className="typography-meta min-w-0 flex-1 truncate text-muted-foreground">{geeLineOf(gee)}</span>
+          <GeeStatusPill status={gee} />
           <Icon name="arrow-right-s" className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         </button>
       </div>
@@ -155,8 +174,8 @@ const QgisDetails: React.FC<{ text: QgisText; status: QgisView | undefined; revi
       title="QGIS"
       titleLeading={<SettingsBackButton label={text.back} onClick={onBack} />}
       titleAccessory={<StatusPill status={status} />}
-      description={lineOf(status, text)}
-      headerEnd={shown ? (
+      // A file that cannot be read is read again on a recheck, the way back once it is fixed.
+      headerEnd={shown || locked ? (
         <Button variant="outline" size="xs" disabled={status?.status === 'checking'} onClick={recheck}>
           {text.recheck}
         </Button>

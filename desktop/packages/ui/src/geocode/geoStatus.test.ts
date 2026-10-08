@@ -84,6 +84,7 @@ test('GeoCode: the interface reads every shape of Earth Engine state GeoEngine p
   const python = '/opt/anaconda3/envs/map/bin/python';
   const states = [
     { status: 'unconfigured' },
+    { status: 'unconfigured', project: 'p' },
     { status: 'checking', python },
     { status: 'checking', python, project: 'p' },
     { status: 'ready', python, project: 'p', versions: { python: '3.11.15', 'earthengine-api': '1.7.19', requests: '' } },

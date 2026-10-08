@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type GeoDomain = 'qgis';
+type GeoDomain = 'qgis' | 'gee';
 
 type GeoSettingsState = {
   /** An environment whose details the Geo environment page should open; the page takes it and clears it. */
@@ -8,7 +8,7 @@ type GeoSettingsState = {
   request: (domain: GeoDomain | null) => void;
 };
 
-// Outside the page, so the QGIS indicator can ask for its details before the page mounts.
+// Outside the page, so an indicator can ask for its environment's details before the page mounts.
 export const useGeoSettingsStore = create<GeoSettingsState>()((set) => ({
   requested: null,
   request: (requested) => set({ requested }),
