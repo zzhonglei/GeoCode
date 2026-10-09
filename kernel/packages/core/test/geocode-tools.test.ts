@@ -802,7 +802,6 @@ const ran = (fields: Record<string, unknown> = {}) =>
 const space = (fields: Record<string, unknown> = {}) => ({
   assets: [],
   more: 0,
-  exports: [],
   others: [],
   tasks: 0,
   ...fields,
@@ -1014,7 +1013,7 @@ describe("GeoCode: geerun", () => {
     }),
   )
 
-  it.effect("starts the answer with the task, its assets and exports, and the latest other tasks", () =>
+  it.effect("starts the answer with the task, its assets, and the latest other tasks", () =>
     Effect.gen(function* () {
       reset()
       const registry = yield* Tool.Service
@@ -1044,11 +1043,6 @@ describe("GeoCode: geerun", () => {
               { name: "area", type: "TABLE", saved: "2026-10-08T02:00:00Z" },
             ],
             more: 3,
-            exports: [
-              { asset: "composite", state: "FAILED", saved: true, error: "User memory limit exceeded." },
-              { asset: "ndvi", state: "RUNNING", progress: 0.4 },
-              { asset: "mask", state: "PENDING", progress: 0 },
-            ],
             others: [
               { name: "b-20260902", assets: 1, updated: "2026-10-01T00:00:00Z" },
               { name: "d-20260904", assets: 0, updated: "2026-09-04T00:00:00Z" },
@@ -1061,10 +1055,6 @@ describe("GeoCode: geerun", () => {
             "- composite (image; bands B4, B8; saved 2026-10-08 05:59 UTC): 台北夏季合成. Sentinel-2 中值合成",
             "- area (table; saved 2026-10-08 02:00 UTC)",
             "- and 3 more assets",
-            "Exports:",
-            "- composite: FAILED (the saved asset is the earlier version): User memory limit exceeded.",
-            "- ndvi: RUNNING, 40%",
-            "- mask: PENDING",
             "Other tasks in GeoCode (4 in all, the latest 3):",
             "- b-20260902 (1 asset, updated 2026-10-01 00:00 UTC)",
             "- d-20260904 (0 assets, updated 2026-09-04 00:00 UTC)",
@@ -1112,12 +1102,6 @@ describe("GeoCode: geerun", () => {
           title: "标".repeat(100),
           description: "说\n".repeat(500),
         })),
-        // As many failed exports as GeoEngine lists, each with as long an error as it keeps.
-        exports: Array.from({ length: 20 }, (_, index) => ({
-          asset: `e${index}`,
-          state: "FAILED",
-          error: "错".repeat(300),
-        })),
         others: [{ name: "b-20260902", assets: 1, updated: "2026-10-01T00:00:00Z" }],
         tasks: 1,
       })
@@ -1131,19 +1115,18 @@ describe("GeoCode: geerun", () => {
         const text = first?.type === "text" ? first.text : ""
         const opening = read ? text.slice(text.indexOf("\n\n(The output") + 2) : text
         expect(opening.startsWith("(The output was too long; only its end is kept.)\n\n")).toBe(true)
-        // The header gives way first, to its share, by its last assets: the exports and other tasks stay, and the
-        // descriptions stay on their own lines.
+        // The header gives way first, to its share, by its last assets: the other tasks stay, and the descriptions
+        // stay on their own lines.
         if (read) {
           const listing = text.slice(0, text.indexOf("\n\n(The output"))
           const shown = listing.split("\n").filter((line) => line.startsWith(`- ${"a".repeat(30)}`)).length
           expect(shown).toBeGreaterThan(0)
-          expect(listing).toContain(`\n- and ${100 - shown} more assets\nExports:\n- e0: FAILED: 错`)
           expect(listing).toContain(
-            `\n- e19: FAILED: ${"错".repeat(300)}\nOther tasks in GeoCode:\n- b-20260902 (1 asset, updated 2026-10-01 00:00 UTC)`,
+            `\n- and ${100 - shown} more assets\nOther tasks in GeoCode:\n- b-20260902 (1 asset, updated 2026-10-01 00:00 UTC)`,
           )
           expect(listing.endsWith("UTC)")).toBe(true)
           expect(Buffer.byteLength(listing, "utf-8")).toBeLessThanOrEqual(ToolOutput.MAX_BYTES / 2)
-          expect(listing.split("\n").length).toBe(shown + 25)
+          expect(listing.split("\n").length).toBe(shown + 4)
         }
         expect(text.endsWith("ZeroDivisionError\n\nThe script failed after 1 s.")).toBe(true)
         expect(text.split("\n").length).toBeLessThanOrEqual(ToolOutput.MAX_LINES)

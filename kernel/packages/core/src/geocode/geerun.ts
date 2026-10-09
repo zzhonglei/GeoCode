@@ -15,10 +15,10 @@ export const name = "geerun"
 export const description = `Run a Python script that uses Google Earth Engine, within a task.
 
 - A task keeps what its scripts save, in a folder of its name in the GeoCode folder of the user's Earth Engine assets, across runs and conversations. Every call names one: "new_task" starts one, "task" continues one. Name a new task for its purpose and today's date, such as taipei-ndvi-20261008: 1 to 30 letters, digits, "_" or "-". Its folder is made when it first saves something; until then the task exists only in this conversation, and leaves nothing in the user's Earth Engine. A task that saved something can be continued from any conversation; any other name is refused.
-- The answer starts with the task: its assets, with their titles and descriptions; its exports still running or failed; and the latest other tasks. Then comes what the script printed.
+- The answer starts with the task: its assets, with their titles and descriptions, and the latest other tasks. Then comes what the script printed.
 - \`ee\` is imported and initialized with the user's Google Cloud project before the script starts. Do not call ee.Authenticate() or ee.Initialize().
 - \`import geocode as gc\` to save to the task and read from it:
-  - gc.save(data, "composite", title=..., description=..., region=..., scale=...) saves an ee.Image or ee.FeatureCollection to the task and returns it read from the saved asset. An image needs region, and scale or crs with crs_transform. Write title and description in the user's language: they are how the user, in the Code Editor, and later conversations know what the asset is. It waits for the export, which may take minutes. The same content saved before under the name is read as it is; other content replaces it. wait=False returns as soon as the export starts, for a final result nothing after it uses.
+  - gc.save(data, "composite", title=..., description=..., region=..., scale=...) saves an ee.Image or ee.FeatureCollection to the task and returns it read from the saved asset. An image needs region, and scale or crs with crs_transform. Write title and description in the user's language: they are how the user, in the Code Editor, and later conversations know what the asset is. It waits for the export, which may take minutes. The same content saved before under the name is read as it is; other content replaces it.
   - gc.load("composite") reads an asset of this task, and gc.load("other-task/composite") one of another task. An asset outside GeoCode's folder is read by the full path the user gives, gc.load("projects/...").
 - An export computes everything again at full resolution, and the first run that saves is slower; later runs read the saved asset instead of computing it again, which spares the user's Earth Engine quota. So save what is expensive and used again, typically the composite once it is checked, and what the user wants kept. Do not save quick looks, cheap steps, or what is still being adjusted. When computing fails with "Computation timed out" or "User memory limit exceeded", save the expensive step first and continue from it.
 - Save to the task only with gc.save. Do not delete tasks or assets unless the user asks.
@@ -55,20 +55,10 @@ const Asset = Schema.Struct({
   description: Schema.optionalKey(Schema.String),
 })
 
-const Export = Schema.Struct({
-  asset: Schema.String,
-  state: Schema.String,
-  progress: Schema.optionalKey(Schema.Number),
-  /** Whether an earlier version of the asset is saved, for an export that failed. */
-  saved: Schema.optionalKey(Schema.Boolean),
-  error: Schema.optionalKey(Schema.String),
-})
-
 const Space = Schema.Struct({
   assets: Schema.Array(Asset),
   /** Assets beyond those listed. */
   more: Schema.Number,
-  exports: Schema.Array(Export),
   others: Schema.Array(Schema.Struct({ name: Schema.String, assets: Schema.Number, updated: Schema.String })),
   /** Other tasks in all. */
   tasks: Schema.Number,
@@ -134,22 +124,12 @@ const assetLine = (asset: typeof Asset.Type) => {
   return `- ${asset.name}${facts.length ? ` (${facts.join("; ")})` : ""}${said ? `: ${said}` : ""}`
 }
 
-const exportLine = (item: typeof Export.Type) => {
-  if (item.state === "FAILED" || item.state === "CANCELLED") {
-    const before = item.saved ? " (the saved asset is the earlier version)" : ""
-    return `- ${item.asset}: ${item.state}${before}${item.error ? `: ${flat(item.error)}` : ""}`
-  }
-  const progress = item.progress ? `, ${Math.round(item.progress * 100)}%` : ""
-  return `- ${item.asset}: ${item.state}${progress}`
-}
-
 /** What the answer starts with: the task GeoAgent works in, what it holds, and the latest other tasks. */
 const header = (task: { readonly name: string; readonly new: boolean }, space: typeof Space.Type) => {
   const held = space.assets.length + space.more
   const opening = task.new
     ? `Task ${task.name} (new): nothing saved yet.`
     : `Task ${task.name}: ${held ? plural(held, "asset") : "nothing saved yet"}.`
-  const exports = space.exports.length ? ["Exports:", ...space.exports.map(exportLine)] : []
   const counted = space.tasks > space.others.length ? ` (${space.tasks} in all, the latest ${space.others.length})` : ""
   const others = space.others.length
     ? [
@@ -159,10 +139,9 @@ const header = (task: { readonly name: string; readonly new: boolean }, space: t
         ),
       ]
     : []
-  const rest = [...exports, ...others]
-  const assets = fitting(space.assets.map(assetLine), [opening, ...rest])
+  const assets = fitting(space.assets.map(assetLine), [opening, ...others])
   const hidden = space.more + space.assets.length - assets.length
-  return [opening, ...assets, ...(hidden ? [`- and ${plural(hidden, "more asset")}`] : []), ...rest].join("\n")
+  return [opening, ...assets, ...(hidden ? [`- and ${plural(hidden, "more asset")}`] : []), ...others].join("\n")
 }
 
 /** The most of the kernel's bounds on an answer the header takes, leaving the rest to what the script printed. */
@@ -171,7 +150,7 @@ const HEADER_BYTES = ToolOutput.MAX_BYTES / 2
 
 /**
  * The asset lines that fit the header's share of the answer beside its other lines, which GeoEngine keeps short: the
- * exports and other tasks matter more than the last of a long list of assets.
+ * other tasks matter more than the last of a long list of assets.
  */
 const fitting = (lines: readonly string[], others: readonly string[]) => {
   const size = (line: string) => Buffer.byteLength(line, "utf-8") + 1

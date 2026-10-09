@@ -1075,57 +1075,37 @@ test("a cancelled run answers at once and ends its process", { skip: !python3 },
 
 const machineGee = async (machine: string) => JSON.parse(await fs.readFile(machine, "utf-8")).gee
 
-/** Writes the user's assets and exports the stubbed earthengine-api lists, in the project "majestic". */
-const holding = (directory: string, assets: readonly object[], operations: readonly object[] = []) =>
-  fs.writeFile(path.join(directory, "stubs", "flags", "assets.json"), JSON.stringify({ assets, operations }))
+/** Writes the user's assets the stubbed earthengine-api lists, in the project "majestic", with no exports yet. */
+const holding = (directory: string, assets: readonly object[]) =>
+  fs.writeFile(path.join(directory, "stubs", "flags", "assets.json"), JSON.stringify({ assets, operations: [] }))
 
 const ROOT = "projects/majestic/assets/GeoCode"
 const folder = (name: string, updateTime: string) => ({ type: "FOLDER", name, id: name, updateTime })
-const operation = (description: string, state: string, createTime: string, extra: object = {}) => ({
-  name: `projects/majestic/operations/${description.replace(/\W/g, "")}`,
-  metadata: { description, state, createTime, updateTime: createTime, progress: 0.4 },
-  ...extra,
-})
 
 test("a run reads its task in GeoCode's folder, for the answer to start with", { skip: !python3 }, async () => {
   const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
   try {
     assert.equal((await engine.settled()).status, "ready")
     const task = `${ROOT}/taipei-ndvi-20261008`
-    await holding(
-      engine.directory,
-      [
-        folder(ROOT, "2026-09-01T00:00:00Z"),
-        folder(task, "2026-10-08T01:00:00Z"),
-        {
-          type: "IMAGE",
-          name: `${task}/composite`,
-          updateTime: "2026-10-08T06:00:00Z",
-          bands: [{ id: "B4" }, { id: "B8" }],
-          properties: { title: "台北夏季合成", description: " Sentinel-2 中值合成 ", saved: "2026-10-08T05:59:00Z" },
-        },
-        { type: "TABLE", name: `${task}/area`, updateTime: "2026-10-08T02:00:00Z" },
-        // Not a task: GeoCode's tasks are folders.
-        { type: "IMAGE", name: `${ROOT}/stray`, updateTime: "2026-10-08T09:00:00Z" },
-        folder(`${ROOT}/a-20260901`, "2026-09-01T00:00:00Z"),
-        folder(`${ROOT}/b-20260902`, "2026-09-02T00:00:00Z"),
-        { type: "TABLE", name: `${ROOT}/b-20260902/x`, updateTime: "2026-10-01T00:00:00Z" },
-        folder(`${ROOT}/c-20260903`, "2026-09-03T00:00:00Z"),
-        folder(`${ROOT}/d-20260904`, "2026-09-04T00:00:00Z"),
-      ],
-      [
-        operation("taipei-ndvi-20261008:ndvi:0123abcd", "RUNNING", "2026-10-08T07:00:00Z"),
-        // Failed after the composite was saved: the earlier version is what is there.
-        operation("taipei-ndvi-20261008:composite:89abcdef", "FAILED", "2026-10-08T08:00:00Z", {
-          error: { message: "User memory limit exceeded." },
-        }),
-        operation("taipei-ndvi-20261008:composite:76543210", "SUCCEEDED", "2026-10-08T05:00:00Z"),
-        // Failed before the asset was last saved: nothing to report.
-        operation("taipei-ndvi-20261008:area:00000000", "FAILED", "2026-10-08T01:00:00Z"),
-        operation("b-20260902:x:11111111", "RUNNING", "2026-10-08T07:00:00Z"),
-        operation("myExportImageTask", "RUNNING", "2026-10-08T07:00:00Z"),
-      ],
-    )
+    await holding(engine.directory, [
+      folder(ROOT, "2026-09-01T00:00:00Z"),
+      folder(task, "2026-10-08T01:00:00Z"),
+      {
+        type: "IMAGE",
+        name: `${task}/composite`,
+        updateTime: "2026-10-08T06:00:00Z",
+        bands: [{ id: "B4" }, { id: "B8" }],
+        properties: { title: "台北夏季合成", description: " Sentinel-2 中值合成 ", saved: "2026-10-08T05:59:00Z" },
+      },
+      { type: "TABLE", name: `${task}/area`, updateTime: "2026-10-08T02:00:00Z" },
+      // Not a task: GeoCode's tasks are folders.
+      { type: "IMAGE", name: `${ROOT}/stray`, updateTime: "2026-10-08T09:00:00Z" },
+      folder(`${ROOT}/a-20260901`, "2026-09-01T00:00:00Z"),
+      folder(`${ROOT}/b-20260902`, "2026-09-02T00:00:00Z"),
+      { type: "TABLE", name: `${ROOT}/b-20260902/x`, updateTime: "2026-10-01T00:00:00Z" },
+      folder(`${ROOT}/c-20260903`, "2026-09-03T00:00:00Z"),
+      folder(`${ROOT}/d-20260904`, "2026-09-04T00:00:00Z"),
+    ])
     const done = result(
       await engine.response(
         engine.send({
@@ -1150,10 +1130,6 @@ test("a run reads its task in GeoCode's folder, for the answer to start with", {
         { name: "area", type: "TABLE", saved: "2026-10-08T02:00:00Z" },
       ],
       more: 0,
-      exports: [
-        { asset: "composite", state: "FAILED", saved: true, error: "User memory limit exceeded." },
-        { asset: "ndvi", state: "RUNNING", progress: 0.4 },
-      ],
       others: [
         { name: "b-20260902", assets: 1, updated: "2026-10-01T00:00:00Z" },
         { name: "d-20260904", assets: 0, updated: "2026-09-04T00:00:00Z" },
@@ -1190,7 +1166,6 @@ test("a run reads its task in GeoCode's folder, for the answer to start with", {
     assert.deepEqual((fresh as unknown as { space: unknown }).space, {
       assets: [],
       more: 0,
-      exports: [],
       others: [],
       tasks: 0,
     })
@@ -1199,49 +1174,36 @@ test("a run reads its task in GeoCode's folder, for the answer to start with", {
   }
 })
 
-test(
-  "the header leaves out a deleted task's exports, and stays within the line GeoEngine reads",
-  { skip: !python3 },
-  async () => {
-    const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
-    try {
-      assert.equal((await engine.settled()).status, "ready")
-      await holding(
-        engine.directory,
-        [],
-        [operation("taipei-ndvi-20261008:ndvi:0123abcd", "FAILED", "2026-10-01T07:00:00Z")],
-      )
-      const task = { name: "taipei-ndvi-20261008", new: true, started: false }
-      const fresh = result(await engine.response(engine.send({ script: "print(1)", cwd: engine.directory, task })))
-      assert.deepEqual((fresh as unknown as { space: { exports: unknown[] } }).space.exports, [])
-
-      // A hundred assets with descriptions far longer than anyone writes.
-      const root = `${ROOT}/taipei-ndvi-20261008`
-      const long = (index: number) => ({
-        type: "IMAGE",
-        name: `${root}/asset_${index}`,
-        updateTime: `2026-10-08T00:00:${String(index % 60).padStart(2, "0")}Z`,
-        properties: { title: "标".repeat(100), description: "说".repeat(1000) },
-      })
-      await holding(engine.directory, [
-        folder(ROOT, "2026-09-01T00:00:00Z"),
-        folder(root, "2026-10-08T00:00:00Z"),
-        ...Array.from({ length: 100 }, (_, index) => long(index)),
-      ])
-      const continuing = { name: "taipei-ndvi-20261008", new: false, started: false }
-      const full = result(
-        await engine.response(engine.send({ script: "print(1)", cwd: engine.directory, task: continuing })),
-      )
-      const space = (full as unknown as { space: { assets: { description: string }[]; more: number } }).space
-      assert.ok(space.assets.length > 10 && space.more > 0, `${space.assets.length} listed, ${space.more} more`)
-      assert.equal(space.assets.length + space.more, 100)
-      assert.equal(space.assets[0]!.description.length, 500)
-      assert.ok(Buffer.byteLength(JSON.stringify(space), "utf-8") <= 48 * 1024)
-    } finally {
-      await engine.stop()
-    }
-  },
-)
+test("the header stays within the line GeoEngine reads", { skip: !python3 }, async () => {
+  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  try {
+    assert.equal((await engine.settled()).status, "ready")
+    // A hundred assets with descriptions far longer than anyone writes.
+    const root = `${ROOT}/taipei-ndvi-20261008`
+    const long = (index: number) => ({
+      type: "IMAGE",
+      name: `${root}/asset_${index}`,
+      updateTime: `2026-10-08T00:00:${String(index % 60).padStart(2, "0")}Z`,
+      properties: { title: "标".repeat(100), description: "说".repeat(1000) },
+    })
+    await holding(engine.directory, [
+      folder(ROOT, "2026-09-01T00:00:00Z"),
+      folder(root, "2026-10-08T00:00:00Z"),
+      ...Array.from({ length: 100 }, (_, index) => long(index)),
+    ])
+    const continuing = { name: "taipei-ndvi-20261008", new: false, started: false }
+    const full = result(
+      await engine.response(engine.send({ script: "print(1)", cwd: engine.directory, task: continuing })),
+    )
+    const space = (full as unknown as { space: { assets: { description: string }[]; more: number } }).space
+    assert.ok(space.assets.length > 10 && space.more > 0, `${space.assets.length} listed, ${space.more} more`)
+    assert.equal(space.assets.length + space.more, 100)
+    assert.equal(space.assets[0]!.description.length, 500)
+    assert.ok(Buffer.byteLength(JSON.stringify(space), "utf-8") <= 48 * 1024)
+  } finally {
+    await engine.stop()
+  }
+})
 
 test("a new task whose name is taken is refused before the script runs", { skip: !python3 }, async () => {
   const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
@@ -1394,7 +1356,7 @@ test(
         // The same grid written another way is the same content.
         save("ndvi", "10.0"),
         save("ndvi masked", "10"),
-        'gc.save(ee.FeatureCollection("area"), "area", title="范围", description="研究区", wait=False)',
+        'gc.save(ee.FeatureCollection("area"), "area", title="范围", description="研究区")',
       )
       const done = result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
       assert.equal(
@@ -1407,7 +1369,8 @@ test(
           "Warning: ndvi was saved before with other content; it is being replaced.",
           "Exporting ndvi (export ID OP1); waiting for it.",
           "Saved ndvi after 0 s.",
-          "Exporting area (export ID OP2); it goes on after the script ends.",
+          "Exporting area (export ID OP2); waiting for it.",
+          "Saved area after 0 s.",
           "",
         ].join("\n"),
       )
@@ -1517,8 +1480,8 @@ test(
       assert.equal((await engine.settled()).status, "ready")
       await holding(engine.directory, [])
       await raise(engine.directory, "export-slow")
-      const save = (graph: string, wait = "True") =>
-        `gc.save(ee.Image("${graph}"), "ndvi", title="t", description="d", region=area, scale=10, wait=${wait})`
+      const save = (graph: string) =>
+        `gc.save(ee.Image("${graph}"), "ndvi", title="t", description="d", region=area, scale=10)`
       const id = engine.send({ script: saving(save("ndvi")), cwd: engine.directory, task: TASK })
       const done = result(await engine.response(id))
       assert.equal(done.output, "Exporting ndvi (export ID OP0); waiting for it.\nSaved ndvi after 0 s.\n")
@@ -1528,33 +1491,52 @@ test(
       ])
       await lower(engine.directory, "export-slow")
 
-      await raise(engine.directory, "export-running")
+      // A run stopped while it waits leaves its export running on the server.
       const continuing = { name: "t-20261008", new: false, started: false }
-      const script = saving(save("ndvi masked", "False"), save("ndvi masked", "False"), save("ndvi clipped", "False"))
-      const joined = result(await engine.response(engine.send({ script, cwd: engine.directory, task: continuing })))
+      const stopped = async (graph: string) => {
+        await raise(engine.directory, "export-running")
+        const id = engine.send({ script: saving(save(graph)), cwd: engine.directory, task: continuing })
+        const exporting = () =>
+          engine.progress(id).some((data) => typeof data === "object" && data !== null && "export" in data)
+        await until(exporting, 10000, "the export")
+        engine.deliver({ type: "cancel", id })
+        const response = await engine.response(id)
+        assert.equal(!response.ok && response.error.code, "cancelled")
+        await lower(engine.directory, "export-running")
+      }
+      await stopped("ndvi masked")
+      // The export left running finishes on the next look at it.
+      const file = path.join(engine.directory, "stubs", "flags", "assets.json")
+      const left = JSON.parse(await fs.readFile(file, "utf-8"))
+      left.operations.find(
+        (operation: Stored["operations"][number]) => operation.metadata.state === "RUNNING",
+      ).finishes = true
+      await fs.writeFile(file, JSON.stringify(left))
+      const joined = result(
+        await engine.response(
+          engine.send({ script: saving(save("ndvi masked")), cwd: engine.directory, task: continuing }),
+        ),
+      )
       assert.equal(
         joined.output,
-        [
-          "Warning: ndvi was saved before with other content; it is being replaced.",
-          "Exporting ndvi (export ID OP1); it goes on after the script ends.",
-          "ndvi is already being exported with the same content.",
-          "Cancelled an export of ndvi still running with other content.",
-          "Warning: ndvi was saved before with other content; it is being replaced.",
-          "Exporting ndvi (export ID OP2); it goes on after the script ends.",
-          "",
-        ].join("\n"),
+        "ndvi is already being exported with the same content; waiting for it.\nSaved ndvi after 0 s.\n",
       )
-      assert.deepEqual(
-        (await stored(engine.directory)).operations.map((operation) => operation.metadata.state),
-        ["SUCCEEDED", "CANCELLED", "RUNNING"],
-      )
+
+      await stopped("ndvi clipped")
       // Guards against reading the saved asset while another version of it is still being exported over it.
       const reused = result(
         await engine.response(
-          engine.send({ script: saving(save("ndvi", "False")), cwd: engine.directory, task: continuing }),
+          engine.send({ script: saving(save("ndvi masked")), cwd: engine.directory, task: continuing }),
         ),
       )
-      assert.match(reused.output, /^Cancelled an export of ndvi still running with other content\.\nndvi is unchanged/)
+      assert.equal(
+        reused.output,
+        "Cancelled an export of ndvi still running with other content.\nndvi is unchanged since it was saved; reading the saved asset.\n",
+      )
+      assert.deepEqual(
+        (await stored(engine.directory)).operations.map((operation) => operation.metadata.state),
+        ["SUCCEEDED", "SUCCEEDED", "CANCELLED"],
+      )
     } finally {
       await engine.stop()
     }

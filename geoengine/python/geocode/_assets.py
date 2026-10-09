@@ -120,10 +120,10 @@ def absent(path):
     return "Task %s has no asset %s. Its assets: %s." % (task, asset, held)
 
 
-def save(data, name, *, title, description, region=None, scale=None, crs=None, crs_transform=None, wait=True):
-    """Saves an ee.Image or ee.FeatureCollection to this run's task as the asset "name", and returns it read from the
-    saved asset. An image needs region, and scale or crs with crs_transform. Content saved before under the name is
-    reused as it is; other content replaces it. wait=False returns data as soon as the export starts."""
+def save(data, name, *, title, description, region=None, scale=None, crs=None, crs_transform=None):
+    """Saves an ee.Image or ee.FeatureCollection to this run's task as the asset "name", waiting for the export, and
+    returns it read from the saved asset. An image needs region, and scale or crs with crs_transform. Content saved
+    before under the name is reused as it is; other content replaces it."""
     checked(name, "asset")
     for key, text in (("title", title), ("description", description)):
         if not isinstance(text, str) or not text.strip():
@@ -157,14 +157,12 @@ def save(data, name, *, title, description, region=None, scale=None, crs=None, c
     fingerprint = hashlib.sha256(text.encode("utf-8")).hexdigest()
     path = "%s/%s/%s" % (_run.root, _run.task, name)
 
-    # First: an export still under way decides what the asset will be, whatever is saved there now.
+    # First: an export still under way, such as one a stopped run left, decides what the asset will be, whatever is
+    # saved there now.
     for operation in _run.exports():
         if (operation["task"], operation["asset"]) != (_run.task, name) or operation["state"] not in UNDER_WAY:
             continue
         if operation["fingerprint"] == fingerprint[:SHORT]:
-            if not wait:
-                print("%s is already being exported with the same content." % name)
-                return data
             print("%s is already being exported with the same content; waiting for it." % name)
             return finish(operation["name"], path, name, [])
         try:
@@ -216,9 +214,6 @@ def save(data, name, *, title, description, region=None, scale=None, crs=None, c
         # Refused as it was submitted, as when a source asset is missing.
         remove_empty(made)
         raise
-    if not wait:
-        print("Exporting %s (export ID %s); it goes on after the script ends." % (name, export.id))
-        return data
     print("Exporting %s (export ID %s); waiting for it." % (name, export.id))
     return finish(export.operation_name, path, name, made)
 

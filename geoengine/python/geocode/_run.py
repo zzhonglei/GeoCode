@@ -12,10 +12,9 @@ LABEL = re.compile(r"^([A-Za-z0-9_-]{1,30}):([A-Za-z0-9_-]{1,30}):([0-9a-f]{8})$
 ACTIVE = ("PENDING", "RUNNING", "CANCELLING")
 
 ASSETS_SHOWN = 100
-EXPORTS_SHOWN = 20
 TAKEN_SHOWN = 20
 BANDS_SHOWN = 50
-TEXT_SHOWN = {"title": 100, "description": 500, "error": 300}
+TEXT_SHOWN = {"title": 100, "description": 500}
 OTHERS_SHOWN = 3
 # GeoEngine reads the header as one line of at most 64 KiB; assets past this are counted, not listed.
 HEADER_BYTES = 48 * 1024
@@ -62,8 +61,6 @@ def start(project, folder, name, new, started, emit):
     space = {
         "assets": assets,
         "more": len(held) - len(assets),
-        # A new task's name may be one of a task deleted since, whose exports are not this one's.
-        "exports": [] if new else troubles(named(held))[:EXPORTS_SHOWN],
         "others": others[:OTHERS_SHOWN],
         "tasks": len(others),
     }
@@ -128,33 +125,6 @@ def exports():
             "asset": match.group(2),
             "fingerprint": match.group(3),
             "state": metadata.get("state", ""),
-            "progress": metadata.get("progress", 0),
             "created": metadata.get("createTime", ""),
-            "updated": metadata.get("updateTime", ""),
-            "error": (operation.get("error") or {}).get("message"),
         })
     return sorted(found, key=lambda operation: operation["created"], reverse=True)
-
-
-def troubles(saved):
-    """The task's exports still running, and those whose latest attempt failed since the asset was last saved."""
-    last = {}
-    for operation in exports():
-        if operation["task"] == task:
-            last.setdefault(operation["asset"], operation)
-    found = []
-    for asset, operation in sorted(last.items()):
-        state = operation["state"]
-        if state in ACTIVE:
-            found.append({"asset": asset, "state": state, "progress": operation["progress"]})
-            continue
-        if state not in ("FAILED", "CANCELLED"):
-            continue
-        before = saved.get(asset)
-        if before is not None and before.get("updateTime", "") >= operation["updated"]:
-            continue
-        failed = {"asset": asset, "state": state, "saved": before is not None}
-        if operation["error"]:
-            failed["error"] = operation["error"][: TEXT_SHOWN["error"]]
-        found.append(failed)
-    return found
