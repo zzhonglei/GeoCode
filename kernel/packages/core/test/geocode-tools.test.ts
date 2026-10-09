@@ -1166,6 +1166,10 @@ describe("GeoCode: geerun", () => {
           `There is no task ${TASK}: it has saved nothing, so the script did not run. Start it with "new_task", or check the name.`,
         ],
         [
+          { code: "task-busy", message: `The task ${TASK} is already running in another call` },
+          `The task ${TASK} is already running in another call, perhaps in another conversation, so the script did not run. Run it again after that call ends.`,
+        ],
+        [
           { code: "start-failed", message: "spawn EACCES", details: { stderr: "x" } },
           "Google Earth Engine is not available right now. Tell the user; restarting GeoCode may fix it.",
         ],

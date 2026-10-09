@@ -1280,6 +1280,41 @@ test("a run whose task cannot be read fails before the script runs", { skip: !py
   }
 })
 
+// Guards against two runs of one task, from parallel calls or two conversations, racing to save the same assets.
+test("a task runs one call at a time, while other tasks run beside it", { skip: !python3 }, async () => {
+  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  try {
+    assert.equal((await engine.settled()).status, "ready")
+    await holding(engine.directory, [])
+    const release = path.join(engine.directory, "release")
+    const held = `import os, time\nwhile not os.path.exists(${JSON.stringify(release)}):\n    time.sleep(0.05)\nprint("done")`
+    const task = (name: string) => ({ name, new: false, started: true })
+    const first = engine.send({ script: held, cwd: engine.directory, task: task("a-20261009") })
+    await until(() => engine.progress(first).length > 0, 10000, "the first run to begin")
+
+    const busy = await engine.response(
+      engine.send({ script: "print(1)", cwd: engine.directory, task: task("a-20261009") }),
+    )
+    assert.deepEqual(!busy.ok && { code: busy.error.code, message: busy.error.message }, {
+      code: "task-busy",
+      message: "The task a-20261009 is already running in another call",
+    })
+    const beside = result(
+      await engine.response(engine.send({ script: "print(2)", cwd: engine.directory, task: task("b-20261009") })),
+    )
+    assert.equal(beside.output, "2\n")
+
+    await fs.writeFile(release, "")
+    assert.equal(result(await engine.response(first)).output, "done\n")
+    const again = result(
+      await engine.response(engine.send({ script: "print(3)", cwd: engine.directory, task: task("a-20261009") })),
+    )
+    assert.equal(again.output, "3\n")
+  } finally {
+    await engine.stop()
+  }
+})
+
 test("the script imports GeoCode's module, which reads the task's assets by name", { skip: !python3 }, async () => {
   const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
   try {

@@ -90,6 +90,8 @@ const failureMessage = (failure: GeoEngine.Failure) => {
     return `${failure.message}, so the script did not run. Continue it with "task", or give "new_task" another name.`
   if (failure.code === "task-missing")
     return `${failure.message}, so the script did not run. Start it with "new_task", or check the name.`
+  if (failure.code === "task-busy")
+    return `${failure.message}, perhaps in another conversation, so the script did not run. Run it again after that call ends.`
   return "Google Earth Engine is not available right now. Tell the user; restarting GeoCode may fix it."
 }
 

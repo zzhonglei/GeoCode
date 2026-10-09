@@ -479,6 +479,9 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       return {}
     })
 
+  /** The tasks being run, by project and name: two runs of one task, from any conversation, would race to save. */
+  const running = new Set<string>()
+
   /** Runs GeoAgent's script in the configured Python, ending it after IDLE_SECONDS with neither output nor a wait. */
   const run: Engine.Method = (raw, context) =>
     Effect.gen(function* () {
@@ -497,6 +500,14 @@ export const capability: Engine.Capability = Effect.gen(function* () {
         { cwd: params.cwd, ...("file" in params ? { file: params.file } : {}) },
         context.signal,
       )
+      const key = `${current.project}/${params.task.name}`
+      if (running.has(key)) {
+        return yield* new Engine.Failure({
+          code: "task-busy",
+          message: `The task ${params.task.name} is already running in another call`,
+        })
+      }
+      running.add(key)
       return yield* execute(runtime, current, params, context).pipe(
         // The environment changed since it was found ready, as when the credentials were revoked or the Python removed:
         // it is checked again, so this call says what is wrong and the indicator stops showing it ready.
@@ -512,6 +523,7 @@ export const capability: Engine.Capability = Effect.gen(function* () {
               return yield* new Engine.Failure({ code: "not-ready", message: hint(next, config.file), details: next })
             }),
         ),
+        Effect.ensuring(Effect.sync(() => running.delete(key))),
       )
     })
 
