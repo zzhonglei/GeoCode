@@ -8,6 +8,7 @@ import { Config } from "../config.ts"
 import { Engine } from "../engine.ts"
 import { Runtime } from "../runtime.ts"
 import { Status } from "../status.ts"
+import { Library } from "./library.ts"
 import { Python } from "./python.ts"
 import { Pythons } from "./pythons.ts"
 
@@ -98,10 +99,16 @@ const Report = Schema.Struct({
   said: Schema.optionalKey(Schema.String),
 })
 
+/**
+ * The task a run works in: whether GeoAgent starts it, which a name already taken refuses; and whether this
+ * conversation started it before, without which a task to continue must have a folder in GeoCode's.
+ */
+const Task = Schema.Struct({ name: Schema.String, new: Schema.Boolean, started: Schema.Boolean })
+
 /** Inline or from a file, never both; `cwd` is the session's directory. */
 const RunParams = Schema.Union([
-  Schema.Struct({ script: Schema.String, cwd: Schema.String }),
-  Schema.Struct({ file: Schema.String, cwd: Schema.String }),
+  Schema.Struct({ script: Schema.String, cwd: Schema.String, task: Task }),
+  Schema.Struct({ file: Schema.String, cwd: Schema.String, task: Task }),
 ])
 
 const CheckParams = Schema.Struct({ cwd: Schema.String, file: Schema.optionalKey(Schema.String) })
@@ -110,6 +117,18 @@ const Event = Schema.Union([
   Schema.Struct({ type: Schema.Literal("begin") }),
   Schema.Struct({ type: Schema.Literal("waiting"), seconds: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("initialize-failed"), error: Schema.String }),
+  /** What the task holds, for the kernel to describe at the start of the answer. */
+  Schema.Struct({ type: Schema.Literal("space"), space: Schema.Unknown }),
+  Schema.Struct({ type: Schema.Literal("space-failed"), error: Schema.String }),
+  /** A few of the taken task's assets, and how many more it has. */
+  Schema.Struct({ type: Schema.Literal("task-taken"), assets: Schema.Array(Schema.String), more: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("task-missing"), latest: Schema.Array(Schema.String) }),
+  Schema.Struct({
+    type: Schema.Literal("export"),
+    asset: Schema.String,
+    state: Schema.String,
+    progress: Schema.Number,
+  }),
   Schema.Struct({ type: Schema.Literal("end"), ok: Schema.Boolean }),
 ])
 
@@ -468,7 +487,16 @@ export const capability: Engine.Capability = Effect.gen(function* () {
         return yield* new Engine.Failure({ code: "invalid-params", message: String(decoded.cause) })
       }
       const params = decoded.value
-      const current = yield* admit("file" in params ? { cwd: params.cwd, file: params.file } : params, context.signal)
+      if (!Library.NAME.test(params.task.name)) {
+        return yield* new Engine.Failure({
+          code: "invalid-params",
+          message: `"${params.task.name}" is not a task name: ${Library.NAME_RULE}`,
+        })
+      }
+      const current = yield* admit(
+        { cwd: params.cwd, ...("file" in params ? { file: params.file } : {}) },
+        context.signal,
+      )
       return yield* execute(runtime, current, params, context).pipe(
         // The environment changed since it was found ready, as when the credentials were revoked or the Python removed:
         // it is checked again, so this call says what is wrong and the indicator stops showing it ready.
@@ -770,6 +798,10 @@ function execute(
   const begun = { stdout: false, stderr: false }
   let ended: { readonly ok: boolean } | undefined
   let initializeError: string | undefined
+  let space: unknown
+  let spaceError: string | undefined
+  let taken: { readonly assets: readonly string[]; readonly more: number } | undefined
+  let missing: readonly string[] | undefined
   const pending = { stdout: "", stderr: "" }
 
   const keep = (text: string, stream: "stdout" | "stderr") => {
@@ -794,6 +826,25 @@ function execute(
       initializeError = event.error
       return
     }
+    if (event.type === "space") {
+      space = event.space
+      return
+    }
+    if (event.type === "space-failed") {
+      spaceError = event.error
+      return
+    }
+    if (event.type === "task-taken") {
+      taken = { assets: event.assets, more: event.more }
+      return
+    }
+    if (event.type === "task-missing") {
+      missing = event.latest
+      return
+    }
+    if (event.type === "export") {
+      return context.progress({ export: { asset: event.asset, state: event.state, progress: event.progress } })
+    }
     if (event.type === "end") {
       ended = { ok: event.ok }
       return
@@ -812,10 +863,13 @@ function execute(
     pending[stream] = ""
   }
 
-  const request =
-    "file" in params
-      ? { project: current.project, file: params.file }
-      : { project: current.project, script: params.script }
+  const request = {
+    project: current.project,
+    task: params.task,
+    folder: Library.FOLDER,
+    package: Library.FILES,
+    ...("file" in params ? { file: params.file } : { script: params.script }),
+  }
 
   return runtime
     .run({
@@ -852,6 +906,27 @@ function execute(
               details: { noise },
             })
           }
+          if (spaceError !== undefined) {
+            return yield* new Engine.Failure({ code: "space-failed", message: spaceError, details: { noise } })
+          }
+          if (taken !== undefined) {
+            const count = taken.assets.length + taken.more
+            const rest = taken.more ? ` and ${taken.more} more` : ""
+            const held = count ? `, with ${plural(count, "asset")}: ${taken.assets.join(", ")}${rest}` : ""
+            return yield* new Engine.Failure({
+              code: "task-taken",
+              message: `The task ${params.task.name} already exists${held}`,
+              details: taken,
+            })
+          }
+          if (missing !== undefined) {
+            const latest = missing.length ? `; the latest tasks are ${missing.join(", ")}` : "; there are no tasks yet"
+            return yield* new Engine.Failure({
+              code: "task-missing",
+              message: `There is no task ${params.task.name}: it has saved nothing in GeoCode's folder, and this conversation did not start it${latest}`,
+              details: { latest: missing },
+            })
+          }
           const exit = result.signal ? `signal ${result.signal}` : `code ${result.code}`
           const outcome =
             result.reason === "idle" ? "idle" : ended === undefined ? "crashed" : ended.ok ? "finished" : "failed"
@@ -861,6 +936,7 @@ function execute(
             output: begun.stdout || begun.stderr ? output : noise,
             truncated,
             durationMs: result.durationMs,
+            ...(space === undefined ? {} : { space }),
             ...(outcome === "crashed" ? { exit } : {}),
             ...(outcome === "idle" ? { idleSeconds: IDLE_SECONDS } : {}),
           }
@@ -874,6 +950,10 @@ async function isKind(target: string, kind: "file" | "directory") {
     (stats) => (kind === "file" ? stats.isFile() : stats.isDirectory()),
     () => false,
   )
+}
+
+function plural(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`
 }
 
 function tail(text: string) {

@@ -1,4 +1,5 @@
 import path from "node:path"
+import { Library } from "../src/gee/library.ts"
 
 // One self-contained ESM file: the app loads it in an Electron utility process, which runs Node, not Bun.
 const root = path.resolve(import.meta.dirname, "..")
@@ -9,6 +10,8 @@ const result = await Bun.build({
   target: "node",
   format: "esm",
   naming: "geoengine.mjs",
+  // GeoCode's Python package, inlined: the app keeps the engine in its archive, where a Python could not read the files.
+  define: { "globalThis.GEOCODE_PACKAGE": JSON.stringify(Library.read(path.join(root, "python"))) },
   plugins: [
     {
       // Its default entry is UMD, which loads its own files through a `require` the bundler cannot follow; Node

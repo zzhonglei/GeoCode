@@ -48,6 +48,8 @@ GeoEngine 是 GeoCode 自己的代码,用 TypeScript 与 Effect 编写,写法照
 
 检查在 `geoengine/` 执行 `bun run typecheck` 与 `bun run test`。
 
+`geoengine/python/` 是 GEE 脚本导入的 Python 包 `geocode`,在用户配置的 Python 里运行,所以只用标准库与 GeoCode 要求装好的包(earthengine-api、geedim、geopandas)。写法照 PEP 8,行宽 120。交给 GeoAgent 的名字列在包的 `__all__` 里,其余模块以下划线开头,不写进工具说明。它由 GeoEngine 的测试经替身的 earthengine-api 运行检查,真实的 Earth Engine 在改动后另做冒烟。
+
 ### 2.4 `scripts/`
 
 shell 脚本用 POSIX sh(`#!/bin/sh`),要能在 macOS 自带的 sh 上运行。

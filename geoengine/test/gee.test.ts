@@ -28,9 +28,21 @@ const python3 = (() => {
 
 /**
  * A file in the stubs' "flags" folder that makes them behave as the named environment does: "adc" has no credentials of
- * Earth Engine's own but Google Cloud's default ones; "no-geopandas" leaves the package out.
+ * Earth Engine's own but Google Cloud's default ones; "no-geopandas" leaves the package out; "unlistable" refuses to
+ * list assets; the "export-" flags say how an export goes (see the stub's `export`).
  */
-type Flag = "signed-out" | "adc" | "revoked" | "offline-refresh" | "no-geopandas" | "broken-geedim"
+type Flag =
+  | "signed-out"
+  | "adc"
+  | "revoked"
+  | "offline-refresh"
+  | "no-geopandas"
+  | "broken-geedim"
+  | "unlistable"
+  | "export-refused"
+  | "export-fails"
+  | "export-running"
+  | "export-slow"
 
 /**
  * Stand in for earthengine-api and what the check imports with it, so the real scripts run without a network: a
@@ -181,18 +193,192 @@ class Flow:
             code = self.server.fetch_code()
         _obtain_and_write_token(code, "verifier", None, redirect_uri)
 `,
-  "ee/data.py": `def get_persistent_credentials():
+  "ee/data.py": `import json
+import os
+
+import flags
+from ee.ee_exception import EEException
+
+
+def get_persistent_credentials():
     return "credentials"
+
+
+def _store():
+    """The user's assets and exports, as the test writes them to assets.json."""
+    path = os.path.join(flags.FOLDER, "assets.json")
+    if not os.path.exists(path):
+        return {"assets": [], "operations": []}
+    with open(path, encoding="utf-8") as source:
+        return json.load(source)
+
+
+def listAssets(params):
+    if flags.raised("unlistable"):
+        raise EEException("Caller does not have required permission to list assets")
+    return {"assets": [asset for asset in _store()["assets"] if asset["name"].rsplit("/", 1)[0] == params["parent"]]}
+
+
+def getAsset(name):
+    for asset in _store()["assets"]:
+        if asset["name"] == name:
+            return asset
+    raise EEException("Asset '%s' not found." % name)
+
+
+def listOperations():
+    return _store()["operations"]
+
+
+def _write(store):
+    with open(os.path.join(flags.FOLDER, "assets.json"), "w", encoding="utf-8") as target:
+        json.dump(store, target, ensure_ascii=False)
+
+
+def _saved(store, operation):
+    store["assets"] = [asset for asset in store["assets"] if asset["name"] != operation["path"]]
+    asset = {"type": operation["kind"], "name": operation["path"], "updateTime": operation["metadata"]["createTime"]}
+    store["assets"].append(dict(asset, properties=operation["properties"]))
+
+
+def createAsset(value, path):
+    store = _store()
+    if any(asset["name"] == path for asset in store["assets"]):
+        raise EEException("Cannot overwrite asset '%s'." % path)
+    store["assets"].append({"type": value["type"], "name": path, "updateTime": "2026-10-08T00:00:00Z"})
+    _write(store)
+
+
+def deleteAsset(path):
+    store = _store()
+    store["assets"] = [asset for asset in store["assets"] if asset["name"] != path]
+    _write(store)
+
+
+def export(element, description, path, kind):
+    """Starts an export, which as the flags say is refused at once, fails, stays running, finishes on the first look
+    at it, or finishes as it starts."""
+    if flags.raised("export-refused"):
+        raise EEException("Image.load: Image asset 'projects/majestic/assets/none' not found.")
+    store = _store()
+    number = len(store["operations"])
+    state = "FAILED" if flags.raised("export-fails") else "RUNNING" if flags.raised("export-running") or flags.raised("export-slow") else "SUCCEEDED"
+    created = "2026-10-08T10:%02d:00Z" % number
+    operation = {
+        "name": "projects/majestic/operations/OP%d" % number,
+        "metadata": {"description": description, "state": state, "createTime": created, "updateTime": created, "progress": 0.5},
+        "done": state in ("FAILED", "SUCCEEDED"),
+        "path": path,
+        "kind": kind,
+        "properties": element.properties,
+        "finishes": flags.raised("export-slow"),
+    }
+    if state == "FAILED":
+        operation["error"] = {"message": "User memory limit exceeded."}
+    if state == "SUCCEEDED":
+        _saved(store, operation)
+    store["operations"].append(operation)
+    _write(store)
+    return "OP%d" % number, operation["name"]
+
+
+def getOperation(name):
+    store = _store()
+    operation = next(operation for operation in store["operations"] if operation["name"] == name)
+    found = json.loads(json.dumps(operation))
+    if operation["finishes"]:
+        operation.update(done=True, finishes=False)
+        operation["metadata"]["state"] = "SUCCEEDED"
+        _saved(store, operation)
+        _write(store)
+    return found
+
+
+def cancelOperation(name):
+    store = _store()
+    for operation in store["operations"]:
+        if operation["name"] == name:
+            operation["metadata"]["state"] = "CANCELLED"
+            operation["done"] = True
+    _write(store)
+`,
+  "ee/serializer.py": `import json
+
+
+def toJSON(element):
+    """A computation as Earth Engine serializes one: an asset's path stands for reading that asset."""
+    if element.graph.startswith("projects/"):
+        load = {"functionName": "Image.load", "arguments": {"id": {"constantValue": element.graph}}}
+        return json.dumps({"result": "0", "values": {"0": {"functionInvocationValue": load}}})
+    return json.dumps({"result": "0", "values": {"0": {"constantValue": element.graph}}})
+`,
+  "ee/batch.py": `from ee import data
+
+
+class Task:
+    def __init__(self, element, description, path, kind):
+        self.arguments = (element, description, path, kind)
+
+    def start(self):
+        self.id, self.operation_name = data.export(*self.arguments)
+
+
+class Export:
+    class image:
+        @staticmethod
+        def toAsset(image, description, assetId, overwrite=False, **grid):
+            assert overwrite
+            return Task(image, description, assetId, "IMAGE")
+
+    class table:
+        @staticmethod
+        def toAsset(collection, description, assetId, overwrite=False):
+            assert overwrite
+            return Task(collection, description, assetId, "TABLE")
 `,
   "ee/__init__.py": `import os
 
 import requests
 from googleapiclient import errors
 
-from ee import data, oauth
+from ee import batch, data, oauth, serializer
 from ee.ee_exception import EEException
 
 __version__ = "1.7.19"
+
+
+class Element:
+    """A computation, by a text standing for its graph, with the properties set on it."""
+
+    def __init__(self, graph, properties=None):
+        self.graph = graph
+        self.properties = properties or {}
+
+    def set(self, properties):
+        return type(self)(self.graph, dict(self.properties, **properties))
+
+    def geometry(self):
+        return Geometry("geometry of " + self.graph)
+
+
+class Image(Element):
+    pass
+
+
+class ImageCollection(Element):
+    pass
+
+
+class FeatureCollection(Element):
+    pass
+
+
+class Feature(Element):
+    pass
+
+
+class Geometry(Element):
+    pass
 
 
 def refuse(status, reasons, message):
@@ -260,6 +446,8 @@ const stubbedPython = async (directory: string, raised: readonly Flag[] = []) =>
 /** Raises a flag of the stubbed Python made in `directory` while it is in use. */
 const raise = (directory: string, flag: Flag) => fs.writeFile(path.join(directory, "stubs", "flags", flag), "")
 
+const lower = (directory: string, flag: Flag) => fs.rm(path.join(directory, "stubs", "flags", flag), { force: true })
+
 const mark = (payload: unknown) => `cat >/dev/null; echo '${Python.MARKER}${JSON.stringify(payload)}'`
 
 type Response = Extract<Protocol.Outbound, { type: "response" }>
@@ -297,9 +485,12 @@ const start = async (block?: (directory: string) => Promise<unknown>) => {
     return states().at(-1)!
   }
   let nextId = 0
-  const send = (params: unknown, method = "gee.run") => {
+  /** A run in a task with nothing saved yet, unless the test names one. */
+  const send = (params: Record<string, unknown>, method = "gee.run") => {
     nextId += 1
-    deliver({ type: "request", id: nextId, method, params })
+    const sent =
+      method === "gee.run" ? { task: { name: "test-20261008", new: false, started: true }, ...params } : params
+    deliver({ type: "request", id: nextId, method, params: sent })
     return nextId
   }
   const response = async (id: number, ms = 20000) => {
@@ -883,6 +1074,492 @@ test("a cancelled run answers at once and ends its process", { skip: !python3 },
 })
 
 const machineGee = async (machine: string) => JSON.parse(await fs.readFile(machine, "utf-8")).gee
+
+/** Writes the user's assets and exports the stubbed earthengine-api lists, in the project "majestic". */
+const holding = (directory: string, assets: readonly object[], operations: readonly object[] = []) =>
+  fs.writeFile(path.join(directory, "stubs", "flags", "assets.json"), JSON.stringify({ assets, operations }))
+
+const ROOT = "projects/majestic/assets/GeoCode"
+const folder = (name: string, updateTime: string) => ({ type: "FOLDER", name, id: name, updateTime })
+const operation = (description: string, state: string, createTime: string, extra: object = {}) => ({
+  name: `projects/majestic/operations/${description.replace(/\W/g, "")}`,
+  metadata: { description, state, createTime, updateTime: createTime, progress: 0.4 },
+  ...extra,
+})
+
+test("a run reads its task in GeoCode's folder, for the answer to start with", { skip: !python3 }, async () => {
+  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  try {
+    assert.equal((await engine.settled()).status, "ready")
+    const task = `${ROOT}/taipei-ndvi-20261008`
+    await holding(
+      engine.directory,
+      [
+        folder(ROOT, "2026-09-01T00:00:00Z"),
+        folder(task, "2026-10-08T01:00:00Z"),
+        {
+          type: "IMAGE",
+          name: `${task}/composite`,
+          updateTime: "2026-10-08T06:00:00Z",
+          bands: [{ id: "B4" }, { id: "B8" }],
+          properties: { title: "台北夏季合成", description: " Sentinel-2 中值合成 ", saved: "2026-10-08T05:59:00Z" },
+        },
+        { type: "TABLE", name: `${task}/area`, updateTime: "2026-10-08T02:00:00Z" },
+        // Not a task: GeoCode's tasks are folders.
+        { type: "IMAGE", name: `${ROOT}/stray`, updateTime: "2026-10-08T09:00:00Z" },
+        folder(`${ROOT}/a-20260901`, "2026-09-01T00:00:00Z"),
+        folder(`${ROOT}/b-20260902`, "2026-09-02T00:00:00Z"),
+        { type: "TABLE", name: `${ROOT}/b-20260902/x`, updateTime: "2026-10-01T00:00:00Z" },
+        folder(`${ROOT}/c-20260903`, "2026-09-03T00:00:00Z"),
+        folder(`${ROOT}/d-20260904`, "2026-09-04T00:00:00Z"),
+      ],
+      [
+        operation("taipei-ndvi-20261008:ndvi:0123abcd", "RUNNING", "2026-10-08T07:00:00Z"),
+        // Failed after the composite was saved: the earlier version is what is there.
+        operation("taipei-ndvi-20261008:composite:89abcdef", "FAILED", "2026-10-08T08:00:00Z", {
+          error: { message: "User memory limit exceeded." },
+        }),
+        operation("taipei-ndvi-20261008:composite:76543210", "SUCCEEDED", "2026-10-08T05:00:00Z"),
+        // Failed before the asset was last saved: nothing to report.
+        operation("taipei-ndvi-20261008:area:00000000", "FAILED", "2026-10-08T01:00:00Z"),
+        operation("b-20260902:x:11111111", "RUNNING", "2026-10-08T07:00:00Z"),
+        operation("myExportImageTask", "RUNNING", "2026-10-08T07:00:00Z"),
+      ],
+    )
+    const done = result(
+      await engine.response(
+        engine.send({
+          script: "print(1)",
+          cwd: engine.directory,
+          task: { name: "taipei-ndvi-20261008", new: false, started: false },
+        }),
+      ),
+    )
+    assert.equal(done.outcome, "finished")
+    assert.equal(done.output, "1\n")
+    assert.deepEqual((done as unknown as { space: unknown }).space, {
+      assets: [
+        {
+          name: "composite",
+          type: "IMAGE",
+          saved: "2026-10-08T05:59:00Z",
+          bands: ["B4", "B8"],
+          title: "台北夏季合成",
+          description: "Sentinel-2 中值合成",
+        },
+        { name: "area", type: "TABLE", saved: "2026-10-08T02:00:00Z" },
+      ],
+      more: 0,
+      exports: [
+        { asset: "composite", state: "FAILED", saved: true, error: "User memory limit exceeded." },
+        { asset: "ndvi", state: "RUNNING", progress: 0.4 },
+      ],
+      others: [
+        { name: "b-20260902", assets: 1, updated: "2026-10-01T00:00:00Z" },
+        { name: "d-20260904", assets: 0, updated: "2026-09-04T00:00:00Z" },
+        { name: "c-20260903", assets: 0, updated: "2026-09-03T00:00:00Z" },
+      ],
+      tasks: 4,
+    })
+
+    // A task to continue that saved nothing and that this conversation did not start: a mistyped name, likely.
+    const marker = path.join(engine.directory, "ran")
+    const typo = await engine.response(
+      engine.send({
+        script: `open(${JSON.stringify(marker)}, "w").write("ran")`,
+        cwd: engine.directory,
+        task: { name: "taipei-ndvi-20261080", new: false, started: false },
+      }),
+    )
+    assert.deepEqual(!typo.ok && { code: typo.error.code, message: typo.error.message }, {
+      code: "task-missing",
+      message:
+        "There is no task taipei-ndvi-20261080: it has saved nothing in GeoCode's folder, and this conversation did not start it; the latest tasks are taipei-ndvi-20261008, b-20260902, d-20260904",
+    })
+    assert.equal(
+      await fs.stat(marker).then(
+        () => true,
+        () => false,
+      ),
+      false,
+    )
+
+    // A task with no folder yet, in a project without GeoCode's folder: nothing is made by reading.
+    await holding(engine.directory, [])
+    const fresh = result(await engine.response(engine.send({ script: "print(2)", cwd: engine.directory })))
+    assert.deepEqual((fresh as unknown as { space: unknown }).space, {
+      assets: [],
+      more: 0,
+      exports: [],
+      others: [],
+      tasks: 0,
+    })
+  } finally {
+    await engine.stop()
+  }
+})
+
+test(
+  "the header leaves out a deleted task's exports, and stays within the line GeoEngine reads",
+  { skip: !python3 },
+  async () => {
+    const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+    try {
+      assert.equal((await engine.settled()).status, "ready")
+      await holding(
+        engine.directory,
+        [],
+        [operation("taipei-ndvi-20261008:ndvi:0123abcd", "FAILED", "2026-10-01T07:00:00Z")],
+      )
+      const task = { name: "taipei-ndvi-20261008", new: true, started: false }
+      const fresh = result(await engine.response(engine.send({ script: "print(1)", cwd: engine.directory, task })))
+      assert.deepEqual((fresh as unknown as { space: { exports: unknown[] } }).space.exports, [])
+
+      // A hundred assets with descriptions far longer than anyone writes.
+      const root = `${ROOT}/taipei-ndvi-20261008`
+      const long = (index: number) => ({
+        type: "IMAGE",
+        name: `${root}/asset_${index}`,
+        updateTime: `2026-10-08T00:00:${String(index % 60).padStart(2, "0")}Z`,
+        properties: { title: "标".repeat(100), description: "说".repeat(1000) },
+      })
+      await holding(engine.directory, [
+        folder(ROOT, "2026-09-01T00:00:00Z"),
+        folder(root, "2026-10-08T00:00:00Z"),
+        ...Array.from({ length: 100 }, (_, index) => long(index)),
+      ])
+      const continuing = { name: "taipei-ndvi-20261008", new: false, started: false }
+      const full = result(
+        await engine.response(engine.send({ script: "print(1)", cwd: engine.directory, task: continuing })),
+      )
+      const space = (full as unknown as { space: { assets: { description: string }[]; more: number } }).space
+      assert.ok(space.assets.length > 10 && space.more > 0, `${space.assets.length} listed, ${space.more} more`)
+      assert.equal(space.assets.length + space.more, 100)
+      assert.equal(space.assets[0]!.description.length, 500)
+      assert.ok(Buffer.byteLength(JSON.stringify(space), "utf-8") <= 48 * 1024)
+    } finally {
+      await engine.stop()
+    }
+  },
+)
+
+test("a new task whose name is taken is refused before the script runs", { skip: !python3 }, async () => {
+  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  try {
+    assert.equal((await engine.settled()).status, "ready")
+    const task = `${ROOT}/taipei-ndvi-20261008`
+    await holding(engine.directory, [
+      folder(ROOT, "2026-09-01T00:00:00Z"),
+      folder(task, "2026-10-08T01:00:00Z"),
+      { type: "IMAGE", name: `${task}/composite`, updateTime: "2026-10-08T06:00:00Z" },
+      { type: "TABLE", name: `${task}/area`, updateTime: "2026-10-08T02:00:00Z" },
+    ])
+    const marker = path.join(engine.directory, "ran")
+    const script = `open(${JSON.stringify(marker)}, "w").write("ran")`
+    const taken = await engine.response(
+      engine.send({ script, cwd: engine.directory, task: { name: "taipei-ndvi-20261008", new: true, started: false } }),
+    )
+    assert.equal(taken.ok, false)
+    assert.deepEqual(!taken.ok && { code: taken.error.code, message: taken.error.message }, {
+      code: "task-taken",
+      message: "The task taipei-ndvi-20261008 already exists, with 2 assets: area, composite",
+    })
+    assert.equal(
+      await fs.stat(marker).then(
+        () => true,
+        () => false,
+      ),
+      false,
+    )
+
+    // Guards against a task of many assets making the refusal too long to be read, and the run taken for a crash.
+    await holding(engine.directory, [
+      folder(ROOT, "2026-09-01T00:00:00Z"),
+      folder(task, "2026-10-08T01:00:00Z"),
+      ...Array.from({ length: 25 }, (_, index) => ({
+        type: "IMAGE",
+        name: `${task}/a${String(index).padStart(2, "0")}`,
+        updateTime: "2026-10-08T06:00:00Z",
+      })),
+    ])
+    const many = await engine.response(
+      engine.send({ script, cwd: engine.directory, task: { name: "taipei-ndvi-20261008", new: true, started: false } }),
+    )
+    const listed = Array.from({ length: 20 }, (_, index) => `a${String(index).padStart(2, "0")}`).join(", ")
+    assert.equal(
+      !many.ok && many.error.message,
+      `The task taipei-ndvi-20261008 already exists, with 25 assets: ${listed} and 5 more`,
+    )
+
+    const named = await engine.response(
+      engine.send({ script, cwd: engine.directory, task: { name: "taipei ndvi", new: true, started: false } }),
+    )
+    assert.equal(!named.ok && named.error.code, "invalid-params")
+  } finally {
+    await engine.stop()
+  }
+})
+
+test("a run whose task cannot be read fails before the script runs", { skip: !python3 }, async () => {
+  const engine = await start(async (directory) => ({
+    python: await stubbedPython(directory, ["unlistable"]),
+    project: "majestic",
+  }))
+  try {
+    assert.equal((await engine.settled()).status, "ready")
+    await holding(engine.directory, [folder(ROOT, "2026-09-01T00:00:00Z")])
+    const response = await engine.response(engine.send({ script: "print(1)", cwd: engine.directory }))
+    assert.deepEqual(!response.ok && { code: response.error.code, message: response.error.message }, {
+      code: "space-failed",
+      message: "EEException: Caller does not have required permission to list assets",
+    })
+  } finally {
+    await engine.stop()
+  }
+})
+
+test("the script imports GeoCode's module, which reads the task's assets by name", { skip: !python3 }, async () => {
+  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  try {
+    assert.equal((await engine.settled()).status, "ready")
+    const task = `${ROOT}/taipei-ndvi-20261008`
+    await holding(engine.directory, [
+      folder(ROOT, "2026-09-01T00:00:00Z"),
+      folder(task, "2026-10-08T01:00:00Z"),
+      { type: "IMAGE", name: `${task}/composite`, updateTime: "2026-10-08T06:00:00Z" },
+    ])
+    const script = [
+      "import geocode as gc",
+      "for name in ['ndvi', 'other-20261001/x', 'a/b/c']:",
+      "    try:",
+      "        gc.load(name)",
+      "    except Exception as error:",
+      "        print(type(error).__name__, error)",
+    ].join("\n")
+    const done = result(
+      await engine.response(
+        engine.send({
+          script,
+          cwd: engine.directory,
+          task: { name: "taipei-ndvi-20261008", new: false, started: false },
+        }),
+      ),
+    )
+    assert.equal(
+      done.output,
+      [
+        "LookupError Task taipei-ndvi-20261008 has no asset ndvi. Its assets: composite.",
+        "LookupError There is no task other-20261001 in GeoCode's folder.",
+        `ValueError gc.load takes "asset" of this task, "task/asset" of another, or a full path starting with "projects/", not 'a/b/c'.`,
+        "",
+      ].join("\n"),
+    )
+  } finally {
+    await engine.stop()
+  }
+})
+
+type Stored = {
+  assets: { name: string; type: string; properties?: Record<string, string> }[]
+  operations: { metadata: { description: string; state: string } }[]
+}
+const stored = async (directory: string) =>
+  JSON.parse(await fs.readFile(path.join(directory, "stubs", "flags", "assets.json"), "utf-8")) as Stored
+
+/** A script saving to the task, with the stub's graphs standing for computations; GeoCode's wait does not sleep. */
+const saving = (...lines: string[]) =>
+  [
+    "import geocode as gc",
+    "import geocode._assets",
+    "geocode._assets.POLL_SECONDS = 0",
+    'area = ee.Geometry("area")',
+    ...lines,
+  ].join("\n")
+
+const TASK = { name: "t-20261008", new: true, started: false }
+
+test(
+  "gc.save makes the task's folders, writes what the asset is, and reuses or replaces it by its content",
+  { skip: !python3 },
+  async () => {
+    const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+    try {
+      assert.equal((await engine.settled()).status, "ready")
+      await holding(engine.directory, [])
+      const save = (graph: string, scale: string) =>
+        `saved = gc.save(ee.Image("${graph}"), "ndvi", title="台北 NDVI", description="夏季中值", region=area, scale=${scale})`
+      const script = saving(
+        save("ndvi", "10"),
+        "print(type(saved).__name__, saved.graph)",
+        // The same grid written another way is the same content.
+        save("ndvi", "10.0"),
+        save("ndvi masked", "10"),
+        'gc.save(ee.FeatureCollection("area"), "area", title="范围", description="研究区", wait=False)',
+      )
+      const done = result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
+      assert.equal(
+        done.output,
+        [
+          "Exporting ndvi (export ID OP0); waiting for it.",
+          "Saved ndvi after 0 s.",
+          `Image ${ROOT}/t-20261008/ndvi`,
+          "ndvi is unchanged since it was saved; reading the saved asset.",
+          "Warning: ndvi was saved before with other content; it is being replaced.",
+          "Exporting ndvi (export ID OP1); waiting for it.",
+          "Saved ndvi after 0 s.",
+          "Exporting area (export ID OP2); it goes on after the script ends.",
+          "",
+        ].join("\n"),
+      )
+      const after = await stored(engine.directory)
+      assert.deepEqual(
+        after.assets.map((asset) => [asset.name, asset.type]),
+        [
+          [ROOT, "FOLDER"],
+          [`${ROOT}/t-20261008`, "FOLDER"],
+          [`${ROOT}/t-20261008/ndvi`, "IMAGE"],
+          [`${ROOT}/t-20261008/area`, "TABLE"],
+        ],
+      )
+      const ndvi = after.assets[2]!.properties!
+      assert.deepEqual(
+        { title: ndvi.title, description: ndvi.description, task: ndvi.task },
+        { title: "台北 NDVI", description: "夏季中值", task: "t-20261008" },
+      )
+      assert.match(ndvi.saved!, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/)
+      // A running export is known by its description alone: the task, the asset and its fingerprint.
+      const labels = after.operations.map((operation) => operation.metadata.description)
+      assert.deepEqual(
+        labels.map((label) => label.replace(/:[0-9a-f]{8}$/, "")),
+        ["t-20261008:ndvi", "t-20261008:ndvi", "t-20261008:area"],
+      )
+      assert.equal(labels[1]!.slice(-8), ndvi.fingerprint!.slice(0, 8))
+      assert.notEqual(labels[0], labels[1])
+    } finally {
+      await engine.stop()
+    }
+  },
+)
+
+// Guards against a save built on another of the task's assets being read as unchanged after that asset was replaced:
+// the computation names it by the same path.
+test(
+  "a save that reads one of GeoCode's assets is done again once that asset is replaced",
+  { skip: !python3 },
+  async () => {
+    const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+    try {
+      assert.equal((await engine.settled()).status, "ready")
+      await holding(engine.directory, [])
+      const save = (data: string, name: string) =>
+        `gc.save(${data}, "${name}", title="t", description="d", region=area, scale=10)`
+      const script = saving(
+        `composite = ${save('ee.Image("composite")', "composite")}`,
+        save("composite", "copy"),
+        save("composite", "copy"),
+        save('ee.Image("composite, cloudless")', "composite"),
+        save('gc.load("composite")', "copy"),
+      )
+      const done = result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
+      assert.equal(
+        done.output,
+        [
+          "Exporting composite (export ID OP0); waiting for it.",
+          "Saved composite after 0 s.",
+          "Exporting copy (export ID OP1); waiting for it.",
+          "Saved copy after 0 s.",
+          "copy is unchanged since it was saved; reading the saved asset.",
+          "Warning: composite was saved before with other content; it is being replaced.",
+          "Exporting composite (export ID OP2); waiting for it.",
+          "Saved composite after 0 s.",
+          "Warning: copy was saved before with other content; it is being replaced.",
+          "Exporting copy (export ID OP3); waiting for it.",
+          "Saved copy after 0 s.",
+          "",
+        ].join("\n"),
+      )
+    } finally {
+      await engine.stop()
+    }
+  },
+)
+
+test("a failed save leaves no folder it made, and reports the failure", { skip: !python3 }, async () => {
+  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  try {
+    assert.equal((await engine.settled()).status, "ready")
+    await holding(engine.directory, [])
+    const script = saving('gc.save(ee.Image("ndvi"), "ndvi", title="t", description="d", region=area, scale=10)')
+    for (const [flag, error] of [
+      ["export-fails", "RuntimeError: Exporting ndvi failed: User memory limit exceeded."],
+      ["export-refused", "EEException: Image.load: Image asset 'projects/majestic/assets/none' not found."],
+    ] as const) {
+      await raise(engine.directory, flag)
+      const done = result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
+      await lower(engine.directory, flag)
+      assert.equal(done.outcome, "failed")
+      assert.match(done.output, new RegExp(`${error.replace(/[.()]/g, "\\$&")}\n$`))
+      // GeoCode's own lines, by the package's file names, as an installed package's would be.
+      assert.match(done.output, /File "geocode\/_assets\.py", line \d+, in save\n {4}\S/)
+      assert.deepEqual((await stored(engine.directory)).assets, [])
+    }
+  } finally {
+    await engine.stop()
+  }
+})
+
+test(
+  "an export under way is waited for with its progress on the tool row, joined, or replaced",
+  { skip: !python3 },
+  async () => {
+    const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+    try {
+      assert.equal((await engine.settled()).status, "ready")
+      await holding(engine.directory, [])
+      await raise(engine.directory, "export-slow")
+      const save = (graph: string, wait = "True") =>
+        `gc.save(ee.Image("${graph}"), "ndvi", title="t", description="d", region=area, scale=10, wait=${wait})`
+      const id = engine.send({ script: saving(save("ndvi")), cwd: engine.directory, task: TASK })
+      const done = result(await engine.response(id))
+      assert.equal(done.output, "Exporting ndvi (export ID OP0); waiting for it.\nSaved ndvi after 0 s.\n")
+      assert.deepEqual(engine.progress(id), [
+        { begun: true },
+        { export: { asset: "ndvi", state: "RUNNING", progress: 0.5 } },
+      ])
+      await lower(engine.directory, "export-slow")
+
+      await raise(engine.directory, "export-running")
+      const continuing = { name: "t-20261008", new: false, started: false }
+      const script = saving(save("ndvi masked", "False"), save("ndvi masked", "False"), save("ndvi clipped", "False"))
+      const joined = result(await engine.response(engine.send({ script, cwd: engine.directory, task: continuing })))
+      assert.equal(
+        joined.output,
+        [
+          "Warning: ndvi was saved before with other content; it is being replaced.",
+          "Exporting ndvi (export ID OP1); it goes on after the script ends.",
+          "ndvi is already being exported with the same content.",
+          "Cancelled an export of ndvi still running with other content.",
+          "Warning: ndvi was saved before with other content; it is being replaced.",
+          "Exporting ndvi (export ID OP2); it goes on after the script ends.",
+          "",
+        ].join("\n"),
+      )
+      assert.deepEqual(
+        (await stored(engine.directory)).operations.map((operation) => operation.metadata.state),
+        ["SUCCEEDED", "CANCELLED", "RUNNING"],
+      )
+      // Guards against reading the saved asset while another version of it is still being exported over it.
+      const reused = result(
+        await engine.response(
+          engine.send({ script: saving(save("ndvi", "False")), cwd: engine.directory, task: continuing }),
+        ),
+      )
+      assert.match(reused.output, /^Cancelled an export of ndvi still running with other content\.\nndvi is unchanged/)
+    } finally {
+      await engine.stop()
+    }
+  },
+)
 
 // Guards against the settings page losing the project when it chooses a Python, or the Python when it names a project.
 test("the settings write the Python or the project, keeping the other, and refuse what is not one", async () => {

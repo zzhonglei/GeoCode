@@ -235,9 +235,10 @@ finish()
 `
 
 /**
- * Initializes Earth Engine with the configured project, then runs GeoAgent's script, inline or from a file, with `ee`
- * at hand. While a request waits for Earth Engine it reports so every few seconds, so a long computation is not taken
- * for a silent script: earthengine-api sends every request through requests' sessions, where the wait is watched.
+ * Initializes Earth Engine with the configured project and reads the run's task in GeoCode's folder, then runs
+ * GeoAgent's script, inline or from a file, with `ee` at hand and GeoCode's package importable. While a request waits
+ * for Earth Engine it reports so every few seconds, so a long computation is not taken for a silent script:
+ * earthengine-api sends every request through requests' sessions, where the wait is watched.
  */
 export const RUN =
   SAFE_PATH +
@@ -290,7 +291,8 @@ def emit(payload, stream=stdout):
         if stream.open:
             stream.stream.write("\n")
             stream.open = False
-        stream.stream.write("${MARKER}" + json.dumps(payload) + "\n")
+        # Not escaped to ASCII, which would make a report of Chinese text six times as long.
+        stream.stream.write("${MARKER}" + json.dumps(payload, ensure_ascii=False) + "\n")
         stream.stream.flush()
 
 
@@ -344,6 +346,60 @@ try:
 except Exception as error:
     emit({"type": "initialize-failed", "error": "%s: %s" % (type(error).__name__, error)})
     sys.exit(1)
+
+import importlib.util
+
+
+class Package:
+    """Imports GeoCode's package from its files' texts, which the request carries, by their paths under the package's
+    folder: a traceback names them and quotes their lines, as it does a package installed on disk."""
+
+    def __init__(self, files):
+        self.files = files
+
+    def find_spec(self, name, path=None, target=None):
+        base = name.replace(".", "/")
+        for file, package in ((base + "/__init__.py", True), (base + ".py", False)):
+            if file in self.files:
+                spec = importlib.util.spec_from_loader(name, self, origin=file, is_package=package)
+                spec.has_location = True
+                return spec
+        return None
+
+    def create_module(self, spec):
+        return None
+
+    def get_source(self, name):
+        # Asked for when the quoted lines are gone, so they are not looked for in the session's folder.
+        spec = self.find_spec(name)
+        return None if spec is None else self.files[spec.origin]
+
+    def exec_module(self, module):
+        file = module.__spec__.origin
+        source = self.files[file]
+        linecache.cache[file] = (len(source), None, source.splitlines(True), file)
+        exec(compile(source, file, "exec"), module.__dict__)
+
+
+# GeoCode's package, importable as geocode, set to the run's task; what it reads of GeoCode's folder starts the answer.
+sys.meta_path.insert(0, Package(request["package"]))
+try:
+    import geocode._run
+
+    task = request["task"]
+    space = geocode._run.start(
+        request["project"], request["folder"], task["name"], task["new"], task["started"], emit
+    )
+except Exception as error:
+    emit({"type": "space-failed", "error": "%s: %s" % (type(error).__name__, error)})
+    sys.exit(1)
+if "taken" in space:
+    emit({"type": "task-taken", "assets": space["taken"], "more": space["more"]})
+    sys.exit(1)
+if "missing" in space:
+    emit({"type": "task-missing", "latest": space["missing"]})
+    sys.exit(1)
+emit({"type": "space", "space": space})
 
 # On both streams: each is read on its own, and what either carries from here on is the script's.
 emit({"type": "begin"}, stdout)

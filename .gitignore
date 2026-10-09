@@ -12,6 +12,7 @@ desktop/packages/electron/resources/geoengine/
 .cache/
 .vite/
 coverage/
+__pycache__/
 
 # Private working notes
 .artifacts/
