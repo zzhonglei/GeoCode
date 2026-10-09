@@ -39,7 +39,7 @@
 
 ```
 ~/.local/share/geocode/
-├── geocode.db            数据库:会话与消息、模型服务商的登录凭据、MCP 服务的授权、模型目录
+├── geocode.db            数据库:会话与消息、模型服务商的登录凭据、MCP 服务的授权、模型目录、各会话建过的 GEE 任务名
 ├── geocode.db-wal, -shm  数据库运行时的附属文件,随数据库一起存在
 ├── log/geocode.log       内核日志,超过 50 MB 时自动截去旧内容
 ├── snapshot/             每个项目的检查点仓库,用于撤销 agent 的修改;只保存差异,复用项目自己的 git 对象

@@ -27,7 +27,7 @@ export const Plugin = {
         editor.add(QgisDocTool.make(permission))
         editor.add(ReadGeodataTool.make(access))
         editor.add(QgisRunTool.make(permission, access, location))
-        editor.add(GeeRunTool.make(permission, access, location))
+        editor.add(GeeRunTool.make(permission, access, location, ctx.storage))
       })
       .pipe(Effect.orDie)
     // Where the rules allow qgisrun, a run of a listed algorithm, outside the project or into a database still asks.

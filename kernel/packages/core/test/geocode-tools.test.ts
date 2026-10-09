@@ -66,6 +66,9 @@ let evaluate: ((event: PermissionEvaluation) => Effect.Effect<void>) | undefined
 /** What "always allow" saved for the project. */
 let saved: Array<{ action: string; resource: string }> = []
 
+/** The geo tools' plugin storage, which the kernel keeps in its database. */
+const stored = new Map<string, Schema.Json>()
+
 const geoToolsNode = makeLocationNode({
   name: "test/geocode-tools-plugin",
   layer: Layer.effectDiscard(
@@ -79,6 +82,12 @@ const geoToolsNode = makeLocationNode({
         list: () => Effect.die("unused permission.list"),
         get: () => Effect.die("unused permission.get"),
         reply: () => Effect.die("unused permission.reply"),
+      },
+      storage: {
+        get: (key) => Effect.sync(() => stored.get(key)),
+        set: (key, value) => Effect.sync(() => void stored.set(key, value)),
+        remove: (key) => Effect.sync(() => void stored.delete(key)),
+        scan: () => Effect.die("unused storage.scan"),
       },
     }),
   ),
@@ -118,6 +127,7 @@ const reset = () => {
   refused = undefined
   pending = undefined
   saved = []
+  stored.clear()
 }
 
 const call = (input: Record<string, unknown>) => ({
@@ -764,15 +774,39 @@ describe("GeoCode: qgisrun", () => {
   )
 })
 
-const gee = (input: Record<string, unknown>) => ({
+const TASK = "taipei-ndvi-20261008"
+
+/** A call of GeoAgent's, continuing TASK with a label unless the input says otherwise; `bare` leaves both out. */
+const gee = (input: Record<string, unknown>, bare = false) => ({
   sessionID,
   ...toolIdentity,
-  call: { type: "tool-call" as const, id: "call-geerun", name: "geerun", input },
+  call: {
+    type: "tool-call" as const,
+    id: "call-geerun",
+    name: "geerun",
+    input: bare ? input : { description: "统计影像", task: TASK, ...input },
+  },
 })
 
 /** A finished run of GeoEngine's, with what the script printed. */
 const ran = (fields: Record<string, unknown> = {}) =>
-  result({ outcome: "finished", output: "images: 73\n", truncated: false, durationMs: 1200, ...fields })
+  result({
+    outcome: "finished",
+    output: "images: 73\n",
+    truncated: false,
+    durationMs: 1200,
+    ...fields,
+  })
+
+/** What GeoEngine read of TASK and GeoCode's folder before the script ran. */
+const space = (fields: Record<string, unknown> = {}) => ({
+  assets: [],
+  more: 0,
+  exports: [],
+  others: [],
+  tasks: 0,
+  ...fields,
+})
 
 describe("GeoCode: geerun", () => {
   it.effect("asks as the shell is asked, runs the script in the project, and answers with what it printed", () =>
@@ -782,20 +816,82 @@ describe("GeoCode: geerun", () => {
       const registry = yield* Tool.Service
       const definition = (yield* toolDefinitions(registry)).find((tool) => tool.name === "geerun")
       expect(definition).toBeDefined()
-      const done = yield* executeTool(registry, gee({ script: "print(1)", description: "统计影像" }))
+      const done = yield* executeTool(registry, gee({ script: "print(1)" }))
       expect(done).toMatchObject({
         status: "completed",
         content: [{ type: "text", text: "images: 73\n\nFinished in 1 s." }],
-        metadata: { description: "统计影像", outcome: "finished" },
+        metadata: { description: "统计影像", task: TASK, outcome: "finished" },
       })
       expect(assertions).toMatchObject([
-        { action: "geerun", resources: ["*"], save: ["*"], metadata: { description: "统计影像", script: "print(1)" } },
+        {
+          action: "geerun",
+          resources: ["*"],
+          save: ["*"],
+          metadata: { description: "统计影像", task: TASK, script: "print(1)" },
+        },
       ])
       // Guards against the run reaching GeoEngine without the kernel's token, or outside the project's directory.
+      const task = { name: TASK, new: false, started: false }
       expect(calls).toEqual([
         { authorization: `Bearer ${TOKEN}`, body: { method: "gee.check", params: { cwd: PROJECT } } },
-        { authorization: `Bearer ${TOKEN}`, body: { method: "gee.run", params: { script: "print(1)", cwd: PROJECT } } },
+        {
+          authorization: `Bearer ${TOKEN}`,
+          body: { method: "gee.run", params: { cwd: PROJECT, task, script: "print(1)" } },
+        },
       ])
+
+      reset()
+      yield* executeTool(
+        registry,
+        gee({ description: "新任务", new_task: "hualien-flood-20261008", path: "scripts/a.py" }, true),
+      )
+      expect(calls.at(-1)?.body).toEqual({
+        method: "gee.run",
+        params: {
+          cwd: PROJECT,
+          task: { name: "hualien-flood-20261008", new: true, started: false },
+          file: path.join(PROJECT, "scripts/a.py"),
+        },
+      })
+    }),
+  )
+
+  // Guards against a task that saved nothing being lost to the conversation that started it, and against a mistyped
+  // name being taken for a new task.
+  it.effect("remembers the tasks a conversation starts, for that conversation alone", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      const start = gee({ description: "新任务", new_task: "hualien-flood-20261008", script: "x" }, true)
+      // Guards against keeping a name the run refused, or never got to check: a Python that ended before the header.
+      answer = () => [JSON.stringify({ type: "result", ok: false, error: { code: "task-taken", message: "taken" } })]
+      expect((yield* executeTool(registry, start)).status).toBe("error")
+      answer = () => ran({ outcome: "crashed", output: "Segmentation fault\n" })
+      expect((yield* executeTool(registry, start)).status).toBe("completed")
+      expect(stored.size).toBe(0)
+
+      // Kept once the run got past the checks, though its script failed.
+      answer = () => ran({ outcome: "failed", space: space() })
+      expect((yield* executeTool(registry, start)).status).toBe("completed")
+      expect(stored.get(`geerun/tasks/${sessionID}`)).toEqual(["hualien-flood-20261008"])
+      calls.length = 0
+      expect((yield* executeTool(registry, start)).error?.message).toBe(
+        'The task hualien-flood-20261008 was already started in this conversation. Continue it with "task", or give "new_task" another name.',
+      )
+      expect(calls).toEqual([])
+
+      yield* executeTool(registry, gee({ task: "hualien-flood-20261008", script: "x" }))
+      expect(calls.at(-1)?.body).toMatchObject({
+        params: { task: { name: "hualien-flood-20261008", new: false, started: true } },
+      })
+      // Guards against one conversation's tasks without a folder being continued from another.
+      yield* executeTool(registry, {
+        ...gee({ task: "hualien-flood-20261008", script: "x" }),
+        sessionID: Session.ID.make("ses_geocode_tools_other"),
+      })
+      expect(calls.at(-1)?.body).toMatchObject({
+        params: { task: { name: "hualien-flood-20261008", new: false, started: false } },
+      })
     }),
   )
 
@@ -823,10 +919,15 @@ describe("GeoCode: geerun", () => {
       const registry = yield* Tool.Service
       yield* executeTool(registry, gee({ path: "scripts/ndvi.py" }))
       expect(assertions.map((input) => input.action)).toEqual(["geerun"])
-      expect(assertions[0]?.metadata).toEqual({ path: path.join(PROJECT, "scripts/ndvi.py") })
+      expect(assertions[0]?.metadata).toEqual({
+        description: "统计影像",
+        task: TASK,
+        path: path.join(PROJECT, "scripts/ndvi.py"),
+      })
+      const task = { name: TASK, new: false, started: false }
       expect(calls.map((call) => call.body)).toEqual([
         { method: "gee.check", params: { cwd: PROJECT, file: path.join(PROJECT, "scripts/ndvi.py") } },
-        { method: "gee.run", params: { file: path.join(PROJECT, "scripts/ndvi.py"), cwd: PROJECT } },
+        { method: "gee.run", params: { cwd: PROJECT, task, file: path.join(PROJECT, "scripts/ndvi.py") } },
       ])
 
       reset()
@@ -840,7 +941,7 @@ describe("GeoCode: geerun", () => {
       // Guards against GeoEngine looking at a file outside the project before the user allows its directory.
       expect(calls.map((call) => call.body)).toEqual([
         { method: "gee.check", params: { cwd: PROJECT } },
-        { method: "gee.run", params: { file: outside, cwd: PROJECT } },
+        { method: "gee.run", params: { cwd: PROJECT, task, file: outside } },
       ])
 
       reset()
@@ -853,19 +954,34 @@ describe("GeoCode: geerun", () => {
     }),
   )
 
-  it.effect("runs nothing without exactly one of the script and the path, or when the user refuses", () =>
-    Effect.gen(function* () {
-      reset()
-      const registry = yield* Tool.Service
-      for (const input of [{}, { script: "print(1)", path: "a.py" }]) {
-        const refusal = yield* executeTool(registry, gee(input))
-        expect(refusal.error?.message).toBe('Give exactly one of "script" and "path".')
-      }
-      expect(calls).toEqual([])
-      refused = "geerun"
-      expect((yield* executeTool(registry, gee({ script: "print(1)" }))).status).toBe("error")
-      expect(calls.map((call) => call.body)).toMatchObject([{ method: "gee.check" }])
-    }),
+  it.effect(
+    "runs nothing without a label, one task, one script and a task name that fits, or when the user refuses",
+    () =>
+      Effect.gen(function* () {
+        reset()
+        const registry = yield* Tool.Service
+        for (const input of [{}, { script: "print(1)", path: "a.py" }]) {
+          const refusal = yield* executeTool(registry, gee(input))
+          expect(refusal.error?.message).toBe('Give exactly one of "script" and "path".')
+        }
+        const task = 'Give exactly one of "task", to continue a task, and "new_task", to start one.'
+        const cases: [Record<string, unknown>, string][] = [
+          [{ description: "x", script: "print(1)" }, task],
+          [{ description: "x", script: "print(1)", task: TASK, new_task: "b" }, task],
+          ...["taipei ndvi", "台北-ndvi", "", "a".repeat(31)].map((name): [Record<string, unknown>, string] => [
+            { description: "x", script: "print(1)", new_task: name },
+            `"${name}" is not a task name: use 1 to 30 letters, digits, "_" or "-", such as taipei-ndvi-20261008.`,
+          ]),
+        ]
+        for (const [input, message] of cases) {
+          expect((yield* executeTool(registry, gee(input, true))).error?.message).toBe(message)
+        }
+        expect((yield* executeTool(registry, gee({ script: "print(1)", task: TASK }, true))).status).toBe("error")
+        expect(calls).toEqual([])
+        refused = "geerun"
+        expect((yield* executeTool(registry, gee({ script: "print(1)" }))).status).toBe("error")
+        expect(calls.map((call) => call.body)).toMatchObject([{ method: "gee.check" }])
+      }),
   )
 
   it.effect("ends the answer with how the run ended", () =>
@@ -898,6 +1014,88 @@ describe("GeoCode: geerun", () => {
     }),
   )
 
+  it.effect("starts the answer with the task, its assets and exports, and the latest other tasks", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      // GeoAgent works by the names of tasks and assets, never by where Earth Engine keeps them.
+      const cases: [Record<string, unknown>, Record<string, unknown>, string][] = [
+        [{ task: TASK }, space(), `Task ${TASK}: nothing saved yet.`],
+        [
+          { new_task: TASK },
+          space({
+            others: [{ name: "a-20261001", assets: 2, updated: "2026-10-01T08:30:12.5Z" }],
+            tasks: 1,
+          }),
+          `Task ${TASK} (new): nothing saved yet.\nOther tasks in GeoCode:\n- a-20261001 (2 assets, updated 2026-10-01 08:30 UTC)`,
+        ],
+        [
+          { task: TASK },
+          space({
+            assets: [
+              {
+                name: "composite",
+                type: "IMAGE",
+                saved: "2026-10-08T05:59:00Z",
+                bands: ["B4", "B8"],
+                title: "台北夏季合成",
+                description: "Sentinel-2 中值合成",
+              },
+              { name: "area", type: "TABLE", saved: "2026-10-08T02:00:00Z" },
+            ],
+            more: 3,
+            exports: [
+              { asset: "composite", state: "FAILED", saved: true, error: "User memory limit exceeded." },
+              { asset: "ndvi", state: "RUNNING", progress: 0.4 },
+              { asset: "mask", state: "PENDING", progress: 0 },
+            ],
+            others: [
+              { name: "b-20260902", assets: 1, updated: "2026-10-01T00:00:00Z" },
+              { name: "d-20260904", assets: 0, updated: "2026-09-04T00:00:00Z" },
+              { name: "c-20260903", assets: 0, updated: "2026-09-03T00:00:00Z" },
+            ],
+            tasks: 4,
+          }),
+          [
+            `Task ${TASK}: 5 assets.`,
+            "- composite (image; bands B4, B8; saved 2026-10-08 05:59 UTC): 台北夏季合成. Sentinel-2 中值合成",
+            "- area (table; saved 2026-10-08 02:00 UTC)",
+            "- and 3 more assets",
+            "Exports:",
+            "- composite: FAILED (the saved asset is the earlier version): User memory limit exceeded.",
+            "- ndvi: RUNNING, 40%",
+            "- mask: PENDING",
+            "Other tasks in GeoCode (4 in all, the latest 3):",
+            "- b-20260902 (1 asset, updated 2026-10-01 00:00 UTC)",
+            "- d-20260904 (0 assets, updated 2026-09-04 00:00 UTC)",
+            "- c-20260903 (0 assets, updated 2026-09-03 00:00 UTC)",
+          ].join("\n"),
+        ],
+      ]
+      for (const [input, read, header] of cases) {
+        answer = () => ran({ space: read })
+        const done = yield* executeTool(registry, gee({ description: "x", script: "x", ...input }, true))
+        expect(done).toMatchObject({
+          status: "completed",
+          content: [{ type: "text", text: `${header}\n\nimages: 73\n\nFinished in 1 s.` }],
+        })
+      }
+    }),
+  )
+
+  // Guards against a header the kernel cannot read hiding a script that ran, and may have started exports.
+  it.effect("answers without the header when it cannot be read", () =>
+    Effect.gen(function* () {
+      reset()
+      answer = () => ran({ space: { assets: "none" } })
+      const done = yield* executeTool(yield* Tool.Service, gee({ script: "x" }))
+      expect(done).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "images: 73\n\nFinished in 1 s." }],
+      })
+    }),
+  )
+
   // Guards against the kernel's own cut, which keeps the start, losing a long run's traceback and how it ended.
   it.effect("keeps the end of a long output, within the kernel's bounds, and marks the answer as cut", () =>
     Effect.gen(function* () {
@@ -905,12 +1103,48 @@ describe("GeoCode: geerun", () => {
       const registry = yield* Tool.Service
       const lines = Array.from({ length: 3000 }, (_, index) => `image ${index}`)
       const huge = "x".repeat(ToolOutput.MAX_BYTES * 2)
-      for (const output of [[...lines, "ZeroDivisionError"].join("\n"), `${huge}ZeroDivisionError`]) {
-        answer = () => ran({ outcome: "failed", output })
+      // More than the header's share holds: a hundred assets with long titles, descriptions and band lists.
+      const bands = Array.from({ length: 50 }, (_, index) => `band_${index}`)
+      const asset = { name: "a".repeat(30), type: "IMAGE", saved: "2026-10-08T00:00:00Z", bands }
+      const full = space({
+        assets: Array.from({ length: 100 }, () => ({
+          ...asset,
+          title: "标".repeat(100),
+          description: "说\n".repeat(500),
+        })),
+        // As many failed exports as GeoEngine lists, each with as long an error as it keeps.
+        exports: Array.from({ length: 20 }, (_, index) => ({
+          asset: `e${index}`,
+          state: "FAILED",
+          error: "错".repeat(300),
+        })),
+        others: [{ name: "b-20260902", assets: 1, updated: "2026-10-01T00:00:00Z" }],
+        tasks: 1,
+      })
+      const outputs = [[...lines, "ZeroDivisionError"].join("\n"), `${huge}ZeroDivisionError`]
+      for (const [output, read] of outputs.flatMap((output) =>
+        [full, undefined].map((read) => [output, read] as const),
+      )) {
+        answer = () => ran({ outcome: "failed", output, ...(read ? { space: read } : {}) })
         const done = yield* executeTool(registry, gee({ script: "x" }))
         const first = done.content?.[0]
         const text = first?.type === "text" ? first.text : ""
-        expect(text.startsWith("(The output was too long; only its end is kept.)\n\n")).toBe(true)
+        const opening = read ? text.slice(text.indexOf("\n\n(The output") + 2) : text
+        expect(opening.startsWith("(The output was too long; only its end is kept.)\n\n")).toBe(true)
+        // The header gives way first, to its share, by its last assets: the exports and other tasks stay, and the
+        // descriptions stay on their own lines.
+        if (read) {
+          const listing = text.slice(0, text.indexOf("\n\n(The output"))
+          const shown = listing.split("\n").filter((line) => line.startsWith(`- ${"a".repeat(30)}`)).length
+          expect(shown).toBeGreaterThan(0)
+          expect(listing).toContain(`\n- and ${100 - shown} more assets\nExports:\n- e0: FAILED: 错`)
+          expect(listing).toContain(
+            `\n- e19: FAILED: ${"错".repeat(300)}\nOther tasks in GeoCode:\n- b-20260902 (1 asset, updated 2026-10-01 00:00 UTC)`,
+          )
+          expect(listing.endsWith("UTC)")).toBe(true)
+          expect(Buffer.byteLength(listing, "utf-8")).toBeLessThanOrEqual(ToolOutput.MAX_BYTES / 2)
+          expect(listing.split("\n").length).toBe(shown + 25)
+        }
         expect(text.endsWith("ZeroDivisionError\n\nThe script failed after 1 s.")).toBe(true)
         expect(text.split("\n").length).toBeLessThanOrEqual(ToolOutput.MAX_LINES)
         expect(Buffer.byteLength(text, "utf-8")).toBeLessThanOrEqual(ToolOutput.MAX_BYTES)
@@ -935,6 +1169,18 @@ describe("GeoCode: geerun", () => {
         [
           { code: "initialize-failed", message: "EEException: Not signed up for Earth Engine" },
           "Earth Engine could not be initialized, so the script did not run: EEException: Not signed up for Earth Engine",
+        ],
+        [
+          { code: "space-failed", message: "EEException: Caller does not have required permission" },
+          "GeoCode could not read its folder of Earth Engine assets, so the script did not run: EEException: Caller does not have required permission",
+        ],
+        [
+          { code: "task-taken", message: `The task ${TASK} already exists, with 1 asset: composite` },
+          `The task ${TASK} already exists, with 1 asset: composite, so the script did not run. Continue it with "task", or give "new_task" another name.`,
+        ],
+        [
+          { code: "task-missing", message: `There is no task ${TASK}: it has saved nothing` },
+          `There is no task ${TASK}: it has saved nothing, so the script did not run. Start it with "new_task", or check the name.`,
         ],
         [
           { code: "start-failed", message: "spawn EACCES", details: { stderr: "x" } },
