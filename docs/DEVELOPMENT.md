@@ -40,7 +40,7 @@ geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
 
 改动 `kernel/` 之后要重新运行它,应用才会用上新的内核。
 
-GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/packages/electron/resources/geoengine/geoengine.mjs`,打包时收进 `app.asar`。开发模式的启动脚本每次启动前都运行它,打包流程也运行它,平时不用手动执行;`geoengine/` 没装依赖时它报错退出。
+GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/packages/electron/resources/geoengine/geoengine.mjs`,打包时收进 `app.asar`。GEE 脚本导入的 Python 包 `geoengine/python/` 在这一步原样编进 `geoengine.mjs`(原因见 `GEOENGINE.md` 第 3 节),改了其中的 `.py` 文件同样要重新构建。开发模式的启动脚本每次启动前都运行它,打包流程也运行它,平时不用手动执行;`geoengine/` 没装依赖时它报错退出。
 
 ## 5. 在沙箱里启动应用
 
