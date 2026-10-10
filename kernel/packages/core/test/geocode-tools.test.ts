@@ -3,7 +3,10 @@ import path from "path"
 import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { FileAccess } from "@opencode/core/file-access"
+import { GeeRunTool } from "@opencode/core/geocode/geerun"
 import { GeoTools } from "@opencode/core/geocode/tools"
+import { Job } from "@opencode/core/job"
+import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -12,6 +15,7 @@ import { Permission } from "@opencode/core/permission"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import type { PermissionEvaluation } from "@opencode/plugin/effect/permission"
 import { Session } from "@opencode/core/session"
+import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { location } from "./fixture/location"
@@ -91,7 +95,33 @@ const geoToolsNode = makeLocationNode({
       },
     }),
   ),
-  deps: [Tool.node, Permission.node, FileAccess.node, Location.node, PermissionSaved.node],
+  deps: [Tool.node, Permission.node, FileAccess.node, Location.node, PermissionSaved.node, Job.node, Session.node],
+})
+/** What the kernel's key-value store holds: a background run's notification, until it is in the conversation. */
+const kv = new Map<string, KV.Value>()
+const kvStore = Layer.succeed(
+  KV.Service,
+  KV.Service.of({
+    get: (key) => Effect.sync(() => kv.get(key)),
+    set: (key, value) => Effect.sync(() => void kv.set(key, value)),
+    remove: (key) => Effect.sync(() => void kv.delete(key)),
+    scan: ({ prefix }) =>
+      Effect.sync(() => ({
+        entries: [...kv].filter(([key]) => key.startsWith(prefix)).map(([key, value]) => ({ key, value })),
+      })),
+  }),
+)
+/** The notifications put into conversations. */
+const notices: Array<Parameters<Session.Interface["synthetic"]>[0]> = []
+let noticed: Deferred.Deferred<void> | undefined
+const sessions = Layer.mock(Session.Service, {
+  // Unused, but not optional as the service's functions are.
+  revert: {} as Session.Interface["revert"],
+  synthetic: (input) =>
+    Effect.sync(() => notices.push(input)).pipe(
+      Effect.andThen(noticed ? Deferred.succeed(noticed, undefined) : Effect.void),
+      Effect.as({} as never),
+    ),
 })
 const permissionSaved = Layer.mock(PermissionSaved.Service, {
   list: () => Effect.sync(() => saved.map((item) => ({ ...item }) as unknown as PermissionSaved.Info)),
@@ -113,9 +143,11 @@ const permission = permissionLayer({
     ),
 })
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Tool.node, geoToolsNode]), [
+  AppNodeBuilder.build(LayerNode.group([Tool.node, geoToolsNode, Job.node, Session.node]), [
     Permission.node.replace(permission),
     PermissionSaved.node.replace(permissionSaved),
+    KV.node.replace(kvStore),
+    Session.node.replace(sessions),
     Location.node.replace(Layer.succeed(Location.Service, Location.Service.of(location({ directory: PROJECT })))),
   ]),
 )
@@ -128,6 +160,9 @@ const reset = () => {
   pending = undefined
   saved = []
   stored.clear()
+  kv.clear()
+  notices.length = 0
+  noticed = undefined
 }
 
 const call = (input: Record<string, unknown>) => ({
@@ -1180,6 +1215,111 @@ describe("GeoCode: geerun", () => {
         expect(done.status).toBe("error")
         expect(done.error?.message).toBe(message)
       }
+    }),
+  )
+
+  it.live("in the background, returns once the script begins and tells the conversation the answer when it ends", () =>
+    Effect.gen(function* () {
+      reset()
+      const encoder = new TextEncoder()
+      let end = () => {}
+      answer = (body) =>
+        body.method !== "gee.run"
+          ? ran()
+          : new ReadableStream({
+              start: (controller) => {
+                controller.enqueue(encoder.encode(`${progress({ begun: true })}\n`))
+                end = () => {
+                  controller.enqueue(encoder.encode(`${ran().join("\n")}\n`))
+                  controller.close()
+                }
+              },
+            })
+      const registry = yield* Tool.Service
+      const running = yield* executeTool(registry, gee({ script: "x", background: true }))
+      expect(running).toMatchObject({
+        status: "completed",
+        content: [
+          {
+            text: `Task ${TASK} is running in the background. You will be notified with its answer when the run ends. DO NOT sleep, poll, or run task ${TASK} again before then. Work on something else, or tell the user what is running and end your response.`,
+          },
+        ],
+        metadata: { status: "running" },
+      })
+      // Kept until the notification is in the conversation, so that a restart can still give it.
+      expect(kv.size).toBe(1)
+      noticed = yield* Deferred.make<void>()
+      end()
+      yield* Deferred.await(noticed)
+      expect(notices).toMatchObject([
+        {
+          sessionID,
+          description: "统计影像",
+          text: `<geerun task="${TASK}" state="completed" description="统计影像">\nimages: 73\n\nFinished in 1 s.\n</geerun>`,
+        },
+      ])
+      for (let turn = 0; turn < 100 && kv.size > 0; turn++) yield* Effect.sleep("10 millis")
+      expect(kv.size).toBe(0)
+
+      // A run that cannot start fails the call itself, as a shell that cannot spawn does.
+      answer = (body) =>
+        body.method !== "gee.run"
+          ? ran()
+          : [JSON.stringify({ type: "result", ok: false, error: { code: "task-busy", message: "busy" } })]
+      const busy = yield* executeTool(registry, gee({ script: "x", background: true }))
+      expect(busy).toMatchObject({ status: "error" })
+      expect(notices).toHaveLength(1)
+
+      // GeoEngine ends its runs as the app quits, often before the kernel: no "not available" now, the restart tells.
+      answer = (body) =>
+        body.method !== "gee.run"
+          ? ran()
+          : new ReadableStream({
+              start: (controller) => {
+                controller.enqueue(encoder.encode(`${progress({ begun: true })}\n`))
+                end = () => {
+                  const error = { code: "cancelled", message: "the run was cancelled" }
+                  controller.enqueue(encoder.encode(`${JSON.stringify({ type: "result", ok: false, error })}\n`))
+                  controller.close()
+                }
+              },
+            })
+      yield* executeTool(registry, gee({ script: "x", background: true }))
+      const [marker] = [...kv.values()] as Array<{ id: string; notificationID: string }>
+      end()
+      expect((yield* (yield* Job.Service).wait({ id: marker!.id })).info?.status).toBe("cancelled")
+      yield* Effect.sleep("50 millis")
+      expect(notices).toHaveLength(1)
+      expect(kv.get(`job.background/${marker!.notificationID}`)).toMatchObject({ status: "running" })
+    }),
+  )
+
+  it.effect("after a restart, tells the conversation that a background run was stopped", () =>
+    Effect.gen(function* () {
+      reset()
+      const jobs = yield* Job.Service
+      const notificationID = SessionMessage.ID.create()
+      kv.set(`job.background/${notificationID}`, {
+        id: "job_geerun",
+        notificationID,
+        recovery: { kind: "geerun", sessionID, task: TASK, description: "统计影像" },
+        status: "running",
+      })
+      // What the kernel reads back at start-up; a marker it cannot read would be passed over without a word.
+      const [background] = yield* jobs.pendingBackground
+      if (background?.recovery.kind !== "geerun") throw new Error("the marker was not read back")
+      yield* GeeRunTool.recover(yield* Session.Service, jobs, background, background.recovery)
+      expect(notices).toEqual([
+        {
+          id: notificationID,
+          sessionID,
+          description: "统计影像",
+          text: `<geerun task="${TASK}" state="cancelled" description="统计影像">\nThe run was stopped because GeoCode restarted. Assets its exports already saved, or still save, stay in the task; run the script again to finish it.\n</geerun>`,
+          metadata: { source: "geerun", task: TASK, state: "cancelled" },
+          resume: false,
+        },
+      ])
+      expect(kv.size).toBe(0)
     }),
   )
 })

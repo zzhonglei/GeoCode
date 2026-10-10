@@ -3,10 +3,12 @@ export * as GeeRunTool from "./geerun.js"
 import { ToolFailure } from "@opencode/ai"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { Tool } from "@opencode/schema/tool"
-import { Effect, Exit, Schema } from "effect"
+import { Deferred, Effect, Exit, Schema, Scope } from "effect"
 import type { FileAccess } from "../file-access.js"
+import type { Job } from "../job.js"
 import type { Location } from "../location.js"
 import type { Permission } from "../permission.js"
+import type { Session } from "../session.js"
 import { ToolOutput } from "../tool-output.js"
 import { GeoEngine } from "./geoengine.js"
 
@@ -24,7 +26,8 @@ export const description = `Run a Python script that uses Google Earth Engine, w
 - Save to the task only with gc.save. Do not delete tasks or assets unless the user asks.
 - Give the code as "script", or the path of a .py file as "path". It runs in the session's directory, with the Python configured for Earth Engine.
 - What the script prints, and its errors, are all you get back, so print what you need. Bring results from Earth Engine with getInfo() and keep them small: statistics or a few values, not pixels or long lists.
-- There is no time limit while the script waits for Earth Engine. A script that prints nothing and waits for no request to Earth Engine for two minutes is stopped.`
+- There is no time limit while the script waits for Earth Engine. A script that prints nothing and waits for no request to Earth Engine for two minutes is stopped.
+- Background runs return once the script begins, and you are notified with the answer when it ends.`
 
 export const Input = Schema.Struct({
   task: Schema.optionalKey(Schema.String).annotate({
@@ -40,6 +43,10 @@ export const Input = Schema.Struct({
   }),
   description: Schema.String.annotate({
     description: "A short 3-5 word label for this step, in the user's language, displayed to the user",
+  }),
+  background: Schema.optionalKey(Schema.Boolean).annotate({
+    description:
+      "Run the script in the background and return once it begins. You will be notified with its answer when it ends. DO NOT sleep or poll for it.",
   }),
 })
 
@@ -205,107 +212,235 @@ const lastPart = (text: string, used: { readonly lines: number; readonly bytes: 
   return { text: kept.toReversed().join("\n"), cut: kept.length < lines.length }
 }
 
+/** GeoEngine's progress once the script itself begins, past the lock and the task's checks. */
+const isBegun = Schema.is(Schema.Struct({ begun: Schema.Literal(true) }))
+
+type Recovery = Extract<Job.Recovery, { kind: "geerun" }>
+
+const backgroundAnswer = (task: string) =>
+  `Task ${task} is running in the background. You will be notified with its answer when the run ends. DO NOT sleep, poll, or run task ${task} again before then. Work on something else, or tell the user what is running and end your response.`
+
+const RESTARTED =
+  "The run was stopped because GeoCode restarted. Assets its exports already saved, or still save, stay in the task; run the script again to finish it."
+
+/** What a background run's notification says: the answer it ended with, as a shell's says what the command printed. */
+const said = (
+  result: Pick<Job.Background, "output" | "error"> & { readonly status: Exclude<Job.Status, "running"> },
+) =>
+  result.status === "completed"
+    ? (result.output ?? "")
+    : result.status === "error"
+      ? (result.error ?? "The run failed.")
+      : "The run was cancelled."
+
+const notification = (recovery: Recovery, state: Exclude<Job.Status, "running">, text: string) => ({
+  sessionID: recovery.sessionID,
+  description: recovery.description,
+  text: `<geerun task="${recovery.task}" state="${state}" description="${recovery.description}">\n${text}\n</geerun>`,
+  metadata: { source: name, task: recovery.task, state },
+})
+
+/** After a restart, as the kernel does for a shell: tells of a background run, which a restart stopped if unfinished. */
+export const recover = Effect.fnUntraced(function* (
+  sessions: Pick<Session.Interface, "synthetic">,
+  jobs: Pick<Job.Interface, "completeBackground">,
+  background: Job.Background,
+  recovery: Recovery,
+) {
+  const state = background.status === "running" ? "cancelled" : background.status
+  yield* sessions
+    .synthetic({
+      id: background.notificationID,
+      ...notification(
+        recovery,
+        state,
+        background.status === "running" ? RESTARTED : said({ ...background, status: state }),
+      ),
+      // As a shell's: a restart's notice does not wake a conversation that is idle.
+      resume: false,
+    })
+    .pipe(
+      Effect.catchTag("Session.NotFoundError", () => Effect.void),
+      Effect.orDie,
+    )
+  yield* jobs.completeBackground(background.notificationID)
+})
+
 export const make = (
   permission: Permission.Interface,
   access: FileAccess.Interface,
   location: Location.Interface,
   storage: Context["storage"],
-) => ({
-  name,
-  // On the provider's tool list, as the built-in tools are, rather than inside Code Mode's catalog.
-  options: { codemode: false },
-  description,
-  input: Input,
-  execute: (input: typeof Input.Type, context: Tool.Context) =>
+  jobs: Job.Interface,
+  sessions: Session.Interface,
+  scope: Scope.Scope,
+) => {
+  /** The answer a run gave, from the script's output and the task GeoEngine read before it. */
+  const answer = Effect.fnUntraced(function* (
+    result: unknown,
+    task: { readonly name: string; readonly new: boolean },
+    key: string,
+    label: string,
+  ) {
+    const decoded = decodeRan(result)
+    if (Exit.isFailure(decoded)) {
+      return yield* failed(new GeoEngine.Failure({ code: "unreadable", message: String(decoded.cause) }))
+    }
+    const ran = decoded.value
+    // Once the run got past the task's checks, which its header says, the task exists in this conversation, whether or
+    // not its script worked. Read again: another call in the conversation may have started a task meanwhile.
+    if (task.new && ran.space !== undefined) {
+      const now = decodeStarted(yield* storage.get(key))
+      const known = Exit.isSuccess(now) ? now.value : []
+      if (!known.includes(task.name)) yield* storage.set(key, [...known, task.name])
+    }
+    const space = ran.space === undefined ? undefined : decodeSpace(ran.space)
+    if (space && Exit.isFailure(space)) yield* Effect.logWarning("geerun header unreadable", { cause: space.cause })
+    const opening = space && Exit.isSuccess(space) ? header(task, space.value) : ""
+    const output = lastPart(ran.output.trimEnd(), {
+      lines: opening.split("\n").length,
+      bytes: Buffer.byteLength(opening, "utf-8"),
+    })
+    const truncated = ran.truncated || output.cut
+    return {
+      content: [
+        ...(opening ? [opening] : []),
+        ...(truncated ? ["(The output was too long; only its end is kept.)"] : []),
+        ...(output.text ? [output.text] : truncated ? [] : ["(The script printed nothing.)"]),
+        ending(ran),
+      ].join("\n\n"),
+      // Set, so the kernel does not cut the answer again from its start.
+      metadata: { description: label, task: task.name, outcome: ran.outcome, truncated },
+    }
+  })
+
+  /** Tells the conversation of a background run once it ends, as the shell tool does of a background command. */
+  const notify = (id: string, recovery: Recovery) =>
     Effect.gen(function* () {
-      if ((input.script === undefined) === (input.path === undefined)) {
-        return yield* new ToolFailure({ message: 'Give exactly one of "script" and "path".' })
-      }
-      if ((input.task === undefined) === (input.new_task === undefined)) {
-        return yield* new ToolFailure({
-          message: 'Give exactly one of "task", to continue a task, and "new_task", to start one.',
+      const info = (yield* jobs.wait({ id })).info
+      // Nothing cancels a run in the background but the app quitting: its marker stays, for the restart to tell of it.
+      if (!info || info.status === "running" || info.status === "cancelled") return
+      yield* sessions.synthetic({
+        ...(info.notificationID ? { id: info.notificationID } : {}),
+        ...notification(recovery, info.status, said({ ...info, status: info.status })),
+      })
+      if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
+    }).pipe(Effect.forkIn(scope, { startImmediately: true }))
+
+  return {
+    name,
+    // On the provider's tool list, as the built-in tools are, rather than inside Code Mode's catalog.
+    options: { codemode: false },
+    description,
+    input: Input,
+    execute: (input: typeof Input.Type, context: Tool.Context) =>
+      Effect.gen(function* () {
+        if ((input.script === undefined) === (input.path === undefined)) {
+          return yield* new ToolFailure({ message: 'Give exactly one of "script" and "path".' })
+        }
+        if ((input.task === undefined) === (input.new_task === undefined)) {
+          return yield* new ToolFailure({
+            message: 'Give exactly one of "task", to continue a task, and "new_task", to start one.',
+          })
+        }
+        const taskName = input.new_task ?? input.task ?? ""
+        if (!TASK_NAME.test(taskName)) {
+          return yield* new ToolFailure({
+            message: `"${taskName}" is not a task name: use 1 to 30 letters, digits, "_" or "-", such as taipei-ndvi-20261008.`,
+          })
+        }
+        // The tasks this conversation started: one that has saved nothing has no folder to be known by.
+        const key = `geerun/tasks/${context.sessionID}`
+        const read = decodeStarted(yield* storage.get(key))
+        const started = Exit.isSuccess(read) ? read.value : []
+        if (input.new_task !== undefined && started.includes(taskName)) {
+          return yield* new ToolFailure({
+            message: `The task ${taskName} was already started in this conversation. Continue it with "task", or give "new_task" another name.`,
+          })
+        }
+        const task = { name: taskName, new: input.new_task !== undefined, started: started.includes(taskName) }
+        const target = input.path === undefined ? undefined : yield* access.resolve({ path: input.path, kind: "file" })
+        const file = target?.absolute
+        // Checked before asking, so the user is never asked about a run that cannot start. A file outside the project is
+        // left to the run, after the user allows its directory: looking at it first would answer whether it is there.
+        const inside = target !== undefined && target.externalDirectory === undefined
+        yield* GeoEngine.call("gee.check", { cwd: location.directory, ...(inside ? { file } : {}) }).pipe(
+          Effect.catch(failed),
+        )
+        // As the shell asks about the directories its command names: a file outside the project, by its directory.
+        if (target) yield* access.authorizeExternal([target], context)
+        // As the shell is asked about: the script can do anything the user can.
+        yield* permission.assert({
+          action: name,
+          resources: ["*"],
+          save: ["*"],
+          metadata: {
+            description: input.description,
+            task: task.name,
+            ...(file === undefined ? { script: input.script } : { path: file }),
+          },
+          sessionID: context.sessionID,
+          agent: context.agent,
+          source: { type: "tool", messageID: context.messageID, id: context.id },
         })
-      }
-      const taskName = input.new_task ?? input.task ?? ""
-      if (!TASK_NAME.test(taskName)) {
-        return yield* new ToolFailure({
-          message: `"${taskName}" is not a task name: use 1 to 30 letters, digits, "_" or "-", such as taipei-ndvi-20261008.`,
-        })
-      }
-      // The tasks this conversation started: one that has saved nothing has no folder to be known by.
-      const key = `geerun/tasks/${context.sessionID}`
-      const read = decodeStarted(yield* storage.get(key))
-      const started = Exit.isSuccess(read) ? read.value : []
-      if (input.new_task !== undefined && started.includes(taskName)) {
-        return yield* new ToolFailure({
-          message: `The task ${taskName} was already started in this conversation. Continue it with "task", or give "new_task" another name.`,
-        })
-      }
-      const task = { name: taskName, new: input.new_task !== undefined, started: started.includes(taskName) }
-      const target = input.path === undefined ? undefined : yield* access.resolve({ path: input.path, kind: "file" })
-      const file = target?.absolute
-      // Checked before asking, so the user is never asked about a run that cannot start. A file outside the project is
-      // left to the run, after the user allows its directory: looking at it first would answer whether it is there.
-      const inside = target !== undefined && target.externalDirectory === undefined
-      yield* GeoEngine.call("gee.check", { cwd: location.directory, ...(inside ? { file } : {}) }).pipe(
-        Effect.catch(failed),
-      )
-      // As the shell asks about the directories its command names: a file outside the project, by its directory.
-      if (target) yield* access.authorizeExternal([target], context)
-      // As the shell is asked about: the script can do anything the user can.
-      yield* permission.assert({
-        action: name,
-        resources: ["*"],
-        save: ["*"],
-        metadata: {
-          description: input.description,
+        const params = {
+          cwd: location.directory,
+          task,
+          ...(file === undefined ? { script: input.script } : { file }),
+        }
+        // As the shell tool runs a command: a job of the kernel's, waited for unless it is or is moved to the background.
+        const begun = yield* Deferred.make<void>()
+        const settled = yield* Deferred.make<Effect.Success<ReturnType<typeof answer>>, ToolFailure>()
+        const run = GeoEngine.call("gee.run", params, (data) =>
+          isBegun(data) ? Deferred.succeed(begun, undefined).pipe(Effect.asVoid) : Effect.void,
+        ).pipe(
+          // GeoEngine ends a run itself only as the app quits, often before the kernel: stopped, not failed, so that a
+          // run in the background is told of after the restart.
+          Effect.catchIf(
+            (failure) => failure.code === "cancelled",
+            () => Effect.interrupt,
+          ),
+          Effect.catch(failed),
+          Effect.flatMap((result) => answer(result, task, key, input.description)),
+          Effect.onExit((exit) => Deferred.done(settled, exit)),
+          Effect.map((answered) => answered.content),
+        )
+        const recovery = {
+          kind: "geerun" as const,
+          sessionID: context.sessionID,
           task: task.name,
-          ...(file === undefined ? { script: input.script } : { path: file }),
-        },
-        sessionID: context.sessionID,
-        agent: context.agent,
-        source: { type: "tool", messageID: context.messageID, id: context.id },
-      })
-      const params = {
-        cwd: location.directory,
-        task,
-        ...(file === undefined ? { script: input.script } : { file }),
-      }
-      const result = yield* GeoEngine.call("gee.run", params).pipe(Effect.catch(failed))
-      const decoded = decodeRan(result)
-      if (Exit.isFailure(decoded)) {
-        return yield* failed(new GeoEngine.Failure({ code: "unreadable", message: String(decoded.cause) }))
-      }
-      const ran = decoded.value
-      // Once the run got past the task's checks, which its header says, the task exists in this conversation, whether or
-      // not its script worked. Read again: another call in the conversation may have started a task meanwhile.
-      if (task.new && ran.space !== undefined) {
-        const now = decodeStarted(yield* storage.get(key))
-        const known = Exit.isSuccess(now) ? now.value : []
-        if (!known.includes(taskName)) yield* storage.set(key, [...known, taskName])
-      }
-      const space = ran.space === undefined ? undefined : decodeSpace(ran.space)
-      if (space && Exit.isFailure(space)) yield* Effect.logWarning("geerun header unreadable", { cause: space.cause })
-      const opening = space && Exit.isSuccess(space) ? header(task, space.value) : ""
-      const output = lastPart(ran.output.trimEnd(), {
-        lines: opening.split("\n").length,
-        bytes: Buffer.byteLength(opening, "utf-8"),
-      })
-      const truncated = ran.truncated || output.cut
-      return {
-        content: [
-          ...(opening ? [opening] : []),
-          ...(truncated ? ["(The output was too long; only its end is kept.)"] : []),
-          ...(output.text ? [output.text] : truncated ? [] : ["(The script printed nothing.)"]),
-          ending(ran),
-        ].join("\n\n"),
-        // Set, so the kernel does not cut the answer again from its start.
-        metadata: { description: input.description, task: task.name, outcome: ran.outcome, truncated },
-      }
-    }).pipe(
-      // As the built-in tools do: a refused permission or a missing session still ends as this tool's failure.
-      Effect.mapError((error) =>
-        error instanceof ToolFailure ? error : new ToolFailure({ message: "Unable to run the script", error }),
+          description: input.description,
+        }
+        // The kernel's own ID: one of the task's name would join a run of the task under way, past GeoEngine's lock.
+        const job = yield* jobs.start({
+          type: name,
+          title: input.description,
+          metadata: { sessionID: context.sessionID, task: task.name },
+          recovery,
+          run,
+        })
+        const block = jobs.block({ id: job.id, sessionID: context.sessionID })
+        // In the background once the script begins: a run that cannot start is told now, as a shell that cannot spawn.
+        const waited = yield* (
+          input.background === true
+            ? Effect.raceFirst(block, Deferred.await(begun).pipe(Effect.as({ type: "begun" as const })))
+            : block
+        ).pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
+        if (waited?.type === "begun" || waited?.type === "backgrounded") {
+          // Whole, or a stop just as the script begins would leave the run with no one to tell of it.
+          yield* Effect.uninterruptible(Effect.andThen(jobs.background(job.id), notify(job.id, recovery)))
+          return {
+            content: backgroundAnswer(task.name),
+            metadata: { description: input.description, task: task.name, status: "running" },
+          }
+        }
+        if (waited?.info.status === "cancelled") return yield* new ToolFailure({ message: "The run was cancelled." })
+        return yield* Deferred.await(settled)
+      }).pipe(
+        // As the built-in tools do: a refused permission or a missing session still ends as this tool's failure.
+        Effect.mapError((error) =>
+          error instanceof ToolFailure ? error : new ToolFailure({ message: "Unable to run the script", error }),
+        ),
       ),
-    ),
-})
+  }
+}

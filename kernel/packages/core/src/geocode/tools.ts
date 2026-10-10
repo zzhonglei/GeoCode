@@ -1,11 +1,13 @@
 export * as GeoTools from "./tools.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { Effect } from "effect"
+import { Effect, Scope } from "effect"
 import { FileAccess } from "../file-access.js"
+import { Job } from "../job.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
 import { PermissionSaved } from "../permission/saved.js"
+import { Session } from "../session.js"
 import { GeeRunTool } from "./geerun.js"
 import { QgisDocTool } from "./qgisdoc.js"
 import { QgisRunTool } from "./qgisrun.js"
@@ -22,12 +24,15 @@ export const Plugin = {
     const access = yield* FileAccess.Service
     const location = yield* Location.Service
     const saved = yield* PermissionSaved.Service
+    const jobs = yield* Job.Service
+    const sessions = yield* Session.Service
+    const scope = yield* Scope.Scope
     yield* ctx.tool
       .transform((editor) => {
         editor.add(QgisDocTool.make(permission))
         editor.add(ReadGeodataTool.make(access))
         editor.add(QgisRunTool.make(permission, access, location))
-        editor.add(GeeRunTool.make(permission, access, location, ctx.storage))
+        editor.add(GeeRunTool.make(permission, access, location, ctx.storage, jobs, sessions, scope))
       })
       .pipe(Effect.orDie)
     // Where the rules allow qgisrun, a run of a listed algorithm, outside the project or into a database still asks.

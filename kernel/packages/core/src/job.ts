@@ -24,6 +24,14 @@ const Background = Schema.Struct({
       agent: Schema.String,
       description: Schema.String,
     }),
+    // --- GeoCode: a geerun run in the background, whose notification survives a restart as a shell's does ---
+    Schema.Struct({
+      kind: Schema.Literal("geerun"),
+      sessionID: SessionSchema.ID,
+      task: Schema.String,
+      description: Schema.String,
+    }),
+    // --- /GeoCode ---
   ]),
   status: Schema.Literals(["running", "completed", "error", "cancelled"]),
   output: Schema.optionalKey(Schema.String),
