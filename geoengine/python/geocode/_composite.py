@@ -6,14 +6,30 @@ import ee
 
 from geocode._images import MASKING
 
+# geedim's mask bands, which its composite keeps: none is the dataset's.
+MASK_BANDS = [
+    "AEROSOL_MASK",
+    "CDI_CLOUD_MASK",
+    "CLOUDLESS_MASK",
+    "CLOUD_DIST",
+    "CLOUD_MASK",
+    "CLOUD_PROB",
+    "CLOUD_SCORE",
+    "CLOUD_SHADOW_MASK",
+    "FILL_MASK",
+    "NONPHYSICAL_MASK",
+    "SATURATION_MASK",
+    "SHADOW_MASK",
+]
+
 
 def composite(images, region, dates=None, method=None, mask=True, min_coverage=0.999):
     """Composites the images as geedim does, masking their clouds as gc.images measured them unless mask is False and
     ordering them by the cloud-free share of their cover of the region; "dates" keeps only those of the given days
     ("2024-06-07") or acquisitions ("2024-06-07 Sentinel-2B R108"). Prints the share of the region the composite's
     first band covers and, of the rest, where no image reaches and where every image is masked, and stops when it
-    covers less than min_coverage. Returns the composite, not clipped, on the grid of the image at the region's
-    centre."""
+    covers less than min_coverage. Returns the composite of the dataset's own bands, not clipped, each band on its grid
+    in the image at the region's centre."""
     import geedim  # noqa: F401 (registers the .gd accessors)
 
     if isinstance(dates, str):
@@ -30,9 +46,14 @@ def composite(images, region, dates=None, method=None, mask=True, min_coverage=0
         raise ValueError("None of the images are of %s." % ", ".join(dates))
 
     centre = chosen.filterBounds(region.centroid(1))
-    grid = ee.Image(ee.Algorithms.If(centre.size().gt(0), centre.first(), chosen.first())).gd.projection()
+    source = ee.Image(ee.Algorithms.If(centre.size().gt(0), centre.first(), chosen.first()))
+    grid = source.gd.projection()
     made = chosen.gd.composite(method=method, mask=mask, region=region, **json.loads(counts["masking"] or "{}"))
-    made = made.setDefaultProjection(grid)
+    bands = made.bandNames().removeAll(MASK_BANDS)
+    # Each band on its own grid in the source image, as Sentinel-2's B11 at 20 m beside B2 at 10 m.
+    gridded = bands.map(lambda band: made.select([band]).setDefaultProjection(source.select([band]).projection()))
+    made = ee.ImageCollection(gridded).toBands().rename(bands).copyProperties(made, made.propertyNames())
+    made = ee.Image(made)
 
     # unmask() keeps an image's footprint, so only the maximum, which has none, is unmasked outside every image.
     reached = chosen.map(lambda image: image.select(0).mask()).max().unmask(0).gt(0)
