@@ -11,42 +11,33 @@ import type { Permission } from "../permission.js"
 import type { Session } from "../session.js"
 import { ToolOutput } from "../tool-output.js"
 import { GeoEngine } from "./geoengine.js"
+import DESCRIPTION from "./geerun.txt"
 
 export const name = "geerun"
 
-export const description = `Run a Python script that uses Google Earth Engine, within a task.
-
-- A task keeps what its scripts save, in a folder of its name in the GeoCode folder of the user's Earth Engine assets, across runs and conversations. Every call names one: "new_task" starts one, "task" continues one. Name a new task for its purpose and today's date, such as taipei-ndvi-20261008: 1 to 30 letters, digits, "_" or "-". Its folder is made when it first saves something; until then the task exists only in this conversation, and leaves nothing in the user's Earth Engine. A task that saved something can be continued from any conversation; any other name is refused.
-- The answer starts with the task: its assets, with their titles and descriptions, and the latest other tasks. Then comes what the script printed.
-- \`ee\` is imported and initialized with the user's Google Cloud project before the script starts. Do not call ee.Authenticate() or ee.Initialize().
-- \`import geocode as gc\` to save to the task and read from it:
-  - gc.save(data, "composite", title=..., description=...) saves an ee.Image or ee.FeatureCollection to the task and returns it read from the saved asset. Clip an image first with image.clip(region); it is saved on its own grid unless given another, such as crs="EPSG:32651", scale=10. Write title and description in the user's language: they are how the user, in the Code Editor, and later conversations know what the asset is. It waits for the export, which may take minutes. The same content saved before under the name is read as it is; other content replaces it.
-  - gc.load("composite") reads an asset of this task, and gc.load("other-task/composite") one of another task. An asset outside GeoCode's folder is read by the full path the user gives, gc.load("projects/...").
-- An export computes everything again at full resolution, and the first run that saves is slower; later runs read the saved asset instead of computing it again, which spares the user's Earth Engine quota. So save what is expensive and used again, typically the composite once it is checked, and what the user wants kept. Do not save quick looks, cheap steps, or what is still being adjusted. When computing fails with "Computation timed out" or "User memory limit exceeded", save the expensive step first and continue from it.
-- Save to the task only with gc.save. Do not delete tasks or assets unless the user asks.
-- Give the code as "script", or the path of a .py file as "path". It runs in the session's directory, with the Python configured for Earth Engine.
-- What the script prints, and its errors, are all you get back, so print what you need. Bring results from Earth Engine with getInfo() and keep them small: statistics or a few values, not pixels or long lists.
-- There is no time limit while the script waits for Earth Engine. A script that prints nothing and waits for no request to Earth Engine for two minutes is stopped.
-- Background runs return once the script begins, and you are notified with the answer when it ends.`
+export const description = DESCRIPTION
 
 export const Input = Schema.Struct({
   task: Schema.optionalKey(Schema.String).annotate({
-    description: 'The task to continue, by its name. Give this or "new_task"',
+    description: 'ID of an existing task to continue. Use this or "new_task", not both.',
   }),
   new_task: Schema.optionalKey(Schema.String).annotate({
     description:
-      'The task to start, named for its purpose and today\'s date, such as taipei-ndvi-20261008. Give this or "task"',
+      'ID of a new task to create, from its purpose and today\'s date, such as taipei-ndvi-20261008 (letters, digits, "_" or "-", at most 30). Use this or "task", not both.',
   }),
-  script: Schema.optionalKey(Schema.String).annotate({ description: 'The Python code to run. Give this or "path"' }),
+  script: Schema.optionalKey(Schema.String).annotate({
+    description: 'Python code to run. Use this or "path", not both.',
+  }),
   path: Schema.optionalKey(Schema.String).annotate({
-    description: 'The .py file to run, absolute or relative to the session\'s directory. Give this or "script"',
+    description:
+      'Path to a .py file to run, absolute or relative to the session\'s directory. Use this or "script", not both.',
   }),
   description: Schema.String.annotate({
-    description: "A short 3-5 word label for this step, in the user's language, displayed to the user",
+    description: "Short label for this run, 3-5 words in the user's language, shown to the user",
   }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
-      "Run the script in the background and return once it begins. You will be notified with its answer when it ends. DO NOT sleep or poll for it.",
+      "Run the script in the background and return once it starts (useful for exports and long computations). You will be notified with its answer when it ends. DO NOT sleep or poll for it.",
   }),
 })
 
@@ -94,9 +85,9 @@ const failureMessage = (failure: GeoEngine.Failure) => {
   if (failure.code === "space-failed")
     return `GeoCode could not read its folder of Earth Engine assets, so the script did not run: ${failure.message}`
   if (failure.code === "task-taken")
-    return `${failure.message}, so the script did not run. Continue it with "task", or give "new_task" another name.`
+    return `${failure.message}, so the script did not run. Continue it with "task", or give "new_task" another ID.`
   if (failure.code === "task-missing")
-    return `${failure.message}, so the script did not run. Start it with "new_task", or check the name.`
+    return `${failure.message}, so the script did not run. Start it with "new_task", or check the ID.`
   if (failure.code === "task-busy")
     return `${failure.message}, perhaps in another conversation, so the script did not run. Run it again after that call ends.`
   return "Google Earth Engine is not available right now. Tell the user; restarting GeoCode may fix it."
@@ -355,7 +346,7 @@ export const make = (
         const started = Exit.isSuccess(read) ? read.value : []
         if (input.new_task !== undefined && started.includes(taskName)) {
           return yield* new ToolFailure({
-            message: `The task ${taskName} was already started in this conversation. Continue it with "task", or give "new_task" another name.`,
+            message: `The task ${taskName} was already started in this conversation. Continue it with "task", or give "new_task" another ID.`,
           })
         }
         const task = { name: taskName, new: input.new_task !== undefined, started: started.includes(taskName) }

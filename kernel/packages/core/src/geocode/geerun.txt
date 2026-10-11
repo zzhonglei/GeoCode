@@ -1,0 +1,43 @@
+Run a Python script that uses Google Earth Engine, within a task.
+
+Give the code as "script", or a .py file as "path". It runs in the session's directory.
+
+IMPORTANT:
+- Create a new task for each piece of work the user asks for, such as the NDVI of a study area or a land-cover map, and run every script of that work in it.
+- Each task has its own space in the user's Earth Engine for the assets it saves, ready for later processing and reuse. A task can also use the assets of other tasks, loading them with gc.load("other-task-id/name").
+- Run scripts that take minutes, such as an export or a year of images, with "background": you are notified with the answer when the script ends, and can work on something else meanwhile.
+- Save with gc.save what is expensive or used again, such as the checked composite: later steps and runs read it instead of computing it again, and a failure later on does not lose it.
+- When the user wants an image, download it with gc.download; export it to Google Drive with gc.to_drive only when the user asks for it.
+- `ee` is already initialized for the user's project: do not call ee.Authenticate() or ee.Initialize().
+- Do not delete tasks or assets unless the user asks.
+
+ALWAYS use the built-in module "geocode" (import geocode as gc) for these steps instead of writing your own:
+
+  gc.region(path: str, layer: str | None = None) -> ee.Geometry
+    Reads the study region, the one polygon feature of a local vector file, in the file's coordinate system.
+
+  gc.images(collection: str | ee.ImageCollection, region: ee.Geometry, start: str, end: str, **masking) -> ee.ImageCollection
+    Finds the dataset's images over the region from start to end, printing for each acquisition the share of the region it covers and how much of that is cloud-free. Clouds are not masked yet; gc.composite masks them.
+
+  gc.composite(images: ee.ImageCollection, region: ee.Geometry, dates: str | list[str] | None = None, method: str | None = None, mask: bool = True, min_coverage: float = 0.999) -> ee.Image
+    Composites the images with clouds masked, the clearest first; stops when holes leave less than 99.9% of the region covered, saying where they are and how to fill them.
+
+  gc.save(data: ee.Image | ee.FeatureCollection, name: str, *, title: str, description: str, crs: str | None = None, crs_transform: list[float] | None = None, shape: tuple[int, int] | None = None, scale: float | None = None, bands: list[str] | None = None) -> ee.Image | ee.FeatureCollection
+    Saves to the task and reads it back, reusing the same content saved before. Write title and description in the user's language.
+
+  gc.load(name: str) -> ee.Image | ee.ImageCollection | ee.FeatureCollection
+    Reads an asset of this task, "other-task-id/name" of another, or "projects/..." by its full path.
+
+  gc.download(image: ee.Image, path: str, *, crs: str | None = None, crs_transform: list[float] | None = None, shape: tuple[int, int] | None = None, scale: float | None = None, resampling: str = "near", dtype: str | None = None, scale_offset: bool = False, bands: list[str] | None = None) -> str
+    Downloads the image to a GeoTIFF in the session's directory and returns the path it saved to.
+
+  gc.to_drive(image: ee.Image, name: str, folder: str = "GeoCode", *, crs: str | None = None, crs_transform: list[float] | None = None, shape: tuple[int, int] | None = None, scale: float | None = None, resampling: str = "near", dtype: str | None = None, scale_offset: bool = False, bands: list[str] | None = None) -> None
+    Exports the image to a folder of the user's Google Drive, waiting until it is done.
+
+Example:
+    import geocode as gc
+
+    region = gc.region("data/taipei.shp")
+    images = gc.images("COPERNICUS/S2_SR_HARMONIZED", region, "2024-06-01", "2024-09-01")
+    composite = gc.composite(images, region)
+    gc.download(composite.select(["B4", "B3", "B2"]).clip(region), "output/taipei_rgb.tif")

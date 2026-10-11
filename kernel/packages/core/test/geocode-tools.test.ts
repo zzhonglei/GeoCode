@@ -910,7 +910,7 @@ describe("GeoCode: geerun", () => {
       expect(stored.get(`geerun/tasks/${sessionID}`)).toEqual(["hualien-flood-20261008"])
       calls.length = 0
       expect((yield* executeTool(registry, start)).error?.message).toBe(
-        'The task hualien-flood-20261008 was already started in this conversation. Continue it with "task", or give "new_task" another name.',
+        'The task hualien-flood-20261008 was already started in this conversation. Continue it with "task", or give "new_task" another ID.',
       )
       expect(calls).toEqual([])
 
@@ -1194,11 +1194,11 @@ describe("GeoCode: geerun", () => {
         ],
         [
           { code: "task-taken", message: `The task ${TASK} already exists, with 1 asset: composite` },
-          `The task ${TASK} already exists, with 1 asset: composite, so the script did not run. Continue it with "task", or give "new_task" another name.`,
+          `The task ${TASK} already exists, with 1 asset: composite, so the script did not run. Continue it with "task", or give "new_task" another ID.`,
         ],
         [
           { code: "task-missing", message: `There is no task ${TASK}: it has saved nothing` },
-          `There is no task ${TASK}: it has saved nothing, so the script did not run. Start it with "new_task", or check the name.`,
+          `There is no task ${TASK}: it has saved nothing, so the script did not run. Start it with "new_task", or check the ID.`,
         ],
         [
           { code: "task-busy", message: `The task ${TASK} is already running in another call` },
