@@ -137,6 +137,8 @@ def save(data, name, *, title, description, **grid):
             "gc.save takes an ee.Image or an ee.FeatureCollection, not %s; reduce a collection to an image first, as by "
             "composite or mosaic." % type(data).__name__
         )
+    # As the signature the agent is shown has it: an argument given as None is not given.
+    grid = {key: value for key, value in grid.items() if value is not None}
     if not image and grid:
         raise ValueError("A table takes no %s; it is saved as it is." % ", ".join(sorted(grid)))
     _outputs.without_region(grid)

@@ -48,6 +48,8 @@ def measured(image, grid):
     import geedim  # noqa: F401 (registers the .gd accessors)
 
     without_region(grid)
+    # As the signature the agent is shown has it: an argument given as None is not given.
+    grid = {key: value for key, value in grid.items() if value is not None}
     if "bands" in grid:
         # Before the grid is measured: the finest of the bands kept, not of the image.
         image = image.select(grid["bands"])
