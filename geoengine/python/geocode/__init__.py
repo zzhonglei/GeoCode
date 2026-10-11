@@ -5,5 +5,6 @@ folder is projects/<project>/assets/GeoCode/<task>.
 """
 
 from geocode._assets import load, save
+from geocode._region import region
 
-__all__ = ["load", "save"]
+__all__ = ["load", "region", "save"]
