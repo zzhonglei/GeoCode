@@ -1578,6 +1578,20 @@ test(
   },
 )
 
+test("a download's share done reaches the tool row, not the answer", { skip: !python3 }, async () => {
+  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  try {
+    assert.equal((await engine.settled()).status, "ready")
+    await holding(engine.directory, [])
+    const script = 'import geocode._run\ngeocode._run.report({"type": "download", "file": "ndvi.tif", "progress": 0.5})'
+    const id = engine.send({ script, cwd: engine.directory, task: TASK })
+    assert.equal(result(await engine.response(id)).output, "")
+    assert.deepEqual(engine.progress(id), [{ begun: true }, { download: { file: "ndvi.tif", progress: 0.5 } }])
+  } finally {
+    await engine.stop()
+  }
+})
+
 // Guards against the settings page losing the project when it chooses a Python, or the Python when it names a project.
 test("the settings write the Python or the project, keeping the other, and refuse what is not one", async () => {
   const engine = await start(async () => ({ project: "majestic" }))

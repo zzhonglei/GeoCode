@@ -7,6 +7,7 @@ folder is projects/<project>/assets/GeoCode/<task>.
 from geocode._assets import load, save
 from geocode._composite import composite
 from geocode._images import images
+from geocode._outputs import download
 from geocode._region import region
 
-__all__ = ["composite", "images", "load", "region", "save"]
+__all__ = ["composite", "download", "images", "load", "region", "save"]

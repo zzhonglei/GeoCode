@@ -129,6 +129,8 @@ const Event = Schema.Union([
     state: Schema.String,
     progress: Schema.Number,
   }),
+  /** A download's share done, from 0 to 1, and the file asked for. */
+  Schema.Struct({ type: Schema.Literal("download"), file: Schema.String, progress: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("end"), ok: Schema.Boolean }),
 ])
 
@@ -857,6 +859,7 @@ function execute(
     if (event.type === "export") {
       return context.progress({ export: { asset: event.asset, state: event.state, progress: event.progress } })
     }
+    if (event.type === "download") return context.progress({ download: { file: event.file, progress: event.progress } })
     if (event.type === "end") {
       ended = { ok: event.ok }
       return
