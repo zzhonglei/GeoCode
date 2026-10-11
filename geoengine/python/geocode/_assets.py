@@ -8,13 +8,14 @@ import time
 
 import ee
 
-from geocode import _run
+from geocode import _outputs, _run
 
 # What a save waits for or cancels: one already being cancelled is ending either way.
 UNDER_WAY = ("PENDING", "RUNNING")
-POLL_SECONDS = 10
 # Of a fingerprint in an export's description: enough to tell two versions of one asset apart.
 SHORT = 8
+# What sets an image's grid and bands as Earth Engine's export to an asset does; given none, its own grid is used.
+GRID = ("bands", "crs", "crs_transform", "scale", "shape")
 
 
 # The functions that read an asset, and the argument naming it, in a serialized computation.
@@ -120,10 +121,12 @@ def absent(path):
     return "Task %s has no asset %s. Its assets: %s." % (task, asset, held)
 
 
-def save(data, name, *, title, description, region=None, scale=None, crs=None, crs_transform=None):
+def save(data, name, *, title, description, **grid):
     """Saves an ee.Image or ee.FeatureCollection to this run's task as the asset "name", waiting for the export, and
-    returns it read from the saved asset. An image needs region, and scale or crs with crs_transform. Content saved
-    before under the name is reused as it is; other content replaces it."""
+    returns it read from the saved asset. An image is saved within its bounds, so clip it first, on its own grid unless
+    crs, crs_transform, shape or scale give another, with only the bands given as bands when it is; each band keeps
+    its type, as in Earth Engine's own export. Content saved before under the name is reused as it is; other content
+    replaces it."""
     checked(name, "asset")
     for key, text in (("title", title), ("description", description)):
         if not isinstance(text, str) or not text.strip():
@@ -134,23 +137,17 @@ def save(data, name, *, title, description, region=None, scale=None, crs=None, c
             "gc.save takes an ee.Image or an ee.FeatureCollection, not %s; reduce a collection to an image first, as by "
             "composite or mosaic." % type(data).__name__
         )
-    if not image and any(value is not None for value in (region, scale, crs, crs_transform)):
-        raise ValueError("region, scale, crs and crs_transform are for images; a table is saved as it is.")
-    grid = {}
-    if image:
-        if isinstance(region, (ee.Feature, ee.FeatureCollection)):
-            region = region.geometry()
-        if not isinstance(region, ee.Geometry):
-            raise ValueError("Saving an image needs region, as an ee.Geometry, ee.Feature or ee.FeatureCollection.")
-        if scale is None and crs_transform is None:
-            raise ValueError("Saving an image needs scale, or crs with crs_transform, to set its grid.")
-        if crs_transform is not None and crs is None:
-            raise ValueError("crs_transform needs crs, the coordinate system it is in, such as \"EPSG:32651\".")
-        if crs is not None and not isinstance(crs, str):
-            raise TypeError('crs must be a string, such as "EPSG:32651".')
-        scale = None if scale is None else number(scale, "scale")
-        crs_transform = None if crs_transform is None else [number(value, "crs_transform") for value in crs_transform]
-        grid = {"region": ee.serializer.toJSON(region), "scale": scale, "crs": crs, "crs_transform": crs_transform}
+    if not image and grid:
+        raise ValueError("A table takes no %s; it is saved as it is." % ", ".join(sorted(grid)))
+    _outputs.without_region(grid)
+    others = sorted(set(grid) - set(GRID))
+    if others:
+        raise TypeError("gc.save takes %s, not %s." % (", ".join(GRID), ", ".join(others)))
+    # The same grid written another way, as 10 and 10.0, is the same content.
+    if "scale" in grid:
+        grid["scale"] = number(grid["scale"], "scale")
+    if "crs_transform" in grid:
+        grid["crs_transform"] = [number(value, "crs_transform") for value in grid["crs_transform"]]
 
     serialized = ee.serializer.toJSON(data)
     text = json.dumps({"data": serialized, "grid": grid, "sources": sources(serialized)}, sort_keys=True)
@@ -180,6 +177,16 @@ def save(data, name, *, title, description, region=None, scale=None, crs=None, c
         print("%s is unchanged since it was saved; reading the saved asset." % name)
         return read(path)
 
+    if image:
+        # Only for an export: measuring asks Earth Engine about the image, which a saved asset reused spares.
+        data, grid = _outputs.measured(data, grid)
+        placed = {"crs": grid.get("crs"), "crsTransform": grid.get("crs_transform"), "scale": grid.get("scale")}
+        if "shape" in grid:
+            placed["dimensions"] = list(grid["shape"])[::-1]
+        if "crs_transform" not in grid or "shape" not in grid:
+            # Without a window of its own; with one, Earth Engine would stretch the region to the shape instead.
+            placed["region"] = data.geometry()
+        placed = {key: value for key, value in placed.items() if value is not None}
     made = make_folders()
     if existing is not None:
         print("Warning: %s was saved before with other content; it is being replaced." % name)
@@ -194,15 +201,7 @@ def save(data, name, *, title, description, region=None, scale=None, crs=None, c
     label = "%s:%s:%s" % (_run.task, name, fingerprint[:SHORT])
     if image:
         export = ee.batch.Export.image.toAsset(
-            image=data.set(properties),
-            description=label,
-            assetId=path,
-            region=region,
-            scale=scale,
-            crs=crs,
-            crsTransform=crs_transform,
-            maxPixels=1e13,
-            overwrite=True,
+            image=data.set(properties), description=label, assetId=path, maxPixels=1e13, overwrite=True, **placed
         )
     else:
         export = ee.batch.Export.table.toAsset(
@@ -238,19 +237,11 @@ def make_folders():
 def finish(operation, path, name, made):
     """Waits for an export, reporting its progress, and reads the saved asset; a failed one leaves no empty folder."""
     started = time.monotonic()
-    while True:
-        status = ee.data.getOperation(operation)
-        metadata = status.get("metadata", {})
-        if status.get("done"):
-            break
-        progress = metadata.get("progress", 0)
-        _run.report({"type": "export", "asset": name, "state": metadata.get("state", ""), "progress": progress})
-        time.sleep(POLL_SECONDS)
-    if metadata.get("state") == "SUCCEEDED":
+    error = _outputs.failure(operation, name)
+    if error is None:
         print("Saved %s after %d s." % (name, time.monotonic() - started))
         return read(path)
     remove_empty(made)
-    error = (status.get("error") or {}).get("message") or metadata.get("state", "an unknown error")
     raise RuntimeError("Exporting %s failed: %s" % (name, error))
 
 

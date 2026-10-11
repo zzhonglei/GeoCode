@@ -1363,13 +1363,16 @@ type Stored = {
 const stored = async (directory: string) =>
   JSON.parse(await fs.readFile(path.join(directory, "stubs", "flags", "assets.json"), "utf-8")) as Stored
 
-/** A script saving to the task, with the stub's graphs standing for computations; GeoCode's wait does not sleep. */
+/**
+ * A script saving to the task, with the stub's graphs standing for computations; GeoCode's wait does not sleep, and an
+ * image is saved as it is, the stub having no grids.
+ */
 const saving = (...lines: string[]) =>
   [
     "import geocode as gc",
-    "import geocode._assets",
-    "geocode._assets.POLL_SECONDS = 0",
-    'area = ee.Geometry("area")',
+    "import geocode._outputs",
+    "geocode._outputs.POLL_SECONDS = 0",
+    "geocode._outputs.measured = lambda image, grid: (image, grid)",
     ...lines,
   ].join("\n")
 
@@ -1384,7 +1387,7 @@ test(
       assert.equal((await engine.settled()).status, "ready")
       await holding(engine.directory, [])
       const save = (graph: string, scale: string) =>
-        `saved = gc.save(ee.Image("${graph}"), "ndvi", title="台北 NDVI", description="夏季中值", region=area, scale=${scale})`
+        `saved = gc.save(ee.Image("${graph}"), "ndvi", title="台北 NDVI", description="夏季中值", scale=${scale})`
       const script = saving(
         save("ndvi", "10"),
         "print(type(saved).__name__, saved.graph)",
@@ -1449,8 +1452,7 @@ test(
     try {
       assert.equal((await engine.settled()).status, "ready")
       await holding(engine.directory, [])
-      const save = (data: string, name: string) =>
-        `gc.save(${data}, "${name}", title="t", description="d", region=area, scale=10)`
+      const save = (data: string, name: string) => `gc.save(${data}, "${name}", title="t", description="d", scale=10)`
       const script = saving(
         `composite = ${save('ee.Image("composite")', "composite")}`,
         save("composite", "copy"),
@@ -1487,7 +1489,7 @@ test("a failed save leaves no folder it made, and reports the failure", { skip: 
   try {
     assert.equal((await engine.settled()).status, "ready")
     await holding(engine.directory, [])
-    const script = saving('gc.save(ee.Image("ndvi"), "ndvi", title="t", description="d", region=area, scale=10)')
+    const script = saving('gc.save(ee.Image("ndvi"), "ndvi", title="t", description="d", scale=10)')
     for (const [flag, error] of [
       ["export-fails", "RuntimeError: Exporting ndvi failed: User memory limit exceeded."],
       ["export-refused", "EEException: Image.load: Image asset 'projects/majestic/assets/none' not found."],
@@ -1515,8 +1517,7 @@ test(
       assert.equal((await engine.settled()).status, "ready")
       await holding(engine.directory, [])
       await raise(engine.directory, "export-slow")
-      const save = (graph: string) =>
-        `gc.save(ee.Image("${graph}"), "ndvi", title="t", description="d", region=area, scale=10)`
+      const save = (graph: string) => `gc.save(ee.Image("${graph}"), "ndvi", title="t", description="d", scale=10)`
       const id = engine.send({ script: saving(save("ndvi")), cwd: engine.directory, task: TASK })
       const done = result(await engine.response(id))
       assert.equal(done.output, "Exporting ndvi (export ID OP0); waiting for it.\nSaved ndvi after 0 s.\n")

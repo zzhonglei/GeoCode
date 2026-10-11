@@ -1,4 +1,5 @@
-"""Downloading an image to a local GeoTIFF, on its own grid unless told otherwise."""
+"""Exporting an image within its bounds, on its own grid unless told otherwise: to a local GeoTIFF, to Google Drive,
+or, by gc.save, to the task."""
 
 import contextlib
 import math
@@ -14,6 +15,7 @@ from geocode._composite import plural
 
 # How often a download reports its share done, which also tells GeoEngine the run is alive.
 REPORT_SECONDS = 5
+POLL_SECONDS = 10
 GEOTIFF = (".tif", ".tiff")
 # What prepareForExport takes to set a grid; given none, the image's own is used.
 GRID = ("crs", "crs_transform", "shape", "scale")
@@ -22,14 +24,34 @@ NO_GRID = [1, 0, 0, 0, 1, 0]
 CODE = re.compile(r"^[A-Z-]+:\d+$")
 
 
+def without_region(grid):
+    if "region" in grid:
+        # Earth Engine's own exports take one, so the agent may give it out of habit.
+        raise ValueError(
+            "gc.save, gc.download and gc.to_drive take no region; clip the image first with image.clip(region)."
+        )
+
+
 def prepared(image, grid):
     """The image ready to export, within its own bounds: on the grid given as geedim's prepareForExport takes it, or
     else on the grid of its finest band."""
+    image, grid = measured(image, grid)
+    if "crs_transform" in grid and "shape" in grid:
+        # A window of its own: with a region too, Earth Engine would stretch the region to the shape instead.
+        return image.gd.prepareForExport(**grid)
+    return image.gd.prepareForExport(region=image.geometry(), **grid)
+
+
+def measured(image, grid):
+    """The image with only the bands kept, and the grid given or else that of its finest band; one without bounds, or
+    without a grid of its own, is refused."""
     import geedim  # noqa: F401 (registers the .gd accessors)
 
+    without_region(grid)
     if "bands" in grid:
         # Before the grid is measured: the finest of the bands kept, not of the image.
-        image = image.select(grid.pop("bands"))
+        image = image.select(grid["bands"])
+        grid = {key: value for key, value in grid.items() if key != "bands"}
     found = ee.Dictionary({"unbounded": image.geometry().isUnbounded(), "grid": image.gd.projection()}).getInfo()
     if found["unbounded"]:
         raise ValueError("The image has no bounds, like any composite; clip it first with image.clip(region).")
@@ -41,10 +63,7 @@ def prepared(image, grid):
                 'crs="EPSG:32651", scale=10, or composite with gc.composite.'
             )
         grid = {"crs": own.get("crs") or own["wkt"], "crs_transform": own["transform"], **grid}
-    if "crs_transform" in grid and "shape" in grid:
-        # A window of its own: with a region too, Earth Engine would stretch the region to the shape instead.
-        return image.gd.prepareForExport(**grid)
-    return image.gd.prepareForExport(region=image.geometry(), **grid)
+    return image, grid
 
 
 def download(image, path, **grid):
@@ -96,6 +115,41 @@ def download(image, path, **grid):
     for note in notes:
         print(note)
     return shown(saved)
+
+
+def to_drive(image, name, folder="GeoCode", **grid):
+    """Exports an ee.Image to the user's Google Drive as the GeoTIFF name in folder, waiting for the export. The image
+    is exported within its bounds, so clip it first, on its own grid unless crs, crs_transform, shape or scale give
+    another; geedim's other prepareForExport arguments, such as dtype or bands, apply too."""
+    stem, extension = os.path.splitext(name)
+    if extension.lower() in GEOTIFF:
+        # Earth Engine adds .tif itself.
+        name = stem
+    ready = prepared(image, grid)
+    # The name Earth Engine's task list shows; it takes only these characters.
+    label = re.sub(r"[^A-Za-z0-9.,:;_-]", "_", name)[:100]
+    task = ready.gd.toGoogleCloud(name, type="drive", folder=folder, wait=False, description=label, maxPixels=1e13)
+    print("Exporting %s to Google Drive (export ID %s); waiting for it." % (name, task.id))
+    started = time.monotonic()
+    error = failure(task.operation_name, name)
+    if error is not None:
+        raise RuntimeError("Exporting %s to Google Drive failed: %s" % (name, error))
+    print("Exported %s to the Google Drive folder %s after %d s." % (name, folder, time.monotonic() - started))
+
+
+def failure(operation, name):
+    """Waits for an export, reporting its progress as name's; why it failed, or None when it succeeded."""
+    while True:
+        status = ee.data.getOperation(operation)
+        metadata = status.get("metadata", {})
+        if status.get("done"):
+            break
+        progress = metadata.get("progress", 0)
+        _run.report({"type": "export", "asset": name, "state": metadata.get("state", ""), "progress": progress})
+        time.sleep(POLL_SECONDS)
+    if metadata.get("state") == "SUCCEEDED":
+        return None
+    return (status.get("error") or {}).get("message") or metadata.get("state", "an unknown error")
 
 
 def destination(path):
