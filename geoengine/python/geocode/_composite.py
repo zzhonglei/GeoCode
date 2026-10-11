@@ -1,0 +1,105 @@
+"""Compositing a dataset's images over the study region, and finding where the composite leaves it without data."""
+
+import json
+
+import ee
+
+from geocode._images import MASKING
+
+
+def composite(images, region, dates=None, method=None, mask=True, min_coverage=0.999):
+    """Composites the images as geedim does, masking their clouds as gc.images measured them unless mask is False and
+    ordering them by the cloud-free share of their cover of the region; "dates" keeps only those of the given days
+    ("2024-06-07") or acquisitions ("2024-06-07 Sentinel-2B R108"). Prints the share of the region the composite's
+    first band covers and, of the rest, where no image reaches and where every image is masked, and stops when it
+    covers less than min_coverage. Returns the composite, not clipped, on the grid of the image at the region's
+    centre."""
+    import geedim  # noqa: F401 (registers the .gd accessors)
+
+    if isinstance(dates, str):
+        dates = [dates]
+    chosen = images.filter(ee.Filter.Or(*[picked(entry) for entry in dates])) if dates else images
+    counts = ee.Dictionary(
+        {
+            "masking": chosen.get(MASKING),
+            "images": chosen.size(),
+            "acquisitions": chosen.aggregate_array("acquisition").distinct().size(),
+        }
+    ).getInfo()
+    if not counts["images"]:
+        raise ValueError("None of the images are of %s." % ", ".join(dates))
+
+    centre = chosen.filterBounds(region.centroid(1))
+    grid = ee.Image(ee.Algorithms.If(centre.size().gt(0), centre.first(), chosen.first())).gd.projection()
+    made = chosen.gd.composite(method=method, mask=mask, region=region, **json.loads(counts["masking"] or "{}"))
+    made = made.setDefaultProjection(grid)
+
+    # unmask() keeps an image's footprint, so only the maximum, which has none, is unmasked outside every image.
+    reached = chosen.map(lambda image: image.select(0).mask()).max().unmask(0).gt(0)
+    covered = made.select(0).mask().unmask(0).gt(0)
+    holes = {"none": reached.Not(), "cloud": reached.And(covered.Not())}
+    # At Earth Engine's default tile size, a summer of Sentinel-2 composited by q-mosaic runs out of memory.
+    measure = dict(geometry=region, crs=grid, scale=grid.nominalScale(), bestEffort=True, maxPixels=1e6, tileScale=4)
+    found = ee.Dictionary(
+        {
+            "sums": ee.Image.cat(covered, holes["none"], holes["cloud"], ee.Image(1))
+            .rename(["covered", "none", "cloud", "all"])
+            .reduceRegion(ee.Reducer.sum(), **measure),
+            "grid": grid,
+            "scale": grid.nominalScale(),
+            **{
+                name: ee.Image.pixelLonLat().updateMask(hole).reduceRegion(ee.Reducer.minMax(), **measure)
+                for name, hole in holes.items()
+            },
+        }
+    ).getInfo()
+
+    sums = found["sums"]
+    share = {name: sums[name] / sums["all"] for name in ("covered", "none", "cloud")}
+    taken = "Composite of " + (
+        plural(counts["acquisitions"], "acquisition") if counts["acquisitions"] else plural(counts["images"], "image")
+    )
+    left = [name for name in ("none", "cloud") if round(100 * share[name], 2) > 0]
+    said = {"none": "No image reaches", "cloud": "Every image is masked as cloud over"}
+    lines = ["%s %.2f%% of the region%s." % (said[name], 100 * share[name], extent(found[name])) for name in left]
+    if share["covered"] >= min_coverage:
+        crs = found["grid"].get("crs", "a projection without an EPSG code")
+        print("%s: covers %.2f%% of the region, on %s at %g m." % (taken, 100 * share["covered"], crs, found["scale"]))
+        for line in lines:
+            print(line)
+        return made
+    fixes = {
+        "none": "where no image reaches, take more acquisitions or another dataset",
+        "cloud": "where every image is masked, take more acquisitions or loosen the masking in gc.images",
+    }
+    head = "%s covers %.2f%% of the region, less than min_coverage=%g." % (taken, 100 * share["covered"], min_coverage)
+    tail = "To fill it, %s; or lower min_coverage=." % "; ".join(fixes[name] for name in left)
+    raise ValueError("\n".join([head] + lines + [tail]))
+
+
+def picked(entry):
+    """The images of a day, or of one acquisition as gc.images lists it."""
+    if len(entry) == 10:
+        return ee.Filter.date(entry, ee.Date(entry).advance(1, "day"))
+    # A row copied from the table is spaced out to its columns.
+    return ee.Filter.eq("acquisition", " ".join(entry.split()))
+
+
+def plural(count, noun):
+    return "%d %s%s" % (count, noun, "" if count == 1 else "s")
+
+
+def extent(bounds):
+    """", within" the lon/lat range of a hole, or nothing where only partial pixels at the region's edge make it up."""
+    if bounds["longitude_min"] is None:
+        return ""
+
+    def at(value, signs):
+        return "%.2f°%s" % (abs(value), signs[value < 0])
+
+    return ", within %s to %s, %s to %s" % (
+        at(bounds["longitude_min"], "EW"),
+        at(bounds["longitude_max"], "EW"),
+        at(bounds["latitude_min"], "NS"),
+        at(bounds["latitude_max"], "NS"),
+    )
