@@ -9,6 +9,7 @@ import type { ToolPart } from '@/lib/opencode/model';
 import { cn } from '@/lib/utils';
 
 import { EarthIcon } from './EarthIcon';
+import { GeeRunRow } from './GeeRunRow';
 import { geoDataPath, geoFileCount, geoRunTitle, geoToolDescription } from './geoTools';
 import { useGeoToolRunStore } from './geoToolRuns';
 import { QgisLogo } from './QgisLogo';
@@ -185,4 +186,10 @@ export const GeoToolRow: React.FC<{ part: ToolPart }> = ({ part }) => {
 
 /** A geo tool call's own row. */
 export const GeoRow: React.FC<{ part: ToolPart }> = ({ part }) =>
-  part.tool === 'qgisrun' ? <QgisRunRow part={part} /> : <GeoToolRow part={part} />;
+  part.tool === 'qgisrun' ? (
+    <QgisRunRow part={part} />
+  ) : part.tool === 'geerun' ? (
+    <GeeRunRow part={part} />
+  ) : (
+    <GeoToolRow part={part} />
+  );

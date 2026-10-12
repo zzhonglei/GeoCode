@@ -8,6 +8,7 @@ import {
   type SessionStatus,
   type ToolPart,
 } from "@/lib/opencode/model"
+import { takesBackgroundProgress } from "@/geocode/geeRunBackground" // GeoCode: see applyToolTransition
 import { Binary } from "./binary"
 import type { State } from "./types"
 import { dropSessionCaches } from "./session-cache"
@@ -250,6 +251,7 @@ function applyToolTransition(part: ToolPart, transition: ToolTransition): ToolPa
         state: { status: "running", input: transition.input, time: { start: transition.start } },
       }
     case "progress":
+      if (takesBackgroundProgress(part, transition.metadata)) return { ...part, state: { ...part.state, metadata: transition.metadata } } // GeoCode: a geerun run in the background goes on past its call's answer
       if (state.status !== "running") return part
       return { ...part, state: { ...state, metadata: transition.metadata } }
     case "success": {

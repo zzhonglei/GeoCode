@@ -9,15 +9,15 @@ import type { PermissionRequest } from '@/types/permission';
 /** The permission actions of the geo tools that have a rule of their own; readgeodata asks as read. */
 export const GEO_TOOL_ACTIONS = ['qgisdoc', 'qgisrun', 'geerun'] as const;
 
-/** The geo tools, which the conversation shows with their own icons and titles; geerun, so far, with its icon only. */
-const GEO_TOOLS = ['qgisdoc', 'readgeodata', 'qgisrun'] as const;
+/** The geo tools, which the conversation shows with their own icons and titles. */
+const GEO_TOOLS = ['qgisdoc', 'readgeodata', 'qgisrun', 'geerun'] as const;
 
 type GeoTool = (typeof GEO_TOOLS)[number];
 
 type GeoAction = (typeof GEO_TOOL_ACTIONS)[number];
 
 /** The tools whose calls show as rows of their own merged ones. */
-type MergedTool = Exclude<GeoTool, 'qgisrun'>;
+type MergedTool = Exclude<GeoTool, 'qgisrun' | 'geerun'>;
 
 type Texts = {
   /** Each tool's title, which is also its settings row's label. */
@@ -133,7 +133,7 @@ export const geoToolMetadata = (toolName: string): ToolMetadata | undefined =>
   isGeoTool(toolName)
     ? {
         displayName: text().titles[toolName],
-        category: toolName === 'readgeodata' ? 'file' : toolName === 'qgisrun' ? 'system' : 'search',
+        category: toolName === 'readgeodata' ? 'file' : toolName === 'qgisdoc' ? 'search' : 'system',
         outputLanguage: 'text',
         inputFields: [],
       }
@@ -142,7 +142,7 @@ export const geoToolMetadata = (toolName: string): ToolMetadata | undefined =>
 const filled = z.string().trim().min(1).optional().catch(undefined);
 const qgisdocInput = z.object({ action: z.string().optional().catch(undefined), algorithm: filled, group: filled, query: filled });
 const readgeodataInput = z.object({ path: filled, layer: filled });
-const qgisrunInput = z.object({ description: filled });
+const runInput = z.object({ description: filled });
 
 /** The path a readgeodata call reads, as GeoAgent gave it. */
 export const geoDataPath = (input: ToolInput | undefined) => readgeodataInput.safeParse(input).data?.path;
@@ -161,8 +161,8 @@ export const geoToolDescription = (toolName: string, input: ToolInput | undefine
     const value = dataset(input);
     return value ? { kind: 'text', value } : null;
   }
-  if (toolName === 'qgisrun') {
-    const value = qgisrunInput.safeParse(input).data?.description;
+  if (toolName === 'qgisrun' || toolName === 'geerun') {
+    const value = runInput.safeParse(input).data?.description;
     return value ? { kind: 'text', value } : null;
   }
   if (toolName !== 'qgisdoc') return undefined;
@@ -204,6 +204,9 @@ export const qgisAlgorithmText = (algorithm: QgisAlgorithm, locale: Locale): z.i
 
 /** qgisrun's title, for a row whose call GeoAgent did not label. */
 export const qgisRunTitle = (locale: Locale) => textIn(locale).titles.qgisrun;
+
+/** geerun's title, for a row whose call GeoAgent did not label. */
+export const geeRunTitle = (locale: Locale) => textIn(locale).titles.geerun;
 
 /** What qgisrun's row says while the algorithm runs. */
 export const qgisRunning = (algorithm: string, locale: Locale) => textIn(locale).runs(algorithm);

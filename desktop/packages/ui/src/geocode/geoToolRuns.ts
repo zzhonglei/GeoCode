@@ -27,8 +27,9 @@ export const isMergedGeoTool = (toolName: string) => MERGED.has(toolName);
 
 export const isMergedGeoPart = (part: Part): part is ToolPart => part.type === 'tool' && isMergedGeoTool(part.tool);
 
-/** Whether a tool's calls show as a geo tool's own rows: runs of merged calls, or a QGIS run each. */
-export const hasGeoRow = (toolName: string) => isMergedGeoTool(toolName) || toolName === 'qgisrun';
+/** Whether a tool's calls show as a geo tool's own rows: runs of merged calls, or a QGIS or Earth Engine run each. */
+export const hasGeoRow = (toolName: string) =>
+  isMergedGeoTool(toolName) || toolName === 'qgisrun' || toolName === 'geerun';
 
 export const isGeoRowPart = (part: Part): part is ToolPart => part.type === 'tool' && hasGeoRow(part.tool);
 
