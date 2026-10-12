@@ -905,12 +905,24 @@ test(
   async () => {
     const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
     try {
-      assert.equal((await engine.settled()).status, "ready")
+      const ready = await engine.settled()
+      assert.ok(ready.status === "ready")
       const script =
         'import os\nprint("中文", os.getcwd())\nprint(ee.Number(1).getInfo())\nimport sys\nprint("warned", file=sys.stderr)'
       const id = engine.send({ script, cwd: engine.directory })
       const done = result(await engine.response(id))
       assert.equal(done.outcome, "finished")
+      // Guards against GeoAgent not being told the Python its script ran in, which it uses and looks after by its path.
+      const versions = ready.versions
+      assert.deepEqual((done as { python?: unknown }).python, {
+        path: ready.python,
+        version: versions.python,
+        packages: {
+          "earthengine-api": versions["earthengine-api"],
+          geedim: versions.geedim,
+          geopandas: versions.geopandas,
+        },
+      })
       const cwd = await fs.realpath(engine.directory)
       assert.equal(done.output, `中文 ${cwd}\n1\nwarned\n`)
       assert.doesNotMatch(done.output, /Earth Engine|__GEOCODE_GEE__/)

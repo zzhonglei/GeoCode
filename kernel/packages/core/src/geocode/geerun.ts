@@ -69,6 +69,11 @@ const Ran = Schema.Struct({
   output: Schema.String,
   truncated: Schema.Boolean,
   durationMs: Schema.Number,
+  python: Schema.Struct({
+    path: Schema.String,
+    version: Schema.String,
+    packages: Schema.Record(Schema.String, Schema.String),
+  }),
   /** Missing when the run ended before the task was read; read on its own, so a bad one loses only the header. */
   space: Schema.optionalKey(Schema.Unknown),
   exit: Schema.optionalKey(Schema.String),
@@ -126,8 +131,17 @@ const assetLine = (asset: typeof Asset.Type) => {
   return `- ${asset.name}${facts.length ? ` (${facts.join("; ")})` : ""}${said ? `: ${said}` : ""}`
 }
 
-/** What the answer starts with: the task GeoAgent works in, what it holds, and the latest other tasks. */
-const header = (task: { readonly name: string; readonly new: boolean }, space: typeof Space.Type) => {
+/** The Python the script ran in, which GeoAgent can use for its own work and look after, by its path. */
+const pythonLine = (python: (typeof Ran.Type)["python"]) => {
+  const packages = Object.entries(python.packages).map(([name, version]) => `${name} ${version}`)
+  return `Python ${python.version} at ${python.path}, with ${packages.join(", ")}.`
+}
+
+/**
+ * What the answer starts with: the Python, then the task GeoAgent works in, what it holds, and the latest other tasks,
+ * all within the header's share of the kernel's bounds.
+ */
+const header = (python: string, task: { readonly name: string; readonly new: boolean }, space: typeof Space.Type) => {
   const held = space.assets.length + space.more
   const opening = task.new
     ? `Task ${task.name} (new): nothing saved yet.`
@@ -141,9 +155,11 @@ const header = (task: { readonly name: string; readonly new: boolean }, space: t
         ),
       ]
     : []
-  const assets = fitting(space.assets.map(assetLine), [opening, ...others])
+  const assets = fitting(space.assets.map(assetLine), [python, opening, ...others])
   const hidden = space.more + space.assets.length - assets.length
-  return [opening, ...assets, ...(hidden ? [`- and ${plural(hidden, "more asset")}`] : []), ...others].join("\n")
+  return [python, opening, ...assets, ...(hidden ? [`- and ${plural(hidden, "more asset")}`] : []), ...others].join(
+    "\n",
+  )
 }
 
 /** The most of the kernel's bounds on an answer the header takes, leaving the rest to what the script printed. */
@@ -326,7 +342,8 @@ export const make = (
     }
     const space = ran.space === undefined ? undefined : decodeSpace(ran.space)
     if (space && Exit.isFailure(space)) yield* Effect.logWarning("geerun header unreadable", { cause: space.cause })
-    const opening = space && Exit.isSuccess(space) ? header(task, space.value) : ""
+    const python = pythonLine(ran.python)
+    const opening = space && Exit.isSuccess(space) ? header(python, task, space.value) : python
     const output = lastPart(ran.output.trimEnd(), {
       lines: opening.split("\n").length,
       bytes: Buffer.byteLength(opening, "utf-8"),

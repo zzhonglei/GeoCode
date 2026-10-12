@@ -970,6 +970,17 @@ function execute(
             output: begun.stdout || begun.stderr ? output : noise,
             truncated,
             durationMs: result.durationMs,
+            // The Python the script ran in, so GeoAgent can use and look after the same one.
+            python: {
+              path: current.python,
+              version: current.versions.python ?? "",
+              packages: Object.fromEntries(
+                PACKAGES.filter((item) => item.name !== "requests").map((item) => [
+                  item.name,
+                  current.versions[item.name] ?? "",
+                ]),
+              ),
+            },
             ...(space === undefined ? {} : { space }),
             ...(outcome === "crashed" ? { exit } : {}),
             ...(outcome === "idle" ? { idleSeconds: IDLE_SECONDS } : {}),

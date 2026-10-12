@@ -842,12 +842,22 @@ const gee = (input: Record<string, unknown>, bare = false) => ({
 })
 
 /** A finished run of GeoEngine's, with what the script printed. */
+/** The Python a run went in, as GeoEngine tells it; the answer starts with it. */
+const PYTHON = {
+  path: "/opt/anaconda3/envs/map/bin/python",
+  version: "3.11.9",
+  packages: { "earthengine-api": "1.7.19", geedim: "2.0.0", geopandas: "1.0.1" },
+}
+const PYTHON_LINE =
+  "Python 3.11.9 at /opt/anaconda3/envs/map/bin/python, with earthengine-api 1.7.19, geedim 2.0.0, geopandas 1.0.1."
+
 const ran = (fields: Record<string, unknown> = {}) =>
   result({
     outcome: "finished",
     output: "images: 73\n",
     truncated: false,
     durationMs: 1200,
+    python: PYTHON,
     ...fields,
   })
 
@@ -919,7 +929,7 @@ describe("GeoCode: geerun", () => {
       const done = yield* executeTool(registry, gee({ script: "print(1)" }))
       expect(done).toMatchObject({
         status: "completed",
-        content: [{ type: "text", text: "images: 73\n\nFinished in 1 s." }],
+        content: [{ type: "text", text: `${PYTHON_LINE}\n\nimages: 73\n\nFinished in 1 s.` }],
         metadata: { description: "统计影像", task: TASK, outcome: "finished" },
       })
       expect(assertions).toMatchObject([
@@ -1109,7 +1119,10 @@ describe("GeoCode: geerun", () => {
       for (const [fields, text] of cases) {
         answer = () => ran(fields)
         const done = yield* executeTool(registry, gee({ script: "x" }))
-        expect(done).toMatchObject({ status: "completed", content: [{ type: "text", text }] })
+        expect(done).toMatchObject({
+          status: "completed",
+          content: [{ type: "text", text: `${PYTHON_LINE}\n\n${text}` }],
+        })
       }
     }),
   )
@@ -1168,7 +1181,7 @@ describe("GeoCode: geerun", () => {
         const done = yield* executeTool(registry, gee({ description: "x", script: "x", ...input }, true))
         expect(done).toMatchObject({
           status: "completed",
-          content: [{ type: "text", text: `${header}\n\nimages: 73\n\nFinished in 1 s.` }],
+          content: [{ type: "text", text: `${PYTHON_LINE}\n${header}\n\nimages: 73\n\nFinished in 1 s.` }],
         })
       }
     }),
@@ -1182,7 +1195,7 @@ describe("GeoCode: geerun", () => {
       const done = yield* executeTool(yield* Tool.Service, gee({ script: "x" }))
       expect(done).toMatchObject({
         status: "completed",
-        content: [{ type: "text", text: "images: 73\n\nFinished in 1 s." }],
+        content: [{ type: "text", text: `${PYTHON_LINE}\n\nimages: 73\n\nFinished in 1 s.` }],
       })
     }),
   )
@@ -1214,7 +1227,7 @@ describe("GeoCode: geerun", () => {
         const done = yield* executeTool(registry, gee({ script: "x" }))
         const first = done.content?.[0]
         const text = first?.type === "text" ? first.text : ""
-        const opening = read ? text.slice(text.indexOf("\n\n(The output") + 2) : text
+        const opening = text.slice(text.indexOf("\n\n(The output") + 2)
         expect(opening.startsWith("(The output was too long; only its end is kept.)\n\n")).toBe(true)
         // The header gives way first, to its share, by its last assets: the other tasks stay, and the descriptions
         // stay on their own lines.
@@ -1227,7 +1240,7 @@ describe("GeoCode: geerun", () => {
           )
           expect(listing.endsWith("UTC)")).toBe(true)
           expect(Buffer.byteLength(listing, "utf-8")).toBeLessThanOrEqual(ToolOutput.MAX_BYTES / 2)
-          expect(listing.split("\n").length).toBe(shown + 4)
+          expect(listing.split("\n").length).toBe(shown + 5)
         }
         expect(text.endsWith("ZeroDivisionError\n\nThe script failed after 1 s.")).toBe(true)
         expect(text.split("\n").length).toBeLessThanOrEqual(ToolOutput.MAX_LINES)
@@ -1338,7 +1351,7 @@ describe("GeoCode: geerun", () => {
         {
           sessionID,
           description: "统计影像",
-          text: `<geerun task="${TASK}" state="completed" description="统计影像">\nimages: 73\n\nFinished in 1 s.\n</geerun>`,
+          text: `<geerun task="${TASK}" state="completed" description="统计影像">\n${PYTHON_LINE}\n\nimages: 73\n\nFinished in 1 s.\n</geerun>`,
           metadata: {
             source: "geerun",
             state: "completed",
