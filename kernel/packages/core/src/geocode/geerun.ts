@@ -4,11 +4,13 @@ import { ToolFailure } from "@opencode/ai"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { Tool } from "@opencode/schema/tool"
 import { Deferred, Effect, Exit, Schema, Scope } from "effect"
+import type { Bus } from "../bus.js"
 import type { FileAccess } from "../file-access.js"
 import type { Job } from "../job.js"
 import type { Location } from "../location.js"
 import type { Permission } from "../permission.js"
 import type { Session } from "../session.js"
+import { SessionEvent } from "../session/event.js"
 import { ToolOutput } from "../tool-output.js"
 import { GeoEngine } from "./geoengine.js"
 import DESCRIPTION from "./geerun.txt"
@@ -203,8 +205,35 @@ const lastPart = (text: string, used: { readonly lines: number; readonly bytes: 
   return { text: kept.toReversed().join("\n"), cut: kept.length < lines.length }
 }
 
-/** GeoEngine's progress once the script itself begins, past the lock and the task's checks. */
-const isBegun = Schema.is(Schema.Struct({ begun: Schema.Literal(true) }))
+/** What one of GeoCode's functions is doing; no text once none is doing anything. */
+const Status = Schema.Struct({
+  seq: Schema.Number,
+  text: Schema.NullOr(Schema.String),
+  progress: Schema.optionalKey(Schema.Number),
+})
+type Status = typeof Status.Type
+
+/**
+ * What GeoEngine tells of a run as it goes: that the script itself began, past the lock and the task's checks; how
+ * long the oldest request has waited for Earth Engine; a function's status; what the script printed.
+ */
+const decodeProgress = Schema.decodeUnknownExit(
+  Schema.Union([
+    Schema.Struct({ begun: Schema.Literal(true) }),
+    Schema.Struct({ waiting: Schema.Number }),
+    Schema.Struct({ status: Status }),
+    Schema.Struct({ output: Schema.String }),
+  ]),
+)
+
+/** The latest statuses the tool row is sent: enough to fill in those it missed between two updates. */
+const SHOWN_STATUSES = 20
+/** The end of what the script printed that the tool row is sent. */
+const LOG_CHARS = 32 * 1024
+/** How often, at most, the tool row is told: a script may print a line at a time. */
+const SHOW_MS = 250
+/** GeoEngine tells of a wait every 5 s while it lasts: past this without word, the wait is over. */
+const WAIT_MS = 6000
 
 type Recovery = Extract<Job.Recovery, { kind: "geerun" }>
 
@@ -224,11 +253,17 @@ const said = (
       ? (result.error ?? "The run failed.")
       : "The run was cancelled."
 
-const notification = (recovery: Recovery, state: Exclude<Job.Status, "running">, text: string) => ({
+const notification = (
+  recovery: Recovery,
+  state: Exclude<Job.Status, "running">,
+  text: string,
+  final: Record<string, unknown> = {},
+) => ({
   sessionID: recovery.sessionID,
   description: recovery.description,
   text: `<geerun task="${recovery.task}" state="${state}" description="${recovery.description}">\n${text}\n</geerun>`,
-  metadata: { source: name, task: recovery.task, state },
+  // For the tool row of the call, which a run in the background left running: what it shows once the run ends.
+  metadata: { ...final, source: name, task: recovery.task, state, callID: recovery.callID },
 })
 
 /** After a restart, as the kernel does for a shell: tells of a background run, which a restart stopped if unfinished. */
@@ -264,6 +299,7 @@ export const make = (
   storage: Context["storage"],
   jobs: Job.Interface,
   sessions: Session.Interface,
+  bus: Pick<Bus.Interface, "publish">,
   scope: Scope.Scope,
 ) => {
   /** The answer a run gave, from the script's output and the task GeoEngine read before it. */
@@ -272,6 +308,7 @@ export const make = (
     task: { readonly name: string; readonly new: boolean },
     key: string,
     label: string,
+    since: number,
   ) {
     const decoded = decodeRan(result)
     if (Exit.isFailure(decoded)) {
@@ -300,20 +337,34 @@ export const make = (
         ...(output.text ? [output.text] : truncated ? [] : ["(The script printed nothing.)"]),
         ending(ran),
       ].join("\n\n"),
-      // Set, so the kernel does not cut the answer again from its start.
-      metadata: { description: label, task: task.name, outcome: ran.outcome, truncated },
+      // Set, so the kernel does not cut the answer again from its start. The tool row shows, once the run ends, how
+      // long it took and what the script printed, as it did while the run went on.
+      metadata: {
+        description: label,
+        task: task.name,
+        outcome: ran.outcome,
+        truncated,
+        started: since,
+        log: ran.output.slice(-LOG_CHARS),
+      },
     }
   })
 
-  /** Tells the conversation of a background run once it ends, as the shell tool does of a background command. */
-  const notify = (id: string, recovery: Recovery) =>
+  /**
+   * Tells the conversation of a background run once it ends, as the shell tool does of a background command, and with
+   * it the run's tool row, which the call's answer left running.
+   */
+  const notify = (id: string, recovery: Recovery, final: Effect.Effect<Record<string, unknown>>) =>
     Effect.gen(function* () {
       const info = (yield* jobs.wait({ id })).info
       // Nothing cancels a run in the background but the app quitting: its marker stays, for the restart to tell of it.
       if (!info || info.status === "running" || info.status === "cancelled") return
       yield* sessions.synthetic({
         ...(info.notificationID ? { id: info.notificationID } : {}),
-        ...notification(recovery, info.status, said({ ...info, status: info.status })),
+        ...notification(recovery, info.status, said({ ...info, status: info.status }), {
+          ...(yield* final),
+          ended: info.completed_at,
+        }),
       })
       if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
     }).pipe(Effect.forkIn(scope, { startImmediately: true }))
@@ -382,9 +433,78 @@ export const make = (
         // As the shell tool runs a command: a job of the kernel's, waited for unless it is or is moved to the background.
         const begun = yield* Deferred.make<void>()
         const settled = yield* Deferred.make<Effect.Success<ReturnType<typeof answer>>, ToolFailure>()
-        const run = GeoEngine.call("gee.run", params, (data) =>
-          isBegun(data) ? Deferred.succeed(begun, undefined).pipe(Effect.asVoid) : Effect.void,
-        ).pipe(
+
+        // The tool row counts the run from here, after the user's answer, as it does a QGIS run.
+        const since = Date.now()
+        const statuses: Status[] = []
+        let log = ""
+        // While a request waits for Earth Engine: the row says so when no function tells what it does.
+        let waiting: { readonly since: number; readonly heard: number } | undefined
+        let shown = 0
+        let changed = false
+        // Once the call has returned, as a run in the background does, the kernel takes no more progress for it: the
+        // row, which the answer left running, is told on the bus itself, as the kernel tells it of a running call.
+        let returned = false
+        const state = () => ({
+          description: input.description,
+          task: task.name,
+          started: since,
+          statuses: [...statuses],
+          log,
+          ...(waiting === undefined ? {} : { waitingSince: waiting.since }),
+          ...(returned ? { status: "running" } : {}),
+        })
+        const show = Effect.suspend(() => {
+          changed = false
+          shown = performance.now()
+          const told = returned
+            ? bus.publish(SessionEvent.Tool.Progress, {
+                sessionID: context.sessionID,
+                assistantMessageID: context.messageID,
+                id: context.id,
+                metadata: state(),
+              })
+            : context.progress(state())
+          // What the row shows is not worth the run: a row that cannot be told only goes without.
+          return told.pipe(
+            Effect.asVoid,
+            Effect.catchCause((cause) => Effect.logWarning("geerun progress not shown", { cause })),
+          )
+        })
+        const heed = (data: unknown) =>
+          Effect.suspend(() => {
+            const decoded = decodeProgress(data)
+            if (Exit.isFailure(decoded)) return Effect.void
+            const told = decoded.value
+            if ("begun" in told) return Deferred.succeed(begun, undefined).pipe(Effect.asVoid)
+            if ("waiting" in told) waiting = { since: Date.now() - told.waiting * 1000, heard: Date.now() }
+            else if ("status" in told) {
+              statuses.push(told.status)
+              if (statuses.length > SHOWN_STATUSES) statuses.shift()
+            } else log = (log + told.output).slice(-LOG_CHARS)
+            if (performance.now() - shown >= SHOW_MS) return show
+            changed = true
+            return Effect.void
+          })
+        // What came within the last moments, once they pass; and the end of a wait, which GeoEngine does not tell.
+        const flush = Effect.forever(
+          Effect.sleep(SHOW_MS).pipe(
+            Effect.andThen(
+              Effect.suspend(() => {
+                if (waiting && Date.now() - waiting.heard > WAIT_MS) {
+                  waiting = undefined
+                  changed = true
+                }
+                return changed && performance.now() - shown >= SHOW_MS ? show : Effect.void
+              }),
+            ),
+          ),
+        )
+
+        yield* show
+        const run = Effect.raceFirst(GeoEngine.call("gee.run", params, heed), flush).pipe(
+          // What came within the last moment before the end, which the flush no longer sends.
+          Effect.ensuring(Effect.suspend(() => (changed ? show : Effect.void))),
           // GeoEngine ends a run itself only as the app quits, often before the kernel: stopped, not failed, so that a
           // run in the background is told of after the restart.
           Effect.catchIf(
@@ -392,7 +512,7 @@ export const make = (
             () => Effect.interrupt,
           ),
           Effect.catch(failed),
-          Effect.flatMap((result) => answer(result, task, key, input.description)),
+          Effect.flatMap((result) => answer(result, task, key, input.description, since)),
           Effect.onExit((exit) => Deferred.done(settled, exit)),
           Effect.map((answered) => answered.content),
         )
@@ -401,6 +521,7 @@ export const make = (
           sessionID: context.sessionID,
           task: task.name,
           description: input.description,
+          callID: context.id,
         }
         // The kernel's own ID: one of the task's name would join a run of the task under way, past GeoEngine's lock.
         const job = yield* jobs.start({
@@ -418,12 +539,18 @@ export const make = (
             : block
         ).pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
         if (waited?.type === "begun" || waited?.type === "backgrounded") {
+          returned = true
+          // Settled before the job ends. A run that failed outright gave no answer: the row keeps what it last showed.
+          const final = Deferred.await(settled).pipe(
+            Effect.exit,
+            Effect.map(
+              (exit): Record<string, unknown> =>
+                Exit.isSuccess(exit) ? exit.value.metadata : { description: input.description, started: since, log },
+            ),
+          )
           // Whole, or a stop just as the script begins would leave the run with no one to tell of it.
-          yield* Effect.uninterruptible(Effect.andThen(jobs.background(job.id), notify(job.id, recovery)))
-          return {
-            content: backgroundAnswer(task.name),
-            metadata: { description: input.description, task: task.name, status: "running" },
-          }
+          yield* Effect.uninterruptible(Effect.andThen(jobs.background(job.id), notify(job.id, recovery, final)))
+          return { content: backgroundAnswer(task.name), metadata: state() }
         }
         if (waited?.info.status === "cancelled") return yield* new ToolFailure({ message: "The run was cancelled." })
         return yield* Deferred.await(settled)

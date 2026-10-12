@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect } from "bun:test"
 import path from "path"
 import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
+import { Bus } from "@opencode/core/bus"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { FileAccess } from "@opencode/core/file-access"
 import { GeeRunTool } from "@opencode/core/geocode/geerun"
@@ -95,7 +96,16 @@ const geoToolsNode = makeLocationNode({
       },
     }),
   ),
-  deps: [Tool.node, Permission.node, FileAccess.node, Location.node, PermissionSaved.node, Job.node, Session.node],
+  deps: [
+    Tool.node,
+    Permission.node,
+    FileAccess.node,
+    Location.node,
+    PermissionSaved.node,
+    Job.node,
+    Session.node,
+    Bus.node,
+  ],
 })
 /** What the kernel's key-value store holds: a background run's notification, until it is in the conversation. */
 const kv = new Map<string, KV.Value>()
@@ -123,6 +133,12 @@ const sessions = Layer.mock(Session.Service, {
       Effect.as({} as never),
     ),
 })
+/** What the kernel told the interface on its bus: a background run's progress, once its call has returned. */
+const published: Array<{ readonly type: string; readonly data: unknown }> = []
+const bus = Layer.mock(Bus.Service, {
+  publish: (definition, data) =>
+    Effect.sync(() => void published.push({ type: definition.type, data })).pipe(Effect.as({} as never)),
+})
 const permissionSaved = Layer.mock(PermissionSaved.Service, {
   list: () => Effect.sync(() => saved.map((item) => ({ ...item }) as unknown as PermissionSaved.Info)),
 })
@@ -148,6 +164,7 @@ const it = testEffect(
     PermissionSaved.node.replace(permissionSaved),
     KV.node.replace(kvStore),
     Session.node.replace(sessions),
+    Bus.node.replace(bus),
     Location.node.replace(Layer.succeed(Location.Service, Location.Service.of(location({ directory: PROJECT })))),
   ]),
 )
@@ -162,6 +179,7 @@ const reset = () => {
   stored.clear()
   kv.clear()
   notices.length = 0
+  published.length = 0
   noticed = undefined
 }
 
@@ -843,6 +861,39 @@ const space = (fields: Record<string, unknown> = {}) => ({
 })
 
 describe("GeoCode: geerun", () => {
+  // Guards against the tool row missing what GeoEngine tells of a run as it goes, or losing it once the run ends.
+  it.effect("tells the tool row the run's statuses, what it printed, and a wait for Earth Engine", () =>
+    Effect.gen(function* () {
+      reset()
+      const status = { seq: 1, text: "Finding images of COPERNICUS/S2_SR_HARMONIZED", progress: 0.5 }
+      answer = () => [
+        progress({ begun: true }),
+        progress({ waiting: 5 }),
+        progress({ status }),
+        progress({ output: "images: 73\n" }),
+        ...ran(),
+      ]
+      const shown: unknown[] = []
+      const before = Date.now()
+      const done = yield* executeTool(yield* Tool.Service, {
+        ...gee({ script: "print(1)" }),
+        progress: (data) => Effect.sync(() => void shown.push(data)),
+      })
+      expect(shown.at(-1)).toMatchObject({
+        description: "统计影像",
+        task: TASK,
+        started: expect.any(Number),
+        statuses: [status],
+        log: "images: 73\n",
+      })
+      expect(done.metadata).toMatchObject({ outcome: "finished", started: expect.any(Number), log: "images: 73\n" })
+      // When the wait began, not when it was last heard of: the request had waited 5 s already.
+      const since = (shown.at(-1) as { waitingSince: number }).waitingSince
+      expect(since).toBeLessThanOrEqual(before - 5000 + 50)
+      expect(since).toBeGreaterThan(before - 5000 - 1000)
+    }),
+  )
+
   it.effect("asks as the shell is asked, runs the script in the project, and answers with what it printed", () =>
     Effect.gen(function* () {
       reset()
@@ -1230,13 +1281,20 @@ describe("GeoCode: geerun", () => {
               start: (controller) => {
                 controller.enqueue(encoder.encode(`${progress({ begun: true })}\n`))
                 end = () => {
+                  controller.enqueue(encoder.encode(`${progress({ output: "images: 73\n" })}\n`))
                   controller.enqueue(encoder.encode(`${ran().join("\n")}\n`))
                   controller.close()
                 }
               },
             })
       const registry = yield* Tool.Service
-      const running = yield* executeTool(registry, gee({ script: "x", background: true }))
+      // As the kernel does: progress through a call once it has returned is refused.
+      let returned = false
+      const running = yield* executeTool(registry, {
+        ...gee({ script: "x", background: true }),
+        progress: () => (returned ? Effect.die(new Error("Tool progress outside running call")) : Effect.void),
+      })
+      returned = true
       expect(running).toMatchObject({
         status: "completed",
         content: [
@@ -1244,22 +1302,45 @@ describe("GeoCode: geerun", () => {
             text: `Task ${TASK} is running in the background. You will be notified with its answer when the run ends. DO NOT sleep, poll, or run task ${TASK} again before then. Work on something else, or tell the user what is running and end your response.`,
           },
         ],
-        metadata: { status: "running" },
+        metadata: { status: "running", started: expect.any(Number) },
       })
       // Kept until the notification is in the conversation, so that a restart can still give it.
       expect(kv.size).toBe(1)
       noticed = yield* Deferred.make<void>()
       end()
       yield* Deferred.await(noticed)
+      // Guards against the row left running by the answer hearing nothing more of the run, or not when it ended.
+      expect(published.at(-1)).toMatchObject({
+        type: "session.tool.progress",
+        data: {
+          sessionID,
+          assistantMessageID: toolIdentity.messageID,
+          id: "call-geerun",
+          metadata: { status: "running", log: "images: 73\n" },
+        },
+      })
       expect(notices).toMatchObject([
         {
           sessionID,
           description: "统计影像",
           text: `<geerun task="${TASK}" state="completed" description="统计影像">\nimages: 73\n\nFinished in 1 s.\n</geerun>`,
+          metadata: {
+            source: "geerun",
+            state: "completed",
+            callID: "call-geerun",
+            outcome: "finished",
+            started: expect.any(Number),
+            ended: expect.any(Number),
+            log: "images: 73\n",
+          },
         },
       ])
       for (let turn = 0; turn < 100 && kv.size > 0; turn++) yield* Effect.sleep("10 millis")
       expect(kv.size).toBe(0)
+      // Guards against a running row told of again after the notice ended it.
+      const told = published.length
+      yield* Effect.sleep("300 millis")
+      expect(published).toHaveLength(told)
 
       // A run that cannot start fails the call itself, as a shell that cannot spawn does.
       answer = (body) =>
@@ -1302,7 +1383,7 @@ describe("GeoCode: geerun", () => {
       kv.set(`job.background/${notificationID}`, {
         id: "job_geerun",
         notificationID,
-        recovery: { kind: "geerun", sessionID, task: TASK, description: "统计影像" },
+        recovery: { kind: "geerun", sessionID, task: TASK, description: "统计影像", callID: "call-geerun" },
         status: "running",
       })
       // What the kernel reads back at start-up; a marker it cannot read would be passed over without a word.
@@ -1315,7 +1396,13 @@ describe("GeoCode: geerun", () => {
           sessionID,
           description: "统计影像",
           text: `<geerun task="${TASK}" state="cancelled" description="统计影像">\nThe run was stopped because GeoCode restarted. Assets its exports already saved, or still save, stay in the task; run the script again to finish it.\n</geerun>`,
-          metadata: { source: "geerun", task: TASK, state: "cancelled" },
+          // Guards against the row the run left running staying so after the restart.
+          metadata: {
+            source: "geerun",
+            task: TASK,
+            state: "cancelled",
+            callID: "call-geerun",
+          },
           resume: false,
         },
       ])

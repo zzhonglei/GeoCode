@@ -30,6 +30,8 @@ const Background = Schema.Struct({
       sessionID: SessionSchema.ID,
       task: Schema.String,
       description: Schema.String,
+      /** The call whose tool row the notification ends. */
+      callID: Schema.String,
     }),
     // --- /GeoCode ---
   ]),
