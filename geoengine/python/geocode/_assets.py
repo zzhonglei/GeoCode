@@ -75,13 +75,19 @@ def load(name):
     full path. Returns an ee.Image, ee.FeatureCollection or ee.ImageCollection, as the asset is."""
     if not isinstance(name, str):
         raise TypeError('gc.load takes an asset\'s name as a string, such as "composite".')
+    with _run.stage("Loading %s" % name):
+        return read(located(name))
+
+
+def located(name):
+    """The full path of an asset gc.load names."""
     if name.startswith("projects/"):
-        return read(name)
+        return name
     parts = name.split("/")
     if len(parts) == 1:
-        return read("%s/%s/%s" % (_run.root, _run.task, checked(name, "asset")))
+        return "%s/%s/%s" % (_run.root, _run.task, checked(name, "asset"))
     if len(parts) == 2:
-        return read("%s/%s/%s" % (_run.root, checked(parts[0], "task"), checked(parts[1], "asset")))
+        return "%s/%s/%s" % (_run.root, checked(parts[0], "task"), checked(parts[1], "asset"))
     raise ValueError(
         'gc.load takes "asset" of this task, "task/asset" of another, or a full path starting with "projects/", not %r.'
         % name
@@ -151,72 +157,73 @@ def save(data, name, *, title, description, **grid):
     if "crs_transform" in grid:
         grid["crs_transform"] = [number(value, "crs_transform") for value in grid["crs_transform"]]
 
-    serialized = ee.serializer.toJSON(data)
-    text = json.dumps({"data": serialized, "grid": grid, "sources": sources(serialized)}, sort_keys=True)
-    fingerprint = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    path = "%s/%s/%s" % (_run.root, _run.task, name)
+    with _run.stage("Saving %s to the task" % name):
+        serialized = ee.serializer.toJSON(data)
+        text = json.dumps({"data": serialized, "grid": grid, "sources": sources(serialized)}, sort_keys=True)
+        fingerprint = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        path = "%s/%s/%s" % (_run.root, _run.task, name)
 
-    # First: an export still under way, such as one a stopped run left, decides what the asset will be, whatever is
-    # saved there now.
-    for operation in _run.exports():
-        if (operation["task"], operation["asset"]) != (_run.task, name) or operation["state"] not in UNDER_WAY:
-            continue
-        if operation["fingerprint"] == fingerprint[:SHORT]:
-            print("%s is already being exported with the same content; waiting for it." % name)
-            return finish(operation["name"], path, name, [])
+        # First: an export still under way, such as one a stopped run left, decides what the asset will be, whatever is
+        # saved there now.
+        for operation in _run.exports():
+            if (operation["task"], operation["asset"]) != (_run.task, name) or operation["state"] not in UNDER_WAY:
+                continue
+            if operation["fingerprint"] == fingerprint[:SHORT]:
+                print("%s is already being exported with the same content; waiting for it." % name)
+                return finish(operation["name"], path, name, [], "Waiting for an export of %s already under way" % name)
+            try:
+                ee.data.cancelOperation(operation["name"])
+                print("Cancelled an export of %s still running with other content." % name)
+            except ee.EEException:
+                # Ended between the listing and now.
+                pass
+
         try:
-            ee.data.cancelOperation(operation["name"])
-            print("Cancelled an export of %s still running with other content." % name)
+            existing = ee.data.getAsset(path)
         except ee.EEException:
-            # Ended between the listing and now.
-            pass
+            existing = None
+        if existing is not None and (existing.get("properties") or {}).get("fingerprint") == fingerprint:
+            print("%s is unchanged since it was saved; reading the saved asset." % name)
+            return read(path)
 
-    try:
-        existing = ee.data.getAsset(path)
-    except ee.EEException:
-        existing = None
-    if existing is not None and (existing.get("properties") or {}).get("fingerprint") == fingerprint:
-        print("%s is unchanged since it was saved; reading the saved asset." % name)
-        return read(path)
-
-    if image:
-        # Only for an export: measuring asks Earth Engine about the image, which a saved asset reused spares.
-        data, grid = _outputs.measured(data, grid)
-        placed = {"crs": grid.get("crs"), "crsTransform": grid.get("crs_transform"), "scale": grid.get("scale")}
-        if "shape" in grid:
-            placed["dimensions"] = list(grid["shape"])[::-1]
-        if "crs_transform" not in grid or "shape" not in grid:
-            # Without a window of its own; with one, Earth Engine would stretch the region to the shape instead.
-            placed["region"] = data.geometry()
-        placed = {key: value for key, value in placed.items() if value is not None}
-    made = make_folders()
-    if existing is not None:
-        print("Warning: %s was saved before with other content; it is being replaced." % name)
-    saved = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    properties = {
-        "title": title,
-        "description": description,
-        "task": _run.task,
-        "saved": saved,
-        "fingerprint": fingerprint,
-    }
-    label = "%s:%s:%s" % (_run.task, name, fingerprint[:SHORT])
-    if image:
-        export = ee.batch.Export.image.toAsset(
-            image=data.set(properties), description=label, assetId=path, maxPixels=1e13, overwrite=True, **placed
-        )
-    else:
-        export = ee.batch.Export.table.toAsset(
-            collection=data.set(properties), description=label, assetId=path, overwrite=True
-        )
-    try:
-        export.start()
-    except Exception:
-        # Refused as it was submitted, as when a source asset is missing.
-        remove_empty(made)
-        raise
-    print("Exporting %s (export ID %s); waiting for it." % (name, export.id))
-    return finish(export.operation_name, path, name, made)
+        if image:
+            # Only for an export: measuring asks Earth Engine about the image, which a saved asset reused spares.
+            data, grid = _outputs.measured(data, grid)
+            placed = {"crs": grid.get("crs"), "crsTransform": grid.get("crs_transform"), "scale": grid.get("scale")}
+            if "shape" in grid:
+                placed["dimensions"] = list(grid["shape"])[::-1]
+            if "crs_transform" not in grid or "shape" not in grid:
+                # Without a window of its own; with one, Earth Engine would stretch the region to the shape instead.
+                placed["region"] = data.geometry()
+            placed = {key: value for key, value in placed.items() if value is not None}
+        made = make_folders()
+        if existing is not None:
+            print("Warning: %s was saved before with other content; it is being replaced." % name)
+        saved = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        properties = {
+            "title": title,
+            "description": description,
+            "task": _run.task,
+            "saved": saved,
+            "fingerprint": fingerprint,
+        }
+        label = "%s:%s:%s" % (_run.task, name, fingerprint[:SHORT])
+        if image:
+            export = ee.batch.Export.image.toAsset(
+                image=data.set(properties), description=label, assetId=path, maxPixels=1e13, overwrite=True, **placed
+            )
+        else:
+            export = ee.batch.Export.table.toAsset(
+                collection=data.set(properties), description=label, assetId=path, overwrite=True
+            )
+        try:
+            export.start()
+        except Exception:
+            # Refused as it was submitted, as when a source asset is missing.
+            remove_empty(made)
+            raise
+        print("Exporting %s (export ID %s); waiting for it." % (name, export.id))
+        return finish(export.operation_name, path, name, made, "Exporting %s to the task" % name)
 
 
 def make_folders():
@@ -236,10 +243,12 @@ def make_folders():
     return made
 
 
-def finish(operation, path, name, made):
-    """Waits for an export, reporting its progress, and reads the saved asset; a failed one leaves no empty folder."""
+def finish(operation, path, name, made, text):
+    """Waits for an export, telling the tool row what it is doing and its progress, and reads the saved asset; a failed
+    one leaves no empty folder."""
     started = time.monotonic()
-    error = _outputs.failure(operation, name)
+    with _run.stage(text, 0):
+        error = _outputs.failure(operation)
     if error is None:
         print("Saved %s after %d s." % (name, time.monotonic() - started))
         return read(path)

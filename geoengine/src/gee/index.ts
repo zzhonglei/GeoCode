@@ -123,14 +123,16 @@ const Event = Schema.Union([
   /** A few of the taken task's assets, and how many more it has. */
   Schema.Struct({ type: Schema.Literal("task-taken"), assets: Schema.Array(Schema.String), more: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("task-missing"), latest: Schema.Array(Schema.String) }),
+  /**
+   * What one of GeoCode's functions is doing, numbered so the tool row can tell one it missed; its share done from 0
+   * to 1 when known, and no text once no function is doing anything.
+   */
   Schema.Struct({
-    type: Schema.Literal("export"),
-    asset: Schema.String,
-    state: Schema.String,
-    progress: Schema.Number,
+    type: Schema.Literal("status"),
+    seq: Schema.Number,
+    text: Schema.NullOr(Schema.String),
+    progress: Schema.optionalKey(Schema.Number),
   }),
-  /** A download's share done, from 0 to 1, and the file asked for. */
-  Schema.Struct({ type: Schema.Literal("download"), file: Schema.String, progress: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("end"), ok: Schema.Boolean }),
 ])
 
@@ -817,6 +819,16 @@ function execute(
   let taken: { readonly assets: readonly string[]; readonly more: number } | undefined
   let missing: readonly string[] | undefined
   const pending = { stdout: "", stderr: "" }
+  // What the script printed since the tool row was last sent some.
+  let unsent = ""
+
+  // For the tool row's log, the answer getting it at the end: what a chunk brought, in one message rather than one a
+  // line, and before any event, so the log and the statuses keep their order.
+  const send = () => {
+    if (!unsent) return
+    context.progress({ output: unsent })
+    unsent = ""
+  }
 
   const keep = (text: string, stream: "stdout" | "stderr") => {
     if (!begun[stream]) {
@@ -824,6 +836,7 @@ function execute(
       return
     }
     output += text
+    unsent += text
     // Cut back with room to spare, not on every line past the limit, which would copy the whole output each time.
     if (output.length <= 2 * OUTPUT_LIMIT) return
     output = output.slice(-OUTPUT_LIMIT)
@@ -834,6 +847,7 @@ function execute(
     const payload = Python.markedLine(text)
     const decoded = payload === undefined ? undefined : decodeEvent(payload)
     if (!decoded || Exit.isFailure(decoded)) return keep(newline ? `${text}\n` : text, stream)
+    send()
     const event = decoded.value
     if (event.type === "waiting") return context.progress({ waiting: event.seconds })
     if (event.type === "initialize-failed") {
@@ -856,10 +870,12 @@ function execute(
       missing = event.latest
       return
     }
-    if (event.type === "export") {
-      return context.progress({ export: { asset: event.asset, state: event.state, progress: event.progress } })
+    if (event.type === "status") {
+      const status = { seq: event.seq, text: event.text }
+      return context.progress({
+        status: event.progress === undefined ? status : { ...status, progress: event.progress },
+      })
     }
-    if (event.type === "download") return context.progress({ download: { file: event.file, progress: event.progress } })
     if (event.type === "end") {
       ended = { ok: event.ok }
       return
@@ -873,9 +889,11 @@ function execute(
     const lines = (pending[stream] + chunk).split(/\r?\n/)
     pending[stream] = lines.pop() ?? ""
     for (const text of lines) line(text, stream, true)
-    if (pending[stream].length <= LINE_LIMIT) return
-    keep(pending[stream], stream)
-    pending[stream] = ""
+    if (pending[stream].length > LINE_LIMIT) {
+      keep(pending[stream], stream)
+      pending[stream] = ""
+    }
+    send()
   }
 
   const request = {
@@ -903,6 +921,7 @@ function execute(
         Effect.gen(function* () {
           if (pending.stdout) line(pending.stdout, "stdout", false)
           if (pending.stderr) line(pending.stderr, "stderr", false)
+          send()
           if (output.length > OUTPUT_LIMIT) {
             output = output.slice(-OUTPUT_LIMIT)
             truncated = true

@@ -1,7 +1,11 @@
-"""The task a run works in, set before GeoAgent's script starts, and what GeoCode's folder holds for the answer's header."""
+"""The task a run works in, set before GeoAgent's script starts; what GeoCode's folder holds, for the answer's header;
+and what GeoCode's functions tell the tool row they are doing."""
 
+import contextlib
+import itertools
 import json
 import re
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import ee
@@ -19,10 +23,54 @@ OTHERS_SHOWN = 3
 # GeoEngine reads the header as one line of at most 64 KiB; assets past this are counted, not listed.
 HEADER_BYTES = 48 * 1024
 
-# Set by start: GeoCode's folder, the task's name, and how a progress report reaches GeoCode.
+# Set by start: GeoCode's folder, the task's name, and how an event, such as a status, reaches GeoEngine. Outside
+# GeoEngine, as in a script run by hand, there is none, and statuses go nowhere.
 root = None
 task = None
 report = None
+
+# What the script is doing now, innermost last: a function's stages within the function's own.
+doing = []
+# Numbers each status, so the tool row can tell one it missed from one it showed; taken as it is sent, so the numbers
+# keep the order of the statuses even when a download's thread tells one.
+seq = itertools.count(1)
+telling = threading.Lock()
+
+
+@contextlib.contextmanager
+def stage(text, progress=None):
+    """Tells the tool row what the script is doing until the block ends: a short English text, with the share done
+    when it is known."""
+    doing.append({"text": text, "progress": progress})
+    try:
+        tell()
+        yield
+    finally:
+        doing.pop()
+        tell()
+
+
+def update(text=None, progress=None):
+    """Changes what the innermost stage says, with its share done if known, or only its share done."""
+    if text is not None:
+        doing[-1] = {"text": text, "progress": progress}
+    else:
+        doing[-1]["progress"] = progress
+    tell()
+
+
+def tell():
+    with telling:
+        now = doing[-1] if doing else {"text": None, "progress": None}
+        status = {"type": "status", "seq": next(seq), "text": now["text"]}
+        if now["progress"] is not None:
+            status["progress"] = now["progress"]
+        if report:
+            report(status)
+
+
+def plural(count, noun):
+    return "%d %s%s" % (count, noun, "" if count == 1 else "s")
 
 
 def start(project, folder, name, new, started, emit):

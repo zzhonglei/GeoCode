@@ -11,7 +11,6 @@ import time
 import ee
 
 from geocode import _run
-from geocode._composite import plural
 
 # How often a download reports its share done, which also tells GeoEngine the run is alive.
 REPORT_SECONDS = 5
@@ -74,14 +73,18 @@ def download(image, path, **grid):
     first, on its own grid unless crs, crs_transform, shape or scale give another; geedim's other prepareForExport
     arguments, such as dtype or bands, apply too. Returns the path it saved to."""
     target, notes = destination(path)
-    ready = prepared(image, grid).gd
     folder, name = os.path.split(target)
+    with _run.stage("Preparing %s" % name):
+        ready = prepared(image, grid).gd
     # Hidden beside the target, so that the target is never a partial file and the rename is atomic.
     partial = os.path.join(folder, ".%s.%d.part" % (name, os.getpid()))
     started = time.monotonic()
     try:
-        with reporting(shown(target)):
-            ready.toGeoTIFF(partial, overwrite=True)
+        with _run.stage("Downloading %s" % name, 0):
+            with reporting():
+                ready.toGeoTIFF(partial, overwrite=True)
+            # Reported only every few seconds, so a download of one tile would show none of it done.
+            _run.update(progress=1)
         saved = numbered(target)
         os.replace(partial, saved)
     except BaseException:
@@ -102,7 +105,7 @@ def download(image, path, **grid):
         "Downloaded %s: %s of %s (nodata %s), %d × %d pixels on %s at %s%s, %s, after %d s."
         % (
             shown(saved),
-            plural(profile["count"], "band"),
+            _run.plural(profile["count"], "band"),
             profile["dtype"],
             figure(ready.nodata),
             profile["width"],
@@ -127,27 +130,27 @@ def to_drive(image, name, folder="GeoCode", **grid):
     if extension.lower() in GEOTIFF:
         # Earth Engine adds .tif itself.
         name = stem
-    ready = prepared(image, grid)
-    # The name Earth Engine's task list shows; it takes only these characters.
-    label = re.sub(r"[^A-Za-z0-9.,:;_-]", "_", name)[:100]
-    task = ready.gd.toGoogleCloud(name, type="drive", folder=folder, wait=False, description=label, maxPixels=1e13)
-    print("Exporting %s to Google Drive (export ID %s); waiting for it." % (name, task.id))
-    started = time.monotonic()
-    error = failure(task.operation_name, name)
+    with _run.stage("Exporting %s to Google Drive" % name):
+        ready = prepared(image, grid)
+        # The name Earth Engine's task list shows; it takes only these characters.
+        label = re.sub(r"[^A-Za-z0-9.,:;_-]", "_", name)[:100]
+        task = ready.gd.toGoogleCloud(name, type="drive", folder=folder, wait=False, description=label, maxPixels=1e13)
+        print("Exporting %s to Google Drive (export ID %s); waiting for it." % (name, task.id))
+        started = time.monotonic()
+        error = failure(task.operation_name)
     if error is not None:
         raise RuntimeError("Exporting %s to Google Drive failed: %s" % (name, error))
     print("Exported %s to the Google Drive folder %s after %d s." % (name, folder, time.monotonic() - started))
 
 
-def failure(operation, name):
-    """Waits for an export, reporting its progress as name's; why it failed, or None when it succeeded."""
+def failure(operation):
+    """Waits for an export, telling the stage its share done; why it failed, or None when it succeeded."""
     while True:
         status = ee.data.getOperation(operation)
         metadata = status.get("metadata", {})
         if status.get("done"):
             break
-        progress = metadata.get("progress", 0)
-        _run.report({"type": "export", "asset": name, "state": metadata.get("state", ""), "progress": progress})
+        _run.update(progress=metadata.get("progress", 0))
         time.sleep(POLL_SECONDS)
     if metadata.get("state") == "SUCCEEDED":
         return None
@@ -196,8 +199,8 @@ def figure(value):
 
 
 @contextlib.contextmanager
-def reporting(file):
-    """Reports, instead of geedim's progress bar, the share of the tiles downloaded."""
+def reporting():
+    """Tells the stage, instead of geedim's progress bar, the share of the tiles downloaded."""
     import geedim.utils
 
     bars = []
@@ -211,8 +214,7 @@ def reporting(file):
 
     def report():
         while not stopped.wait(REPORT_SECONDS):
-            share = bars[-1].n / bars[-1].total if bars else 0
-            _run.report({"type": "download", "file": file, "progress": share})
+            _run.update(progress=bars[-1].n / bars[-1].total if bars else 0)
 
     stopped = threading.Event()
     reporter = threading.Thread(target=report)

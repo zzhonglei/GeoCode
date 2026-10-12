@@ -914,7 +914,11 @@ test(
       const cwd = await fs.realpath(engine.directory)
       assert.equal(done.output, `中文 ${cwd}\n1\nwarned\n`)
       assert.doesNotMatch(done.output, /Earth Engine|__GEOCODE_GEE__/)
-      assert.deepEqual(engine.progress(id), [{ begun: true }])
+      // Guards against the tool row's log losing or adding to what the answer has.
+      const [begun, ...printed] = engine.progress(id) as [unknown, ...{ output: string }[]]
+      assert.deepEqual(begun, { begun: true })
+      assert.ok(printed.every((data) => Object.keys(data).join() === "output"))
+      assert.equal(printed.map((data) => data.output).join(""), done.output)
     } finally {
       await engine.stop()
     }
@@ -1523,7 +1527,13 @@ test(
       assert.equal(done.output, "Exporting ndvi (export ID OP0); waiting for it.\nSaved ndvi after 0 s.\n")
       assert.deepEqual(engine.progress(id), [
         { begun: true },
-        { export: { asset: "ndvi", state: "RUNNING", progress: 0.5 } },
+        { status: { seq: 1, text: "Saving ndvi to the task" } },
+        { output: "Exporting ndvi (export ID OP0); waiting for it.\n" },
+        { status: { seq: 2, text: "Exporting ndvi to the task", progress: 0 } },
+        { status: { seq: 3, text: "Exporting ndvi to the task", progress: 0.5 } },
+        { status: { seq: 4, text: "Saving ndvi to the task" } },
+        { output: "Saved ndvi after 0 s.\n" },
+        { status: { seq: 5, text: null } },
       ])
       await lower(engine.directory, "export-slow")
 
@@ -1533,7 +1543,7 @@ test(
         await raise(engine.directory, "export-running")
         const id = engine.send({ script: saving(save(graph)), cwd: engine.directory, task: continuing })
         const exporting = () =>
-          engine.progress(id).some((data) => typeof data === "object" && data !== null && "export" in data)
+          engine.progress(id).some((data) => typeof data === "object" && data !== null && "status" in data)
         await until(exporting, 10000, "the export")
         engine.deliver({ type: "cancel", id })
         const response = await engine.response(id)
@@ -1579,15 +1589,27 @@ test(
   },
 )
 
-test("a download's share done reaches the tool row, not the answer", { skip: !python3 }, async () => {
+test("what GeoCode's functions are doing reaches the tool row, not the answer", { skip: !python3 }, async () => {
   const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
   try {
     assert.equal((await engine.settled()).status, "ready")
     await holding(engine.directory, [])
-    const script = 'import geocode._run\ngeocode._run.report({"type": "download", "file": "ndvi.tif", "progress": 0.5})'
+    const script = [
+      "from geocode import _run",
+      'with _run.stage("Reading the region from taipei.shp"):',
+      '    with _run.stage("Converting the region to WGS 84"):',
+      "        pass",
+    ].join("\n")
     const id = engine.send({ script, cwd: engine.directory, task: TASK })
     assert.equal(result(await engine.response(id)).output, "")
-    assert.deepEqual(engine.progress(id), [{ begun: true }, { download: { file: "ndvi.tif", progress: 0.5 } }])
+    assert.deepEqual(engine.progress(id), [
+      { begun: true },
+      { status: { seq: 1, text: "Reading the region from taipei.shp" } },
+      { status: { seq: 2, text: "Converting the region to WGS 84" } },
+      // Guards against an inner stage's end clearing the outer one.
+      { status: { seq: 3, text: "Reading the region from taipei.shp" } },
+      { status: { seq: 4, text: null } },
+    ])
   } finally {
     await engine.stop()
   }
