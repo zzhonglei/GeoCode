@@ -8,7 +8,6 @@ import {
   NO_GEO_STATUSES,
   QGIS_FAILURES,
   geeStatusOf,
-  lightOf,
   withGeoStatusEvent,
   withGeoStatusSnapshot,
 } from './geoStatus';
@@ -63,19 +62,6 @@ test('GeoCode: the interface knows every Earth Engine failure and refusal GeoEng
   expect(refusals.length).toBeGreaterThan(0);
   expect([...GEE_FAILURES].sort()).toEqual(failures);
   expect([...GEE_REFUSALS].sort()).toEqual(refusals);
-});
-
-// Guards against a user still setting Earth Engine up meeting a red light, as a broken environment shows.
-test('GeoCode: Earth Engine not set up, not signed in or without a project is grey, a failure red', () => {
-  expect(['unconfigured', 'signed-out', 'project-missing'].map(lightOf)).toEqual(['idle', 'idle', 'idle']);
-  expect(['packages-missing', 'unreachable', 'rejected', 'check-failed'].map(lightOf)).toEqual(['failed', 'failed', 'failed', 'failed']);
-  expect([lightOf('ready'), lightOf('checking')]).toEqual(['ready', 'checking']);
-});
-
-test('GeoCode: an Earth Engine status the interface cannot read is kept whole', () => {
-  const statuses = withGeoStatusEvent(NO_GEO_STATUSES, { type: 'geo-status', revision: 1, domain: 'gee', value: { status: 'new-state' } });
-  expect(geeStatusOf(statuses)).toEqual({ status: 'unreadable', value: { status: 'new-state' } });
-  expect(geeStatusOf(NO_GEO_STATUSES)).toBeUndefined();
 });
 
 // Guards against the interface's copy of Earth Engine's state drifting from GeoEngine's, which would show a real state

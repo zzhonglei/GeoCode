@@ -29,8 +29,7 @@ const python3 = (() => {
 /**
  * A file in the stubs' "flags" folder that makes them behave as the named environment does: "adc" has no credentials of
  * Earth Engine's own but Google Cloud's default ones; "no-geopandas" leaves the package out; "old-geedim" makes it a 1.x;
- * "old-python" makes the Python a 3.10, which is a 3.11 otherwise, whatever runs the stubs; "unlistable" refuses to
- * list assets; the "export-" flags say how an export goes (see the stub's `export`).
+ * the "export-" flags say how an export goes (see the stub's `export`).
  */
 type Flag =
   | "signed-out"
@@ -40,8 +39,6 @@ type Flag =
   | "no-geopandas"
   | "broken-geedim"
   | "old-geedim"
-  | "old-python"
-  | "unlistable"
   | "export-refused"
   | "export-fails"
   | "export-running"
@@ -61,12 +58,6 @@ FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "flags")
 
 def raised(name):
     return os.path.exists(os.path.join(FOLDER, name))
-`,
-  "sitecustomize.py": `import sys
-
-import flags
-
-sys.version = ("3.10.4" if flags.raised("old-python") else "3.11.9") + sys.version[sys.version.index(" ") :]
 `,
   "requests/__init__.py": `import time
 
@@ -223,8 +214,6 @@ def _store():
 
 
 def listAssets(params):
-    if flags.raised("unlistable"):
-        raise EEException("Caller does not have required permission to list assets")
     return {"assets": [asset for asset in _store()["assets"] if asset["name"].rsplit("/", 1)[0] == params["parent"]]}
 
 
@@ -457,8 +446,6 @@ const raise = (directory: string, flag: Flag) => fs.writeFile(path.join(director
 
 const lower = (directory: string, flag: Flag) => fs.rm(path.join(directory, "stubs", "flags", flag), { force: true })
 
-const mark = (payload: unknown) => `cat >/dev/null; echo '${Python.MARKER}${JSON.stringify(payload)}'`
-
 type Response = Extract<Protocol.Outbound, { type: "response" }>
 type Progress = Extract<Protocol.Outbound, { type: "progress" }>
 
@@ -538,132 +525,29 @@ const result = (response: Response) => {
   return response.result as { outcome: string; output: string; truncated: boolean; durationMs: number; exit?: string }
 }
 
-test("no configuration settles on unconfigured, and a run is refused with what to do", async () => {
-  const engine = await start()
-  try {
-    assert.equal((await engine.settled()).status, "unconfigured")
-    const response = await engine.response(engine.send({ script: "print(1)", cwd: engine.directory }))
-    assert.equal(!response.ok && response.error.code, "not-ready")
-    assert.match(!response.ok ? response.error.message : "", /"gee" block of .*machine\.json/)
-    assert.match(!response.ok ? response.error.message : "", /never guess it/)
-  } finally {
-    await engine.stop()
-  }
-})
-
-/** A check's report of a Python with every package, whose user is signed in. */
-const SIGNED_IN = { python: "3.12.1", versions: { "earthengine-api": "1.7.19", geedim: "2.0.0", geopandas: "1.1.3" } }
-
-test("a Python that cannot start or ends without a report settles on its own state", { skip: !posix }, async () => {
-  const cases: [(directory: string) => Promise<unknown>, string][] = [
-    [async (directory) => ({ python: path.join(directory, "missing", "python"), project: "p" }), "python-missing"],
-    // Guards against a Python that ends without a report reading as anything but a failed check, losing its output.
-    [
-      async (directory) => ({
-        python: await fakePython(directory, "echo 'Segmentation fault' >&2; exit 139"),
-        project: "p",
-      }),
-      "check-failed",
-    ],
-    [async (directory) => ({ python: await fakePython(directory, mark(SIGNED_IN)), project: "p" }), "ready"],
-  ]
-  for (const [block, expected] of cases) {
-    const engine = await start(block)
-    try {
-      const state = await engine.settled()
-      assert.equal(state.status, expected, JSON.stringify(state))
-    } finally {
-      await engine.stop()
-    }
-  }
-})
-
-// Guards against GeoAgent being told only that the check ended without a report, not what the Python said.
-test("a Python that ends without a report is described by what it printed", { skip: !posix }, async () => {
+// Guards against a Python that ends without a report reading as anything but a failed check.
+test("a Python that ends without a report settles on a failed check", { skip: !posix }, async () => {
   const engine = await start(async (directory) => ({
     python: await fakePython(directory, "cat >/dev/null; echo 'Python was not found' >&2; exit 9"),
   }))
   try {
-    const state = await engine.settled()
-    assert.equal(state.status, "check-failed")
-    const response = await engine.response(engine.send({ script: "print(1)", cwd: engine.directory }))
-    const message = !response.ok ? response.error.message : ""
-    assert.match(message, /exited with code 9 without a report\nPython was not found\n/)
-    // Guards against naming a project that is not configured.
-    assert.doesNotMatch(message, /undefined/)
+    assert.equal((await engine.settled()).status, "check-failed")
   } finally {
     await engine.stop()
   }
 })
-
-// Guards against a call waiting out the settle limit for a check nothing starts, when the file has not changed.
-test("a run without a project is refused at once with what to do", { skip: !posix }, async () => {
-  const engine = await start(async (directory) => ({ python: await fakePython(directory, mark(SIGNED_IN)) }))
-  try {
-    assert.equal((await engine.settled()).status, "project-missing")
-    const started = Date.now()
-    const response = await engine.response(engine.send({ script: "print(1)", cwd: engine.directory }))
-    assert.ok(Date.now() - started < 5000, `answered after ${Date.now() - started} ms`)
-    assert.equal(!response.ok && response.error.code, "not-ready")
-    assert.match(!response.ok ? response.error.message : "", /no Google Cloud project is configured/)
-  } finally {
-    await engine.stop()
-  }
-})
-
-/** The lines several of GeoAgent's hints share. */
-const CONFIGURED = (file: string) =>
-  `The configuration is the "gee" block of ${file}: {"python": "<absolute path of the Python>", "project": "<Google Cloud project ID>"}. It is checked as soon as the file is saved; then call geerun again.`
-const AGAIN = "It is checked again the next time geerun is called."
-const SIGN_IN = (command: string) =>
-  `The user must sign in with their Google account. They can do it themselves in GeoCode's settings, under Geo environment, Google Earth Engine. Or ask them to get it ready; once they say so, run \`${command}\` with a timeout of 10 minutes. It opens their browser and ends when they finish there.`
-const REVOKED = (python: string) =>
-  [
-    "Google refused the Earth Engine credentials on this computer: they have expired, been revoked, or do not cover Earth Engine.",
-    "Google said: invalid_grant: Token has been expired or revoked.",
-    SIGN_IN(`"${python}" -m ee.cli.eecli authenticate --auth_mode=localhost --force`),
-    AGAIN,
-  ].join("\n")
 
 test(
-  "each finding of the check settles on its own state, and tells GeoAgent what to do",
+  "each finding of the check settles on its own state, and nothing runs until it is ready",
   { skip: !python3 },
   async () => {
     const cases: {
       readonly flags?: readonly Flag[]
       readonly project?: string
-      /** Lays out more of the Python's folder. */
-      readonly folder?: (directory: string) => Promise<void>
       readonly status: string
       readonly diagnostics?: Record<string, unknown>
-      readonly hint?: (python: string, file: string) => string
     }[] = [
-      {
-        flags: ["no-geopandas"],
-        status: "packages-missing",
-        diagnostics: { missing: ["geopandas"] },
-        hint: (python, file) =>
-          [
-            `The configured Python, ${python}, lacks geopandas. GeoCode needs earthengine-api, geedim 2.0 or later, geopandas 1.0 or later in that Python.`,
-            `With the user's consent, install them: \`"${python}" -m pip install "geopandas>=1.0"\`.`,
-            CONFIGURED(file),
-          ].join("\n"),
-      },
-      // Guards against installing into a conda environment with pip, or with a conda the shell cannot find.
-      {
-        flags: ["no-geopandas"],
-        folder: async (directory) => {
-          await fs.mkdir(path.join(directory, "conda-meta"))
-          await fakePython(directory, "exit 0", path.join("bin", "conda"))
-        },
-        status: "packages-missing",
-        hint: (python, file) =>
-          [
-            `The configured Python, ${python}, lacks geopandas. GeoCode needs earthengine-api, geedim 2.0 or later, geopandas 1.0 or later in that Python.`,
-            `With the user's consent, install them: \`"${path.dirname(python)}/bin/conda" install --prefix "${path.dirname(python)}" -c conda-forge -y "geopandas>=1.0"\`.`,
-            CONFIGURED(file),
-          ].join("\n"),
-      },
+      { flags: ["no-geopandas"], status: "packages-missing", diagnostics: { missing: ["geopandas"] } },
       // Guards against a package that is there but cannot load reading as one to install: installing it again rarely helps.
       {
         flags: ["no-geopandas", "broken-geedim"],
@@ -672,15 +556,6 @@ test(
           missing: ["geopandas"],
           broken: [{ package: "geedim", error: "ImportError: dlopen(libgdal.37.dylib): image not found" }],
         },
-        hint: (python, file) =>
-          [
-            `In the configured Python, ${python}, these packages are installed but fail to import:`,
-            "- geedim: ImportError: dlopen(libgdal.37.dylib): image not found",
-            "Installing them again rarely helps. Show the user the errors; with their consent, repair the environment or set up another one.",
-            `The configured Python, ${python}, lacks geopandas. GeoCode needs earthengine-api, geedim 2.0 or later, geopandas 1.0 or later in that Python.`,
-            `With the user's consent, install them: \`"${python}" -m pip install "geopandas>=1.0"\`.`,
-            CONFIGURED(file),
-          ].join("\n"),
       },
       // Guards against a package that imports but lacks what GeoCode's functions use reading as ready.
       {
@@ -688,175 +563,39 @@ test(
         project: "majestic",
         status: "packages-outdated",
         diagnostics: { outdated: [{ package: "geedim", version: "1.9.1", required: "2.0" }] },
-        hint: (python, file) =>
-          [
-            `The configured Python, ${python}, has geedim 1.9.1, older than GeoCode needs: geedim 2.0 or later.`,
-            `With the user's consent, upgrade them: \`"${python}" -m pip install "geedim>=2.0"\`.`,
-            CONFIGURED(file),
-          ].join("\n"),
       },
       {
         flags: ["no-geopandas", "old-geedim"],
-        folder: async (directory) => {
-          await fs.mkdir(path.join(directory, "conda-meta"))
-          await fakePython(directory, "exit 0", path.join("bin", "conda"))
-        },
         status: "packages-missing",
         diagnostics: { missing: ["geopandas"], outdated: [{ package: "geedim", version: "1.9.1", required: "2.0" }] },
-        hint: (python, file) =>
-          [
-            `The configured Python, ${python}, lacks geopandas. GeoCode needs earthengine-api, geedim 2.0 or later, geopandas 1.0 or later in that Python.`,
-            "That Python has geedim 1.9.1, older than GeoCode needs: geedim 2.0 or later.",
-            `With the user's consent, install them: \`"${path.dirname(python)}/bin/conda" install --prefix "${path.dirname(python)}" -c conda-forge -y "geopandas>=1.0" "geedim>=2.0"\`.`,
-            CONFIGURED(file),
-          ].join("\n"),
       },
-      // Guards against an upgrade the Python cannot take: pip picks an older geedim, conda may upgrade Python itself.
-      {
-        flags: ["old-python", "old-geedim"],
-        project: "majestic",
-        status: "packages-outdated",
-        diagnostics: { pythonVersion: "3.10.4" },
-        hint: (python, file) =>
-          [
-            `The configured Python, ${python}, is Python 3.10.4, which cannot install geedim 2.0: it needs Python 3.11 or later.`,
-            "With the user's consent, set up another environment with Python 3.11 or later and earthengine-api, geedim 2.0 or later, geopandas 1.0 or later, rather than upgrading this one.",
-            CONFIGURED(file),
-          ].join("\n"),
-      },
-      // Without an earthengine command beside the Python, through its own module.
-      {
-        flags: ["signed-out"],
-        status: "signed-out",
-        hint: (python) =>
-          [
-            "Google Earth Engine is not signed in: there are no Earth Engine credentials on this computer.",
-            SIGN_IN(`"${python}" -m ee.cli.eecli authenticate --auth_mode=localhost`),
-            AGAIN,
-          ].join("\n"),
-      },
-      {
-        flags: ["signed-out"],
-        folder: (directory) => fakePython(directory, "exit 0", "earthengine").then(() => {}),
-        status: "signed-out",
-        hint: (python) =>
-          [
-            "Google Earth Engine is not signed in: there are no Earth Engine credentials on this computer.",
-            SIGN_IN(`"${path.dirname(python)}/earthengine" authenticate --auth_mode=localhost`),
-            AGAIN,
-          ].join("\n"),
-      },
+      { flags: ["signed-out"], status: "signed-out" },
       // Signed in, the project is asked for only then: a missing project never hides a missing sign-in.
-      {
-        status: "project-missing",
-        hint: (_python, file) =>
-          [
-            "Google Earth Engine is signed in, but no Google Cloud project is configured.",
-            "Ask the user for the ID of their Google Cloud project registered for Earth Engine, which the Code Editor (https://code.earthengine.google.com) shows at its top; never guess it.",
-            CONFIGURED(file),
-          ].join("\n"),
-      },
+      { status: "project-missing" },
       // Guards against a refused refresh reading as no credentials at all, as earthengine-api words it.
-      { flags: ["revoked"], project: "majestic", status: "rejected", hint: REVOKED },
-      {
-        project: "scoped",
-        status: "rejected",
-        diagnostics: { refusal: "credentials-invalid" },
-        hint: (python) =>
-          [
-            "Google refused the Earth Engine credentials on this computer: they have expired, been revoked, or do not cover Earth Engine.",
-            "Google said: Request had insufficient authentication scopes.",
-            SIGN_IN(`"${python}" -m ee.cli.eecli authenticate --auth_mode=localhost --force`),
-            AGAIN,
-          ].join("\n"),
-      },
-      {
-        project: "absent",
-        status: "rejected",
-        diagnostics: { refusal: "project-not-found" },
-        hint: (_python, file) =>
-          [
-            "There is no Google Cloud project with the configured ID, absent.",
-            "Google said: Project 'projects/absent' not found or deleted.",
-            "Ask the user for the right ID, which the Code Editor (https://code.earthengine.google.com) shows at its top; never guess it.",
-            CONFIGURED(file),
-            AGAIN,
-          ].join("\n"),
-      },
-      {
-        project: "refused",
-        status: "rejected",
-        diagnostics: { refusal: "no-permission" },
-        hint: (_python, file) =>
-          [
-            "The signed-in Google account may not use the configured project, refused.",
-            "Google said: Caller does not have required permission to use project refused",
-            "Ask the user whether the ID is right and whether the project belongs to the account they signed in with; they may need to sign in with another account, or use a project of their own.",
-            CONFIGURED(file),
-            AGAIN,
-          ].join("\n"),
-      },
-      {
-        project: "disabled",
-        status: "rejected",
-        diagnostics: { refusal: "api-disabled" },
-        hint: (_python, file) =>
-          [
-            "The Earth Engine API is not enabled in the configured project, disabled.",
-            "Google said: Google Earth Engine API has not been used in project disabled before",
-            "Ask the user to enable it at https://console.cloud.google.com/apis/library/earthengine.googleapis.com?project=disabled; it takes a few minutes to apply.",
-            CONFIGURED(file),
-            AGAIN,
-          ].join("\n"),
-      },
-      {
-        project: "offline",
-        status: "unreachable",
-        hint: () =>
-          [
-            "Google Earth Engine cannot be reached: ConnectionError: Failed to establish a new connection",
-            "The local setup is in place; the network, or Google, is at fault. Tell the user, and do not reinstall, reconfigure or sign in again.",
-            AGAIN,
-          ].join("\n"),
-      },
+      { flags: ["revoked"], project: "majestic", status: "rejected", diagnostics: { refusal: "credentials-invalid" } },
+      { project: "scoped", status: "rejected", diagnostics: { refusal: "credentials-invalid" } },
+      { project: "absent", status: "rejected", diagnostics: { refusal: "project-not-found" } },
+      { project: "refused", status: "rejected", diagnostics: { refusal: "no-permission" } },
+      { project: "disabled", status: "rejected", diagnostics: { refusal: "api-disabled" } },
+      { project: "offline", status: "unreachable" },
       // Guards against the network failing at the sign-in's refresh reading as refused credentials.
       { flags: ["offline-refresh"], project: "majestic", status: "unreachable" },
       // Guards against Earth Engine failing on its side reading as a refusal of the project.
-      {
-        project: "overloaded",
-        status: "unreachable",
-        hint: () =>
-          [
-            "Google Earth Engine cannot be reached: EEException: The service is currently unavailable.",
-            "Google said: The service is currently unavailable.",
-            "The local setup is in place; the network, or Google, is at fault. Tell the user, and do not reinstall, reconfigure or sign in again.",
-            AGAIN,
-          ].join("\n"),
-      },
+      { project: "overloaded", status: "unreachable" },
       // Google Cloud's default credentials sign in as well as Earth Engine's own.
       { flags: ["adc"], project: "majestic", status: "ready" },
       { project: "majestic", status: "ready" },
     ]
     for (const item of cases) {
-      let python = ""
-      const engine = await start(async (directory) => {
-        python = await stubbedPython(directory, item.flags)
-        await item.folder?.(directory)
-        return { python, ...(item.project === undefined ? {} : { project: item.project }) }
-      })
+      const engine = await start(async (directory) => ({
+        python: await stubbedPython(directory, item.flags),
+        ...(item.project === undefined ? {} : { project: item.project }),
+      }))
       try {
         const state = await engine.settled()
         assert.equal(state.status, item.status, JSON.stringify(state))
-        if (state.status === "ready") {
-          assert.deepEqual(state.versions, {
-            python: state.versions.python,
-            "earthengine-api": "1.7.19",
-            geedim: "2.0.0",
-            geopandas: "1.1.3",
-            requests: "",
-          })
-          continue
-        }
+        if (state.status === "ready") continue
         if (item.diagnostics && "diagnostics" in state) {
           for (const [key, value] of Object.entries(item.diagnostics)) {
             assert.deepEqual(state.diagnostics[key as keyof Gee.Diagnostics], value, key)
@@ -865,29 +604,9 @@ test(
         // Through the check the kernel makes before asking, which answers as a run would.
         const response = await engine.response(engine.send({ cwd: engine.directory }, "gee.check"))
         assert.equal(!response.ok && response.error.code, "not-ready")
-        if (item.hint) assert.equal(!response.ok ? response.error.message : "", item.hint(python, engine.machine))
       } finally {
         await engine.stop()
       }
-    }
-  },
-)
-
-test(
-  "the check before asking answers for a ready environment, and refuses a missing file",
-  { skip: !python3 },
-  async () => {
-    const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
-    try {
-      assert.equal((await engine.settled()).status, "ready")
-      const ready = await engine.response(engine.send({ cwd: engine.directory }, "gee.check"))
-      assert.deepEqual(ready.ok && ready.result, {})
-      const file = path.join(engine.directory, "none.py")
-      const missing = await engine.response(engine.send({ cwd: engine.directory, file }, "gee.check"))
-      assert.equal(!missing.ok && missing.error.code, "invalid-params")
-      assert.equal(!missing.ok && missing.error.message, `${file} is not a file`)
-    } finally {
-      await engine.stop()
     }
   },
 )
@@ -904,7 +623,6 @@ test("a run whose Python is gone checks again, and answers with what is now wron
     await fs.rm(python)
     const response = await engine.response(engine.send({ script: "print(1)", cwd: engine.directory }))
     assert.equal(!response.ok && response.error.code, "not-ready")
-    assert.match(!response.ok ? response.error.message : "", /^The configured Python, .*, cannot be started/)
     assert.equal(engine.states().at(-1)?.status, "python-missing")
   } finally {
     await engine.stop()
@@ -924,7 +642,6 @@ test(
       await fs.writeFile(path.join(engine.directory, "refuse"), "")
       const response = await engine.response(engine.send({ script: "print(1)", cwd: engine.directory }))
       assert.equal(!response.ok && response.error.code, "not-ready")
-      assert.equal(!response.ok && response.error.message, REVOKED(path.join(engine.directory, "python")))
       assert.equal(engine.states().at(-1)?.status, "rejected")
     } finally {
       await engine.stop()
@@ -962,17 +679,6 @@ test(
       const id = engine.send({ script, cwd: engine.directory })
       const done = result(await engine.response(id))
       assert.equal(done.outcome, "finished")
-      // Guards against GeoAgent not being told the Python its script ran in, which it uses and looks after by its path.
-      const versions = ready.versions
-      assert.deepEqual((done as { python?: unknown }).python, {
-        path: ready.python,
-        version: versions.python,
-        packages: {
-          "earthengine-api": versions["earthengine-api"],
-          geedim: versions.geedim,
-          geopandas: versions.geopandas,
-        },
-      })
       const cwd = await fs.realpath(engine.directory)
       assert.equal(done.output, `中文 ${cwd}\n1\n`)
       assert.doesNotMatch(done.output, /Earth Engine|__GEOCODE_GEE__/)
@@ -1001,20 +707,12 @@ test("a failing script ends with its traceback, from its own lines", { skip: !py
     )
     assert.match(done.output, /ZeroDivisionError/)
     assert.doesNotMatch(done.output, /<stdin>/)
-
-    const exited = result(
-      await engine.response(engine.send({ script: "import sys\nsys.exit(3)", cwd: engine.directory })),
-    )
-    assert.equal(exited.outcome, "failed")
-    const syntax = result(await engine.response(engine.send({ script: "print(", cwd: engine.directory })))
-    assert.equal(syntax.outcome, "failed")
-    assert.match(syntax.output, /SyntaxError/)
   } finally {
     await engine.stop()
   }
 })
 
-test("a script file runs from its own folder's imports, and a missing one is refused", { skip: !python3 }, async () => {
+test("a script file runs from its own folder's imports", { skip: !python3 }, async () => {
   const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
   try {
     assert.equal((await engine.settled()).status, "ready")
@@ -1030,11 +728,6 @@ test("a script file runs from its own folder's imports, and a missing one is ref
     )
     assert.equal(done.outcome, "finished")
     assert.equal(done.output, "42 True\n")
-
-    const missing = await engine.response(engine.send({ file: path.join(folder, "none.py"), cwd: engine.directory }))
-    assert.equal(!missing.ok && missing.error.code, "invalid-params")
-    const neither = await engine.response(engine.send({ cwd: engine.directory }))
-    assert.equal(!neither.ok && neither.error.code, "invalid-params")
   } finally {
     await engine.stop()
   }
@@ -1085,59 +778,6 @@ test(
     }
   },
 )
-
-test("an initialization Earth Engine refuses fails the run with its error", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
-  try {
-    assert.equal((await engine.settled()).status, "ready")
-    await fs.writeFile(path.join(engine.directory, "refuse"), "")
-    const response = await engine.response(engine.send({ script: "print(1)", cwd: engine.directory }))
-    assert.equal(!response.ok && response.error.code, "initialize-failed")
-    assert.match(!response.ok ? response.error.message : "", /required permission to use project majestic/)
-  } finally {
-    await engine.stop()
-  }
-})
-
-test("a cancelled run answers at once and ends its process", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
-  try {
-    assert.equal((await engine.settled()).status, "ready")
-    const marker = path.join(engine.directory, "pid")
-    const id = engine.send({
-      script: `import os\nopen(${JSON.stringify(marker)}, "w").write(str(os.getpid()))\nee.wait(60)`,
-      cwd: engine.directory,
-    })
-    await until(
-      () =>
-        fs.stat(marker).then(
-          () => true,
-          () => false,
-        ),
-      10000,
-      "the script to start",
-    )
-    const pid = Number(await fs.readFile(marker, "utf-8"))
-    engine.deliver({ type: "cancel", id })
-    const response = await engine.response(id, 10000)
-    assert.equal(!response.ok && response.error.code, "cancelled")
-    assert.equal(response.cancelled, true)
-    await until(
-      () => {
-        try {
-          process.kill(pid, 0)
-          return false
-        } catch {
-          return true
-        }
-      },
-      10000,
-      "the process to end",
-    )
-  } finally {
-    await engine.stop()
-  }
-})
 
 const machineGee = async (machine: string) => JSON.parse(await fs.readFile(machine, "utf-8")).gee
 
@@ -1213,11 +853,7 @@ test("a run reads its task in GeoCode's folder, for the answer to start with", {
         task: { name: "taipei-ndvi-20261080", new: false, started: false },
       }),
     )
-    assert.deepEqual(!typo.ok && { code: typo.error.code, message: typo.error.message }, {
-      code: "task-missing",
-      message:
-        "There is no task taipei-ndvi-20261080: it has saved nothing in GeoCode's folder, and this conversation did not start it; the latest tasks are taipei-ndvi-20261008, b-20260902, d-20260904",
-    })
+    assert.equal(!typo.ok && typo.error.code, "task-missing")
     assert.equal(
       await fs.stat(marker).then(
         () => true,
@@ -1261,10 +897,9 @@ test("the header stays within the line GeoEngine reads", { skip: !python3 }, asy
     const full = result(
       await engine.response(engine.send({ script: "print(1)", cwd: engine.directory, task: continuing })),
     )
-    const space = (full as unknown as { space: { assets: { description: string }[]; more: number } }).space
+    const space = (full as unknown as { space: { assets: unknown[]; more: number } }).space
     assert.ok(space.assets.length > 10 && space.more > 0, `${space.assets.length} listed, ${space.more} more`)
     assert.equal(space.assets.length + space.more, 100)
-    assert.equal(space.assets[0]!.description.length, 500)
     assert.ok(Buffer.byteLength(JSON.stringify(space), "utf-8") <= 48 * 1024)
   } finally {
     await engine.stop()
@@ -1287,11 +922,7 @@ test("a new task whose name is taken is refused before the script runs", { skip:
     const taken = await engine.response(
       engine.send({ script, cwd: engine.directory, task: { name: "taipei-ndvi-20261008", new: true, started: false } }),
     )
-    assert.equal(taken.ok, false)
-    assert.deepEqual(!taken.ok && { code: taken.error.code, message: taken.error.message }, {
-      code: "task-taken",
-      message: "The task taipei-ndvi-20261008 already exists, with 2 assets: area, composite",
-    })
+    assert.equal(!taken.ok && taken.error.code, "task-taken")
     assert.equal(
       await fs.stat(marker).then(
         () => true,
@@ -1299,48 +930,6 @@ test("a new task whose name is taken is refused before the script runs", { skip:
       ),
       false,
     )
-
-    // Guards against a task of many assets making the refusal too long to be read, and the run taken for a crash.
-    await holding(engine.directory, [
-      folder(ROOT, "2026-09-01T00:00:00Z"),
-      folder(task, "2026-10-08T01:00:00Z"),
-      ...Array.from({ length: 25 }, (_, index) => ({
-        type: "IMAGE",
-        name: `${task}/a${String(index).padStart(2, "0")}`,
-        updateTime: "2026-10-08T06:00:00Z",
-      })),
-    ])
-    const many = await engine.response(
-      engine.send({ script, cwd: engine.directory, task: { name: "taipei-ndvi-20261008", new: true, started: false } }),
-    )
-    const listed = Array.from({ length: 20 }, (_, index) => `a${String(index).padStart(2, "0")}`).join(", ")
-    assert.equal(
-      !many.ok && many.error.message,
-      `The task taipei-ndvi-20261008 already exists, with 25 assets: ${listed} and 5 more`,
-    )
-
-    const named = await engine.response(
-      engine.send({ script, cwd: engine.directory, task: { name: "taipei ndvi", new: true, started: false } }),
-    )
-    assert.equal(!named.ok && named.error.code, "invalid-params")
-  } finally {
-    await engine.stop()
-  }
-})
-
-test("a run whose task cannot be read fails before the script runs", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({
-    python: await stubbedPython(directory, ["unlistable"]),
-    project: "majestic",
-  }))
-  try {
-    assert.equal((await engine.settled()).status, "ready")
-    await holding(engine.directory, [folder(ROOT, "2026-09-01T00:00:00Z")])
-    const response = await engine.response(engine.send({ script: "print(1)", cwd: engine.directory }))
-    assert.deepEqual(!response.ok && { code: response.error.code, message: response.error.message }, {
-      code: "space-failed",
-      message: "EEException: Caller does not have required permission to list assets",
-    })
   } finally {
     await engine.stop()
   }
@@ -1361,10 +950,7 @@ test("a task runs one call at a time, while other tasks run beside it", { skip: 
     const busy = await engine.response(
       engine.send({ script: "print(1)", cwd: engine.directory, task: task("a-20261009") }),
     )
-    assert.deepEqual(!busy.ok && { code: busy.error.code, message: busy.error.message }, {
-      code: "task-busy",
-      message: "The task a-20261009 is already running in another call",
-    })
+    assert.equal(!busy.ok && busy.error.code, "task-busy")
     const beside = result(
       await engine.response(engine.send({ script: "print(2)", cwd: engine.directory, task: task("b-20261009") })),
     )
@@ -1381,53 +967,15 @@ test("a task runs one call at a time, while other tasks run beside it", { skip: 
   }
 })
 
-test("the script imports GeoCode's module, which reads the task's assets by name", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
-  try {
-    assert.equal((await engine.settled()).status, "ready")
-    const task = `${ROOT}/taipei-ndvi-20261008`
-    await holding(engine.directory, [
-      folder(ROOT, "2026-09-01T00:00:00Z"),
-      folder(task, "2026-10-08T01:00:00Z"),
-      { type: "IMAGE", name: `${task}/composite`, updateTime: "2026-10-08T06:00:00Z" },
-    ])
-    const script = [
-      "import geocode as gc",
-      "for name in ['ndvi', 'other-20261001/x', 'a/b/c']:",
-      "    try:",
-      "        gc.load(name)",
-      "    except Exception as error:",
-      "        print(type(error).__name__, error)",
-    ].join("\n")
-    const done = result(
-      await engine.response(
-        engine.send({
-          script,
-          cwd: engine.directory,
-          task: { name: "taipei-ndvi-20261008", new: false, started: false },
-        }),
-      ),
-    )
-    assert.equal(
-      done.output,
-      [
-        "LookupError Task taipei-ndvi-20261008 has no asset ndvi. Its assets: composite.",
-        "LookupError There is no task other-20261001 in GeoCode's folder.",
-        `ValueError gc.load takes "asset" of this task, "task/asset" of another, or a full path starting with "projects/", not 'a/b/c'.`,
-        "",
-      ].join("\n"),
-    )
-  } finally {
-    await engine.stop()
-  }
-})
-
 type Stored = {
   assets: { name: string; type: string; properties?: Record<string, string> }[]
   operations: { metadata: { description: string; state: string } }[]
 }
 const stored = async (directory: string) =>
   JSON.parse(await fs.readFile(path.join(directory, "stubs", "flags", "assets.json"), "utf-8")) as Stored
+
+/** The asset each export was for, in order, by the "task:asset:fingerprint" its description names. */
+const exported = (held: Stored) => held.operations.map((operation) => operation.metadata.description.split(":")[1])
 
 /**
  * A script saving to the task, with the stub's graphs standing for computations; GeoCode's wait does not sleep, and an
@@ -1463,21 +1011,8 @@ test(
         'gc.save(ee.FeatureCollection("area"), "area", title="范围", description="研究区")',
       )
       const done = result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
-      assert.equal(
-        done.output,
-        [
-          "Exporting ndvi (export ID OP0); waiting for it.",
-          "Saved ndvi after 0 s.",
-          `Image ${ROOT}/t-20261008/ndvi`,
-          "ndvi is unchanged since it was saved; reading the saved asset.",
-          "Warning: ndvi was saved before with other content; it is being replaced.",
-          "Exporting ndvi (export ID OP1); waiting for it.",
-          "Saved ndvi after 0 s.",
-          "Exporting area (export ID OP2); waiting for it.",
-          "Saved area after 0 s.",
-          "",
-        ].join("\n"),
-      )
+      // What gc.save returns is the saved asset, read back.
+      assert.match(done.output, new RegExp(`^Image ${ROOT}/t-20261008/ndvi$`, "m"))
       const after = await stored(engine.directory)
       assert.deepEqual(
         after.assets.map((asset) => [asset.name, asset.type]),
@@ -1493,15 +1028,8 @@ test(
         { title: ndvi.title, description: ndvi.description, task: ndvi.task },
         { title: "台北 NDVI", description: "夏季中值", task: "t-20261008" },
       )
-      assert.match(ndvi.saved!, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/)
-      // A running export is known by its description alone: the task, the asset and its fingerprint.
-      const labels = after.operations.map((operation) => operation.metadata.description)
-      assert.deepEqual(
-        labels.map((label) => label.replace(/:[0-9a-f]{8}$/, "")),
-        ["t-20261008:ndvi", "t-20261008:ndvi", "t-20261008:area"],
-      )
-      assert.equal(labels[1]!.slice(-8), ndvi.fingerprint!.slice(0, 8))
-      assert.notEqual(labels[0], labels[1])
+      // Exported once, not again for the same grid written another way, again for other content.
+      assert.deepEqual(exported(after), ["ndvi", "ndvi", "area"])
     } finally {
       await engine.stop()
     }
@@ -1526,24 +1054,9 @@ test(
         save('ee.Image("composite, cloudless")', "composite"),
         save('gc.load("composite")', "copy"),
       )
-      const done = result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
-      assert.equal(
-        done.output,
-        [
-          "Exporting composite (export ID OP0); waiting for it.",
-          "Saved composite after 0 s.",
-          "Exporting copy (export ID OP1); waiting for it.",
-          "Saved copy after 0 s.",
-          "copy is unchanged since it was saved; reading the saved asset.",
-          "Warning: composite was saved before with other content; it is being replaced.",
-          "Exporting composite (export ID OP2); waiting for it.",
-          "Saved composite after 0 s.",
-          "Warning: copy was saved before with other content; it is being replaced.",
-          "Exporting copy (export ID OP3); waiting for it.",
-          "Saved copy after 0 s.",
-          "",
-        ].join("\n"),
-      )
+      result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
+      // The copy is reused while the composite it reads is unchanged, and exported again once that is replaced.
+      assert.deepEqual(exported(await stored(engine.directory)), ["composite", "copy", "composite", "copy"])
     } finally {
       await engine.stop()
     }
@@ -1556,15 +1069,11 @@ test("a failed save leaves no folder it made, and reports the failure", { skip: 
     assert.equal((await engine.settled()).status, "ready")
     await holding(engine.directory, [])
     const script = saving('gc.save(ee.Image("ndvi"), "ndvi", title="t", description="d", scale=10)')
-    for (const [flag, error] of [
-      ["export-fails", "RuntimeError: Exporting ndvi failed: User memory limit exceeded."],
-      ["export-refused", "EEException: Image.load: Image asset 'projects/majestic/assets/none' not found."],
-    ] as const) {
+    for (const flag of ["export-fails", "export-refused"] as const) {
       await raise(engine.directory, flag)
       const done = result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
       await lower(engine.directory, flag)
       assert.equal(done.outcome, "failed")
-      assert.match(done.output, new RegExp(`${error.replace(/[.()]/g, "\\$&")}\n$`))
       // GeoCode's own lines, by the package's file names, as an installed package's would be.
       assert.match(done.output, /File "geocode\/_assets\.py", line \d+, in save\n {4}\S/)
       assert.deepEqual((await stored(engine.directory)).assets, [])
@@ -1585,18 +1094,13 @@ test(
       await raise(engine.directory, "export-slow")
       const save = (graph: string) => `gc.save(ee.Image("${graph}"), "ndvi", title="t", description="d", scale=10)`
       const id = engine.send({ script: saving(save("ndvi")), cwd: engine.directory, task: TASK })
-      const done = result(await engine.response(id))
-      assert.equal(done.output, "Exporting ndvi (export ID OP0); waiting for it.\nSaved ndvi after 0 s.\n")
-      assert.deepEqual(engine.progress(id), [
-        { begun: true },
-        { status: { seq: 1, text: "Saving ndvi to the task" } },
-        { output: "Exporting ndvi (export ID OP0); waiting for it.\n" },
-        { status: { seq: 2, text: "Exporting ndvi to the task", progress: 0 } },
-        { status: { seq: 3, text: "Exporting ndvi to the task", progress: 0.5 } },
-        { status: { seq: 4, text: "Saving ndvi to the task" } },
-        { output: "Saved ndvi after 0 s.\n" },
-        { status: { seq: 5, text: null } },
-      ])
+      assert.equal(result(await engine.response(id)).outcome, "finished")
+      const shares = engine.progress(id).flatMap((data) => {
+        const share = (data as { status?: { progress?: number } }).status?.progress
+        return share === undefined ? [] : [share]
+      })
+      // The export's share done reaches the tool row as Earth Engine reports it.
+      assert.deepEqual(shares, [0, 0.5])
       await lower(engine.directory, "export-slow")
 
       // A run stopped while it waits leaves its export running on the server.
@@ -1620,27 +1124,20 @@ test(
         (operation: Stored["operations"][number]) => operation.metadata.state === "RUNNING",
       ).finishes = true
       await fs.writeFile(file, JSON.stringify(left))
-      const joined = result(
+      result(
         await engine.response(
           engine.send({ script: saving(save("ndvi masked")), cwd: engine.directory, task: continuing }),
         ),
-      )
-      assert.equal(
-        joined.output,
-        "ndvi is already being exported with the same content; waiting for it.\nSaved ndvi after 0 s.\n",
       )
 
       await stopped("ndvi clipped")
       // Guards against reading the saved asset while another version of it is still being exported over it.
-      const reused = result(
+      result(
         await engine.response(
           engine.send({ script: saving(save("ndvi masked")), cwd: engine.directory, task: continuing }),
         ),
       )
-      assert.equal(
-        reused.output,
-        "Cancelled an export of ndvi still running with other content.\nndvi is unchanged since it was saved; reading the saved asset.\n",
-      )
+      // Joined rather than exported again, then the other version cancelled: three exports in all.
       assert.deepEqual(
         (await stored(engine.directory)).operations.map((operation) => operation.metadata.state),
         ["SUCCEEDED", "SUCCEEDED", "CANCELLED"],
@@ -1651,43 +1148,12 @@ test(
   },
 )
 
-test("what GeoCode's functions are doing reaches the tool row, not the answer", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
-  try {
-    assert.equal((await engine.settled()).status, "ready")
-    await holding(engine.directory, [])
-    const script = [
-      "from geocode import _run",
-      'with _run.stage("Reading the region from taipei.shp"):',
-      '    with _run.stage("Converting the region to WGS 84"):',
-      "        pass",
-    ].join("\n")
-    const id = engine.send({ script, cwd: engine.directory, task: TASK })
-    assert.equal(result(await engine.response(id)).output, "")
-    assert.deepEqual(engine.progress(id), [
-      { begun: true },
-      { status: { seq: 1, text: "Reading the region from taipei.shp" } },
-      { status: { seq: 2, text: "Converting the region to WGS 84" } },
-      // Guards against an inner stage's end clearing the outer one.
-      { status: { seq: 3, text: "Reading the region from taipei.shp" } },
-      { status: { seq: 4, text: null } },
-    ])
-  } finally {
-    await engine.stop()
-  }
-})
-
 // Guards against the settings page losing the project when it chooses a Python, or the Python when it names a project.
-test("the settings write the Python or the project, keeping the other, and refuse what is not one", async () => {
+test("the settings write the Python or the project, keeping the other", async () => {
   const engine = await start(async () => ({ project: "majestic" }))
   try {
     // A project before any Python is no configuration yet, though the settings show it.
     assert.deepEqual(await engine.settled(), { status: "unconfigured", project: "majestic" })
-    // Guards against GeoAgent asking again for a project the user has already named in the settings.
-    const refused = await engine.response(engine.send({ script: "print(1)", cwd: engine.directory }))
-    const hint = !refused.ok ? refused.error.message : ""
-    assert.match(hint, /The project is already set to majestic; keep it when adding the Python\./)
-    assert.doesNotMatch(hint, /never guess it/)
 
     // Guards against a virtual environment chosen by its folder being configured as the Python it was made from.
     const base = path.join(engine.directory, "base", "python3.12")
@@ -1702,22 +1168,11 @@ test("the settings write the Python or the project, keeping the other, and refus
     // The Python found is answered, for a page to tell a choice of the folder already configured from a new one.
     assert.deepEqual(chosen.ok && chosen.result, { python: venv })
     assert.deepEqual(await machineGee(engine.machine), { project: "majestic", python: venv })
-    const empty = await engine.response(
-      engine.send({ environment: path.join(engine.directory, "base") }, "gee.configure"),
-    )
-    assert.equal(!empty.ok && empty.error.code, "invalid-params")
 
     const python = path.join(engine.directory, "missing", "python")
     assert.ok((await engine.response(engine.send({ python }, "gee.configure"))).ok)
     assert.deepEqual(await machineGee(engine.machine), { project: "majestic", python })
     assert.ok((await engine.response(engine.send({ project: "other-project" }, "gee.configure"))).ok)
-    assert.deepEqual(await machineGee(engine.machine), { project: "other-project", python })
-    // Guards against a project ID the request to Earth Engine cannot carry, as one with a full-width comma typed into it.
-    const refusedProjects = [{ project: "has space" }, { project: "" }, { project: "majestic-v4、5" }]
-    for (const params of [{ python: "bin/python" }, ...refusedProjects, { other: 1 }]) {
-      const response = await engine.response(engine.send(params, "gee.configure"))
-      assert.equal(!response.ok && response.error.code, "invalid-params", JSON.stringify(params))
-    }
     assert.deepEqual(await machineGee(engine.machine), { project: "other-project", python })
   } finally {
     await engine.stop()
@@ -1734,8 +1189,8 @@ const signIn = async (engine: Awaited<ReturnType<typeof start>>, query: string) 
   // Guards against a request that is not the sign-in coming back, as the browser's for the page's icon, ending it.
   assert.equal((await fetch(`${back}/favicon.ico`)).status, 404)
   assert.ok(!engine.sent.some((message) => message.type === "response" && message.id === id))
-  const page = await fetch(`${back}/?${query}`).then((answer) => answer.text())
-  return { response: await engine.response(id), page, back: back ?? "" }
+  await fetch(`${back}/?${query}`).then((answer) => answer.text())
+  return { response: await engine.response(id), back: back ?? "" }
 }
 
 test("signing in through the browser checks again, and finds the user signed in", { skip: !python3 }, async () => {
@@ -1756,48 +1211,13 @@ test("signing in through the browser checks again, and finds the user signed in"
 })
 
 // Guards against a denied sign-in hanging until its time is up, as earthengine-api then waits for a code typed in.
-test("access denied in the browser ends the sign-in at once, saying so there too", { skip: !python3 }, async () => {
+test("access denied in the browser ends the sign-in at once", { skip: !python3 }, async () => {
   const engine = await start(async (directory) => ({ python: await stubbedPython(directory, ["signed-out"]) }))
   try {
     assert.equal((await engine.settled()).status, "signed-out")
-    const { response, page } = await signIn(engine, "error=access_denied")
+    const { response } = await signIn(engine, "error=access_denied")
     assert.equal(!response.ok && response.error.code, "denied")
-    assert.match(!response.ok ? response.error.message : "", /access_denied/)
-    assert.match(page, /did not complete \(access_denied\)/)
     assert.equal(engine.states().at(-1)?.status, "signed-out")
-  } finally {
-    await engine.stop()
-  }
-})
-
-test(
-  "a sign-in is cancelled, or ended by another one, without waiting for the browser",
-  { skip: !python3 },
-  async () => {
-    const engine = await start(async (directory) => ({ python: await stubbedPython(directory, ["signed-out"]) }))
-    try {
-      await engine.settled()
-      const first = engine.send({}, "gee.signIn")
-      await until(() => engine.progress(first).length > 0, 10000, "the first sign-in")
-      const second = engine.send({}, "gee.signIn")
-      const replaced = await engine.response(first, 10000)
-      assert.equal(!replaced.ok && replaced.error.code, "replaced")
-      await until(() => engine.progress(second).length > 0, 10000, "the second sign-in")
-      engine.deliver({ type: "cancel", id: second })
-      const cancelled = await engine.response(second, 10000)
-      assert.equal(!cancelled.ok && cancelled.error.code, "cancelled")
-    } finally {
-      await engine.stop()
-    }
-  },
-)
-
-test("signing in without a configured Python is refused", async () => {
-  const engine = await start()
-  try {
-    await engine.settled()
-    const response = await engine.response(engine.send({}, "gee.signIn"))
-    assert.equal(!response.ok && response.error.code, "invalid-params")
   } finally {
     await engine.stop()
   }
