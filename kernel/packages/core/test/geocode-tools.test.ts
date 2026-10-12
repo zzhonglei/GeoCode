@@ -386,7 +386,7 @@ describe("GeoCode: readgeodata", () => {
     }),
   )
 
-  it.effect("asks again about a dataset whose asking was interrupted", () =>
+  it.live("asks again about a dataset whose asking was interrupted", () =>
     Effect.gen(function* () {
       reset()
       answer = () => result({ text: "dem.tif: raster, GeoTIFF" })
@@ -395,7 +395,8 @@ describe("GeoCode: readgeodata", () => {
       const outside = path.join(path.parse(PROJECT).root, "survey", "dem.tif")
       pending = yield* Deferred.make<void>()
       const asking = yield* Effect.forkChild(executeTool(registry, read({ path: outside }, session)))
-      for (let turn = 0; turn < 100; turn++) yield* Effect.yieldNow
+      // Interrupted while asking, not before it asks.
+      for (let turn = 0; turn < 100 && !assertions.length; turn++) yield* Effect.sleep("10 millis")
       yield* Fiber.interrupt(asking)
       pending = undefined
       // Guards against keeping an asking the user never answered, which would hold every later call on it.

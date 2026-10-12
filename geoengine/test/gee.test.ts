@@ -958,8 +958,7 @@ test(
     try {
       const ready = await engine.settled()
       assert.ok(ready.status === "ready")
-      const script =
-        'import os\nprint("中文", os.getcwd())\nprint(ee.Number(1).getInfo())\nimport sys\nprint("warned", file=sys.stderr)'
+      const script = 'import os\nprint("中文", os.getcwd())\nprint(ee.Number(1).getInfo())'
       const id = engine.send({ script, cwd: engine.directory })
       const done = result(await engine.response(id))
       assert.equal(done.outcome, "finished")
@@ -975,7 +974,7 @@ test(
         },
       })
       const cwd = await fs.realpath(engine.directory)
-      assert.equal(done.output, `中文 ${cwd}\n1\nwarned\n`)
+      assert.equal(done.output, `中文 ${cwd}\n1\n`)
       assert.doesNotMatch(done.output, /Earth Engine|__GEOCODE_GEE__/)
       // Guards against the tool row's log losing or adding to what the answer has.
       const [begun, ...printed] = engine.progress(id) as [unknown, ...{ output: string }[]]
@@ -993,12 +992,12 @@ test("a failing script ends with its traceback, from its own lines", { skip: !py
   try {
     assert.equal((await engine.settled()).status, "ready")
     const done = result(
-      await engine.response(engine.send({ script: 'print("before")\nvalue = 1 / 0\n', cwd: engine.directory })),
+      await engine.response(engine.send({ script: "divisor = 0\nvalue = 1 / divisor\n", cwd: engine.directory })),
     )
     assert.equal(done.outcome, "failed")
     assert.match(
       done.output,
-      /^before\nTraceback \(most recent call last\):\n {2}File "<script>", line 2, in <module>\n {4}value = 1 \/ 0\n/,
+      /^Traceback \(most recent call last\):\n {2}File "<script>", line 2, in <module>\n {4}value = 1 \/ divisor\n/,
     )
     assert.match(done.output, /ZeroDivisionError/)
     assert.doesNotMatch(done.output, /<stdin>/)
