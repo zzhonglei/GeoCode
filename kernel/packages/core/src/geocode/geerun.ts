@@ -232,8 +232,10 @@ const SHOWN_STATUSES = 20
 const LOG_CHARS = 32 * 1024
 /** How often, at most, the tool row is told: a script may print a line at a time. */
 const SHOW_MS = 250
-/** GeoEngine tells of a wait every 5 s while it lasts: past this without word, the wait is over. */
-const WAIT_MS = 6000
+/** GeoEngine tells of a wait every second while it lasts: past this without word, the wait is over. */
+const WAIT_MS = 1500
+/** How long a wait lasts before the row says so: a shorter one would only flash by. */
+const WAIT_SHOWN_MS = 1000
 
 type Recovery = Extract<Job.Recovery, { kind: "geerun" }>
 
@@ -438,8 +440,12 @@ export const make = (
         const since = Date.now()
         const statuses: Status[] = []
         let log = ""
-        // While a request waits for Earth Engine: the row says so when no function tells what it does.
-        let waiting: { readonly since: number; readonly heard: number } | undefined
+        // While requests wait for Earth Engine, one after another or together, since the first began: the row says so
+        // once it has lasted, when no function tells what it does. The script beginning or a function's status ends the
+        // run of requests, so a wait from before does not count toward the next.
+        let waiting: { readonly since: number; readonly heard: number; readonly long: boolean } | undefined
+        // Once the script itself began: before, the row says it is starting.
+        let scriptBegan = false
         let shown = 0
         let changed = false
         // Once the call has returned, as a run in the background does, the kernel takes no more progress for it: the
@@ -451,7 +457,8 @@ export const make = (
           started: since,
           statuses: [...statuses],
           log,
-          ...(waiting === undefined ? {} : { waitingSince: waiting.since }),
+          ...(waiting?.long ? { waitingSince: waiting.since } : {}),
+          ...(scriptBegan ? { begun: true } : {}),
           ...(returned ? { status: "running" } : {}),
         })
         const show = Effect.suspend(() => {
@@ -476,15 +483,21 @@ export const make = (
             const decoded = decodeProgress(data)
             if (Exit.isFailure(decoded)) return Effect.void
             const told = decoded.value
-            if ("begun" in told) return Deferred.succeed(begun, undefined).pipe(Effect.asVoid)
-            if ("waiting" in told) waiting = { since: Date.now() - told.waiting * 1000, heard: Date.now() }
-            else if ("status" in told) {
+            if (!("waiting" in told || "output" in told)) waiting = undefined
+            if ("begun" in told) scriptBegan = true
+            else if ("waiting" in told) {
+              const now = Date.now()
+              const start = waiting?.since ?? now - told.waiting * 1000
+              const long = waiting?.long === true
+              waiting = { since: start, heard: now, long: long || now - start >= WAIT_SHOWN_MS }
+              // A beat that changes nothing the row shows is not worth sending it the whole state again.
+              if (waiting.long === long) return Effect.void
+            } else if ("status" in told) {
               statuses.push(told.status)
               if (statuses.length > SHOWN_STATUSES) statuses.shift()
             } else log = (log + told.output).slice(-LOG_CHARS)
-            if (performance.now() - shown >= SHOW_MS) return show
-            changed = true
-            return Effect.void
+            const tell = performance.now() - shown >= SHOW_MS ? show : Effect.sync(() => void (changed = true))
+            return "begun" in told ? Deferred.succeed(begun, undefined).pipe(Effect.andThen(tell)) : tell
           })
         // What came within the last moments, once they pass; and the end of a wait, which GeoEngine does not tell.
         const flush = Effect.forever(
@@ -492,8 +505,8 @@ export const make = (
             Effect.andThen(
               Effect.suspend(() => {
                 if (waiting && Date.now() - waiting.heard > WAIT_MS) {
+                  changed ||= waiting.long
                   waiting = undefined
-                  changed = true
                 }
                 return changed && performance.now() - shown >= SHOW_MS ? show : Effect.void
               }),

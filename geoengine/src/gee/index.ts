@@ -23,8 +23,8 @@ const CHECK_TIMEOUT = "90 seconds"
 const SETTLE_TIMEOUT = "100 seconds"
 
 /**
- * How long a run may go with no output and no request waiting for Earth Engine. A waiting request reports every few
- * seconds, so only the script's own work counts, such as reading a large file.
+ * How long a run may go with no output and no request waiting for Earth Engine. A waiting request reports while it
+ * waits, so only the script's own work counts, such as reading a large file.
  */
 const IDLE_SECONDS = 120
 

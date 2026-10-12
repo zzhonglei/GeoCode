@@ -3,8 +3,11 @@ export * as Python from "./python.ts"
 /** Prefixes every structured line: earthengine-api and the script also write to stdout, so only these are parsed. */
 export const MARKER = "__GEOCODE_GEE__"
 
-/** Seconds between the reports a run makes while a request waits for Earth Engine. */
-export const BEAT_SECONDS = 5
+/**
+ * Seconds between the reports a run makes while a request waits for Earth Engine: often enough that the tool row says
+ * so within a moment of a wait beginning.
+ */
+export const BEAT_SECONDS = 1
 
 /**
  * The longest one request is reported for, in seconds: Earth Engine ends an interactive computation after about five
@@ -237,7 +240,7 @@ finish()
 /**
  * Initializes Earth Engine with the configured project and reads the run's task in GeoCode's folder, then runs
  * GeoAgent's script, inline or from a file, with `ee` at hand and GeoCode's package importable. While a request waits
- * for Earth Engine it reports so every few seconds, so a long computation is not taken for a silent script:
+ * for Earth Engine it reports so, so a long computation is not taken for a silent script:
  * earthengine-api sends every request through requests' sessions, where the wait is watched.
  */
 export const RUN =
@@ -334,7 +337,7 @@ def beat():
         with pending_lock:
             waiting = [start for start in pending.values() if now - start < ${LONGEST_REQUEST_SECONDS}]
         if waiting:
-            heartbeat({"type": "waiting", "seconds": round(now - min(waiting))})
+            heartbeat({"type": "waiting", "seconds": round(now - min(waiting), 1)})
 
 
 threading.Thread(target=beat, daemon=True).start()

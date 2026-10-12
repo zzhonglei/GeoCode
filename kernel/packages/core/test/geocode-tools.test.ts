@@ -868,8 +868,10 @@ describe("GeoCode: geerun", () => {
       const status = { seq: 1, text: "Finding images of COPERNICUS/S2_SR_HARMONIZED", progress: 0.5 }
       answer = () => [
         progress({ begun: true }),
-        progress({ waiting: 5 }),
+        progress({ waiting: 1 }),
+        // A function's status ends the run of requests: the wait below counts from its own 5 s, not from the one before.
         progress({ status }),
+        progress({ waiting: 5 }),
         progress({ output: "images: 73\n" }),
         ...ran(),
       ]
@@ -879,10 +881,13 @@ describe("GeoCode: geerun", () => {
         ...gee({ script: "print(1)" }),
         progress: (data) => Effect.sync(() => void shown.push(data)),
       })
+      // The row says the run is starting until the script itself begins.
+      expect(shown[0]).not.toHaveProperty("begun")
       expect(shown.at(-1)).toMatchObject({
         description: "统计影像",
         task: TASK,
         started: expect.any(Number),
+        begun: true,
         statuses: [status],
         log: "images: 73\n",
       })
@@ -891,6 +896,16 @@ describe("GeoCode: geerun", () => {
       const since = (shown.at(-1) as { waitingSince: number }).waitingSince
       expect(since).toBeLessThanOrEqual(before - 5000 + 50)
       expect(since).toBeGreaterThan(before - 5000 - 1000)
+
+      // Guards against a request that waited only a moment flashing a wait on the row.
+      reset()
+      answer = () => [progress({ begun: true }), progress({ waiting: 0.3 }), progress({ output: "1\n" }), ...ran()]
+      const glimpsed: unknown[] = []
+      yield* executeTool(yield* Tool.Service, {
+        ...gee({ script: "print(1)" }),
+        progress: (data) => Effect.sync(() => void glimpsed.push(data)),
+      })
+      expect(glimpsed.some((data) => Object.hasOwn(data as object, "waitingSince"))).toBe(false)
     }),
   )
 

@@ -12,9 +12,12 @@ import ee
 
 from geocode import _run
 
-# How often a download reports its share done, which also tells GeoEngine the run is alive.
+# How often a download looks at its share done, reporting it when it moved; and how often it reports it at least,
+# which also tells GeoEngine the run is alive.
+LOOK_SECONDS = 1
 REPORT_SECONDS = 5
-POLL_SECONDS = 10
+# How often an export is asked about: its share done moves on the tool row about as often.
+POLL_SECONDS = 3
 GEOTIFF = (".tif", ".tiff")
 # What prepareForExport takes to set a grid; given none, the image's own is used.
 GRID = ("crs", "crs_transform", "shape", "scale")
@@ -82,8 +85,10 @@ def download(image, path, **grid):
     try:
         with _run.stage("Downloading %s" % name, 0):
             with reporting():
-                ready.toGeoTIFF(partial, overwrite=True)
-            # Reported only every few seconds, so a download of one tile would show none of it done.
+                # In tiles of 2 MB rather than geedim's 4, so the share done moves in finer steps; no smaller, or
+                # geedim no longer cuts a float64 image in whole blocks of the GeoTIFF it writes.
+                ready.toGeoTIFF(partial, overwrite=True, max_tile_size=2)
+            # Looked at only every second, so a download of one tile would show none of it done.
             _run.update(progress=1)
         saved = numbered(target)
         os.replace(partial, saved)
@@ -213,8 +218,12 @@ def reporting():
             bars.append(self)
 
     def report():
-        while not stopped.wait(REPORT_SECONDS):
-            _run.update(progress=bars[-1].n / bars[-1].total if bars else 0)
+        told, at = 0, time.monotonic()
+        while not stopped.wait(LOOK_SECONDS):
+            share = bars[-1].n / bars[-1].total if bars else 0
+            if share != told or time.monotonic() - at >= REPORT_SECONDS:
+                _run.update(progress=share)
+                told, at = share, time.monotonic()
 
     stopped = threading.Event()
     reporter = threading.Thread(target=report)

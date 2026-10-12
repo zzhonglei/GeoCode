@@ -46,14 +46,6 @@ def composite(images, region, dates=None, method=None, mask=True, min_coverage=0
         ).getInfo()
         if not counts["images"]:
             raise ValueError("None of the images are of %s." % ", ".join(dates))
-        count = (
-            _run.plural(counts["acquisitions"], "acquisition")
-            if counts["acquisitions"]
-            else _run.plural(counts["images"], "image")
-        )
-        # From here to the check below, where Earth Engine computes the composite.
-        _run.update("Compositing %s" % count)
-
         centre = chosen.filterBounds(region.centroid(1))
         source = ee.Image(ee.Algorithms.If(centre.size().gt(0), centre.first(), chosen.first()))
         grid = source.gd.projection()
@@ -88,6 +80,11 @@ def composite(images, region, dates=None, method=None, mask=True, min_coverage=0
 
         sums = found["sums"]
         share = {name: sums[name] / sums["all"] for name in ("covered", "none", "cloud")}
+        count = (
+            _run.plural(counts["acquisitions"], "acquisition")
+            if counts["acquisitions"]
+            else _run.plural(counts["images"], "image")
+        )
         taken = "Composite of " + count
         left = [name for name in ("none", "cloud") if round(100 * share[name], 2) > 0]
         said = {"none": "No image reaches", "cloud": "Every image is masked as cloud over"}
