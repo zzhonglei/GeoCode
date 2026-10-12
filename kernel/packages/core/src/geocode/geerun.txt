@@ -40,4 +40,6 @@ Example:
     region = gc.region("data/taipei.shp")
     images = gc.images("COPERNICUS/S2_SR_HARMONIZED", region, "2024-06-01", "2024-09-01")
     composite = gc.composite(images, region)
-    gc.download(composite.select(["B4", "B3", "B2"]).clip(region), "output/taipei_rgb.tif")
+    # A composite has no bounds: clip it before gc.save, gc.download or gc.to_drive.
+    composite = composite.clip(region)
+    gc.download(composite.select(["B4", "B3", "B2"]), "output/taipei_rgb.tif")
