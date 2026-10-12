@@ -28,7 +28,8 @@ const python3 = (() => {
 
 /**
  * A file in the stubs' "flags" folder that makes them behave as the named environment does: "adc" has no credentials of
- * Earth Engine's own but Google Cloud's default ones; "no-geopandas" leaves the package out; "unlistable" refuses to
+ * Earth Engine's own but Google Cloud's default ones; "no-geopandas" leaves the package out; "old-geedim" makes it a 1.x;
+ * "old-python" makes the Python a 3.10, which is a 3.11 otherwise, whatever runs the stubs; "unlistable" refuses to
  * list assets; the "export-" flags say how an export goes (see the stub's `export`).
  */
 type Flag =
@@ -38,6 +39,8 @@ type Flag =
   | "offline-refresh"
   | "no-geopandas"
   | "broken-geedim"
+  | "old-geedim"
+  | "old-python"
   | "unlistable"
   | "export-refused"
   | "export-fails"
@@ -58,6 +61,12 @@ FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "flags")
 
 def raised(name):
     return os.path.exists(os.path.join(FOLDER, name))
+`,
+  "sitecustomize.py": `import sys
+
+import flags
+
+sys.version = ("3.10.4" if flags.raised("old-python") else "3.11.9") + sys.version[sys.version.index(" ") :]
 `,
   "requests/__init__.py": `import time
 
@@ -128,7 +137,7 @@ class Credentials:
 
 if flags.raised("broken-geedim"):
     raise ImportError("dlopen(libgdal.37.dylib): image not found", name="rasterio._base")
-__version__ = "2.0.0"
+__version__ = "1.9.1" if flags.raised("old-geedim") else "2.0.0"
 `,
   "geopandas/__init__.py": `__version__ = "1.1.3"
 `,
@@ -635,8 +644,8 @@ test(
         diagnostics: { missing: ["geopandas"] },
         hint: (python, file) =>
           [
-            `The configured Python, ${python}, lacks geopandas. GeoCode needs earthengine-api, geedim, geopandas in that Python.`,
-            `With the user's consent, install them: \`"${python}" -m pip install geopandas\`.`,
+            `The configured Python, ${python}, lacks geopandas. GeoCode needs earthengine-api, geedim 2.0 or later, geopandas 1.0 or later in that Python.`,
+            `With the user's consent, install them: \`"${python}" -m pip install "geopandas>=1.0"\`.`,
             CONFIGURED(file),
           ].join("\n"),
       },
@@ -650,8 +659,8 @@ test(
         status: "packages-missing",
         hint: (python, file) =>
           [
-            `The configured Python, ${python}, lacks geopandas. GeoCode needs earthengine-api, geedim, geopandas in that Python.`,
-            `With the user's consent, install them: \`"${path.dirname(python)}/bin/conda" install --prefix "${path.dirname(python)}" -c conda-forge -y geopandas\`.`,
+            `The configured Python, ${python}, lacks geopandas. GeoCode needs earthengine-api, geedim 2.0 or later, geopandas 1.0 or later in that Python.`,
+            `With the user's consent, install them: \`"${path.dirname(python)}/bin/conda" install --prefix "${path.dirname(python)}" -c conda-forge -y "geopandas>=1.0"\`.`,
             CONFIGURED(file),
           ].join("\n"),
       },
@@ -668,8 +677,50 @@ test(
             `In the configured Python, ${python}, these packages are installed but fail to import:`,
             "- geedim: ImportError: dlopen(libgdal.37.dylib): image not found",
             "Installing them again rarely helps. Show the user the errors; with their consent, repair the environment or set up another one.",
-            `The configured Python, ${python}, lacks geopandas. GeoCode needs earthengine-api, geedim, geopandas in that Python.`,
-            `With the user's consent, install them: \`"${python}" -m pip install geopandas\`.`,
+            `The configured Python, ${python}, lacks geopandas. GeoCode needs earthengine-api, geedim 2.0 or later, geopandas 1.0 or later in that Python.`,
+            `With the user's consent, install them: \`"${python}" -m pip install "geopandas>=1.0"\`.`,
+            CONFIGURED(file),
+          ].join("\n"),
+      },
+      // Guards against a package that imports but lacks what GeoCode's functions use reading as ready.
+      {
+        flags: ["old-geedim"],
+        project: "majestic",
+        status: "packages-outdated",
+        diagnostics: { outdated: [{ package: "geedim", version: "1.9.1", required: "2.0" }] },
+        hint: (python, file) =>
+          [
+            `The configured Python, ${python}, has geedim 1.9.1, older than GeoCode needs: geedim 2.0 or later.`,
+            `With the user's consent, upgrade them: \`"${python}" -m pip install "geedim>=2.0"\`.`,
+            CONFIGURED(file),
+          ].join("\n"),
+      },
+      {
+        flags: ["no-geopandas", "old-geedim"],
+        folder: async (directory) => {
+          await fs.mkdir(path.join(directory, "conda-meta"))
+          await fakePython(directory, "exit 0", path.join("bin", "conda"))
+        },
+        status: "packages-missing",
+        diagnostics: { missing: ["geopandas"], outdated: [{ package: "geedim", version: "1.9.1", required: "2.0" }] },
+        hint: (python, file) =>
+          [
+            `The configured Python, ${python}, lacks geopandas. GeoCode needs earthengine-api, geedim 2.0 or later, geopandas 1.0 or later in that Python.`,
+            "That Python has geedim 1.9.1, older than GeoCode needs: geedim 2.0 or later.",
+            `With the user's consent, install them: \`"${path.dirname(python)}/bin/conda" install --prefix "${path.dirname(python)}" -c conda-forge -y "geopandas>=1.0" "geedim>=2.0"\`.`,
+            CONFIGURED(file),
+          ].join("\n"),
+      },
+      // Guards against an upgrade the Python cannot take: pip picks an older geedim, conda may upgrade Python itself.
+      {
+        flags: ["old-python", "old-geedim"],
+        project: "majestic",
+        status: "packages-outdated",
+        diagnostics: { pythonVersion: "3.10.4" },
+        hint: (python, file) =>
+          [
+            `The configured Python, ${python}, is Python 3.10.4, which cannot install geedim 2.0: it needs Python 3.11 or later.`,
+            "With the user's consent, set up another environment with Python 3.11 or later and earthengine-api, geedim 2.0 or later, geopandas 1.0 or later, rather than upgrading this one.",
             CONFIGURED(file),
           ].join("\n"),
       },

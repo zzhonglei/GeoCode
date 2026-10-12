@@ -37,6 +37,7 @@ export const stepsOf = (view: GeeView | undefined): Steps => {
     case 'python-missing':
     case 'packages-missing':
     case 'packages-broken':
+    case 'packages-outdated':
       return { python: 'problem', account: 'unknown', project: 'todo' };
     // Ended or cut off anywhere, the importing of the packages included.
     case 'check-failed':

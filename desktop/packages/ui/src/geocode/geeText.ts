@@ -13,6 +13,7 @@ const GEE_STATUS = {
   'python-missing': 'Python not found',
   'packages-missing': 'Packages missing',
   'packages-broken': 'Packages broken',
+  'packages-outdated': 'Packages outdated',
   'signed-out': 'Not signed in',
   'project-missing': 'No project',
   unreachable: 'Unreachable',
@@ -42,6 +43,18 @@ export const geeSummaryOf = (status: Extract<GeeStatus, { status: 'ready' }>) =>
     .filter(Boolean)
     .join(' · ');
 
+/** What a Python in the settings' list lacks, or has too old, on one line; in English, as the status is. */
+export const unfitOf = (python: {
+  missing: readonly string[];
+  outdated?: readonly { package: string; version: string }[];
+}) =>
+  [
+    python.missing.length ? `Missing ${python.missing.join(', ')}` : null,
+    python.outdated?.length ? `${python.outdated.map((item) => `${item.package} ${item.version}`).join(', ')} too old` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
 /** The failure itself, on a line: what Google said when it answered, GeoEngine's message otherwise. */
 export const geeMessageOf = (status: Extract<GeeStatus, { diagnostics: unknown }>) =>
   status.diagnostics.said ?? status.diagnostics.message;
@@ -57,11 +70,16 @@ export const geeDiagnosticsOf = (view: GeeView): string => {
     diagnostics.message,
     diagnostics.said && diagnostics.said !== diagnostics.message ? `Google said: ${diagnostics.said}` : null,
     diagnostics.file ? `File: ${diagnostics.file}` : null,
-    diagnostics.python ? `Python: ${diagnostics.python}` : null,
+    diagnostics.python
+      ? `Python: ${diagnostics.python}${diagnostics.pythonVersion ? ` (${diagnostics.pythonVersion})` : ''}`
+      : null,
     diagnostics.project ? `Project: ${diagnostics.project}` : null,
     diagnostics.missing?.length ? `Not installed: ${diagnostics.missing.join(', ')}` : null,
     diagnostics.broken?.length
       ? `Failing to import:\n${diagnostics.broken.map((item) => `${item.package}: ${item.error}`).join('\n')}`
+      : null,
+    diagnostics.outdated?.length
+      ? `Too old: ${diagnostics.outdated.map((item) => `${item.package} ${item.version} (needs ${item.required} or later)`).join(', ')}`
       : null,
     diagnostics.output?.trim() ? `Output:\n${diagnostics.output.trim()}` : null,
     diagnostics.traceback?.trim() ? `Traceback:\n${diagnostics.traceback.trim()}` : null,
@@ -74,7 +92,6 @@ export type GeeText = {
   pythonHeading: string;
   pythonHelp: string;
   noPythons: string;
-  missing: (packages: readonly string[]) => string;
   pickPython: string;
   scanFailed: (reason: string) => string;
   chooseFailed: (reason: string) => string;
@@ -111,7 +128,6 @@ const PAGE_TEXT: { en: GeeText } & Partial<Record<Locale, GeeText>> = {
     pythonHelp:
       'The Pythons on this computer with earthengine-api installed. For another, use Other location… to choose its folder: a virtual environment, or a project folder with a .venv in it.',
     noPythons: 'No Python with earthengine-api found. Choose one with Other location…, or ask GeoAgent to set one up.',
-    missing: (packages) => `Missing ${packages.join(', ')}`,
     pickPython: 'Choose the folder of the Python environment',
     scanFailed: (reason) => `Could not look for Pythons: ${reason}`,
     chooseFailed: (reason) => `Could not use this Python: ${reason}`,
@@ -144,7 +160,6 @@ const PAGE_TEXT: { en: GeeText } & Partial<Record<Locale, GeeText>> = {
     pythonHeading: 'Python 环境',
     pythonHelp: '列出这台电脑上装了 earthengine-api 的 Python。其他的用「其他位置…」选择它所在的文件夹：虚拟环境，或者含有 .venv 的项目文件夹。',
     noPythons: '没有找到装了 earthengine-api 的 Python。可以用「其他位置…」指定，或者请 GeoAgent 帮你配置。',
-    missing: (packages) => `缺少 ${packages.join('、')}`,
     pickPython: '选择 Python 环境所在的文件夹',
     scanFailed: (reason) => `查找 Python 失败：${reason}`,
     chooseFailed: (reason) => `无法使用这个 Python：${reason}`,
@@ -177,7 +192,6 @@ const PAGE_TEXT: { en: GeeText } & Partial<Record<Locale, GeeText>> = {
     pythonHeading: 'Python 環境',
     pythonHelp: '列出這台電腦上裝了 earthengine-api 的 Python。其他的用「其他位置…」選擇它所在的資料夾：虛擬環境，或者含有 .venv 的專案資料夾。',
     noPythons: '沒有找到裝了 earthengine-api 的 Python。可以用「其他位置…」指定，或者請 GeoAgent 幫你設定。',
-    missing: (packages) => `缺少 ${packages.join('、')}`,
     pickPython: '選擇 Python 環境所在的資料夾',
     scanFailed: (reason) => `尋找 Python 失敗：${reason}`,
     chooseFailed: (reason) => `無法使用這個 Python：${reason}`,

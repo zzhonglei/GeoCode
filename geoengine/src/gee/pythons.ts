@@ -15,6 +15,8 @@ export interface Found {
   readonly earthengine?: string
   /** The other packages GeoCode needs that are not there, by the names they install under. */
   readonly missing: readonly string[]
+  /** Those of the other packages there that are older than GeoCode needs, as their installation records name them. */
+  readonly outdated?: readonly { readonly package: string; readonly version: string }[]
   /** The configured Python, by the file it is, whatever path names it. */
   readonly configured?: boolean
 }
@@ -35,6 +37,22 @@ const OTHERS = [
   { name: "geedim", module: "geedim" },
   { name: "geopandas", module: "geopandas" },
 ] as const
+
+/** The least version of each package GeoCode needs, by the name it installs under. */
+export const LEAST = { geedim: "2.0", geopandas: "1.0" } as const
+
+/** The least Python that geedim's least version installs on. */
+export const LEAST_PYTHON = "3.11"
+
+/** Whether a version is older than `least`, by their leading numbers; one that starts with none is not. */
+export function older(version: string, least: string) {
+  const numbers = (text: string) => (/^\d+(?:\.\d+)*/.exec(text)?.[0].split(".") ?? []).map(Number)
+  const have = numbers(version)
+  if (!have.length) return false
+  const need = numbers(least)
+  const differs = need.findIndex((part, index) => (have[index] ?? 0) !== part)
+  return differs >= 0 && (have[differs] ?? 0) < need[differs]
+}
 
 const CONDA_ROOTS = ["anaconda3", "miniconda3", "miniforge3", "mambaforge"]
 
@@ -257,13 +275,30 @@ async function packages(place: Place, python: string, site: string, version: str
   const listed = (await Promise.all(sites.map(entries))).flat()
   const earthengine = listed.map((entry) => /^earthengine_api-(.+)\.(?:dist|egg)-info$/.exec(entry)?.[1]).find(Boolean)
   const missing = []
+  const outdated = []
   for (const item of OTHERS) {
-    if (!listed.includes(item.module)) missing.push(item.name)
+    if (!listed.includes(item.module)) {
+      missing.push(item.name)
+      continue
+    }
+    const record = new RegExp(`^${item.name}-(.+)\\.(?:dist|egg)-info$`)
+    // The newest: conda upgrading a package pip installed leaves pip's record beside its own.
+    const installed = listed
+      .map((entry) => record.exec(entry)?.[1])
+      .filter((recorded): recorded is string => recorded !== undefined)
+      .reduce<string | undefined>(
+        (newest, recorded) => (newest && !older(newest, recorded) ? newest : recorded),
+        undefined,
+      )
+    if (installed !== undefined && older(installed, LEAST[item.name])) {
+      outdated.push({ package: item.name, version: installed })
+    }
   }
   const found: Found = {
     python,
     name: place.name,
     missing,
+    ...(outdated.length ? { outdated } : {}),
     ...(version === undefined ? {} : { version }),
     ...(earthengine === undefined ? {} : { earthengine }),
   }

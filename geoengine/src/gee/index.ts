@@ -77,9 +77,21 @@ const PACKAGES = [
   { name: "requests", module: "requests" },
 ] as const
 
+/** The least version of a package GeoCode needs, for one it needs a version of. */
+const leastOf = (name: string) => Object.entries(Pythons.LEAST).find(([named]) => named === name)?.[1]
+
+/** A package as GeoAgent installs it: with the least version GeoCode needs, should pip or conda pick an older one. */
+const requirement = (name: string) => {
+  const least = leastOf(name)
+  return least ? `"${name}>=${least}"` : name
+}
+
 /** The packages GeoAgent is told GeoCode needs: requests comes with earthengine-api. */
 const NAMED = PACKAGES.filter((item) => item.name !== "requests")
-  .map((item) => item.name)
+  .map((item) => {
+    const least = leastOf(item.name)
+    return least ? `${item.name} ${least} or later` : item.name
+  })
   .join(", ")
 
 const Broken = Schema.Struct({ package: Schema.String, error: Schema.String })
@@ -149,6 +161,7 @@ export type Failed =
   | "python-missing"
   | "packages-missing"
   | "packages-broken"
+  | "packages-outdated"
   | "signed-out"
   | "project-missing"
   | "unreachable"
@@ -165,11 +178,15 @@ export interface Diagnostics {
   /** machine.json, when it is the file at fault. */
   readonly file?: string
   readonly python?: string
+  /** Python's own version, when a package is missing or too old: a new enough package may not install on it. */
+  readonly pythonVersion?: string
   readonly project?: string
   /** The packages not installed, by the names they install under. */
   readonly missing?: readonly string[]
   /** The packages installed that fail to import, with their errors. */
   readonly broken?: readonly { readonly package: string; readonly error: string }[]
+  /** The packages older than GeoCode needs, with their versions and the least GeoCode needs. */
+  readonly outdated?: readonly { readonly package: string; readonly version: string; readonly required: string }[]
   readonly refusal?: Refusal
   /** What Google answered, in its own words, when it answered. */
   readonly said?: string
@@ -202,6 +219,7 @@ const RECHECKED: ReadonlySet<State["status"]> = new Set([
   "python-missing",
   "packages-missing",
   "packages-broken",
+  "packages-outdated",
   "signed-out",
   "unreachable",
   "rejected",
@@ -586,14 +604,29 @@ function judge(python: string, project: string | undefined, result: Runtime.Resu
   const report = decoded.value
   const error = report.error ?? ""
   const traceback = report.traceback
+  // Only the packages that import report a version.
+  const outdated = Object.entries(Pythons.LEAST).flatMap(([name, required]) => {
+    const version = report.versions?.[name]
+    return version !== undefined && Pythons.older(version, required) ? [{ package: name, version, required }] : []
+  })
+  const old = outdated.length ? { outdated } : {}
+  const packaged = { ...where, pythonVersion: report.python }
   if (report.failed === "broken") {
     const broken = report.broken ?? []
     const message = `installed but failing to import: ${broken.map((item) => item.package).join(", ")}`
-    return failed("packages-broken", { ...where, message, broken, missing: report.missing ?? [] })
+    return failed("packages-broken", { ...packaged, message, broken, missing: report.missing ?? [], ...old })
   }
   if (report.failed === "missing") {
     const missing = report.missing ?? []
-    return failed("packages-missing", { ...where, message: `not installed: ${missing.join(", ")}`, missing })
+    return failed("packages-missing", { ...packaged, message: `not installed: ${missing.join(", ")}`, missing, ...old })
+  }
+  if (outdated.length) {
+    const named = outdated.map((item) => `${item.package} ${item.version} (${item.required} or later)`)
+    return failed("packages-outdated", {
+      ...packaged,
+      message: `older than GeoCode needs: ${named.join(", ")}`,
+      outdated,
+    })
   }
   if (report.failed === "signed-out") {
     return failed("signed-out", { ...where, message: "no Earth Engine credentials on this computer" })
@@ -652,7 +685,7 @@ export function hint(state: Exclude<State, Ready>, file: string): string {
     // A project the user named in the settings first is kept, and not asked for again.
     const named = state.project
     return [
-      `Google Earth Engine is not set up. Setting it up takes, in order: a Python with ${NAMED} installed; signing in with the user's Google account; and the user's Google Cloud project.`,
+      `Google Earth Engine is not set up. Setting it up takes, in order: a Python ${Pythons.LEAST_PYTHON} or later with ${NAMED} installed; signing in with the user's Google account; and the user's Google Cloud project.`,
       configured,
       finding,
       named === undefined ? projectId : `The project is already set to ${named}; keep it when adding the Python.`,
@@ -669,21 +702,46 @@ export function hint(state: Exclude<State, Ready>, file: string): string {
       "\n",
     )
   }
-  if (state.status === "packages-missing" || state.status === "packages-broken") {
+  if (
+    state.status === "packages-missing" ||
+    state.status === "packages-broken" ||
+    state.status === "packages-outdated"
+  ) {
     const broken = (diagnostics.broken ?? []).map((item) => `- ${item.package}: ${last(item.error)}`)
     const missing = diagnostics.missing ?? []
+    const outdated = diagnostics.outdated ?? []
+    // One command for both: pip and conda alike install what a requirement asks for over an older version.
+    const wanted = [...missing, ...outdated.map((item) => item.package)].map(requirement)
+    const having = outdated.map((item) => `${item.package} ${item.version}`).join(", ")
+    const needing = outdated.map((item) => `${item.package} ${item.required} or later`).join(", ")
+    const fixing = broken.length
+      ? [
+          `In the configured Python, ${python}, these packages are installed but fail to import:`,
+          ...broken,
+          "Installing them again rarely helps. Show the user the errors; with their consent, repair the environment or set up another one.",
+        ]
+      : []
+    // Below it, pip quietly picks an older geedim, and conda may upgrade the environment's Python with no one asked.
+    const version = diagnostics.pythonVersion
+    if (wanted.length && version !== undefined && Pythons.older(version, Pythons.LEAST_PYTHON)) {
+      return [
+        ...fixing,
+        `The configured Python, ${python}, is Python ${version}, which cannot install geedim ${Pythons.LEAST.geedim}: it needs Python ${Pythons.LEAST_PYTHON} or later.`,
+        `With the user's consent, set up another environment with Python ${Pythons.LEAST_PYTHON} or later and ${NAMED}, rather than upgrading this one.`,
+        configured,
+      ].join("\n")
+    }
     return [
-      ...(broken.length
+      ...fixing,
+      ...(missing.length ? [`The configured Python, ${python}, lacks ${missing.join(", ")}. ${needs}`] : []),
+      ...(outdated.length
         ? [
-            `In the configured Python, ${python}, these packages are installed but fail to import:`,
-            ...broken,
-            "Installing them again rarely helps. Show the user the errors; with their consent, repair the environment or set up another one.",
+            `${missing.length ? "That Python" : `The configured Python, ${python},`} has ${having}, older than GeoCode needs: ${needing}.`,
           ]
         : []),
-      ...(missing.length
+      ...(wanted.length
         ? [
-            `The configured Python, ${python}, lacks ${missing.join(", ")}. ${needs}`,
-            `With the user's consent, install them: \`${installCommand(python, missing)}\`.`,
+            `With the user's consent, ${missing.length ? "install" : "upgrade"} them: \`${installCommand(python, wanted)}\`.`,
           ]
         : []),
       configured,

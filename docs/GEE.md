@@ -87,9 +87,9 @@ GEE 的工作常要好几天、跨几个对话,耗时的结果要留在云端接
 
 ## 7. 环境
 
-GEE 在用户自己的 Python 里运行,要装齐 earthengine-api、geedim 与 geopandas;GeoCode 不安装软件,也不改动用户的环境(`GEOENGINE.md` 第 1 节)。Python 与 Google Cloud 项目在设置里选和填,项目 ID 只有用户知道,不猜;登录用 Google 账号,网络跟随用户自己的代理配置。
+GEE 在用户自己的 Python 里运行,要装齐 earthengine-api、geedim 2.0 以上与 geopandas 1.0 以上:更旧的版本能导入,却缺 `geocode` 包的函数用到的接口;geedim 2.0 只能装在 Python 3.11 以上;GeoCode 不安装软件,也不改动用户的环境(`GEOENGINE.md` 第 1 节)。Python 与 Google Cloud 项目在设置里选和填,项目 ID 只有用户知道,不猜;登录用 Google 账号,网络跟随用户自己的代理配置。
 
-检查分本地与远端两段,把缺包、没登录、项目不对、连不上等问题分开报告,每次调用 `geerun` 时再检查一次,修好之后不必重启应用。没有就绪时不执行脚本,告诉 GeoAgent 缺什么、哪些它能做、哪些要请用户做。
+检查分本地与远端两段,把缺包、版本过旧、没登录、项目不对、连不上等问题分开报告,每次调用 `geerun` 时再检查一次,修好之后不必重启应用。没有就绪时不执行脚本,告诉 GeoAgent 缺什么、哪些它能做、哪些要请用户做。
 
 ## 8. 权限
 

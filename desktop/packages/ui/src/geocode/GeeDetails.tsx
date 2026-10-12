@@ -14,7 +14,7 @@ import { configureGee, fetchGeePythons, pickPythonFolder, recheckGee, type GeePy
 import { useGeeSignIn, type SignIn } from './geeSignIn';
 import { GeeStatusDetails } from './GeeStatusDetails';
 import { ACCOUNT_MARK, configuredOf, isProjectId, sameConfigured, stepsOf, type Account, type Mark } from './geeSteps';
-import { geeLabel, type GeeText } from './geeText';
+import { geeLabel, unfitOf, type GeeText } from './geeText';
 import { lightOf, type GeeView } from './geoStatus';
 import type { QgisText } from './qgisText';
 import { LIST_CLASS, ROW_CLASS, TONE } from './settingsList';
@@ -152,13 +152,18 @@ export const GeeDetails: React.FC<{
     });
   };
 
-  const extra = (python: string): GeePython => ({
-    python,
-    name: nameOf(python),
-    version: status?.status === 'ready' ? status.versions.python : undefined,
-    earthengine: status?.status === 'ready' ? status.versions['earthengine-api'] : undefined,
-    missing: status?.status === 'packages-missing' ? status.diagnostics.missing ?? [] : [],
-  });
+  const extra = (python: string): GeePython => {
+    // A choice on its way is not what the status describes until the status after it arrives.
+    const own = configured.python === python ? status : undefined;
+    return {
+      python,
+      name: nameOf(python),
+      version: own?.status === 'ready' ? own.versions.python : undefined,
+      earthengine: own?.status === 'ready' ? own.versions['earthengine-api'] : undefined,
+      missing: own && 'diagnostics' in own ? own.diagnostics.missing ?? [] : [],
+      outdated: own && 'diagnostics' in own ? own.diagnostics.outdated : undefined,
+    };
+  };
   // The configured Python, and a choice on its way, stay in the list when the scan does not find them, so a missing
   // one is seen as missing.
   const unlisted = [
@@ -217,7 +222,6 @@ export const GeeDetails: React.FC<{
               <PythonRow
                 key={python.python}
                 python={python}
-                text={text}
                 inUse={shared.inUse}
                 selected={isChosen(python)}
                 tone={isChosen(python) && !pending ? TONE[light] : 'neutral'}
@@ -268,17 +272,17 @@ const StepTitle: React.FC<{ number: number; title: string; mark: Shown; text: Ge
 
 const PythonRow: React.FC<{
   python: GeePython;
-  text: GeeText;
   inUse: string;
   selected: boolean;
   tone: SettingsCardTone;
   locked: boolean;
   onSelect: () => void;
-}> = ({ python, text, inUse, selected, tone, locked, onSelect }) => {
+}> = ({ python, inUse, selected, tone, locked, onSelect }) => {
   const versions = [
     python.version ? `Python ${python.version}` : null,
     python.earthengine ? `earthengine-api ${python.earthengine}` : null,
   ].filter(Boolean).join(' · ');
+  const unfit = unfitOf(python);
   return (
     <button
       type="button"
@@ -308,9 +312,7 @@ const PythonRow: React.FC<{
         </span>
         <span className="typography-micro block truncate font-mono text-muted-foreground" title={python.python}>{python.python}</span>
       </span>
-      {python.missing.length > 0 ? (
-        <span className="typography-micro shrink-0 text-[var(--status-warning)]">{text.missing(python.missing)}</span>
-      ) : null}
+      {unfit ? <span className="typography-micro shrink-0 text-[var(--status-warning)]">{unfit}</span> : null}
       {selected ? <SettingsCardPill tone={tone}>{inUse}</SettingsCardPill> : null}
     </button>
   );

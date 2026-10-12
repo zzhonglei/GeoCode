@@ -114,6 +114,7 @@ const pythonsSchema = z.object({
     version: z.string().optional(),
     earthengine: z.string().optional(),
     missing: z.array(z.string()),
+    outdated: z.array(z.object({ package: z.string(), version: z.string() })).optional(),
     /** The configured Python, by what it is, whatever path names it. */
     configured: z.boolean().optional(),
   })),

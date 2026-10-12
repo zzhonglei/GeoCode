@@ -95,6 +95,16 @@ test('GeoCode: the interface reads every shape of Earth Engine state GeoEngine p
       status: 'packages-broken',
       diagnostics: { python, message: 'installed but failing to import: geedim', broken: [{ package: 'geedim', error: 'ImportError: x' }], missing: [] },
     },
+    {
+      status: 'packages-outdated',
+      diagnostics: {
+        python,
+        pythonVersion: '3.11.9',
+        project: 'p',
+        message: 'older than GeoCode needs: geedim 1.9.1 (2.0 or later)',
+        outdated: [{ package: 'geedim', version: '1.9.1', required: '2.0' }],
+      },
+    },
     { status: 'signed-out', diagnostics: { python, message: 'no Earth Engine credentials on this computer' } },
     { status: 'project-missing', diagnostics: { python, message: 'no Google Cloud project is configured' } },
     { status: 'unreachable', diagnostics: { python, project: 'p', message: 'TransportError: x', said: 'unavailable', traceback: 'Traceback' } },
