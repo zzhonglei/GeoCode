@@ -7,6 +7,7 @@ import os
 import re
 import threading
 import time
+import warnings
 
 import ee
 
@@ -84,7 +85,10 @@ def download(image, path, **grid):
     started = time.monotonic()
     try:
         with _run.stage("Downloading %s" % name, 0):
-            with reporting():
+            with reporting(), warnings.catch_warnings():
+                # geedim looks every image up among the public datasets for its bands' descriptions: an asset of a
+                # task is not one, which only leaves the descriptions out.
+                warnings.filterwarnings("ignore", "Couldn't find STAC entry", RuntimeWarning)
                 # In tiles of 2 MB rather than geedim's 4, so the share done moves in finer steps; no smaller, or
                 # geedim no longer cuts a float64 image in whole blocks of the GeoTIFF it writes.
                 ready.toGeoTIFF(partial, overwrite=True, max_tile_size=2)
@@ -150,12 +154,15 @@ def to_drive(image, name, folder="GeoCode", **grid):
 
 def failure(operation):
     """Waits for an export, telling the stage its share done; why it failed, or None when it succeeded."""
+    done = 0
     while True:
         status = ee.data.getOperation(operation)
         metadata = status.get("metadata", {})
         if status.get("done"):
             break
-        _run.update(progress=metadata.get("progress", 0))
+        # Earth Engine's share can fall back between the export's stages.
+        done = max(done, metadata.get("progress", 0))
+        _run.update(progress=done)
         time.sleep(POLL_SECONDS)
     if metadata.get("state") == "SUCCEEDED":
         return None
