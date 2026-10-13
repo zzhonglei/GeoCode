@@ -16,10 +16,7 @@ GeoCode is a desktop AI application for geographic work, built on two upstreams 
 - Before deleting anything, look at the target and confirm with the maintainer.
 - Change existing files, notes included, with the edit tool, one change at a time. Never rewrite a file with a script or `sed -i`; scripts only generate new artifacts or read.
 - Before committing code, have two read-only subagents review it: one against the conventions, one against the design in `docs/`. Documentation changes need no review.
-- Every text the model or the user reads (tool descriptions, replies, errors, interface text) is drafted with care and settled by the maintainer.
-- For interface work, build it the way the maintainer prefers (compact, few words, few frames) and let them try the packaged app; ask about placement first.
-- Do not touch what the maintainer is using. A sandbox isolates only the home directory: the clipboard, the screen, the default browser and notifications are theirs. Verify through the app's own state.
-- Before asking the maintainer to clean up anything by hand, weigh whether it is worth it. When a check or a design keeps growing, stop and ask whether to narrow it.
+- Every text handed to the model (tool names, descriptions, parameters, replies, errors) is drafted with care and settled by the maintainer.
 - After each stage, reread and tidy the documentation.
 
 ## Verification
