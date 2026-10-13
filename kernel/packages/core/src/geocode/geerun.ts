@@ -2,6 +2,7 @@ export * as GeeRunTool from "./geerun.js"
 
 import { ToolFailure } from "@opencode/ai"
 import type { Context } from "@opencode/plugin/effect/plugin"
+import { Identifier } from "@opencode/schema/identifier"
 import type { Tool } from "@opencode/schema/tool"
 import { Deferred, Effect, Exit, Schema, Scope } from "effect"
 import type { Bus } from "../bus.js"
@@ -553,8 +554,9 @@ export const make = (
           description: input.description,
           callID: context.id,
         }
-        // The kernel's own ID: one of the task's name would join a run of the task under way, past GeoEngine's lock.
         const job = yield* jobs.start({
+          // A fresh ID: one of the task's name would join a run of the task under way, past GeoEngine's lock.
+          id: "job_" + Identifier.ascending(),
           type: name,
           title: input.description,
           metadata: { sessionID: context.sessionID, task: task.name },

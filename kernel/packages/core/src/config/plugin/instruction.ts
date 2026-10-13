@@ -31,7 +31,9 @@ export const Plugin = define({
       const lock = Semaphore.makeUnsafe(1)
       const start = yield* fs.resolve(location.directory)
       const root = yield* fs.resolve(location.project.directory)
+      /* --- GeoCode: used only by the stop closed below ---
       const home = yield* fs.resolve(global.home)
+      --- /GeoCode --- */
       const project = discovery.project && FSUtil.contains(root, start)
       // --- GeoCode: only the location directory's AGENTS.md, not its ancestors' ---
       const stop = start
