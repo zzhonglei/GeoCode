@@ -42,7 +42,7 @@ const snapshotConfig = `[core]
 export const TreeID = Schema.String.pipe(Schema.brand("Git.TreeID"))
 export type TreeID = typeof TreeID.Type
 
-const temporaryIndexPrefix = "index.opencode-"
+const temporaryIndexPrefix = "index.geocode-" // GeoCode: its own file names, here and in withPackLock
 // Like `git gc --auto`, pack once loose objects accumulate, and combine packs before lookups slow down.
 // Room for paths on one Git command line after the Git path, repository flags, and quoting. Windows caps a command
 // line at 32,767 characters. macOS caps arguments plus environment at 1 MiB, and Linux caps them at 2 MiB by default.
@@ -1183,7 +1183,7 @@ const layer = Layer.effect(
 
     // Cross-process exclusion: concurrent packing would stay lossless but duplicate work and objects.
     const withPackLock = <A, E, R>(repository: Repository, effect: Effect.Effect<A, E, R>) => {
-      const file = path.join(repository.gitDirectory, "opencode-pack.lock")
+      const file = path.join(repository.gitDirectory, "geocode-pack.lock")
       return Effect.gen(function* () {
         const stale = yield* fs.stat(file).pipe(
           Effect.map((info) => (Option.getOrUndefined(info.mtime)?.getTime() ?? 0) < Date.now() - 60 * 60 * 1000),

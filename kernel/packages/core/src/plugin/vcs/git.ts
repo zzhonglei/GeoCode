@@ -559,7 +559,7 @@ const untrackedBatch = Effect.fnUntraced(function* (
 
   return yield* Effect.acquireUseRelease(
     Effect.promise(async () => {
-      const base = path.join(os.tmpdir(), `opencode-untracked-${randomUUID()}`)
+      const base = path.join(os.tmpdir(), `geocode-untracked-${randomUUID()}`) // GeoCode: its own temp names
       await fs.writeFile(`${base}.list`, eligible.map((file) => `${file}\0`).join(""))
       return base
     }),
