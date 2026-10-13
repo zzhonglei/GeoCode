@@ -1032,8 +1032,9 @@ test("an export under way is waited for, joined, or replaced", { skip: !python3 
     const stopped = async (graph: string) => {
       await raise(engine.directory, "export-running")
       const id = engine.send({ script: saving(save(graph)), cwd: engine.directory, task: continuing })
+      // Waiting on the export, not on the save's first status, which comes before the export is submitted.
       const exporting = () =>
-        engine.progress(id).some((data) => typeof data === "object" && data !== null && "status" in data)
+        engine.progress(id).some((data) => (data as { status?: { progress?: number } }).status?.progress !== undefined)
       await until(exporting, 10000, "the export")
       engine.deliver({ type: "cancel", id })
       const response = await engine.response(id)
