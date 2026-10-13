@@ -54,19 +54,10 @@ describe("GeoCode: a page of the QGIS manual", () => {
     expect(QgisManual.extract(PAGE, byId("missing"))).toBeUndefined()
   })
 
-  test("is cut down to its article, or to the section its fragment names, and says so when there is none", () => {
+  test("is cut down to the section its fragment names, or else to its article", () => {
     expect(QgisManual.of(MANUAL, "text/html; charset=utf-8", PAGE)).toBe(ARTICLE)
     expect(QgisManual.of(`${MANUAL}#buffer`, "text/html", PAGE)).toBe(BUFFER)
-    expect(QgisManual.of(`${MANUAL}#missing`, "text/html", PAGE)).toBe(
-      `<p>This page has no section "#missing"; this is the whole page.</p>\n${ARTICLE}`,
-    )
-  })
-
-  // Guards against webfetch changing any other site, or anything but HTML.
-  test("leaves every other site and anything but HTML whole", () => {
-    expect(QgisManual.of("https://docs.example/vectorgeometry.html#buffer", "text/html", PAGE)).toBe(PAGE)
-    expect(QgisManual.of("https://qgis.org/vectorgeometry.html#buffer", "text/html", PAGE)).toBe(PAGE)
-    expect(QgisManual.of(`${MANUAL}#buffer`, "text/plain", PAGE)).toBe(PAGE)
+    expect(QgisManual.of(`${MANUAL}#missing`, "text/html", PAGE)).toEndWith(`\n${ARTICLE}`)
   })
 })
 

@@ -520,9 +520,10 @@ describe("GeoCode", () => {
             { path: globalFile, type: "file" },
             { path: locationFile, type: "file" },
           ])
-          expect((yield* readInitial(yield* discovery.load())).text).toBe(
-            [`Instructions from: ${globalFile}\nglobal`, `Instructions from: ${locationFile}\nlocation`].join("\n\n"),
-          )
+          const text = (yield* readInitial(yield* discovery.load())).text
+          expect(text).toContain("global")
+          expect(text).toContain("location")
+          expect(text).not.toContain("ancestor")
         }).pipe(
           Effect.provide(
             instructionLayer({

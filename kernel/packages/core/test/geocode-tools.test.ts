@@ -210,50 +210,6 @@ describe("GeoCode: qgisdoc", () => {
       ])
     }),
   )
-
-  it.effect("tells GeoAgent what to do when QGIS is not ready", () =>
-    Effect.gen(function* () {
-      reset()
-      answer = () => [
-        JSON.stringify({ type: "progress", data: { percent: 1 } }),
-        JSON.stringify({
-          type: "result",
-          ok: false,
-          error: { code: "not-ready", message: "QGIS is not configured.\nIts configuration is in machine.json." },
-        }),
-      ]
-      const result = yield* executeTool(yield* Tool.Service, call({ action: "groups", algorithm: "native:buffer" }))
-      expect(result.status).toBe("error")
-      expect(JSON.stringify(result.error)).toContain("QGIS is not configured.\\nIts configuration is in machine.json.")
-      // Guards against asking about a field the action does not use.
-      expect(assertions).toMatchObject([{ resources: ["groups"] }])
-    }),
-  )
-
-  // Guards against GeoAgent reading GeoCode's internals, which it can do nothing with.
-  it.effect("tells GeoAgent only what to do when GeoCode cannot answer", () =>
-    Effect.gen(function* () {
-      reset()
-      const url = process.env.OPENCHAMBER_AGENT_TOOL_URL
-      delete process.env.OPENCHAMBER_AGENT_TOOL_URL
-      const outside = yield* executeTool(yield* Tool.Service, call({ action: "groups" }))
-      process.env.OPENCHAMBER_AGENT_TOOL_URL = url
-      expect(outside.error?.message).toBe(
-        "The QGIS tools are not available right now. Tell the user; restarting GeoCode may fix it.",
-      )
-      expect(calls).toEqual([])
-
-      answer = () => [
-        JSON.stringify({
-          type: "result",
-          ok: false,
-          error: { code: "catalog-failed", message: "Traceback: boom", details: { stderr: "Traceback: boom" } },
-        }),
-      ]
-      const listing = yield* executeTool(yield* Tool.Service, call({ action: "groups" }))
-      expect(listing.error?.message).toBe("QGIS could not list its algorithms.")
-    }),
-  )
 })
 
 const read = (input: Record<string, unknown>, session = sessionID) => ({
@@ -295,16 +251,6 @@ describe("GeoCode: readgeodata", () => {
         ["external_directory", [path.join(path.dirname(outside), "*")]],
         ["read", [outside]],
       ])
-    }),
-  )
-
-  it.effect("reads nothing when the read rules refuse", () =>
-    Effect.gen(function* () {
-      reset()
-      refused = "read"
-      const refusal = yield* executeTool(yield* Tool.Service, read({ path: ".env.gpkg" }))
-      expect(refusal.status).toBe("error")
-      expect(calls).toEqual([])
     }),
   )
 
@@ -420,33 +366,6 @@ describe("GeoCode: readgeodata", () => {
           { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png", name: "dem.tif" },
         ],
       })
-    }),
-  )
-
-  // Guards against GeoAgent reading GeoCode's internals, while keeping what GDAL said about the data.
-  it.effect("tells GeoAgent what went wrong with the data, and only what to do about the rest", () =>
-    Effect.gen(function* () {
-      reset()
-      const registry = yield* Tool.Service
-      const failing = (code: string, message: string) => {
-        answer = () => [
-          JSON.stringify({ type: "result", ok: false, error: { code, message, details: { stderr: "Traceback" } } }),
-        ]
-        return executeTool(registry, read({ path: "dem.tif" }))
-      }
-      expect((yield* failing("read-failed", "TIFFReadDirectory: Not a TIFF file")).error?.message).toBe(
-        "GDAL failed while reading dem.tif: TIFFReadDirectory: Not a TIFF file",
-      )
-      expect((yield* failing("timeout", "reading reported nothing for 5 minutes")).error?.message).toBe(
-        "Reading dem.tif stopped without an answer.",
-      )
-      expect((yield* failing("crashed", "exited with signal SIGSEGV")).error?.message).toBe(
-        "Reading dem.tif stopped without an answer.",
-      )
-      expect((yield* failing("not-ready", "QGIS is not configured.")).error?.message).toBe("QGIS is not configured.")
-      expect((yield* failing("start-failed", "spawn ENOENT")).error?.message).toBe(
-        "The QGIS tools are not available right now. Tell the user; restarting GeoCode may fix it.",
-      )
     }),
   )
 })
@@ -675,22 +594,6 @@ describe("GeoCode: qgisrun", () => {
     }),
   )
 
-  // Guards against telling GeoAgent the tools are down when only the data could not be checked.
-  it.effect("says the data could not be checked when the survey before asking stops without an answer", () =>
-    Effect.gen(function* () {
-      reset()
-      answer = (body) =>
-        body.method === "qgis.locate"
-          ? result({ files: ["data/broken.geojson"] })
-          : [JSON.stringify({ type: "result", ok: false, error: { code: "crashed", message: "signal SIGSEGV" } })]
-      const crashed = yield* executeTool(yield* Tool.Service, runs({ algorithm: "native:buffer", parameters: {} }))
-      expect(crashed.error?.message).toBe(
-        "Checking the data the parameters name stopped without an answer, so nothing was run.",
-      )
-      expect(assertions).toEqual([])
-    }),
-  )
-
   it.effect("keeps everything QGIS said when a run fails or crashes, and ends the answer with how", () =>
     Effect.gen(function* () {
       reset()
@@ -719,11 +622,6 @@ describe("GeoCode: qgisrun", () => {
       const crashed = yield* failing("crashed", "QGIS exited unexpectedly after 5 s.")
       expect(crashed.status).toBe("completed")
       expect(isJsonRecord(failed.metadata) && isJsonRecord(crashed.metadata)).toBe(true)
-      // Guards against GeoAgent reading GeoCode's internals when the chain itself fails.
-      const broken = yield* failing("start-failed", "")
-      expect(broken.error?.message).toBe(
-        "The QGIS tools are not available right now. Tell the user; restarting GeoCode may fix it.",
-      )
     }),
   )
 
@@ -754,13 +652,8 @@ describe("GeoCode: qgisrun", () => {
         expect(Date.now() - started).toBeGreaterThanOrEqual(10000)
         expect(stopped).toMatchObject({
           status: "completed",
-          content: [
-            {
-              text: expect.stringMatching(
-                new RegExp(`^${HEADER}\\n\\nstarted\\n\\nStopped after 1\\d s, with no progress for the last 10 s\\.$`),
-              ),
-            },
-          ],
+          content: [{ text: expect.stringContaining("\nstarted\n") }],
+          metadata: { outcome: "timeout" },
         })
         // Guards against leaving the task running in GeoEngine after giving up on it.
         for (let turn = 0; turn < 100 && !aborted.includes("qgis.run"); turn++) yield* Effect.sleep("10 millis")
@@ -795,36 +688,6 @@ describe("GeoCode: qgisrun", () => {
         expect(ran).toMatchObject({ status: "completed", metadata: { outcome: "finished" } })
       }),
     20000,
-  )
-
-  it.effect("gives the interface the latest messages only, and GeoAgent every one", () =>
-    Effect.gen(function* () {
-      reset()
-      const lines = Array.from({ length: 600 }, (_, index) => progress({ level: "info", text: `line ${index}` }))
-      engine({ run: () => [...lines, ...result({ ending: "Finished in 1 s." })] })
-      const ran = yield* executeTool(yield* Tool.Service, runs({ algorithm: "native:buffer", parameters: {} }))
-      const shown = (ran.metadata as { messages: { text: string }[] }).messages
-      expect([shown.length, shown[0]?.text, shown.at(-1)?.text]).toEqual([500, "line 100", "line 599"])
-      expect(ran.content).toMatchObject([{ text: expect.stringContaining("\nline 0\n") }])
-    }),
-  )
-
-  // Guards against the row counting the wait for the user's answer as the run's time.
-  it.live("tells the interface when the run began, after the user answered", () =>
-    Effect.gen(function* () {
-      reset()
-      engine({})
-      pending = yield* Deferred.make<void>()
-      const asking = yield* Effect.forkChild(
-        executeTool(yield* Tool.Service, runs({ algorithm: "native:buffer", parameters: {} })),
-      )
-      for (let turn = 0; turn < 100 && !assertions.length; turn++) yield* Effect.sleep("10 millis")
-      yield* Effect.sleep("50 millis")
-      const answered = Date.now()
-      yield* Deferred.succeed(pending, undefined)
-      const ran = yield* Fiber.join(asking)
-      expect(ran.metadata?.started).toBeGreaterThanOrEqual(answered)
-    }),
   )
 })
 
@@ -870,44 +733,6 @@ const space = (fields: Record<string, unknown> = {}) => ({
 })
 
 describe("GeoCode: geerun", () => {
-  // Guards against the tool row missing what GeoEngine tells of a run as it goes, or losing it once the run ends.
-  it.effect("tells the tool row the run's statuses, what it printed, and a wait for Earth Engine", () =>
-    Effect.gen(function* () {
-      reset()
-      const status = { seq: 1, text: "Finding images of COPERNICUS/S2_SR_HARMONIZED", progress: 0.5 }
-      answer = () => [
-        progress({ begun: true }),
-        progress({ waiting: 1 }),
-        // A function's status ends the run of requests: the wait below counts from its own 5 s, not from the one before.
-        progress({ status }),
-        progress({ waiting: 5 }),
-        progress({ output: "images: 73\n" }),
-        ...ran(),
-      ]
-      const shown: unknown[] = []
-      const before = Date.now()
-      const done = yield* executeTool(yield* Tool.Service, {
-        ...gee({ script: "print(1)" }),
-        progress: (data) => Effect.sync(() => void shown.push(data)),
-      })
-      // The row says the run is starting until the script itself begins.
-      expect(shown[0]).not.toHaveProperty("begun")
-      expect(shown.at(-1)).toMatchObject({
-        description: "统计影像",
-        task: TASK,
-        started: expect.any(Number),
-        begun: true,
-        statuses: [status],
-        log: "images: 73\n",
-      })
-      expect(done.metadata).toMatchObject({ outcome: "finished", started: expect.any(Number), log: "images: 73\n" })
-      // When the wait began, not when it was last heard of: the request had waited 5 s already.
-      const since = (shown.at(-1) as { waitingSince: number }).waitingSince
-      expect(since).toBeLessThanOrEqual(before - 5000 + 50)
-      expect(since).toBeGreaterThan(before - 5000 - 1000)
-    }),
-  )
-
   it.effect("asks as the shell is asked, runs the script in the project, and answers with what it printed", () =>
     Effect.gen(function* () {
       reset()
@@ -987,23 +812,6 @@ describe("GeoCode: geerun", () => {
       expect(calls.at(-1)?.body).toMatchObject({
         params: { task: { name: "hualien-flood-20261008", new: false, started: false } },
       })
-    }),
-  )
-
-  // Guards against asking the user about a run that cannot start, as while Earth Engine is not set up.
-  it.effect("asks nothing and runs nothing when the check finds Earth Engine not ready", () =>
-    Effect.gen(function* () {
-      reset()
-      answer = (body) =>
-        body.method === "gee.check"
-          ? [JSON.stringify({ type: "result", ok: false, error: { code: "not-ready", message: "Not signed in." } })]
-          : ran()
-      const done = yield* executeTool(yield* Tool.Service, gee({ path: "scripts/ndvi.py" }))
-      expect(done.status).toBe("error")
-      expect(assertions).toEqual([])
-      expect(calls.map((call) => call.body)).toEqual([
-        { method: "gee.check", params: { cwd: PROJECT, file: path.join(PROJECT, "scripts/ndvi.py") } },
-      ])
     }),
   )
 

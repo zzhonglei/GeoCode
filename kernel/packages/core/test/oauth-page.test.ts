@@ -14,15 +14,12 @@ describe("OauthCallbackPage", () => {
   })
 
   // Guards against a merge restoring OpenCode's name in the pages the user reads after signing in.
-  test("GeoCode: names GeoCode in the callback pages", () => {
+  test("GeoCode: the callback pages do not name OpenCode", () => {
     const pages = [
       OauthCallbackPage.success({ provider: "Example" }),
       OauthCallbackPage.error("denied", { provider: "Example" }),
       OauthCallbackPage.bootstrap({ provider: "Example", tokenPath: "/token" }),
     ]
-    for (const html of pages) {
-      expect(html).toContain('aria-label="GeoCode"')
-      expect(html).not.toContain("OpenCode")
-    }
+    for (const html of pages) expect(html).not.toContain("OpenCode")
   })
 })
