@@ -82,16 +82,18 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 
 ```
 ~/.cache/geocode/
-├── bin/          本机没有 ripgrep 时下载的 rg,终端所用的 geocode-pty
+├── bin/          本机没有 ripgrep 时下载的 rg,内核的持久终端所用的 geocode-pty
 ├── npm/          按需安装的服务商 SDK 与格式化工具
 └── npm-cache/    下载 npm 包的缓存
 ```
 
 使用 GitLab 服务商时,这里还有两份 GitLab 模型信息的缓存。
 
-状态目录 `~/.local/state/geocode/` 每次启动就建立,里面只有 `locks/` 下的锁文件,安装 npm 包与克隆外部仓库时使用。
+状态目录 `~/.local/state/geocode/` 每次启动就建立。里面有 `locks/` 下的锁文件,安装 npm 包与克隆外部仓库时使用;内核的持久终端启动过时,还有它的运行目录 `pty/`。
 
-临时目录 `$TMPDIR/geocode/` 是提示 agent 存放临时文件的地方,agent 可以不经询问读写。系统临时目录下另有几类以 `geocode-` 开头的短期文件:终端的通信套接字(`geocode-pty-*`)、查看 git 差异与暂存部分修改时的中间文件(`geocode-branch-diff-*`、`geocode-hunk-*`)、多方案运行保存快照时的中间文件(`geocode-snapshot-*`),macOS 上还有转换应用图标时的 `geocode-icon-*.png`。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`。每次启动时,运行时还会在系统临时目录解出一个 `.bun-*.dylib` 库文件。这些都是临时文件,删除不影响使用。
+临时目录 `$TMPDIR/geocode/` 是提示 agent 存放临时文件的地方,agent 可以不经询问读写。系统临时目录下另有几类以 `geocode-` 开头的短期文件:查看 git 差异与暂存部分修改时的中间文件(`geocode-branch-diff-*`、`geocode-hunk-*`)、多方案运行保存快照时的中间文件(`geocode-snapshot-*`),macOS 上还有转换应用图标时的 `geocode-icon-*.png`。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`。每次启动时,运行时还会在系统临时目录解出一个 `.bun-*.dylib` 库文件。这些都是临时文件,删除不影响使用。
+
+内核的持久终端只在调用内核的终端接口时启动,GeoCode 界面里的终端不经过它;Windows 上没有它。它的守护进程在 macOS 上把通信套接字固定放在 `/tmp/opencode-pty-<用户编号>/`,不随 `TMPDIR`。这样路径才短于系统对套接字路径的上限;目录名由上游的守护进程写死,改不了。用户自己的 OpenCode 也用这个目录,套接字按各自的运行目录命名,互不相碰;退出时套接字删除,目录留下。
 
 内核的运行时(Bun)另把插件的转译结果缓存在它自己的共享缓存目录里(macOS 是 `~/Library/Caches/bun`),与本机其他使用 Bun 的程序共用,按内容命名,删除不影响使用。
 
