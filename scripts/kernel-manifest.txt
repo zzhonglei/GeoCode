@@ -63,9 +63,11 @@ packages/ui
 packages/util
 
 # Outside that closure. app is the web UI the CLI build embeds, with
-# session-ui as its only extra dependency; GeoCode's UI comes from OpenChamber.
+# session-ui and gui-extensions as its extra dependencies; GeoCode's UI comes
+# from OpenChamber.
 !packages/app
 !packages/session-ui
+!packages/gui-extensions
 !packages/console
 !packages/containers
 !packages/desktop
