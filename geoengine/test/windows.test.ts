@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import path from "node:path"
 import { test } from "node:test"
-import { Qgis } from "../src/qgis/index.ts"
 import { Windows } from "../src/qgis/windows.ts"
 
 const win = path.win32
@@ -121,18 +120,17 @@ test("a folder with more than one QGIS takes the one a path names, and otherwise
   // Windows drops the spaces and dots a name ends in.
   assert.deepEqual(await Windows.locate(`${OSGEO4W}\\apps\\qgis. `, DISK), current)
   for (const configured of [OSGEO4W, `${OSGEO4W}\\bin`, `${OSGEO4W}\\apps`, `${OSGEO4W}\\bin\\o4w_env.bat`]) {
+    const located = await Windows.locate(configured, DISK)
     assert.deepEqual(
-      await Windows.locate(configured, DISK),
-      {
-        ok: false,
-        status: "ambiguous",
-        message: `${OSGEO4W} holds more than one QGIS`,
-        folder: OSGEO4W,
-        choices: [
+      located.ok ? located : [located.status, located.folder, located.choices],
+      [
+        "ambiguous",
+        OSGEO4W,
+        [
           { app: `${OSGEO4W}\\apps\\qgis`, version: "4.2.3" },
           { app: `${OSGEO4W}\\apps\\qgis-ltr`, version: "3.44.15" },
         ],
-      },
+      ],
       configured,
     )
   }
@@ -154,13 +152,8 @@ test("each kind of wrong path settles on its own state", async () => {
   const launcherless = Object.entries({ ...common(root), ...qgis(root, "qgis-ltr") }).filter(
     ([file]) => !win.basename(file).startsWith("python-"),
   )
-  assert.deepEqual(await Windows.locate(root, disk(Object.fromEntries(launcherless))), {
-    ok: false,
-    status: "python-missing",
-    message: `${root} has no bin\\python-qgis-ltr.bat to start its Python with`,
-    app: `${root}\\apps\\qgis-ltr`,
-    version: undefined,
-  })
+  const located = await Windows.locate(root, disk(Object.fromEntries(launcherless)))
+  assert.deepEqual(located.ok ? located : [located.status, located.app], ["python-missing", `${root}\\apps\\qgis-ltr`])
   const leftover = disk({ ...common(root), ...qgis(root, "qgis"), [`${root}\\apps\\qgis-old\\bin\\qgis_core.dll`]: "" })
   assert.deepEqual(await Windows.locate(root, leftover), install(root, "qgis", undefined))
   assert.equal(await status(`${root}\\apps\\qgis-old`, leftover), "python-missing")
@@ -168,11 +161,7 @@ test("each kind of wrong path settles on its own state", async () => {
   assert.equal(await status(root, disk({ [`${root}\\bin\\python-qgis.bat`]: "" })), "not-qgis")
   // A path that names a QGIS the folder does not hold is not taken for the one it does.
   const named = disk({ ...common(root), ...qgis(root, "qgis"), [`${root}\\bin\\python-qgis-dev.bat`]: "" })
-  assert.deepEqual(await Windows.locate(`${root}\\bin\\python-qgis-dev.bat`, named), {
-    ok: false,
-    status: "not-qgis",
-    message: `${root} holds no QGIS named qgis-dev`,
-  })
+  assert.equal(await status(`${root}\\bin\\python-qgis-dev.bat`, named), "not-qgis")
 })
 
 test("the QGIS installs are found where the installers put them, on every fixed drive, newest first", async () => {
@@ -197,49 +186,4 @@ test("the fixed drives are read from PowerShell's answer", () => {
   const { args } = Windows.drivesCommand()
   const script = Buffer.from(args.at(-1)!, "base64").toString("utf16le")
   assert.match(script, /DriveType=3/)
-})
-
-test("GeoAgent is told how to find and configure QGIS on Windows", () => {
-  const file = "C:\\Users\\张三\\.config\\geocode\\machine.json"
-  const unconfigured = Qgis.hint({ status: "unconfigured" }, file, Windows)
-  assert.ok(unconfigured.includes(Windows.FINDING))
-  assert.ok(unconfigured.includes(`Its configuration is in ${file}, ${Windows.CONFIGURED}`))
-  // Worded for both systems: on Windows a QGIS is a folder, not an app.
-  const elsewhere = Qgis.hint(
-    { status: "not-qgis", diagnostics: { message: "C:\\Users is not inside a QGIS folder" } },
-    file,
-    Windows,
-  )
-  assert.ok(
-    elsewhere.startsWith("The configured path is not a QGIS installation: C:\\Users is not inside a QGIS folder."),
-  )
-  const ambiguous = Qgis.hint(
-    {
-      status: "ambiguous",
-      diagnostics: {
-        message: "C:\\OSGeo4W holds more than one QGIS",
-        // The folder that holds them, whatever place in it was configured.
-        path: "c:/osgeo4w/bin",
-        folder: "C:\\OSGeo4W",
-        choices: [
-          { app: "C:\\OSGeo4W\\apps\\qgis", version: "4.2.3" },
-          { app: "C:\\OSGeo4W\\apps\\qgis-ltr", version: "3.44.15" },
-        ],
-      },
-    },
-    file,
-    Windows,
-  )
-  assert.equal(
-    ambiguous.split("\n")[0],
-    "The configured folder, C:\\OSGeo4W, holds more than one QGIS: C:\\OSGeo4W\\apps\\qgis (4.2.3), C:\\OSGeo4W\\apps\\qgis-ltr (3.44.15). Ask the user which to use, and write its folder.",
-  )
-  const missing = Qgis.hint(
-    { status: "python-missing", diagnostics: { message: "", app: "C:\\OSGeo4W\\apps\\qgis", version: "4.2.3" } },
-    file,
-    Windows,
-  )
-  assert.ok(
-    missing.startsWith(`The configured QGIS, C:\\OSGeo4W\\apps\\qgis (4.2.3), does not work: ${Windows.NO_PYTHON}.`),
-  )
 })

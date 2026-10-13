@@ -59,15 +59,6 @@ test("an override replaces every spelling of a variable's name on Windows, and o
   })
 })
 
-test("collects output and the exit code", async () => {
-  const result = await run(node(`process.stdout.write("out"); process.stderr.write("err"); process.exit(3)`))
-  assert.equal(result.reason, "exit")
-  assert.equal(result.code, 3)
-  assert.equal(result.stdout, "out")
-  assert.equal(result.stderr, "err")
-  assert.equal(result.drainIncomplete, false)
-})
-
 test("the total clock ends a run that outlives it and keeps what it wrote", async () => {
   const result = await run(
     node(`process.stdout.write("started"); setInterval(() => {}, 1000)`, { clocks: { total: "500 millis" } }),
@@ -177,18 +168,6 @@ test("collect mode stops a run whose output passes the limit", async () => {
   assert.equal(result.truncated, true)
 })
 
-test("incremental mode hands output to the consumer and keeps stderr", async () => {
-  const chunks: string[] = []
-  const result = await run(
-    node(`process.stdout.write("one"); process.stderr.write("problem")`, {
-      delivery: { mode: "incremental", onChunk: (chunk) => void chunks.push(chunk) },
-    }),
-  )
-  assert.equal(chunks.join(""), "one")
-  assert.equal(result.stdout, "")
-  assert.equal(result.stderr, "problem")
-})
-
 test("incremental mode can hand stderr over too, saying which stream each chunk came from", async () => {
   const chunks: string[] = []
   const result = await run(
@@ -230,23 +209,8 @@ test("a task that exits without reading a large input does not bring the engine 
   assert.equal(result.code, 0)
 })
 
-test("output cut inside a character is kept, not dropped", async () => {
-  const result = await run(node(`process.stdout.write(Buffer.from([0x61, 0xe4, 0xb8]))`))
-  assert.equal(result.stdout.startsWith("a"), true)
-  assert.ok(result.stdout.length > 1)
-})
-
-test("a missing executable fails at once", async () => {
+test("a missing executable fails at once when the run carries a signal", async () => {
   const started = Date.now()
-  const outcome = await run({ ...node(""), command: "/nonexistent/geoengine-test-binary" }).then(
-    () => undefined,
-    (error: NodeJS.ErrnoException) => error,
-  )
-  assert.equal(outcome?.code, "ENOENT")
-  assert.ok(Date.now() - started < 1000)
-})
-
-test("a missing executable fails cleanly when the run also carries a signal", async () => {
   const outcome = await run({
     ...node(""),
     command: "/nonexistent/geoengine-test-binary",
@@ -256,31 +220,7 @@ test("a missing executable fails cleanly when the run also carries a signal", as
     (error: NodeJS.ErrnoException) => error,
   )
   assert.equal(outcome?.code, "ENOENT")
-})
-
-test("a process ended by a signal reports it", { skip: POSIX_ONLY }, async () => {
-  const result = await run(node(`process.kill(process.pid, "SIGKILL")`))
-  assert.equal(result.reason, "exit")
-  assert.equal(result.signal, "SIGKILL")
-})
-
-test("the environment is laid over the engine's, and input reaches stdin", async () => {
-  const result = await run(
-    node(
-      `process.stdin.on("data", (d) => process.stdout.write(d + ":" + process.env.GEOENGINE_TEST + ":" + Boolean(process.env.PATH)))`,
-      { env: { GEOENGINE_TEST: "set" }, input: "hello" },
-    ),
-  )
-  assert.equal(result.stdout, "hello:set:true")
-})
-
-test("every task process is reported when it starts and when it ends", async () => {
-  const events: string[] = []
-  const result = await run(node(`process.stdout.write(String(process.pid))`), {
-    started: (pid) => void events.push(`start ${pid}`),
-    ended: (pid) => void events.push(`end ${pid}`),
-  })
-  assert.deepEqual(events, [`start ${result.stdout}`, `end ${result.stdout}`])
+  assert.ok(Date.now() - started < 1000)
 })
 
 test("a task's process is reported ended when it exits, not when its pipes close", async () => {

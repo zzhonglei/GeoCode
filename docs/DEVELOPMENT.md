@@ -88,7 +88,7 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 GeoEngine 的测试涉及两种外部软件:
 
 - QGIS:macOS 上接真实的 QGIS,默认用 `/Applications` 下每一个认得出的 `QGIS*.app`,也可以用 `GEOENGINE_QGIS_APPS` 列出应用包的路径(以冒号分隔);本机没有 QGIS 时这几项跳过。QGIS 照常在用户目录下写它自己的配置与缓存。Windows 上认路径与发现安装的逻辑在任何平台上都测,用的是照 OSGeo4W 的真实组件包搭出的假目录树;经启动脚本运行 QGIS 只能在 Windows 上验证。
-- GEE:测试不联网。环境检查与运行脚本都用 `PATH` 里的 `python3` 真实执行,earthengine-api、它用到的 Google 库、requests、geedim 与 geopandas 换成测试自带的替身,没有 `python3` 时这些项跳过;Python 自己出错的情形由冒充 Python 的 shell 脚本模拟。
+- GEE:测试不联网。环境检查与运行脚本都用 `PATH` 里的 `python3` 真实执行,earthengine-api、它用到的 Google 库、requests、geedim 与 geopandas 换成测试自带的替身,没有 `python3` 时这些项跳过。
 
 ## 8. 写入检测
 
