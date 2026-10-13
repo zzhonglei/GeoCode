@@ -641,6 +641,7 @@ export const WalkthroughView = ({ directory: rootDirectory, visible = true }: Wa
             </TooltipContent>
           </Tooltip>
           </Closed>
+          {/* --- /GeoCode --- */}
 
           {/* A walkthrough nobody can read is worth nothing, so the prose
               language is a per-review choice like the model — defaulting to the

@@ -135,6 +135,7 @@ export const OpenCodeCompatibilityGate: React.FC<React.PropsWithChildren> = ({ c
       </div>
     </section>
     </Closed>
+    {/* --- /GeoCode --- */}
     </>
   );
 };

@@ -982,6 +982,7 @@ function App({ apis }: AppProps) {
           isRetrying={manualInitRetrying}
         />
         </Closed>
+        {/* --- /GeoCode --- */}
       </ErrorBoundary>
     );
   }

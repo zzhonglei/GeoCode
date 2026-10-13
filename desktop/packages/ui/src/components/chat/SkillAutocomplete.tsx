@@ -166,6 +166,7 @@ export const SkillAutocomplete = React.forwardRef<SkillAutocompleteHandle, Skill
               {source}
             </span>
             </Closed>
+            {/* --- /GeoCode --- */}
           </div>
         </div>
       </div>
