@@ -16,7 +16,7 @@ geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
 
 ## 2. 工具链
 
-- bun:版本以 `kernel/package.json`、`desktop/package.json` 与 `geoengine/package.json` 的 `packageManager` 为准,三者应当一致。版本不对时,内核的构建脚本会拒绝运行。
+- bun:版本以 `kernel/package.json`、`desktop/package.json` 与 `geoengine/package.json` 的 `packageManager` 为准,三者应当一致。版本过低或主版本不同时,内核的构建脚本拒绝运行。
 - Node:22.18 或更新,`geoengine/` 的测试命令需要这个版本。
 - gh:`scripts/vendor.sh` 用它下载上游源码。
 
@@ -36,7 +36,7 @@ geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
 ./scripts/stage-kernel.sh
 ```
 
-它在 `kernel/packages/cli` 执行 `bun run script/build.ts --single --skip-web-ui --skip-install`:只构建本机平台,不打包 OpenCode 自带的网页界面(GeoCode 的界面来自 OpenChamber,那份网页界面不在本仓库里),也跳过只有全平台构建才需要的依赖安装。产物放到 `desktop/packages/electron/resources/opencode-cli/geocode-kernel`(改成 GeoCode 自己的文件名,见 `DESKTOP.md` 第 6 节),脚本随后核对它报出的版本。版本取 `kernel/package.json` 的 `version`,以 `OPENCODE_VERSION` 注入;不注入时,内核报的是 `0.0.0-<分支>-…` 这样的预览版本号,过不了壳启动内核前的版本检查。
+它只构建本机平台的内核,产物放到 `desktop/packages/electron/resources/opencode-cli/geocode-kernel`(改成 GeoCode 自己的文件名,见 `DESKTOP.md` 第 6 节)。脚本把 `kernel/package.json` 的 `version` 注入内核,并核对它报出的版本;直接用上游的构建命令得到的是预览版本号,过不了壳启动内核前的版本检查。
 
 改动 `kernel/` 之后要重新运行它,应用才会用上新的内核。
 
@@ -44,7 +44,7 @@ GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/package
 
 ## 5. 在沙箱里启动应用
 
-开发时在沙箱主目录里启动。应用把配置、数据与缓存放在主目录下的 `geocode` 目录里(见 `PATHS.md`),在沙箱里启动,开发与测试留下的会话、登录与设置就不会混进真实主目录里的那一份,删掉沙箱即可从头再来。
+开发时在沙箱主目录里启动。应用把配置、数据与缓存放在主目录下名为 `geocode` 的几个目录里(见 `PATHS.md`),在沙箱里启动,开发与测试留下的会话、登录与设置就不会混进真实主目录里的那一份,删掉沙箱即可从头再来。
 
 ```bash
 SANDBOX=<一个空目录,放在仓库外>
@@ -55,7 +55,7 @@ OPENCHAMBER_DESKTOP_USER_DATA_DIR="$SANDBOX/electron-user-data" \
 bun run electron:dev:bundled
 ```
 
-壳与内核都从 `HOME` 推导自己的数据、配置与缓存目录,前提是环境里没有设 `XDG_*` 变量,设了的话内核会改用它们。Electron 自己的配置目录在 macOS 上按系统账户找主目录,不看 `HOME`,所以要用 `OPENCHAMBER_DESKTOP_USER_DATA_DIR` 单独指定。系统的偏好设置同样按系统账户存放,沙箱挡不住:开发时写进 Electron 通用的 `~/Library/Preferences/com.github.Electron.plist`,打包出的应用写进 `~/Library/Preferences/io.github.zzhonglei.geocode.plist`,里面只有文件对话框的位置这类系统记下的状态。Electron 的日志写在 `$SANDBOX/Library/Logs/` 下,跟着 `HOME` 走。
+壳与内核都从 `HOME` 推导自己的数据、配置与缓存目录,前提是环境里没有设 `XDG_*` 变量,设了的话两者都会改用它们。Electron 自己的配置目录在 macOS 上按系统账户找主目录,不看 `HOME`,所以要用 `OPENCHAMBER_DESKTOP_USER_DATA_DIR` 单独指定。系统的偏好设置同样按系统账户存放,沙箱挡不住:开发时写进 Electron 通用的 `~/Library/Preferences/com.github.Electron.plist`(打包出的应用写的那一份见 `PATHS.md` 第 5 节),里面只有文件对话框的位置这类系统记下的状态。Electron 的日志写在 `$SANDBOX/Library/Logs/` 下,跟着 `HOME` 走。
 
 `electron:dev:bundled` 先构建界面,再用构建好的界面启动,壳使用第 4 节暂存的内核;没有暂存时,启动日志提示「bundled OpenCode CLI missing」,内核起不来。`electron:dev` 用热更新的界面,适合改界面时快速查看,但它另起的壳服务端不在 Electron 里,访问控制(`DESKTOP.md` 第 4 节)在那里不生效,也接不到 GeoEngine,地理环境与地理工具都不可用;验证这些要用 `electron:dev:bundled` 或打包出的应用。
 
@@ -68,7 +68,7 @@ cd desktop/packages/electron
 CSC_IDENTITY_AUTO_DISCOVERY=false bun run package -- --dir -c.mac.identity=- -c.mac.notarize=false
 ```
 
-`package` 依次构建界面、暂存内核与 GeoEngine(第 4 节)、打包主进程、重建原生模块,再调用 electron-builder。`--dir` 只生成应用目录 `dist/mac-arm64/GeoCode.app`,不生成 dmg 与 zip;`-c.mac.identity=-` 用临时签名(ad-hoc),不需要开发者证书;`-c.mac.notarize=false` 不公证。不要单独运行上游的 `verify:opencode-cli`:它按上游固定的 npm 版本核对暂存的内核,与 `kernel/` 的版本不符。
+`package` 依次构建界面、暂存内核与 GeoEngine(第 4 节)、打包主进程、重建原生模块,再调用 electron-builder。`--dir` 只生成应用目录 `dist/mac-arm64/GeoCode.app`,不生成 dmg 与 zip;`-c.mac.identity=-` 用临时签名(ad-hoc),不需要开发者证书;`-c.mac.notarize=false` 不公证。不要单独运行上游的 `verify:opencode-cli`:它找的是上游的文件名 `opencode`,核对的是上游固定的版本,对 GeoCode 的内核必然失败。
 
 macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是它的源(Icon Composer 的文档,图层在其中的 `Assets/` 里),编译出的 `resources/icons/Assets.car` 提交在仓库里,打包只把它拷进应用,缺了它打包会失败。改了图层或 `icon.json` 之后,在 `desktop/packages/electron` 运行 `bun run generate:macos-icon` 重新生成(需要 Xcode),与源一起提交。浅色与深色两张图层沿用上游的文件名,灰度的一张是 GeoCode 加的。
 
@@ -80,15 +80,15 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 
 各部分的测试这样运行,都不能写真实的主目录:
 
-- `kernel/`:GeoCode 的测试有两种,加在上游测试文件里的用例(命名见 `CONVENTIONS.md` 第 4 节)与 GeoCode 自己的测试文件(位置见第 3.4 节),都借用上游的夹具。在包目录用 `bun run test <文件>` 运行,它把主目录、`XDG_*` 与 `TMPDIR` 换成临时目录;不要在包里直接执行 `bun test`。
-- `desktop/`:GeoCode 的测试在各包的 `geocode/` 目录,在包目录用 `bun run test` 运行,壳服务端的那些在 `desktop/packages/web` 里用 `bun run test -- server/geocode/`。主进程监管 GeoEngine 的测试在 `desktop/packages/electron` 里用 `node --test --test-timeout=10000 geocode/geoengine-supervisor.test.mjs` 运行,时限让漏掉的等待变成失败而不是挂住。
-- 上游的测试不保证只写临时目录,`web` 包里就有测试在主目录下建目录、写 npm 缓存。要跑它们时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉而不是设成空值,否则 Bun 会把转译缓存写到当前目录下。
+- `kernel/`:GeoCode 的测试有两种,加在上游测试文件里的用例(命名见 `CONVENTIONS.md` 第 4 节)与 GeoCode 自己的测试文件(位置见 `CONVENTIONS.md` 第 3.4 节),都借用上游的夹具。`packages/core` 的测试在包目录用 `bun run test <文件>` 运行,它把主目录、`XDG_*` 与 `TMPDIR` 换成临时目录;其他包(如 `packages/server`)的 `test` 脚本不换,照下面上游测试的办法换一个临时主目录。不要在包里直接执行 `bun test`。
+- `desktop/`:GeoCode 的测试在各包的 `geocode/` 目录。包的 `bun run test` 会连上游的测试一起跑,所以只跑这些目录:界面的在 `desktop/packages/ui` 里用 `node ../../scripts/run-isolated-tests.mjs src/geocode`,壳服务端的在 `desktop/packages/web` 里用 `bun run test -- server/geocode/`,主进程监管 GeoEngine 的在 `desktop/packages/electron` 里用 `node --test --test-timeout=10000 geocode/geoengine-supervisor.test.mjs`,时限让漏掉的等待变成失败而不是挂住。
+- 上游的测试不保证只写临时目录,`web` 包里就有测试在主目录下建目录、写 npm 缓存。要跑它们时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_STATE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉而不是设成空值,否则 Bun 会把转译缓存写到当前目录下。
 - `geoengine/`:测试在系统临时目录下建以 `geoengine-` 开头的目录,结束时删掉。有的测试启动外部进程并验证它们被结束,所以按顺序逐个运行。
 
 GeoEngine 的测试涉及两种外部软件:
 
-- QGIS:macOS 上接真实的 QGIS,默认用 `/Applications` 下每一个 `QGIS*.app`,也可以用 `GEOENGINE_QGIS_APPS` 列出应用包的路径(以冒号分隔);本机没有 QGIS 时这几项跳过。QGIS 照常在用户目录下写它自己的配置与缓存。Windows 上认路径与发现安装的逻辑在任何平台上都测,用的是照 OSGeo4W 的真实组件包搭出的假目录树;经启动脚本运行 QGIS 只能在 Windows 上验证。
-- GEE:测试不联网。环境状态由冒充 Python 的 shell 脚本给出;运行脚本的几项用 `PATH` 里的 `python3` 执行真实的运行脚本,earthengine-api 与 requests 换成测试自带的替身,没有 `python3` 时跳过。
+- QGIS:macOS 上接真实的 QGIS,默认用 `/Applications` 下每一个认得出的 `QGIS*.app`,也可以用 `GEOENGINE_QGIS_APPS` 列出应用包的路径(以冒号分隔);本机没有 QGIS 时这几项跳过。QGIS 照常在用户目录下写它自己的配置与缓存。Windows 上认路径与发现安装的逻辑在任何平台上都测,用的是照 OSGeo4W 的真实组件包搭出的假目录树;经启动脚本运行 QGIS 只能在 Windows 上验证。
+- GEE:测试不联网。环境检查与运行脚本都用 `PATH` 里的 `python3` 真实执行,earthengine-api、它用到的 Google 库、requests、geedim 与 geopandas 换成测试自带的替身,没有 `python3` 时这些项跳过;Python 自己出错的情形由冒充 Python 的 shell 脚本模拟。
 
 ## 8. 写入检测
 
@@ -100,4 +100,4 @@ GeoEngine 的测试涉及两种外部软件:
 ./scripts/foreign-writes.sh after
 ```
 
-它检查 OpenCode、OpenChamber(包括它在 `~/Library` 下的窗口数据与日志)与 Claude 的目录有没有被写入,文件的新增、修改与权限变化都算。无论在沙箱里还是在真实主目录下启动,结果都应当是干净的。退出码:0 干净;1 发现写入;3 需要人确认,表示本机的 OpenChamber 在这段时间里运行过,它自己的写入被单独列出,要得到干净的结论就关掉它重跑。
+它检查 OpenCode、OpenChamber(包括它在 `~/Library` 下的窗口数据与日志)、Claude 与通用的 `~/.agents` 目录有没有被写入,文件的新增、修改、删除与权限变化都算。无论在沙箱里还是在真实主目录下启动,结果都应当是干净的。退出码:0 干净;1 发现写入;3 需要人确认,表示变动全在 OpenChamber 与 OpenCode 自己的目录里,而本机的 OpenChamber 在这段时间里运行过,多半是它自己写的,关掉它重跑才能得出结论。

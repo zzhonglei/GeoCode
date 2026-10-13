@@ -11,21 +11,21 @@ GeoCode 建在两个开源项目之上:
 
 地理能力由 GeoCode 自己的地理引擎 GeoEngine 提供,位于 `geoengine/`(见 [`docs/GEOENGINE.md`](docs/GEOENGINE.md))。
 
-两个上游的源码放在本仓库里,并持续合并上游的新版本(见 [`docs/UPSTREAM.md`](docs/UPSTREAM.md))。GeoCode 尽量通过配置与装配来定制它们,做不到时才修改上游源码;修改处带有注释标记,对上游的全部修改都能用 git 列出来。
+两个上游的源码放在本仓库里,并持续合并上游的新版本(见 [`docs/UPSTREAM.md`](docs/UPSTREAM.md))。GeoCode 尽量通过配置与装配来定制它们,做不到时才修改上游源码,对上游的全部修改都能用 git 列出来。
 
 ## 文档
 
 | 文档 | 内容 |
 |---|---|
-| [`docs/DESIGN.md`](docs/DESIGN.md) | 设计大纲:定位、基础、原则、待定问题与路线 |
-| [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) | 开发规范:写代码、改上游代码、测试、文档与提交 |
-| [`docs/UPSTREAM.md`](docs/UPSTREAM.md) | 两个上游怎么导入与升级 |
-| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | 安装、构建、运行、打包与检查 |
-| [`docs/DESKTOP.md`](docs/DESKTOP.md) | 桌面应用:组成、内核、边界、本机访问控制、环境变量、名字与标识 |
-| [`docs/PATHS.md`](docs/PATHS.md) | 路径与存储:GeoCode 在用户电脑上的目录 |
-| [`docs/GEOENGINE.md`](docs/GEOENGINE.md) | 地理引擎的框架:定位、在应用中的位置、结构、边界、约束、验收与待定问题 |
-| [`docs/QGIS.md`](docs/QGIS.md) | QGIS 能力域:范围、安装与环境、检查与提示、权限、执行算法、读取数据、查阅算法、界面与验收 |
-| [`docs/GEE.md`](docs/GEE.md) | Google Earth Engine 能力域:为什么不直接经 shell 运行 Python、一次运行、不被误杀的运行、任务与资产、内置的 Python 包、运行中的信息、环境、权限、界面、验收与待定问题 |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | 设计大纲:定位、原则与路线 |
+| [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) | 开发规范:代码、对上游的修改、测试、文档与提交怎样写 |
+| [`docs/UPSTREAM.md`](docs/UPSTREAM.md) | 两个上游怎样导入与升级 |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | 怎样安装、构建、运行、打包与检查 |
+| [`docs/DESKTOP.md`](docs/DESKTOP.md) | 桌面应用由什么组成、守哪些边界 |
+| [`docs/PATHS.md`](docs/PATHS.md) | GeoCode 在用户电脑上与项目里产生的文件 |
+| [`docs/GEOENGINE.md`](docs/GEOENGINE.md) | 地理引擎 GeoEngine:各能力域共用的框架 |
+| [`docs/QGIS.md`](docs/QGIS.md) | QGIS 能力域:读取地理数据、查阅与执行算法 |
+| [`docs/GEE.md`](docs/GEE.md) | Google Earth Engine 能力域:运行 GEE 脚本,在任务里保存与沿用结果 |
 
 ## 许可
 
