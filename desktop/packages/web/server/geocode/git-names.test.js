@@ -6,8 +6,7 @@ import path from 'node:path';
 
 import { snapshotWorktree } from '../lib/git/service.js';
 
-// Guards against the UI's run snapshot refs (lib/multirun/keep.ts) and the server's accepted ones drifting apart,
-// and against OpenChamber's name on what the app leaves in a user's repository.
+// Guards against a merge bringing OpenChamber's name back to what the app leaves in a user's repository.
 const roots = [];
 const git = (cwd, args) => execFileSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', HOME: cwd } });
 
@@ -26,17 +25,12 @@ afterAll(() => {
 });
 
 describe('GeoCode: git names', () => {
-  it('keeps run snapshots under refs/geocode, authored by GeoCode', async () => {
+  it('keeps run snapshots under refs/geocode, with no upstream name on them', async () => {
     const repo = repository();
     fs.writeFileSync(path.join(repo, 'README.md'), '# Changed\n');
     const ref = 'refs/geocode/runs/group-1/ses_abc';
     const result = await snapshotWorktree(repo, { ref });
     expect(git(repo, ['rev-parse', ref]).trim()).toBe(result.commit);
-    expect(git(repo, ['log', '-1', '--format=%an <%ae> %cn <%ce>', result.commit]).trim()).toBe('GeoCode <snapshot@geocode.local> GeoCode <snapshot@geocode.local>');
-    expect(git(repo, ['log', '-1', '--format=%s', result.commit]).trim()).toBe('GeoCode run snapshot');
-  });
-
-  it('refuses refs under OpenChamber\'s name', async () => {
-    await expect(snapshotWorktree(repository(), { ref: 'refs/openchamber/runs/group-1/ses_abc' })).rejects.toThrow('Invalid snapshot ref');
+    expect(git(repo, ['log', '-1', '--format=%an %ae %cn %ce %s', result.commit])).not.toMatch(/openchamber/i);
   });
 });

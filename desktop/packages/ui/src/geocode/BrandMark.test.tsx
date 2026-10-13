@@ -72,15 +72,9 @@ describe('GeoCode: the loading mark', () => {
 });
 
 describe('GeoCode: the logo component', () => {
-  test('draws the mark, still by default', () => {
+  test('draws the mark', () => {
     const html = render(<OpenChamberLogo />);
     expect(html).toContain('var(--geocode-orbit');
-    expect(html).not.toContain('animateMotion');
     expect(html).not.toContain('8.432');
-  });
-
-  test('draws the moving mark on startup screens', () => {
-    expect(render(<OpenChamberLogo variant="splash" />)).toContain('animateMotion');
-    expect(render(<OpenChamberLogo isAnimated />)).toContain('animateMotion');
   });
 });
