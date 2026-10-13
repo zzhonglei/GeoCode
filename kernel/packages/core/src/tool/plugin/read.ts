@@ -89,15 +89,16 @@ export const Plugin = {
                 const resolved = yield* fs.resolve(result.target.absolute)
                 const root = yield* fs.resolve(location.directory)
                 if (!FSUtil.contains(root, resolved)) return // GeoCode: only AGENTS.md inside the location directory
-                // up() searches its stop directory, so the Location-root AGENTS.md (already
-                // supplied by core initial instructions) is dropped by the dirname filter.
+                // The Location and its ancestors are already supplied by initial instructions,
+                // even when an upward walk from elsewhere in the project cannot reach root.
                 const discovered = yield* fs.up({
                   targets: [FILENAME],
                   start: result.content.type === "list-page" ? resolved : dirname(resolved),
                   stop: root,
+                  type: "file",
                 })
                 const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter(
-                  (file) => dirname(file) !== root,
+                  (file) => !FSUtil.contains(dirname(file), root) && file !== resolved,
                 )
                 if (candidates.length === 0) return
                 yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
