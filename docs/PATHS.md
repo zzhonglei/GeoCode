@@ -26,7 +26,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 ```
 ~/.config/geocode/
 ├── geocode.json        全局配置:模型与服务商、权限、MCP 服务、网页搜索等。也可以写成 geocode.jsonc(允许注释)
-├── machine.json        本机地理执行环境的配置:QGIS、Python 等软件的位置,GeoEngine 写入,也可以手改(见 GEOENGINE.md 第 3.2 节)
+├── machine.json        本机地理执行环境的配置:QGIS、Python 等软件的位置与 GEE 的 Cloud 项目,GeoEngine 写入,也可以手改(见 GEOENGINE.md 第 3.2 节)
 ├── AGENTS.md           写给所有项目的指示,每次对话都会带上
 ├── agents/             自定义 agent,每个一份 .md
 ├── commands/           自定义命令,每个一份 .md
@@ -41,7 +41,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 
 ```
 ~/.local/share/geocode/
-├── geocode.db            数据库:会话与消息、模型服务商的登录凭据、MCP 服务的授权、模型目录、各会话建过的 GEE 任务名
+├── geocode.db            数据库:会话与消息、模型服务商的登录凭据、MCP 服务的授权、「始终允许」的权限、模型目录、各会话建过的 GEE 任务名
 ├── geocode.db-wal, -shm  数据库运行时的附属文件,随数据库一起存在
 ├── log/geocode.log       内核日志,超过 50 MB 时自动截去旧内容
 ├── snapshot/             每个项目的检查点仓库,用于撤销 agent 的修改;只保存差异,复用项目自己的 git 对象
@@ -51,12 +51,12 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 ├── repos/                agent 查阅外部代码时克隆的仓库
 ├── plan/                 计划模式写下的计划
 └── desktop/              应用的设置与状态
-    ├── settings.json         应用设置:界面、默认模型、窗口位置等
-    ├── preferences.json      个人偏好
+    ├── settings.json         这台电脑上的状态:窗口位置等
+    ├── preferences.json      个人偏好:界面、默认模型等
     ├── projects/             每个项目的设置、定时任务、上下文与计划
     ├── project-icons/        项目图标
     ├── chats/                不属于任何项目的对话各自的工作目录,agent 在这类对话里生成的文件都在这里
-    ├── themes/               自定义主题,可以把主题文件放进来再在设置里导入
+    ├── themes/               自定义主题:放进来的主题文件直接可选,在设置里导入的也存在这里
     ├── speech-models/        下载的本地语音输入模型
     ├── goals/                会话目标
     ├── walkthroughs/         生成的改动导览
@@ -74,7 +74,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
     └── tmp/                       合并分支时的临时工作树
 ```
 
-用到对应功能时才会出现的文件,在没用过的电脑上不存在。
+`log/` 与 `repos/` 每次启动就建立,其余的用到对应功能时才会出现,在没用过的电脑上不存在。设置或偏好写到一半时应用崩溃,会留下名字里带 `.tmp-` 的副本;排队的消息读不出时,原文件改名为 `message-queue.json.corrupt-<时间>` 留下。
 
 ## 4. 缓存、状态与临时文件
 
@@ -89,9 +89,9 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 
 使用 GitLab 服务商时,这里还有两份 GitLab 模型信息的缓存。
 
-状态目录 `~/.local/state/geocode/` 只有安装 npm 包时用的锁文件。
+状态目录 `~/.local/state/geocode/` 每次启动就建立,里面只有 `locks/` 下的锁文件,安装 npm 包与克隆外部仓库时使用。
 
-临时目录 `$TMPDIR/geocode/` 是提示 agent 存放临时文件的地方,agent 可以不经询问读写。系统临时目录下另有几类以 `geocode-` 开头的短期文件:终端的通信套接字(`geocode-pty-*`)、agent 用浏览器时的截图(`geocode-browser-*`)、查看 git 差异与暂存部分修改时的中间文件(`geocode-branch-diff-*`、`geocode-hunk-*`、`geocode-snapshot-*`),macOS 上还有转换应用图标时的 `geocode-icon-*.png`。每次启动时,运行时还会在系统临时目录解出一个 `.bun-*.dylib` 库文件。这些都是临时文件,删除不影响使用。
+临时目录 `$TMPDIR/geocode/` 是提示 agent 存放临时文件的地方,agent 可以不经询问读写。系统临时目录下另有几类以 `geocode-` 开头的短期文件:终端的通信套接字(`geocode-pty-*`)、查看 git 差异与暂存部分修改时的中间文件(`geocode-branch-diff-*`、`geocode-hunk-*`)、多方案运行保存快照时的中间文件(`geocode-snapshot-*`),macOS 上还有转换应用图标时的 `geocode-icon-*.png`。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`。每次启动时,运行时还会在系统临时目录解出一个 `.bun-*.dylib` 库文件。这些都是临时文件,删除不影响使用。
 
 内核的运行时(Bun)另把插件的转译结果缓存在它自己的共享缓存目录里(macOS 是 `~/Library/Caches/bun`),与本机其他使用 Bun 的程序共用,按内容命名,删除不影响使用。
 
@@ -99,11 +99,11 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 
 窗口数据目录是 Electron 的存储:界面记住的状态(打开的标签页、草稿、折叠状态等)、网页缓存,以及内置浏览器面板的 Cookie 与网站数据(`Partitions/geocode-browser`,对话里展开的 QGIS 手册网页也用它)。删掉它,界面回到初始的布局,浏览器面板里登录过的网站需要重新登录,会话与设置不受影响。
 
-应用日志 `main.log` 记录窗口与进程的运行,7 天前的日志自动删除;会话与工具执行记在数据目录的 `log/geocode.log`。排查问题时两份一起看。
+应用日志 `main.log` 记录窗口与进程的运行,超过 5 MB 时换成 `main.old.log`,日志目录里 7 天前的文件自动删除;会话与工具执行记在数据目录的 `log/geocode.log`。排查问题时两份一起看。
 
 操作系统按应用标识 `io.github.zzhonglei.geocode` 记录 GeoCode:
 
-- macOS:偏好设置 `~/Library/Preferences/io.github.zzhonglei.geocode.plist`(文件对话框的位置等),以及在系统设置里授予的权限(麦克风、文件夹访问、通知、本地网络)。
+- macOS:偏好设置 `~/Library/Preferences/io.github.zzhonglei.geocode.plist`(文件对话框的位置等),以及在系统设置里授予的权限(麦克风、文件夹访问、通知、本地网络);开机启动打开时,还有一项登录项。
 - Windows:安装目录、开始菜单与桌面的快捷方式、注册表 `HKEY_CURRENT_USER` 下的卸载信息与安装位置;开机启动打开时,还有一项启动项。
 
 ## 6. 项目里
@@ -119,18 +119,21 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 │   ├── agents/  commands/  skills/   项目专属的 agent、命令与技能
 │   └── screenshots/    agent 使用浏览器时保存的截图
 └── .git/
-    ├── geocode         项目标识,GeoCode 用它把会话归到这个项目
+    ├── geocode         项目标识(根提交),建立或删除工作树时写入;壳用它给工作树的目录命名,仓库没有远程地址时内核也用它认出项目
+    ├── config          建立工作树时写入 core.longpaths;在设置里给项目套用 git 身份时写入用户名、邮箱、签名与凭据的设置
     ├── worktrees/      git 为工作树记录的信息,建立工作树时由 git 写入
     └── refs/
         ├── heads/geocode/   新建工作树而没有指定分支名时建立的分支
         └── geocode/runs/    多方案运行里选定一个后,其余方案的工作树删除前留下的快照
 ```
 
-在设置里修改项目配置时,项目配置旁边同样会留一份 `.geocode.backup` 副本。agent 按任务修改的文件与运行命令产生的文件,由任务本身决定,不在此列;哪些操作要先征得用户同意,由权限设置决定。GeoCode 只认上面这些名字,给其他工具准备的配置(如 `.opencode/`、`.claude/`)不会改变 GeoCode 的行为。
+在设置里修改项目配置时,项目配置旁边同样会留一份 `.geocode.backup` 副本。agent 按任务修改的文件与运行命令产生的文件,由任务本身决定,不在此列;哪些操作要先征得用户同意,由权限设置决定。GeoCode 只认 `geocode` 这个名字下的配置(内核还兼容 `agent/` 这类单数的旧目录名),给其他工具准备的配置(如 `.opencode/`、`.claude/`)不会改变 GeoCode 的行为。
 
 ## 7. 读取的用户环境
 
-为了让 git、npm 与云服务照常工作,GeoCode 会读用户为这些工具配置的内容:git 的全局配置与 `~/.git-credentials`,GitHub CLI 的登录(`gh auth token`),`~/.npmrc`,以及选用对应服务商时 AWS 与 Google Cloud 的凭据。启动时读取登录 shell 的环境变量,agent 执行的命令与终端因此能找到 conda、GDAL 等工具。这些只读不写。
+为了让 git、npm 与云服务照常工作,GeoCode 会读用户为这些工具配置的内容:git 的全局配置与 `~/.git-credentials`,GitHub CLI 的登录(`gh auth token`),`~/.npmrc`,以及选用对应服务商时 AWS 与 Google Cloud 的凭据。启动时读取登录 shell 的环境变量,agent 执行的命令与终端因此能找到 conda、GDAL 等工具。GEE 的检查读 Earth Engine 的凭据 `~/.config/earthengine/credentials`。
+
+这些只读不写,例外有两处:在设置里登录 GEE 时,由 earthengine-api 写入它的凭据文件;给项目套用带令牌的 git 身份时,项目的 git 配置改用 `store` 保存凭据,之后由 git 自己写 `~/.git-credentials`。
 
 ## 8. 删除与重置
 
@@ -143,7 +146,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 ## 9. 约束
 
 - 内核与壳各自按 `geocode` 这个名字算出目录,GeoCode 不靠设置 `XDG_*`、`TMPDIR` 这类通用变量来指定它们:这些变量会传给内核启动的所有程序,git 会改读 GeoCode 目录里的 git 配置,用户的工具会把配置与缓存写进 GeoCode 的目录。用户自己的环境里设了它们时,照第 1 节跟随。
-- 同一个目录,写入方与所有读取方用同一个来源。壳有好几处直接读内核的文件(登录凭据、数据库、工作树),漏掉一处不报错,只会读到用户自己的 OpenCode 的文件,或写进它的目录。
+- 同一个目录,写入方与所有读取方用同一个来源。壳有好几处直接读写内核的文件(数据库里的登录凭据、配置文件、工作树),漏掉一处不报错,只会读到用户自己的 OpenCode 的文件,或写进它的目录。
 - 应用名与应用标识不与 OpenCode、OpenChamber 相同:Electron 的存储与日志、单实例锁、系统偏好与权限、Windows 的安装目录与注册表项都按它们区分。Windows 的安装目录与注册表项在第一次安装时写定,之后的安装沿用,所以应用标识发布之后不再改。
 - 目录名不与已有的名字只差大小写:macOS 与 Windows 的文件系统默认不区分大小写。
-- agent 不经询问就能进入内核的配置目录与临时目录,所以壳的令牌与登录凭据不放在这两处。
+- agent 不经询问就能进入内核的配置目录、临时目录与数据目录的 `shell/`、`tool-output/`(计划模式下还有 `plan/`),所以壳的令牌与登录凭据不放在这些地方。

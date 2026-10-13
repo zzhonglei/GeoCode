@@ -31,8 +31,6 @@ GeoCode 建在两个开源项目之上,两者的源码都放在本仓库里(见 
 
 - 更新与签名:OpenChamber 自带自动更新;GeoCode 用不用它,安装包签不签名。
 
-做这些决定时,按定制阶梯取最靠前的手段:能用配置或环境变量做到的,不改源码。
-
 ## 5. 路线
 
 每一步都能单独验证。先把两个上游封装成一个应用(见 `DESKTOP.md`),再屏蔽 GeoCode 用不到的上游功能,再把路径与存储同用户安装的 OpenCode、OpenChamber 分开(见 `PATHS.md`),再把用户看到的名字、链接、版本、图标与标志换成 GeoCode 自己的(见 `DESKTOP.md` 第 6 节)。再建地理引擎 GeoEngine(见 `GEOENGINE.md`):先搭框架,再按 QGIS、Google Earth Engine、OpenStreetMap、GDAL 的顺序接入能力域。之后的内核装配(agent 阵容、权限、屏蔽项)、壳的定制、地理界面、双平台打包、与第一版逐项对照验收,顺序待定。
