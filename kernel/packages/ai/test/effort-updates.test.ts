@@ -268,6 +268,22 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
+  it.effect("strips markers when thinking is disabled or between_tools", () =>
+    Effect.gen(function* () {
+      const sonnet = anthropic("claude-sonnet-5-5")
+      const betweenTools = yield* compileRequest(
+        LLM.request({
+          model: sonnet,
+          messages: conversation,
+          providerOptions: { thinking: { type: "between_tools" }, effort: "low" },
+        }),
+      )
+
+      expect(systemMessages(betweenTools.body)).toHaveLength(0)
+      expect(betweenTools.body.output_config).toEqual({ effort: "low" })
+    }),
+  )
+
   it.effect("strips markers for Opus 5.0 on Bedrock Mantle Messages while lowering Opus 5.5", () =>
     Effect.gen(function* () {
       const mantle = AmazonBedrockMantle.configure({ apiKey: "test", region: "us-east-1" })
@@ -293,20 +309,28 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
-  it.effect("strips markers on the Vertex Anthropic route, whose protocol wrapper does not forward support", () =>
+  it.effect("lowers markers on the Vertex Anthropic route for models that support them", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
+      const vertex = GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" })
+      const opus5 = yield* compileRequest(
         LLM.request({
-          model: GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" }).model(
-            "claude-opus-5",
-          ),
+          model: vertex.model("claude-opus-5"),
+          messages: conversation,
+          providerOptions: { effort: "low" },
+        }),
+      )
+      const opus48 = yield* compileRequest(
+        LLM.request({
+          model: vertex.model("claude-opus-4-8"),
           messages: conversation,
           providerOptions: { effort: "low" },
         }),
       )
 
-      expect(systemMessages(prepared.body)).toHaveLength(0)
-      expect(prepared.body.output_config).toEqual({ effort: "low" })
+      expect(systemMessages(opus5.body)).toEqual([{ role: "system", content: [], output_config: { effort: "low" } }])
+      expect(opus5.body.output_config).toEqual({ effort: "high" })
+      expect(systemMessages(opus48.body)).toHaveLength(0)
+      expect(opus48.body.output_config).toEqual({ effort: "low" })
     }),
   )
 })

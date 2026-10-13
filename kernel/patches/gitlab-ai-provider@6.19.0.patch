@@ -1,8 +1,8 @@
 diff --git a/dist/index.js b/dist/index.js
-index 1304af37398a8b39a32d97d3f4c266086fbd460e..f3315464fe0a5a576066c8745d9e5bc553f6d262 100644
+index 01ea670300f2a05644ad8f1511bfa66348a58466..14ec59d4c33cabf07dfca487d03e685847160f32 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -3656,7 +3656,7 @@ var crypto = __toESM(require("crypto"));
+@@ -3659,7 +3659,7 @@ var crypto = __toESM(require("crypto"));
  var DISCOVERY_TTL_MS = 10 * 60 * 1e3;
  function getCacheFilePath() {
    const cacheHome = process.env.XDG_CACHE_HOME || path3.join(os.homedir(), ".cache");
@@ -11,7 +11,7 @@ index 1304af37398a8b39a32d97d3f4c266086fbd460e..f3315464fe0a5a576066c8745d9e5bc5
  }
  function computeCacheKey(workDir, instanceUrl, scope) {
    const normalizedUrl = (instanceUrl || "https://gitlab.com").replace(/\/$/, "");
-@@ -5450,12 +5450,12 @@ function getOpenCodeAuthPath() {
+@@ -5453,12 +5453,12 @@ function getOpenCodeAuthPath() {
    const homeDir = os2.homedir();
    const xdgDataHome = process.env.XDG_DATA_HOME;
    if (xdgDataHome) {
@@ -27,7 +27,7 @@ index 1304af37398a8b39a32d97d3f4c266086fbd460e..f3315464fe0a5a576066c8745d9e5bc5
  }
  async function loadOpenCodeAuth(instanceUrl) {
    try {
-@@ -5747,7 +5747,7 @@ var DEFAULT_CONTEXT = 2e5;
+@@ -5750,7 +5750,7 @@ var DEFAULT_CONTEXT = 2e5;
  var DEFAULT_OUTPUT = 64e3;
  function getCacheFilePath2() {
    const cacheHome = process.env.XDG_CACHE_HOME || path5.join(os3.homedir(), ".cache");
@@ -37,10 +37,10 @@ index 1304af37398a8b39a32d97d3f4c266086fbd460e..f3315464fe0a5a576066c8745d9e5bc5
  function readCacheFile() {
    try {
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 6ee167989304b478ec321540585a7a36b37d51f5..fbf7c6f2fadb3d07775f9c315cdcbde8f45eed6d 100644
+index 480bea5c340b3d1dfc375bd3f6ad0e35a642afe1..ca10058c93413b58bba0a01811f84c023fbf8970 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -3577,7 +3577,7 @@ import * as crypto from "crypto";
+@@ -3580,7 +3580,7 @@ import * as crypto from "crypto";
  var DISCOVERY_TTL_MS = 10 * 60 * 1e3;
  function getCacheFilePath() {
    const cacheHome = process.env.XDG_CACHE_HOME || path3.join(os.homedir(), ".cache");
@@ -49,7 +49,7 @@ index 6ee167989304b478ec321540585a7a36b37d51f5..fbf7c6f2fadb3d07775f9c315cdcbde8
  }
  function computeCacheKey(workDir, instanceUrl, scope) {
    const normalizedUrl = (instanceUrl || "https://gitlab.com").replace(/\/$/, "");
-@@ -5371,12 +5371,12 @@ function getOpenCodeAuthPath() {
+@@ -5374,12 +5374,12 @@ function getOpenCodeAuthPath() {
    const homeDir = os2.homedir();
    const xdgDataHome = process.env.XDG_DATA_HOME;
    if (xdgDataHome) {
@@ -65,7 +65,7 @@ index 6ee167989304b478ec321540585a7a36b37d51f5..fbf7c6f2fadb3d07775f9c315cdcbde8
  }
  async function loadOpenCodeAuth(instanceUrl) {
    try {
-@@ -5668,7 +5668,7 @@ var DEFAULT_CONTEXT = 2e5;
+@@ -5671,7 +5671,7 @@ var DEFAULT_CONTEXT = 2e5;
  var DEFAULT_OUTPUT = 64e3;
  function getCacheFilePath2() {
    const cacheHome = process.env.XDG_CACHE_HOME || path5.join(os3.homedir(), ".cache");

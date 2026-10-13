@@ -53,6 +53,7 @@ const noRemoteConfig = Layer.succeed(
     add: (origin) => Effect.fail(new Error(`Remote config is not available: ${origin}`)),
     remove: () => Effect.void,
     resolve: () => Effect.succeed([]),
+    cached: () => Effect.succeed([]),
   }),
 )
 
