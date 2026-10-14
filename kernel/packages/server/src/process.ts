@@ -102,7 +102,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
           password,
         },
         urls,
-        GeoCodeProfile.replacements(options), // GeoCode: plugins only from the managed config, no remote config
+        GeoCodeProfile.replacements(options), // GeoCode: managed plugins only, no remote or machine-wide config
       ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
       applicationScope,
     )

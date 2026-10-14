@@ -4,6 +4,7 @@ import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
+import { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { Credential } from "@opencode/core/credential"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -39,6 +40,27 @@ const seed = async (root: string) => {
   return { root, global, project, managed: path.join(root, "link", "managed.json") }
 }
 
+// The location, every global directory and the credentials, inside one temporary root.
+const surroundings = (paths: { root: string; global: string; project: string }) => [
+  Location.node.replace(
+    Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(paths.project) }))),
+  ),
+  Global.node.replace(
+    Global.layerWith({
+      config: paths.global,
+      home: path.join(paths.root, "home"),
+      data: path.join(paths.root, "data"),
+      cache: path.join(paths.root, "cache"),
+      state: path.join(paths.root, "state"),
+      tmp: path.join(paths.root, "tmp"),
+      bin: path.join(paths.root, "cache", "bin"),
+      log: path.join(paths.root, "data", "log"),
+      repos: path.join(paths.root, "data", "repos"),
+    }),
+  ),
+  Credential.node.replace(emptyCredentialNode),
+]
+
 const operations = (paths: { root: string; global: string; project: string }, options: Config.Options) =>
   Effect.gen(function* () {
     const source = yield* ConfigPluginSource.Service
@@ -46,28 +68,8 @@ const operations = (paths: { root: string; global: string; project: string }, op
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([ConfigPluginSource.node, Bus.node]), [
-        ...GeoCodeProfile.replacements({ config: { file: options.file } }),
-        Config.node.replace(Config.configured(options)),
-        Location.node.replace(
-          Layer.succeed(
-            Location.Service,
-            Location.Service.of(location({ directory: AbsolutePath.make(paths.project) })),
-          ),
-        ),
-        Global.node.replace(
-          Global.layerWith({
-            config: paths.global,
-            home: path.join(paths.root, "home"),
-            data: path.join(paths.root, "data"),
-            cache: path.join(paths.root, "cache"),
-            state: path.join(paths.root, "state"),
-            tmp: path.join(paths.root, "tmp"),
-            bin: path.join(paths.root, "cache", "bin"),
-            log: path.join(paths.root, "data", "log"),
-            repos: path.join(paths.root, "data", "repos"),
-          }),
-        ),
-        Credential.node.replace(emptyCredentialNode),
+        ...GeoCodeProfile.replacements({ config: { file: options.file, content: options.content } }),
+        ...surroundings(paths),
         Watcher.node.replace(Watcher.testLayer),
       ]),
     ),
@@ -89,5 +91,26 @@ it.live("GeoCode: takes no plugin operations without a managed config file", () 
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
     const paths = yield* Effect.promise(() => seed(tmp.path))
     expect(yield* operations(paths, { content: JSON.stringify({ plugins: ["content-npm-plugin"] }) })).toEqual([])
+  }),
+)
+
+// Fails if Config watches the machine-wide directory, or its parent while it is absent.
+it.live("GeoCode: does not watch the machine-wide config directory", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+    const paths = yield* Effect.promise(() => seed(tmp.path))
+    const watcher = Watcher.testLayer
+    const graph = AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
+      ...GeoCodeProfile.replacements({}),
+      ...surroundings(paths),
+      Watcher.node.replace(watcher),
+    ])
+    const watched = yield* Effect.gen(function* () {
+      yield* (yield* Config.Service).entries()
+      return (yield* (yield* Watcher.Test).subscriptions()).map((subscription) => subscription.path)
+    }).pipe(Effect.provide(Layer.mergeAll(graph, watcher)))
+    const system = ConfigDiscovery.systemDirectory()
+    expect(watched).toContain(paths.global)
+    expect(watched.filter((target) => target === system || target === path.dirname(system))).toEqual([])
   }),
 )

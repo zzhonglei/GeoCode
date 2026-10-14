@@ -57,6 +57,19 @@ const noRemoteConfig = Layer.succeed(
   }),
 )
 
+// routes.ts's standard Config options plus `system: false`: no machine-wide directory or MDM preferences.
+const noMachineConfig = (options: ServerOptions) =>
+  Config.configured({
+    project: options.config?.project,
+    file: options.config?.file,
+    content: options.config?.content,
+    system: false,
+  })
+
 export function replacements(options: ServerOptions): LayerNode.Replacements {
-  return [ConfigPluginSource.node.replace(managedPlugins(options.config?.file)), WellKnown.node.replace(noRemoteConfig)]
+  return [
+    Config.node.replace(noMachineConfig(options)),
+    ConfigPluginSource.node.replace(managedPlugins(options.config?.file)),
+    WellKnown.node.replace(noRemoteConfig),
+  ]
 }
