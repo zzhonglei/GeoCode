@@ -64,7 +64,8 @@
       "name": "geocode",
       "version": "1.0.0",
       "description": "GeoCode",
-      "author": "GeoCode"
+      "author": "GeoCode",
+      "homepage": "https://github.com/zzhonglei/GeoCode-Release"
     },
     "asarUnpack": [
       "node_modules/@openchamber/web/server/built-in-extensions/**/*",
