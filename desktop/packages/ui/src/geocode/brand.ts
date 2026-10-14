@@ -22,7 +22,7 @@ const UPSTREAM = /(\b[Aa]n )?(?:OpenChamber|OpenCode(?! (?:Zen|Go|Console|Web Se
 export const toGeoCodeText = (text: string): string =>
   text.replace(UPSTREAM, (_, article?: string) => `${article ? article.replace('n ', ' ') : ''}GeoCode`);
 
-// Where upstream means the kernel as a part, or describes a server and a client that are one app here.
+// Where upstream means the kernel as a part, describes a server and a client that are one app here, or offers what the app does not have.
 const MESSAGES = {
   en: {
     'settings.view.nav.group.opencode': 'Kernel',
@@ -43,6 +43,7 @@ const MESSAGES = {
     'settings.voice.page.tooltip.sttLocal': 'On-device transcription on this computer. Models download automatically; no API key needed.',
     'sessionAuth.error.networkTitle': 'The local service is not responding',
     'sessionAuth.error.networkDescription': 'GeoCode could not verify this window with its local service. Retry, or restart GeoCode.',
+    'sourceBoard.empty.noSource': 'This project has no GitHub remote.',
   },
   'zh-CN': {
     'settings.view.nav.group.opencode': '内核',
@@ -63,6 +64,7 @@ const MESSAGES = {
     'settings.voice.page.tooltip.sttLocal': '在本机转写。模型自动下载，无需 API 密钥。',
     'sessionAuth.error.networkTitle': '本地服务没有响应',
     'sessionAuth.error.networkDescription': 'GeoCode 无法向本地服务验证此窗口。请重试，或重启 GeoCode。',
+    'sourceBoard.empty.noSource': '这个项目没有 GitHub 远程仓库。',
   },
   'zh-TW': {
     'settings.view.nav.group.opencode': '核心',
@@ -83,6 +85,7 @@ const MESSAGES = {
     'settings.voice.page.tooltip.sttLocal': '在本機轉寫。模型會自動下載，無需 API 金鑰。',
     'sessionAuth.error.networkTitle': '本機服務沒有回應',
     'sessionAuth.error.networkDescription': 'GeoCode 無法向本機服務驗證此視窗。請重試，或重新啟動 GeoCode。',
+    'sourceBoard.empty.noSource': '這個專案沒有 GitHub 遠端儲存庫。',
   },
 } satisfies Partial<Record<Locale, Messages>>;
 
