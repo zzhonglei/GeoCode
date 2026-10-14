@@ -100,7 +100,7 @@ export const GeoToolRow: React.FC<{ part: ToolPart }> = ({ part }) => {
 
   if (part.tool !== 'readgeodata') {
     return (
-      <div className="oc-static-tool-row flex w-full items-center gap-x-1.5 pr-2 pl-px py-1.5 rounded-xl min-w-0">
+      <div className="oc-static-tool-row flex w-full items-center gap-x-1.5 pe-2 ps-px py-1.5 rounded-xl min-w-0">
         <div className="inline-flex h-5 items-center flex-shrink-0">
           <QgisLogo className="h-3.5 w-3.5 flex-shrink-0" />
         </div>
@@ -127,7 +127,7 @@ export const GeoToolRow: React.FC<{ part: ToolPart }> = ({ part }) => {
   return (
     <div className="w-full min-w-0">
       <div
-        className="group/tool oc-static-tool-row flex w-full items-center gap-x-1.5 pr-2 pl-px py-1.5 rounded-xl min-w-0 cursor-pointer"
+        className="group/tool oc-static-tool-row flex w-full items-center gap-x-1.5 pe-2 ps-px py-1.5 rounded-xl min-w-0 cursor-pointer"
         role="button"
         tabIndex={0}
         aria-expanded={open}
@@ -167,7 +167,7 @@ export const GeoToolRow: React.FC<{ part: ToolPart }> = ({ part }) => {
         ) : null}
       </div>
       {open ? (
-        <div className="pb-1 pl-6 pr-2 min-w-0">
+        <div className="pb-1 ps-6 pe-2 min-w-0">
           {files.map((file) => (
             <div
               key={file}

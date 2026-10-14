@@ -18,7 +18,7 @@ export const StatusFailure: React.FC<{
   return (
     <div className="min-w-0 space-y-1">
       {message ? <p className="typography-meta break-words text-foreground">{message}</p> : null}
-      <div className="-ml-1.5 flex items-center gap-1">
+      <div className="-ms-1.5 flex items-center gap-1">
         <button type="button" aria-expanded={expanded} onClick={() => setExpanded((open) => !open)} className={LINK_CLASS}>
           {text.details}
         </button>

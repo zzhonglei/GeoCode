@@ -185,7 +185,7 @@ export const GeeDetails: React.FC<{
       ) : null}
     >
       {status && light === 'failed' ? (
-        <div className="mb-6 border-l-2 border-[var(--status-error)] pl-3">
+        <div className="mb-6 border-s-2 border-[var(--status-error)] ps-3">
           <GeeStatusDetails status={status} text={shared} />
         </div>
       ) : null}
@@ -338,7 +338,7 @@ const Waiting: React.FC<{ url: string | null; text: GeeText; copied: string; onC
         {url ? (
           <p className={cn(SETTINGS_HELPER_CLASS, 'mt-1')}>
             {text.noBrowser}
-            <button type="button" onClick={() => { void copy(); }} className="ml-1 text-[var(--primary-text)] hover:underline">
+            <button type="button" onClick={() => { void copy(); }} className="ms-1 text-[var(--primary-text)] hover:underline">
               {done ? copied : text.copyLink}
             </button>
           </p>

@@ -8,10 +8,6 @@ export const normalizers = withoutClosedQuotaProviders({ // GeoCode: Cursor cred
     const usageToken = clean(value?.usageToken);
     return usageToken ? { usageToken } : null;
   },
-  'ollama-cloud': (value) => {
-    const cookie = clean(value?.cookie);
-    return cookie ? { cookie } : null;
-  },
   cursor: (value) => {
     const accessToken = clean(value?.accessToken);
     const refreshToken = clean(value?.refreshToken);

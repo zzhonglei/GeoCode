@@ -14,7 +14,7 @@
 import express from 'express';
 
 import { createRelayIdentityRuntime } from './identity.js';
-import { startRelayHost } from './host-client.js';
+import { describeRelayError, startRelayHost } from './host-client.js';
 import { isEnterpriseMode, readEnterprisePolicy } from '../enterprise-mode.js';
 import { createInertRelayService } from '../../geocode/inert-relay.js'; // GeoCode: see createRelayService
 
@@ -172,7 +172,7 @@ export const createRelayService = ({
             await start(relayUrl);
           }
         } catch (error) {
-          logger.warn(`[Relay] claim watch failed: ${error?.message ?? error}`);
+          logger.warn(`[Relay] claim watch failed: ${describeRelayError(error)}`);
         }
       })();
     }, CLAIM_WATCH_INTERVAL_MS);
@@ -237,7 +237,7 @@ export const createRelayService = ({
         await start(config.relayUrl);
       }
     } catch (error) {
-      logger.warn(`[Relay] startup failed: ${error?.message ?? error}`);
+      logger.warn(`[Relay] startup failed: ${describeRelayError(error)}`);
     }
   };
 
@@ -259,7 +259,7 @@ export const createRelayService = ({
         stop();
       }
     } catch (error) {
-      logger.warn(`[Relay] reconcile failed: ${error?.message ?? error}`);
+      logger.warn(`[Relay] reconcile failed: ${describeRelayError(error)}`);
     }
   };
 

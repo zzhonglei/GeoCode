@@ -100,7 +100,7 @@ export const StartupFailure: React.FC<StartupFailureProps> = ({ cause, error, ke
           </div>
 
           {detail ? (
-            <div className="w-full text-left">
+            <div className="w-full text-start">
               <div className="typography-meta mb-1 text-muted-foreground">{TEXT.error}</div>
               <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-border bg-[var(--surface-muted)] px-3 py-2 font-mono typography-meta select-text">
                 {detail}
@@ -108,7 +108,7 @@ export const StartupFailure: React.FC<StartupFailureProps> = ({ cause, error, ke
             </div>
           ) : null}
 
-          <div className="flex w-full items-center justify-between gap-3 text-left">
+          <div className="flex w-full items-center justify-between gap-3 text-start">
             <div className="min-w-0">
               <div className="typography-meta text-muted-foreground">{TEXT.log}</div>
               <div className="truncate font-mono typography-meta select-text">{log.shown}</div>

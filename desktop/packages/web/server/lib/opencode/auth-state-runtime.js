@@ -1,3 +1,7 @@
+/* --- GeoCode: see setOpenCodeAuthState ---
+import { assignInjectedEnv } from '../injected-env.js';
+--- /GeoCode --- */
+
 export const createOpenCodeAuthStateRuntime = (dependencies) => {
   const {
     crypto,
@@ -40,7 +44,7 @@ export const createOpenCodeAuthStateRuntime = (dependencies) => {
     setAuthPassword(normalized);
     setAuthSource(source);
     /* --- GeoCode: the shell's children, the terminal among them, must not inherit it ---
-    process.env.OPENCODE_SERVER_PASSWORD = normalized;
+    assignInjectedEnv(process.env, { OPENCODE_SERVER_PASSWORD: normalized });
     --- /GeoCode --- */
     syncToHmrState();
     return normalized;

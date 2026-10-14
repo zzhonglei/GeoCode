@@ -21,6 +21,8 @@ const CLOSED = [
   'settings.openchamber.tunnel.',
   'settings.openchamber.opencodeCli.',
   'settings.projects.shared.',
+  'settings.projects.actionEditor.savedIn.',
+  'settings.projects.actions.confirmDelete.',
   'settings.skills.catalog.',
   'settings.skills.sidebar.badge.opencode',
   'onboarding.localSetup.',

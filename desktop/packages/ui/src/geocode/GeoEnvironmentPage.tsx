@@ -182,7 +182,7 @@ const QgisDetails: React.FC<{ text: QgisText; status: QgisView | undefined; revi
       ) : null}
     >
       {status && light === 'failed' ? (
-        <div className="mb-6 border-l-2 border-[var(--status-error)] pl-3">
+        <div className="mb-6 border-s-2 border-[var(--status-error)] ps-3">
           <QgisStatusDetails status={status} text={text} withApp={false} />
         </div>
       ) : null}

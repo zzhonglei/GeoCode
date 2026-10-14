@@ -12,4 +12,4 @@ export const TONE = {
 
 export const LIST_CLASS = 'divide-y divide-[var(--interactive-border)] overflow-hidden rounded-lg border border-[var(--interactive-border)]';
 
-export const ROW_CLASS = 'flex w-full items-center gap-3 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:bg-[var(--interactive-hover)]';
+export const ROW_CLASS = 'flex w-full items-center gap-3 px-3 py-2 text-start transition-colors focus-visible:outline-none focus-visible:bg-[var(--interactive-hover)]';

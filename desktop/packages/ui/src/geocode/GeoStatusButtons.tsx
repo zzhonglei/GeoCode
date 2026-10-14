@@ -40,7 +40,7 @@ const GeoIndicator: React.FC<{
             render={<button type="button" aria-label={`${spoken}: ${label}`} className={cn('relative', className)} />}
           >
             <Logo className={cn('h-[18px] w-[18px]', (light === 'idle' || light === 'failed') && 'opacity-60')} />
-            <span className={cn('absolute right-1 top-1 size-2 rounded-full border border-[var(--background)]', DOT_CLASS[light])} aria-hidden />
+            <span className={cn('absolute inset-e-1 top-1 size-2 rounded-full border border-[var(--background)]', DOT_CLASS[light])} aria-hidden />
           </Popover.Trigger>
         </TooltipTrigger>
         <TooltipContent side="bottom">{`${name} · ${label}`}</TooltipContent>

@@ -37,7 +37,7 @@ export const Labelled: React.FC<{
   mono?: boolean;
 }> = ({ label, children, mono }) => (
   <div className={cn(LINE_CLASS, 'text-foreground', mono && 'font-mono')}>
-    <span className={cn('text-muted-foreground', mono ? 'mr-2 font-sans' : undefined)}>{label}</span>
+    <span className={cn('text-muted-foreground', mono ? 'me-2 font-sans' : undefined)}>{label}</span>
     {children}
   </div>
 );

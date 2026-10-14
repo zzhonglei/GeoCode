@@ -338,7 +338,7 @@ export const AgentPermissionsEditor: React.FC<AgentPermissionsEditorProps> = ({
           <button
             type="button"
             onClick={supportsPatterns ? () => setExpandedKeys((current) => ({ ...current, [key]: !isExpanded })) : undefined}
-            className={cn('flex min-w-0 items-center gap-1.5 text-left', !supportsPatterns && 'cursor-default')}
+            className={cn('flex min-w-0 items-center gap-1.5 text-start', !supportsPatterns && 'cursor-default')}
             aria-expanded={supportsPatterns ? isExpanded : undefined}
           >
             <Icon
@@ -369,7 +369,7 @@ export const AgentPermissionsEditor: React.FC<AgentPermissionsEditorProps> = ({
         </div>
 
         {isExpanded && supportsPatterns && (
-          <div className="mt-2 space-y-2 pl-5">
+          <div className="mt-2 space-y-2 ps-5">
             {state.patterns.map((rule, index) => (
               <div key={index} className="flex flex-wrap items-center gap-2">
                 <Input
@@ -399,7 +399,7 @@ export const AgentPermissionsEditor: React.FC<AgentPermissionsEditorProps> = ({
               </div>
             ))}
             <Button variant="outline" size="xs" className="!font-normal" onClick={() => addPattern(key)}>
-              <Icon name="add" className="mr-1 h-3.5 w-3.5" />
+              <Icon name="add" className="me-1 h-3.5 w-3.5" />
               {t('settings.agents.page.permissionsEditor.actions.addRule')}
             </Button>
           </div>
@@ -460,7 +460,7 @@ export const AgentPermissionsEditor: React.FC<AgentPermissionsEditorProps> = ({
           className="h-8 w-full max-w-[16rem] font-mono text-xs"
         />
         <Button variant="outline" size="xs" className="!font-normal" onClick={addCustomKey} disabled={!customKeyDraft.trim()}>
-          <Icon name="add" className="mr-1 h-3.5 w-3.5" />
+          <Icon name="add" className="me-1 h-3.5 w-3.5" />
           {t('settings.agents.page.permissionsEditor.actions.addKey')}
         </Button>
       </div>

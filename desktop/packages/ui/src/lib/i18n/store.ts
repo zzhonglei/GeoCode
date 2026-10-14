@@ -53,7 +53,11 @@ async function loadDictionary(locale: Locale): Promise<I18nDictionary> {
                     ? await import('./messages/ja') as { dict: I18nDictionary }
                     : locale === 'tr'
                       ? await import('./messages/tr') as { dict: I18nDictionary }
-                      : { dict: enDict };
+                      : locale === 'ar'
+                        ? await import('./messages/ar')
+                        : locale === 'he'
+                          ? await import('./messages/he')
+                          : { dict: enDict };
   const dictionary = toGeoCodeDictionary(locale, mod.dict); // GeoCode: the upstream dictionaries stay as they are
   dictionaries.set(locale, dictionary);
   return dictionary;

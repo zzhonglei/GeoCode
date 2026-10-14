@@ -107,7 +107,7 @@ const Log: React.FC<{ lines: readonly Line[] }> = ({ lines }) => {
         const icon = line.icon ? ICONS[line.tone] : undefined;
         return (
           <div key={index} className={cn('min-w-0 overflow-hidden text-ellipsis whitespace-pre', TONES[line.tone])}>
-            {icon ? <Icon name={icon} className="mr-1.5 inline-block size-3.5 align-[-2px]" /> : null}
+            {icon ? <Icon name={icon} className="me-1.5 inline-block size-3.5 align-[-2px]" /> : null}
             {line.text}
           </div>
         );
@@ -140,7 +140,7 @@ export const RunRow: React.FC<{
   return (
     <div className="w-full min-w-0">
       <div
-        className="group/tool oc-static-tool-row flex w-full min-w-0 cursor-pointer items-center gap-x-1.5 rounded-xl py-1.5 pr-2 pl-px"
+        className="group/tool oc-static-tool-row flex w-full min-w-0 cursor-pointer items-center gap-x-1.5 rounded-xl py-1.5 pe-2 ps-px"
         role="button"
         tabIndex={0}
         aria-expanded={open}
@@ -202,13 +202,13 @@ export const RunRow: React.FC<{
         </span>
       </div>
       {open && lines.length ? (
-        <div className="relative ml-2 min-w-0 pl-3">
+        <div className="relative ms-2 min-w-0 ps-3">
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute top-px bottom-0 left-0 w-px"
+            className="pointer-events-none absolute top-px bottom-0 inset-s-0 w-px"
             style={{ backgroundColor: 'var(--tools-border)' }}
           />
-          <div className="min-w-0 py-2 pr-2 pl-4">
+          <div className="min-w-0 py-2 pe-2 ps-4">
             <Log lines={lines} />
           </div>
         </div>

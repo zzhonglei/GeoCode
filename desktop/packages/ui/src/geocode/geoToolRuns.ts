@@ -31,8 +31,6 @@ export const isMergedGeoPart = (part: Part): part is ToolPart => part.type === '
 export const hasGeoRow = (toolName: string) =>
   isMergedGeoTool(toolName) || toolName === 'qgisrun' || toolName === 'geerun';
 
-export const isGeoRowPart = (part: Part): part is ToolPart => part.type === 'tool' && hasGeoRow(part.tool);
-
 /** Whether a part shows in the conversation, and so parts the calls on either side of it. */
 const shows = (part: Part, showReasoningTraces: boolean) => {
   if (part.type === 'tool') return true;
