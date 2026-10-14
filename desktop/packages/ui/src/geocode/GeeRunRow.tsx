@@ -1,7 +1,9 @@
 import React from 'react';
 
+import { useToolContentCompletion } from '@/components/chat/message/parts/useToolContentCompletion';
+import { Button } from '@/components/ui/button';
 import { useDurationTickerNow } from '@/hooks/useDurationTicker';
-import { useI18nStore } from '@/lib/i18n';
+import { useI18n, useI18nStore } from '@/lib/i18n';
 import type { ToolPart } from '@/lib/opencode/model';
 import { useDirectorySync } from '@/sync/sync-context';
 
@@ -18,6 +20,7 @@ import {
 import { isBackgroundGeeRun } from './geeRunBackground';
 import { GeeLogo } from './GeeLogo';
 import { RunRow } from './RunRow';
+import { useRunRowOpen } from './runRowOpen';
 
 /** The statuses the row shows in turn, each one long enough to be read however fast they come. */
 const useRowStatus = (
@@ -48,8 +51,23 @@ export const GeeRunRow: React.FC<{ part: ToolPart }> = ({ part }) => {
   const notice = useDirectorySync((state) =>
     isBackgroundGeeRun(part) ? geeRunNotice(state.message[part.sessionID] ?? [], part.callID) : undefined,
   );
+  const open = useRunRowOpen(part.id);
+  // History pages leave a finished call's answer out; a run in the background has its answer in the notification.
+  const completion = useToolContentCompletion(part, open && part.state.status === 'completed' && !isBackgroundGeeRun(part));
+  const { t } = useI18n();
   const view = geeRunView(part, notice, locale);
   const { doing, percent } = useRowStatus(view.statuses, view.running, view);
+  const note =
+    completion.status === 'failed' ? (
+      <div className="typography-meta flex items-center gap-2 py-1 text-muted-foreground">
+        <span>{t('chat.toolPart.content.loadFailed')}</span>
+        <Button variant="ghost" size="xs" onClick={completion.retry}>
+          {t('chat.toolPart.content.retry')}
+        </Button>
+      </div>
+    ) : completion.status === 'loading' && completion.showProgress ? (
+      <div className="typography-meta py-1 text-muted-foreground">{t('chat.toolPart.content.loading')}</div>
+    ) : undefined;
   return (
     <RunRow
       id={part.id}
@@ -61,6 +79,7 @@ export const GeeRunRow: React.FC<{ part: ToolPart }> = ({ part }) => {
       start={view.start}
       end={view.end}
       lines={view.lines}
+      note={note}
     />
   );
 };

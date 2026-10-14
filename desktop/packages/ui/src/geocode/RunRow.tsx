@@ -1,5 +1,4 @@
 import React from 'react';
-import { create } from 'zustand';
 
 import { MinDurationShineText } from '@/components/chat/message/parts/MinDurationShineText';
 import { Icon } from '@/components/icon/Icon';
@@ -7,6 +6,7 @@ import { useDurationTickerNow } from '@/hooks/useDurationTicker';
 import { cn } from '@/lib/utils';
 
 import type { Line, Tone } from './runLines';
+import { useRunRowOpen, useRunRowToggle } from './runRowOpen';
 
 // As the static tool rows draw theirs.
 const ROW_TEXT_CLASS = '!text-[length:var(--text-meta)] !leading-5 sm:!leading-6 tracking-normal';
@@ -26,20 +26,6 @@ const ICONS = {
   error: 'close-circle',
   success: 'check',
 } as const satisfies Record<Tone, string | undefined>;
-
-// A store rather than component state: the row moves between groups as the turn goes on, and stays open.
-const useExpanded = create<{
-  open: ReadonlySet<string>;
-  toggle: (id: string) => void;
-}>()((set) => ({
-  open: new Set(),
-  toggle: (id) =>
-    set((state) => {
-      const open = new Set(state.open);
-      if (!open.delete(id)) open.add(id);
-      return { open };
-    }),
-}));
 
 /** How long a percentage takes to count up to a new value. */
 const COUNT_MS = 600;
@@ -119,7 +105,7 @@ const Log: React.FC<{ lines: readonly Line[] }> = ({ lines }) => {
 /**
  * A run of a geo tool, as one row: its logo and what GeoAgent says the step is for; while it runs, what it is doing,
  * its percentage when known, and the time so far; once done, the time it took, the title in the error colour when
- * `bad`. It opens to the run's lines.
+ * `bad`. It opens to the run's lines, and `note` under them.
  */
 export const RunRow: React.FC<{
   id: string;
@@ -131,10 +117,11 @@ export const RunRow: React.FC<{
   start?: number;
   end?: number;
   lines: readonly Line[];
-}> = ({ id, logo, title, bad, doing, percent, start, end, lines }) => {
+  note?: React.ReactNode;
+}> = ({ id, logo, title, bad, doing, percent, start, end, lines, note }) => {
   const counted = useCounted(percent, doing);
-  const open = useExpanded((state) => state.open.has(id));
-  const toggleOpen = useExpanded((state) => state.toggle);
+  const open = useRunRowOpen(id);
+  const toggleOpen = useRunRowToggle();
   const toggle = () => toggleOpen(id);
 
   return (
@@ -201,7 +188,7 @@ export const RunRow: React.FC<{
           ) : null}
         </span>
       </div>
-      {open && lines.length ? (
+      {open && (lines.length || note) ? (
         <div className="relative ms-2 min-w-0 ps-3">
           <span
             aria-hidden="true"
@@ -209,7 +196,8 @@ export const RunRow: React.FC<{
             style={{ backgroundColor: 'var(--tools-border)' }}
           />
           <div className="min-w-0 py-2 pe-2 ps-4">
-            <Log lines={lines} />
+            {lines.length ? <Log lines={lines} /> : null}
+            {note}
           </div>
         </div>
       ) : null}
