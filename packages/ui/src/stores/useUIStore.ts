@@ -11,7 +11,6 @@ import type { CustomProviderIcon } from '@/lib/customProviderIcons';
 import { DEFAULT_MONO_FONT, DEFAULT_UI_FONT, type MonoFontOption, type UiFontOption } from '@/lib/fontOptions';
 import { getStoredMobileKeyboardMode, type MobileKeyboardMode } from '@/lib/mobileKeyboardMode';
 import type { TerminalShell } from '@/lib/api/types';
-import type { ProjectRef } from '@/lib/projectContextApi';
 import type { PermissionMode } from './utils/permissionAutoAccept';
 import { directoryMayHaveActiveProjectAction, useTerminalStore } from '@/stores/useTerminalStore';
 import { useFilesViewTabsStore } from './useFilesViewTabsStore';
@@ -45,7 +44,7 @@ export type { ContextPanelMode };
 export const clampContextEditorTreeWidth = (width: number): number =>
   Math.min(480, Math.max(200, Math.round(width)));
 
-const contextPanelModeSchema = z.enum(['diff', 'walkthrough', 'file', 'context', 'plan', 'chat', 'browser', 'git', 'pr', 'notes', 'terminal']);
+const contextPanelModeSchema = z.enum(['diff', 'walkthrough', 'file', 'context', 'chat', 'browser', 'git', 'pr', 'notes', 'terminal']);
 // Older builds also stored `widthFractionByMode` (a share of the chat area);
 // it is ignored, and the pixel width the same resize stored is used.
 const persistedPanelWidthsSchema = z.object({
@@ -84,14 +83,6 @@ type ContextPanelTab = {
   mode: ContextPanelMode;
   targetPath: string | null;
   targetDirectory: string | null;
-  /** Saved project plan this tab shows, for `plan` tabs opened from the notes
-      panel. Project plans are addressed by id because their markdown is
-      server-owned and has no client-visible path. */
-  projectPlanId: string | null;
-  /** The project that owns `projectPlanId`. Persisted with the tab so a
-      restored plan tab opens against its own project instead of guessing the
-      owner from whatever directory happens to be current. */
-  projectPlanRef: ProjectRef | null;
   dedupeKey: string;
   label: string | null;
   sessionTitleFallback: string | null;
@@ -113,8 +104,6 @@ type ContextPanelTabDescriptor = {
   mode: ContextPanelMode;
   targetPath?: string | null;
   targetDirectory?: string | null;
-  projectPlanId?: string | null;
-  projectPlanRef?: ProjectRef | null;
   dedupeKey?: string | null;
   label?: string | null;
   sessionTitleFallback?: string | null;
@@ -292,18 +281,6 @@ const normalizePendingDiffScope = (value: unknown): PendingDiffScope | null => {
   return value === 'working' || value === 'staged' || value === 'turn' || value === 'branch' || value === 'commit' || value === 'pr' ? value : null;
 };
 
-/** A plan tab's owner must be a complete project reference or nothing; a
-    half-valid one is worse than none because it points the editor somewhere. */
-const normalizeContextPanelProjectPlanRef = (value: unknown): ProjectRef | null => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
-  const candidate = value as { id?: unknown; path?: unknown };
-  const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
-  const path = typeof candidate.path === 'string' ? candidate.path.trim() : '';
-  return id && path ? { id, path } : null;
-};
-
 const buildDefaultContextPanelTabDedupeKey = (mode: ContextPanelMode, targetPath: string | null): string => {
   if (mode === 'file') {
     return targetPath || mode;
@@ -358,10 +335,6 @@ const createContextPanelTab = (descriptor: ContextPanelTabDescriptor): ContextPa
     mode: descriptor.mode,
     targetPath: normalizedTargetPath,
     targetDirectory: normalizedTargetDirectory,
-    projectPlanId: typeof descriptor.projectPlanId === 'string' && descriptor.projectPlanId.trim()
-      ? descriptor.projectPlanId.trim()
-      : null,
-    projectPlanRef: normalizeContextPanelProjectPlanRef(descriptor.projectPlanRef),
     dedupeKey,
     label: normalizeContextTabLabel(descriptor.label),
     sessionTitleFallback: normalizeContextTabLabel(descriptor.sessionTitleFallback),
@@ -425,8 +398,6 @@ const sanitizeContextPanelTabs = (tabs: unknown): ContextPanelTab[] => {
       mode?: unknown;
       targetPath?: unknown;
       targetDirectory?: string | null;
-      projectPlanId?: unknown;
-      projectPlanRef?: unknown;
       dedupeKey?: unknown;
       label?: unknown;
       sessionTitleFallback?: unknown;
@@ -455,19 +426,6 @@ const sanitizeContextPanelTabs = (tabs: unknown): ContextPanelTab[] => {
     const targetDirectory = contextPanelModeKeepsTargetDirectory(candidate.mode)
       ? normalizeContextTargetDirectory(candidate.targetDirectory)
       : null;
-    const projectPlanId = typeof candidate.projectPlanId === 'string' && candidate.projectPlanId.trim()
-      ? candidate.projectPlanId.trim()
-      : null;
-    const projectPlanRef = normalizeContextPanelProjectPlanRef(candidate.projectPlanRef);
-    // `mode: 'plan'` covers two documents: a saved Project knowledge plan
-    // (needs both the plan id and its owning project) and a plain session
-    // filesystem plan (has neither). Only the half-identified form — id
-    // without owner — is unopenable: the editor would have to guess the
-    // project from the current directory, which is exactly the bug that made
-    // saved plans open empty. Such tabs are dropped rather than resurrected.
-    if (candidate.mode === 'plan' && (projectPlanId !== null) !== (projectPlanRef !== null)) {
-      continue;
-    }
     const dedupeKey = normalizeContextPanelTabDedupeKey(
       candidate.mode,
       targetPath,
@@ -484,8 +442,6 @@ const sanitizeContextPanelTabs = (tabs: unknown): ContextPanelTab[] => {
       mode: candidate.mode,
       targetPath,
       targetDirectory,
-      projectPlanId,
-      projectPlanRef,
       dedupeKey,
       label: normalizeContextTabLabel(typeof candidate.label === 'string' ? candidate.label : null),
       sessionTitleFallback: normalizeContextTabLabel(typeof candidate.sessionTitleFallback === 'string' ? candidate.sessionTitleFallback : null),
@@ -592,8 +548,6 @@ const upsertContextPanelTab = (
           mode: nextTab.mode,
           targetPath: nextTab.targetPath || tab.targetPath,
           targetDirectory: nextTab.targetDirectory,
-          projectPlanId: nextTab.projectPlanId ?? tab.projectPlanId,
-          projectPlanRef: nextTab.projectPlanRef ?? tab.projectPlanRef,
           dedupeKey: nextTab.dedupeKey,
           label: nextTab.label,
           sessionTitleFallback: nextTab.sessionTitleFallback || tab.sessionTitleFallback,
@@ -796,7 +750,7 @@ const sanitizeContextPanelByDirectory = (
     // no owner and cannot be migrated into an openable saved-plan tab — that
     // combination is dropped by sanitize above. A generic filesystem plan tab
     // (no plan id) revives fine from the descriptor alone.
-    if (tabs.length === 0 && (candidate.mode === 'diff' || candidate.mode === 'file' || candidate.mode === 'context' || candidate.mode === 'plan' || candidate.mode === 'chat' || candidate.mode === 'terminal')) {
+    if (tabs.length === 0 && (candidate.mode === 'diff' || candidate.mode === 'file' || candidate.mode === 'context' || candidate.mode === 'chat' || candidate.mode === 'terminal')) {
       tabs = [createContextPanelTab({
         mode: candidate.mode,
         targetPath: typeof candidate.targetPath === 'string' ? candidate.targetPath : null,
@@ -885,7 +839,6 @@ interface UIStore {
       it leaves only the tree, with the file tabs kept open. */
   contextEditorVisible: boolean;
   contextEditorTreeWidth: number;
-  notesPanelHeight: number;
   /** Expanded collapsible sections of the in-chat work-status panel, by id. */
   workStatusExpandedSections: Record<string, boolean>;
   /**
@@ -932,6 +885,7 @@ interface UIStore {
   isMobile: boolean;
   isCommandPaletteOpen: boolean;
   isHelpDialogOpen: boolean;
+  isProjectActionsDialogOpen: boolean;
   isAboutDialogOpen: boolean;
   isOpenCodeStatusDialogOpen: boolean;
   openCodeStatusText: string;
@@ -1013,6 +967,10 @@ interface UIStore {
    * as they open and close. Off, they snap (`useLayoutAnimationMs`).
    */
   layoutAnimations: boolean;
+  /** Plain clicks on links in chat open in the built-in browser panel (desktop only). */
+  openLinksInBrowserPanel: boolean;
+  /** Plain clicks on issue, PR and Linear links in chat open them on the issues and PRs board. */
+  openTrackerLinksOnBoard: boolean;
   autoDeleteAfterDays: number;
   sessionRetentionAction: SessionRetentionAction;
   sessionRetentionOnlyArchived: boolean;
@@ -1105,6 +1063,7 @@ interface UIStore {
   /** Who answers the agent's browser actions: `builtin` (the in-app view) or an extension id. */
   browserProvider: string;
   agentMemoryToolEnabled: boolean;
+  agentKnowledgeToolEnabled: boolean;
   agentNotifyToolEnabled: boolean;
   /** Whether OpenChamber's agent tools sit behind OpenCode's Code Mode instead of being direct tools. */
   agentToolsCodeMode: boolean;
@@ -1129,10 +1088,13 @@ interface UIStore {
    * new/changed badges; there is no stored review state.
    */
   agentMemoryViewedAt: Record<string, number>;
-  /** Width of the project context panel's section sidebar, in pixels. */
-  projectContextSidebarWidth: number;
   /** Active tab of the project context panel (notes/todos/plans). */
   projectContextTab: string;
+  /**
+   * A saved plan an agent asked to show, waiting for the Project knowledge
+   * panel of its project to open it in place. Not persisted.
+   */
+  projectKnowledgePlanRequest: { projectContextId: string; planId: string } | null;
   inputSpellcheckEnabled: boolean;
   largeTextPasteBehavior: LargeTextPasteBehavior;
   enterToSend: boolean;
@@ -1203,7 +1165,6 @@ interface UIStore {
    * on screen it goes along: the zone it left closes and the new one opens on it.
    */
   moveContextSurfaceToZone: (mode: ContextPanelMode, zone: ContextZone) => void;
-  setNotesPanelHeight: (height: number) => void;
   setWorkStatusSectionExpanded: (sectionId: string, expanded: boolean) => void;
   setMessageQueueExpanded: (expanded: boolean) => void;
   setWorkStatusScrollTop: (scrollTop: number) => void;
@@ -1228,6 +1189,7 @@ interface UIStore {
   setCommandPaletteOpen: (open: boolean) => void;
   toggleHelpDialog: () => void;
   setHelpDialogOpen: (open: boolean) => void;
+  setProjectActionsDialogOpen: (open: boolean) => void;
   setAboutDialogOpen: (open: boolean) => void;
   setOpenCodeStatusDialogOpen: (open: boolean) => void;
   setOpenCodeStatusText: (text: string) => void;
@@ -1277,6 +1239,8 @@ interface UIStore {
   setAutoSaveEnabled: (value: boolean) => void;
   setConfirmFileTreeMove: (value: boolean) => void;
   setLayoutAnimations: (value: boolean) => void;
+  setOpenLinksInBrowserPanel: (value: boolean) => void;
+  setOpenTrackerLinksOnBoard: (value: boolean) => void;
   setFileTreeSide: (side: 'left' | 'right') => void;
   setAutoDeleteAfterDays: (days: number) => void;
   setSessionRetentionAction: (value: SessionRetentionAction) => void;
@@ -1322,6 +1286,8 @@ interface UIStore {
   toggleFavoriteAgent: (agentName: string) => void;
   addRecentEffort: (providerID: string, modelID: string, variant: string | undefined) => void;
   setDiffLayoutPreference: (mode: 'dynamic' | 'inline' | 'side-by-side') => void;
+  /** The layout setting for every diff, dropping the per-file choices (the Changes header toggle). */
+  setDiffLayoutForAllFiles: (mode: 'inline' | 'side-by-side') => void;
   setDiffFileLayout: (filePath: string, mode: 'inline' | 'side-by-side') => void;
   setDiffWrapLines: (wrap: boolean) => void;
   setDiffHideWhitespace: (hide: boolean) => void;
@@ -1360,6 +1326,7 @@ interface UIStore {
   setMessageSearchReasoningEnabled: (value: boolean) => void;
   setBrowserProvider: (value: string) => void;
   setAgentMemoryToolEnabled: (value: boolean) => void;
+  setAgentKnowledgeToolEnabled: (value: boolean) => void;
   setAgentNotifyToolEnabled: (value: boolean) => void;
   setAgentToolsCodeMode: (value: boolean) => void;
   setAgentWorktreeMoveWithoutAsking: (value: boolean) => void;
@@ -1368,8 +1335,9 @@ interface UIStore {
   setAgentMemoryFeatureAvailable: (value: boolean) => void;
   setRoutingFeatureAvailable: (value: boolean) => void;
   markAgentMemoryViewed: (key: string, viewedAt: number) => void;
-  setProjectContextSidebarWidth: (width: number) => void;
   setProjectContextTab: (value: string) => void;
+  openProjectKnowledgePlan: (directory: string, projectContextId: string, planId: string) => void;
+  clearProjectKnowledgePlanRequest: () => void;
   setInputSpellcheckEnabled: (value: boolean) => void;
   setLargeTextPasteBehavior: (value: LargeTextPasteBehavior) => void;
   setEnterToSend: (value: boolean) => void;
@@ -1423,7 +1391,6 @@ export const useUIStore = create<UIStore>()(
         fileTreeSide: 'right',
         contextEditorVisible: true,
         contextEditorTreeWidth: 240,
-        notesPanelHeight: 112,
         workStatusExpandedSections: {},
         messageQueueExpanded: false,
         workStatusScrollTop: 0,
@@ -1444,6 +1411,7 @@ export const useUIStore = create<UIStore>()(
         isMobile: false,
         isCommandPaletteOpen: false,
         isHelpDialogOpen: false,
+        isProjectActionsDialogOpen: false,
         isAboutDialogOpen: false,
         isOpenCodeStatusDialogOpen: false,
         openCodeStatusText: '',
@@ -1491,6 +1459,8 @@ export const useUIStore = create<UIStore>()(
         autoSaveEnabled: true,
         confirmFileTreeMove: true,
         layoutAnimations: true,
+        openLinksInBrowserPanel: false,
+        openTrackerLinksOnBoard: true,
         autoDeleteAfterDays: 30,
         sessionRetentionAction: 'archive',
         sessionRetentionOnlyArchived: false,
@@ -1566,6 +1536,7 @@ export const useUIStore = create<UIStore>()(
         messageSearchReasoningEnabled: false,
         browserProvider: 'builtin',
         agentMemoryToolEnabled: false,
+        agentKnowledgeToolEnabled: true,
         agentNotifyToolEnabled: false,
         agentToolsCodeMode: false,
         agentWorktreeMoveWithoutAsking: false,
@@ -1574,8 +1545,8 @@ export const useUIStore = create<UIStore>()(
         agentMemoryFeatureAvailable: false,
         routingFeatureAvailable: false,
         agentMemoryViewedAt: {},
-        projectContextSidebarWidth: 168,
         projectContextTab: 'notes',
+        projectKnowledgePlanRequest: null,
         inputSpellcheckEnabled: false,
         largeTextPasteBehavior: DEFAULT_LARGE_TEXT_PASTE_BEHAVIOR,
         enterToSend: false,
@@ -2186,10 +2157,6 @@ export const useUIStore = create<UIStore>()(
           });
         },
 
-        setNotesPanelHeight: (height) => {
-          set({ notesPanelHeight: height });
-        },
-
         setWorkStatusSectionExpanded: (sectionId, expanded) => {
           set((state) => (
             state.workStatusExpandedSections[sectionId] === expanded
@@ -2333,6 +2300,10 @@ export const useUIStore = create<UIStore>()(
 
         setHelpDialogOpen: (open) => {
           set({ isHelpDialogOpen: open });
+        },
+
+        setProjectActionsDialogOpen: (open) => {
+          set({ isProjectActionsDialogOpen: open });
         },
 
         setAboutDialogOpen: (open) => {
@@ -2554,6 +2525,14 @@ export const useUIStore = create<UIStore>()(
           set({ layoutAnimations: value });
         },
 
+        setOpenLinksInBrowserPanel: (value) => {
+          set({ openLinksInBrowserPanel: value });
+        },
+
+        setOpenTrackerLinksOnBoard: (value) => {
+          set({ openTrackerLinksOnBoard: value });
+        },
+
         setFileTreeSide: (side) => {
           set({ fileTreeSide: side === 'left' ? 'left' : 'right' });
         },
@@ -2703,6 +2682,10 @@ export const useUIStore = create<UIStore>()(
 
         setDiffLayoutPreference: (mode) => {
           set({ diffLayoutPreference: mode });
+        },
+
+        setDiffLayoutForAllFiles: (mode) => {
+          set({ diffLayoutPreference: mode, diffFileLayout: {} });
         },
 
         setDiffFileLayout: (filePath, mode) => {
@@ -3094,6 +3077,9 @@ export const useUIStore = create<UIStore>()(
         setAgentMemoryToolEnabled: (value) => {
           set({ agentMemoryToolEnabled: value });
         },
+        setAgentKnowledgeToolEnabled: (value) => {
+          set({ agentKnowledgeToolEnabled: value });
+        },
         setIsolatedSpacesEnabled: (value) => {
           set({ isolatedSpacesEnabled: value });
         },
@@ -3115,9 +3101,6 @@ export const useUIStore = create<UIStore>()(
         setRoutingFeatureAvailable: (value) => {
           set({ routingFeatureAvailable: value });
         },
-        setProjectContextSidebarWidth: (width) => {
-          set({ projectContextSidebarWidth: width });
-        },
         markAgentMemoryViewed: (key, viewedAt) => {
           set((state) => ({
             // Never moves backwards: a stale unmount landing after a newer look
@@ -3129,6 +3112,13 @@ export const useUIStore = create<UIStore>()(
         },
         setProjectContextTab: (value) => {
           set({ projectContextTab: value });
+        },
+        openProjectKnowledgePlan: (directory, projectContextId, planId) => {
+          set({ projectContextTab: 'plans', projectKnowledgePlanRequest: { projectContextId, planId } });
+          get().openContextPanelTab(directory, { mode: 'notes' });
+        },
+        clearProjectKnowledgePlanRequest: () => {
+          set({ projectKnowledgePlanRequest: null });
         },
         setInputSpellcheckEnabled: (value) => {
           set({ inputSpellcheckEnabled: value });
@@ -3391,9 +3381,6 @@ export const useUIStore = create<UIStore>()(
             if (!Array.isArray(state.workStatusHiddenSections)) {
               state.workStatusHiddenSections = [];
             }
-            if (typeof state.notesPanelHeight !== 'number' || !Number.isFinite(state.notesPanelHeight)) {
-              state.notesPanelHeight = 112;
-            }
           }
 
           // v0 -> v1: reset legacy notification templates
@@ -3512,7 +3499,6 @@ export const useUIStore = create<UIStore>()(
           fileTreeSide: state.fileTreeSide,
           contextEditorVisible: state.contextEditorVisible,
           contextEditorTreeWidth: state.contextEditorTreeWidth,
-          notesPanelHeight: state.notesPanelHeight,
           workStatusExpandedSections: state.workStatusExpandedSections,
           messageQueueExpanded: state.messageQueueExpanded,
           workStatusScrollTop: state.workStatusScrollTop,
@@ -3547,6 +3533,8 @@ export const useUIStore = create<UIStore>()(
           autoSaveEnabled: state.autoSaveEnabled,
           confirmFileTreeMove: state.confirmFileTreeMove,
           layoutAnimations: state.layoutAnimations,
+          openLinksInBrowserPanel: state.openLinksInBrowserPanel,
+          openTrackerLinksOnBoard: state.openTrackerLinksOnBoard,
           autoDeleteAfterDays: state.autoDeleteAfterDays,
           sessionRetentionAction: state.sessionRetentionAction,
           sessionRetentionOnlyArchived: state.sessionRetentionOnlyArchived,
@@ -3606,13 +3594,13 @@ export const useUIStore = create<UIStore>()(
           messageSearchReasoningEnabled: state.messageSearchReasoningEnabled,
           browserProvider: state.browserProvider,
           agentMemoryToolEnabled: state.agentMemoryToolEnabled,
+          agentKnowledgeToolEnabled: state.agentKnowledgeToolEnabled,
           agentNotifyToolEnabled: state.agentNotifyToolEnabled,
           agentToolsCodeMode: state.agentToolsCodeMode,
           agentWorktreeMoveWithoutAsking: state.agentWorktreeMoveWithoutAsking,
           isolatedSpacesEnabled: state.isolatedSpacesEnabled,
           permissionDefaultMode: state.permissionDefaultMode,
           agentMemoryViewedAt: state.agentMemoryViewedAt,
-          projectContextSidebarWidth: state.projectContextSidebarWidth,
           inputSpellcheckEnabled: state.inputSpellcheckEnabled,
           largeTextPasteBehavior: state.largeTextPasteBehavior,
           enterToSend: state.enterToSend,
