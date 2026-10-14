@@ -1,7 +1,7 @@
 // Kept free of runtime imports: the settings metadata that calls these is imported everywhere.
 import type { SettingsPageMeta } from '@/lib/settings/metadata';
 
-const CLOSED_PAGES = new Set(['remote-instances', 'tunnel', 'extensions', 'plugins', 'magic-prompts', 'snippets', 'skills.catalog']);
+const CLOSED_PAGES = new Set(['remote-instances', 'tunnel', 'extensions', 'plugins', 'magic-prompts', 'snippets', 'skills.catalog', 'isolated-spaces']);
 
 const MOVED_PAGES = new Map<SettingsPageMeta['slug'], SettingsPageMeta['group']>([['skills.installed', 'opencode']]);
 
@@ -22,6 +22,8 @@ const CLOSED_SEARCH_ITEMS = new Set([
   'integrations.third-party.opencode-claude',
   'integrations.extensions',
   'integrations.extensions.excalidraw',
+  'general.isolated-spaces',
+  'general.isolated-spaces-idle-stop',
   'sessions.browser-provider',
   'sessions.work-auto-open',
   'chat.session-goal-checker',
