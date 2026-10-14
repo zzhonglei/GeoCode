@@ -5,6 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 
 import { createOpenChamberControlService } from './service.js';
+import { OpenChamberControlError } from './error.js';
 
 const createService = (overrides = {}) => {
   const client = {
@@ -18,6 +19,10 @@ const createService = (overrides = {}) => {
   };
   const sessionService = {
     create: vi.fn(async () => ({ sessionId: 'ses_1', directory: '/repo', promptDispatched: false })),
+    resolveDirectory: vi.fn(async ({ projectId }) => {
+      if (projectId === 'project-1') return '/repo';
+      throw new OpenChamberControlError('Project not found', 404);
+    }),
     send: vi.fn(),
     fork: vi.fn(),
   };
@@ -195,7 +200,8 @@ describe('OpenChamber control service', () => {
 
   it('filters sessions archived in OpenChamber state and adds global statuses', async () => {
     const { service, client } = createService({
-      archiveStore: { isArchived: (id) => (id === 'ses_archived' ? 100 : null) },
+      // Async like the real store (`openchamber-sessions/archive-store.js`).
+      archiveStore: { archivedAt: async (id) => (id === 'ses_archived' ? 100 : null) },
     });
     client.session.list.mockResolvedValue({ data: [
       { id: 'ses_active', location: { directory: '/repo' }, time: {} },
@@ -226,6 +232,51 @@ describe('OpenChamber control service', () => {
       directory: null,
       archived: 'excluded',
     });
+  });
+
+  it('scopes session reads to an explicit project instead of the tool context directory', async () => {
+    const { service, client, sessionService } = createService();
+    client.session.list.mockResolvedValue({ data: [{ id: 'ses_repo', location: { directory: '/repo' }, time: {} }] });
+
+    await expect(service.execute('session.list', { projectId: ' project-1 ' }, '/current-session')).resolves.toEqual(
+      expect.objectContaining({ directory: '/repo', sessions: [{ id: 'ses_repo', location: { directory: '/repo' }, time: {} }] }),
+    );
+    expect(sessionService.resolveDirectory).toHaveBeenCalledWith({ projectId: 'project-1' });
+    expect(client.session.list).toHaveBeenCalledWith({ directory: '/repo' });
+
+    await expect(service.execute('session.status', { projectId: 'project-1', sessionId: 'ses_repo' }, '/current-session'))
+      .resolves.toEqual({ sessionId: 'ses_repo', directory: '/repo', sessionStatus: { type: 'idle' } });
+  });
+
+  it('rejects an unknown project instead of reading another directory', async () => {
+    const { service, client } = createService();
+    await expect(service.execute('session.list', { projectId: 'missing' }, '/current-session'))
+      .rejects.toMatchObject({ statusCode: 404, message: 'Project not found' });
+    await expect(service.execute('session.list', { projectId: 'missing' }))
+      .rejects.toMatchObject({ statusCode: 404 });
+    await expect(service.execute('session.messages', { projectId: 'missing', sessionId: 'ses_1' }, '/current-session'))
+      .rejects.toMatchObject({ statusCode: 404 });
+    expect(client.session.list).not.toHaveBeenCalled();
+    expect(client.message.list).not.toHaveBeenCalled();
+  });
+
+  it('asks for sessionId before looking up the project', async () => {
+    const { service, sessionService } = createService();
+    await expect(service.execute('session.status', { projectId: 'missing' }, '/current-session'))
+      .rejects.toMatchObject({ statusCode: 400, message: 'sessionId is required' });
+    expect(sessionService.resolveDirectory).not.toHaveBeenCalled();
+  });
+
+  it('rejects any session action scoped by both projectId and directory', async () => {
+    const { service, client, sessionService } = createService();
+    for (const action of ['session.list', 'session.status', 'session.create', 'session.send', 'session.fork']) {
+      await expect(service.execute(action, { projectId: 'project-1', directory: '/other', sessionId: 'ses_1', prompt: 'hi' }))
+        .rejects.toMatchObject({ statusCode: 400, message: 'Provide only one of projectId or directory' });
+    }
+    expect(client.session.list).not.toHaveBeenCalled();
+    expect(sessionService.create).not.toHaveBeenCalled();
+    expect(sessionService.send).not.toHaveBeenCalled();
+    expect(sessionService.fork).not.toHaveBeenCalled();
   });
 
   it('names limit in positive-integer validation errors', async () => {
@@ -385,5 +436,79 @@ describe('browser capture', () => {
     expect(request).toHaveBeenLastCalledWith('browser.capture', {}, expect.objectContaining({
       context: { directory, sessionId: null },
     }));
+  });
+});
+
+describe('returning a dispatched session result', () => {
+  const createReturningService = (overrides = {}) => {
+    const dispatchResults = { register: vi.fn(async () => ({ id: 'dispatch-1' })) };
+    const created = createService({ dispatchResults, now: () => 1_000, ...overrides });
+    created.sessionService.create.mockResolvedValue({ sessionId: 'ses_child', directory: '/repo', promptDispatched: true });
+    created.sessionService.send.mockResolvedValue({ sessionId: 'ses_child', directory: '/repo', promptDispatched: true, baselineAssistantMessageId: 'msg_old' });
+    return { ...created, dispatchResults };
+  };
+
+  it('returns at once and registers the delivery to the calling session', async () => {
+    const { service, dispatchResults, client } = createReturningService();
+    const result = await service.execute('session.create', { prompt: 'Check the build', returnResult: true }, '/repo', { contextSessionId: 'ses_parent' });
+
+    expect(dispatchResults.register).toHaveBeenCalledWith({ parentSessionId: 'ses_parent', sessionId: 'ses_child', dispatchedAt: 1_000 });
+    expect(result.resultDelivery).toEqual({ status: 'pending', note: expect.stringContaining('delivered to you automatically') });
+    expect(result.resultDelivery.note).toContain('Do not poll');
+    // Nothing waits: no status or message reads happen for the dispatch.
+    expect(client.session.active).not.toHaveBeenCalled();
+  });
+
+  it('hands the end-of-run baseline to the delivery and keeps it from the agent', async () => {
+    const { service, dispatchResults, sessionService } = createReturningService();
+    sessionService.send.mockResolvedValue({ sessionId: 'ses_child', directory: '/repo', promptDispatched: true, baselineIdleRecordId: 'msg_idle_old' });
+    const result = await service.execute('session.send', { sessionId: 'ses_child', prompt: 'Again', returnResult: true }, '/repo', { contextSessionId: 'ses_parent' });
+
+    expect(dispatchResults.register).toHaveBeenCalledWith({
+      parentSessionId: 'ses_parent', sessionId: 'ses_child', dispatchedAt: 1_000, afterIdleId: 'msg_idle_old',
+    });
+    expect(result).not.toHaveProperty('baselineIdleRecordId');
+  });
+
+  it('does not schedule a delivery for a prompt that never landed', async () => {
+    const { service, dispatchResults, sessionService } = createReturningService();
+    sessionService.create.mockResolvedValue({ sessionId: 'ses_child', directory: '/repo', promptDispatched: false, promptError: 'no queued message' });
+    const result = await service.execute('session.create', { prompt: 'Check', returnResult: true }, '/repo', { contextSessionId: 'ses_parent' });
+
+    expect(dispatchResults.register).not.toHaveBeenCalled();
+    expect(result.resultDelivery.status).toBe('not-scheduled');
+  });
+
+  it('reports a failed registration instead of claiming the result is coming', async () => {
+    const { service, dispatchResults } = createReturningService();
+    dispatchResults.register.mockRejectedValue(new Error('disk full'));
+    const result = await service.execute('session.send', { sessionId: 'ses_child', prompt: 'Again', returnResult: true }, '/repo', { contextSessionId: 'ses_parent' });
+
+    expect(result.resultDelivery).toEqual({ status: 'not-scheduled', reason: expect.stringContaining('disk full') });
+    expect(result).not.toHaveProperty('baselineAssistantMessageId');
+  });
+
+  it.each([
+    ['without a calling session', { prompt: 'x', returnResult: true }, {}, 'needs a calling session'],
+    ['without a prompt', { returnResult: true }, { contextSessionId: 'ses_parent' }, 'returnResult requires prompt'],
+    ['combined with wait', { prompt: 'x', returnResult: true, wait: true }, { contextSessionId: 'ses_parent' }, 'cannot be combined with wait'],
+  ])('refuses returnResult %s before creating anything', async (_label, input, options, message) => {
+    const { service, sessionService } = createReturningService();
+    await expect(service.execute('session.create', input, '/repo', options)).rejects.toThrow(message);
+    expect(sessionService.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses to deliver a session\'s result to itself', async () => {
+    const { service, sessionService } = createReturningService();
+    await expect(service.execute('session.send', { sessionId: 'ses_parent', prompt: 'x', returnResult: true }, '/repo', { contextSessionId: 'ses_parent' }))
+      .rejects.toThrow('to itself');
+    expect(sessionService.send).not.toHaveBeenCalled();
+  });
+
+  it('answers 503 on a server that cannot deliver results', async () => {
+    const { service, sessionService } = createService();
+    await expect(service.execute('session.create', { prompt: 'x', returnResult: true }, '/repo', { contextSessionId: 'ses_parent' }))
+      .rejects.toMatchObject({ statusCode: 503 });
+    expect(sessionService.create).not.toHaveBeenCalled();
   });
 });

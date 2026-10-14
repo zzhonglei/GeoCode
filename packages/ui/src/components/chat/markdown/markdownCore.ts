@@ -1,10 +1,11 @@
-import { Marked, marked, type Tokens, type TokenizerAndRendererExtension } from 'marked';
+import { Marked, marked, type MarkedExtension, type Tokens, type TokenizerAndRendererExtension } from 'marked';
 import markedLinkifyIt from 'marked-linkify-it';
 import remend from 'remend';
 import katex from 'katex';
 import DOMPurify, { type DOMPurify as DOMPurifyInstance } from 'dompurify';
 import { buildAgentMentionUrl, parseAgentHref, parseSkillHref } from '@/lib/messages/inlineMessageLinks';
 import { isAppLinkUrl } from '@/lib/url';
+import { isSessionDeepLink } from '@/lib/sessionLinks';
 import { isVSCodeRuntime } from '@/lib/desktop';
 import { contentFingerprint, HighlightResultCache, utf16Bytes } from './highlightResultCache';
 import { highlightCodeInWorker } from './markdown-worker';
@@ -31,7 +32,17 @@ export interface MarkdownImageCandidate {
   filename: string;
 }
 
-export type MarkdownImageMode = 'inline' | 'label';
+/**
+ * `inline` draws every image. `label` draws none: the image becomes its file
+ * name (assistant text, whose images the gallery shows). `local` draws images
+ * from this machine and `data:` images, and turns a remote one into a link.
+ * A remote image loads by itself the moment it renders, so in output the
+ * model or a tool wrote (tool results, reasoning) it could report what the
+ * user is reading to any server; a link waits for a click.
+ */
+export type MarkdownImageMode = 'inline' | 'label' | 'local';
+
+export const isRemoteMarkdownImageSource = (source: string): boolean => /^(?:https?:)?\/\//i.test(source);
 
 /**
  * `escape` keeps raw HTML visible as text (assistant output and every other
@@ -158,6 +169,9 @@ export const __markdownImageCandidateCacheForTests = {
   }),
 };
 
+/** Links being rendered right now; parsing is synchronous, so a counter is exact. */
+let markdownLinkDepth = 0;
+
 const renderMarkdownImageLabel = ({
   href,
   title,
@@ -169,7 +183,11 @@ const renderMarkdownImageLabel = ({
 }): string => {
   const label = getMarkdownImageFilename(href ?? '', text);
   const titleAttr = title ? ` title="${escapeAttr(title)}"` : '';
-  return `<span${titleAttr} class="inline-flex items-center gap-1 align-text-bottom text-muted-foreground" data-openchamber-markdown-image-label="true">${escapeAttr(label)}</span>`;
+  const span = `<span${titleAttr} class="inline-flex items-center gap-1 align-text-bottom text-muted-foreground" data-openchamber-markdown-image-label="true">${escapeAttr(label)}</span>`;
+  // A remote image becomes a link to itself, unless it already sits inside
+  // one (a badge): a link cannot hold another.
+  if (!isRemoteMarkdownImageSource(href ?? '') || markdownLinkDepth > 0) return span;
+  return `<a href="${escapeAttr(href)}" class="external-link" target="_blank" rel="noopener noreferrer">${span}</a>`;
 };
 
 export const extractMarkdownImageCandidates = (
@@ -235,9 +253,31 @@ const hasOpenFence = (raw: string): boolean => {
 // pass when the fence closes.
 const OPEN_FENCE_HIGHLIGHT_LINE_LIMIT = 300;
 
+// A single `~` between word characters would be escaped only while streaming,
+// so the settled message could render differently.
+const HEAL_OPTIONS = { linkMode: 'text-only', singleTilde: false } as const;
+
+// remend 1.4 turns an unfinished image into one pointing at this placeholder,
+// which our sanitizer drops, leaving a broken image while the message streams.
+// Earlier versions removed the unfinished image, so the source is cut at its
+// `![` and the rest healed again; closers for markers opened inside its alt
+// text go with it. remend may rewrite the alt text, so the cut uses the last
+// `![` of the source rather than matching the alt. A tail of many nested
+// unfinished images stops after a few cuts and streams unhealed.
+const INCOMPLETE_IMAGE_TARGET = '](streamdown:incomplete-image)';
+const INCOMPLETE_IMAGE_MAX_CUTS = 4;
+
 const heal = (text: string): string => {
   try {
-    return remend(text, { linkMode: 'text-only' });
+    let source = text;
+    let healed = remend(source, HEAL_OPTIONS);
+    for (let cuts = 0; healed.includes(INCOMPLETE_IMAGE_TARGET); cuts += 1) {
+      const start = source.lastIndexOf('![');
+      if (start < 0 || cuts === INCOMPLETE_IMAGE_MAX_CUTS) return text;
+      source = source.slice(0, start);
+      healed = remend(source, HEAL_OPTIONS);
+    }
+    return healed;
   } catch {
     return text;
   }
@@ -367,7 +407,10 @@ const lexStreamBlocks = (text: string): MarkdownBlock[] => {
       && raw.split('\n').length <= OPEN_FENCE_HIGHLIGHT_LINE_LIMIT;
     blocks.push({
       raw,
-      src: openFence ? raw : heal(raw),
+      // A finished block renders from its own text, as it will once the
+      // message settles: healing it made, say, a ``` mentioned mid-sentence
+      // show as code until the stream ended.
+      src: openFence || !isLast ? raw : heal(raw),
       mode: isLast ? 'live' : 'full',
       highlight: !openFence || openFenceHighlight,
     });
@@ -420,13 +463,13 @@ const renderMathPlaceholders = (html: string): string => html.replace(
   },
 );
 
+// No `start` hint: marked's inline text rule already stops before every
+// backslash, so a hint could not end a text run any earlier, and searching the
+// rest of the paragraph for `\(` at every inline token costs the square of its
+// length (openchamber/openchamber#4204).
 const createInlineMathExtension = (render: MathRender) => ({
   name: 'inlineMath',
   level: 'inline' as const,
-  start(src: string) {
-    const index = src.indexOf('\\(');
-    return index < 0 ? undefined : index;
-  },
   tokenizer(src: string): MathToken | undefined {
     const match = /^\\\(([\s\S]+?)\\\)/.exec(src);
     if (!match) return undefined;
@@ -447,11 +490,40 @@ const createInlineMathExtension = (render: MathRender) => ({
 const BLOCK_MATH_RE = /^[ \t]*\\\[([\s\S]+?)\\\][ \t]*(?:\n|$)/;
 const BLOCK_MATH_LINE_START_RE = /(?:^|\n)[ \t]*\\\[/;
 
+// Characters the `start` searches below have read, so tests can show that a
+// large message costs work in proportion to its length.
+const scanStats = { linkify: 0, blockStart: 0 };
+
+/** Test-only: reset and read the `start` search counters. */
+export const resetScanStatsForTests = (): void => {
+  scanStats.linkify = 0;
+  scanStats.blockStart = 0;
+};
+export const __scanStatsForTests = () => ({ ...scanStats });
+
+// A block extension's `start` only tells marked where to end the paragraph it
+// is lexing. marked's paragraph never continues past a line that is empty or
+// holds only spaces (a tab-only line does not end it), so the search stops
+// there. Searching the whole rest made every block rescan the message, which
+// cost seconds on messages of thousands of short paragraphs
+// (openchamber/openchamber#4204). A hint beyond that line only flagged the
+// paragraph as cut, which let marked glue a following stray line such as an
+// empty `1. ` onto it; that no longer depends on text further down. User
+// messages turn every newline into "  \n", so their empty lines hold two
+// spaces. The newline before the ending line stays in, so patterns that end at
+// a line break still match.
+const untilParagraphEnd = (src: string): string => {
+  const end = /\n *\n/.exec(src);
+  const window = end ? src.slice(0, end.index + 1) : src;
+  scanStats.blockStart += window.length;
+  return window;
+};
+
 const createBlockMathExtension = (render: MathRender) => ({
   name: 'blockMath',
   level: 'block' as const,
   start(src: string) {
-    const match = BLOCK_MATH_LINE_START_RE.exec(src);
+    const match = BLOCK_MATH_LINE_START_RE.exec(untilParagraphEnd(src));
     // Point marked at the `\[` itself, never at the newline before it.
     return match ? match.index + match[0].length - 2 : undefined;
   },
@@ -472,7 +544,7 @@ const detailsExtension: TokenizerAndRendererExtension = {
   name: 'disclosure',
   level: 'block',
   start(src) {
-    const match = /(?:^|\n) {0,3}<details(?:\s|>)/i.exec(src);
+    const match = /(?:^|\n) {0,3}<details(?:\s|>)/i.exec(untilParagraphEnd(src));
     return match ? match.index + (match[0].startsWith('\n') ? 1 : 0) : undefined;
   },
   tokenizer(src) {
@@ -537,10 +609,47 @@ const detailsExtension: TokenizerAndRendererExtension = {
 // marked's GFM autolink swallows CJK punctuation after a bare URL, so switch
 // to marked-linkify-it, which treats Unicode punctuation as a URL boundary.
 // Plain CJK characters right after a URL are still consumed, matching GitHub.
+//
+// marked-linkify-it searches all the remaining inline text at every inline
+// token, so one long paragraph costs the square of its length: a 250 KB data
+// dump without blank lines froze the window for most of a minute
+// (openchamber/openchamber#4204). While more than LINKIFY_SOURCE_LIMIT
+// characters of inline text remain, it steps aside and marked's own GFM
+// autolink, which is linear, links bare URLs without the CJK boundary.
+export const LINKIFY_SOURCE_LIMIT = 5_000;
+
+// A pasted session or message link (`openchamber://session/<id>?message=<id>`)
+// becomes a link too; other `openchamber:` routes stay text.
+const OPENCHAMBER_SESSION_LINK_TAIL = /^\/\/session\/[A-Za-z0-9_-]{1,128}(?:\?message=[A-Za-z0-9_-]{1,128})?/;
+const OPENCHAMBER_SESSION_LINK_SCHEMA = {
+  // Length of the link after `openchamber:` at `pos`, or 0 when it is not one.
+  validate: (text: string, pos: number): number => OPENCHAMBER_SESSION_LINK_TAIL.exec(text.slice(pos))?.[0].length ?? 0,
+};
+
+const boundedLinkify = (): MarkedExtension => ({
+  extensions: (markedLinkifyIt({ fuzzyLink: false, schemas: { 'openchamber:': OPENCHAMBER_SESSION_LINK_SCHEMA } }).extensions ?? []).map((extension) => {
+    if (!('tokenizer' in extension)) return extension;
+    const { start, tokenizer } = extension;
+    return {
+      ...extension,
+      start(src) {
+        if (src.length > LINKIFY_SOURCE_LIMIT) return undefined;
+        scanStats.linkify += src.length;
+        return start?.call(this, src);
+      },
+      tokenizer(src, tokens) {
+        if (src.length > LINKIFY_SOURCE_LIMIT) return undefined;
+        scanStats.linkify += src.length;
+        return tokenizer.call(this, src, tokens);
+      },
+    };
+  }),
+});
+
 const createParser = (imageMode: MarkdownImageMode, rawHtml: MarkdownRawHtmlMode) => {
   const renderMath = rawHtml === 'sanitize' ? renderMathPlaceholder : renderKatex;
   return new Marked().use(
-    markedLinkifyIt({ fuzzyLink: false }),
+    boundedLinkify(),
     {
       gfm: true,
       breaks: false,
@@ -556,7 +665,13 @@ const createParser = (imageMode: MarkdownImageMode, rawHtml: MarkdownRawHtmlMode
         link({ href, title, tokens }) {
           // The link text goes through the inline renderer, so an image
           // inside it (a badge) renders and raw HTML in it follows the mode.
-          const text = this.parser.parseInline(tokens);
+          markdownLinkDepth += 1;
+          let text: string;
+          try {
+            text = this.parser.parseInline(tokens);
+          } finally {
+            markdownLinkDepth -= 1;
+          }
           const target = href ?? '';
           const agentName = parseAgentHref(target);
           if (agentName) {
@@ -570,6 +685,10 @@ const createParser = (imageMode: MarkdownImageMode, rawHtml: MarkdownRawHtmlMode
           return `<a href="${escapeAttr(target)}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`;
         },
         ...(imageMode === 'label' ? { image: renderMarkdownImageLabel } : {}),
+        // `false` hands a local image back to marked's own renderer.
+        ...(imageMode === 'local'
+          ? { image: (token: Tokens.Image) => (isRemoteMarkdownImageSource(token.href ?? '') ? renderMarkdownImageLabel(token) : false) }
+          : {}),
       },
     },
   );
@@ -577,11 +696,13 @@ const createParser = (imageMode: MarkdownImageMode, rawHtml: MarkdownRawHtmlMode
 
 const inlineImageParser = createParser('inline', 'escape');
 const imageLabelParser = createParser('label', 'escape');
+const localImageParser = createParser('local', 'escape');
 const documentParser = createParser('inline', 'sanitize');
 
 const parserFor = (imageMode: MarkdownImageMode, rawHtml: MarkdownRawHtmlMode) => {
   if (rawHtml === 'sanitize') return documentParser;
-  return imageMode === 'label' ? imageLabelParser : inlineImageParser;
+  if (imageMode === 'label') return imageLabelParser;
+  return imageMode === 'local' ? localImageParser : inlineImageParser;
 };
 
 // ---------------------------------------------------------------------------
@@ -739,7 +860,13 @@ const installAnchorHooks = (purifier: DOMPurifyInstance): void => {
     // DOMPurify's default URI policy strips custom application schemes
     // (obsidian://, vscode://, ...). Keep them for anchors; dangerous schemes
     // stay excluded via isAppLinkUrl and clicks go through confirmation.
-    if (isLocalFileUrl(data.attrValue) || isAppLinkUrl(data.attrValue)) data.forceKeepAttr = true;
+    // OpenChamber's own scheme is kept only for session links, which the chat
+    // opens in place; pairing and other privileged routes stay stripped. VS
+    // Code keeps them as text: its sessions live on its own OpenCode.
+    const keepSessionLink = isSessionDeepLink(data.attrValue) && !isVSCodeRuntime();
+    if (isLocalFileUrl(data.attrValue) || isAppLinkUrl(data.attrValue) || keepSessionLink) {
+      data.forceKeepAttr = true;
+    }
   });
   purifier.addHook('afterSanitizeAttributes', (node) => {
     if (!(node instanceof HTMLAnchorElement)) return;
@@ -795,8 +922,16 @@ const getDocumentPurifier = (): DOMPurifyInstance | null => {
     }
     // Tailwind preflight gives images `height: auto`, which beats the height
     // attribute, so `<img height="28">` would render at its natural size.
+    // With a width too (a GitHub screenshot: 1920 x 906) the image is scaled
+    // down to the column, so the pair becomes a ratio rather than a fixed
+    // height that would stretch it.
     const height = node.tagName === 'IMG' ? node.getAttribute('height')?.trim() : undefined;
-    if (height && /^\d+$/.test(height)) node.setAttribute('style', `height:${height}px`);
+    const width = node.tagName === 'IMG' ? node.getAttribute('width')?.trim() : undefined;
+    if (height && /^\d+$/.test(height)) {
+      node.setAttribute('style', width && /^\d+$/.test(width) && Number(height) > 0
+        ? `aspect-ratio:${width}/${height}`
+        : `height:${height}px`);
+    }
   });
   documentPurifier = purifier;
   return purifier;

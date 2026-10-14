@@ -1,7 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { registerOpenCodeRoutes } from './routes.js';
+import { configureOpenCodeCredentials } from './auth.js';
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
 
 const createApp = (getProviderSources) => {
   const app = express();
@@ -21,6 +28,14 @@ describe('provider writes in enterprise mode', () => {
     agent.post('/api/integration/github-copilot/connect/command').send({ methodID: 'cli' }),
     agent.post('/api/experimental/integration/wellknown').send({ url: 'https://example.test' }),
     agent.put('/api/provider').send({ providerID: 'company-ai', config: {}, scope: 'user' }),
+    // OpenCode routes these to the key handler too.
+    agent.post('/API/integration/openai/connect/key').send({ key: 'sk-test' }),
+    agent.post('/api//integration/openai/connect/key').send({ key: 'sk-test' }),
+    agent.post('/api/integration/openai/%63onnect/key').send({ key: 'sk-test' }),
+    agent.post('/api/integration\\openai\\connect\\key').send({ key: 'sk-test' }),
+    agent.post('/api/experimental/integration/wellknown;x').send({ url: 'https://example.test' }),
+    agent.post('/api/credential').send({ integrationID: 'openai', value: { type: 'key', key: 'sk-test' } }),
+    agent.post('/API//credential').send({ integrationID: 'openai', value: { type: 'key', key: 'sk-test' } }),
   ];
 
   it('refuses connecting a provider, adding a key, or creating a custom provider', async () => {
@@ -31,8 +46,20 @@ describe('provider writes in enterprise mode', () => {
         expect(response.status).toBe(403);
         expect(response.body.code).toBe('enterprise_mode');
       }
+      const discovery = await agent.post('/api/provider/discover-models').send({ baseURL: 'https://example.test/v1' });
+      expect(discovery.status).toBe(403);
+      expect(discovery.body.code).toBe('enterprise_mode');
       // Removing an account only narrows access and still reaches OpenCode.
       expect((await agent.delete('/api/credential/cred_1')).status).toBe(404);
+      expect((await agent.post('/api/credential/cred_1/activate')).status).toBe(404);
+      // Signing in to a remote MCP server reaches a tool server, not a model provider.
+      const mcpSignIn = [
+        agent.post('/api/integration/mcp_0123456789abcdef/connect/oauth').send({ methodID: 'mcp_0123456789abcdef' }),
+        agent.post('/api/integration/mcp_0123456789abcdef/connect/oauth/att_1/complete').send({ code: 'x' }),
+      ];
+      for (const response of await Promise.all(mcpSignIn)) {
+        expect(response.status).toBe(404);
+      }
     } finally {
       delete process.env.OPENCHAMBER_ENTERPRISE_MODE;
     }
@@ -45,7 +72,42 @@ describe('provider writes in enterprise mode', () => {
   });
 });
 
+describe('the stored credential list', () => {
+  const reads = (agent) => [
+    agent.get('/api/credential'),
+    agent.get('/API//credential/'),
+    agent.get('/api/%63redential'),
+    agent.head('/api/credential'),
+  ];
+
+  it('never reaches a client, with or without enterprise mode', async () => {
+    const agent = request(createApp(vi.fn()));
+    for (const response of await Promise.all(reads(agent))) {
+      expect(response.status).toBe(403);
+    }
+    expect((await agent.get('/api/credential')).body.code).toBe('credential_list_refused');
+
+    process.env.OPENCHAMBER_ENTERPRISE_MODE = '1';
+    try {
+      for (const response of await Promise.all(reads(agent))) {
+        expect(response.status).toBe(403);
+      }
+    } finally {
+      delete process.env.OPENCHAMBER_ENTERPRISE_MODE;
+    }
+  });
+
+  it('does not refuse renaming an account', async () => {
+    // No proxy in this app: falling through reads as Express's 404.
+    expect((await request(createApp(vi.fn())).patch('/api/credential/cred_1').send({ label: 'work' })).status).toBe(404);
+  });
+});
+
 describe('GET /api/provider/:providerId/source', () => {
+  // The auth source reads OpenCode's stored credentials; this one has none.
+  beforeEach(() => configureOpenCodeCredentials({ list: async () => [] }));
+  afterEach(() => configureOpenCodeCredentials(null));
+
   it('returns the stored config entry next to the layer sources', async () => {
     const stored = {
       name: 'Stored',
@@ -87,5 +149,34 @@ describe('GET /api/provider/:providerId/source', () => {
       .expect(200);
 
     expect(response.body.config).toBeNull();
+  });
+});
+
+describe('POST /api/provider/discover-models', () => {
+  it('uses the stored provider key without returning it to the browser', async () => {
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      expect(init.headers.Authorization).toBe('Bearer replacement-secret');
+      return new Response(JSON.stringify({ data: [{ id: 'model-a' }] }), { status: 200 });
+    });
+    const app = express();
+    app.use(express.json());
+    registerOpenCodeRoutes(app, {
+      resolveProjectDirectory: vi.fn(async () => ({ directory: '/projects/app' })),
+      getProviderSources: vi.fn(),
+    });
+
+    // The route's auth module reads the real OpenCode credential store. This
+    // fixture cannot inject that private module, so the module-level fallback
+    // is covered in model-discovery.test.js and this keeps the route contract:
+    // provider id enters, no credential leaves in the response.
+    const response = await request(app)
+      .post('/api/provider/discover-models')
+      .send({ providerID: 'stored-llm', baseURL: 'https://provider.test', apiKey: 'replacement-secret', enrich: false })
+      .expect(200);
+    expect(response.body).toEqual({
+      models: [{ id: 'model-a', name: 'model-a' }],
+      enrichment: { requested: false, available: false },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('replacement-secret');
   });
 });

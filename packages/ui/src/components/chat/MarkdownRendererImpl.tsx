@@ -18,6 +18,8 @@ import { useEffectiveDirectory } from '@/hooks/useEffectiveDirectory';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import type { EditorAPI } from '@/lib/api/types';
 import { isVSCodeRuntime } from '@/lib/desktop';
+import { openSessionLink } from '@/lib/router/openSessionFromRoute';
+import { getRuntimeApiBaseUrl } from '@/lib/runtime-switch';
 import { isMobileSurfaceRuntime } from '@/lib/runtimeSurface';
 import { getDirectoryForFilePath, isFilePathWithinDirectory, toAbsoluteFilePath } from '@/lib/path-utils';
 import {
@@ -32,6 +34,7 @@ import { getMarkdownSyntaxVars } from './markdown/markdownSyntaxVars';
 import {
   attachMarkdownInteractions,
   applyMarkdownCodeBlockWrapState,
+  applyMarkdownTableWrapState,
   decorateMarkdown,
   getMarkdownCodeText,
   stabilizeMarkdownTableWidths,
@@ -40,6 +43,7 @@ import {
   type MermaidControlOptions,
   type MermaidRender,
 } from './markdown/decorate';
+import type { RenderedCopyFormat } from './markdown/selectionMarkdown';
 import { findTextPosition } from './markdown/textPosition';
 import { createMermaidViewerRegistry, MERMAID_BLOCK_SELECTOR, shouldRefreshMermaidViewers } from './markdown/mermaidViewer';
 import {
@@ -67,6 +71,22 @@ const useCurrentMermaidTheme = () => {
       : fallbackLight);
 };
 
+// Addresses that serve the instance this chat belongs to: the page itself
+// (web), and the instance the app is connected to, which the desktop page,
+// living on its own scheme, does not share an origin with. A link to either
+// opens in place; one to another instance leaves the chat as before.
+const resolveOwnOrigins = (): string[] => {
+  if (typeof window === 'undefined') return [];
+  const origins = [window.location.origin];
+  try {
+    const apiOrigin = new URL(getRuntimeApiBaseUrl() || window.location.href, window.location.href).origin;
+    if (!origins.includes(apiOrigin)) origins.push(apiOrigin);
+  } catch {
+    // An unparseable runtime address adds nothing.
+  }
+  return origins;
+};
+
 const useLinkInteractions = ({
   containerRef,
   enabled,
@@ -80,10 +100,16 @@ const useLinkInteractions = ({
       return;
     }
 
+    // VS Code keeps session links inert: its sessions live on its own OpenCode.
+    const opensSessionLinks = !isVSCodeRuntime();
     return attachAppLinkInteractions(container, {
       allowExternalHttp: enabled !== false,
       openAppLink: (href) => void openAppLinkWithConfirmation(href),
       openExternalHttp: (href) => void openExternalUrl(href),
+      openSessionLink: opensSessionLinks
+        ? (target) => void openSessionLink(target.sessionId, target.messageId)
+        : undefined,
+      ownOrigins: resolveOwnOrigins(),
     });
   }, [containerRef, enabled]);
 };
@@ -784,6 +810,10 @@ const mermaidColorsFromTheme = (theme: Theme) => ({
   font: 'system-ui, sans-serif',
 });
 
+const readCopyFormat = (): RenderedCopyFormat => (
+  useUIStore.getState().copyMessagesAsPlainText ? 'plain' : 'markdown'
+);
+
 const useDecorateContext = (
   currentTheme: Theme,
   deferCodeLineNumberSync: boolean,
@@ -796,6 +826,8 @@ const useDecorateContext = (
     copied: t('markdownRenderer.code.actions.copiedTitle'),
     enableCodeWrap: t('markdownRenderer.code.actions.enableWrapTitle'),
     disableCodeWrap: t('markdownRenderer.code.actions.disableWrapTitle'),
+    enableTableWrap: t('markdownRenderer.table.actions.enableWrapTitle'),
+    disableTableWrap: t('markdownRenderer.table.actions.disableWrapTitle'),
     copyTable: t('markdownRenderer.table.actions.copyTitle'),
     downloadTable: t('markdownRenderer.table.actions.downloadTitle'),
     copyDiagram: t('markdownRenderer.mermaid.actions.copySourceTitle'),
@@ -812,6 +844,11 @@ const useDecorateContext = (
   const toggleCodeBlockLineWrap = React.useCallback(() => {
     setCodeBlockLineWrap(!useUIStore.getState().codeBlockLineWrap);
   }, [setCodeBlockLineWrap]);
+  const tableCellWrap = useUIStore((state) => state.tableCellWrap);
+  const setTableCellWrap = useUIStore((state) => state.setTableCellWrap);
+  const toggleTableCellWrap = React.useCallback(() => {
+    setTableCellWrap(!useUIStore.getState().tableCellWrap);
+  }, [setTableCellWrap]);
 
   return React.useMemo<DecorateContext>(() => {
     const colors = mermaidColorsFromTheme(currentTheme);
@@ -826,8 +863,19 @@ const useDecorateContext = (
           return {};
         }
       });
-    return { labels, mermaidControls, codeBlockLineWrap, deferCodeLineNumberSync, onToggleCodeBlockLineWrap: toggleCodeBlockLineWrap, renderMermaid, onPreviewLoopback };
-  }, [currentTheme, labels, mermaidControls, codeBlockLineWrap, deferCodeLineNumberSync, toggleCodeBlockLineWrap, onPreviewLoopback]);
+    return {
+      labels,
+      mermaidControls,
+      codeBlockLineWrap,
+      deferCodeLineNumberSync,
+      onToggleCodeBlockLineWrap: toggleCodeBlockLineWrap,
+      tableCellWrap,
+      onToggleTableCellWrap: toggleTableCellWrap,
+      renderMermaid,
+      onPreviewLoopback,
+      getCopyFormat: readCopyFormat,
+    };
+  }, [currentTheme, labels, mermaidControls, codeBlockLineWrap, deferCodeLineNumberSync, toggleCodeBlockLineWrap, tableCellWrap, toggleTableCellWrap, onPreviewLoopback]);
 };
 
 // Runs the async render pipeline into the container and keeps a stable
@@ -890,6 +938,7 @@ const useMorphdomMarkdown = ({
     }
     mermaidViewerRef.current.refresh();
   }, [containerRef]);
+  const { tableCellWrap } = ctx;
   const scheduleTableLayout = React.useCallback(() => {
     if (!tableLayoutSettled) return;
     const previousFrame = tableLayoutFrameRef.current;
@@ -901,10 +950,10 @@ const useMorphdomMarkdown = ({
       if (renderRevisionRef.current !== renderRevision) return;
       const container = containerRef.current;
       const target = container?.querySelector<HTMLElement>('[data-markdown-content]') ?? container;
-      if (target) stabilizeMarkdownTableWidths(target);
+      if (target) stabilizeMarkdownTableWidths(target, tableCellWrap);
     });
     tableLayoutFrameRef.current = frame;
-  }, [containerRef, tableLayoutSettled]);
+  }, [containerRef, tableCellWrap, tableLayoutSettled]);
 
   React.useEffect(() => () => {
     const frame = tableLayoutFrameRef.current;
@@ -934,6 +983,7 @@ const useMorphdomMarkdown = ({
       }
       for (const [key, value] of Object.entries(syntaxVars)) target.style.setProperty(key, value);
       applyMarkdownCodeBlockWrapState(target, ctx.codeBlockLineWrap, ctx.labels);
+      applyMarkdownTableWrapState(target, ctx.tableCellWrap, ctx.labels);
       mountedDomRef.current = {
         key: domCacheKey,
         copiedLabel: ctx.labels.copied,
@@ -1244,7 +1294,9 @@ const MarkdownRendererImpl: React.FC<MarkdownRendererProps> = ({
   const syntaxVars = React.useMemo(() => getMarkdownSyntaxVars(currentTheme), [currentTheme]);
   const ctx = useDecorateContext(currentTheme, live, effectiveDirectory ? handlePreviewLoopback : undefined, DEFAULT_MERMAID_CONTROLS);
   const { locale } = useI18n();
-  const imageMode: MarkdownImageMode = variant === 'assistant' ? 'label' : 'inline';
+  // Assistant images live in the gallery under the message; tool output and
+  // reasoning draw local images and link remote ones (see MarkdownImageMode).
+  const imageMode: MarkdownImageMode = variant === 'assistant' ? 'label' : 'local';
   const settledPart = part
     && (part.type === 'text' || part.type === 'reasoning')
     && part.time?.end !== undefined
@@ -1373,6 +1425,9 @@ const SimpleMarkdownRendererImpl: React.FC<{
     containerRef,
     text: renderedContent,
     streaming: false,
+    // A document a user opened (allowRawHtml) draws its images like GitHub
+    // does; everything else here is written by a model or a tool.
+    imageMode: 'local',
     rawHtml: allowRawHtml ? 'sanitize' : 'escape',
     syntaxVars,
     ctx,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSessionTurnActive } from '@/sync/global-session-status';
+import { useSessionTurnActivity } from '@/sync/global-session-status';
 import { SessionActivityIndicator } from '@/components/session/SessionActivityIndicator';
 import type { Session } from '@/lib/opencode/model';
 
@@ -105,7 +105,7 @@ const MobileTimelineRunRow: React.FC<{
           {activity ? <CollapsedActivityIndicator state={activity} /> : null}
           {time ? <span className="shrink-0 typography-micro text-muted-foreground tabular-nums">{time}</span> : null}
         </span>
-        <span className={cn('block min-w-0 truncate typography-ui-label', active ? 'text-primary' : 'text-foreground')}>
+        <span dir="auto" className={cn('block min-w-0 truncate text-left typography-ui-label', active ? 'text-primary' : 'text-foreground')}>
           {run.title}
         </span>
         <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
@@ -137,9 +137,10 @@ const MobileTimelineRow: React.FC<{
   const aiRename = useSessionAiRenameAction(session.id, session.directory, revealed || renaming);
 
   // Live indicators, same conventions as the grouped rows: busy/retry →
-  // info dot; unseen activity on a non-active row → success dot.
+  // running-kind icon; unseen activity on a non-active row → unread icon.
   const unseenCount = useSessionUnseenCount(session.id);
-  const isStreaming = useSessionTurnActive(session.id);
+  const turnActivity = useSessionTurnActivity(session.id);
+  const isStreaming = turnActivity !== null;
   const showUnreadDot = !isStreaming && unseenCount > 0 && !active;
   const hasActivityDuration = useHasSessionActivityDuration(session.id, isStreaming);
   const showActivityDuration = (isStreaming || showUnreadDot) && hasActivityDuration;
@@ -197,8 +198,7 @@ const MobileTimelineRow: React.FC<{
                 <Icon name="loader-4" className="size-3 shrink-0 animate-spin text-primary" aria-label={t('sessions.aiRename.generating')} />
               ) : isStreaming || showUnreadDot ? (
                 <SessionActivityIndicator
-                  state={isStreaming ? 'running' : 'unread'}
-                  label={isStreaming ? t('sessions.sidebar.session.status.active') : t('sessions.sidebar.session.status.unread')}
+                  state={turnActivity ?? 'unread'}
                 />
               ) : null}
               {showActivityDuration ? (
@@ -220,7 +220,7 @@ const MobileTimelineRow: React.FC<{
                 onCancel={handlers.onCancelRename}
               />
             ) : (
-              <span className={cn('block min-w-0 truncate typography-ui-label', active ? 'text-primary' : 'text-foreground')}>
+              <span dir="auto" className={cn('block min-w-0 truncate text-left typography-ui-label', active ? 'text-primary' : 'text-foreground')}>
                 {title}
               </span>
             )}

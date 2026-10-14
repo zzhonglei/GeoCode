@@ -19,15 +19,13 @@ import type {
   FormAnswer,
   FormInfo,
   LocationGetOutput,
-  PermissionEffect,
-  PermissionSource,
   SessionInboxDelivery,
   SessionRevert,
 } from "@opencode/client"
 import { z } from "zod"
 import type { FilesAPI } from "../api/types"
 import { getDesktopHomeDirectory } from "../desktop"
-import { isAmbiguousTransportFailure, markAmbiguousTransportFailure } from "@/lib/relay/transport-error"
+import { isAmbiguousTransportFailure, isDefiniteTransportFailure, markAmbiguousTransportFailure, markDefiniteTransportFailure } from "@/lib/relay/transport-error"
 import { FilesystemError, parseFilesystemErrorReason } from "@/lib/api/files-errors"
 import type { ContextPartMetadata } from "@/lib/messages/contextParts"
 import { getRuntimeUrlResolver } from "@/lib/runtime-url"
@@ -62,6 +60,7 @@ import {
   type Vcs,
 } from "./model"
 import { ascendingId } from "./ids"
+import { runningShellFromWire, shellCancellationNote, type RunningShell } from "./background-shell"
 import { toJsonRecord } from "./json"
 import { deniesAnyProvider, mergeConfigDocuments, projectAgent, projectMessages, projectProject, projectSession, projectVcs } from "./projection"
 
@@ -73,6 +72,8 @@ const DEFAULT_BASE_URL = import.meta.env.VITE_OPENCODE_URL || "/api"
 const CONFIG_CACHE_TTL_MS = 10_000
 const OPENCODE_HEALTH_TIMEOUT_MS = 4_000
 const DEFAULT_SESSION_PAGE_LIMIT = 100
+/** How much of a running command's output the live view starts with. */
+const SHELL_OUTPUT_TAIL_BYTES = 64 * 1024
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -135,6 +136,23 @@ export class OpencodeApiError extends Error {
 
 const taggedErrorSchema = z.object({ _tag: z.string(), message: z.string().optional(), ref: z.string().optional() })
 
+class RuntimeRoutingResponseError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message)
+    this.name = 'RuntimeRoutingResponseError'
+  }
+}
+
+const validateRuntimeResponse = (response: Response): Response => {
+  const unavailable = response.headers.get('x-openchamber-error') === 'runtime-unavailable'
+  const html = response.ok && (response.headers.get('content-type') ?? '').toLowerCase().includes('text/html')
+  if (!unavailable && !html) return response
+  void response.body?.cancel().catch(() => undefined)
+  throw new RuntimeRoutingResponseError(response.status, unavailable
+    ? 'runtime_unavailable'
+    : 'the runtime returned a web page instead of an API response')
+}
+
 /**
  * Turns whatever the generated client threw into an `OpencodeApiError` with a
  * status the rest of the app can branch on. Transport failures keep their
@@ -143,6 +161,13 @@ const taggedErrorSchema = z.object({ _tag: z.string(), message: z.string().optio
  */
 export function normalizeOpencodeError(operation: string, error: unknown): OpencodeApiError {
   if (error instanceof OpencodeApiError) return error
+  const routingError = error instanceof RuntimeRoutingResponseError ? error
+    : error instanceof ClientError && error.cause instanceof RuntimeRoutingResponseError ? error.cause : null
+  if (routingError) {
+    return markDefiniteTransportFailure(new OpencodeApiError(operation, routingError.message, {
+      status: routingError.status, cause: error,
+    }))
+  }
   if (error instanceof ClientError) {
     if (error.reason === "UnexpectedStatus") {
       const status = (error.cause as { status?: unknown } | undefined)?.status
@@ -296,7 +321,7 @@ export const createRuntimeOpencodeClient = (config: RuntimeOpencodeClientConfig)
       const url = input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url)
       const method = String(init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase()
       if (isEventStreamUrl(url) || method === "POST") {
-        return runtimeFetch(input, init)
+        return validateRuntimeResponse(await runtimeFetch(input, init))
       }
       const timeout = createTimeoutSignal(requestTimeoutMs)
       const callerSignal = init?.signal !== undefined
@@ -340,6 +365,7 @@ export const createRuntimeOpencodeClient = (config: RuntimeOpencodeClientConfig)
       let responseHasBody = false
       try {
         const response = await runtimeFetch(input, { ...init, signal })
+        validateRuntimeResponse(response)
         responseHasBody = response.body !== null
         return response
       } catch (error) {
@@ -438,10 +464,14 @@ export type FetchPermissionResult =
   | { state: "unknown" }
 
 type DirectoryAvailability = "available" | "missing" | "unknown"
+/**
+ * Pending requests live in the location that raised them, so a list is asked
+ * per directory. There is no global list on v2: a request without a directory
+ * answers for OpenCode's own working directory and makes OpenCode start it,
+ * MCP servers included.
+ */
 type PendingRequestListOptions = {
   directories?: Array<string | null | undefined>
-  /** Skip the global fallback when initializing one explicit directory. */
-  includeGlobal?: boolean
 }
 const directoryProbeErrorSchema = z.object({ reason: z.string().optional(), isDirectory: z.boolean().optional() })
 
@@ -674,8 +704,25 @@ class OpencodeService {
     return call("location.get", () => this.clientFor(directory).location.get())
   }
 
+  /**
+   * Drops the location OpenCode keeps for a directory, which stops that
+   * directory's MCP servers; the next read of it starts them again. OpenCode
+   * serves this among its debug routes. Asked without a directory it would
+   * drop its own working directory, so one is required.
+   */
+  async releaseLocation(directory: string): Promise<void> {
+    const normalized = this.normalizeCandidatePath(directory)
+    if (!normalized) throw new Error("releaseLocation needs a directory")
+    await call("debug.location.evict", () => this.getScopedSdkClient(normalized).debug.location.evict())
+  }
+
+  /**
+   * The list is global, but v2 serves it through a location: asked without a
+   * directory, OpenCode starts its own working directory (MCP servers
+   * included) to answer. The current directory is already running.
+   */
   async listProjects(): Promise<Project[]> {
-    const projects = await call("project.list", () => this.client.project.list())
+    const projects = await call("project.list", () => this.clientFor().project.list())
     return projects.map(projectProject)
   }
 
@@ -1164,7 +1211,9 @@ class OpencodeService {
       // Do not retry a prompt after a transport failure: through a remote
       // tunnel the POST may already be running server-side even though the
       // client lost the response.
-      recordProviderError(params.providerID, error instanceof OpencodeApiError ? error.status : undefined)
+      if (!(error instanceof Error && isDefiniteTransportFailure(error))) {
+        recordProviderError(params.providerID, error instanceof OpencodeApiError ? error.status : undefined)
+      }
       throw error
     }
 
@@ -1224,6 +1273,16 @@ class OpencodeService {
   async abortSession(id: string, directory?: string | null): Promise<boolean> {
     const result = await call("session.interrupt", () => this.clientFor(directory).session.interrupt({ sessionID: id }))
     return result.interrupted
+  }
+
+  /**
+   * Moves the work the turn is blocked on (a running shell command, a
+   * subagent it waits for) to the background. The work keeps running, the
+   * agent is told to move on, and the result is handed back when it settles.
+   * A no-op when nothing blocks.
+   */
+  async backgroundSessionWork(id: string, directory?: string | null): Promise<void> {
+    await call("session.background", () => this.clientFor(directory).session.background({ sessionID: id }))
   }
 
   /** Runs a shell command inside the session transcript. Returns the shell message id. */
@@ -1408,46 +1467,6 @@ class OpencodeService {
   }
 
   /**
-   * Programmatically evaluate and (when approval is required) create a
-   * permission request for a session.
-   *
-   * Returns `{ id, effect }` on success, or `null` on any failure. Callers
-   * driving authoritative state must treat `null` as "unknown — do not act"
-   * rather than "permission allowed."
-   */
-  async createPermission(
-    sessionID: string,
-    action: string,
-    resources: string[],
-    options?: {
-      id?: string
-      save?: string[]
-      metadata?: ContextPartMetadata
-      source?: PermissionSource
-      agent?: string
-      directory?: string | null
-    },
-  ): Promise<{ id: string; effect: PermissionEffect } | null> {
-    try {
-      const result = await call("permission.create", () =>
-        this.clientFor(options?.directory).permission.create({
-          sessionID,
-          action,
-          resources,
-          id: options?.id,
-          save: options?.save,
-          metadata: options?.metadata ? toJsonRecord(options.metadata) : undefined,
-          source: options?.source,
-          agent: options?.agent,
-        }),
-      )
-      return { id: result.id, effect: result.effect }
-    } catch {
-      return null
-    }
-  }
-
-  /**
    * Fetch a pending permission request owned by a session. A 404 is the
    * server confirming the request has settled; every other failure stays
    * distinct so auto-accept fails closed while the request stays visible.
@@ -1469,11 +1488,11 @@ class OpencodeService {
    * returned no pending permissions".
    */
   async listPendingPermissions(options?: PendingRequestListOptions): Promise<PermissionRequest[]> {
-    const directories = this.uniqueDirectories(options?.directories, options?.includeGlobal)
+    const directories = this.uniqueDirectories(options?.directories)
     const lists = await Promise.all(
       directories.map((directory) =>
         call("permission.request.list", () =>
-          (directory ? this.getScopedSdkClient(directory) : this.client).permission.request.list().then((r) => r.data),
+          this.getScopedSdkClient(directory).permission.request.list().then((r) => r.data),
         ),
       ),
     )
@@ -1496,25 +1515,89 @@ class OpencodeService {
 
   /** Throws on fetch failure; see {@link listPendingPermissions}. */
   async listPendingForms(options?: PendingRequestListOptions): Promise<FormInfo[]> {
-    const directories = this.uniqueDirectories(options?.directories, options?.includeGlobal)
+    const directories = this.uniqueDirectories(options?.directories)
     const lists = await Promise.all(
       directories.map((directory) =>
         call("form.list", () =>
-          (directory ? this.getScopedSdkClient(directory) : this.client).form.list().then((r) => r.data),
+          this.getScopedSdkClient(directory).form.list().then((r) => r.data),
         ),
       ),
     )
     return dedupeById(lists)
   }
 
+  // -------------------------------------------------------------------------
+  // Shell commands the agent started (background commands)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Commands still running in the directory on behalf of a session, keyed by
+   * the directory OpenCode resolved it to (symlinks resolved), which is the
+   * directory its shell events carry. Throws on fetch failure.
+   */
+  async listRunningShells(directory: string): Promise<{ directory: string; shells: RunningShell[] }> {
+    const response = await call("shell.list", () => this.clientFor(directory).shell.list())
+    return {
+      directory: response.location.directory ?? directory,
+      shells: response.data.flatMap((info) => runningShellFromWire(info) ?? []),
+    }
+  }
+
+  /**
+   * The newest part of a command's captured output, and the cursor to read
+   * on from. Without a cursor the read starts `tailBytes` before the end.
+   */
+  async readShellOutput(
+    shellID: string,
+    directory: string,
+    cursor?: number,
+    tailBytes = SHELL_OUTPUT_TAIL_BYTES,
+  ): Promise<{ output: string; cursor: number; skipped: boolean }> {
+    const client = this.clientFor(directory)
+    let start = cursor
+    if (start === undefined) {
+      const end = await call("shell.output", () => client.shell.output({ id: shellID, cursor: Number.MAX_SAFE_INTEGER }).then((r) => r.data))
+      start = Math.max(0, end.size - tailBytes)
+    }
+    const page = await call("shell.output", () => client.shell.output({ id: shellID, cursor: start, limit: tailBytes }).then((r) => r.data))
+    return { output: page.output, cursor: page.cursor, skipped: cursor === undefined && start > 0 }
+  }
+
+  /**
+   * Stops a background command the agent started. The agent is told first,
+   * in a note that does not wake it, that the error OpenCode is about to
+   * report is the user's stop (see `shellCancellationNote`); the command is
+   * killed only once the note is in. Throws when either step fails, and
+   * nothing is killed when the note could not be delivered.
+   */
+  async stopBackgroundShell(params: {
+    sessionID: string
+    sessionDirectory?: string | null
+    shellID: string
+    shellDirectory: string
+    command: string
+  }): Promise<void> {
+    const note = shellCancellationNote({ shellID: params.shellID, command: params.command })
+    await call("session.synthetic", () =>
+      this.clientFor(params.sessionDirectory).session.synthetic({
+        sessionID: params.sessionID,
+        text: note.text,
+        description: note.description,
+        metadata: note.metadata,
+        resume: false,
+      }),
+    )
+    await call("shell.remove", () => this.clientFor(params.shellDirectory).shell.remove({ id: params.shellID }))
+  }
+
   /** Global pending items when requested, then each distinct directory. */
-  private uniqueDirectories(entries: Array<string | null | undefined> | undefined, includeGlobal = true): Array<string | null> {
+  private uniqueDirectories(entries: Array<string | null | undefined> | undefined): string[] {
     const unique = new Set<string>()
     for (const entry of entries ?? []) {
       const normalized = this.normalizeCandidatePath(entry)
       if (normalized) unique.add(normalized)
     }
-    return includeGlobal ? [null, ...unique] : [...unique]
+    return [...unique]
   }
 
   // -------------------------------------------------------------------------
@@ -1586,12 +1669,19 @@ class OpencodeService {
    * The providers of a directory inside an isolated space are the host's: a space offers the
    * host's catalog, and the host refuses its provider routes across the boundary, so they are
    * asked of the host with no directory. Models and the default come from the space as usual.
+   *
+   * `fresh`: a request already in flight started before the caller's reason to re-read (a
+   * catalog event), so it may carry the old catalog. Wait it out and read again.
    */
-  async getProvidersForConfig(directory?: string | null): Promise<ProviderCatalog> {
+  async getProvidersForConfig(directory?: string | null, options?: { fresh?: boolean }): Promise<ProviderCatalog> {
     const effectiveDirectory = this.resolveDirectory(directory)
     const key = effectiveDirectory ?? ""
 
-    const existing = this.providerCatalogInFlight.get(key)
+    let existing = this.providerCatalogInFlight.get(key)
+    if (existing && options?.fresh) {
+      await existing.catch(() => undefined)
+      existing = this.providerCatalogInFlight.get(key)
+    }
     if (existing) {
       return existing
     }
@@ -1606,7 +1696,9 @@ class OpencodeService {
       ])
       return compact({
         providers,
-        models,
+        models: models.map((model) => (
+          Array.isArray(model.variants) ? model : { ...model, variants: [] }
+        )),
         default: fallback ? { id: fallback.modelID, providerID: fallback.providerID } : undefined,
       })
     })()
@@ -1750,7 +1842,7 @@ class OpencodeService {
     }
 
     if (options?.asProject) {
-      const response = await runtimeFetch(`${this.baseUrl}/opencode/directory`, {
+      const response = await runtimeFetch('/api/openchamber/directory', {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1992,7 +2084,7 @@ class OpencodeService {
       return null
     }
 
-    const url = `${this.baseUrl}/opencode/directory`
+    const url = '/api/openchamber/directory'
 
     try {
       const response = await runtimeFetch(url, {

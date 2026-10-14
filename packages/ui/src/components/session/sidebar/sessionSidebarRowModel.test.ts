@@ -116,6 +116,31 @@ describe('buildSessionSidebarRowModel', () => {
     expect(sessions).toEqual(['timeline:working', 'timeline:other']);
   });
 
+  test('keeps badge scopes for hidden timeline descendants without adding child rows', () => {
+    const input = args([]);
+    input.viewMode = 'timeline';
+    input.timelineItems = [timelineItem('root', {
+      blockingBadgeSessionScopes: [
+        { directory: '/repo', sessionIDs: ['root'] },
+        { directory: '/worktree', sessionIDs: ['child'] },
+      ],
+    })];
+    input.workItems = [timelineItem('working', {
+      blockingBadgeSessionScopes: [
+        { directory: '/repo', sessionIDs: ['working'] },
+        { directory: '/worktree', sessionIDs: ['worker'] },
+      ],
+    })];
+    input.workSessionIds = new Set(['working']);
+
+    const model = buildSessionSidebarRowModel(input);
+    const rows = model.rows.filter((row) => row.kind === 'session');
+    expect(rows.map((row) => row.node.session.id)).toEqual(['working', 'root']);
+    expect(rows.map((row) => row.blockingBadgeSessionScopes?.[1]?.sessionIDs)).toEqual([['worker'], ['child']]);
+    expect(rows.every((row) => row.node.children.length === 0)).toBe(true);
+    expect(model.selectionEntries.map((entry) => entry.id)).toEqual(['working', 'root']);
+  });
+
   test('search counts a subsession of a session in work once, and the moved tree leaves its group', () => {
     const parent = node('ses_parent', [node('ses_child'), node('ses_other')]);
     const main = group([parent]);
@@ -312,6 +337,22 @@ describe('buildSessionSidebarRowModel', () => {
     expect(model.rows.some((row) => row.kind === 'session')).toBe(false);
   });
 
+  test('sessions inside a folder sit one level deeper than ungrouped sessions', () => {
+    const child = node('child');
+    child.session.parentID = 'in-folder';
+    const input = args([project([group([node('in-folder', [child]), node('top-level')])])]);
+    input.foldersMap = { '/repo': [
+      { id: 'outer', name: 'Outer', createdAt: 1, sessionIds: [] },
+      { id: 'inner', name: 'Inner', parentId: 'outer', createdAt: 1, sessionIds: ['in-folder'] },
+    ] };
+    input.expandedParents = new Set(['project:active:in-folder']);
+    const rows = buildSessionSidebarRowModel(input).rows.filter((row) => row.kind === 'folder-header' || row.kind === 'session');
+
+    expect(rows.map((row) => (row.kind === 'session' ? `${row.node.session.id}@${row.depth}` : row.displayName))).toEqual([
+      'Outer', 'Outer / Inner', 'in-folder@1', 'child@2', 'top-level@0',
+    ]);
+  });
+
   test('builds the folder-heavy 25,000-session projection without duplicating descendant storage', () => {
     const sessions = Array.from({ length: 25_000 }, (_, index) => node(`session-${index}`));
     const input = args([project([group(sessions)])]);
@@ -447,7 +488,17 @@ describe('buildSessionSidebarRowModel', () => {
       input.expandedParents = new Set([runExpansionKey('project', runKey)]);
       const rows = buildSessionSidebarRowModel(input).rows.filter((row) => row.kind === 'run' || row.kind === 'session');
 
-      expect(rows.map((row) => (row.kind === 'session' ? `${row.node.session.id}@${row.depth}` : row.kind))).toEqual(['run', 'lane-1@1', 'lane-2@1']);
+      expect(rows.map((row) => (row.kind === 'session' ? `${row.node.session.id}@${row.depth}` : `run@${row.depth}`))).toEqual(['run@0', 'lane-1@1', 'lane-2@1']);
+    });
+
+    test('a run inside a folder and its lanes sit one level deeper', () => {
+      const input = args([project([group([node('lane-1'), node('lane-2')])])]);
+      input.runIndex = runIndex;
+      input.foldersMap = { '/repo': [{ id: 'folder-a', name: 'Folder', createdAt: 1, sessionIds: ['lane-1', 'lane-2'] }] };
+      input.expandedParents = new Set([runExpansionKey('project', runKey)]);
+      const rows = buildSessionSidebarRowModel(input).rows.filter((row) => row.kind === 'run' || row.kind === 'session');
+
+      expect(rows.map((row) => (row.kind === 'session' ? `${row.node.session.id}@${row.depth}` : `run@${row.depth}`))).toEqual(['run@1', 'lane-1@2', 'lane-2@2']);
     });
 
     test('a run spends one slot of the reveal limit', () => {
@@ -458,6 +509,36 @@ describe('buildSessionSidebarRowModel', () => {
 
       expect(model.rows.filter((row) => row.kind === 'run')).toHaveLength(1);
       expect(model.rows.filter((row) => row.kind === 'session')).toHaveLength(4);
+    });
+
+    test('expanded activity lanes keep their own badge scopes', () => {
+      const input = args([]);
+      input.runIndex = runIndex;
+      input.workItems = [
+        timelineItem('lane-1', { blockingBadgeSessionScopes: [{ directory: '/repo', sessionIDs: ['lane-1', 'lane-1-child'] }] }),
+        timelineItem('lane-2', { blockingBadgeSessionScopes: [{ directory: '/repo', sessionIDs: ['lane-2'] }] }),
+      ];
+      input.workSessionIds = new Set(['lane-1', 'lane-2']);
+      input.expandedParents = new Set([runExpansionKey('recent', runKey)]);
+      const lanes = buildSessionSidebarRowModel(input).rows.filter((row) => row.kind === 'session');
+
+      expect(lanes.map((row) => row.kind === 'session' && row.blockingBadgeSessionScopes?.[0]?.sessionIDs)).toEqual([
+        ['lane-1', 'lane-1-child'],
+        ['lane-2'],
+      ]);
+    });
+
+    test('a timeline run row carries the sessions that block its lanes', () => {
+      const input = args([]);
+      input.viewMode = 'timeline';
+      input.runIndex = runIndex;
+      input.timelineItems = [
+        timelineItem('lane-1', { blockingBadgeSessionScopes: [{ directory: '/repo', sessionIDs: ['lane-1', 'lane-1-subagent'] }] }),
+        timelineItem('lane-2', { blockingBadgeSessionScopes: [{ directory: '/repo', sessionIDs: ['lane-2'] }] }),
+      ];
+      const run = buildSessionSidebarRowModel(input).rows.find((row) => row.kind === 'run');
+
+      expect(run?.kind === 'run' && [...run.blockingSessionIds]).toEqual(['lane-1', 'lane-1-subagent', 'lane-2']);
     });
 
     test('timeline items collapse into one run row', () => {

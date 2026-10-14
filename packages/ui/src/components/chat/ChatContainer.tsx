@@ -1,9 +1,20 @@
 import React from 'react';
 import type { Message, Part, Session } from '@/lib/opencode/model';
 import { getLastConversationRecord, isIncompleteAssistantTurn } from '@/lib/opencode/model';
+import { keepCommandSubagentReports } from '@/lib/opencode/subagent-run';
+import { isOpencodeNotFound, opencodeClient } from '@/lib/opencode/client';
 
 import { ChatInput } from './ChatInput';
-import { ChatColumnSessionContext, type ChatColumnSession } from './chatColumnSession';
+import { CHAT_INPUT_EDITOR_SELECTOR } from './composer/editor/dom';
+import {
+    ChatColumnActionsContext,
+    ChatColumnExpandedInputContext,
+    ChatColumnSessionContext,
+    useChatColumnActions,
+    type ChatColumnActions,
+    type ChatColumnExpandedInput,
+    type ChatColumnSession,
+} from './chatColumnSession';
 import { MobileCommentComposerContext, useMobileCommentComposerOwner } from './composer/comment/MobileCommentComposerContext';
 import { DraftPresetChips } from './DraftPresetChips';
 import { useInputStore } from '@/sync/input-store';
@@ -12,7 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import ChatEmptyState from './ChatEmptyState';
 import { useGlobalSyncStore } from '@/sync/global-sync-store';
 import MessageList, { type MessageListHandle } from './MessageList';
-import { createTimelineRevealGate, TIMELINE_REVEAL_CAP_MS, TimelineRevealGateContext, type TimelineRevealGate } from './timelineRevealGate';
+import { createTimelineRevealGate, TimelineRevealGateContext, type TimelineRevealGate } from './timelineRevealGate';
 
 // How long the previous timeline stays on screen while a session that is not
 // in memory loads, before the skeleton takes over.
@@ -37,6 +48,7 @@ const TIMELINE_SETTLE_CAP_MS = 300;
 // Mirrors the oc-chat-hydration-reveal duration in index.css.
 const TIMELINE_REVEAL_FADE_MS = 100;
 import { hasActiveFormToolInCurrentTurn, recoverPendingFormWithRetry } from '@/sync/form-recovery';
+import { toast } from '@/components/ui';
 import { StatusRowContainer } from './StatusRowContainer';
 import { SessionRecapNote } from '@/components/chat/SessionRecapSpacer';
 import { SessionErrorNotice } from '@/components/chat/SessionErrorNotice';
@@ -44,7 +56,7 @@ import ScrollToBottomButton from './components/ScrollToBottomButton';
 import { PromptNavigatorRail } from './components/PromptNavigatorRail';
 import { useAuthSessionStore } from '@/lib/runtime-auth-expiry';
 import { useScrollShadow } from '@/components/ui/useScrollShadow';
-import { useChatTimelineScroll, type TimelineListHandle } from '@/hooks/useChatTimelineScroll';
+import { useChatTimelineScroll, type LinkedMessageState, type TimelineListHandle } from '@/hooks/useChatTimelineScroll';
 import { useChatTimelineController } from './hooks/useChatTimelineController';
 import { TimelineDialog } from './TimelineDialog';
 import { useChatTurnNavigation } from './hooks/useChatTurnNavigation';
@@ -62,7 +74,7 @@ import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useStreamingStore } from '@/sync/streaming';
 import {
-    useSessionMessageCount,
+    useChildStoreManager,
     useSessionMessageRecords,
     useSessionMessageLoadState,
     useSessionMessageLoader,
@@ -73,16 +85,21 @@ import {
     useScopedBlockingForms,
     useParentSession,
     useSession,
+    useSessions,
 } from '@/sync/sync-context';
 import { useSync } from '@/sync/use-sync';
 import { usePlanDetection } from '@/hooks/usePlanDetection';
 import { useI18n } from '@/lib/i18n';
 import { isVSCodeRuntime } from '@/lib/desktop';
+import { eventMatchesShortcut, getEffectiveShortcutCombo } from '@/lib/shortcuts';
+import { ChatSearchBar } from './search/ChatSearchBar';
 import { WorkStatusPanel } from './work-status/WorkStatusPanel';
 import { useWorkStatusVisibility } from './work-status/useWorkStatusVisibility';
-import { getEmbeddedSessionChatOriginSessionId } from '@/components/layout/contextPanelEmbeddedChat';
 import { normalizeUserDisplayParts } from './message/normalizeUserDisplayParts';
 import { resolveChatPromptReadOnly } from './chatPromptReadOnly';
+import { PermissionDock } from './PermissionDock';
+import { FormDock } from './FormDock';
+import { ensureSpaceArchives, useSpaceArchiveOf } from '@/lib/spaces/space-archives';
 import { getRuntimeKey } from '@/lib/runtime-switch';
 import { createFirstVisibleSessionPerformanceTracker } from '@/sync/session-load-performance';
 import { isChatDirectoryPath } from '@/lib/chatDirectories';
@@ -458,7 +475,7 @@ const ChatViewport = React.memo(({
                 return;
             }
             revealGate.onEmpty = () => reveal(true);
-            timer = window.setTimeout(() => reveal(true), TIMELINE_REVEAL_CAP_MS);
+            timer = window.setTimeout(() => reveal(true), revealGate.capMs);
         });
         return () => {
             finished = true;
@@ -599,19 +616,15 @@ const HYDRATING_SKELETON_ITEMS: Array<{
     },
 ];
 
-const ReadOnlyPromptBanner: React.FC = () => {
-    const { t } = useI18n();
-
-    return (
-        <div className="w-full py-3">
-            <div className="chat-input-column">
-                <div className="rounded-2xl border border-border/70 bg-[var(--surface-background)] px-4 py-3 text-center typography-ui-label text-muted-foreground">
-                    {t('chat.container.readOnlySubagentPromptBanner')}
-                </div>
+const ReadOnlyPromptBanner: React.FC<{ text: string }> = ({ text }) => (
+    <div className="w-full py-3">
+        <div className="chat-input-column">
+            <div className="rounded-2xl border border-border/70 bg-[var(--surface-background)] px-4 py-3 text-center typography-ui-label text-muted-foreground">
+                {text}
             </div>
         </div>
-    );
-};
+    </div>
+);
 
 const getProjectDisplayLabel = (project: { label?: string; path: string }): string => {
     const label = project.label?.trim();
@@ -668,38 +681,48 @@ const DraftWelcome: React.FC<{ exiting?: boolean }> = ({ exiting = false }) => {
 
 type ChatContainerProps = {
     active?: boolean;
-    /**
-     * When set, controls message-history reads and session-message loads
-     * independently of `active`. Defaults to `active`. Embedded session-chat
-     * panels pass `true` so a delayed/lost visibility handshake cannot hide
-     * an already-materialized transcript (leaving only the working-status
-     * row — issue #2903).
-     */
-    messagesEnabled?: boolean;
     autoOpenDraft?: boolean;
     readOnly?: boolean;
-    initialAllowPromptingSubagentSessions?: boolean;
+    /**
+     * Shows this session instead of the app's selection: a chat opened in the
+     * side panel. The column navigates inside itself (open a subtask, return
+     * to the parent) and never changes the main chat's selection, draft, or
+     * panels.
+     */
+    pinnedSession?: { sessionId: string; directory: string | null };
 };
+
+type PinnedSelection = { sessionId: string; directory: string | null };
 
 export const ChatContainer: React.FC<ChatContainerProps> = ({
     active = true,
-    messagesEnabled: messagesEnabledProp,
-    autoOpenDraft = true,
+    autoOpenDraft: autoOpenDraftProp = true,
     readOnly = false,
-    initialAllowPromptingSubagentSessions,
+    pinnedSession,
 }) => {
-    const messagesEnabled = messagesEnabledProp ?? active;
+    const pinned = pinnedSession !== undefined;
+    const autoOpenDraft = autoOpenDraftProp && !pinned;
     const { t } = useI18n();
+    // A pinned column starts on its session and moves only through its own
+    // navigation. A different session from the owner starts it over.
+    const [pinnedOrigin, setPinnedOrigin] = React.useState<PinnedSelection | null>(pinnedSession ?? null);
+    const [pinnedSelection, setPinnedSelection] = React.useState<PinnedSelection | null>(pinnedSession ?? null);
+    if (pinnedSession && (pinnedSession.sessionId !== pinnedOrigin?.sessionId || pinnedSession.directory !== pinnedOrigin?.directory)) {
+        setPinnedOrigin(pinnedSession);
+        setPinnedSelection(pinnedSession);
+    }
     // Session UI state. The selection is published synchronously by the
     // sidebar click, but the chat swaps its content on a deferred copy: the
     // first commit paints the cheap reactions (active row, URL, tab) while the
     // timeline for the new session renders in an interruptible transition
     // behind it. Both fields travel as one value so the key, the message
     // subscription, and the loader target never mix an old directory with a
-    // new session id.
-    const liveSessionId = useSessionUIStore((s) => s.currentSessionId);
-    const liveSessionDirectory = useSessionUIStore((s) => s.currentSessionDirectory);
-    const materializedDraftSessionId = useSessionUIStore((s) => s.materializedDraftSessionId);
+    // new session id. A pinned column does not subscribe to the selection.
+    const globalSessionId = useSessionUIStore((s) => (pinned ? null : s.currentSessionId));
+    const globalSessionDirectory = useSessionUIStore((s) => (pinned ? null : s.currentSessionDirectory));
+    const liveSessionId = pinned ? pinnedSelection?.sessionId ?? null : globalSessionId;
+    const liveSessionDirectory = pinned ? pinnedSelection?.directory ?? null : globalSessionDirectory;
+    const materializedDraftSessionId = useSessionUIStore((s) => (pinned ? null : s.materializedDraftSessionId));
     const liveSelection = React.useMemo(
         () => ({ sessionId: liveSessionId, directory: liveSessionDirectory }),
         [liveSessionId, liveSessionDirectory],
@@ -740,7 +763,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
 
     const clearMaterializedDraftSession = useSessionUIStore((s) => s.clearMaterializedDraftSession);
     const openNewSessionDraft = useSessionUIStore((s) => s.openNewSessionDraft);
-    const setCurrentSession = useSessionUIStore((s) => s.setCurrentSession);
     const newSessionDraft = useSessionUIStore((s) => s.newSessionDraft);
 
     // Sync actions
@@ -748,6 +770,20 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     const syncDirectory = useSyncDirectory();
     const effectiveSessionDirectory = currentSessionDirectory ?? syncDirectory;
     const messageLoader = useSessionMessageLoader();
+    // The app bootstraps only the current directory and the selected
+    // session's. A pinned column may show a session of another project, so it
+    // asks for its own directory while it is open.
+    const childStores = useChildStoreManager();
+    const columnDemandOwner = `chat-column:${React.useId()}`;
+    React.useEffect(() => {
+        if (!pinned || !effectiveSessionDirectory) return;
+        childStores.setBootstrapDemand(columnDemandOwner, [{
+            directory: effectiveSessionDirectory,
+            priority: 'selected',
+            reason: 'selected-session',
+        }]);
+        return () => childStores.clearBootstrapDemand(columnDemandOwner);
+    }, [childStores, columnDemandOwner, effectiveSessionDirectory, pinned]);
     const currentSessionKey = currentSessionId
         ? JSON.stringify([getRuntimeKey(), effectiveSessionDirectory, currentSessionId])
         : null;
@@ -781,13 +817,32 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     );
 
     // UI store
-    const isExpandedInput = useUIStore((state) => state.isExpandedInput);
+    const globalExpandedInput = useUIStore((state) => (pinned ? false : state.isExpandedInput));
+    const [pinnedExpandedInput, setPinnedExpandedInput] = React.useState(false);
+    const isExpandedInput = pinned ? pinnedExpandedInput : globalExpandedInput;
+    const pinnedExpandedInputValue = React.useMemo<ChatColumnExpandedInput | null>(
+        () => (pinned ? { expanded: pinnedExpandedInput, setExpanded: setPinnedExpandedInput } : null),
+        [pinned, pinnedExpandedInput],
+    );
     const stickyUserHeader = useUIStore((state) => state.stickyUserHeader);
     const promptNavigatorEnabled = useUIStore((state) => state.promptNavigatorEnabled);
     const allowPromptingSubagentSessions = useUIStore((state) => state.allowPromptingSubagentSessions);
-    const [embeddedAllowPrompting, setEmbeddedAllowPrompting] = React.useState(initialAllowPromptingSubagentSessions);
-    const isTimelineDialogOpen = useUIStore((s) => s.isTimelineDialogOpen);
-    const setTimelineDialogOpen = useUIStore((s) => s.setTimelineDialogOpen);
+    // The timeline dialog of the main chat is app state (a global shortcut
+    // opens it); a pinned column keeps its own.
+    const globalTimelineDialogOpen = useUIStore((s) => s.isTimelineDialogOpen);
+    const setGlobalTimelineDialogOpen = useUIStore((s) => s.setTimelineDialogOpen);
+    const [pinnedTimelineDialogOpen, setPinnedTimelineDialogOpen] = React.useState(false);
+    const isTimelineDialogOpen = pinned ? pinnedTimelineDialogOpen : globalTimelineDialogOpen;
+    const setTimelineDialogOpen = pinned ? setPinnedTimelineDialogOpen : setGlobalTimelineDialogOpen;
+    const columnRootRef = React.useRef<HTMLDivElement | null>(null);
+    const pinnedColumnActions = React.useMemo<ChatColumnActions | null>(() => (pinned ? {
+        pinned: true,
+        openSession: (sessionId, directory) => setPinnedSelection({ sessionId, directory }),
+        openTimelineDialog: () => setPinnedTimelineDialogOpen(true),
+        focusInput: () => columnRootRef.current?.querySelector<HTMLElement>(CHAT_INPUT_EDITOR_SELECTOR)?.focus(),
+    } : null), [pinned]);
+    const inheritedColumnActions = useChatColumnActions();
+    const columnActions = pinnedColumnActions ?? inheritedColumnActions;
 
     // Streaming state
     const streamingMessageId = useStreamingStore(
@@ -805,13 +860,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             [streamingMessageId],
         ),
     );
-    const sessionMessageCount = useSessionMessageCount(currentSessionId ?? '', effectiveSessionDirectory);
     const hasRenderableSessionSnapshot = useSessionRenderable(currentSessionId ?? '', effectiveSessionDirectory);
-    // Messages from sync system. Keep this gated by `messagesEnabled`, not
-    // `active`, so embedded panels can show history while the composer stays
-    // inactive until the parent confirms visibility.
+    // Messages from sync system.
     const sessionMessageRecords = useSessionMessageRecords(currentSessionId ?? '', effectiveSessionDirectory, {
-        enabled: messagesEnabled,
+        enabled: active,
         suspendPartUpdates: Boolean(streamingMessageId),
         suspendPartUpdatesForMessageId: streamingMessageId,
     });
@@ -930,7 +982,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     const { isMobile } = useDeviceInfo();
     const isVSCode = isVSCodeRuntime();
     const chatSurfaceMode = useChatSurfaceMode();
-    const draftOpen = Boolean(newSessionDraft?.open);
+    // The new-session draft is the main chat's; a pinned column never shows it.
+    const draftOpen = !pinned && Boolean(newSessionDraft?.open);
     const isManagedChatContext = draftOpen
         ? newSessionDraft?.target === 'chat'
         : isChatDirectoryPath(effectiveSessionDirectory);
@@ -954,10 +1007,17 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         isMobile,
         isVSCode,
     });
+    const attachColumnRoot = React.useCallback((node: HTMLDivElement | null) => {
+        columnRootRef.current = node;
+        workStatusRowRef(node);
+    }, [workStatusRowRef]);
     // Surfaces that never host the panel skip it entirely; the rest keep it
     // mounted so its visibility can animate rather than snap.
+    // A pinned column leaves the panel, and the app-wide flags below, to the
+    // main chat.
     const workStatusPanelMountable = !isMobile
         && !isVSCode
+        && !pinned
         && chatSurfaceMode !== 'mini-chat';
     const showWorkStatusPanel = workStatusPanelMountable && workStatusVisible;
 
@@ -974,36 +1034,36 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     const showWorkStatusOverlay = workStatusOverlayMountable && workStatusOverlayOpen;
 
     React.useEffect(() => {
+        if (pinned) return;
         setWorkStatusPanelFits(workStatusPanelMountable && workStatusFits);
         return () => setWorkStatusPanelFits(false);
-    }, [setWorkStatusPanelFits, workStatusFits, workStatusPanelMountable]);
+    }, [pinned, setWorkStatusPanelFits, workStatusFits, workStatusPanelMountable]);
 
     // Published so the header can drop the readouts the panel already carries.
     // Cleared on unmount: a chat that goes away is not showing anything.
     const setWorkStatusPanelVisible = useUIStore((state) => state.setWorkStatusPanelVisible);
     React.useEffect(() => {
+        if (pinned) return;
         setWorkStatusPanelVisible(showWorkStatusPanel);
         return () => setWorkStatusPanelVisible(false);
-    }, [setWorkStatusPanelVisible, showWorkStatusPanel]);
+    }, [pinned, setWorkStatusPanelVisible, showWorkStatusPanel]);
     const messageListRef = React.useRef<MessageListHandle | null>(null);
 
     const currentSession = useSession(currentSessionId, effectiveSessionDirectory);
     const parentSession = useParentSession(currentSessionId, effectiveSessionDirectory);
 
-    // In the embedded session-chat iframe, hide "Return to parent" when
-    // viewing the panel's anchor session (the one recorded in the URL). Going
-    // up from the anchor would show the primary session that's already in the
-    // main chat. Drilling into a deeper subtask (currentSessionId ≠ anchor)
-    // re-enables the button to navigate back to the embedded session.
-    const embeddedPanelAnchorSessionId = getEmbeddedSessionChatOriginSessionId();
-    const hideReturnToParent =
-        embeddedPanelAnchorSessionId !== null && currentSessionId === embeddedPanelAnchorSessionId;
+    // A pinned column hides "Return to parent" on the session it was opened
+    // on: going up from there would show the session the main chat already
+    // has. Drilling into a deeper subtask brings the button back, to return to
+    // the pinned session.
+    const hideReturnToParent = pinned && currentSessionId === pinnedOrigin?.sessionId;
 
+    const openColumnSession = columnActions.openSession;
     const handleReturnToParentSession = React.useCallback(() => {
         if (!parentSession) return;
         const parentDirectory = (parentSession as Session & { directory?: string | null }).directory ?? null;
-        setCurrentSession(parentSession.id, parentDirectory);
-    }, [parentSession, setCurrentSession]);
+        openColumnSession(parentSession.id, parentDirectory);
+    }, [openColumnSession, parentSession]);
 
     const returnToParentButton = parentSession && !hideReturnToParent ? (
         <Button
@@ -1021,61 +1081,35 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             {t('chat.container.returnToParent.label')}
         </Button>
     ) : null;
-    const promptReadOnly = resolveChatPromptReadOnly(
+    // A chat of a deleted isolated space is on the Archive page and read-only; the server refuses
+    // to run it whatever the screen shows. Its directory is the archive's own, and the list of
+    // archives is read once per runtime.
+    React.useEffect(() => {
+        ensureSpaceArchives();
+    }, []);
+    const spaceArchive = useSpaceArchiveOf(effectiveSessionDirectory);
+    const promptReadOnly = spaceArchive !== null || resolveChatPromptReadOnly(
         currentSession,
-        embeddedAllowPrompting ?? allowPromptingSubagentSessions,
+        allowPromptingSubagentSessions,
         readOnly,
     );
 
-    React.useEffect(() => {
-        // VS Code/Cursor/Positron webviews delete window.parent (and window.top).
-        // The old `window.parent === window` check does not catch that, so
-        // `window.parent.postMessage(...)` threw on chat open:
-        // TypeError: Cannot read properties of undefined (reading 'postMessage')
-        if (typeof window === 'undefined' || !window.parent || window.parent === window) {
-            return;
-        }
-
-        const parentWindow = window.parent;
-        const applySetting = (value: boolean) => {
-            setEmbeddedAllowPrompting(value);
-            useUIStore.getState().setAllowPromptingSubagentSessions(value);
-        };
-        const scopedWindow = window as typeof window & {
-            __openchamberApplyChatSettingsSync?: (payload: { allowPromptingSubagentSessions: boolean }) => void;
-        };
-        const applySync = (payload: { allowPromptingSubagentSessions: boolean }) => {
-            applySetting(payload.allowPromptingSubagentSessions);
-        };
-        const handleMessage = (event: MessageEvent) => {
-            if (event.source !== parentWindow || event.origin !== window.location.origin) return;
-            const data = event.data as { type?: unknown; payload?: { allowPromptingSubagentSessions?: unknown } };
-            if (data?.type !== 'openchamber:chat-settings-sync'
-                || typeof data.payload?.allowPromptingSubagentSessions !== 'boolean') return;
-            applySetting(data.payload.allowPromptingSubagentSessions);
-        };
-
-        scopedWindow.__openchamberApplyChatSettingsSync = applySync;
-        window.addEventListener('message', handleMessage);
-        parentWindow.postMessage({ type: 'openchamber:chat-settings-request' }, window.location.origin);
-        return () => {
-            window.removeEventListener('message', handleMessage);
-            if (scopedWindow.__openchamberApplyChatSettingsSync === applySync) {
-                delete scopedWindow.__openchamberApplyChatSettingsSync;
-            }
-        };
-    }, []);
 
     // Selection policy reads the live selection, not the deferred one: right
     // after a click the deferred id still names the previous session (or
     // nothing) for one commit, and acting on that would open a draft over the
     // session the user just chose.
     React.useEffect(() => {
-        if (autoOpenDraft && !liveSessionId && !draftOpen) {
-            // Programmatic fallback, not user navigation — must not clear the
-            // persisted last-session pointer the cold-launch restore reads.
-            openNewSessionDraft({ automatic: true });
-        }
+        if (!autoOpenDraft || liveSessionId || draftOpen) return;
+        // Checked again against the store when the effect runs: a session link
+        // can select a session between this render and the effect (a startup
+        // route, Strict Mode's effect replay), and a draft opened from the
+        // stale render would throw that selection away.
+        const live = useSessionUIStore.getState();
+        if (live.currentSessionId || live.newSessionDraft.open) return;
+        // Programmatic fallback, not user navigation — must not clear the
+        // persisted last-session pointer the cold-launch restore reads.
+        openNewSessionDraft({ automatic: true });
     }, [autoOpenDraft, liveSessionId, draftOpen, openNewSessionDraft]);
 
     const activeTurnChangeRef = React.useRef<(turnId: string | null) => void>(() => {});
@@ -1115,6 +1149,27 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         statusOverlayObserverRef.current?.disconnect();
         statusOverlayObserverRef.current = null;
     }, []);
+    // The timeline controller owns history loading and needs this hook's
+    // scroll commands, so the hook reaches the loader through a ref.
+    const loadHistoryUntilMessageRef = React.useRef<(messageId: string, maxBatches: number) => Promise<boolean>>(async () => false);
+    const loadHistoryUntilMessage = React.useCallback(
+        (messageId: string, maxBatches: number) => loadHistoryUntilMessageRef.current(messageId, maxBatches),
+        [],
+    );
+    const handleLinkedMessageMissing = React.useCallback(() => {
+        toast.info(t('chat.messageLink.notFound'));
+    }, [t]);
+    // One request settles whether a linked message exists before the timeline
+    // pages through the whole history toward it. Only a 404 means missing.
+    const checkLinkedMessage = React.useCallback(async (messageId: string): Promise<LinkedMessageState> => {
+        if (!currentSessionId) return 'unknown';
+        try {
+            await opencodeClient.getSessionMessage(currentSessionId, messageId, effectiveSessionDirectory);
+            return 'exists';
+        } catch (error) {
+            return isOpencodeNotFound(error) ? 'missing' : 'unknown';
+        }
+    }, [currentSessionId, effectiveSessionDirectory]);
     const {
         scrollRef,
         scrollNode,
@@ -1134,14 +1189,70 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     } = useChatTimelineScroll({
         currentSessionId,
         currentSessionKey,
-        sessionMessageCount,
         composerOverlayHeight,
+        messageListRef,
+        loadHistoryUntilMessage,
+        checkLinkedMessage,
+        onLinkedMessageMissing: handleLinkedMessageMissing,
         sessionIsWorking,
         revealGate,
         onActiveTurnChange: handleActiveTurnChange,
     });
 
-    const viewportMessages = sessionMessages;
+    // ── in-conversation search ──────────────────────────────────────────────
+    // Cmd+F belongs to whatever has focus: the editor keeps its own search,
+    // the chat (its composer, or nothing focused after clicking its text)
+    // opens this bar. With several chat columns on screen, an unfocused
+    // Cmd+F goes to the column the pointer last pressed in. Search is opt-in;
+    // while it is off the shortcut is left alone. VS Code has no OpenChamber
+    // server and so no index to search.
+    const chatRootRef = React.useRef<HTMLDivElement>(null);
+    const lastPressedInsideRef = React.useRef(false);
+    const [chatSearch, setChatSearch] = React.useState({ open: false, focusRequest: 0 });
+    const shortcutOverrides = useUIStore((state) => state.shortcutOverrides);
+    const messageSearchEnabled = useUIStore((state) => state.messageSearchEnabled);
+    React.useEffect(() => {
+        if (!active || !currentSessionId || !messageSearchEnabled || isVSCodeRuntime()) return;
+        const combo = getEffectiveShortcutCombo('find_in_file', shortcutOverrides);
+        const onPointerDown = (event: PointerEvent) => {
+            // SAFETY: a pointer event target inside the document is a Node.
+            lastPressedInsideRef.current = Boolean(chatRootRef.current?.contains(event.target as Node));
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.defaultPrevented || !eventMatchesShortcut(event, combo)) return;
+            const root = chatRootRef.current;
+            const focused = document.activeElement;
+            const unfocused = !focused || focused === document.body;
+            if (!root || (unfocused ? !lastPressedInsideRef.current : !root.contains(focused))) return;
+            event.preventDefault();
+            setChatSearch((current) => ({ open: true, focusRequest: current.focusRequest + 1 }));
+        };
+        document.addEventListener('pointerdown', onPointerDown, { capture: true });
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.removeEventListener('pointerdown', onPointerDown, { capture: true });
+            document.removeEventListener('keydown', onKeyDown);
+        };
+    }, [active, currentSessionId, messageSearchEnabled, shortcutOverrides]);
+    // The search belongs to the conversation it was opened in.
+    React.useEffect(() => {
+        setChatSearch((current) => (current.open ? { ...current, open: false } : current));
+    }, [currentSessionId]);
+    const closeChatSearch = React.useCallback(() => {
+        setChatSearch((current) => ({ ...current, open: false }));
+    }, []);
+
+    // A subagent report opens a turn of its own at the end of the chat only for
+    // a `subagent: true` command; a call's report finishes that call's row
+    // (see `ToolPart`), and a run started before the loaded history stays in
+    // the session's subagent list, so the chat never shifts for either.
+    const directorySessions = useSessions(effectiveSessionDirectory);
+    const viewportMessages = React.useMemo(() => {
+        const childStartedAt = (childSessionID: string): number | undefined => (
+            directorySessions.find((session) => session.id === childSessionID)?.time.created
+        );
+        return keepCommandSubagentReports(sessionMessages, childStartedAt);
+    }, [directorySessions, sessionMessages]);
 
     const timelineController = useChatTimelineController({
         sessionId: currentSessionId,
@@ -1185,6 +1296,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     React.useEffect(() => {
         activeTurnChangeRef.current = timelineController.handleActiveTurnChange;
     }, [timelineController.handleActiveTurnChange]);
+    // Assigned during render: the entry restore runs in a layout effect of
+    // this same commit, before passive effects could update the ref.
+    const controllerLoadHistoryUntilMessage = timelineController.loadHistoryUntilMessage;
+    loadHistoryUntilMessageRef.current = (messageId, maxBatches) => controllerLoadHistoryUntilMessage(messageId, { maxBatches });
     const chatQuoteHighlights = useChatQuoteHighlightStore();
 
     const navigation = useChatTurnNavigation({
@@ -1208,10 +1323,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         && timelineController.turnIds.length >= 2;
 
     React.useEffect(() => {
-        if (!showPromptNavigator) {
+        if (!showPromptNavigator && !pinned) {
             useUIStore.getState().setPromptNavigatorPanelOpen(false);
         }
-    }, [showPromptNavigator]);
+    }, [pinned, showPromptNavigator]);
 
     React.useEffect(() => {
         if (typeof window === 'undefined' || !currentSessionId) return;
@@ -1312,9 +1427,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         Boolean(currentSessionId)
         && !hasRenderableSessionSnapshot;
     const retrySessionLoad = React.useCallback(() => {
-        if (!messagesEnabled || !currentSessionId) return;
+        if (!active || !currentSessionId) return;
         void sync.ensureSessionRenderable(currentSessionId, true, effectiveSessionDirectory);
-    }, [currentSessionId, effectiveSessionDirectory, messagesEnabled, sync]);
+    }, [currentSessionId, effectiveSessionDirectory, active, sync]);
 
     // A load that failed while the session was expired retries itself the
     // moment the re-login lands — the error screen should never outlive its
@@ -1356,10 +1471,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     }, [active, currentSessionId, currentSessionKey, onManualNavigation, restoreSnapshot]);
 
     React.useEffect(() => {
-        if (!messagesEnabled || !currentSessionId) return;
+        if (!active || !currentSessionId) return;
         if (hasRenderableSessionSnapshot) return;
         void ensureSessionRenderable(currentSessionId);
-    }, [currentSessionId, ensureSessionRenderable, hasRenderableSessionSnapshot, messagesEnabled]);
+    }, [currentSessionId, ensureSessionRenderable, hasRenderableSessionSnapshot, active]);
 
     const composerSlotRef = React.useRef<HTMLDivElement | null>(null);
     // The slot mounts after the first commit (behind the session gate), so
@@ -1606,8 +1721,18 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     })();
 
 	return (
-		<div ref={workStatusRowRef} className="flex h-full min-h-0 bg-background">
+		<div
+			ref={attachColumnRoot}
+			// App-wide handlers (double Escape to stop) find the pinned
+			// column's session and whether it runs here.
+			data-chat-column={pinned ? 'pinned' : 'main'}
+			data-chat-session-id={pinned ? currentSessionId ?? undefined : undefined}
+			data-chat-working={pinned && sessionIsWorking ? 'true' : undefined}
+			className="flex h-full min-h-0 bg-background"
+		>
 		<ChatColumnSessionContext.Provider value={chatColumnSession}>
+		<ChatColumnActionsContext.Provider value={columnActions}>
+		<ChatColumnExpandedInputContext.Provider value={pinnedExpandedInputValue}>
 		{/* One mobile comment controller per column: selections in this column
 		    comment into this column's composer, never a sibling's. */}
 		<MobileCommentComposerContext.Provider value={mobileCommentComposer}>
@@ -1617,9 +1742,28 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
 			scrollNode={scrollNode}
 			scrollToMessage={timelineController.scrollToMessage}
 		/>
-		<div data-composer-bound className="relative flex min-w-0 flex-1 flex-col h-full bg-background">
+		<div
+			ref={chatRootRef}
+			data-composer-bound
+			// A live reply can outrun the follow glide; while it streams and the
+			// view follows it (no scroll-to-bottom pill, no reader gesture), the
+			// transcript fades out above the composer (index.css). Once the
+			// reader leaves the end, the rows slide under its glass again.
+			data-live-tail={sessionStatusForCurrent.type === 'busy' && isFollowingProgrammatically ? 'true' : undefined}
+			className="relative flex min-w-0 flex-1 flex-col h-full bg-background"
+		>
 			{returnToParentButton}
 			{sessionSurface}
+			{chatSearch.open && currentSessionId && messageSearchEnabled ? (
+				<div className="pointer-events-none absolute right-3 top-2 z-20">
+					<ChatSearchBar
+						sessionId={currentSessionId}
+						scrollNode={scrollNode}
+						focusRequest={chatSearch.focusRequest}
+						onClose={closeChatSearch}
+					/>
+				</div>
+			) : null}
 
             <div
                 ref={attachComposerSlot}
@@ -1702,7 +1846,28 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                     </div>
                 )}
                 {promptReadOnly ? (
-                    <ReadOnlyPromptBanner />
+                    <>
+                        {/* The docks live inside ChatInput, which a read-only
+                            chat does not mount. A subagent still asks for
+                            permissions and answers, and they must be answerable
+                            where the user is looking; the parent shows the same
+                            requests, and answering one clears it in both. */}
+                        <PermissionDock
+                            sessionId={currentSessionId}
+                            directory={effectiveSessionDirectory}
+                            hidden={false}
+                        />
+                        <FormDock
+                            sessionId={currentSessionId}
+                            directory={effectiveSessionDirectory}
+                            hidden={sessionPermissions.length > 0}
+                        />
+                        <ReadOnlyPromptBanner
+                            text={spaceArchive
+                                ? t('spaces.archive.readOnlyBanner', { name: spaceArchive.name })
+                                : t('chat.container.readOnlySubagentPromptBanner')}
+                        />
+                    </>
                 ) : (
                     <ChatInput
                         active={active}
@@ -1739,6 +1904,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         </div>
         </ChatQuoteHighlightContext.Provider>
         </MobileCommentComposerContext.Provider>
+        </ChatColumnExpandedInputContext.Provider>
+        </ChatColumnActionsContext.Provider>
         </ChatColumnSessionContext.Provider>
         {/* Kept mounted while it could ever show, so it can animate its own
             collapse; `visible` drives that. Unmounting on the spot is what made
