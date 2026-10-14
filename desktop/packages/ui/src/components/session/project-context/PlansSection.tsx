@@ -296,7 +296,7 @@ export const PlansSection: React.FC<{
                         destructive: true,
                         onSelect: () => handleDeletePlan(plan.id),
                       },
-                    ]}
+                    ].filter((item) => item.id !== 'move')} // GeoCode: no shared plans folder, so a plan does not move into the repository
                   />
                 </li>
               );
