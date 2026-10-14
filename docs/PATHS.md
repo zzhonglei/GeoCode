@@ -79,6 +79,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
     ├── dispatch-results.json      等待交回发起会话的子会话结果
     ├── message-search.sqlite      消息搜索的索引,在设置里打开后才建立
     ├── voice-keys.json            语音朗读与转写服务的密钥
+    ├── environment.json           设置里填的环境变量,以及各项目的环境变量与环境命令
     ├── quota/                     查询用量所用的密钥
     ├── remote-clients.json        窗口的访问令牌记录
     ├── geocode.managed.json       应用交给内核的配置,每次启动重新生成
@@ -87,7 +88,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
     └── tmp/                       合并分支时的临时工作树
 ```
 
-`log/`、`repos/` 与 git 凭据助手的两份文件每次启动就建立,其余的用到对应功能时才会出现,在没用过的电脑上不存在。设置或偏好写到一半时应用崩溃,会留下名字里带 `.tmp-` 的副本;git 与代码托管的几份存储写入时在旁边建 `.lock` 锁文件与临时副本,崩溃时可能留下;排队的消息读不出时,原文件改名为 `message-queue.json.corrupt-<时间>` 留下。
+`log/`、`repos/`、`desktop/chats/` 与 git 凭据助手的两份文件每次启动就建立,其余的用到对应功能时才会出现,在没用过的电脑上不存在。设置或偏好写到一半时应用崩溃,会留下名字里带 `.tmp-` 的副本,环境变量则留下 `environment.json.<进程号>.tmp`;git 与代码托管的几份存储写入时在旁边建 `.lock` 锁文件与临时副本,崩溃时可能留下;排队的消息读不出时,原文件改名为 `message-queue.json.corrupt-<时间>` 留下。
 
 ## 4. 缓存、状态与临时文件
 
