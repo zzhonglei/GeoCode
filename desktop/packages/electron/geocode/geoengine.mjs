@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { app, utilityProcess } from 'electron';
 import { kernelConfigDir } from '@openchamber/web/server/geocode/kernel-paths.js';
+import { withoutAppVariables } from '@openchamber/web/server/geocode/app-variables.js';
 import { createSupervisor } from './geoengine-supervisor.mjs';
-import { withoutAppVariables } from './inherited-env.mjs';
 
 const MACHINE_FILE = 'machine.json';
 const TASK_GRACE_MS = 3_000;

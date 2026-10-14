@@ -4,6 +4,7 @@ import path from 'node:path';
 import { primaryWorktreeRootFromGitDir } from '../git/repository-root.js';
 import { isUserAction } from './refresh-scope.js';
 import { overlayEnvironment, parseEnvironmentOutput } from './variables.js';
+import { withoutAppVariables } from '../../geocode/app-variables.js'; // GeoCode: see forOpenCode
 
 /**
  * Which environment variables each process OpenChamber starts receives on top
@@ -271,7 +272,7 @@ export const createEnvironmentRuntime = ({
     } catch {
       serviceVariables = {};
     }
-    return { ...serviceVariables, ...readUserVariables() };
+    return withoutAppVariables({ ...serviceVariables, ...readUserVariables() }); // GeoCode: the kernel takes none of the app's own variables, as from the user's shell
   };
 
   /** The last outcome of the project's environment command, or null before any run. */
