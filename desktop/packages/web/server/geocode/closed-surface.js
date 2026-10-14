@@ -29,6 +29,8 @@ const CLOSED_PATHS = Object.freeze([
   '/api/openchamber/spaces',
   '/api/spaces',
   '/api/config/skills/catalog/source',
+  '/api/pair',
+  '/api/experimental/persistent-pty/handoff',
 ]);
 
 // One method on the exact path only: other methods, and the paths below, address a skill of that name.
@@ -38,9 +40,11 @@ const CLOSED_ROUTES = Object.freeze([
   ['POST', '/api/config/skills/install'],
 ]);
 
-// One method on paths that carry an id; the project's other config routes stay open.
+// One method on paths that carry an id; the project's and the terminal's other routes stay open.
 const CLOSED_PATTERNS = Object.freeze([
   ['PUT', /^\/api\/projects\/[^/]+\/config\/shared$/],
+  ['POST', /^\/api\/pty\/[^/]+\/connect-token$/],
+  ['POST', /^\/api\/experimental\/persistent-pty\/[^/]+\/connect-token$/],
 ]);
 
 // Express matches routes case-insensitively, and runs GET routes for HEAD, so the comparison must too.
