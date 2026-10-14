@@ -91,7 +91,7 @@ export const OPENCHAMBER_KNOWLEDGE_ACTION_DEFINITIONS = Object.freeze([
   { action: 'knowledge.list', title: 'List project knowledge', description: 'Everything the project keeps in one answer: notes with their text, todos with their state, plans by title with the path of their markdown file. List before you add something, so you do not add it twice' },
   { action: 'knowledge.save', title: 'Save project knowledge', description: 'Create (no id) or replace (with id) a note, todo or plan; requires kind and body. A plan body is the whole markdown document and starts with a # title line; the answer gives its path. A todo takes completed too, and a todo update may send completed alone. Pass expected when replacing a note or plan' },
   { action: 'knowledge.delete', title: 'Delete project knowledge', description: 'Delete one note, todo or plan; requires kind and id' },
-  { action: 'knowledge.show', title: 'Show a plan to the user', description: 'Open a plan in front of the user in OpenChamber, where they read it, comment on lines and send it to a session; requires kind plan and id' },
+  { action: 'knowledge.show', title: 'Show a plan to the user', description: 'Open a plan in front of the user in GeoCode, where they read it, comment on lines and send it to a session; requires kind plan and id' },
 ]);
 
 export const OPENCHAMBER_KNOWLEDGE_ACTIONS = Object.freeze(
