@@ -50,8 +50,8 @@ tsconfig.json
 vite.config.ts
 vite-theme-plugin.ts
 postcss.config.js
-eslint.config.js
 oxlint.config.ts
+oxlint.anti-slop.config.ts
 fix-deprecation.js
 tools
 .gitignore
