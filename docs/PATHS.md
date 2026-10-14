@@ -21,7 +21,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 
 ## 2. 配置目录
 
-放用户自己编辑的配置。GeoCode 启动时建立这个目录;在设置里修改配置时,会在配置文件旁边留一份改动前的副本(如 `geocode.json.geocode.backup`),只供手动恢复;GeoEngine 写入 `machine.json` 时先写同目录的 `machine.json.tmp` 再改名;写到一半时应用崩溃,它会留到下一次写入。此外不往里面放别的文件。
+放用户自己编辑的配置。GeoCode 启动时建立这个目录;在设置里修改配置时,会在配置文件旁边留一份改动前的副本(如 `geocode.json.geocode.backup`),只供手动恢复;GeoEngine 写入 `machine.json` 时先写同目录的 `machine.json.tmp` 再改名;写到一半时应用崩溃,它会留到下一次写入。设置里保存配置文件、agent 与命令文件时,同样先写旁边的 `<文件名>.tmp-<进程号>-…` 再改名替换(项目的 `.geocode/` 里也是),只在保存的一瞬间存在,保存中途崩溃才会留下。此外不往里面放别的文件。
 
 ```
 ~/.config/geocode/
@@ -105,7 +105,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 
 状态目录 `~/.local/state/geocode/` 每次启动就建立。里面有 `locks/` 下的锁文件,安装 npm 包与克隆外部仓库时使用;内核的持久终端启动过时,还有它的运行目录 `pty/`。
 
-临时目录 `$TMPDIR/geocode/` 是提示 agent 存放临时文件的地方,agent 可以不经询问读写。系统临时目录下另有几类以 `geocode-` 开头的短期文件:查看 git 差异与暂存部分修改时的中间文件(`geocode-branch-diff-*`、`geocode-hunk-*`)、内核列出项目改动时未跟踪文件的中间文件(`geocode-untracked-*`)、多方案运行保存快照时的中间文件(`geocode-snapshot-*`),经应用推送 Git LFS 文件与在贡献者的工作树里执行检出钩子时的中间目录(`geocode-lfs-upload-*`、`geocode-checkout-hook-*`),macOS 上还有转换应用图标时的 `geocode-icon-*.png`。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`。每次启动时,运行时还会在系统临时目录解出一个 `.bun-*.dylib` 库文件。这些都是临时文件,删除不影响使用。
+临时目录 `$TMPDIR/geocode/` 是提示 agent 存放临时文件的地方,agent 可以不经询问读写。系统临时目录下另有几类以 `geocode-` 开头的短期文件:查看 git 差异与暂存部分修改时的中间文件(`geocode-branch-diff-*`、`geocode-hunk-*`)、内核列出项目改动时未跟踪文件的中间文件(`geocode-untracked-*`)、多方案运行保存快照时的中间文件(`geocode-snapshot-*`),经应用推送 Git LFS 文件与在贡献者的工作树里执行检出钩子时的中间目录(`geocode-lfs-upload-*`、`geocode-checkout-hook-*`),用户的 git 配置里有 `safe.directory` 条目时,经应用拉取或推送前抄出这些条目的 `geocode-git-trust-*`(每次运行至多一个,不删),macOS 上还有转换应用图标时的 `geocode-icon-*.png`。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`。每次启动时,运行时还会在系统临时目录解出一个 `.bun-*.dylib` 库文件。这些都是临时文件,删除不影响使用。
 
 内核的持久终端只在调用内核的终端接口时启动,GeoCode 界面里的终端不经过它;Windows 上没有它。它的守护进程在 macOS 上把通信套接字固定放在 `/tmp/opencode-pty-<用户编号>/`,不随 `TMPDIR`。这样路径才短于系统对套接字路径的上限;目录名由上游的守护进程写死,改不了。用户自己的 OpenCode 也用这个目录,套接字按各自的运行目录命名,互不相碰;退出时套接字删除,目录留下。
 
