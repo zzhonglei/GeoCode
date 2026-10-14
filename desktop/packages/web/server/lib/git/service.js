@@ -2626,7 +2626,7 @@ export async function configureRepositoryTransport(directory, { credentialHelper
   const directoryPath = normalizeDirectoryPath(directory);
   if (typeof directoryPath !== 'string' || !directoryPath.trim()) throw new Error('Git directory is required');
   const config = (args) => runGitCommand(directoryPath, ['config', '--local', ...args]);
-  const ourHelper = (value) => value.startsWith('!') && /git-credential-openchamber/.test(value);
+  const ourHelper = (value) => value.startsWith('!') && /git-credential-geocode/.test(value); // GeoCode: its own helper, named in repository-credential-runtime.js
   const helpers = await config(['--get-all', 'credential.helper']);
   if (!helpers.success && helpers.exitCode !== 1) throw new Error(helpers.stderr || 'Failed to read the repository credential helper');
   const current = helpers.success ? helpers.stdout.replace(/\n$/, '').split('\n') : [];
@@ -2653,7 +2653,7 @@ export async function configureRepositoryTransport(directory, { credentialHelper
   // `credential.useHttpPath`. The person's own helpers never see it: inside
   // this repository the reset hides them, and the helper asks them from
   // outside it. A value the person set is theirs; the marker records ours.
-  const ownedPathKey = 'openchamber.credentialusehttppath';
+  const ownedPathKey = 'geocode.credentialusehttppath'; // GeoCode: its own marker in the user's repository
   const owned = (await config(['--get', ownedPathKey])).success;
   if (credentialHelper && !owned) {
     const existingPath = await config(['--get', 'credential.useHttpPath']);
@@ -5654,8 +5654,8 @@ const replaceWorktreeGitDirectoryLink = async (primaryWorktree, worktreePath) =>
     return false;
   };
   const contents = `gitdir: ${process.platform === 'win32' ? toGitPath(metadataDirectory) : metadataDirectory}\n`;
-  const temporaryEntry = `${gitEntry}.openchamber-${randomUUID()}`;
-  const claimedLinkEntry = `${gitEntry}.openchamber-${randomUUID()}`;
+  const temporaryEntry = `${gitEntry}.geocode-${randomUUID()}`; // GeoCode: its own names beside the worktree's .git, also below
+  const claimedLinkEntry = `${gitEntry}.geocode-${randomUUID()}`;
   let temporaryIdentity;
   let claimedLink = false;
   let releaseLinkClaim = false;
@@ -5714,7 +5714,7 @@ const replaceWorktreeGitDirectoryLink = async (primaryWorktree, worktreePath) =>
     };
     if (!await sameDirectoriesExist() || !await isTemporaryFile(gitEntry)) return;
 
-    const claimedEntry = `${gitEntry}.openchamber-${randomUUID()}`;
+    const claimedEntry = `${gitEntry}.geocode-${randomUUID()}`;
     try {
       await fsp.rename(gitEntry, claimedEntry);
     } catch (error) {

@@ -130,7 +130,7 @@ export function createGitRepositoryCredentialRuntime({
   }
   const { callbackHost, isSameMachineAddress } = createCallbackAddress(getActiveHost);
   const endpointFilePath = path.join(dataDir, 'git-credential-endpoint.json');
-  const launcherPath = path.join(dataDir, 'bin', 'git-credential-openchamber');
+  const launcherPath = path.join(dataDir, 'bin', 'git-credential-geocode'); // GeoCode: its own name, which configureRepositoryTransport in service.js recognises
   let activeSecret = null;
 
   const answer = async (payload) => {

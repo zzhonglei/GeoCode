@@ -64,7 +64,7 @@ const fileIdentity = (stats) => `${stats.dev}:${stats.ino}`;
 // filesystem that fails this, or answers too coarsely to tell, falls back to
 // device and inode rather than to a false conflict.
 const birthtimeHoldsStill = async (fsImpl, pathImpl, directory) => {
-  const probe = pathImpl.join(directory, '.openchamber-clone-probe');
+  const probe = pathImpl.join(directory, '.geocode-clone-probe'); // GeoCode: its own names in and beside the user's repository and in the system's temporary folder, also below
   try {
     const before = await fsImpl.stat(directory);
     await fsImpl.mkdir(probe);
@@ -727,7 +727,7 @@ export function createNetworkOperations({
       && args.length === 3
       && args[0] === 'update-ref'
       && args[1] === '-d'
-      && args[2] === `refs/openchamber/network/${plan.operationId}`;
+      && args[2] === `refs/geocode/network/${plan.operationId}`;
     const result = await run({
       cwd: options.cwd ?? plan.directory,
       args: [...context.configArgs, ...args],
@@ -1384,7 +1384,7 @@ export function createNetworkOperations({
 
       // A private bare repository excludes mutable checkout config, URL rewrites,
       // custom transfers and ambient netrc credentials from the upload process.
-      await awaitMutation(() => fsImpl.mkdtemp(pathImpl.join(os.tmpdir(), 'openchamber-lfs-upload-')), controls, deadline,
+      await awaitMutation(() => fsImpl.mkdtemp(pathImpl.join(os.tmpdir(), 'geocode-lfs-upload-')), controls, deadline,
         (directory) => { root = directory; });
       const env = managedEnvironment(inheritedEnv, platform);
       for (const name of Object.keys(env)) if (name.startsWith('GIT_') || name.startsWith('LFS_')) delete env[name];
@@ -1525,7 +1525,7 @@ export function createNetworkOperations({
           await controls.markStepCompleted('transferred');
           result = { state: 'succeeded' };
         } else {
-          temporaryRef = plan.target.operation === 'pull' ? `refs/openchamber/network/${plan.operationId}` : plan.target.destinationRef;
+          temporaryRef = plan.target.operation === 'pull' ? `refs/geocode/network/${plan.operationId}` : plan.target.destinationRef;
           await commandResult(plan, controls, [
             'fetch', '--no-tags', ...(plan.target.operation === 'pull' ? ['--no-recurse-submodules'] : []),
             '--', plan.rawEndpoint, `${plan.target.sourceRef}:${temporaryRef}`,
@@ -1850,7 +1850,7 @@ export function createNetworkOperations({
 
   const quarantineAndClean = async (target, operationId, matches) => {
     const quarantine = await fsImpl.mkdtemp(pathImpl.join(
-      pathImpl.dirname(target), `.openchamber-quarantine-${operationId}-`,
+      pathImpl.dirname(target), `.geocode-quarantine-${operationId}-`,
     ));
     const moved = pathImpl.join(quarantine, 'object');
     try {
@@ -2152,7 +2152,7 @@ export function createNetworkOperations({
 
   const snapshotCheckoutHook = async (action, operationId, controls, deadline) => {
     const root = await awaitPhase(
-      () => fsImpl.mkdtemp(pathImpl.join(os.tmpdir(), `openchamber-checkout-hook-${operationId}-`)),
+      () => fsImpl.mkdtemp(pathImpl.join(os.tmpdir(), `geocode-checkout-hook-${operationId}-`)),
       controls,
       deadline,
     );
