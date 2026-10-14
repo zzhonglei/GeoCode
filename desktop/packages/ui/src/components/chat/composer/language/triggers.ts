@@ -90,6 +90,7 @@ function matchInlineToken(
  * offer only the snippet picker (comment inputs), with the composer's rule.
  */
 export function matchSnippetTrigger(value: string, cursorPosition: number): string | null {
+    return null; // GeoCode: the app has no snippets, so a comment field never opens the snippet picker
     return matchInlineToken(value, cursorPosition, '#', 'snippet')?.query ?? null;
 }
 
