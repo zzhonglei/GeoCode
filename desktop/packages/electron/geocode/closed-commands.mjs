@@ -3,6 +3,7 @@ const CLOSED_COMMANDS = new Set([
   'desktop_hosts_set',
   'desktop_host_probe',
   'desktop_host_update_server',
+  'desktop_switch_to_local',
   'desktop_remote_password_login',
   'desktop_new_window_for_host',
   'desktop_new_window_at_url',
