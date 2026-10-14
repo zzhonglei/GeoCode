@@ -39,6 +39,10 @@ sst-env.d.ts
 .github/TEAM_MEMBERS
 !.github
 
+# packages/cli's build scripts import this. The rest of script/ is upstream's
+# release tooling.
+script/native-arch.ts
+
 # --- Packages: the workspace dependency closure of @opencode/cli, dev
 # dependencies included. ---
 packages/ai
@@ -80,6 +84,9 @@ packages/util
 !packages/stats
 !packages/storybook
 !packages/web
+# Official plugins, each installed on its own; the CLI neither bundles nor
+# loads them.
+!packages/plugins
 
 # --- Read by our own kernel as instructions and project config whenever its
 # working directory is inside kernel/. ---
