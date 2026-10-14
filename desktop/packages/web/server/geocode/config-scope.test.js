@@ -61,35 +61,35 @@ describe('GeoCode: findWorktreeRoot', () => {
 });
 
 describe('GeoCode: skill directories', () => {
-  it('lists only the global and session directories', () => {
-    expect(skills.discoverSkills(session).map((found) => found.path).sort()).toEqual([
+  it('lists only the global and session directories', async () => {
+    expect((await skills.discoverSkills(session)).map((found) => found.path).sort()).toEqual([
       path.join(config, 'skill', 'legacy', 'SKILL.md'),
       path.join(config, 'skills', 'dup', 'SKILL.md'),
       path.join(session, '.geocode', 'skills', 'own', 'SKILL.md'),
     ]);
   });
 
-  it('edits only in those directories', () => {
+  it('edits only in those directories', async () => {
     const foreign = path.join(home, '.claude', 'skills', 'dup', 'SKILL.md');
     const before = fs.readFileSync(foreign, 'utf8');
-    expect(() => skills.updateSkill('dup', { description: 'changed' }, session, foreign)).toThrow(/outside the skill directories/);
+    await expect(skills.updateSkill('dup', { description: 'changed' }, session, foreign)).rejects.toThrow(/outside the skill directories/);
     expect(fs.readFileSync(foreign, 'utf8')).toBe(before);
 
     for (const target of [path.join(session, '.geocode', 'skills', 'own', 'SKILL.md'), path.join(config, 'skill', 'legacy', 'SKILL.md')]) {
-      skills.updateSkill(path.basename(path.dirname(target)), { description: 'changed' }, session, target);
+      await skills.updateSkill(path.basename(path.dirname(target)), { description: 'changed' }, session, target);
       expect(fs.readFileSync(target, 'utf8')).toContain('changed');
     }
   });
 
-  it('deletes and creates only in those directories', () => {
+  it('deletes and creates only in those directories', async () => {
     skills.deleteSkill('dup', session);
     expect(fs.existsSync(path.join(config, 'skills', 'dup'))).toBe(false);
     for (const dir of [path.join(home, '.claude'), path.join(home, '.agents'), path.join(session, '.claude'), path.join(session, '.agents')]) {
       expect(fs.existsSync(path.join(dir, 'skills', 'dup', 'SKILL.md'))).toBe(true);
     }
 
-    skills.createSkill('made-user', { source: 'agents', description: 'made' }, session, 'user');
-    skills.createSkill('made-project', { source: 'agents', description: 'made' }, session, 'project');
+    await skills.createSkill('made-user', { source: 'agents', description: 'made' }, session, 'user');
+    await skills.createSkill('made-project', { source: 'agents', description: 'made' }, session, 'project');
     expect(fs.existsSync(path.join(config, 'skills', 'made-user', 'SKILL.md'))).toBe(true);
     expect(fs.existsSync(path.join(session, '.geocode', 'skills', 'made-project', 'SKILL.md'))).toBe(true);
     expect(fs.existsSync(path.join(home, '.agents', 'skills', 'made-user'))).toBe(false);

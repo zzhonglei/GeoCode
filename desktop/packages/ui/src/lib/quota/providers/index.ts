@@ -1,7 +1,7 @@
 import type { QuotaProviderId } from '@/types';
 import { withoutClosedQuotaProviders } from '@/geocode/quota'; // GeoCode: see QUOTA_PROVIDERS
 
-export interface QuotaProviderMeta {
+interface QuotaProviderMeta {
   id: QuotaProviderId;
   name: string;
 }

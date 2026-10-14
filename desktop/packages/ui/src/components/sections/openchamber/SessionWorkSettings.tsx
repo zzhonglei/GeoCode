@@ -17,8 +17,10 @@ export const SessionWorkSettings: React.FC = () => {
   const isVSCode = React.useMemo(() => isVSCodeRuntime(), []);
   const enabled = useUIStore((state) => state.sessionWorkEnabled);
   const autoOpen = useUIStore((state) => state.sessionWorkAutoOpen);
+  const keepInGroup = useUIStore((state) => state.sessionWorkKeepInGroup);
   const setEnabled = useUIStore((state) => state.setSessionWorkEnabled);
   const setAutoOpen = useUIStore((state) => state.setSessionWorkAutoOpen);
+  const setKeepInGroup = useUIStore((state) => state.setSessionWorkKeepInGroup);
   const jevAvailable = useRoutingStore(selectSafetyNetAvailable);
 
   return (
@@ -33,6 +35,15 @@ export const SessionWorkSettings: React.FC = () => {
         onChange={setEnabled}
         label={t('settings.openchamber.sessionWork.field.enabled')}
         ariaLabel={t('settings.openchamber.sessionWork.field.enabled')}
+      />
+      <SettingsCheckboxRow
+        settingsItem="sessions.work-keep-in-group"
+        checked={enabled && keepInGroup}
+        onChange={setKeepInGroup}
+        disabled={!enabled}
+        label={t('settings.openchamber.sessionWork.field.keepInGroup')}
+        ariaLabel={t('settings.openchamber.sessionWork.field.keepInGroup')}
+        info={t('settings.openchamber.sessionWork.field.keepInGroupInfo')}
       />
       {/* --- GeoCode: sessions move in on their own only through Jev, which is off --- */}
       <Closed>

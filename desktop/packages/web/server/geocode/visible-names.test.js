@@ -20,9 +20,6 @@ describe('GeoCode: visible names', () => {
     expect(naming('electron/main.mjs')).toEqual([
       "clientLabel: 'OpenChamber Desktop',",
       "label: 'OpenChamber Desktop',",
-      "label: typeof payload.label === 'string' && payload.label.trim() ? payload.label.trim() : 'OpenChamber',",
-      "clientLabel: 'OpenChamber Desktop',",
-      "deviceName: 'OpenChamber Desktop',",
       "title: 'Connect to OpenChamber server?',",
       "throw new Error('Desktop update requires OpenChamber.app to be installed in /Applications');",
     ]);

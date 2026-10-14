@@ -7,6 +7,7 @@ import { toast } from '@/components/ui';
 import { invokeDesktop, isDesktopShell, isVSCodeRuntime } from '@/lib/desktop';
 import { syncDesktopSettings, initializeAppearancePreferences } from '@/lib/persistence';
 import { applyPersistedDirectoryPreferences } from '@/lib/directoryPersistence';
+import { ensureHomeDirectoryResolved, useDirectoryStore } from '@/stores/useDirectoryStore';
 import { DesktopHostSwitcherInline } from '@/components/desktop/DesktopHostSwitcher';
 import { OpenChamberLogo } from '@/components/ui/OpenChamberLogo';
 import { Icon } from "@/components/icon/Icon";
@@ -31,6 +32,8 @@ import { SessionLostNotice } from '@/geocode/SessionLostNotice'; // GeoCode: see
 import { Closed } from '@/geocode/Closed'; // GeoCode: see the locked state
 
 const STATUS_CHECK_ENDPOINT = '/auth/session';
+// How long the app stays hidden after login while the home directory resolves.
+const HOME_RESOLUTION_WAIT_MS = 10_000;
 // Transient-failure auto-retry for the initial session check. Over the relay the
 // very first /auth/session can race the tunnel's initial WebSocket attempt (a
 // failed attempt rejects requests queued on the channel even though the tunnel
@@ -356,6 +359,11 @@ export const SessionAuthGate: React.FC<SessionAuthGateProps> = ({
   const passwordInputRef = React.useRef<HTMLInputElement | null>(null);
   const hasResyncedRef = React.useRef(skipAuth);
   const hasBootstrapResyncedRef = React.useRef(skipAuth);
+  // Whether the home directory was resolved after authentication. Until then
+  // the app stays unmounted when the home is unknown: on a first visit to a
+  // password-protected server the page-load attempt could only fall back to
+  // "/", and the app would start working there.
+  const [homeChecked, setHomeChecked] = React.useState(skipAuth);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') {
@@ -468,6 +476,12 @@ export const SessionAuthGate: React.FC<SessionAuthGateProps> = ({
 
         if (response.ok) {
           resetTransientRetry();
+          // The gate may already be 'authenticated' (the user logged in from
+          // another tab before pressing "Log in" here), so the state effect
+          // below would not fire; this answer itself proves the session alive.
+          if (useAuthSessionStore.getState().state !== 'ok') {
+            useAuthSessionStore.getState().markAuthenticated();
+          }
           setState('authenticated');
           setIsTunnelLocked(false);
           setErrorMessage('');
@@ -547,10 +561,27 @@ export const SessionAuthGate: React.FC<SessionAuthGateProps> = ({
       setActivePasskeyAction(null);
       setIsPasskeyBusy(false);
       resetTransientRetry();
+      setHomeChecked(false);
       setState('pending');
       void checkStatus();
     });
   }, [checkStatus, resetTransientRetry, skipAuth]);
+
+  React.useEffect(() => {
+    if (homeChecked || state !== 'authenticated') return;
+    let cancelled = false;
+    const settle = () => {
+      if (!cancelled) setHomeChecked(true);
+    };
+    // The home read has no timeout of its own; a stalled one must not keep the
+    // app hidden. Past the bound the app starts as it did before this wait.
+    const timer = window.setTimeout(settle, HOME_RESOLUTION_WAIT_MS);
+    void ensureHomeDirectoryResolved().finally(settle);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [homeChecked, state]);
 
   React.useEffect(() => {
     if (!skipAuth && state === 'locked') {
@@ -1027,6 +1058,10 @@ export const SessionAuthGate: React.FC<SessionAuthGateProps> = ({
         {/* --- /GeoCode --- */}
       </AuthShell>
     );
+  }
+
+  if (!homeChecked && !useDirectoryStore.getState().isHomeReady) {
+    return <LoadingScreen />;
   }
 
   return (

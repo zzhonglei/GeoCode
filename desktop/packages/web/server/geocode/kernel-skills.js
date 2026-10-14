@@ -1,5 +1,5 @@
 import path from 'path';
-import { OPENCODE_CONFIG_DIR, SKILL_SCOPE, walkSkillMdFiles, addSkillFromMdFile } from '../lib/opencode/shared.js';
+import { OPENCODE_CONFIG_DIR, SKILL_SCOPE, walkSkillMdFiles, addSkillFromMdFile, parseMdFileAsync } from '../lib/opencode/shared.js';
 import { KERNEL_PROJECT_DIR } from './kernel-paths.js';
 
 // The skill directories the kernel reads, in its order: a later root wins a duplicate name.
@@ -10,11 +10,11 @@ const kernelSkillRoots = (workingDirectory) => [
     : []),
 ];
 
-export const discoverKernelSkills = (workingDirectory) => {
+export const discoverKernelSkills = async (workingDirectory) => {
   const skills = new Map();
   for (const { root, scope } of kernelSkillRoots(workingDirectory)) {
-    for (const skillMdPath of walkSkillMdFiles(root)) {
-      addSkillFromMdFile(skills, skillMdPath, scope, 'opencode');
+    for (const skillMdPath of await walkSkillMdFiles(root)) {
+      addSkillFromMdFile(skills, skillMdPath, await parseMdFileAsync(skillMdPath).catch(() => null), scope, 'opencode');
     }
   }
   return Array.from(skills.values());

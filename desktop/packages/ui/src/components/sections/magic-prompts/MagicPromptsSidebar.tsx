@@ -3,7 +3,7 @@ import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { useMagicPromptsStore } from '@/stores/useMagicPromptsStore';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n';
-import { SETTINGS_PANEL_TITLE_CLASS } from '@/components/sections/shared/SettingsSection';
+import { SETTINGS_SECTION_TITLE_CLASS } from '@/components/sections/shared/SettingsSection';
 
 interface MagicPromptsSidebarProps {
   onItemSelect?: () => void;
@@ -25,14 +25,6 @@ export const MagicPromptsSidebar: React.FC<MagicPromptsSidebarProps> = ({ onItem
           { id: 'git.integrate.cherrypick.resolve', titleKey: 'settings.magicPrompts.sidebar.item.gitCherrypickConflictResolve' },
         ],
       },
-      /* --- GeoCode: the app offers no Linear integration ---
-      {
-        groupKey: 'settings.magicPrompts.sidebar.group.linear',
-        items: [
-          { id: 'linear.issue.review', titleKey: 'settings.magicPrompts.sidebar.item.linearIssueReview' },
-        ],
-      },
-      --- /GeoCode --- */
       {
         groupKey: 'settings.magicPrompts.sidebar.group.planning',
         items: [
@@ -61,7 +53,7 @@ export const MagicPromptsSidebar: React.FC<MagicPromptsSidebarProps> = ({ onItem
   return (
     <div className="flex h-full flex-col bg-background">
       <div className="border-b px-3 pt-4 pb-3">
-        <h2 className={SETTINGS_PANEL_TITLE_CLASS}>{t('settings.magicPrompts.sidebar.title')}</h2>
+        <h2 className={SETTINGS_SECTION_TITLE_CLASS}>{t('settings.magicPrompts.sidebar.title')}</h2>
         <p className="typography-meta mt-1 text-muted-foreground">{t('settings.magicPrompts.sidebar.description')}</p>
       </div>
 

@@ -33,7 +33,7 @@ import { useI18n } from '@/lib/i18n';
 import { useProjectWorktrees } from './useProjectWorktrees';
 import { Closed } from '@/geocode/Closed'; // GeoCode: see the share button
 
-export interface WorktreeSectionContentProps {
+interface WorktreeSectionContentProps {
   projectRef?: { id: string; path: string } | null;
   /**
    * 'all' renders setup commands + the worktree list (settings panel);
