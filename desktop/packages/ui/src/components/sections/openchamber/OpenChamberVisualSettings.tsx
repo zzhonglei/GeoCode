@@ -82,7 +82,7 @@ import { subscribeRuntimeEndpointChanged } from '@/lib/runtime-switch';
 import { formatShortcutForDisplay } from '@/lib/shortcuts';
 import { useInputHistoryStore } from '@/stores/useInputHistoryStore';
 import { SessionGoalCheckerField, SessionGoalMaxTurnsField } from './SessionGoalCheckerField';
-import { Closed } from '@/geocode/Closed'; // GeoCode: see the goal checker row
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the review offer and goal checker rows
 
 interface Option<T extends string> {
     id: T;
@@ -2018,6 +2018,8 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                                 />
                                             </>
                                         )}
+                                        {/* --- GeoCode: only Jev offers a review, and it is off --- */}
+                                        <Closed>
                                         {/* Jev runs on the OpenChamber server, which VS Code does not have. */}
                                         {shouldShow('sessionAssist') && !isVSCode && (
                                             <div>
@@ -2033,6 +2035,8 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                                 <JevAccessNote />
                                             </div>
                                         )}
+                                        </Closed>
+                                        {/* --- /GeoCode --- */}
                                         {shouldShow('subagentReadOnlyBanner') && (
                                             <SettingsCheckboxRow
                                                 checked={allowPromptingSubagentSessions}
