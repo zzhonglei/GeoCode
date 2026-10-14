@@ -15,6 +15,8 @@ const CLOSED_SEARCH_ITEMS = new Set([
   'integrations.linear',
   'integrations.linear.add-workspace',
   'integrations.linear.mapping',
+  'git.gitlab-account',
+  'git.gitlab-connect',
   'integrations.guests',
   'integrations.third-party',
   'integrations.third-party.opencode-claude',

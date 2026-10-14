@@ -1,7 +1,9 @@
 import type { GitRemote, PageResult, SourceControlAuthAccount, SourceControlBindingRead, SourceControlIdentity, SourceControlProvider, SourceControlReadContext } from '@/lib/api/types';
 
 export const GITHUB_SOURCE_CONTROL_IDENTITY: SourceControlIdentity = { provider: 'github', instance: 'github.com' };
+/* --- GeoCode: see resolveSourceControlTarget ---
 const GITLAB_SOURCE_CONTROL_IDENTITY: SourceControlIdentity = { provider: 'gitlab', instance: 'https://gitlab.com' };
+--- /GeoCode --- */
 
 const getRemoteAuthority = (remote: GitRemote | null | undefined): string | null => {
   const value = remote?.pushUrl?.trim() || remote?.fetchUrl?.trim();
@@ -124,7 +126,10 @@ export const resolveSourceControlTarget = (
   remotes: GitRemote[],
   identities: SourceControlIdentity[],
 ): SourceControlTarget | null => {
+  /* --- GeoCode: the app offers no GitLab integration, so a gitlab.com remote is a host it does not know ---
   const knownIdentities = [GITHUB_SOURCE_CONTROL_IDENTITY, GITLAB_SOURCE_CONTROL_IDENTITY, ...identities];
+  --- /GeoCode --- */
+  const knownIdentities = [GITHUB_SOURCE_CONTROL_IDENTITY, ...identities];
   const targets: SourceControlTarget[] = [];
   for (const remote of remotes) {
     const authority = getRemoteAuthority(remote);

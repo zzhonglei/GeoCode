@@ -45,7 +45,11 @@ export const IntegrationsPage: React.FC = () => {
           contentClassName="space-y-3"
         >
           {hasGitHub ? <GitHubIntegration /> : null}
+          {/* --- GeoCode: the app offers no GitLab integration --- */}
+          <Closed>
           {hasGitLab ? <GitLabSettings /> : null}
+          </Closed>
+          {/* --- /GeoCode --- */}
           {hasLinear ? <LinearSettings /> : null}
           {builtInGuests.map((guest) => <GuestIntegrationCard key={`${runtimeKey}:${guest.id}`} guest={guest} />)}
         </SettingsSection>

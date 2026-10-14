@@ -168,14 +168,18 @@ export function registerSourceControlRoutes(app, dependencies = {}) {
   });
   app.get('/api/source-control/instances', async (_req, res) => {
     try {
+      /* --- GeoCode: see the instances below ---
       const configuredGitLabInstances = await gitlab.listInstances();
+      --- /GeoCode --- */
       return res.json({
         instances: [
           { provider: 'github', instance: 'github.com' },
+          /* --- GeoCode: the app offers no GitLab integration, so the interface asks after no GitLab instance ---
           { provider: 'gitlab', instance: 'https://gitlab.com' },
           ...configuredGitLabInstances
             .filter((instance) => instance !== 'https://gitlab.com')
             .map((instance) => ({ provider: 'gitlab', instance })),
+          --- /GeoCode --- */
         ],
       });
     } catch (error) {

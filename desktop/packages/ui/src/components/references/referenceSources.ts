@@ -52,7 +52,9 @@ export type ReferenceSourceStatus = 'ready' | 'disconnected' | 'unsupported';
 
 const BUILT_IN_IDENTITIES: SourceControlIdentity[] = [
     GITHUB_SOURCE_CONTROL_IDENTITY,
+    /* --- GeoCode: the app offers no GitLab integration ---
     { provider: 'gitlab', instance: 'https://gitlab.com' },
+    --- /GeoCode --- */
 ];
 
 /**
