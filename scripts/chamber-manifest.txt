@@ -59,15 +59,11 @@ tools
 bun-patches
 scripts
 
-# --- Project files: the license and upstream's design notes. Its user guides,
-# README screenshots and the documentation site's content, read only by the
-# docs:validate script, are left out. ---
+# --- Project files: the license. Upstream's user guides, README screenshots
+# and the documentation site's content, read only by the docs:validate script,
+# are left out. ---
 LICENSE
-docs/isolated-spaces
-!docs/.gitkeep
-!docs/CUSTOM_THEMES.md
-!docs/REVERSE_PROXY.md
-!docs/references
+!docs
 !packages/docs
 
 # --- Deployment of upstream's server mode, and configs for developer tools we
