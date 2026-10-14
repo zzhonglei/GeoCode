@@ -9,4 +9,5 @@ export const noEnterprisePolicy = () => ({
   allowNetworkAccess: false,
   allowedExtensions: [],
   allowLocalExtensions: false,
+  opencodeBinary: null,
 });
