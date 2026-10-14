@@ -27,6 +27,7 @@ describe('GeoCode: visible names', () => {
 
   it('names GeoCode in the tray and the window titles', () => {
     expect(naming('electron/tray.mjs')).toEqual([]);
+    expect(naming('electron/tray-menu.mjs')).toEqual([]);
     // The splash keeps upstream's cube, label included, inside a template that is never drawn.
     expect(naming('electron/early-startup.mjs')).toEqual([
       '<svg width="120" height="120" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OpenChamber loading icon">',
