@@ -576,7 +576,7 @@ function listDisabledAgents(workingDirectory) {
     const worktreeRoot = findWorktreeRoot(workingDirectory) || path.resolve(workingDirectory);
     for (const base of getAncestors(workingDirectory, worktreeRoot)) {
       for (const dirName of PROJECT_AGENT_DIR_NAMES) {
-        collectAgentIds(path.join(base, '.opencode', dirName), '', names);
+        collectAgentIds(path.join(base, KERNEL_PROJECT_DIR, dirName), '', names);
       }
     }
   }
