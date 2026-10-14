@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/dialog';
 import { useGuestSurfaces } from '@/hooks/useGuestSurfaces';
 import { sortContextSurfaces } from '@/lib/surfaces/registry';
-import { withoutClosedSurfaces } from '@/geocode/surface'; // GeoCode: see ContextRailSurfacesDialog
 
 /**
  * Which surfaces the context rail shows. Everything is on by default and the
@@ -35,7 +34,7 @@ export const ContextRailSurfacesDialog: React.FC<{
   // filter currently drops, so a choice made on desktop is editable anywhere.
   const guestSurfaces = useGuestSurfaces();
   const surfaces = React.useMemo(
-    () => withoutClosedSurfaces(sortContextSurfaces(contextRailOrder, guestSurfaces)), // GeoCode: the full registry would still offer closed panels
+    () => sortContextSurfaces(contextRailOrder, guestSurfaces),
     [contextRailOrder, guestSurfaces],
   );
 
