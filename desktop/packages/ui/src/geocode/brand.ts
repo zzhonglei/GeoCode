@@ -52,6 +52,8 @@ const MESSAGES = {
     'settings.agents.page.field.colorTooltip': 'Marks the agent in the composer, menus and messages. Saved in the agent\'s config. Without one, a colour from the theme is picked.',
     'gitView.toast.initializeGitNotDetected': 'Git was initialized, but GeoCode does not see a repository here.',
     'settings.projects.actions.info': 'Commands the run button starts.',
+    'chat.chatInput.waitingForOpenCode': 'Waiting for the kernel…',
+    'chat.chatInput.waitingForOpenCodeHint': 'The message goes out as soon as the kernel starts',
   },
   'zh-CN': {
     'settings.view.nav.group.opencode': '内核',
@@ -81,6 +83,8 @@ const MESSAGES = {
     'settings.agents.page.field.colorTooltip': '在输入框、菜单和消息中标识该代理。保存在代理配置中。未设置时会从主题中选取颜色。',
     'gitView.toast.initializeGitNotDetected': 'Git 已初始化，但 GeoCode 在这里看不到仓库。',
     'settings.projects.actions.info': '运行按钮启动的命令。',
+    'chat.chatInput.waitingForOpenCode': '正在等待内核…',
+    'chat.chatInput.waitingForOpenCodeHint': '内核启动后会立即发送消息',
   },
   'zh-TW': {
     'settings.view.nav.group.opencode': '核心',
@@ -110,6 +114,8 @@ const MESSAGES = {
     'settings.agents.page.field.colorTooltip': '在輸入框、選單和訊息中標示此代理。儲存在代理設定中。未設定時會從主題中選取顏色。',
     'gitView.toast.initializeGitNotDetected': 'Git 已初始化，但 GeoCode 在這裡看不到儲存庫。',
     'settings.projects.actions.info': '執行按鈕啟動的命令。',
+    'chat.chatInput.waitingForOpenCode': '正在等待核心…',
+    'chat.chatInput.waitingForOpenCodeHint': '核心啟動後會立即傳送訊息',
   },
 } satisfies Partial<Record<Locale, Messages>>;
 
