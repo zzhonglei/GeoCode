@@ -32,7 +32,7 @@ const metadataSchema = z.object({
   title: z.string().optional(),
 })
 
-const ENVELOPE = /^\s*<openchamber-session\b[^>]*>\n?([\s\S]*?)\n?<\/openchamber-session>\s*$/
+const ENVELOPE = /^\s*<geocode-session\b[^>]*>\n?([\s\S]*?)\n?<\/geocode-session>\s*$/ // GeoCode: as buildDispatchResultMessage on the server writes it
 
 /** The dispatched session a message reports the result of, or undefined for any other message. */
 export function readDispatchedSessionResult(message: Message): DispatchedSessionResult | undefined {

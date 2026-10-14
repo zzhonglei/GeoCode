@@ -189,7 +189,7 @@ export const buildDispatchResultMessage = ({ sessionId, title, outcome }) => {
   const metadata = { source: DISPATCH_RESULT_SOURCE, sessionID: sessionId, state: outcome.state };
   if (title) metadata.title = title;
   return {
-    text: `<openchamber-session ${attributes}>\n${outcomeBody(outcome, sessionId)}\n</openchamber-session>`,
+    text: `<geocode-session ${attributes}>\n${outcomeBody(outcome, sessionId)}\n</geocode-session>`, // GeoCode: the model reads its name; ENVELOPE in the UI's dispatched-session.ts matches it
     description: label,
     metadata,
   };

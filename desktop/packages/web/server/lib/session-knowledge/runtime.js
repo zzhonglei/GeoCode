@@ -73,7 +73,7 @@ const MEMORY_SAVE_GUIDANCE = 'You have memory that persists across sessions, thr
 export const SESSION_LINK_GUIDANCE = "When the user gives you an issue or a change under"
   + " review (a pull or merge request) to work on, fix, investigate or review, when you"
   + " open one for this work, and when the work resolves one, link it to this session"
-  + " with the openchamber tool's session.link as soon as you know it, so the user"
+  + " with the geocode tool's session.link as soon as you know it, so the user" // GeoCode: the tool's name in GeoCode
   + " sees it with the session. Not one merely mentioned in passing.";
 
 /**
