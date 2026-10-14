@@ -39,6 +39,7 @@ import {
     type PinnableItem,
     type PinnableSection,
 } from './useDraftStarters';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the share button
 
 type DraftPresetChipsProps = {
     /** Called with the resolved starter invocation when a chip is clicked. */
@@ -101,6 +102,8 @@ const SortableChip: React.FC<{
                 <Icon name={item.icon} className="h-3 w-3 shrink-0 opacity-70 transition-opacity group-hover:opacity-100" />
                 <span className="whitespace-nowrap">{item.label}</span>
             </button>
+            {/* --- GeoCode: no team-shared project setup, so a starter stays in the user's settings --- */}
+            <Closed>
             {onToggleShared && !hideRemove ? (
                 <button
                     type="button"
@@ -113,6 +116,8 @@ const SortableChip: React.FC<{
                     <Icon name={item.shared ? 'user' : 'team'} className="h-2.5 w-2.5" />
                 </button>
             ) : null}
+            </Closed>
+            {/* --- /GeoCode --- */}
             {/* A shared starter is the team's: it leaves only through the repo file. */}
             {hideRemove || item.shared ? null : (
                 <button
