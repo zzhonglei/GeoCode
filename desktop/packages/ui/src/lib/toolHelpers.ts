@@ -199,7 +199,7 @@ const TOOL_METADATA: Record<string, ToolMetadata> = {
        ]
      },
 
-    geocode: { // GeoCode: its agent tools, under their own names, also the three below
+    geocode: { // GeoCode: its agent tools, under their own names, also the four below
       displayName: 'GeoCode',
       category: 'system',
       outputLanguage: 'json',
@@ -215,6 +215,13 @@ const TOOL_METADATA: Record<string, ToolMetadata> = {
 
     geocode_memory: {
       displayName: 'GeoCode Memory',
+      category: 'system',
+      outputLanguage: 'json',
+      inputFields: []
+    },
+
+    geocode_knowledge: {
+      displayName: 'GeoCode Knowledge',
       category: 'system',
       outputLanguage: 'json',
       inputFields: []

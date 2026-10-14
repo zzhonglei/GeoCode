@@ -34,7 +34,7 @@ const diagnostics = []
 for (let i = 0; i < own.length; i += 200) {
   let out
   try {
-    const args = ['-c', 'oxlint.config.ts', '-f', 'json', '--no-error-on-unmatched-pattern', ...own.slice(i, i + 200)]
+    const args = ['-c', 'oxlint.anti-slop.config.ts', '-f', 'json', '--no-error-on-unmatched-pattern', ...own.slice(i, i + 200)]
     out = execFileSync(oxlint, args, { cwd: desktop, encoding: 'utf8', maxBuffer: 1 << 28 })
   } catch (error) {
     if (error.status !== 1) throw error

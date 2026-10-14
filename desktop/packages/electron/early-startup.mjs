@@ -410,6 +410,7 @@ export const buildRendererAdditionalArguments = ({
   requestHeaders = {},
   bootOutcome = null,
   relayHostId = '',
+  explicitRuntime = false,
   trayEnabled = isMacMenuBarEnabled(),
   nativeFrame = usesLinuxNativeFrame(),
 } = {}) => [
@@ -422,6 +423,7 @@ export const buildRendererAdditionalArguments = ({
   `--openchamber-tray-enabled=${trayEnabled ? '1' : '0'}`,
   `--openchamber-boot-outcome=${JSON.stringify(bootOutcome)}`,
   `--openchamber-relay-host-id=${relayHostId}`,
+  `--openchamber-explicit-runtime=${explicitRuntime ? '1' : '0'}`,
   `--openchamber-native-frame=${nativeFrame ? '1' : '0'}`,
 ];
 

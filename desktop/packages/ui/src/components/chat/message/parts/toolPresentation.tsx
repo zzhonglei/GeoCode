@@ -81,7 +81,7 @@ export const getToolIcon = (toolName: string, presentation?: GuestToolRule | nul
     if (tool === 'subagent') {
         return <Icon name="ai-agent" className={iconClass} />;
     }
-    if (tool === 'geocode') { // GeoCode: its agent tools, under their own names, also the three below
+    if (tool === 'geocode') { // GeoCode: its agent tools, under their own names, also the four below
         return <Icon name="geocode" className={iconClass} />; // GeoCode: its own icon
     }
     if (tool === 'linear' || tool.startsWith('linear_')) {
@@ -95,6 +95,9 @@ export const getToolIcon = (toolName: string, presentation?: GuestToolRule | nul
     }
     if (tool === 'geocode_notify') {
         return <Icon name="notification-3" className={iconClass} />;
+    }
+    if (tool === 'geocode_knowledge') {
+        return <Icon name="sticky-note" className={iconClass} />;
     }
     if (tool === 'geocode_memory') {
         return <Icon name="brain-4" className={iconClass} />;
