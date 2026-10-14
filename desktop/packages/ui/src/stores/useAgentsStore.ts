@@ -78,14 +78,21 @@ export const getConfigDirectory = (): string | null => {
 const AGENTS_LOAD_CACHE_TTL_MS = 5000;
 const DEFAULT_AGENTS_CACHE_KEY = '__default__';
 const agentsLastLoadedAt = new Map<string, number>();
-const agentsLoadInFlight = new Map<string, Promise<boolean>>();
+// Each invalidation starts a new load generation. A read that began before the
+// latest invalidation (a delete, a catalog event) may carry the list from
+// before that change, so later callers never join it: they wait for it to
+// settle and read again, and the newest generation's result is the one kept.
+const agentsLoadGeneration = new Map<string, number>();
+const agentsLoadInFlight = new Map<string, { generation: number; request: Promise<boolean> }>();
 
 const getAgentsCacheKey = (directory: string | null): string => {
   return directory?.trim() || DEFAULT_AGENTS_CACHE_KEY;
 };
 
 export const invalidateAgentsLoadCache = (directory: string | null = getConfigDirectory()) => {
-  agentsLastLoadedAt.delete(getAgentsCacheKey(directory));
+  const cacheKey = getAgentsCacheKey(directory);
+  agentsLastLoadedAt.delete(cacheKey);
+  agentsLoadGeneration.set(cacheKey, (agentsLoadGeneration.get(cacheKey) ?? 0) + 1);
 };
 
 const buildAgentsSignature = (agents: Agent[]): string => {
@@ -247,6 +254,18 @@ export const isAgentHidden = (agent: Agent): boolean => {
 export const filterVisibleAgents = (agents: Agent[]): Agent[] =>
   agents.filter((agent) => !isAgentHidden(agent));
 
+// Hidden custom agents remain manageable even though pickers exclude them. A
+// hidden agent counts as custom only when its config lookup confirmed it
+// (`native === false`): when the lookup failed the built-in flag is unknown,
+// and internal agents (title, compaction, summary) must stay out of Settings.
+export const isAgentManageable = (agent: Agent): boolean => {
+  if (!isAgentHidden(agent)) return true;
+  // SAFETY: store entries are SDK agents that loadAgents may extend with the
+  // optional config-lookup flags; reading an absent flag yields undefined.
+  const extended = agent as AgentWithExtras & { builtIn?: boolean };
+  return extended.native === false && extended.builtIn !== true;
+};
+
 const CONFIG_EVENT_SOURCE = "useAgentsStore";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const MAX_HEALTH_WAIT_MS = 20000;
@@ -322,6 +341,7 @@ export interface AgentDraft {
   top_p?: number | null;
   mode?: "primary" | "subagent" | "all";
   permissions?: PermissionRule[];
+  hidden?: boolean;
 }
 
 interface AgentsStore {
@@ -432,11 +452,18 @@ export const useAgentsStore = create<AgentsStore>()(
             return true;
           }
 
-          const inFlight = agentsLoadInFlight.get(cacheKey);
-          if (inFlight) {
-            return inFlight;
+          let inFlight = agentsLoadInFlight.get(cacheKey);
+          while (inFlight) {
+            if (inFlight.generation === (agentsLoadGeneration.get(cacheKey) ?? 0)) {
+              return inFlight.request;
+            }
+            // Started before the latest invalidation: let it settle so it cannot
+            // commit after this read, then read again.
+            await inFlight.request;
+            inFlight = agentsLoadInFlight.get(cacheKey);
           }
 
+          const generation = agentsLoadGeneration.get(cacheKey) ?? 0;
           const request = (async () => {
             set({ isLoading: true });
             // Failure must never look like an empty project. The mirror is the
@@ -519,7 +546,10 @@ export const useAgentsStore = create<AgentsStore>()(
                 } else {
                   set({ isLoading: false });
                 }
-                agentsLastLoadedAt.set(cacheKey, Date.now());
+                // A stale generation's read must not count as fresh for the TTL.
+                if (generation === (agentsLoadGeneration.get(cacheKey) ?? 0)) {
+                  agentsLastLoadedAt.set(cacheKey, Date.now());
+                }
                 return true;
               } catch {
                 // ignore error
@@ -530,11 +560,12 @@ export const useAgentsStore = create<AgentsStore>()(
             return false;
           })();
 
-          agentsLoadInFlight.set(cacheKey, request);
+          const entry = { generation, request };
+          agentsLoadInFlight.set(cacheKey, entry);
           try {
             return await request;
           } finally {
-            agentsLoadInFlight.delete(cacheKey);
+            if (agentsLoadInFlight.get(cacheKey) === entry) agentsLoadInFlight.delete(cacheKey);
           }
         },
 
@@ -700,7 +731,9 @@ export const useAgentsStore = create<AgentsStore>()(
               return { ok: true, requiresManualRestart: true };
             }
 
-            // OpenCode 2 re-reads the file itself; the store just refreshes its list.
+            // OpenCode 2 re-reads the file itself and then announces
+            // `agent.updated`, which re-reads this list again (catalogRefresh).
+            // This read can land before that and still carry the deleted agent.
             const loaded = await get().loadAgents(configDirectory);
             if (loaded) {
               emitConfigChange("agents", { source: CONFIG_EVENT_SOURCE });

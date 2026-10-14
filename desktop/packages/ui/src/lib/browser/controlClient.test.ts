@@ -26,7 +26,12 @@ mock.module('@/lib/openchamberEvents', () => ({
   },
 }));
 
-const { registerBrowserController, registerBrowserOpener, setShownBrowserTab } = await import('./controlClient');
+const {
+  registerBrowserController,
+  registerBrowserOpener,
+  registerSleepingBrowserTab,
+  setShownBrowserTab,
+} = await import('./controlClient');
 
 /** Registrations are module-global, so every test unwinds its own. */
 const cleanups: Array<() => void> = [];
@@ -79,6 +84,7 @@ describe('opening a page before any view exists', () => {
       tabId: 'tab-new',
       viewportApplied: true,
       viewport: { mode: 'mobile', width: 390, height: 844 },
+      drivable: false,
     });
   });
 
@@ -124,7 +130,19 @@ describe('opening a page before any view exists', () => {
     emitOpen({ url: 'https://example.test' });
     await wait(20);
 
-    expect(posted[0]?.data).toEqual({ url: 'https://example.test', opened: true, tabId: 'tab-new' });
+    expect(posted[0]?.data).toEqual({ url: 'https://example.test', opened: true, tabId: 'tab-new', drivable: false });
+  });
+
+  test('on a driving host, an open reports that the page can be driven', async () => {
+    // Only an Electron renderer can drive the page it shows.
+    Object.defineProperty(globalThis, 'window', { value: { __OPENCHAMBER_ELECTRON__: {} }, configurable: true, writable: true });
+    cleanups.push(() => Reflect.deleteProperty(globalThis, 'window'));
+    cleanups.push(registerBrowserOpener(() => 'tab-new'));
+
+    emitOpen({ url: 'https://example.test' });
+    await wait(20);
+
+    expect(posted[0]?.data).toEqual({ url: 'https://example.test', opened: true, tabId: 'tab-new', drivable: true });
   });
 
   test('says the layout was not applied when no view ever appears', async () => {
@@ -230,7 +248,7 @@ describe('choosing the tab an action runs in', () => {
 
     expect(ran).toEqual([]);
     expect(opened).toEqual(['https://example.test']);
-    expect(posted[0]?.data).toEqual({ url: 'https://example.test', opened: true, tabId: 'agent-tab' });
+    expect(posted[0]?.data).toEqual({ url: 'https://example.test', opened: true, tabId: 'agent-tab', drivable: false });
   });
 
   test('navigates the named tab when browser.open gives one', async () => {
@@ -244,5 +262,110 @@ describe('choosing the tab an action runs in', () => {
 
     expect(opened).toEqual([]);
     expect(ran).toEqual(['agent-tab:browser.open']);
+  });
+});
+
+describe('tabs that have not loaded their page yet', () => {
+  beforeEach(() => {
+    posted.length = 0;
+    claims.length = 0;
+    grantClaims = true;
+  });
+
+  afterEach(() => {
+    while (cleanups.length > 0) cleanups.pop()?.();
+  });
+
+  const emit = (action: string, parameters: Parameters<Listener>[0]['parameters']): void => {
+    listener?.({ type: 'browser-control-request', requestId: 'req-1', action, parameters });
+  };
+
+  /** A sleeping tab whose view mounts a moment after it is woken, as in the app. */
+  const sleepingTab = (tabId: string, ran: string[], woken: string[]) => {
+    let release = () => {};
+    release = registerSleepingBrowserTab({
+      tabId,
+      describe: () => ({ title: '', url: `https://${tabId}.test/` }),
+      wake: () => {
+        woken.push(tabId);
+        setTimeout(() => {
+          release();
+          cleanups.push(registerBrowserController({
+            tabId,
+            describe: () => ({ title: `Title ${tabId}`, url: `https://${tabId}.test/` }),
+            run: async (action) => { ran.push(`${tabId}:${action}`); return { url: `https://${tabId}.test/` }; },
+          }));
+        }, 80);
+      },
+    });
+    return () => release();
+  };
+
+  test('lists sleeping tabs without waking them', async () => {
+    const woken: string[] = [];
+    cleanups.push(registerBrowserController({
+      tabId: 'loaded',
+      describe: () => ({ title: 'Loaded', url: 'https://loaded.test/' }),
+      run: async () => ({ url: 'https://loaded.test/' }),
+    }));
+    cleanups.push(sleepingTab('asleep', [], woken));
+    setShownBrowserTab('loaded');
+
+    emit('browser.snapshot', {});
+    await wait(50);
+
+    expect(woken).toEqual([]);
+    expect(posted[0]?.data).toEqual({
+      url: 'https://loaded.test/',
+      tabs: [
+        { id: 'loaded', title: 'Loaded', url: 'https://loaded.test/', active: true },
+        { id: 'asleep', title: '', url: 'https://asleep.test/', active: false },
+      ],
+    });
+  });
+
+  test('wakes a named sleeping tab only after the claim, then runs there', async () => {
+    const ran: string[] = [];
+    const woken: string[] = [];
+    cleanups.push(sleepingTab('asleep', ran, woken));
+
+    grantClaims = false;
+    emit('browser.click', { selector: 'button', tabId: 'asleep' });
+    await wait(200);
+    expect(woken).toEqual([]);
+
+    grantClaims = true;
+    emit('browser.click', { selector: 'button', tabId: 'asleep' });
+    await wait(300);
+    expect(woken).toEqual(['asleep']);
+    expect(ran).toEqual(['asleep:browser.click']);
+    expect(posted[0]?.ok).toBe(true);
+  });
+
+  test('wakes the shown tab when an action names none', async () => {
+    const ran: string[] = [];
+    const woken: string[] = [];
+    cleanups.push(sleepingTab('shown-asleep', ran, woken));
+    setShownBrowserTab('shown-asleep');
+
+    emit('browser.snapshot', {});
+    await wait(300);
+
+    expect(woken).toEqual(['shown-asleep']);
+    expect(ran).toEqual(['shown-asleep:browser.snapshot']);
+  });
+
+  test('says so when a woken tab never gets a view', async () => {
+    cleanups.push(registerSleepingBrowserTab({
+      tabId: 'stuck',
+      describe: () => ({ title: '', url: '' }),
+      wake: () => {},
+    }));
+
+    emit('browser.click', { selector: 'button', tabId: 'stuck' });
+    await wait(2_400);
+
+    expect(posted[0]?.ok).toBe(false);
+    expect(posted[0]?.error).toContain('could not be loaded');
   });
 });

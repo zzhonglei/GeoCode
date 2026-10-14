@@ -329,7 +329,7 @@ export const registerSkillRoutes = (app, dependencies) => {
         .map((parsed) => parsed.normalizedRepo);
       const repoMetas = await fetchGitHubRepoMetas(githubRepos);
 
-      const sourcesForUi = sources.map(({ gitIdentityId, ...rest }) => {
+      const sourcesForUi = sources.map(({ gitIdentityId, excludedSkills, ...rest }) => {
         const parsed = parseSkillRepoSource(rest.source);
         const meta = parsed.ok && parsed.host === 'github.com'
           ? repoMetas[parsed.normalizedRepo] || {}
@@ -415,7 +415,8 @@ export const registerSkillRoutes = (app, dependencies) => {
         return res.status(500).json({ ok: false, error: scanResult.error });
       }
 
-      const items = (scanResult.items || []).map((item) => {
+      const excludedSkills = new Set(src.excludedSkills || []);
+      const items = (scanResult.items || []).filter((item) => !excludedSkills.has(item.skillName)).map((item) => {
         const installed = installedByName.get(item.skillName);
         return {
           sourceId: src.id,

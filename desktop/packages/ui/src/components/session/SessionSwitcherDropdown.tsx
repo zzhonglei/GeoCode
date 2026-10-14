@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSessionTurnActive } from '@/sync/global-session-status';
+import { useSessionTurnActivity } from '@/sync/global-session-status';
 import { Menu as BaseMenu } from '@base-ui/react/menu';
 import type { Session } from '@/lib/opencode/model';
 
@@ -237,7 +237,8 @@ function SwitcherRow({ session, depth, variant, secondaryMeta, hasChildren, isEx
   const sessionTitle = session.title?.trim() || t('sessions.sidebar.session.untitled');
   const isSubtask = Boolean((session as Session & { parentID?: string | null }).parentID);
   const needsAttention = unseenCount > 0 && (!isSubtask || notifyOnSubtasks);
-  const isStreaming = useSessionTurnActive(session.id);
+  const turnActivity = useSessionTurnActivity(session.id);
+  const isStreaming = turnActivity !== null;
   const showUnreadDot = !isStreaming && needsAttention && !isActive;
 
   const timestamp = session.time?.updated || session.time?.created || Date.now();
@@ -293,7 +294,7 @@ function SwitcherRow({ session, depth, variant, secondaryMeta, hasChildren, isEx
               {isExpanded ? <Icon name="arrow-down-s" className="h-3.5 w-3.5" /> : <Icon name="arrow-right-s" className="h-3.5 w-3.5" />}
             </span>
           ) : null}
-          <span className="truncate typography-ui-label font-normal leading-tight text-foreground">
+          <span dir="auto" className="truncate text-left typography-ui-label font-normal leading-tight text-foreground">
             {sessionTitle}
           </span>
         </div>
@@ -333,11 +334,8 @@ function SwitcherRow({ session, depth, variant, secondaryMeta, hasChildren, isEx
       {isStreaming || showUnreadDot ? (
         <span className="flex h-3 w-3 flex-shrink-0 items-center justify-center self-center">
           <SessionActivityIndicator
-            state={isStreaming ? 'running' : 'unread'}
-            label={isStreaming
-              ? t('sessions.sidebar.session.status.active')
-              : t('sessions.sidebar.session.status.unread')}
-            runningDotClassName="animate-busy-pulse"
+            state={turnActivity ?? 'unread'}
+            runningClassName="animate-busy-pulse"
           />
         </span>
       ) : null}

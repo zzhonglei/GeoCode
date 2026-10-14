@@ -18,7 +18,5 @@ export const KERNEL_BINARY = process.platform === 'win32' ? `${KERNEL_PROCESS}.e
 export const KERNEL_CONFIG_JSON = 'geocode.json';
 export const KERNEL_CONFIG_JSONC = 'geocode.jsonc';
 export const KERNEL_PROJECT_DIR = '.geocode';
-// kernel/packages/cli/src/database-path.ts
-export const KERNEL_DATABASE = 'geocode.db';
 // kernel/packages/core/src/project.ts: the project id cached in the git directory
 export const KERNEL_PROJECT_ID_FILE = 'geocode';

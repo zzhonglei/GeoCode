@@ -2,6 +2,7 @@ import React from 'react';
 import { OpenChamberVisualSettings } from './OpenChamberVisualSettings';
 import { AboutSettings } from './AboutSettings';
 import { SessionRetentionSettings } from './SessionRetentionSettings';
+import { MergedWorktreeCleanupSettings } from './MergedWorktreeCleanupSettings';
 import { SessionWorkSettings } from './SessionWorkSettings';
 import { PasskeySettings } from './PasskeySettings';
 import { AppLinkSecuritySettings } from './AppLinkSecuritySettings';
@@ -58,8 +59,8 @@ export const OpenChamberPage: React.FC<OpenChamberPageProps> = ({ section }) => 
                 {showDesktopNetworkSettings && <DesktopNetworkSettings />}
                 {!isVSCode && <OpenCodeCliSettings />}
                 {!isVSCode && <OpenChamberToolsSettings />}
-                {!isVSCode && ISOLATED_SPACES_RELEASED && <IsolatedSpacesSettings />}
                 <SessionRetentionSettings />
+                {!isVSCode && <MergedWorktreeCleanupSettings />}
                 <AppLinkSecuritySettings />
                 {isWebRuntime() && !isDesktopShell() && !isVSCode && !isCapacitorApp() && <PasskeySettings />}
                 {showAbout && <AboutSettings />}
@@ -88,6 +89,8 @@ export const OpenChamberPage: React.FC<OpenChamberPageProps> = ({ section }) => 
                 return <VoiceSectionContent />;
             case 'tunnel':
                 return <TunnelSectionContent />;
+            case 'spaces':
+                return <SpacesSectionContent />;
             default:
                 return null;
         }
@@ -104,6 +107,7 @@ export const OpenChamberPage: React.FC<OpenChamberPageProps> = ({ section }) => 
         notifications: t('settings.page.notifications.title'),
         voice: t('settings.page.voice.title'),
         tunnel: t('settings.page.tunnel.title'),
+        spaces: t('settings.openchamber.spaces.title'),
     }[section];
 
     const pageDescription = {
@@ -117,6 +121,7 @@ export const OpenChamberPage: React.FC<OpenChamberPageProps> = ({ section }) => 
         notifications: t('settings.page.notifications.description'),
         voice: t('settings.page.voice.description'),
         tunnel: t('settings.page.tunnel.description'),
+        spaces: undefined,
     }[section];
 
     return (
@@ -156,7 +161,6 @@ const GeneralSectionContent: React.FC = () => {
             </Closed>
             {/* --- /GeoCode --- */}
             {!isVSCode && <OpenChamberToolsSettings />}
-            {!isVSCode && ISOLATED_SPACES_RELEASED && <IsolatedSpacesSettings />}
             <OpenChamberVisualSettings visibleSettings={[
                 'fileEditorKeymap',
                 ...(!isVSCode ? ['sessionTabs' as const] : []),
@@ -214,11 +218,14 @@ const ChatSectionContent: React.FC = () => {
                 'promptNavigatorEnabled',
                 'wideChatLayout',
                 'codeBlockLineWrap',
+                'tableCellWrap',
+                'copyMessagesAsPlainText',
                 'splitAssistantMessageActions',
                 'subagentReadOnlyBanner',
                 'diffLayout',
                 'inputHistoryScope',
                 'inputHistoryLimit',
+                'messageSearch',
                 'dotfiles',
                 'fileViewerPreview',
                 'followUpBehavior',
@@ -238,6 +245,7 @@ const SessionsSectionContent: React.FC<{ runtimeEndpointEpoch: number }> = ({ ru
             <DefaultsSettings key={runtimeEndpointEpoch} />
             <SessionWorkSettings />
             <SessionRetentionSettings />
+            {!isVSCodeRuntime() && <MergedWorktreeCleanupSettings />}
         </>
     );
 };
@@ -258,6 +266,15 @@ const VoiceSectionContent: React.FC = () => {
         return null;
     }
     return <VoiceSettings />;
+};
+
+// Isolated spaces: the switch, the idle stop, the places with their disk, and the spaces without a
+// project. Never in VS Code (decision 16), and nowhere until the feature is released.
+const SpacesSectionContent: React.FC = () => {
+    if (isVSCodeRuntime() || !ISOLATED_SPACES_RELEASED) {
+        return null;
+    }
+    return <IsolatedSpacesSettings />;
 };
 
 const TunnelSectionContent: React.FC = () => {
