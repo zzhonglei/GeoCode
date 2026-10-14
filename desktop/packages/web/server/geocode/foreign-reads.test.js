@@ -8,6 +8,7 @@ import { migrateLegacyUserDirs } from '../lib/data-dir-migration.js';
 import { discoverLoopFiles } from '../lib/scheduled-tasks/loops.js';
 import { getClaudeCliAuthStatus } from '../lib/opencode/claude-cli-auth.js';
 import { createProjectConfigRuntime } from '../lib/projects/project-config.js';
+import { getProfiles } from '../lib/git/identity-storage.js';
 
 // Guards against the shell taking data, tasks, logins or commands from OpenChamber, other agent tools
 // or a file checked into a project.
@@ -42,6 +43,21 @@ describe('GeoCode: foreign reads', () => {
     const dataDir = path.join(root, 'data');
     expect(await migrateLegacyUserDirs({ fsPromises, path, dataDir, legacyRoot: path.join(home, '.config', 'openchamber') })).toEqual([]);
     expect(fs.existsSync(dataDir)).toBe(false);
+  });
+
+  it('imports no git identities from OpenChamber\'s data directory', () => {
+    const theirs = path.join(home, '.config', 'openchamber');
+    fs.writeFileSync(path.join(theirs, 'git-identities.json'), `${JSON.stringify({ profiles: [{ id: 'theirs', name: 'theirs', userName: 'theirs', userEmail: 'theirs@example.com' }] })}\n`);
+    const before = fs.readdirSync(theirs).sort();
+    const savedDataDir = process.env.OPENCHAMBER_DATA_DIR;
+    process.env.OPENCHAMBER_DATA_DIR = path.join(root, 'identities');
+    try {
+      expect(getProfiles()).toEqual([]);
+    } finally {
+      if (savedDataDir === undefined) delete process.env.OPENCHAMBER_DATA_DIR;
+      else process.env.OPENCHAMBER_DATA_DIR = savedDataDir;
+    }
+    expect(fs.readdirSync(theirs).sort()).toEqual(before);
   });
 
   it('finds no loops in .agents', () => {

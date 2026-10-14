@@ -250,7 +250,9 @@ export function createGitIdentityStore({
 
 const stores = new Map();
 const defaultStore = () => {
+  /* --- GeoCode: it neither reads nor imports OpenChamber's identities ---
   const oldFilePath = path.join(legacyDataDir(), FILE_NAME);
+  --- /GeoCode --- */
   const dataDir = process.env.OPENCHAMBER_DATA_DIR
     ? path.resolve(process.env.OPENCHAMBER_DATA_DIR)
     : legacyDataDir();
@@ -259,7 +261,9 @@ const defaultStore = () => {
   if (!store) {
     store = createGitIdentityStore({
       filePath,
+      /* --- GeoCode: see oldFilePath ---
       legacyFilePath: filePath === oldFilePath ? undefined : oldFilePath,
+      --- /GeoCode --- */
     });
     stores.set(filePath, store);
   }
