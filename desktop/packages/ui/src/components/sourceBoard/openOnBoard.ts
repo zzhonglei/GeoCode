@@ -25,6 +25,7 @@ export const boardTargetOfUrl = (url: string): BoardTarget | null => {
     const linear = url.match(LINEAR_ISSUE_URL);
     if (linear) return { source: 'linear', identifier: linear[1].toUpperCase() };
     // Only links: a bare `#12` says nothing about which repository it is in.
+    if ([parseChangeRequestReference(url), parseIssueReference(url)].some((reference) => reference?.identity?.provider === 'gitlab')) return null; // GeoCode: GitLab is closed, so its links open in the browser
     if (parseChangeRequestReference(url)?.project) return { source: 'repository', kind: 'pull' };
     if (parseIssueReference(url)?.project) return { source: 'repository', kind: 'issue' };
     return null;
