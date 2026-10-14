@@ -54,6 +54,7 @@ const MESSAGES = {
     'settings.projects.actions.info': 'Commands the run button starts.',
     'chat.chatInput.waitingForOpenCode': 'Waiting for the kernel…',
     'chat.chatInput.waitingForOpenCodeHint': 'The message goes out as soon as the kernel starts',
+    'settings.openchamber.sessionWork.info': 'A block in the sidebar, under Chats, for the sessions you\'re working in. A session goes there when you send a message in it, stays in its project as well, and leaves when you mark it done: hover it and use the check, or use the session menu.',
   },
   'zh-CN': {
     'settings.view.nav.group.opencode': '内核',
@@ -85,6 +86,7 @@ const MESSAGES = {
     'settings.projects.actions.info': '运行按钮启动的命令。',
     'chat.chatInput.waitingForOpenCode': '正在等待内核…',
     'chat.chatInput.waitingForOpenCodeHint': '内核启动后会立即发送消息',
+    'settings.openchamber.sessionWork.info': '侧边栏中位于聊天下方的一个区块，用于放置你正在处理的会话。你在会话中发送消息后，它就会进入这里，同时仍留在所属项目中；标记为完成后才会离开：悬停在会话上点对勾，或使用会话菜单。',
   },
   'zh-TW': {
     'settings.view.nav.group.opencode': '核心',
@@ -116,6 +118,7 @@ const MESSAGES = {
     'settings.projects.actions.info': '執行按鈕啟動的命令。',
     'chat.chatInput.waitingForOpenCode': '正在等待核心…',
     'chat.chatInput.waitingForOpenCodeHint': '核心啟動後會立即傳送訊息',
+    'settings.openchamber.sessionWork.info': '側邊欄中位於聊天下方的一個區塊，用來放置你正在處理的工作階段。你在工作階段中傳送訊息後，它就會進入這裡，同時仍留在所屬專案中；標記為完成後才會離開：將游標移到工作階段上點勾號，或使用工作階段選單。',
   },
 } satisfies Partial<Record<Locale, Messages>>;
 
