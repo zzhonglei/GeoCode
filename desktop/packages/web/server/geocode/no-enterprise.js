@@ -10,4 +10,5 @@ export const noEnterprisePolicy = () => ({
   allowedExtensions: [],
   allowLocalExtensions: false,
   opencodeBinary: null,
+  hideBuiltinSkillCatalogs: false,
 });
