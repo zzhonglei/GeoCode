@@ -10,7 +10,7 @@ import { resolveAgentToolAction } from '../lib/openchamber-control/actions.js';
 
 // Guards against the tool names drifting apart: the plugin registers them, the control service resolves
 // actions by them, and the interface matches them by name to render calls and list permission rules.
-const TOOLS = ['geocode', 'geocode_web', 'geocode_memory', 'geocode_notify'];
+const TOOLS = ['geocode', 'geocode_web', 'geocode_memory', 'geocode_knowledge', 'geocode_notify'];
 const packages = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-agent-tools-'));
 
@@ -18,7 +18,7 @@ afterAll(() => fs.rmSync(dataDir, { recursive: true, force: true }));
 
 const pluginSource = async () => {
   const runtime = createAgentToolRuntime({ crypto, fsPromises: fs.promises, path, dataDir, getActivePort: () => 1 });
-  const directory = await runtime.materializePlugin({ includeControl: true, includeWeb: true, includeMemory: true, includeNotify: true });
+  const directory = await runtime.materializePlugin({ includeControl: true, includeWeb: true, includeMemory: true, includeKnowledge: true, includeNotify: true });
   return fs.readFileSync(path.join(directory, 'index.js'), 'utf8');
 };
 
@@ -45,7 +45,7 @@ describe('GeoCode: agent tools', () => {
     ]) {
       const source = fs.readFileSync(path.join(packages, file), 'utf8');
       for (const tool of TOOLS) expect(source, `${file} names ${tool}`).toMatch(new RegExp(`(?:['"]${tool}['"]|\\b${tool}:)`));
-      expect(source, file).not.toMatch(/openchamber_(?:web|memory|notify)/);
+      expect(source, file).not.toMatch(/openchamber_(?:web|memory|knowledge|notify)/);
     }
   });
 });
