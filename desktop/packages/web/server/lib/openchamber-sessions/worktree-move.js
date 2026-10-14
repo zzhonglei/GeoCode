@@ -80,7 +80,7 @@ export const createSessionWorktreeMover = (dependencies) => {
    * words `stashPush` does not recognise.
    */
   const carryChanges = async ({ source, destination, sessionId, name }) => {
-    const message = `OpenChamber: session ${sessionId} moved to worktree ${name}`;
+    const message = `GeoCode: session ${sessionId} moved to worktree ${name}`; // GeoCode: its own name in the user's repository
     const before = new Set((await listStashes(source)).map((entry) => entry.hash));
     await stashPush(source, { message });
     let stash;

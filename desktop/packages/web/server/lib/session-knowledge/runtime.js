@@ -90,12 +90,12 @@ export const SESSION_LINK_GUIDANCE = "When the user gives you an issue or a chan
 export const WORKTREE_MOVE_GUIDANCE = {
   ask: "When the user hands you a new task in a checkout whose branch already carries"
     + " an open pull request or uncommitted changes that are not yours, offer to move"
-    + " this session into a new worktree with the openchamber tool's"
+    + " this session into a new worktree with the geocode tool's" // GeoCode: the tool's name in GeoCode, also in auto
     + " session.moveToWorktree and wait for the user's yes; move at once only when the"
     + " user asked for a worktree themselves.",
   auto: "When the user hands you a new task in a checkout whose branch already carries"
     + " an open pull request or uncommitted changes that are not yours, first move this"
-    + " session into a new worktree with the openchamber tool's session.moveToWorktree,"
+    + " session into a new worktree with the geocode tool's session.moveToWorktree,"
     + " without asking, and tell the user in one line where the work now lives.",
 };
 
