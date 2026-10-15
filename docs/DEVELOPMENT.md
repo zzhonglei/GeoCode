@@ -59,7 +59,7 @@ bun run electron:dev:bundled
 
 `electron:dev:bundled` 先构建界面,再用构建好的界面启动,壳使用第 4 节暂存的内核;没有暂存时,启动日志提示「bundled OpenCode CLI missing」,内核起不来。`electron:dev` 用热更新的界面,适合改界面时快速查看,但它另起的壳服务端不在 Electron 里,访问控制(`DESKTOP.md` 第 4 节)在那里不生效,也接不到 GeoEngine,地理环境与地理工具都不可用;验证这些要用 `electron:dev:bundled` 或打包出的应用。
 
-沙箱里没有登录信息,可以用 OpenCode 提供的免费模型,也可以在沙箱里登录。测完删掉沙箱目录即可。
+沙箱里没有登录信息,要对话就在沙箱里连接一个模型服务,或在沙箱的全局配置里配一个本机的 OpenAI 兼容接口。OpenCode 的免费模型只对 OpenCode 自己的客户端开放,GeoCode 用不了。测完删掉沙箱目录即可。
 
 ## 6. 打包(macOS)
 

@@ -54,6 +54,8 @@ git commit
 
 一次只升级一个上游。同时升级两个,API 变化、上游的问题与补丁的失效会混在一起,分不清原因。
 
+界面连内核用的客户端库 `@opencode/client` 是 OpenChamber 声明的依赖,它的版本只随 OpenChamber 的版本变。所以两边要升到彼此配套的版本时,先把内核升到 OpenChamber 新版声明的客户端版本,再升 OpenChamber;中间一段界面的客户端落后内核一两版,内核对它的接口只增不减时没有问题,事件流比对能验证这一点。
+
 1. 确认版本。最新版本以上游的发布为准(OpenCode 看 git tag 与 npm 上 `@opencode/cli` 的 `latest`,OpenChamber 看 GitHub Release;npm 上的 `opencode-ai` 是 OpenCode 1 的包),不看本地某个旧 clone。
 2. 记下现在的补丁面,供第 8 步对比:
 
