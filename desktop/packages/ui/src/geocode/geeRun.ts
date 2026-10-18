@@ -31,6 +31,8 @@ const runMetadata = z.object({
 const noticeMetadata = z.object({
   source: z.literal('geerun'),
   callID: z.string(),
+  task: z.string(),
+  state: z.string(),
   outcome,
   started: z.number().optional().catch(undefined),
   ended: z.number().optional().catch(undefined),
@@ -39,8 +41,15 @@ const noticeMetadata = z.object({
 
 /** Where Python's report of an error begins: from there on, what the script printed is the error. */
 const TRACEBACK = 'Traceback (most recent call last):';
-/** The notification's text: the answer, between a first line of attributes and a closing tag. */
-const ENVELOPE = /^<geerun\b[^\n]*>\n([\s\S]*)\n<\/geerun>$/;
+/**
+ * The notification's answer: its text without the opening tag and the closing one. The opening tag is rebuilt from
+ * what the kernel wrote it with, as the description in it may span lines and hold quotes.
+ */
+const noticeAnswer = (notice: SyntheticMessage, { task, state }: z.infer<typeof noticeMetadata>) =>
+  notice.text.slice(
+    `<geerun task="${task}" state="${state}" description="${notice.description}">\n`.length,
+    -'\n</geerun>'.length,
+  );
 
 /** The notification that ended a call's run in the background, among a conversation's messages. */
 export const geeRunNotice = (messages: readonly Message[], callID: string) =>
@@ -77,7 +86,7 @@ export const geeRunView = (part: ToolPart, notice: SyntheticMessage | undefined,
   // A run in the background ends with its notification: the answer is in its text, the times in its metadata.
   const answer =
     endNotice && notice
-      ? notice.text.match(ENVELOPE)?.[1]
+      ? noticeAnswer(notice, endNotice)
       : state.status === 'completed' && !background
         ? state.output
         : undefined;

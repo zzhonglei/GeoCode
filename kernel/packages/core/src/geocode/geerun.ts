@@ -282,6 +282,7 @@ export const notification = (
 ) => ({
   sessionID: recovery.sessionID,
   description: recovery.description,
+  // The interface rebuilds this opening tag from the fields below to take the answer out: change it there too.
   text: `<geerun task="${recovery.task}" state="${state}" description="${recovery.description}">\n${text}\n</geerun>`,
   // For the tool row of the call, which a run in the background left running: what it shows once the run ends.
   metadata: { ...final, source: name, task: recovery.task, state, callID: recovery.callID },

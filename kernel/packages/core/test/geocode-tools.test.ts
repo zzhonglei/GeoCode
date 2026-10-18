@@ -1024,8 +1024,12 @@ describe("GeoCode: geerun", () => {
         {
           sessionID,
           description: "统计影像",
-          // The interface takes the answer out of this envelope, by its first line and closing tag.
-          text: expect.stringMatching(/^<geerun [^\n]*state="completed"[^\n]*>\n[\s\S]*images: 73[\s\S]*\n<\/geerun>$/),
+          // The interface takes the answer out of this envelope, by an opening tag it rebuilds from the same fields.
+          text: expect.stringMatching(
+            new RegExp(
+              `^<geerun task="${TASK}" state="completed" description="统计影像">\\n[\\s\\S]*images: 73[\\s\\S]*\\n</geerun>$`,
+            ),
+          ),
           metadata: {
             source: "geerun",
             state: "completed",

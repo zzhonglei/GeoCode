@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 
-import type { Metadata, ToolPart, ToolState } from '@/lib/opencode/model';
+import type { Metadata, SyntheticMessage, ToolPart, ToolState } from '@/lib/opencode/model';
 import { applyDirectoryEvent } from '@/sync/event-reducer';
 import { INITIAL_STATE } from '@/sync/types';
+
+import { geeRunView } from './geeRun';
 
 const call = (state: ToolState): ToolPart => ({
   id: 'call_gee',
@@ -41,5 +43,22 @@ describe("GeoCode: geerun's row", () => {
 
     const answered = { ...INITIAL_STATE, part: { msg_a: [backgrounded({ status: null })] } };
     expect(applyDirectoryEvent(answered, progress({ status: 'running' }))).toBe(false);
+  });
+
+  // Guards against a description of several lines hiding how a run in the background ended.
+  test('a background run ends as its notification says, whatever lines and quotes its description holds', () => {
+    const description = '下载台北真彩色影像\n并导出 "RGB"';
+    const notice: SyntheticMessage = {
+      id: 'msg_notice',
+      sessionID: 'ses_1',
+      role: 'synthetic',
+      time: { created: 5000 },
+      description,
+      text: `<geerun task="${INPUT.task}" state="completed" description="${description}">\nimages: 0\n\nThe script failed.\n</geerun>`,
+      metadata: { source: 'geerun', callID: 'call_gee', task: INPUT.task, state: 'completed', outcome: 'failed', ended: 4000 },
+    };
+    const view = geeRunView(backgrounded(), notice, 'en');
+    expect(view.bad).toBe(true);
+    expect(view.lines.at(-1)).toMatchObject({ text: 'The script failed.', tone: 'error' });
   });
 });
