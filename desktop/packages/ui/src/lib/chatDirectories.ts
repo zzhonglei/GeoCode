@@ -12,9 +12,13 @@ const chatsRootListeners = new Set<() => void>();
 const joinPath = (base: string, ...parts: string[]): string =>
   [base.replace(/[\\/]+$/, ''), ...parts].join('/');
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- GeoCode: home is used only in the closed body
 function legacyRootForHome(home: string | null | undefined): string | null {
+  return null; // GeoCode: ~/.config/openchamber/chats is OpenChamber's, and cleanup deletes what this classifies as a chat
+  /* --- GeoCode: see above ---
   const normalized = normalizePath(home);
   return normalized ? joinPath(normalized, '.config', 'openchamber', 'chats') : null;
+  --- /GeoCode --- */
 }
 
 function isWithinRoot(directory: string, root: string): boolean {
@@ -66,8 +70,9 @@ async function getChatRoots(): Promise<ChatRoots> {
   const runtimeKey = getRuntimeKey();
   const existing = chatsRootByRuntime.get(runtimeKey);
   if (existing) return existing;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- GeoCode: home no longer names a chats root, see below
   const pending = opencodeClient.getFilesystemHomeInfo().then(({ home, chatsRoot, canonicalChatsRoot, canonicalLegacyChatsRoot }) => {
-    const legacy = legacyRootForHome(home);
+    const legacy = normalizePath(chatsRoot); // GeoCode: the server's chats root only, never one derived from the home
     const configured = normalizePath(chatsRoot) ?? legacy;
     if (!legacy || !configured) throw new Error('Unable to resolve chat directories');
     const roots = {
