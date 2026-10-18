@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect } from "bun:test"
 import path from "path"
-import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Schema, Scope } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { FileAccess } from "@opencode/core/file-access"
 import { GeeRunTool } from "@opencode/core/geocode/geerun"
+import { GeeRunJob } from "@opencode/core/geocode/geerun-job"
 import { GeoTools } from "@opencode/core/geocode/tools"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
@@ -73,6 +74,8 @@ let saved: Array<{ action: string; resource: string }> = []
 
 /** The geo tools' plugin storage, which the kernel keeps in its database. */
 const stored = new Map<string, Schema.Json>()
+/** The scope the plugin is started in, which the plugin service closes when the plugin's location is evicted. */
+let pluginScope: Scope.Closeable | undefined
 
 const geoToolsNode = makeLocationNode({
   name: "test/geocode-tools-plugin",
@@ -94,7 +97,12 @@ const geoToolsNode = makeLocationNode({
         remove: (key) => Effect.sync(() => void stored.delete(key)),
         scan: () => Effect.die("unused storage.scan"),
       },
-    }),
+    }).pipe(
+      Effect.provideServiceEffect(
+        Scope.Scope,
+        Effect.flatMap(Scope.Scope, Scope.fork).pipe(Effect.tap((scope) => Effect.sync(() => (pluginScope = scope)))),
+      ),
+    ),
   ),
   deps: [
     Tool.node,
@@ -103,6 +111,7 @@ const geoToolsNode = makeLocationNode({
     Location.node,
     PermissionSaved.node,
     Job.node,
+    GeeRunJob.node,
     Session.node,
     Bus.node,
   ],
@@ -159,7 +168,7 @@ const permission = permissionLayer({
     ),
 })
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Tool.node, geoToolsNode, Job.node, Session.node]), [
+  AppNodeBuilder.build(LayerNode.group([Tool.node, geoToolsNode, Job.node, GeeRunJob.node, Session.node]), [
     Permission.node.replace(permission),
     PermissionSaved.node.replace(permissionSaved),
     KV.node.replace(kvStore),
@@ -1005,6 +1014,33 @@ describe("GeoCode: geerun", () => {
       yield* Effect.sleep("50 millis")
       expect(notices).toHaveLength(1)
       expect(kv.get(`job.background/${marker!.notificationID}`)).toMatchObject({ status: "running" })
+    }),
+  )
+
+  // Guards against the notification being lost when the plugin that started the run is gone, as its location's eviction does.
+  it.live("in the background, tells the conversation the answer though the plugin that started the run is gone", () =>
+    Effect.gen(function* () {
+      reset()
+      const encoder = new TextEncoder()
+      let end = () => {}
+      answer = (body) =>
+        body.method !== "gee.run"
+          ? ran()
+          : new ReadableStream({
+              start: (controller) => {
+                controller.enqueue(encoder.encode(`${progress({ begun: true })}\n`))
+                end = () => {
+                  controller.enqueue(encoder.encode(`${ran().join("\n")}\n`))
+                  controller.close()
+                }
+              },
+            })
+      yield* executeTool(yield* Tool.Service, gee({ script: "x", background: true }))
+      yield* Scope.close(pluginScope!, Exit.void)
+      noticed = yield* Deferred.make<void>()
+      end()
+      yield* Deferred.await(noticed)
+      expect(notices).toHaveLength(1)
     }),
   )
 

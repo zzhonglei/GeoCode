@@ -87,6 +87,7 @@ import { WebSearchTool } from "../tool/plugin/websearch.js"
 import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
 import { GeoTools } from "../geocode/tools.js" // GeoCode: the geo tools, built in as the tools above are
+import { GeeRunJob } from "../geocode/geerun-job.js" // GeoCode: what tells of a geerun run in the background, as SubagentJob tells of a subagent
 import { PermissionSaved } from "../permission/saved.js" // GeoCode: qgisrun's asking reads what "always allow" saved
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
@@ -129,6 +130,7 @@ const services = [
   InstructionDiscovery.Service,
   Integration.Service,
   Job.Service,
+  GeeRunJob.Service, // GeoCode: see the import
   KV.Service,
   LLMClient.Service,
   Location.Service,
@@ -184,6 +186,7 @@ export const requirements = LayerNode.group([
   InstructionDiscovery.node,
   Integration.node,
   Job.node,
+  GeeRunJob.node, // GeoCode: see the import
   KV.node,
   llmClient,
   Location.node,

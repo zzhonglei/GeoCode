@@ -4,7 +4,7 @@ import { ToolFailure } from "@opencode/ai"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Identifier } from "@opencode/schema/identifier"
 import type { Tool } from "@opencode/schema/tool"
-import { Deferred, Effect, Exit, Schema, Scope } from "effect"
+import { Deferred, Effect, Exit, Schema } from "effect"
 import type { Bus } from "../bus.js"
 import type { FileAccess } from "../file-access.js"
 import type { Job } from "../job.js"
@@ -14,6 +14,7 @@ import type { Session } from "../session.js"
 import { SessionEvent } from "../session/event.js"
 import { ToolOutput } from "../tool-output.js"
 import { GeoEngine } from "./geoengine.js"
+import type { GeeRunJob } from "./geerun-job.js"
 import DESCRIPTION from "./geerun.txt"
 
 export const name = "geerun"
@@ -263,7 +264,7 @@ const RESTARTED =
   "The run was stopped because GeoCode restarted. Assets its exports already saved, or still save, stay in the task; run the script again to finish it."
 
 /** What a background run's notification says: the answer it ended with, as a shell's says what the command printed. */
-const said = (
+export const said = (
   result: Pick<Job.Background, "output" | "error"> & { readonly status: Exclude<Job.Status, "running"> },
 ) =>
   result.status === "completed"
@@ -272,7 +273,7 @@ const said = (
       ? (result.error ?? "The run failed.")
       : "The run was cancelled."
 
-const notification = (
+export const notification = (
   recovery: Recovery,
   state: Exclude<Job.Status, "running">,
   text: string,
@@ -317,9 +318,8 @@ export const make = (
   location: Location.Interface,
   storage: Context["storage"],
   jobs: Job.Interface,
-  sessions: Session.Interface,
   bus: Pick<Bus.Interface, "publish">,
-  scope: Scope.Scope,
+  runs: GeeRunJob.Interface,
 ) => {
   /** The answer a run gave, from the script's output and the task GeoEngine read before it. */
   const answer = Effect.fnUntraced(function* (
@@ -369,25 +369,6 @@ export const make = (
       },
     }
   })
-
-  /**
-   * Tells the conversation of a background run once it ends, as the shell tool does of a background command, and with
-   * it the run's tool row, which the call's answer left running.
-   */
-  const notify = (id: string, recovery: Recovery, final: Effect.Effect<Record<string, unknown>>) =>
-    Effect.gen(function* () {
-      const info = (yield* jobs.wait({ id })).info
-      // Nothing cancels a run in the background but the app quitting: its marker stays, for the restart to tell of it.
-      if (!info || info.status === "running" || info.status === "cancelled") return
-      yield* sessions.synthetic({
-        ...(info.notificationID ? { id: info.notificationID } : {}),
-        ...notification(recovery, info.status, said({ ...info, status: info.status }), {
-          ...(yield* final),
-          ended: info.completed_at,
-        }),
-      })
-      if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
-    }).pipe(Effect.forkIn(scope, { startImmediately: true }))
 
   return {
     name,
@@ -581,7 +562,7 @@ export const make = (
             ),
           )
           // Whole, or a stop just as the script begins would leave the run with no one to tell of it.
-          yield* Effect.uninterruptible(Effect.andThen(jobs.background(job.id), notify(job.id, recovery, final)))
+          yield* Effect.uninterruptible(runs.background(job.id, recovery, final))
           return { content: backgroundAnswer(task.name), metadata: state() }
         }
         if (waited?.info.status === "cancelled") return yield* new ToolFailure({ message: "The run was cancelled." })

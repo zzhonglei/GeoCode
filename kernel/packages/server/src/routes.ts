@@ -20,6 +20,7 @@ import { Instance } from "@opencode/core/instance/service"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Job } from "@opencode/core/job"
+import { GeeRunJob } from "@opencode/core/geocode/geerun-job" // GeoCode: built for the app, as Job is, so an evicted location keeps geerun's background waits
 import { Mcp } from "@opencode/core/mcp/index"
 import { Global } from "@opencode/util/global"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
@@ -56,6 +57,7 @@ const applicationServiceNodes = [
   EventLogger.node,
   httpClient,
   Job.node,
+  GeeRunJob.node, // GeoCode: see the import
   Project.node,
   Project.sweepNode,
   Worktree.node,
