@@ -193,6 +193,7 @@ const getStableWorkingPhrase = (key: string): string => {
 export const hasBackgroundableWork = (parts: readonly Part[]): boolean => parts.some((part) => {
     if (part.type !== 'tool' || part.state?.status !== 'running') return false;
     if (isShellTool(part.tool) || isSubagentTool(part.tool)) return true;
+    if (part.tool === 'geerun') return true; // GeoCode: geerun runs as a command does, and moves to the background as one
     if (!isExecuteTool(part.tool)) return false;
     return executeHasBackgroundableWork(part.state.metadata);
 });
