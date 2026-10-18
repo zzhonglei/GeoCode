@@ -85,8 +85,9 @@ export const make = (access: FileAccess.Interface) => {
 
   return {
     name,
-    // On the provider's tool list, as the built-in tools are, rather than inside Code Mode's catalog.
-    options: { codemode: false },
+    // On the provider's tool list, as the built-in tools are, rather than inside Code Mode's catalog; offered wherever
+    // read is, since it asks as read.
+    options: { codemode: false, permission: "read" },
     description,
     input: Input,
     execute: (input: typeof Input.Type, context: Tool.Context) =>

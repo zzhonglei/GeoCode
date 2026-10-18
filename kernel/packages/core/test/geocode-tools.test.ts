@@ -221,6 +221,18 @@ const read = (input: Record<string, unknown>, session = sessionID) => ({
 const result = (value: unknown) => [JSON.stringify({ type: "result", ok: true, result: value })]
 
 describe("GeoCode: readgeodata", () => {
+  // Guards against an agent that may only read, such as Explore, not being offered it.
+  it.effect("is offered wherever read is", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const tools = yield* toolDefinitions(registry, [
+        { action: "*", resource: "*", effect: "deny" },
+        { action: "read", resource: "*", effect: "allow" },
+      ])
+      expect(tools.map((tool) => tool.name)).toContain("readgeodata")
+    }),
+  )
+
   it.effect("asks as read asks, then has GeoEngine read the file at its absolute path", () =>
     Effect.gen(function* () {
       reset()
