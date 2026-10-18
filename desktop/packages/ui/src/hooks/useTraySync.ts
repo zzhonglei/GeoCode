@@ -28,6 +28,7 @@ import { resolveProjectForSessionDirectory, normalizeProjectPath } from '@/lib/p
 import type { ProjectEntry } from '@/lib/api/types';
 import type { WorktreeMetadata } from '@/types/worktree';
 import { toast } from '@/components/ui';
+import { geoTrayLabel, reviewInApp } from '@/geocode/geoTools'; // GeoCode: see permissionLabel and TrayApproval
 
 // Native tray/menu bar bridge. The Electron main process owns the Tray UI; this hook
 // streams a compact snapshot of live session/approval state to it via the
@@ -67,6 +68,7 @@ type TrayApproval = {
   // permission can only when the request carries save patterns, so the tray can
   // drop the "Allow always" item instead of offering a no-op.
   canSave: boolean;
+  reviewInApp?: boolean; // GeoCode: see reviewInApp in geocode/geoTools.ts
 };
 
 type TrayUsageRow = { label: string; value: string };
@@ -111,6 +113,8 @@ const isTrayEnabled = (): boolean =>
   typeof window !== 'undefined' && window.__OPENCHAMBER_ELECTRON__?.trayEnabled !== false;
 
 const permissionLabel = (request: BlockingPermissionRequest): string => {
+  const geo = geoTrayLabel(request.action, request.resources); // GeoCode: geo tools by their titles, not their tool names
+  if (geo) return geo; // GeoCode: see above
   const head = request.action.trim() || 'Permission';
   const resource = request.resources.find((item) => item.trim());
   return resource ? `${head}: ${resource}` : head;
@@ -272,7 +276,7 @@ const collectLiveData = (): LiveData => {
       for (const request of requests ?? []) {
         if (!request?.id) continue;
         const sid = request.sessionID || sessionId;
-        approvals.push({ kind: 'permission', id: request.id, sessionId: sid, sessionTitle: '', label: permissionLabel(request), directory, canSave: canSavePermission(request.save) });
+        approvals.push({ kind: 'permission', id: request.id, sessionId: sid, sessionTitle: '', label: permissionLabel(request), directory, canSave: canSavePermission(request.save), reviewInApp: reviewInApp(request.action) }); // GeoCode: see TrayApproval
       }
     }
     for (const [sessionId, requests] of Object.entries(state.form ?? {})) {
@@ -402,7 +406,7 @@ const buildSnapshot = (instanceName: string, includeTray: boolean): TraySnapshot
     for (const request of pending.permissions) {
       if (seen.has(request.id)) continue;
       seen.add(request.id);
-      approvals.push({ kind: 'permission', id: request.id, sessionId, sessionTitle, label: permissionLabel(request), directory: pending.directory, canSave: canSavePermission(request.save) });
+      approvals.push({ kind: 'permission', id: request.id, sessionId, sessionTitle, label: permissionLabel(request), directory: pending.directory, canSave: canSavePermission(request.save), reviewInApp: reviewInApp(request.action) }); // GeoCode: see TrayApproval
     }
     for (const request of pending.forms) {
       if (seen.has(request.id)) continue;

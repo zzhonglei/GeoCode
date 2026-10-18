@@ -55,11 +55,13 @@ export const buildTrayMenuTemplate = (snapshot, { onAction, statusIcons }) => {
         return {
           label: approvalLabel(approval),
           submenu: [
+            ...(approval.reviewInApp ? [] : [ // GeoCode: a QGIS or Earth Engine run is approved only on its card, see reviewInApp in ui/src/geocode/geoTools.ts
             { label: 'Allow once', click: () => onAction({ type: 'respond-permission', sessionId: approval.sessionId, id: approval.id, response: 'once' }) },
             // Only when the request carries save patterns; otherwise "always"
             // behaves like "once" and remembers nothing.
             ...(approval.canSave ? [{ label: 'Allow always', click: () => onAction({ type: 'respond-permission', sessionId: approval.sessionId, id: approval.id, response: 'always' }) }] : []),
             { type: 'separator' },
+            ]), // GeoCode: see above
             { label: 'Deny', click: () => onAction({ type: 'respond-permission', sessionId: approval.sessionId, id: approval.id, response: 'reject' }) },
             { type: 'separator' },
             { label: 'Open in app', click: () => onAction({ type: 'focus-session', sessionId: approval.sessionId, directory: approval.directory || '' }) },

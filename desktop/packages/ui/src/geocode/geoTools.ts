@@ -245,3 +245,14 @@ export const geoPermissionName = (permission: PermissionRequest): string => {
 
 /** The settings label of a geo tool's permission rule; undefined for any other key. */
 export const geoActionLabel = (key: string): string | undefined => (isGeoAction(key) ? text().titles[key] : undefined);
+
+/** A run is approved on its card, which shows what it will do and its warnings; the tray can only deny it or open it. */
+export const reviewInApp = (action: string) => action === 'qgisrun' || action === 'geerun';
+
+/** The tray's label for a geo tool's request, in English like the rest of the tray; a run shows no algorithm id. */
+export const geoTrayLabel = (action: string, resources: readonly string[]): string | undefined => {
+  if (!isGeoAction(action)) return undefined;
+  const title = TEXT.en.titles[action];
+  const resource = reviewInApp(action) ? undefined : resources.find((value) => value.trim());
+  return resource ? `${title}: ${resource}` : title;
+};
