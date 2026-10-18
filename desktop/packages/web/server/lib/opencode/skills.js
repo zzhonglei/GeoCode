@@ -23,7 +23,7 @@ import {
   findWorktreeRoot,
   isPlainObject,
 } from './shared.js';
-import { discoverKernelSkills, isKernelSkillPath } from '../../geocode/kernel-skills.js'; // GeoCode: see discoverSkills and updateSkill
+import { discoverKernelSkills, isKernelSkillPath, isSkillFolderName } from '../../geocode/kernel-skills.js'; // GeoCode: see discoverSkills, getSkillScope, updateSkill and deleteSkill
 
 const BUILT_IN_SKILL_LOCATION = '<built-in>';
 
@@ -104,6 +104,7 @@ async function getSkillScope(skillName, workingDirectory) {
   if (discovered?.path) {
     return { scope: discovered.scope || null, path: discovered.path, source: discovered.source || null };
   }
+  if (!isSkillFolderName(skillName)) return { scope: null, path: null, source: null }; // GeoCode: rename and update would join it into the paths below, outside the skill folders
 
   if (workingDirectory) {
     const projectPath = getProjectSkillPath(workingDirectory, skillName);
@@ -673,6 +674,7 @@ async function updateSkillNow(skillName, updates, workingDirectory, targetPath =
 }
 
 function deleteSkill(skillName, workingDirectory) {
+  if (!isSkillFolderName(skillName)) throw new Error(`Skill "${skillName}" not found`); // GeoCode: the name comes from the skill's own file and is joined into each folder removed below
   let deleted = false;
 
   if (workingDirectory) {

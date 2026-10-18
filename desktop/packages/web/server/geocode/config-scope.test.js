@@ -95,4 +95,15 @@ describe('GeoCode: skill directories', () => {
     expect(fs.existsSync(path.join(home, '.agents', 'skills', 'made-user'))).toBe(false);
     expect(fs.existsSync(path.join(session, '.agents', 'skills', 'made-project'))).toBe(false);
   });
+
+  // Guards against deleting a folder outside them through a skill whose name is a path.
+  it('deletes or renames nothing outside them for a name that is a path', async () => {
+    expect(() => skills.deleteSkill('../../.claude/skills/dup', session)).toThrow();
+    expect(fs.existsSync(path.join(session, '.claude', 'skills', 'dup', 'SKILL.md'))).toBe(true);
+    const nameless = path.join(session, '.claude', 'skills', 'nameless');
+    fs.mkdirSync(nameless, { recursive: true });
+    fs.writeFileSync(path.join(nameless, 'SKILL.md'), '---\ndescription: no name\n---\nBody.\n');
+    await expect(skills.renameSkill('../../.claude/skills/nameless', 'renamed', session)).rejects.toThrow();
+    expect(fs.existsSync(path.join(nameless, 'SKILL.md'))).toBe(true);
+  });
 });

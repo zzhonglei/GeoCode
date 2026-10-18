@@ -20,6 +20,8 @@ export const discoverKernelSkills = async (workingDirectory) => {
   return Array.from(skills.values());
 };
 
+export const isSkillFolderName = (name) => Boolean(name) && name !== '.' && name !== '..' && !/[\\/]/.test(name);
+
 export const isKernelSkillPath = (filePath, workingDirectory) => kernelSkillRoots(workingDirectory).some(({ root }) => {
   const relative = path.relative(root, path.resolve(filePath));
   return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
