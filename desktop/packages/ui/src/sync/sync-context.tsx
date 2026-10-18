@@ -98,6 +98,7 @@ import {
 } from "./global-session-status"
 import { applyGlobalBlockingRequestEvents } from "./global-blocking-requests"
 import { applyBackgroundShellEvents, directoriesWithRunningShells, refreshBackgroundShells } from "./background-shells"
+import { applyGeeRuns } from "@/geocode/backgroundGeeRuns" // GeoCode: see handleEvent
 import {
   CHAT_LOCATION_RELEASE_DELAY_MS,
   WORKTREE_LOCATION_RELEASE_DELAY_MS,
@@ -1848,6 +1849,12 @@ export function handleEvent(
   batch?: DirectoryEventBatch,
   globalEffectsAlreadyApplied = false,
 ) {
+  // --- GeoCode: the kernel's list of Earth Engine runs in the background belongs to no directory ---
+  if (payload.type === "geocode.geeruns") {
+    if (expectedRuntimeKey === getRuntimeKey()) applyGeeRuns(payload.properties)
+    return
+  }
+  // --- /GeoCode ---
   if (payload.type === "openchamber.notification") {
     handleUiNotificationEvent(payload.properties, normalizeEventDirectory(rawDirectory))
     return

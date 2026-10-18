@@ -566,7 +566,7 @@ export const make = (
             ),
           )
           // Whole, or a stop just as the script begins would leave the run with no one to tell of it.
-          yield* Effect.uninterruptible(runs.background(job.id, recovery, final))
+          yield* Effect.uninterruptible(runs.background(job.id, recovery, final, location))
           return { content: backgroundAnswer(task.name), metadata: state() }
         }
         if (waited?.info.status === "cancelled") return yield* new ToolFailure({ message: "The run was cancelled." })

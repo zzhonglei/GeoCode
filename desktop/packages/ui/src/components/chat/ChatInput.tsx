@@ -227,6 +227,7 @@ import { SessionSuggestionChip } from '@/components/chat/SessionSuggestionChip';
 import { SessionDoneHintRow } from '@/components/chat/SessionDoneHintRow';
 import { SessionReviewHintRow } from '@/components/chat/SessionReviewHintRow';
 import { BackgroundShellsStrip } from '@/components/chat/BackgroundShellsStrip';
+import { BackgroundGeeStrip } from '@/geocode/BackgroundGeeStrip'; // GeoCode: see the rows over the composer
 import { ComposerStatusStrip } from '@/components/chat/ComposerStatusStrip';
 import { useWorktreeBootstrapPending } from '@/hooks/useWorktreeBootstrapPending';
 import { FormDock } from '@/components/chat/FormDock';
@@ -3925,6 +3926,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
             {goalRow}
             {autoReviewRow}
             {backgroundShellsRow}
+            {backgroundShellsRow ? <BackgroundGeeStrip key={currentSessionId ?? ''} sessionId={currentSessionId} /> : null}{/* GeoCode: the Earth Engine runs in the background, under the commands */}
             {revertRow}
             {queueRow}
             {doneHintRow}

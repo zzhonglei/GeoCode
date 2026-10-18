@@ -23,6 +23,7 @@ import type {
   SessionRevert,
 } from "@opencode/client"
 import { z } from "zod"
+import { geeRunsRpc, type GeeRunsSnapshot } from "@/geocode/geeRunsRpc" // GeoCode: see listRunningGeeRuns
 import type { FilesAPI } from "../api/types"
 import { getDesktopHomeDirectory } from "../desktop"
 import { isAmbiguousTransportFailure, isDefiniteTransportFailure, markAmbiguousTransportFailure, markDefiniteTransportFailure } from "@/lib/relay/transport-error"
@@ -1694,6 +1695,12 @@ class OpencodeService {
   // -------------------------------------------------------------------------
   // Shell commands the agent started (background commands)
   // -------------------------------------------------------------------------
+
+  // --- GeoCode: Earth Engine runs in the background, of every directory, which the geo tools' plugin lists ---
+  async listRunningGeeRuns(directory: string): Promise<GeeRunsSnapshot> {
+    return call("geocode.geeruns.list", () => this.clientFor(directory).rpc(geeRunsRpc).list({}))
+  }
+  // --- /GeoCode ---
 
   /**
    * Commands still running in the directory on behalf of a session, keyed by

@@ -43,7 +43,7 @@ const useSessionTreeShells = (sessionId: string): TrackedShell[] => {
 };
 
 /** Its own leaf, so the once-a-second tick re-renders this text alone. */
-const ShellElapsed: React.FC<{ startedAt: number }> = ({ startedAt }) => {
+export const ShellElapsed: React.FC<{ startedAt: number }> = ({ startedAt }) => { // GeoCode: the Earth Engine strip shows the same
   const { t } = useI18n();
   const now = useDurationTickerNow(true, ELAPSED_TICK_MS);
   const label = formatSessionActivityDuration(now - startedAt, t);

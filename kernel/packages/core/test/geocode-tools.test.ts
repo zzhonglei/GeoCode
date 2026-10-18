@@ -6,6 +6,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { FileAccess } from "@opencode/core/file-access"
 import { GeeRunTool } from "@opencode/core/geocode/geerun"
 import { GeeRunJob } from "@opencode/core/geocode/geerun-job"
+import { GeeRunRpc } from "@opencode/core/geocode/geerun-rpc"
 import { GeoRunActivity } from "@opencode/core/geocode/run-activity"
 import { GeoTools } from "@opencode/core/geocode/tools"
 import { Job } from "@opencode/core/job"
@@ -77,11 +78,26 @@ let saved: Array<{ action: string; resource: string }> = []
 const stored = new Map<string, Schema.Json>()
 /** The scope the plugin is started in, which the plugin service closes when the plugin's location is evicted. */
 let pluginScope: Scope.Closeable | undefined
+/** How the plugin answers the interface asking for the runs in the background. */
+let listRuns: (() => Effect.Effect<unknown>) | undefined
 
 const geoToolsNode = makeLocationNode({
   name: "test/geocode-tools-plugin",
   layer: Layer.effectDiscard(
     registerToolPlugin(GeoTools.Plugin, {
+      rpc: Object.assign(
+        () => {
+          throw new Error("unused rpc client")
+        },
+        {
+          register: (_definition: unknown, handlers: unknown) =>
+            Effect.sync(() => {
+              // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+              listRuns = (handlers as { list: () => Effect.Effect<unknown> }).list
+              return { dispose: Effect.void, events: { emit: () => Effect.void } }
+            }),
+        },
+      ),
       permission: {
         hook: (_name, callback) =>
           Effect.sync(() => {
@@ -1011,7 +1027,7 @@ describe("GeoCode: geerun", () => {
       end()
       yield* Deferred.await(noticed)
       // Guards against the row left running by the answer hearing nothing more of the run, or not when it ended.
-      expect(published.at(-1)).toMatchObject({
+      expect(published.filter((event) => event.type === "session.tool.progress").at(-1)).toMatchObject({
         type: "session.tool.progress",
         data: {
           sessionID,
@@ -1105,6 +1121,42 @@ describe("GeoCode: geerun", () => {
       end()
       yield* Deferred.await(noticed)
       expect(notices).toHaveLength(1)
+    }),
+  )
+
+  // Guards against the interface showing no run in the background, or one that has ended.
+  it.live("lists a run while it goes on in the background, and tells of each change", () =>
+    Effect.gen(function* () {
+      reset()
+      const encoder = new TextEncoder()
+      let end = () => {}
+      answer = (body) =>
+        body.method !== "gee.run"
+          ? ran()
+          : new ReadableStream({
+              start: (controller) => {
+                controller.enqueue(encoder.encode(`${progress({ begun: true })}\n`))
+                end = () => {
+                  controller.enqueue(encoder.encode(`${ran().join("\n")}\n`))
+                  controller.close()
+                }
+              },
+            })
+      const told = () => published.filter((event) => event.type === "rpc.geocode.geeruns.changed").at(-1)?.data
+      yield* executeTool(yield* Tool.Service, gee({ script: "x", description: "统计影像", background: true }))
+      const listed = Schema.decodeUnknownSync(GeeRunRpc.Snapshot)(yield* listRuns!())
+      expect(listed.runs).toEqual([
+        { id: expect.any(String), sessionID, description: "统计影像", startedAt: expect.any(Number) },
+      ])
+      expect(told()).toEqual(listed)
+      noticed = yield* Deferred.make<void>()
+      end()
+      yield* Deferred.await(noticed)
+      const ended = Schema.decodeUnknownSync(GeeRunRpc.Snapshot)(yield* listRuns!())
+      expect(ended.runs).toEqual([])
+      // The interface keeps the latest list by its revision.
+      expect(ended.revision).toBeGreaterThan(listed.revision)
+      expect(told()).toEqual(ended)
     }),
   )
 

@@ -5,20 +5,22 @@ import { useI18n } from '@/lib/i18n';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSessionDisplayStore } from '@/stores/useSessionDisplayStore';
 import { cn } from '@/lib/utils';
+import { GeeLogo } from '@/geocode/GeeLogo'; // GeoCode: an Earth Engine run in the background, marked as a command is, with its own icon and words
+import { geeBackgroundText } from '@/geocode/geoTools'; // GeoCode: see above
 
 /**
  * What a session row or aggregate is showing: its own turn running
  * (busy/retry), a pause kept open by a background subagent or a background
  * command, or a finished turn the user has not seen.
  */
-type SessionActivityIndicatorState = 'running' | 'subagent' | 'shell' | 'unread';
+type SessionActivityIndicatorState = 'running' | 'subagent' | 'shell' | 'unread' | 'gee'; // GeoCode: see the import
 
 const PRESENTATION = {
   running: { icon: 'circle', colorClass: 'text-status-info', labelKey: 'sessions.sidebar.session.status.active' },
   subagent: { icon: 'robot', colorClass: 'text-status-info', labelKey: 'sessions.sidebar.session.status.backgroundSubagent' },
   shell: { icon: 'terminal', colorClass: 'text-status-info', labelKey: 'sessions.sidebar.session.status.backgroundCommand' },
   unread: { icon: 'checkbox-circle', colorClass: 'text-status-success', labelKey: 'sessions.sidebar.session.status.unread' },
-} as const satisfies Record<SessionActivityIndicatorState, { icon: IconName; colorClass: string; labelKey: string }>;
+} as const satisfies Record<Exclude<SessionActivityIndicatorState, 'gee'>, { icon: IconName; colorClass: string; labelKey: string }>; // GeoCode: see the import
 
 /**
  * Live-activity marker for one session row or aggregate. Each state has its
@@ -39,10 +41,10 @@ export const SessionActivityIndicator: React.FC<{
    */
   tooltip?: boolean;
 }> = ({ state, className, runningClassName, tooltip = false }) => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n(); // GeoCode: see the import
   const animated = useSessionDisplayStore((s) => s.animatedActivityIndicators);
-  const presentation = PRESENTATION[state];
-  const label = t(presentation.labelKey);
+  const presentation = PRESENTATION[state === 'gee' ? 'shell' : state]; // GeoCode: see the import
+  const label = state === 'gee' ? geeBackgroundText(locale).running : t(presentation.labelKey); // GeoCode: see the import
   const running = state !== 'unread';
 
   const mark = (
@@ -54,6 +56,8 @@ export const SessionActivityIndicator: React.FC<{
     >
       {running && animated ? (
         <Icon name="loader-4" className="activity-spinner h-3 w-3 text-status-info" />
+      ) : state === 'gee' ? ( // GeoCode: see the import
+        <GeeLogo className={cn('h-3 w-3', runningClassName)} />
       ) : (
         <Icon
           name={presentation.icon}

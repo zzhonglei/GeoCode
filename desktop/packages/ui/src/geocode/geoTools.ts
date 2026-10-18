@@ -48,6 +48,15 @@ type Texts = {
     /** Under a script's first lines, what is left out. */
     rest: (count: number) => string;
   };
+  /** Earth Engine runs in the background, beside the background commands. */
+  background: {
+    /** A session's mark in the session list, while its run goes on. */
+    running: string;
+    /** The strip over the composer, folded. */
+    count: (count: number) => string;
+    /** The strip's name, for a screen reader. */
+    strip: string;
+  };
 };
 
 const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
@@ -72,6 +81,11 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
       file: 'Script file',
       rest: (count) => `… ${count} more ${count === 1 ? 'line' : 'lines'}`,
     },
+    background: {
+      running: 'Earth Engine script running in the background',
+      count: (count) => `Background Earth Engine scripts: ${count}`,
+      strip: 'Background Earth Engine scripts',
+    },
   },
   'zh-CN': {
     titles: { qgisdoc: 'QGIS 文档', readgeodata: '读取地理数据', qgisrun: '运行 QGIS 算法', geerun: '运行 Earth Engine 脚本' },
@@ -94,6 +108,11 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
       file: '脚本文件',
       rest: (count) => `…… 其余 ${count} 行`,
     },
+    background: {
+      running: 'Earth Engine 脚本正在后台运行',
+      count: (count) => `后台 Earth Engine 脚本：${count}`,
+      strip: '后台 Earth Engine 脚本',
+    },
   },
   'zh-TW': {
     titles: { qgisdoc: 'QGIS 文件', readgeodata: '讀取地理資料', qgisrun: '執行 QGIS 演算法', geerun: '執行 Earth Engine 腳本' },
@@ -115,6 +134,11 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
       output: '輸出',
       file: '腳本檔案',
       rest: (count) => `…… 其餘 ${count} 行`,
+    },
+    background: {
+      running: 'Earth Engine 腳本正在背景執行',
+      count: (count) => `背景 Earth Engine 腳本：${count}`,
+      strip: '背景 Earth Engine 腳本',
     },
   },
 };
@@ -207,6 +231,9 @@ export const qgisRunTitle = (locale: Locale) => textIn(locale).titles.qgisrun;
 
 /** geerun's title, for a row whose call GeoAgent did not label. */
 export const geeRunTitle = (locale: Locale) => textIn(locale).titles.geerun;
+
+/** What tells of Earth Engine runs in the background. */
+export const geeBackgroundText = (locale: Locale) => textIn(locale).background;
 
 /** What qgisrun's row says while the algorithm runs. */
 export const qgisRunning = (algorithm: string, locale: Locale) => textIn(locale).runs(algorithm);

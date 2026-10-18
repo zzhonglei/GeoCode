@@ -14,6 +14,7 @@
  */
 
 import type { OpenCodeEvent } from "@opencode/client"
+import { geeRunsSnapshot, type GeeRunsSnapshot } from "@/geocode/geeRunsRpc" // GeoCode: see translateWireEvent
 import {
   compact,
   partIds,
@@ -98,6 +99,7 @@ export type CatalogKind =
   | "websearch"
 
 export type SyncEvent =
+  | { type: "geocode.geeruns"; properties: GeeRunsSnapshot } // GeoCode: see translateWireEvent
   | { type: "server.connected"; properties: Record<never, never> }
   | { type: "installation.update-available"; properties: { version: string } }
   | { type: "session.created"; properties: { info: Session } }
@@ -220,6 +222,12 @@ const finiteExit = (exit: number | "Infinity" | "-Infinity" | "NaN" | undefined)
  * not model (usage records, inbox delivery changes, TUI events, ...).
  */
 export function translateWireEvent(event: OpenCodeEvent): SyncEvent[] {
+  // --- GeoCode: the kernel's list of Earth Engine runs in the background, which reaches the stream as an rpc event ---
+  if (event.type === "rpc.geocode.geeruns.changed") {
+    const snapshot = geeRunsSnapshot.safeParse(event.data)
+    return snapshot.success ? [{ type: "geocode.geeruns", properties: snapshot.data }] : []
+  }
+  // --- /GeoCode ---
   switch (event.type) {
     case "server.connected":
       return [{ type: "server.connected", properties: {} }]

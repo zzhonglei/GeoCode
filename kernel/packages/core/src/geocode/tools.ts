@@ -10,6 +10,7 @@ import { Permission } from "../permission.js"
 import { PermissionSaved } from "../permission/saved.js"
 import { GeeRunTool } from "./geerun.js"
 import { GeeRunJob } from "./geerun-job.js"
+import { GeeRunRpc } from "./geerun-rpc.js"
 import { QgisDocTool } from "./qgisdoc.js"
 import { QgisRunTool } from "./qgisrun.js"
 import { ReadGeodataTool } from "./readgeodata.js"
@@ -28,6 +29,7 @@ export const Plugin = {
     const jobs = yield* Job.Service
     const runs = yield* GeeRunJob.Service
     const bus = yield* Bus.Service
+    yield* ctx.rpc.register(GeeRunRpc.Definition, { list: () => runs.list }).pipe(Effect.orDie)
     yield* ctx.tool
       .transform((editor) => {
         editor.add(QgisDocTool.make(permission))

@@ -14,6 +14,7 @@ import {
 } from './session-activity-timing';
 import { countSyncPerformance } from './performance-diagnostics';
 import { hasRunningShell, useBackgroundShellsStore } from './background-shells';
+import { hasRunningGeeRun, settleEndedGeeRuns, useBackgroundGeeRuns } from '@/geocode/backgroundGeeRuns'; // GeoCode: an Earth Engine run in the background keeps its session's turn open, as a command does
 
 // Shared live busy/retry index for every directory. Global events update it
 // incrementally and authoritative directory snapshots reconcile it, so each
@@ -119,12 +120,13 @@ const withBackgroundWork = (activeSessionIds: ReadonlySet<string>): ReadonlySet<
   };
   for (const activeId of activeSessionIds) forEachAncestorId(activeId, add);
   for (const sessionId of useBackgroundShellsStore.getState().sessionIds) add(sessionId);
+  for (const sessionId of useBackgroundGeeRuns.getState().sessionIds) add(sessionId); // GeoCode: see the import
   return extended ?? activeSessionIds;
 };
 
 /** True when the session idles only while its background work runs. */
 const hasBackgroundWork = (sessionId: string, activeSessionIds: ReadonlySet<string>): boolean => (
-  hasActiveSubagent(sessionId, activeSessionIds) || hasRunningShell(sessionId)
+  hasActiveSubagent(sessionId, activeSessionIds) || hasRunningShell(sessionId) || hasRunningGeeRun(sessionId) // GeoCode: see the import
 );
 
 /**
@@ -133,7 +135,7 @@ const hasBackgroundWork = (sessionId: string, activeSessionIds: ReadonlySet<stri
  * it started in the background runs. The session's own run wins; a pause with
  * both kinds of background work reports the subagent.
  */
-type SessionTurnActivity = 'running' | 'subagent' | 'shell';
+type SessionTurnActivity = 'running' | 'subagent' | 'shell' | 'gee'; // GeoCode: see the import; a command wins over it
 
 export const useSessionTurnActivity = (sessionId: string): SessionTurnActivity | null => {
   const status = useGlobalSessionStatusStore((state): SessionTurnActivity | null => {
@@ -141,7 +143,8 @@ export const useSessionTurnActivity = (sessionId: string): SessionTurnActivity |
     return hasActiveSubagent(sessionId, state.activeSessionIds) ? 'subagent' : null;
   });
   const waitingOnShell = useBackgroundShellsStore((state) => state.sessionIds.has(sessionId));
-  return status ?? (waitingOnShell ? 'shell' : null);
+  const waitingOnGee = useBackgroundGeeRuns((state) => state.sessionIds.has(sessionId)); // GeoCode: see the import
+  return status ?? (waitingOnShell ? 'shell' : waitingOnGee ? 'gee' : null); // GeoCode: see the import
 };
 
 // The last background command of an idle session ending closes its turn,
@@ -152,11 +155,17 @@ useBackgroundShellsStore.subscribe((state, previous) => {
   const timingMutations: SessionActivityTimingMutation[] = [];
   for (const sessionId of previous.sessionIds) {
     if (state.sessionIds.has(sessionId)) continue;
-    if (activeSessionIds.has(sessionId) || hasActiveSubagent(sessionId, activeSessionIds)) continue;
+    if (activeSessionIds.has(sessionId) || hasActiveSubagent(sessionId, activeSessionIds) || hasRunningGeeRun(sessionId)) continue; // GeoCode: see the import
     timingMutations.push({ type: 'observe', sessionId, phase: 'settled' });
   }
   applySessionActivityTimingMutations(timingMutations);
 });
+// --- GeoCode: and as it does, the last Earth Engine run in the background ending closes an idle session's turn ---
+settleEndedGeeRuns((sessionId) => {
+  const { activeSessionIds } = useGlobalSessionStatusStore.getState();
+  return activeSessionIds.has(sessionId) || hasBackgroundWork(sessionId, activeSessionIds);
+});
+// --- /GeoCode ---
 
 const normalizeStatusType = (type: string | undefined): ActiveStatusType | 'idle' => {
   if (type === 'busy') return 'busy';

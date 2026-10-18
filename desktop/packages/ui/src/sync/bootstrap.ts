@@ -7,6 +7,7 @@ import { emitSyncConfigChanged } from "./sync-refs"
 import { warmChatsRootDirectory } from "../lib/chatDirectories"
 import { runBackgroundNetworkTask } from "../lib/background-network"
 import { refreshBackgroundShells } from "./background-shells"
+import { refreshGeeRuns } from "@/geocode/backgroundGeeRuns" // GeoCode: see initializeDirectory
 import {
   readDirectoryStatusSnapshot,
   readDirectoryFormSnapshot,
@@ -180,6 +181,7 @@ async function initializeDirectory(input: DirectoryBootstrapInput): Promise<Boot
     // Commands the agent left running in the background, including ones whose
     // start or exit this client missed.
     read(() => refreshBackgroundShells(directory, (target) => opencodeClient.listRunningShells(target))),
+    read(() => refreshGeeRuns(() => opencodeClient.listRunningGeeRuns(directory))), // GeoCode: and the Earth Engine runs in the background, every directory's
   ])
   const [results, enrichmentResults] = await Promise.all([critical, enrichment])
   if (input.isStale?.()) return "stale"
