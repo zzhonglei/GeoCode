@@ -8,6 +8,7 @@ import { SessionEvent } from "./session/event.js"
 import { SessionExecution } from "./session/execution.js"
 import { SessionStore } from "./session/store.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { GeoRunActivity } from "./geocode/run-activity.js" // GeoCode: a geographic run in the foreground is not idleness, though it may send no session event for hours
 
 const isSessionEvent = Schema.is(SessionEvent.Durable)
 
@@ -55,6 +56,7 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           expired,
           (entry) =>
             Effect.gen(function* () {
+              if (GeoRunActivity.isActive(entry.ref)) return yield* touch(entry.ref) // GeoCode: see the import
               const owners = active.flatMap((session) =>
                 session && key(session.location) === key(entry.ref) ? [session] : [],
               )
