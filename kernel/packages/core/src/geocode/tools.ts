@@ -29,7 +29,9 @@ export const Plugin = {
     const jobs = yield* Job.Service
     const runs = yield* GeeRunJob.Service
     const bus = yield* Bus.Service
-    yield* ctx.rpc.register(GeeRunRpc.Definition, { list: () => runs.list }).pipe(Effect.orDie)
+    yield* ctx.rpc
+      .register(GeeRunRpc.Definition, { list: () => runs.list, stop: ({ id }) => runs.stop(id) })
+      .pipe(Effect.orDie)
     yield* ctx.tool
       .transform((editor) => {
         editor.add(QgisDocTool.make(permission))

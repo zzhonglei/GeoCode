@@ -26,6 +26,8 @@ export interface Interface {
   ) => Effect.Effect<void>
   /** The runs under way in the background, for the interface to show beside its background commands. */
   readonly list: Effect.Effect<typeof GeeRunRpc.Snapshot.Type>
+  /** Stops a run in the background at the user's word, for its conversation to be told so. */
+  readonly stop: (id: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@geocode/GeeRunJob") {}
@@ -38,6 +40,7 @@ const make = Effect.gen(function* () {
   const scope = yield* Scope.Scope
   const context = yield* Effect.context<never>()
   const running = new Map<string, typeof GeeRunRpc.Run.Type>()
+  const stopped = new Set<string>()
   let revision = yield* Clock.currentTimeMillis
   const snapshot = () => ({ revision, runs: [...running.values()] })
   // In the location of the run that changed, as the protocol has every `rpc.` event in one; the interface reads the
@@ -50,6 +53,11 @@ const make = Effect.gen(function* () {
 
   return Service.of({
     list: Effect.sync(snapshot),
+    stop: Effect.fn("GeeRunJob.stop")(function* (id) {
+      if (!running.has(id)) return
+      stopped.add(id)
+      yield* jobs.cancel(id)
+    }),
     background: Effect.fn("GeeRunJob.background")(function* (id, recovery, final, call) {
       const moved = yield* jobs.background(id)
       // The place alone, as an event carries it, without the rest of what the location knows.
@@ -67,14 +75,17 @@ const make = Effect.gen(function* () {
         // Off the list once it ends, while its notification still makes its way into the conversation.
         const ended = Effect.suspend(() => (running.delete(id) ? changed(location) : Effect.void))
         const info = (yield* jobs.wait({ id }).pipe(Effect.ensuring(ended))).info
-        // Only the app quitting cancels a run in the background: its marker stays, for the restart to tell of it.
-        if (!info || info.status === "running" || info.status === "cancelled") return
+        const byUser = stopped.delete(id)
+        // Cancelled other than by the user, the app is quitting: the run's marker stays, for the restart to tell of it.
+        if (!info || info.status === "running" || (info.status === "cancelled" && !byUser)) return
         yield* sessions.synthetic({
           ...(info.notificationID ? { id: info.notificationID } : {}),
-          ...GeeRunTool.notification(recovery, info.status, GeeRunTool.said({ ...info, status: info.status }), {
-            ...(yield* final),
-            ended: info.completed_at,
-          }),
+          ...GeeRunTool.notification(
+            recovery,
+            info.status,
+            info.status === "cancelled" ? GeeRunTool.STOPPED : GeeRunTool.said({ ...info, status: info.status }),
+            { ...(yield* final), ended: info.completed_at },
+          ),
         })
         if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
       }).pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.setContext(context))

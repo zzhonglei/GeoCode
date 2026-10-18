@@ -1696,9 +1696,14 @@ class OpencodeService {
   // Shell commands the agent started (background commands)
   // -------------------------------------------------------------------------
 
-  // --- GeoCode: Earth Engine runs in the background, of every directory, which the geo tools' plugin lists ---
+  // --- GeoCode: Earth Engine runs in the background, of every directory, which the geo tools' plugin lists and stops ---
   async listRunningGeeRuns(directory: string): Promise<GeeRunsSnapshot> {
     return call("geocode.geeruns.list", () => this.clientFor(directory).rpc(geeRunsRpc).list({}))
+  }
+
+  /** Stops a run in the background, which tells its conversation so; any directory reaches it. Throws when it could not be stopped. */
+  async stopGeeRun(id: string): Promise<void> {
+    await call("geocode.geeruns.stop", () => this.clientFor().rpc(geeRunsRpc).stop({ id }))
   }
   // --- /GeoCode ---
 

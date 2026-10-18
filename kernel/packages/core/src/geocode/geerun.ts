@@ -264,6 +264,9 @@ const backgroundAnswer = (task: string) =>
 const RESTARTED =
   "The run was stopped because GeoCode restarted. Assets its exports already saved, or still save, stay in the task; run the script again to finish it."
 
+/** What a background run's notification says when the user stopped the run from the interface. */
+export const STOPPED = "The user stopped the run. Assets its exports already saved, or still save, stay in the task."
+
 /** What a background run's notification says: the answer it ended with, as a shell's says what the command printed. */
 export const said = (
   result: Pick<Job.Background, "output" | "error"> & { readonly status: Exclude<Job.Status, "running"> },

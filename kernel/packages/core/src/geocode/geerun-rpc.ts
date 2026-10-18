@@ -20,7 +20,10 @@ export const Snapshot = Schema.Struct({ revision: Schema.Number, runs: Schema.Ar
 
 export const Definition = Rpc.define({
   id: "geocode.geeruns",
-  methods: { list: { input: Schema.Struct({}), output: Snapshot } },
+  methods: {
+    list: { input: Schema.Struct({}), output: Snapshot },
+    stop: { input: Schema.Struct({ id: Schema.String }), output: Schema.Void },
+  },
   events: { changed: { schema: Snapshot } },
 })
 

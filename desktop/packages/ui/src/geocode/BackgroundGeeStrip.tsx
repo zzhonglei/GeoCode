@@ -3,9 +3,11 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { ShellElapsed } from '@/components/chat/BackgroundShellsStrip';
 import { Icon } from '@/components/icon/Icon';
+import { toast } from '@/components/ui';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/lib/i18n';
+import { opencodeClient } from '@/lib/opencode/client';
 import { useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
 import { sessionsInTree } from '@/sync/background-shells';
 
@@ -38,11 +40,46 @@ const useTreeRuns = (sessionId: string): readonly BackgroundGeeRun[] => {
   );
 };
 
+const STOP_BUTTON_CLASS = 'shrink-0 text-status-error/80 hover:bg-transparent hover:text-status-error';
+
+/** Stops runs as the commands' strip stops its commands: a row stays disabled until its run ends and leaves the list. */
+const useStopRuns = () => {
+  const { locale } = useI18n();
+  const [stoppingIds, setStoppingIds] = React.useState<ReadonlySet<string>>(() => new Set());
+
+  const stop = React.useCallback(
+    (runs: readonly BackgroundGeeRun[]) => {
+      const pending = runs.filter((run) => !stoppingIds.has(run.id));
+      if (pending.length === 0) return;
+      setStoppingIds((current) => new Set([...current, ...pending.map((run) => run.id)]));
+      void Promise.allSettled(pending.map((run) => opencodeClient.stopGeeRun(run.id))).then((results) => {
+        const failed = pending.filter((_, index) => results[index].status === 'rejected');
+        if (failed.length === 0) return;
+        setStoppingIds((current) => {
+          const next = new Set(current);
+          for (const run of failed) next.delete(run.id);
+          return next;
+        });
+        toast.error(geeBackgroundText(locale).stopFailed);
+      });
+    },
+    [locale, stoppingIds],
+  );
+
+  return { stoppingIds, stop };
+};
+
 /** A run's row, as a command's, with what GeoAgent said the run is for. */
-const RunRow: React.FC<{ run: BackgroundGeeRun; fromSubagent: boolean }> = ({ run, fromSubagent }) => {
-  const { t } = useI18n();
+const RunRow: React.FC<{
+  run: BackgroundGeeRun;
+  fromSubagent: boolean;
+  stopping: boolean;
+  onStop: (run: BackgroundGeeRun) => void;
+}> = ({ run, fromSubagent, stopping, onStop }) => {
+  const { t, locale } = useI18n();
+  const text = geeBackgroundText(locale);
   return (
-    <div className="flex h-10 items-center gap-2 ps-3 pe-3">
+    <div className="flex h-10 items-center gap-2 ps-3 pe-1.5">
       <GeeLogo className="size-3.5 shrink-0" />
       <Tooltip delayDuration={500}>
         <TooltipTrigger asChild>
@@ -58,24 +95,46 @@ const RunRow: React.FC<{ run: BackgroundGeeRun; fromSubagent: boolean }> = ({ ru
         <span className="shrink-0 typography-meta text-muted-foreground">{t('chat.backgroundShells.subagent')}</span>
       ) : null}
       <ShellElapsed startedAt={run.startedAt} />
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={stopping}
+        onClick={() => onStop(run)}
+        onMouseDown={(event) => event.preventDefault()}
+        aria-label={text.stopAria(run.description)}
+        className={STOP_BUTTON_CLASS}
+      >
+        {text.stop}
+      </Button>
     </div>
   );
 };
 
 /**
  * Earth Engine runs in the background, under the commands running there and shown as they are: one run is its own
- * row, several fold into a count that expands in place. No stop: a run in the background stops only as it ends.
+ * row, several fold into a count that expands in place, with a stop for each and for all.
  */
 export const BackgroundGeeStrip: React.FC<{ sessionId: string | null }> = React.memo(({ sessionId }) => {
   const { locale } = useI18n();
   const runs = useTreeRuns(sessionId ?? '');
   const [expanded, setExpanded] = React.useState(false);
   const listId = React.useId();
+  const { stoppingIds, stop } = useStopRuns();
+  const stopOne = React.useCallback((run: BackgroundGeeRun) => stop([run]), [stop]);
 
   if (!sessionId || runs.length === 0) return null;
 
   const text = geeBackgroundText(locale);
-  const row = (run: BackgroundGeeRun) => <RunRow key={run.id} run={run} fromSubagent={run.sessionID !== sessionId} />;
+  const row = (run: BackgroundGeeRun) => (
+    <RunRow
+      key={run.id}
+      run={run}
+      fromSubagent={run.sessionID !== sessionId}
+      stopping={stoppingIds.has(run.id)}
+      onStop={stopOne}
+    />
+  );
 
   return (
     <div role="group" className="border-b border-border/60" aria-label={text.strip}>
@@ -83,7 +142,7 @@ export const BackgroundGeeStrip: React.FC<{ sessionId: string | null }> = React.
         row(runs[0])
       ) : (
         <>
-          <div className="flex h-10 items-center gap-2 ps-3 pe-3">
+          <div className="flex h-10 items-center gap-2 ps-3 pe-1.5">
             <Button
               type="button"
               variant="ghost"
@@ -97,6 +156,17 @@ export const BackgroundGeeStrip: React.FC<{ sessionId: string | null }> = React.
               <GeeLogo className="size-3.5 shrink-0" />
               <span className="min-w-0 flex-1 truncate text-start">{text.count(runs.length)}</span>
               <Icon name={expanded ? 'arrow-up-s' : 'arrow-down-s'} className="size-4 shrink-0" aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={runs.every((run) => stoppingIds.has(run.id))}
+              onClick={() => stop(runs)}
+              onMouseDown={(event) => event.preventDefault()}
+              className={STOP_BUTTON_CLASS}
+            >
+              {text.stopAll}
             </Button>
           </div>
           {expanded ? <div id={listId}>{runs.map(row)}</div> : null}

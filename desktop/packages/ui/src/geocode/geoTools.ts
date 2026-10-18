@@ -56,6 +56,11 @@ type Texts = {
     count: (count: number) => string;
     /** The strip's name, for a screen reader. */
     strip: string;
+    stop: string;
+    stopAll: string;
+    /** A row's stop, for a screen reader. */
+    stopAria: (description: string) => string;
+    stopFailed: string;
   };
 };
 
@@ -85,6 +90,10 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
       running: 'Earth Engine script running in the background',
       count: (count) => `Background Earth Engine scripts: ${count}`,
       strip: 'Background Earth Engine scripts',
+      stop: 'Stop',
+      stopAll: 'Stop all',
+      stopAria: (description) => `Stop ${description}`,
+      stopFailed: 'Could not stop the Earth Engine run',
     },
   },
   'zh-CN': {
@@ -112,6 +121,10 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
       running: 'Earth Engine 脚本正在后台运行',
       count: (count) => `后台 Earth Engine 脚本：${count}`,
       strip: '后台 Earth Engine 脚本',
+      stop: '停止',
+      stopAll: '全部停止',
+      stopAria: (description) => `停止 ${description}`,
+      stopFailed: '未能停止 Earth Engine 运行',
     },
   },
   'zh-TW': {
@@ -139,6 +152,10 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
       running: 'Earth Engine 腳本正在背景執行',
       count: (count) => `背景 Earth Engine 腳本：${count}`,
       strip: '背景 Earth Engine 腳本',
+      stop: '停止',
+      stopAll: '全部停止',
+      stopAria: (description) => `停止 ${description}`,
+      stopFailed: '無法停止 Earth Engine 執行',
     },
   },
 };

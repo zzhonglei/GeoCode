@@ -10,6 +10,9 @@ export type GeeRunsSnapshot = z.infer<typeof geeRunsSnapshot>;
 
 export const geeRunsRpc = {
   id: 'geocode.geeruns',
-  methods: { list: { input: z.object({}), output: geeRunsSnapshot } },
+  methods: {
+    list: { input: z.object({}), output: geeRunsSnapshot },
+    stop: { input: z.object({ id: z.string() }), output: z.void() },
+  },
   events: { changed: { schema: geeRunsSnapshot } },
 } as const;

@@ -78,8 +78,8 @@ let saved: Array<{ action: string; resource: string }> = []
 const stored = new Map<string, Schema.Json>()
 /** The scope the plugin is started in, which the plugin service closes when the plugin's location is evicted. */
 let pluginScope: Scope.Closeable | undefined
-/** How the plugin answers the interface asking for the runs in the background. */
-let listRuns: (() => Effect.Effect<unknown>) | undefined
+/** How the plugin answers the interface about the runs in the background. */
+let runsRpc: { list: () => Effect.Effect<unknown>; stop: (input: { id: string }) => Effect.Effect<unknown> } | undefined
 
 const geoToolsNode = makeLocationNode({
   name: "test/geocode-tools-plugin",
@@ -93,7 +93,7 @@ const geoToolsNode = makeLocationNode({
           register: (_definition: unknown, handlers: unknown) =>
             Effect.sync(() => {
               // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-              listRuns = (handlers as { list: () => Effect.Effect<unknown> }).list
+              runsRpc = handlers as NonNullable<typeof runsRpc>
               return { dispose: Effect.void, events: { emit: () => Effect.void } }
             }),
         },
@@ -1144,7 +1144,7 @@ describe("GeoCode: geerun", () => {
             })
       const told = () => published.filter((event) => event.type === "rpc.geocode.geeruns.changed").at(-1)?.data
       yield* executeTool(yield* Tool.Service, gee({ script: "x", description: "统计影像", background: true }))
-      const listed = Schema.decodeUnknownSync(GeeRunRpc.Snapshot)(yield* listRuns!())
+      const listed = Schema.decodeUnknownSync(GeeRunRpc.Snapshot)(yield* runsRpc!.list())
       expect(listed.runs).toEqual([
         { id: expect.any(String), sessionID, description: "统计影像", startedAt: expect.any(Number) },
       ])
@@ -1152,11 +1152,44 @@ describe("GeoCode: geerun", () => {
       noticed = yield* Deferred.make<void>()
       end()
       yield* Deferred.await(noticed)
-      const ended = Schema.decodeUnknownSync(GeeRunRpc.Snapshot)(yield* listRuns!())
+      const ended = Schema.decodeUnknownSync(GeeRunRpc.Snapshot)(yield* runsRpc!.list())
       expect(ended.runs).toEqual([])
       // The interface keeps the latest list by its revision.
       expect(ended.revision).toBeGreaterThan(listed.revision)
       expect(told()).toEqual(ended)
+    }),
+  )
+
+  // Guards against a run the user stopped going on, or its conversation told nothing, as of a run the app's quitting stopped.
+  it.live("stops a run in the background at the user's word, and tells the conversation so", () =>
+    Effect.gen(function* () {
+      reset()
+      const encoder = new TextEncoder()
+      answer = (body) =>
+        body.method !== "gee.run"
+          ? ran()
+          : new ReadableStream({
+              start: (controller) => controller.enqueue(encoder.encode(`${progress({ begun: true })}\n`)),
+            })
+      yield* executeTool(yield* Tool.Service, gee({ script: "x", description: "统计影像", background: true }))
+      const [run] = Schema.decodeUnknownSync(GeeRunRpc.Snapshot)(yield* runsRpc!.list()).runs
+      noticed = yield* Deferred.make<void>()
+      yield* runsRpc!.stop({ id: run!.id })
+      yield* Deferred.await(noticed)
+      for (let turn = 0; turn < 100 && !aborted.includes("gee.run"); turn++) yield* Effect.sleep("10 millis")
+      expect(aborted).toContain("gee.run")
+      expect(notices).toMatchObject([
+        {
+          sessionID,
+          description: "统计影像",
+          text: `<geerun task="${TASK}" state="cancelled" description="统计影像">\n${GeeRunTool.STOPPED}\n</geerun>`,
+          metadata: { source: "geerun", state: "cancelled", callID: "call-geerun", ended: expect.any(Number) },
+        },
+      ])
+      // As a background command's: the stop's notice wakes the conversation.
+      expect(notices[0]?.resume).not.toBe(false)
+      for (let turn = 0; turn < 100 && kv.size > 0; turn++) yield* Effect.sleep("10 millis")
+      expect(kv.size).toBe(0)
     }),
   )
 
