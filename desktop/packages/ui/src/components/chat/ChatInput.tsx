@@ -3926,7 +3926,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
             {goalRow}
             {autoReviewRow}
             {backgroundShellsRow}
-            {backgroundShellsRow ? <BackgroundGeeStrip key={currentSessionId ?? ''} sessionId={currentSessionId} /> : null}{/* GeoCode: the Earth Engine runs in the background, under the commands */}
+            {backgroundShellsRow ? <BackgroundGeeStrip key={`gee-${currentSessionId ?? ''}`} sessionId={currentSessionId} /> : null}{/* GeoCode: the Earth Engine runs in the background, under the commands; a key of its own beside theirs */}
             {revertRow}
             {queueRow}
             {doneHintRow}
