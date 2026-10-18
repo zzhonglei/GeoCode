@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { kernelDataDir, KERNEL_PROJECT_ID_FILE } from '../../geocode/kernel-paths.js'; // GeoCode: see getOpenCodeDataPath and ensureOpenCodeProjectId
+import { isManagedSshCommand } from './network-operations.js'; // GeoCode: see configureRepositoryTransport
 import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import { createRequire } from 'module';
@@ -2719,7 +2720,7 @@ export async function configureRepositoryTransport(directory, { credentialHelper
   }
   const currentSsh = await config(['--get', 'core.sshCommand']);
   const existingSsh = currentSsh.success ? currentSsh.stdout.trim() : '';
-  const oursSsh = /ssh-wrapper\.js/.test(existingSsh);
+  const oursSsh = isManagedSshCommand(existingSsh); // GeoCode: by this install's wrapper path, not its file name
   if (sshCommand) {
     if (existingSsh !== sshCommand) {
       const written = await config(['core.sshCommand', sshCommand]);

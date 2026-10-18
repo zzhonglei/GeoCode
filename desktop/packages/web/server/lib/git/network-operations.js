@@ -30,6 +30,7 @@ const SSH_WRAPPER_PATH = fileURLToPath(new URL('./ssh-wrapper.js', import.meta.u
  */
 export const managedSshCommand = (privateKeyPath) =>
   `OPENCHAMBER_GIT_SSH_KEY=${shellQuote(privateKeyPath)} ${helperShellCommand(SSH_WRAPPER_PATH)}`;
+export const isManagedSshCommand = (value) => value.includes(shellQuote(SSH_WRAPPER_PATH)); // GeoCode: this install's wrapper, as managedSshCommand quotes it; OpenChamber's has the same file name
 const MANAGED_ENV_NAMES = new Set([
   'GIT_ASKPASS', 'SSH_ASKPASS', 'SSH_ASKPASS_REQUIRE', 'GIT_CONFIG_COUNT',
   'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM',
