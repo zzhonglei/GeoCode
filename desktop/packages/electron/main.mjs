@@ -1732,7 +1732,9 @@ Stop-ProcessTree $targetPid $true
     'if [ "$pid" -gt 0 ] 2>/dev/null; then kill -TERM "$pid" 2>/dev/null; kill -TERM "-$pid" 2>/dev/null; fi',
     'sleep "$grace"',
     'if [ "$pid" -gt 0 ] 2>/dev/null; then kill -KILL "-$pid" 2>/dev/null; kill -KILL "$pid" 2>/dev/null; fi',
+    /* --- GeoCode: whoever listens on the old port need not be the kernel ---
     'if [ "$port" -gt 0 ] 2>/dev/null && command -v lsof >/dev/null 2>&1; then for target in $(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null; lsof -ti ":$port" 2>/dev/null); do [ "$target" = "$$" ] || kill -KILL "$target" 2>/dev/null; done; fi',
+    --- /GeoCode --- */
   ].join('; ');
   const child = spawn('/bin/sh', ['-c', script, 'openchamber-opencode-killer', normalizedPid, normalizedPort, String(OPENCODE_SHUTDOWN_GRACE_MS / 1000)], {
     detached: true,

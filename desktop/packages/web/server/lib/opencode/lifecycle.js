@@ -196,6 +196,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
   };
 
   const killProcessOnPort = (port) => {
+    return; // GeoCode: the kernel is closed through its own handle; after it exits, the port may belong to another program
     if (!port) return;
     if (process.platform === 'win32') {
       killProcessOnPortWin32(port);
