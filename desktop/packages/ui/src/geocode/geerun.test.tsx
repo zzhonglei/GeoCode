@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 
-import type { Metadata, SyntheticMessage, ToolPart, ToolState } from '@/lib/opencode/model';
+import type { Message, Metadata, SyntheticMessage, ToolPart, ToolState } from '@/lib/opencode/model';
 import { applyDirectoryEvent } from '@/sync/event-reducer';
+import { materializeSessionSnapshots } from '@/sync/materialization';
 import { INITIAL_STATE } from '@/sync/types';
 
 import { geeRunView } from './geeRun';
@@ -60,5 +61,27 @@ describe("GeoCode: geerun's row", () => {
     const view = geeRunView(backgrounded(), notice, 'en');
     expect(view.bad).toBe(true);
     expect(view.lines.at(-1)).toMatchObject({ text: 'The script failed.', tone: 'error' });
+  });
+
+  // Guards against a call the interface closed itself, as its turn ended, ending its row otherwise than one the kernel
+  // interrupted: the words for it are the interface's own.
+  test('a call the interface closed as its turn ended ends as one the kernel interrupted', () => {
+    const metadata = { started: 1000, statuses: [], log: '' };
+    const turn: Message = {
+      id: 'msg_a',
+      sessionID: 'ses_1',
+      role: 'assistant',
+      time: { created: 900, completed: 13000 },
+      modelID: 'model',
+      providerID: 'provider',
+      agent: 'agent',
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    };
+    const running = call({ status: 'running', input: INPUT, metadata, time: { start: 900 } });
+    const closed = materializeSessionSnapshots({ message: {}, part: {} }, 'ses_1', [{ info: turn, parts: [running] }]).part
+      .msg_a[0];
+    const interrupted = call({ status: 'error', input: INPUT, error: 'Tool execution interrupted', metadata, time: { start: 900, end: 13000 } });
+    expect(closed?.type === 'tool' && geeRunView(closed, undefined, 'en').lines).toEqual(geeRunView(interrupted, undefined, 'en').lines);
   });
 });
