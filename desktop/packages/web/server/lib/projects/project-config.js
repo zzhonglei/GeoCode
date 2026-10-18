@@ -345,7 +345,10 @@ const normalizeTaskForStorage = (value, options) => {
   // Loop provenance: absolute path of the `.agents/loops/*.md` file driving
   // this task, when any. Preserved on every write so the scheduler can detect
   // removed loop files across restarts. Unknown to the UI model.
+  /* --- GeoCode: loop files are not read (see discoverLoopFiles), and a stored path would let the loop endpoints rewrite or delete that file ---
   const loopFile = asNonEmptyString(value.loopFile) ?? asNonEmptyString(existingTask?.loopFile);
+  --- /GeoCode --- */
+  const loopFile = null; // GeoCode: see above
 
   const nowMs = Math.max(0, Math.round(now));
   const baseState = normalizeState(value.state, existingTask?.state);
