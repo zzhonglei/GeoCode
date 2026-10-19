@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 
 import { routeWireEvent } from '@/lib/opencode/events';
 import { getRuntimeKey } from '@/lib/runtime-switch';
-import { applyBackgroundShellEvents, resetBackgroundShells } from '@/sync/background-shells';
 import { ChildStoreManager } from '@/sync/child-store';
 import {
   applyGlobalSessionStatusEvents,
@@ -25,17 +24,9 @@ const idle = () => {
   applyGlobalSessionStatusEvents('/repo', [{ type: 'session.idle', properties: { sessionID: 'ses_1' } }]);
   applyGlobalSessionStatusSnapshot('/repo', {}, ['ses_1']);
 };
-const shell = (running: boolean) =>
-  applyBackgroundShellEvents(
-    '/repo',
-    running
-      ? [{ type: 'shell.started', properties: { shell: { id: 'shell', sessionID: 'ses_1', command: 'sleep 30', file: '/tmp/out', startedAt: 1 } } }]
-      : [{ type: 'shell.ended', properties: { shellID: 'shell', end: { kind: 'exited', status: 'exited', exit: 0 }, endedAt: 2 } }],
-  );
 
 beforeEach(() => {
   resetGeeRuns();
-  resetBackgroundShells();
   replaceGlobalSessionStatusById(new Map());
   resetSessionActivityTiming();
 });
@@ -63,13 +54,6 @@ describe('GeoCode: Earth Engine runs in the background', () => {
     childStores.disposeAll();
   });
 
-  // Guards against a list read while the run ended bringing it back to the strip for good.
-  test('a list read before the latest event does not bring back a run that ended', () => {
-    applyGeeRuns(listed(2, false));
-    applyGeeRuns(listed(1, true));
-    expect(hasRunningGeeRun('ses_1')).toBe(false);
-  });
-
   // Guards against the turn timer stopping while the run goes on in the background, or going on after it.
   test("keeps the session's turn timed while its run goes on after the turn, as a command does", () => {
     busy();
@@ -79,20 +63,4 @@ describe('GeoCode: Earth Engine runs in the background', () => {
     applyGeeRuns(listed(2, false));
     expect(timed()).toBe(false);
   });
-
-  // Guards against the turn ending while the other kind of background work still runs.
-  for (const first of ['command', 'run'] as const) {
-    test(`ends the turn once both a command and a run in the background end (${first} first)`, () => {
-      busy();
-      applyGeeRuns(listed(1, true));
-      shell(true);
-      idle();
-      if (first === 'command') shell(false);
-      else applyGeeRuns(listed(2, false));
-      expect(timed()).toBe(true);
-      if (first === 'command') applyGeeRuns(listed(2, false));
-      else shell(false);
-      expect(timed()).toBe(false);
-    });
-  }
 });

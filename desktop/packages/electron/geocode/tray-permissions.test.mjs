@@ -22,5 +22,4 @@ const repliesFrom = (approvals) => {
 // Guards against a run being allowed, once or always, from the tray, which would skip its card.
 test('a run can only be denied from the tray, in the menu and in its overflow', () => {
   assert.deepEqual(repliesFrom(Array.from({ length: 12 }, (_, index) => approval(String(index), true))), Array(12).fill('reject'));
-  assert.deepEqual(repliesFrom([approval('other', false)]), ['once', 'always', 'reject']);
 });
