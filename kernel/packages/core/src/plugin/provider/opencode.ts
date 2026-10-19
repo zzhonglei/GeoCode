@@ -506,6 +506,7 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
           }
           return yield* HttpClientResponse.filterStatusOk(response).pipe(
             Effect.flatMap(HttpClientResponse.schemaBodyJson(RemoteResponse)),
+            Effect.map(({ providers, websearch }): typeof RemoteResponse.Type => ({ providers, websearch })), // GeoCode: the Console's model services and search, not the configuration it sends
           )
         }),
       ),
