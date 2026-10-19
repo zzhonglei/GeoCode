@@ -2,7 +2,11 @@
 // Prefixes, not names, so variables upstream adds later are dropped too.
 const APP_VARIABLE_PREFIXES = Object.freeze(['OPENCODE_', 'OPENCHAMBER_', 'OTEL_', 'BUN_', 'ELECTRON_']);
 
-export const isAppVariable = (key) => APP_VARIABLE_PREFIXES.some((prefix) => key.startsWith(prefix));
+// Windows reads variable names in any case, so `Opencode_Binary` is still `OPENCODE_BINARY` there.
+export const isAppVariable = (key) => {
+  const name = process.platform === 'win32' ? key.toUpperCase() : key;
+  return APP_VARIABLE_PREFIXES.some((prefix) => name.startsWith(prefix));
+};
 
 export const withoutAppVariables = (environment) =>
   Object.fromEntries(Object.entries(environment).filter(([key]) => !isAppVariable(key)));
