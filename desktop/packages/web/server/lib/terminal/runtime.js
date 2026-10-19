@@ -13,6 +13,7 @@ import { buildTerminalShellLaunch, createTerminalShellResolver, normalizeTermina
 import { stripAppImageArgv0Leak, stripAppImageLauncherEnv, resolvePosixPtyLaunch } from '../inherited-env.js';
 import { shutdownTerminalProcesses } from './shutdown.js';
 import { isOpaqueOriginRequest, isPasswordlessSocketOriginAllowed } from '../security/request-security.js';
+import { dropShellDirectories } from '../../geocode/app-variables.js'; // GeoCode: see spawnPty
 
 const MAX_SESSIONS = 20;
 const MAX_HISTORY_BYTES = 512 * 1024;
@@ -229,6 +230,7 @@ export function createTerminalRuntime({
         // (even an empty one) makes Node CLIs warn about an unparsable IPC channel.
         delete env.NODE_CHANNEL_FD;
         delete env.BASH_XTRACEFD; delete env.BASH_ENV; delete env.ENV; delete env.ELECTRON_RUN_AS_NODE;
+        dropShellDirectories(env); // GeoCode: the shell's own directories, after the project's variables so these cannot put them back
         // AppImage exports ARGV0; zsh would otherwise rewrite argv[0] for every command (#2588).
         stripAppImageArgv0Leak(env);
         // The AppImage launcher also prepends its own directories to PATH, LD_LIBRARY_PATH,

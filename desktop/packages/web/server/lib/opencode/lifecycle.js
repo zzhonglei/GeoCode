@@ -10,6 +10,7 @@ import { overlayEnvironment } from '../environment/variables.js';
 import { recordStartupPerformance } from './startup-performance.js';
 import { topUpV1Migration } from './v1-migration-topup.js';
 import { readStdioReadyUrl } from '../../geocode/stdio-kernel.js'; // GeoCode: see createManagedOpenCodeServerProcess
+import { dropShellDirectories } from '../../geocode/app-variables.js'; // GeoCode: see startOpenCodeOnce
 
 const parsePositiveInt = (value, fallback) => {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -804,6 +805,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
         OPENCODE_SERVER_PASSWORD: openCodePassword,
       },
     ))));
+    dropShellDirectories(processEnv); // GeoCode: without the shell's own directories, which the agent's commands would inherit
     managedProcessEnv = processEnv;
 
     let serverInstance;

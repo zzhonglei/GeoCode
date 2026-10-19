@@ -164,6 +164,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 ## 9. 约束
 
 - 内核与壳各自按 `geocode` 这个名字算出目录,GeoCode 不靠设置 `XDG_*`、`TMPDIR` 这类通用变量来指定它们:这些变量会传给内核启动的所有程序,git 会改读 GeoCode 目录里的 git 配置,用户的工具会把配置与缓存写进 GeoCode 的目录。用户自己的环境里设了它们时,照第 1 节跟随。
+- 主进程用 `OPENCHAMBER_DATA_DIR`、`OPENCHAMBER_MANAGED_PROCESS_REGISTRY` 把壳的数据目录交给壳,这两个变量不交给内核与终端:用户另装的 OpenChamber 在终端里或由 agent 运行时,会把 GeoCode 的目录当成自己的。
 - 同一个目录,写入方与所有读取方用同一个来源。壳有好几处直接读写内核的文件(配置文件、工作树;登录凭据则经内核的接口取得),漏掉一处不报错,只会读到用户自己的 OpenCode 的文件,或写进它的目录。
 - 应用名与应用标识不与 OpenCode、OpenChamber 相同:Electron 的存储与日志、单实例锁、系统偏好与权限、Windows 的安装目录与注册表项都按它们区分。Windows 的安装目录与注册表项在第一次安装时写定,之后的安装沿用,所以应用标识发布之后不再改。
 - 目录名不与已有的名字只差大小写:macOS 与 Windows 的文件系统默认不区分大小写。
