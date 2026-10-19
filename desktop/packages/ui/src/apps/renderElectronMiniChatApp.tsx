@@ -5,6 +5,7 @@ import '@/styles/katex-css';
 import '@/index.css';
 import '@/lib/debug';
 import { SessionAuthGate } from '@/components/auth/SessionAuthGate';
+import { GeoEngineGate } from '@/geocode/GeoEngineGate'; // GeoCode: see renderElectronMiniChatApp
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { ThemeSystemProvider } from '@/contexts/ThemeSystemContext';
 import type { RuntimeAPIs } from '@/lib/api/types';
@@ -26,7 +27,8 @@ export function renderElectronMiniChatApp(apis: RuntimeAPIs) {
         <ThemeSystemProvider>
           <ThemeProvider>
             <SessionAuthGate>
-              <ElectronMiniChatApp apis={apis} />
+              {/* GeoCode: GeoEngine stopping means the app itself is broken, so this window says so too */}
+              <GeoEngineGate><ElectronMiniChatApp apis={apis} /></GeoEngineGate>
             </SessionAuthGate>
           </ThemeProvider>
         </ThemeSystemProvider>
