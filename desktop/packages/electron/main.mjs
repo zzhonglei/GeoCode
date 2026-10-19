@@ -1656,7 +1656,7 @@ const spawnLocalServer = async () => {
   await mutateSettingsRoot((root) => {
     root.desktopLocalPort = port;
   });
-  await mintLocalClientToken(handle).catch((error) => log.warn('[electron] local client token unavailable:', error)); // GeoCode: mints the window token, see geocode/local-access.mjs
+  await mintLocalClientToken(handle); // GeoCode: mints the window token, see geocode/local-access.mjs; without it no window reaches the shell, so startup fails
 
   return url;
 };
