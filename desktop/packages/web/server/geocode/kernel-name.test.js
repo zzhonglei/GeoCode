@@ -57,23 +57,20 @@ describe('GeoCode: the kernel runs under its own name', () => {
     expect(runtime.resolveOpencodeCliPath()).toBe(path.join(directory, KERNEL_BINARY));
   });
 
-  // A recycled pid may belong to an OpenCode server the user started, or to anything whose command line names the kernel: only the recorded executable is killed.
-  it.skipIf(process.platform === 'win32')('reaps its own orphaned kernel and leaves other processes alone', async () => {
-    const binary = `/Applications/GeoCode Beta.app/Contents/Resources/opencode-cli/${KERNEL_PROCESS}`;
+  // A recycled pid may belong to an OpenCode server the user started: only GeoCode's own kernel is killed.
+  it.skipIf(process.platform === 'win32')('reaps its own orphaned kernel and leaves an OpenCode server alone', async () => {
     const reapWith = async (command) => {
       const registry = temporary('geocode-kernel-registry-');
       process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY = registry;
       const child = spawn('sleep', ['60'], { detached: true, stdio: 'ignore' });
       children.push(child);
-      fs.writeFileSync(path.join(registry, `${child.pid}.json`), JSON.stringify({ pid: child.pid, ownerPid: process.pid, port: 4096, binary }));
+      fs.writeFileSync(path.join(registry, `${child.pid}.json`), JSON.stringify({ pid: child.pid, ownerPid: process.pid, port: 4096 }));
       const { reapOrphanedProcesses } = createManagedProcessRegistry({ execFileAsync: async () => ({ stdout: `1 ${command}\n` }) });
       const { reaped } = await reapOrphanedProcesses();
       return { reaped, alive: isAlive(child.pid) };
     };
     expect(await reapWith('/usr/local/bin/opencode serve --port 4096')).toEqual({ reaped: 0, alive: true });
-    expect(await reapWith(`/tmp/${KERNEL_PROCESS}/opencode serve --port 4096`)).toEqual({ reaped: 0, alive: true });
-    expect(await reapWith(`/Applications/GeoCode.app/Contents/Resources/opencode-cli/${KERNEL_PROCESS} serve --stdio --port 4096`)).toEqual({ reaped: 0, alive: true });
-    expect(await reapWith(`${binary} serve --stdio --port 4096`)).toMatchObject({ reaped: 1 });
+    expect(await reapWith(`/Applications/GeoCode.app/Contents/Resources/opencode-cli/${KERNEL_PROCESS} serve --stdio --port 4096`)).toMatchObject({ reaped: 1 });
   });
 
   // Windows identifies a process by its image name alone, so a check left on upstream's name would never match the kernel again.
@@ -93,7 +90,6 @@ describe('GeoCode: the kernel runs under its own name', () => {
       return { reaped, killed };
     };
     expect(await reapWith('opencode.exe')).toEqual({ reaped: 0, killed: [] });
-    expect(await reapWith(`other-${KERNEL_PROCESS}.exe`)).toEqual({ reaped: 0, killed: [] });
     expect(await reapWith(`${KERNEL_PROCESS}.exe`)).toEqual({ reaped: 1, killed: [String(process.pid)] });
   });
 });

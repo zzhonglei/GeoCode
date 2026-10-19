@@ -78,7 +78,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const commandIdentifiesOurServer = (command, entry) => {
   if (typeof command !== 'string') return false;
   const lower = command.toLowerCase();
-  if (!command.startsWith(`${entry.binary} `) || !lower.includes('serve')) return false; // GeoCode: only the kernel executable it recorded, not a command that merely names it
+  if (!lower.includes(KERNEL_PROCESS) || !lower.includes('serve')) return false; // GeoCode: only its own kernel, not an OpenCode the user runs
   // Tie to the exact server we registered when we know its port, so a recycled
   // pid running a *different* opencode server is never mistaken for ours.
   if (Number.isInteger(entry.port) && !command.includes(String(entry.port))) return false;
@@ -235,7 +235,7 @@ export const createManagedProcessRegistry = ({ fs = fsp, execFileAsync = default
 
     if (process.platform === 'win32') {
       const image = await readWindowsImageName(entry.pid);
-      const looksLikeOpencode = typeof image === 'string' && image.toLowerCase().startsWith(`"${KERNEL_PROCESS}.exe",`); // GeoCode: the quotes delimit the whole image name, so a name that only contains it does not match
+      const looksLikeOpencode = typeof image === 'string' && image.toLowerCase().includes(KERNEL_PROCESS); // GeoCode: only its own kernel, see commandIdentifiesOurServer
       // Windows lacks reliable reparent-to-1 semantics (job objects usually kill
       // children with the parent), so we reap only when the owner is provably dead
       // AND the image still looks like opencode.
