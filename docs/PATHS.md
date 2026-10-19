@@ -17,7 +17,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 | 日志 | `~/Library/Logs/GeoCode/main.log` 与数据目录的 `log/` | `%APPDATA%\GeoCode\logs\main.log` 与数据目录的 `log\` |
 | 程序 | `/Applications/GeoCode.app` | `%LOCALAPPDATA%\Programs\geocode\` |
 
-环境里设了 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_CACHE_HOME`、`XDG_STATE_HOME` 的,配置、数据、缓存、状态目录改在它们下面的 `geocode/`。
+环境里设了 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_CACHE_HOME`、`XDG_STATE_HOME` 的,配置、数据、缓存、状态目录改在它们下面的 `geocode/`。只在登录 shell 的配置里设了 `XDG_DATA_HOME`、又不从终端启动应用的,壳自己的 `desktop/`(第 3 节)仍在默认的数据目录下:壳在读入登录 shell 的环境之前就定下了它。
 
 ## 2. 配置目录
 
@@ -158,6 +158,8 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 - 释放空间:删除 `~/.cache/geocode/`。
 - 重置界面:删除窗口数据目录。
 - 完全卸载:删除程序,再删除第 1 节表里的全部位置。
+
+设了 `XDG_*` 的,删的是它们下面的 `geocode/`;`XDG_DATA_HOME` 只设在登录 shell 里时,默认数据目录下的 `desktop/` 也要删(第 1 节)。
 
 仓库绑定了账号或托管的 SSH 密钥时,它的 `.git/config` 指向数据目录里的凭据助手与 GeoCode 程序本身(第 6 节)。删除数据目录或卸载之前先在设置里解除绑定,否则在终端里对这个仓库拉取与推送会失败。
 
