@@ -1847,8 +1847,10 @@ const ensureGlobalWatcherStarted = async () => {
 
   return globalWatcherStartPromise;
 };
+let geocodeKernelStartFailed = false; // GeoCode: see bootstrapOpenCodeAtStartup and getHealthSnapshot
 const bootstrapOpenCodeAtStartup = async (...args) => {
   await openCodeLifecycleRuntime.bootstrapOpenCodeAtStartup(...args);
+  geocodeKernelStartFailed = !isOpenCodeReady; // GeoCode: bootstrap catches its failures, so readiness after its last attempt is the only sign it failed
   scheduleOpenCodeApiDetection();
   if (openCodeLifecycleState.openCodeProcess && !openCodeLifecycleState.isExternalOpenCode) {
     startHealthMonitoring();
@@ -2268,6 +2270,7 @@ async function main(options = {}) {
         openCodeApiPrefix: '',
         openCodeApiPrefixDetected: true,
         isOpenCodeReady,
+        geocodeKernelStartFailed: geocodeKernelStartFailed && !isOpenCodeReady, // GeoCode: the initial launch failed, and the kernel has not come up since
         lastOpenCodeError,
         lastOpenCodeLaunchDiagnostics,
         lastOpenCodeHealthFailure,

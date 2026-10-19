@@ -1,5 +1,7 @@
 import React from 'react';
+import { z } from 'zod';
 
+import { runtimeFetch } from '@/lib/runtime-fetch';
 import { fetchStartupDiagnostics, type StartupDiagnostics } from '@/lib/startupDiagnostics';
 import type { InitFailure } from '@/stores/useConfigStore';
 
@@ -31,13 +33,19 @@ export const readStartupDiagnostics = async (signal: AbortSignal): Promise<Start
   }
 };
 
+// Set by the local service once every attempt of the initial launch has failed (web/server/index.js).
+const startFailedSchema = z.object({ geocodeKernelStartFailed: z.boolean().optional() });
+
+const fetchKernelStartFailed = async (signal: AbortSignal): Promise<boolean> => {
+  const response = await runtimeFetch('/health', { signal, headers: { Accept: 'application/json' }, cache: 'no-store' });
+  return response.ok && startFailedSchema.parse(await response.json()).geocodeKernelStartFailed === true;
+};
+
 const START_FAILURE_POLL_MS = 3000;
-const START_FAILURE_CONFIRMATIONS = 2;
 
 /**
  * Whether the local service reports that the kernel failed to start. Upstream shows its recovery screen only after
- * about two minutes of retries; a kernel that is merely slow reports no error, and one failed attempt can be followed
- * by a successful one, so the error has to be reported twice in a row.
+ * about two minutes of retries; the service knows as soon as the attempts of the initial launch are over.
  */
 export const useKernelStartFailed = (watching: boolean): boolean => {
   const [failed, setFailed] = React.useState(false);
@@ -48,12 +56,9 @@ export const useKernelStartFailed = (watching: boolean): boolean => {
       return;
     }
     const controller = new AbortController();
-    let confirmations = 0;
     const poll = async () => {
-      const diagnostics = await readStartupDiagnostics(controller.signal);
-      if (controller.signal.aborted) return;
-      confirmations = diagnostics?.error ? confirmations + 1 : 0;
-      if (confirmations >= START_FAILURE_CONFIRMATIONS) setFailed(true);
+      const reported = await fetchKernelStartFailed(controller.signal).catch(() => false);
+      if (reported && !controller.signal.aborted) setFailed(true);
     };
     const timer = setInterval(() => { void poll(); }, START_FAILURE_POLL_MS);
     return () => {
