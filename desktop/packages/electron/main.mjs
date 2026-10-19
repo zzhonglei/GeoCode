@@ -1489,7 +1489,7 @@ import { provideLoginShellEnvSnapshot } from '@openchamber/web/server/lib/openco
 import { dropInheritedAppVariables } from './geocode/inherited-env.mjs'; // GeoCode: see inheritUserShellEnv
 import { assertDesktopCommandOpen } from './geocode/closed-commands.mjs'; // GeoCode: see handleInvoke
 import { localClientToken, localServerPassword, mintLocalClientToken } from './geocode/local-access.mjs'; // GeoCode: see spawnLocalServer and readDesktopLocalClientToken
-import { geoEngineFailure, geoEngineRequest, geoEngineStatuses, onGeoEngineStatus, startGeoEngine, stopGeoEngine } from './geocode/geoengine.mjs'; // GeoCode: see resolveInitialUrl, shutdownBackgroundServices, handleInvoke and startWebUiServer
+import { geoEngineFailure, geoEngineRequest, geoEngineStatuses, onGeoEngineStatus, startGeoEngine, stopGeoEngine } from './geocode/geoengine.mjs'; // GeoCode: see resolveInitialUrl, shutdownBackgroundServices, handleInvoke, startWebUiServer and the startup failure
 
 // Merge the user's login-shell env (PATH, etc.) into this process before we
 // import/start the server in-process. The server and its children (opencode
@@ -6406,5 +6406,6 @@ app.whenReady().then(async () => {
   log.error('[electron] startup failed:', error);
   // GeoCode: say why, instead of a window that never appears
   dialog.showErrorBox('GeoCode could not start', `${error instanceof Error ? error.message : String(error)}\n\nLog: ${log.transports.file.getFile().path}`);
+  return stopGeoEngine().finally(() => app.exit(1)); // GeoCode: GeoEngine ends its tasks before the app exits
   app.exit(1);
 });
