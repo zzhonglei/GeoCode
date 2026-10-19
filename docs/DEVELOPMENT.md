@@ -36,7 +36,7 @@ geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
 ./scripts/stage-kernel.sh
 ```
 
-它只构建本机平台的内核,产物放到 `desktop/packages/electron/resources/opencode-cli/geocode-kernel`(改成 GeoCode 自己的文件名,见 `DESKTOP.md` 第 6 节)。脚本把 `kernel/package.json` 的 `version` 注入内核,并核对它报出的版本;直接用上游的构建命令得到的是预览版本号,过不了壳启动内核前的版本检查。
+它只构建本机平台的内核,产物放到 `desktop/packages/electron/resources/opencode-cli/geocode-kernel`(改成 GeoCode 自己的文件名,见 `DESKTOP.md` 第 6 节;Windows 上为 `geocode-kernel.exe`)。脚本把 `kernel/package.json` 的 `version` 注入内核,并核对它报出的版本;直接用上游的构建命令得到的是预览版本号,过不了壳启动内核前的版本检查。
 
 改动 `kernel/` 之后要重新运行它,应用才会用上新的内核。
 
