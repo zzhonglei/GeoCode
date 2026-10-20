@@ -663,6 +663,33 @@ describe("GeoCode: qgisrun", () => {
     }),
   )
 
+  it.effect("keeps the end of what QGIS said, within the kernel's bounds, and how the run ended", () =>
+    Effect.gen(function* () {
+      reset()
+      const ending = "Failed after 9 s.\nINPUT: Input layer (vector, required)"
+      engine({
+        run: () => [
+          ...Array.from({ length: 3000 }, (_, index) =>
+            progress({ level: "warning", text: `Feature ${index} has invalid geometry. Skipping feature.` }),
+          ),
+          progress({ level: "error", text: "No features left to buffer" }),
+          JSON.stringify({
+            type: "result",
+            ok: false,
+            error: { code: "algorithm-failed", message: "x", details: { ending } },
+          }),
+        ],
+      })
+      const done = yield* executeTool(yield* Tool.Service, runs({ algorithm: "native:buffer", parameters: {} }))
+      const first = done.content?.[0]
+      const text = first?.type === "text" ? first.text : ""
+      expect(text).toContain("No features left to buffer")
+      expect(text.endsWith(ending)).toBe(true)
+      expect(text.split("\n").length).toBeLessThanOrEqual(ToolOutput.MAX_LINES)
+      expect(Buffer.byteLength(text, "utf-8")).toBeLessThanOrEqual(ToolOutput.MAX_BYTES)
+    }),
+  )
+
   it.live(
     "stops a run that reports nothing for its timeout, keeping what it said",
     () =>

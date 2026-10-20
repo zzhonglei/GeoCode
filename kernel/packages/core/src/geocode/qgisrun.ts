@@ -8,6 +8,7 @@ import { FileAccess } from "../file-access.js"
 import type { Location } from "../location.js"
 import type { Permission } from "../permission.js"
 import { Wildcard } from "../util/wildcard.js"
+import { GeoAnswer } from "./answer.js"
 import { GeoEngine } from "./geoengine.js"
 import { GeoRunActivity } from "./run-activity.js"
 
@@ -32,7 +33,7 @@ const MIN_TIMEOUT = 10
 /** The silence allowed before the algorithm begins, at the least: QGIS says nothing while it starts, slowly when cold. */
 const START_TIMEOUT = 120
 
-/** The messages the interface is given, the latest; the answer has them all. */
+/** The messages the interface is given, the latest; the answer keeps the latest that fit. */
 const SHOWN_MESSAGES = 500
 
 export const Input = Schema.Struct({
@@ -294,10 +295,18 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
         watch.pipe(Effect.as(undefined)),
       )
 
-      const answer = (outcome: Outcome, ending: string) => ({
-        content: [plan.header, messages.map((message) => message.text).join("\n"), ending].filter(Boolean).join("\n\n"),
-        metadata: state({ outcome, text: ending }),
-      })
+      // An algorithm may warn once per feature, so only the end of what QGIS said is kept.
+      const answer = (outcome: Outcome, ending: string) => {
+        const around = `${plan.header}\n${ending}`
+        const said = GeoAnswer.lastPart(messages.map((message) => message.text).join("\n"), {
+          lines: around.split("\n").length,
+          bytes: Buffer.byteLength(around, "utf-8"),
+        })
+        return {
+          content: [plan.header, ...(said.cut ? [GeoAnswer.CUT] : []), said.text, ending].filter(Boolean).join("\n\n"),
+          metadata: state({ outcome, text: ending }),
+        }
+      }
       if (ran === undefined) {
         const left = yield* Effect.promise(() => written(plan))
         const ending = [
