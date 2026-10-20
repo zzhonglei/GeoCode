@@ -1,5 +1,4 @@
 import { normalizeToolName } from '@/lib/opencode/tools';
-import { geoToolMetadata } from '@/geocode/geoTools'; // GeoCode: see getToolMetadata
 import {
   isEditTool,
   isPatchTool,
@@ -272,8 +271,6 @@ function formatUnknownToolDisplayName(toolName: string): string {
 }
 
 export function getToolMetadata(toolName: string): ToolMetadata {
-  const geo = geoToolMetadata(toolName); // GeoCode: the geo tools' titles, in the interface's language
-  if (geo) return geo; // GeoCode: see above
   // Namespaced tools (`opencode.session_rename`) are keyed by their last segment.
   return TOOL_METADATA[toolName] || TOOL_METADATA[normalizeToolName(toolName)] || {
     displayName: formatUnknownToolDisplayName(toolName),

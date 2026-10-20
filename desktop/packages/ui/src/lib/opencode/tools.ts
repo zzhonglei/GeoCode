@@ -21,7 +21,6 @@
 import { z } from "zod"
 
 import type { Metadata, ToolInput } from "./model"
-import { geoToolDescription } from "@/geocode/geoTools" // GeoCode: see toolDescription
 
 /** Built-in tool names as the server reports them. */
 export const OPENCODE_TOOLS = {
@@ -458,8 +457,6 @@ export function toolDescription(
 ): ToolDescription | null {
   const name = normalizeToolName(toolName)
   const parsed = readInput(input)
-  const geo = geoToolDescription(name, input) // GeoCode: what a geo tool is looking up or doing
-  if (geo !== undefined) return geo // GeoCode: see above
 
   switch (name) {
     case OPENCODE_TOOLS.shell:

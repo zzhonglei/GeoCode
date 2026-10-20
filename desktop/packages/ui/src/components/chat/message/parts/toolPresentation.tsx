@@ -4,7 +4,6 @@ import { GuestIcon } from '@/components/layout/GuestRailIcon';
 import { resolveGuestToolIcon } from '@/lib/guests/icon';
 import type { GuestToolRule } from '@/lib/guests/tool-presentation';
 import { getRuntimeUrlResolver } from '@/lib/runtime-url';
-import { geoToolIcon } from '@/geocode/geoToolIcon'; // GeoCode: see getToolIcon
 
 /**
  * Icon for a tool row, dialog header, or error fallback. An extension rule
@@ -21,8 +20,6 @@ export const getToolIcon = (toolName: string, presentation?: GuestToolRule | nul
         return <GuestIcon icon={guestIcon.icon} iconSrc={guestIcon.iconSrc} className={iconClass} />;
     }
     const tool = toolName.toLowerCase();
-    const geoIcon = geoToolIcon(tool, iconClass); // GeoCode: the geo tools' own icons
-    if (geoIcon) return geoIcon; // GeoCode: see above
 
     if (tool === 'reasoning') {
         return <Icon name="brain-ai-3" className={iconClass} />;

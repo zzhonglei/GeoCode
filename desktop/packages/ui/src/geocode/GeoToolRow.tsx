@@ -23,10 +23,7 @@ const ROW_TEXT_CLASS = '!text-[length:var(--text-meta)] !leading-5 sm:!leading-6
 
 const working = (part: ToolPart) => part.state.status === 'pending' || part.state.status === 'running';
 
-const subjectOf = (part: ToolPart) => {
-  const description = geoToolDescription(part.tool, part.state.input);
-  return description?.kind === 'text' ? description.value : undefined;
-};
+const subjectOf = (part: ToolPart) => geoToolDescription(part.tool, part.state.input);
 
 // By run, outside the row: a call joining the run moves the row to it, and neither may start over.
 const held = new Map<string, { shown: string | undefined; since: number }>();

@@ -2,8 +2,6 @@ import { z } from 'zod';
 
 import { useI18nStore, type Locale } from '@/lib/i18n';
 import type { ToolInput } from '@/lib/opencode/model';
-import type { ToolDescription } from '@/lib/opencode/tools';
-import type { ToolMetadata } from '@/lib/toolHelpers';
 import type { PermissionRequest } from '@/types/permission';
 
 /** The permission actions of the geo tools that have a rule of their own; readgeodata asks as read. */
@@ -20,8 +18,8 @@ type GeoAction = (typeof GEO_TOOL_ACTIONS)[number];
 type MergedTool = Exclude<GeoTool, 'qgisrun' | 'geerun'>;
 
 type Texts = {
-  /** Each tool's title, which is also its settings row's label. */
-  titles: Record<GeoTool | GeoAction, string>;
+  /** The title of each tool with a rule of its own, which is also its settings row's label. */
+  titles: Record<GeoAction, string>;
   /** The permission card's summary of what the tool asks to do. */
   asks: Record<GeoAction, string>;
   allGroups: string;
@@ -66,7 +64,7 @@ type Texts = {
 
 const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
   en: {
-    titles: { qgisdoc: 'QGIS Docs', readgeodata: 'Read Geodata', qgisrun: 'Run QGIS Algorithm', geerun: 'Run Earth Engine Script' },
+    titles: { qgisdoc: 'QGIS Docs', qgisrun: 'Run QGIS Algorithm', geerun: 'Run Earth Engine Script' },
     asks: { qgisdoc: 'Look up QGIS algorithms', qgisrun: 'Request to run QGIS algorithm', geerun: 'Request to run Earth Engine script' },
     allGroups: 'All groups',
     running: { qgisdoc: 'Reading QGIS Documentation', readgeodata: 'Reading Geospatial Data' },
@@ -97,7 +95,7 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
     },
   },
   'zh-CN': {
-    titles: { qgisdoc: 'QGIS 文档', readgeodata: '读取地理数据', qgisrun: '运行 QGIS 算法', geerun: '运行 Earth Engine 脚本' },
+    titles: { qgisdoc: 'QGIS 文档', qgisrun: '运行 QGIS 算法', geerun: '运行 Earth Engine 脚本' },
     asks: { qgisdoc: '查阅 QGIS 算法', qgisrun: '请求执行 QGIS 算法', geerun: '请求执行 Earth Engine 脚本' },
     allGroups: '全部分组',
     running: { qgisdoc: '正在阅读 QGIS 文档', readgeodata: '正在读取地理数据' },
@@ -128,7 +126,7 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
     },
   },
   'zh-TW': {
-    titles: { qgisdoc: 'QGIS 文件', readgeodata: '讀取地理資料', qgisrun: '執行 QGIS 演算法', geerun: '執行 Earth Engine 腳本' },
+    titles: { qgisdoc: 'QGIS 文件', qgisrun: '執行 QGIS 演算法', geerun: '執行 Earth Engine 腳本' },
     asks: { qgisdoc: '查閱 QGIS 演算法', qgisrun: '請求執行 QGIS 演算法', geerun: '請求執行 Earth Engine 腳本' },
     allGroups: '全部分組',
     running: { qgisdoc: '正在閱讀 QGIS 文件', readgeodata: '正在讀取地理資料' },
@@ -169,21 +167,9 @@ const textIn = (locale: Locale) => TEXT[locale] ?? TEXT.en;
 // Read outside React: the callers are plain functions, and the rows rerender when the language changes.
 const text = () => textIn(useI18nStore.getState().locale);
 
-/** The title a geo tool's row shows; undefined for any other tool. */
-export const geoToolMetadata = (toolName: string): ToolMetadata | undefined =>
-  isGeoTool(toolName)
-    ? {
-        displayName: text().titles[toolName],
-        category: toolName === 'readgeodata' ? 'file' : toolName === 'qgisdoc' ? 'search' : 'system',
-        outputLanguage: 'text',
-        inputFields: [],
-      }
-    : undefined;
-
 const filled = z.string().trim().min(1).optional().catch(undefined);
 const qgisdocInput = z.object({ action: z.string().optional().catch(undefined), algorithm: filled, group: filled, query: filled });
 const readgeodataInput = z.object({ path: filled, layer: filled });
-const runInput = z.object({ description: filled });
 
 /** The path a readgeodata call reads, as GeoAgent gave it. */
 export const geoDataPath = (input: ToolInput | undefined) => readgeodataInput.safeParse(input).data?.path;
@@ -196,24 +182,15 @@ const dataset = (input: ToolInput | undefined) => {
   return parsed.data?.layer ? `${file} · ${parsed.data.layer}` : file;
 };
 
-/** What a geo tool's row says it is doing, from its input; null when there is nothing to say. */
-export const geoToolDescription = (toolName: string, input: ToolInput | undefined): ToolDescription | null | undefined => {
-  if (toolName === 'readgeodata') {
-    const value = dataset(input);
-    return value ? { kind: 'text', value } : null;
-  }
-  if (toolName === 'qgisrun' || toolName === 'geerun') {
-    const value = runInput.safeParse(input).data?.description;
-    return value ? { kind: 'text', value } : null;
-  }
-  if (toolName !== 'qgisdoc') return undefined;
+/** What a merged row's call is reading or looking up, from its input; undefined when there is nothing to say. */
+export const geoToolDescription = (toolName: string, input: ToolInput | undefined) => {
+  if (toolName === 'readgeodata') return dataset(input);
   const parsed = qgisdocInput.safeParse(input);
-  if (!parsed.success) return null;
+  if (!parsed.success) return undefined;
   const { action, algorithm, group, query } = parsed.data;
   // Each action's own field, as the kernel asks permission for it.
   const values = new Map([['groups', text().allGroups], ['algorithms', group], ['help', algorithm], ['search', query]]);
-  const value = action ? values.get(action) : undefined;
-  return value ? { kind: 'text', value } : null;
+  return action ? values.get(action) : undefined;
 };
 
 const webfetchInput = z.object({ url: z.url({ protocol: /^https$/, hostname: /^docs\.qgis\.org$/ }) });
