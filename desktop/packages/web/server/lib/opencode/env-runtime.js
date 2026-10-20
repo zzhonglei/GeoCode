@@ -413,7 +413,7 @@ export const createOpenCodeEnvRuntime = (deps) => {
   };
 
   const resolveOpencodeCliPath = () => {
-    return bundledOpenCodeCliFallback(); // GeoCode: only the bundled kernel, never one from the environment or PATH
+    return bundledOpenCodeCliFallback(); // GeoCode: only the bundled kernel; ensureOpencodeCliEnv takes OPENCODE_BINARY first, which only development keeps
     const explicit = [
       process.env.OPENCODE_BINARY,
       process.env.OPENCODE_PATH,
@@ -886,7 +886,7 @@ export const createOpenCodeEnvRuntime = (deps) => {
   };
 
   const resolveManagedOpenCodeLaunchSpec = (opencodePath) => {
-    // --- GeoCode: without its bundled kernel the app fails rather than run whatever `opencode` is on PATH ---
+    // --- GeoCode: with no kernel path the app fails rather than run whatever `opencode` is on PATH ---
     if (!opencodePath) {
       throw new Error('The kernel bundled with GeoCode is missing.');
     }

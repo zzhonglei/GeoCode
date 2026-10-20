@@ -58,7 +58,7 @@ export const make = (access: FileAccess.Interface) => {
    * Each session's datasets, by absolute path, with the asking that allowed them or is still waiting on the user.
    * GeoAgent looks at one dataset in several calls (its layers, its pages, a preview), often side by side, so a dataset
    * is asked about once a session, and calls made while that asking waits share its answer. A refusal is not kept, and
-   * nothing is kept past the kernel's run.
+   * the rest only as long as the tool: a rebuilt tool table or an evicted location starts it empty.
    */
   const allowed = new Map<string, Map<string, Deferred.Deferred<Authorization, Refusal>>>()
 

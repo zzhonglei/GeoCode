@@ -11,7 +11,7 @@
 // the wordmark is the same geometry as `packages/ui/src/components/logo.tsx`.
 // Keep this file in sync with those sources when the brand changes.
 
-import { WORDMARK } from "../geocode/wordmark" // GeoCode: its own wordmark, in place of the one closed below
+import { WORDMARK } from "../geocode/wordmark" // GeoCode: its own wordmark, in place of the one closed below; only the tokens still follow OpenCode
 
 export interface CallbackPageOptions {
   /** Friendly integration name shown as a subtitle, e.g. "xAI", "Snowflake", "MCP". */

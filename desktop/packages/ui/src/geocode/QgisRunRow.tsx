@@ -11,8 +11,8 @@ import { RunRow } from './RunRow';
 /**
  * A qgisrun call's row: the QGIS logo and what GeoAgent says the step is for; while it runs, the algorithm being run,
  * its percentage when QGIS reports one, and the time so far; once done, the time it took, the title in the error
- * colour unless it finished. It opens to the English excerpt of the answer: the facts settled before the run, every
- * message QGIS gave, and how the run ended.
+ * colour unless it finished. It opens to the English excerpt of the answer: the facts settled before the run, the
+ * latest messages QGIS gave, and how the run ended.
  */
 export const QgisRunRow: React.FC<{ part: ToolPart }> = ({ part }) => {
   // Subscribed so the row follows a change of language.

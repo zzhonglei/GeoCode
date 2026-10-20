@@ -32,7 +32,7 @@ const metadataSchema = z.object({
   title: z.string().optional(),
 })
 
-const ENVELOPE = /^\s*<geocode-session\b[^>]*>\n?([\s\S]*?)\n?<\/geocode-session>\s*$/ // GeoCode: as buildDispatchResultMessage on the server writes it
+const ENVELOPE = /^\s*<geocode-session\b[^>]*>\n?([\s\S]*?)\n?<\/geocode-session>\s*$/ // GeoCode: the envelope buildDispatchResultMessage writes, which the file comment above still calls <openchamber-session>
 
 /** The dispatched session a message reports the result of, or undefined for any other message. */
 export function readDispatchedSessionResult(message: Message): DispatchedSessionResult | undefined {

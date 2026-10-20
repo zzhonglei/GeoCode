@@ -7,12 +7,11 @@ let clientToken = '';
 
 export const localClientToken = () => clientToken;
 
-// Created without expiresAt, so it lasts until the next launch replaces it.
+// Created without expiresAt under a fixed dedupeKey, so it lasts until the next launch replaces it.
 export const mintLocalClientToken = async (serverHandle) => {
   const created = await serverHandle.remoteClientAuthRuntime.createClient({
     label: 'GeoCode',
     clientKind: 'desktop-local',
-    // The shared data directory may hold OpenChamber's own desktop-local client under its default dedupe key.
     dedupeKey: 'geocode-desktop',
   });
   clientToken = created.token;

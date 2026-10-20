@@ -30,7 +30,7 @@ import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Tool } from "@opencode/core/tool"
 import { tempLocationLayer } from "./fixture/location"
-import { tmpdirScoped } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir" // GeoCode: for the GeoCode test below
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"

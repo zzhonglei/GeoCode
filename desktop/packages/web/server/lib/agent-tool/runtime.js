@@ -331,7 +331,7 @@ const createPluginSource = ({ includeControl, includeWeb, includeMemory, include
   const entries = [];
   if (includeControl) {
     entries.push(createToolEntry({
-      name: 'geocode', // GeoCode: the tools carry its name; ACTIONS_BY_TOOL and the interface match these four
+      name: 'geocode', // GeoCode: every tool below carries its name, which ACTIONS_BY_TOOL and the interface match
       description: controlToolDescription({ worktreeMoveWithoutAsking }),
       definitions: OPENCHAMBER_AGENT_TOOL_ACTION_DEFINITIONS,
       parameters: CONTROL_PARAMETER_PROPERTIES,

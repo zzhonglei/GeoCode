@@ -1129,9 +1129,11 @@ const ToolExpandedContent: React.FC<ToolExpandedContentProps> = React.memo(({
 
         return formatInputForDisplay(input, part.tool);
     }, [input, part.tool]);
-    const [qgisManualShown, setQgisManualShown] = React.useState(false); // GeoCode: see QgisManualPage below
-    const showQgisManual = React.useCallback(() => setQgisManualShown(true), []); // GeoCode: see QgisManualPage below
-    const hasInputText = !hideToolInputPreview && inputTextContent.trim().length > 0 && !qgisManualShown; // GeoCode: a shown manual page needs no summary of its address
+    // --- GeoCode: a shown QGIS manual page (see QgisManualPage below) needs no summary of its address ---
+    const [qgisManualShown, setQgisManualShown] = React.useState(false);
+    const showQgisManual = React.useCallback(() => setQgisManualShown(true), []);
+    const hasInputText = !hideToolInputPreview && inputTextContent.trim().length > 0 && !qgisManualShown;
+    // --- /GeoCode ---
     // `null` keeps the plain text renderer for a result OpenCode formatted differently.
     const webSearchOutput = React.useMemo(
         () => (isWebSearchTool(part.tool) && state.status === 'completed' && hasStringOutput ? parseWebSearchOutput(outputString) : null),
