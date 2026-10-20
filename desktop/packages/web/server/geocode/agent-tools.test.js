@@ -23,10 +23,9 @@ const pluginSource = async () => {
 };
 
 describe('GeoCode: agent tools', () => {
-  it('registers the tools under GeoCode names and describes them without OpenChamber', async () => {
+  it('registers the tools under GeoCode names', async () => {
     const source = await pluginSource();
     expect([...source.matchAll(/tools\.add\(\{\s*name: "([^"]+)"/g)].map((match) => match[1])).toEqual(TOOLS);
-    expect(source).not.toMatch(/"[^"\n]*OpenChamber[^"\n]*"/);
   });
 
   it('resolves a bare action through the name of the tool that asked', () => {

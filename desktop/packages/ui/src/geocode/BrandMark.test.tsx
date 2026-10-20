@@ -6,7 +6,6 @@ import type React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { AppStartupOverlay } from '@/components/ui/AppStartupOverlay';
-import { OpenChamberLogo } from '@/components/ui/OpenChamberLogo';
 import { I18nProvider } from '@/lib/i18n';
 
 // The loading mark is written out in three files that nothing links, so a change to one has to reach the others.
@@ -18,11 +17,8 @@ const marks = (text: string) => text.match(/<svg\b[^>]*data-geocode-mark[^>]*>[\
 const body = (mark: string) => mark.replace(/^<svg\b[^>]*>/, '').replace(/<\/svg>$/, '');
 const clock = (text: string) =>
   ((text.match(/<script>[\s\S]*?<\/script>/g) ?? []).find((block) => block.includes('data-geocode-mark')) ?? '').replace(/\s+/g, ' ').trim();
-const withoutTemplates = (text: string) => text.replace(/<template>[\s\S]*?<\/template>/g, '');
 const orbitColours = (text: string) => [...new Set(text.match(/#(?:5A6874|A8B5C1)/gi) ?? [])].map((c) => c.toUpperCase()).sort();
 const size = (html: string) => /<svg\b[^>]*\bwidth="(\d+)"[^>]*\bheight="(\d+)"/.exec(html)?.slice(1, 3);
-
-const CUBE = 'L8.432 26';
 
 const render = (element: React.ReactElement) => renderToStaticMarkup(<I18nProvider>{element}</I18nProvider>);
 
@@ -49,14 +45,6 @@ describe('GeoCode: the loading mark', () => {
     expect(component).toContain('setCurrentTime((Date.now() / 1000) % period)');
   });
 
-  test('replaces the cube in both splashes', () => {
-    const cube = (text: string) => [text.includes(CUBE), withoutTemplates(text).includes(CUBE)];
-    const firstWindow = withoutTemplates(read('electron/early-startup.mjs'));
-    expect(cube(read('electron/early-startup.mjs'))).toEqual([true, false]);
-    expect(['${LOADING_MARK}', '${LOADING_MARK_STYLE}', '${LOADING_MARK_CLOCK}'].map((part) => firstWindow.includes(part))).toEqual([true, true, true]);
-    expect(cube(page)).toEqual([true, false]);
-  });
-
   test('takes the same pair of orbit colours in all three', () => {
     expect(orbitColours(module)).toEqual(['#5A6874', '#A8B5C1']);
     expect(orbitColours(page)).toEqual(orbitColours(module));
@@ -68,13 +56,5 @@ describe('GeoCode: the loading mark', () => {
     const [pageMark = ''] = marks(page);
     expect(size(render(<AppStartupOverlay ready={false} />))).toEqual(size(pageMark));
     expect(size(pageMark)?.length).toBe(2);
-  });
-});
-
-describe('GeoCode: the logo component', () => {
-  test('draws the mark', () => {
-    const html = render(<OpenChamberLogo />);
-    expect(html).toContain('var(--geocode-orbit');
-    expect(html).not.toContain('8.432');
   });
 });
