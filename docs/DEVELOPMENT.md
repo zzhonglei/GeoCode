@@ -76,14 +76,14 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 
 ## 7. 检查与测试
 
-类型检查与 lint 的命令见 `CONVENTIONS.md` 第 2 节,测试写什么、怎么证明它会失败见第 4 节。
+类型检查与 lint 的命令见 `CONVENTIONS.md` 第 2 节,测试写什么、怎么证明它会失败见同一篇第 4 节。
 
 各部分的测试这样运行,都不能写真实的主目录:
 
 - `kernel/`:GeoCode 的测试有两种,加在上游测试文件里的用例(命名见 `CONVENTIONS.md` 第 4 节)与 GeoCode 自己的测试文件(位置见 `CONVENTIONS.md` 第 3.4 节),都借用上游的夹具。`packages/core` 的测试在包目录用 `bun run test <文件>` 运行,它把主目录、`XDG_*` 与 `TMPDIR` 换成临时目录;其他包(如 `packages/server`)的 `test` 脚本不换,照下面上游测试的办法换一个临时主目录。不要在包里直接执行 `bun test`。
-- `desktop/`:GeoCode 的测试在各包的 `geocode/` 目录。包的 `bun run test` 会连上游的测试一起跑,所以只跑这些目录:界面的在 `desktop/packages/ui` 里用 `node ../../scripts/run-isolated-tests.mjs src/geocode`,壳服务端的在 `desktop/packages/web` 里用 `bun run test -- server/geocode/`,主进程监管 GeoEngine 的在 `desktop/packages/electron` 里用 `node --test --test-timeout=10000 geocode/geoengine-supervisor.test.mjs`,时限让漏掉的等待变成失败而不是挂住。
+- `desktop/`:GeoCode 的测试在各包的 `geocode/` 目录。包的 `bun run test` 会连上游的测试一起跑,所以只跑这些目录:界面的在 `desktop/packages/ui` 里用 `node ../../scripts/run-isolated-tests.mjs src/geocode`,壳服务端的在 `desktop/packages/web` 里用 `bun run test -- server/geocode/`,主进程的在 `desktop/packages/electron` 里用 `node --test --test-timeout=10000 geocode/*.test.mjs`,时限让漏掉的等待变成失败而不是挂住。
 - 上游的测试不保证只写临时目录,`web` 包里就有测试在主目录下建目录、写 npm 缓存。要跑它们时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_STATE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉而不是设成空值,否则 Bun 会把转译缓存写到当前目录下。
-- `geoengine/`:测试在系统临时目录下建以 `geoengine-` 开头的目录,结束时删掉。有的测试启动外部进程并验证它们被结束,所以按顺序逐个运行。
+- `geoengine/`:在包目录用 `bun run test`。测试在系统临时目录下建以 `geoengine-` 开头的目录,结束时删掉;有的测试启动外部进程并验证它们被结束,这条命令因此按顺序逐个运行。
 
 GeoEngine 的测试涉及两种外部软件:
 
@@ -100,4 +100,4 @@ GeoEngine 的测试涉及两种外部软件:
 ./scripts/foreign-writes.sh after
 ```
 
-它检查 OpenCode、OpenChamber(包括它在 `~/Library` 下的窗口数据与日志)、Claude 与通用的 `~/.agents` 目录有没有被写入,文件的新增、修改、删除与权限变化都算。无论在沙箱里还是在真实主目录下启动,结果都应当是干净的。退出码:0 干净;1 发现写入;3 需要人确认,表示变动全在 OpenChamber 与 OpenCode 自己的目录里,而本机的 OpenChamber 在这段时间里运行过,多半是它自己写的,关掉它重跑才能得出结论。
+它检查 OpenCode、OpenChamber(包括它在 `~/Library` 下的窗口数据与日志)的目录、Claude 的技能、`CLAUDE.md` 与凭据,以及通用的 `~/.agents` 目录有没有被写入,文件的新增、修改、删除与权限变化都算。无论在沙箱里还是在真实主目录下启动,结果都应当是干净的。退出码:0 干净;1 发现写入;3 需要人确认,表示变动全在 OpenChamber 与 OpenCode 自己的目录里,而本机的 OpenChamber 在这段时间里运行过,多半是它自己写的,关掉它重跑才能得出结论。
