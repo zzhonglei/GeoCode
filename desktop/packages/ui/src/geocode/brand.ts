@@ -11,9 +11,10 @@ export const GEOCODE_ISSUES_URL = 'https://github.com/zzhonglei/GeoCode/issues/n
 export const withoutUpstreamSite = (url: string): string | undefined =>
   /^https:\/\/(?:[\w-]+\.)*(?:opencode\.ai|openchamber\.dev)(?:\/|$)/.test(url) ? undefined : url;
 
-// Renames the label of each status line and leaves the values, which hold paths and error text, as they are.
+// Renames the label of each status line, leaving the values, which hold paths and error text, and the kernel's own
+// lines, which the report indents, as they are.
 export const toGeoCodeReport = (lines: readonly string[]): string[] =>
-  lines.map((line) => line.replace(/^[^:]*/, (label) =>
+  lines.map((line) => /^\s/.test(line) ? line : line.replace(/^[^:]*/, (label) =>
     label.replace(/OpenChamber/g, 'GeoCode').replace(/^(- )?OpenCode/, '$1Kernel').replace(/OpenCode/g, 'kernel')));
 
 // OpenCode's own services keep their names.
