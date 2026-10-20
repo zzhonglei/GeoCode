@@ -21,7 +21,9 @@ const MAX_TITLE_LENGTH = 300;
 const MAX_IDENTIFIER_LENGTH = 64;
 
 const GITHUB_PATTERN = /^\/([^/]+)\/([^/]+)\/(pull|issues)\/(\d+)(?:\/|$)/;
+/* --- GeoCode: only the closed Linear branch of buildLinkEntry used it ---
 const LINEAR_PATTERN = /^\/[^/]+\/issue\/([A-Za-z][A-Za-z0-9]*-\d+)(?:\/|$)/;
+--- /GeoCode --- */
 // GitLab's own routes sit behind `/-/` on any instance, so this shape names a
 // merge request or issue whatever the host; tabs such as `/diffs` follow it.
 const GITLAB_THREAD_PATTERN = /^(\/.+\/-\/(?:merge_requests|issues|work_items)\/\d+)(?:\/|$)/;
@@ -67,6 +69,7 @@ export const buildLinkEntry = (input, linkedAt) => {
     }
   }
 
+  /* --- GeoCode: Linear is closed, so its addresses are stored as any other tracker's ---
   if (host === 'linear.app') {
     const match = LINEAR_PATTERN.exec(url.pathname);
     if (match) {
@@ -74,6 +77,7 @@ export const buildLinkEntry = (input, linkedAt) => {
       return { entry: { id: `linear:${issueIdentifier}`, identifier: issueIdentifier, title, url: url.toString(), kind: 'linear', linkedAt } };
     }
   }
+  --- /GeoCode --- */
 
   url.hash = '';
   // One GitLab thread is one entry however its address was written: the same
