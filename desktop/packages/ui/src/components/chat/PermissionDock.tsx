@@ -89,9 +89,10 @@ const PermissionDockRequest: React.FC<{
     availableMaxHeight: number | undefined;
     t: ReturnType<typeof useI18n>['t'];
 }> = ({ permission, permissions, currentIndex, collapsed, onToggleCollapsed, onSelect, bodyRef, availableMaxHeight, t }) => {
+    const { locale } = useI18n(); // GeoCode: see getPermissionToolPresentation
     const { isResponding, respond } = usePermissionResponse(permission);
     const isFromSubagent = usePermissionFromSubagent(permission);
-    const tool = getPermissionToolPresentation(permission);
+    const tool = getPermissionToolPresentation(permission, locale); // GeoCode: see getPermissionToolPresentation
     const title = t('chat.permissionCard.title');
 
     return (
@@ -125,7 +126,7 @@ const PermissionDockRequest: React.FC<{
                 {!collapsed && permissions.length > 1 ? (
                     <div className="flex shrink-0 items-center gap-1" role="tablist">
                         {permissions.map((entry, index) => {
-                            const label = t('chat.permissionDock.stepAria', { index: String(index + 1), tool: getPermissionToolPresentation(entry).name });
+                            const label = t('chat.permissionDock.stepAria', { index: String(index + 1), tool: getPermissionToolPresentation(entry, locale).name }); // GeoCode: see getPermissionToolPresentation
                             return (
                                 <button
                                     key={entry.id}

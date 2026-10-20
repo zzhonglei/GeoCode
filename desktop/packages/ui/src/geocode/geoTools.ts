@@ -279,12 +279,12 @@ const askingAlgorithm = z.object({ algorithm: qgisAlgorithm.optional().catch(und
  * The name a permission request shows beside its tool's icon: qgisrun's asks to run the algorithm it names, geerun's to
  * run a script.
  */
-export const geoPermissionName = (permission: PermissionRequest): string => {
-  if (permission.action === 'geerun') return text().asks.geerun;
+export const geoPermissionName = (permission: PermissionRequest, locale: Locale): string => {
+  const words = textIn(locale);
+  if (permission.action === 'geerun') return words.asks.geerun;
   if (permission.action !== 'qgisrun') return permission.action;
   const algorithm = askingAlgorithm.safeParse(permission.metadata ?? {}).data?.algorithm;
-  const locale = useI18nStore.getState().locale;
-  return algorithm ? `${text().asks.qgisrun} ${qgisAlgorithmText(algorithm, locale).name}` : text().asks.qgisrun;
+  return algorithm ? `${words.asks.qgisrun} ${qgisAlgorithmText(algorithm, locale).name}` : words.asks.qgisrun;
 };
 
 /** The settings label of a geo tool's permission rule; undefined for any other key. */

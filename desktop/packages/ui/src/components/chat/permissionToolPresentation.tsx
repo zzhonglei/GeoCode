@@ -2,6 +2,7 @@ import { Icon } from '@/components/icon/Icon';
 import type { PermissionRequest } from '@/types/permission';
 import { geoToolIcon } from '@/geocode/geoToolIcon'; // GeoCode: see getPermissionToolPresentation
 import { geoPermissionName } from '@/geocode/geoTools'; // GeoCode: see getPermissionToolPresentation
+import type { Locale } from '@/lib/i18n'; // GeoCode: see getPermissionToolPresentation
 
 const getToolIcon = (toolName: string) => {
   const iconClass = "h-3 w-3";
@@ -54,10 +55,10 @@ export const getToolDisplayName = (toolName: string): string => {
 };
 
 /** Icon and short name of the capability a request asks for, for headers. */
-export const getPermissionToolPresentation = (permission: PermissionRequest) => {
+export const getPermissionToolPresentation = (permission: PermissionRequest, locale: Locale) => { // GeoCode: a geo tool's name is in the interface language, which the compiler must see change
   // v2 names the requested capability `action` (`shell`, `edit`, `webfetch`, ...).
   const toolName = permission.action || 'unknown';
   const geoIcon = geoToolIcon(toolName, 'h-3 w-3'); // GeoCode: the geo tools' own icons
-  if (geoIcon) return { icon: geoIcon, name: geoPermissionName(permission) }; // GeoCode: see above
+  if (geoIcon) return { icon: geoIcon, name: geoPermissionName(permission, locale) }; // GeoCode: see above
   return { icon: getToolIcon(toolName), name: getToolDisplayName(toolName) };
 };

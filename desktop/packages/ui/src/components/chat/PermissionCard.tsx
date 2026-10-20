@@ -461,9 +461,10 @@ export const PermissionActions: React.FC<{
 /** The inline card the BTW sheet shows for its child session's requests. */
 export const PermissionCard: React.FC<PermissionCardProps> = ({ permission, onResponse }) => {
   const { t } = useI18n();
+  const { locale } = useI18n(); // GeoCode: see getPermissionToolPresentation
   const { isResponding, hasResponded, respond } = usePermissionResponse(permission, onResponse);
   const isFromSubagent = usePermissionFromSubagent(permission);
-  const tool = getPermissionToolPresentation(permission);
+  const tool = getPermissionToolPresentation(permission, locale); // GeoCode: see getPermissionToolPresentation
 
   if (hasResponded) {
     return null;
