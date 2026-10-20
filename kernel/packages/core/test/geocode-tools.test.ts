@@ -1011,6 +1011,24 @@ describe("GeoCode: geerun", () => {
     }),
   )
 
+  it.effect("folds a line printed over and over before cutting the start of an output too long to keep whole", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      answer = () => ran({ output: ["start", ...Array.from({ length: 5000 }, () => "waiting"), "done"].join("\n") })
+      const long = yield* executeTool(registry, gee({ script: "x" }))
+      const first = long.content?.[0]
+      const text = first?.type === "text" ? first.text : ""
+      expect(text).toContain("start")
+      expect(text).toContain("done")
+      expect(long.metadata).toMatchObject({ truncated: false })
+      // Guards against folding an output that fits.
+      answer = () => ran({ output: ["waiting", "waiting", "waiting"].join("\n") })
+      const short = (yield* executeTool(registry, gee({ script: "x" }))).content?.[0]
+      expect(short?.type === "text" ? short.text : "").toContain("waiting\nwaiting\nwaiting")
+    }),
+  )
+
   // Guards against the kernel evicting the location of a long run, which sends no session event, and stopping the run.
   it.live("keeps its location from looking idle while it runs", () =>
     Effect.gen(function* () {

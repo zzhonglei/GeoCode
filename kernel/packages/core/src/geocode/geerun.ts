@@ -187,6 +187,23 @@ const fitting = (lines: readonly string[], others: readonly string[]) => {
   return kept
 }
 
+/** What a script printed with each line that came three or more times in a row kept once, and how many more it came. */
+const folded = (output: string) => {
+  const lines = output.split("\n")
+  const kept: string[] = []
+  for (let at = 0; at < lines.length; ) {
+    let next = at + 1
+    while (next < lines.length && lines[next] === lines[at]) next++
+    const more = next - at - 1
+    kept.push(
+      lines[at],
+      ...(more > 1 ? [`(The line above was printed ${more} more times.)`] : lines.slice(at + 1, next)),
+    )
+    at = next
+  }
+  return kept.join("\n")
+}
+
 /** How the run ended, after what it printed. */
 const ending = (ran: typeof Ran.Type) => {
   const after = seconds(ran.durationMs)
@@ -325,10 +342,11 @@ export const make = (
     if (space && Exit.isFailure(space)) yield* Effect.logWarning("geerun header unreadable", { cause: space.cause })
     const python = pythonLine(ran.python)
     const opening = space && Exit.isSuccess(space) ? header(python, task, space.value) : python
-    const output = GeoAnswer.lastPart(ran.output.trimEnd(), {
-      lines: opening.split("\n").length,
-      bytes: Buffer.byteLength(opening, "utf-8"),
-    })
+    const used = { lines: opening.split("\n").length, bytes: Buffer.byteLength(opening, "utf-8") }
+    const printed = ran.output.trimEnd()
+    const whole = GeoAnswer.lastPart(printed, used)
+    // Only output that does not fit loses its repeated lines, and loses them before it loses its start.
+    const output = whole.cut ? GeoAnswer.lastPart(folded(printed), used) : whole
     const truncated = ran.truncated || output.cut
     return {
       content: [
