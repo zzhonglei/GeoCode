@@ -254,11 +254,12 @@ const askingAlgorithm = z.object({ algorithm: qgisAlgorithm.optional().catch(und
 
 /**
  * The name a permission request shows beside its tool's icon: qgisrun's asks to run the algorithm it names, geerun's to
- * run a script.
+ * run a script, qgisdoc's is the tool's title.
  */
 export const geoPermissionName = (permission: PermissionRequest, locale: Locale): string => {
   const words = textIn(locale);
   if (permission.action === 'geerun') return words.asks.geerun;
+  if (permission.action === 'qgisdoc') return words.titles.qgisdoc;
   if (permission.action !== 'qgisrun') return permission.action;
   const algorithm = askingAlgorithm.safeParse(permission.metadata ?? {}).data?.algorithm;
   return algorithm ? `${words.asks.qgisrun} ${qgisAlgorithmText(algorithm, locale).name}` : words.asks.qgisrun;
