@@ -18,7 +18,25 @@ type GeoToolRun = {
   readonly open: boolean;
 };
 
-type Runs = ReadonlyMap<string, GeoToolRun>;
+export type Runs = ReadonlyMap<string, GeoToolRun>;
+
+/** Whether a part draws a row: in a run only the call standing for it does, and any other part draws its own. */
+export const isGeoRunRow = (part: Part, run: GeoToolRun | undefined) => !run || run.row === part.id;
+
+/** How many rows a message's row parts draw: a run of geo calls draws one, in the message of its last call. */
+export const geoDrawnRows = (parts: readonly Part[], runs: Runs | undefined) =>
+  parts.filter((part) => isGeoRunRow(part, runs?.get(part.id))).length;
+
+/** How many of a message's row parts it takes to draw its first `rows` rows, which is what MessageBody skips. */
+export const geoRowParts = (parts: readonly Part[], rows: number, runs: Runs | undefined) => {
+  let drawn = 0;
+  let index = 0;
+  while (index < parts.length && drawn < rows) {
+    if (isGeoRunRow(parts[index], runs?.get(parts[index].id))) drawn += 1;
+    index += 1;
+  }
+  return index;
+};
 
 /** The geo tools whose side-by-side calls the conversation shows as one row. */
 const MERGED = new Set(['qgisdoc', 'readgeodata']);
@@ -95,7 +113,7 @@ export const useGeoToolRunStore = create<RunState>()((set) => ({
 const unchanged = (left: Runs, right: Runs) =>
   left.size === right.size && [...right].every(([id, run]) => left.get(id) === run);
 
-/** Publishes a turn's runs; before paint, so a row left out of its run never shows for a frame. */
+/** Publishes a turn's runs before paint, so a row left out of its run never shows for a frame, and returns them. */
 export const usePublishGeoToolRuns = (
   messages: readonly ChatMessageEntry[],
   showReasoningTraces: boolean,
@@ -111,4 +129,5 @@ export const usePublishGeoToolRuns = (
     publish(runs, new Map());
     return () => publish(new Map(), runs);
   }, [runs]);
+  return runs;
 };

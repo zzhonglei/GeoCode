@@ -302,7 +302,7 @@ const TurnBlock = React.memo(({
         [turn.assistantMessages]
     );
 
-    usePublishGeoToolRuns(turn.assistantMessages, showReasoningTraces, isLastTurn && sessionIsWorking); // GeoCode: side-by-side calls of a geo tool show as one row
+    const geoRuns = usePublishGeoToolRuns(turn.assistantMessages, showReasoningTraces, isLastTurn && sessionIsWorking); // GeoCode: side-by-side calls of a geo tool show as one row
 
     const assistantIndexById = React.useMemo(() => {
         const ids = new Map<string, number>();
@@ -434,6 +434,7 @@ const TurnBlock = React.memo(({
                     expanded={isActivityExpanded}
                     onToggle={handleToggleActivity}
                     renderMessage={renderMessage}
+                    geoRuns={geoRuns} // GeoCode: the fold counts rows as the turn draws them
                 />
             ) : undefined}
         />

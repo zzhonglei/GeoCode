@@ -3,6 +3,7 @@ import { Icon } from '@/components/icon/Icon';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/lib/i18n';
 import { useUIStore } from '@/stores/useUIStore';
+import { geoDrawnRows, geoRowParts, type Runs as GeoToolRuns } from '@/geocode/geoToolRuns'; // GeoCode: see the trim
 import {
     ActivityRowSkipContext,
     LIVE_ACTIVITY_VISIBLE_ROWS,
@@ -24,9 +25,10 @@ interface LiveTurnActivityProps {
     expanded: boolean;
     onToggle: () => void;
     renderMessage: (message: ChatMessageEntry) => React.ReactNode;
+    geoRuns?: GeoToolRuns; // GeoCode: the turn's runs of geo calls, each drawing one row
 }
 
-export function LiveTurnActivity({ turn, hasLaterAssistant, expanded, onToggle, renderMessage }: LiveTurnActivityProps) {
+export function LiveTurnActivity({ turn, hasLaterAssistant, expanded, onToggle, renderMessage, geoRuns }: LiveTurnActivityProps) { // GeoCode: see geoRuns
     const { t } = useI18n();
     const contentId = React.useId();
     const finalContentId = React.useId();
@@ -45,16 +47,16 @@ export function LiveTurnActivity({ turn, hasLaterAssistant, expanded, onToggle, 
     const trimRows = !expanded;
     const trim = React.useMemo(() => (trimRows
         ? planActivityTrim(
-            activityMessages.map((message) => activityRowParts(message.parts, showReasoningTraces).length),
+            activityMessages.map((message) => geoDrawnRows(activityRowParts(message.parts, showReasoningTraces), geoRuns)), // GeoCode: rows drawn, not parts
             LIVE_ACTIVITY_VISIBLE_ROWS,
         )
-        : null), [activityMessages, showReasoningTraces, trimRows]);
+        : null), [activityMessages, showReasoningTraces, trimRows, geoRuns]); // GeoCode: see geoRuns
     const shownMessages = React.useMemo(
         () => (trim && trim.hiddenMessages > 0 ? activityMessages.slice(trim.hiddenMessages) : activityMessages),
         [activityMessages, trim],
     );
     const skippedMessageId = trim && trim.skipRows > 0 ? shownMessages[0]?.info.id : undefined;
-    const skippedRows = trim?.skipRows ?? 0;
+    const skippedRows = trim && shownMessages[0] ? geoRowParts(activityRowParts(shownMessages[0].parts, showReasoningTraces), trim.skipRows, geoRuns) : 0; // GeoCode: MessageBody skips parts, and a run's merged calls draw none
     const rowSkip = React.useMemo(
         () => (skippedMessageId ? { messageId: skippedMessageId, rows: skippedRows } : null),
         [skippedMessageId, skippedRows],

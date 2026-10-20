@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { EarthIcon } from './EarthIcon';
 import { GeeRunRow } from './GeeRunRow';
 import { geoDataPath, geoFileCount, geoRunTitle, geoToolDescription } from './geoTools';
-import { useGeoToolRunStore } from './geoToolRuns';
+import { isGeoRunRow, useGeoToolRunStore } from './geoToolRuns';
 import { QgisLogo } from './QgisLogo';
 import { QgisRunRow } from './QgisRunRow';
 
@@ -92,7 +92,7 @@ export const GeoToolRow: React.FC<{ part: ToolPart }> = ({ part }) => {
   const key = run?.first ?? part.id;
   const active = Boolean(run?.open) || parts.some(working);
   const latest = parts.map(subjectOf).filter(Boolean).at(-1);
-  const drawn = !run || run.row === part.id;
+  const drawn = isGeoRunRow(part, run);
   const subject = useHeld(key, active ? latest : undefined, drawn);
   // By the run's key, so the row stays open as it moves to a call joining the run.
   const open = useExpanded((state) => state.runs.has(key));
