@@ -3,12 +3,12 @@ import { ISOLATED_SPACES_RELEASED } from '@/lib/spaces/release';
 import { useUIStore } from '@/stores/useUIStore';
 import type { SettingsPageSlug, SettingsRuntimeContext } from './metadata';
 import { getSettingsPageMeta } from './metadata';
-import { closeSettingsSearchItems } from '@/geocode/settings'; // GeoCode: see SETTINGS_SEARCH_ITEMS
+import { closeSettingsSearchItems, GEO_ENVIRONMENT_SEARCH_ITEM } from '@/geocode/settings'; // GeoCode: see SETTINGS_SEARCH_ITEMS
 
 interface SettingsSearchItem {
   id: string;
   page: SettingsPageSlug;
-  titleKey: I18nKey;
+  titleKey?: I18nKey; // GeoCode: without one, an entry takes its page's title
   descriptionKey?: I18nKey;
   keywords?: string[];
   isAvailable?: (ctx: SettingsSearchAvailabilityContext) => boolean;
@@ -32,6 +32,7 @@ interface SettingsSearchAvailabilityContext extends SettingsRuntimeContext {
 }
 
 const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
+  GEO_ENVIRONMENT_SEARCH_ITEM, // GeoCode: see geocode/settings.ts
   {
     id: 'chat.activity-default',
     page: 'chat',
@@ -1546,7 +1547,7 @@ export function buildSettingsSearchResults({
       return [];
     }
 
-    const title = t(item.titleKey);
+    const title = item.titleKey ? t(item.titleKey) : getPageTitle(item.page); // GeoCode: see titleKey
     const description = item.descriptionKey ? t(item.descriptionKey) : null;
     const haystack = normalizeSearchText([
       title,

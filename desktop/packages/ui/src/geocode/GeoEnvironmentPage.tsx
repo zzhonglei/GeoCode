@@ -17,6 +17,7 @@ import { geeStatusOf, lightOf, qgisStatusOf, type GeeView, type QgisView } from 
 import { QgisLogo } from './QgisLogo';
 import { QgisStatusDetails } from './QgisStatusDetails';
 import { QGIS_STATUS, qgisText, releaseOf, summaryOf, type QgisText } from './qgisText';
+import { GEO_ENVIRONMENT_SEARCH_ITEM } from './settings';
 import { LIST_CLASS, ROW_CLASS, TONE } from './settingsList';
 
 type Installs = { kind: 'loading' } | { kind: 'found'; installs: QgisInstall[] } | { kind: 'failed'; reason: string };
@@ -87,7 +88,7 @@ export const GeoEnvironmentPage: React.FC = () => {
 
   return (
     <SettingsPageLayout title={text.pageTitle} description={text.pageDescription}>
-      <div className={LIST_CLASS}>
+      <div className={LIST_CLASS} data-settings-item={GEO_ENVIRONMENT_SEARCH_ITEM.id}>
         <button type="button" onClick={() => setOpen('qgis')} className={cn(ROW_CLASS, 'py-2.5 hover:bg-[var(--interactive-hover)]/50')}>
           <QgisLogo className="size-5 shrink-0" />
           <span className="typography-ui-label shrink-0 font-medium text-foreground">QGIS</span>

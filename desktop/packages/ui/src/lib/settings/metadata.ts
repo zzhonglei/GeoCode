@@ -1,7 +1,7 @@
 import type { SidebarSection } from '@/constants/sidebar';
 import type { IconName } from '@/components/icon/icons';
 import { ISOLATED_SPACES_RELEASED } from '@/lib/spaces/release';
-import { adaptSettingsPages } from '@/geocode/settings'; // GeoCode: see SETTINGS_PAGE_METADATA
+import { adaptSettingsPages, GEO_ENVIRONMENT_SEARCH_ITEM } from '@/geocode/settings'; // GeoCode: see SETTINGS_PAGE_METADATA
 
 export type SettingsPageSlug =
   | 'home'
@@ -86,7 +86,7 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
     title: 'Geo environment',
     group: 'general',
     kind: 'single',
-    keywords: ['qgis', 'gis', 'geo', 'geoengine', 'environment', '地理', '環境', '环境'],
+    keywords: GEO_ENVIRONMENT_SEARCH_ITEM.keywords,
   },
   // --- /GeoCode ---
   {

@@ -1,6 +1,13 @@
 // Kept free of runtime imports: the settings metadata that calls these is imported everywhere.
 import type { SettingsPageMeta } from '@/lib/settings/metadata';
 
+// Search finds settings, not pages, and the Geo environment page lists none: it is found as a whole, by its keywords.
+export const GEO_ENVIRONMENT_SEARCH_ITEM = {
+  id: 'geo-environment',
+  page: 'geo-environment' as const,
+  keywords: ['qgis', 'gis', 'geo', 'geoengine', 'environment', '地理', '環境', '环境', 'gee', 'earth engine'],
+};
+
 const CLOSED_PAGES = new Set(['remote-instances', 'tunnel', 'extensions', 'plugins', 'magic-prompts', 'snippets', 'skills.catalog', 'isolated-spaces']);
 
 const MOVED_PAGES = new Map<SettingsPageMeta['slug'], SettingsPageMeta['group']>([['skills.installed', 'opencode']]);
