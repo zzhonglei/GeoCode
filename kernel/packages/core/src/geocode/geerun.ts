@@ -13,6 +13,7 @@ import type { Permission } from "../permission.js"
 import type { Session } from "../session.js"
 import { SessionEvent } from "../session/event.js"
 import { ToolOutput } from "../tool-output.js"
+import { GeoAnswer } from "./answer.js"
 import { GeoEngine } from "./geoengine.js"
 import type { GeeRunJob } from "./geerun-job.js"
 import { GeoRunActivity } from "./run-activity.js"
@@ -198,32 +199,6 @@ const ending = (ran: typeof Ran.Type) => {
   return `The Python ended${ran.exit === undefined ? "" : ` with ${ran.exit}`} after ${after}, before the script finished.`
 }
 
-/** Room left in the kernel's bounds on an answer for the note and the ending around the header and what was printed. */
-const RESERVED_LINES = 10
-const RESERVED_BYTES = 1024
-
-/**
- * The end of what the script printed, within what is left of the kernel's bounds on an answer. The kernel's own cut
- * keeps the start, which would lose a failing script's traceback and how the run ended.
- */
-const lastPart = (text: string, used: { readonly lines: number; readonly bytes: number }) => {
-  const lines = text.split("\n")
-  const kept: string[] = []
-  let room = ToolOutput.MAX_BYTES - RESERVED_BYTES - used.bytes
-  for (const line of lines.toReversed()) {
-    if (kept.length >= ToolOutput.MAX_LINES - RESERVED_LINES - used.lines) break
-    const size = Buffer.byteLength(line, "utf-8") + 1
-    if (size > room) {
-      // The end of a line too long to keep whole, as long as there is room: it may hold the error.
-      if (room > 0) kept.push(Buffer.from(line, "utf-8").subarray(-room).toString("utf-8"))
-      return { text: kept.toReversed().join("\n"), cut: true }
-    }
-    kept.push(line)
-    room -= size
-  }
-  return { text: kept.toReversed().join("\n"), cut: kept.length < lines.length }
-}
-
 /** What one of GeoCode's functions is doing; no text once none is doing anything. */
 const Status = Schema.Struct({
   seq: Schema.Number,
@@ -350,7 +325,7 @@ export const make = (
     if (space && Exit.isFailure(space)) yield* Effect.logWarning("geerun header unreadable", { cause: space.cause })
     const python = pythonLine(ran.python)
     const opening = space && Exit.isSuccess(space) ? header(python, task, space.value) : python
-    const output = lastPart(ran.output.trimEnd(), {
+    const output = GeoAnswer.lastPart(ran.output.trimEnd(), {
       lines: opening.split("\n").length,
       bytes: Buffer.byteLength(opening, "utf-8"),
     })
@@ -358,7 +333,7 @@ export const make = (
     return {
       content: [
         ...(opening ? [opening] : []),
-        ...(truncated ? ["(The output was too long; only its end is kept.)"] : []),
+        ...(truncated ? [GeoAnswer.CUT] : []),
         ...(output.text ? [output.text] : truncated ? [] : ["(The script printed nothing.)"]),
         ending(ran),
       ].join("\n\n"),
