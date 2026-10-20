@@ -85,8 +85,9 @@ const Title: React.FC<{ active: boolean; title: string }> = ({ active, title }) 
  */
 export const GeoToolRow: React.FC<{ part: ToolPart }> = ({ part }) => {
   const run = useGeoToolRunStore((state) => state.runs.get(part.id));
-  // Subscribed so the title follows a change of language.
-  useI18nStore((state) => state.locale);
+  // Subscribed so the titles follow a change of language; passed to the file count, which the compiler keeps while the
+  // count stays the same.
+  const locale = useI18nStore((state) => state.locale);
   const parts = run?.parts ?? [part];
   const key = run?.first ?? part.id;
   const active = Boolean(run?.open) || parts.some(working);
@@ -162,7 +163,7 @@ export const GeoToolRow: React.FC<{ part: ToolPart }> = ({ part }) => {
             className={cn('typography-meta min-w-0 flex-1 truncate whitespace-nowrap', ROW_TEXT_CLASS)}
             style={{ color: 'var(--tools-description)' }}
           >
-            {geoFileCount(count)}
+            {geoFileCount(count, locale)}
           </span>
         ) : null}
       </div>

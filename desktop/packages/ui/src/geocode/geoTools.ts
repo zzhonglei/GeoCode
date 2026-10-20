@@ -268,7 +268,7 @@ export const excerptOf = (script: string) => {
 };
 
 /** How many files a row of readgeodata calls read. */
-export const geoFileCount = (count: number) => text().files(count);
+export const geoFileCount = (count: number, locale: Locale) => textIn(locale).files(count);
 
 /** The permission card's summary for a geo tool's own action; undefined for any other action. */
 export const geoPermissionTitle = (action: string): string | undefined => (isGeoAction(action) ? text().asks[action] : undefined);
