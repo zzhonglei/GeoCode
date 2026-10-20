@@ -22,7 +22,7 @@ GeoCode 建在两个开源项目之上:
 | [`docs/UPSTREAM.md`](docs/UPSTREAM.md) | 两个上游怎样导入与升级 |
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | 怎样安装、构建、运行、打包与检查 |
 | [`docs/DESKTOP.md`](docs/DESKTOP.md) | 桌面应用由什么组成、守哪些边界 |
-| [`docs/PATHS.md`](docs/PATHS.md) | GeoCode 在用户电脑上与项目里产生的文件 |
+| [`docs/PATHS.md`](docs/PATHS.md) | GeoCode 在用户电脑上与项目里产生与读取的文件,以及怎样删除 |
 | [`docs/GEOENGINE.md`](docs/GEOENGINE.md) | 地理引擎 GeoEngine:各能力域共用的框架 |
 | [`docs/QGIS.md`](docs/QGIS.md) | QGIS 能力域:读取地理数据、查阅与执行算法 |
 | [`docs/GEE.md`](docs/GEE.md) | Google Earth Engine 能力域:运行 GEE 脚本,在任务里保存与沿用结果 |
