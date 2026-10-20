@@ -82,6 +82,7 @@ def download(image, path, **grid):
         ready = prepared(image, grid).gd
     # Hidden beside the target, so that the target is never a partial file and the rename is atomic.
     partial = os.path.join(folder, ".%s.%d.part" % (name, os.getpid()))
+    _run.partial(partial)
     started = time.monotonic()
     try:
         with _run.stage("Downloading %s" % name, 0):

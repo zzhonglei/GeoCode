@@ -746,6 +746,36 @@ test(
   },
 )
 
+test("a run stopped during a download leaves no unfinished file", { skip: !python3 }, async () => {
+  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  try {
+    assert.equal((await engine.settled()).status, "ready")
+    // Guards against the hidden file of a stopped download staying in the user's folder.
+    const unfinished = path.join(engine.directory, ".area.tif.1.part")
+    // Guards against removing a file of the user's that a line of output names.
+    const kept = path.join(engine.directory, "thesis.tif")
+    await fs.writeFile(kept, "mine")
+    const script = [
+      "import time",
+      "from geocode import _run",
+      `_run.partial(${JSON.stringify(unfinished)})`,
+      `open(${JSON.stringify(unfinished)}, "w").write("half")`,
+      `_run.partial(${JSON.stringify(kept)})`,
+      'print("downloading", flush=True)',
+      "time.sleep(60)",
+    ].join("\n")
+    const id = engine.send({ script, cwd: engine.directory })
+    await until(() => JSON.stringify(engine.progress(id)).includes("downloading"), 20000, "the download to start")
+    engine.deliver({ type: "cancel", id })
+    const response = await engine.response(id)
+    assert.equal(!response.ok && response.error.code, "cancelled")
+    await assert.rejects(fs.access(unfinished))
+    await fs.access(kept)
+  } finally {
+    await engine.stop()
+  }
+})
+
 const machineGee = async (machine: string) => JSON.parse(await fs.readFile(machine, "utf-8")).gee
 
 /** Writes the user's assets the stubbed earthengine-api lists, in the project "majestic", with no exports yet. */

@@ -4,6 +4,7 @@ and what GeoCode's functions tell the tool row they are doing."""
 import contextlib
 import itertools
 import json
+import os
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -67,6 +68,13 @@ def tell():
             status["progress"] = now["progress"]
         if report:
             report(status)
+
+
+def partial(path):
+    """Tells GeoEngine of a file that only a finished download moves into place: a run ended before then cannot remove
+    it itself, so GeoEngine does once the run's process is gone."""
+    if report:
+        report({"type": "partial", "path": os.path.abspath(path)})
 
 
 def plural(count, noun):

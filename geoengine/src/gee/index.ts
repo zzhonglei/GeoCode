@@ -37,6 +37,12 @@ const OUTPUT_TAIL = 16 * 1024
 /** Characters held while waiting for the end of a line; longer output without one is passed on as it is. */
 const LINE_LIMIT = 64 * 1024
 
+/**
+ * The name gc.download gives a download's unfinished file. Only such a file is removed: the event is a line of output,
+ * which anything the script prints could also make.
+ */
+const PARTIAL = /^\..+\.\d+\.part$/
+
 const STILL_CHECKING = "Google Earth Engine is still being checked. Call geerun again in a minute."
 
 /** Lines of an error GeoAgent is given. */
@@ -146,6 +152,8 @@ const Event = Schema.Union([
     progress: Schema.optionalKey(Schema.Number),
   }),
   Schema.Struct({ type: Schema.Literal("end"), ok: Schema.Boolean }),
+  /** A download's unfinished file, which only the download's end moves into place. */
+  Schema.Struct({ type: Schema.Literal("partial"), path: Schema.String }),
 ])
 
 const decodeBlock = Schema.decodeUnknownExit(Block)
@@ -876,6 +884,7 @@ function execute(
   let spaceError: string | undefined
   let taken: { readonly assets: readonly string[]; readonly more: number } | undefined
   let missing: readonly string[] | undefined
+  const partials = new Set<string>()
   const pending = { stdout: "", stderr: "" }
   // What the script printed since the tool row was last sent some.
   let unsent = ""
@@ -938,6 +947,10 @@ function execute(
       ended = { ok: event.ok }
       return
     }
+    if (event.type === "partial") {
+      if (PARTIAL.test(path.basename(event.path))) partials.add(event.path)
+      return
+    }
     begun[stream] = true
     if (stream === "stdout") context.progress({ begun: true })
   }
@@ -980,6 +993,11 @@ function execute(
           if (pending.stdout) line(pending.stdout, "stdout", false)
           if (pending.stderr) line(pending.stderr, "stderr", false)
           send()
+          // The process has ended, or was killed and waited for, so a download it left unfinished can go; one still
+          // held, as by a virus scanner on Windows, stays.
+          yield* Effect.promise(() =>
+            Promise.all([...partials].map((file) => fsp.rm(file, { force: true }).catch(() => undefined))),
+          )
           if (output.length > OUTPUT_LIMIT) {
             output = output.slice(-OUTPUT_LIMIT)
             truncated = true
