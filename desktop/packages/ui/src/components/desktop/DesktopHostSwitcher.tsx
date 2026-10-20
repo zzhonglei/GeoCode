@@ -1212,7 +1212,6 @@ export function DesktopHostSwitcherInline() {
   if (!isDesktopShell()) {
     return null;
   }
-  return null; // GeoCode: the app has one local instance, so there is nothing to switch to
 
   return (
     <>

@@ -29,7 +29,7 @@ import {
   registerCurrentDevicePasskey,
 } from '@/lib/passkeys';
 import { SessionLostNotice } from '@/geocode/SessionLostNotice'; // GeoCode: see the locked state
-import { Closed } from '@/geocode/Closed'; // GeoCode: see the locked state
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the error and locked states
 
 const STATUS_CHECK_ENDPOINT = '/auth/session';
 // How long the app stays hidden after login while the home directory resolves.
@@ -909,6 +909,8 @@ export const SessionAuthGate: React.FC<SessionAuthGateProps> = ({
   if (state === 'error') {
     return (
       <ErrorScreen onRetry={() => { resetTransientRetry(); void checkStatus(); }} errorType="network">
+        {/* --- GeoCode: the app has one local instance, so there is nothing to switch to --- */}
+        <Closed>
         {showHostSwitcher && (
           <div className="w-full max-w-xs">
             <DesktopHostSwitcherInline />
@@ -917,6 +919,8 @@ export const SessionAuthGate: React.FC<SessionAuthGateProps> = ({
             </p>
           </div>
         )}
+        </Closed>
+        {/* --- /GeoCode --- */}
       </ErrorScreen>
     );
   }
