@@ -91,11 +91,13 @@ export const geeRunView = (part: ToolPart, notice: SyntheticMessage | undefined,
         ? state.output
         : undefined;
   const result = background ? endNotice?.outcome : metadata?.outcome;
-  const start = endNotice?.started ?? metadata?.started;
+  // A notice the app gave on starting again has no end, as nothing saw the run stop: the row shows no time rather than
+  // one counting while the app was shut.
+  const start = endNotice && endNotice.ended === undefined ? undefined : (endNotice?.started ?? metadata?.started);
   const end = running
     ? undefined
     : endNotice
-      ? (endNotice.ended ?? notice?.time.created)
+      ? endNotice.ended
       : 'time' in state && 'end' in state.time
         ? state.time.end
         : undefined;

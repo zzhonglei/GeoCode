@@ -51,6 +51,15 @@ const make = Effect.gen(function* () {
       return yield* bus.publish(GeeRunRpc.Changed, snapshot(), { location })
     })
 
+  // The kernel's restart recovery runs only as a service, not as the app runs the kernel: a run the app's last exit
+  // stopped is told of here, once, as that recovery tells of it, without waking its conversation.
+  yield* Effect.gen(function* () {
+    for (const background of yield* jobs.pendingBackground) {
+      if (background.recovery.kind !== "geerun" || (yield* jobs.get(background.id))?.status === "running") continue
+      yield* GeeRunTool.recover(sessions, jobs, background, background.recovery)
+    }
+  }).pipe(Effect.forkIn(scope))
+
   return Service.of({
     list: Effect.sync(snapshot),
     stop: Effect.fn("GeeRunJob.stop")(function* (id) {

@@ -11,7 +11,6 @@ import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
-import { GeeRunTool } from "../../geocode/geerun.js" // GeoCode: geerun's background runs, told of after a restart
 
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."
@@ -210,8 +209,7 @@ export const layer = (options?: Options) =>
             Effect.fnUntraced(function* (background) {
               if ((yield* jobs.get(background.id))?.status === "running") return
               const recovery = background.recovery
-              // GeoCode: see the import
-              if (recovery.kind === "geerun") return yield* GeeRunTool.recover(sessions, jobs, background, recovery)
+              if (recovery.kind === "geerun") return // GeoCode: GeeRunJob tells of geerun's runs when the kernel starts
               yield* recovery.kind === "shell"
                 ? recoverShell(background, recovery)
                 : recoverSubagent(background, recovery, suspended)

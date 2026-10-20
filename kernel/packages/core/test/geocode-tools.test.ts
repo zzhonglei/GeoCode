@@ -1262,7 +1262,6 @@ describe("GeoCode: geerun", () => {
   it.effect("after a restart, tells the conversation that a background run was stopped", () =>
     Effect.gen(function* () {
       reset()
-      const jobs = yield* Job.Service
       const notificationID = SessionMessage.ID.create()
       kv.set(`job.background/${notificationID}`, {
         id: "job_geerun",
@@ -1270,10 +1269,24 @@ describe("GeoCode: geerun", () => {
         recovery: { kind: "geerun", sessionID, task: TASK, description: "统计影像", callID: "call-geerun" },
         status: "running",
       })
-      // What the kernel reads back at start-up; a marker it cannot read would be passed over without a word.
-      const [background] = yield* jobs.pendingBackground
-      if (background?.recovery.kind !== "geerun") throw new Error("the marker was not read back")
-      yield* GeeRunTool.recover(yield* Session.Service, jobs, background, background.recovery)
+      // Started as the app starts the kernel again, which runs no restart recovery of its own; a marker it cannot read
+      // would be passed over without a word.
+      noticed = yield* Deferred.make<void>()
+      yield* GeeRunJob.Service.pipe(
+        Effect.andThen(Deferred.await(noticed)),
+        Effect.andThen(
+          Effect.gen(function* () {
+            for (let turn = 0; turn < 100 && kv.size > 0; turn++) yield* Effect.yieldNow
+          }),
+        ),
+        Effect.provide(
+          AppNodeBuilder.build(LayerNode.group([GeeRunJob.node]), [
+            KV.node.replace(kvStore),
+            Session.node.replace(sessions),
+            Bus.node.replace(bus),
+          ]),
+        ),
+      )
       expect(notices).toMatchObject([
         {
           id: notificationID,
