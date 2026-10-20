@@ -226,7 +226,7 @@ function unavailable(status: Status.State) {
       {
         code: "service_failed",
         message: "The background service could not start.",
-        action: "Restart GeoCode.", // GeoCode: the app runs the kernel, there is no service command
+        action: "Run `opencode service restart` after checking the service logs.",
       },
       { status: 503 },
     )
