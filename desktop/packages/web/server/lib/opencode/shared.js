@@ -269,7 +269,7 @@ function readConfigFile(filePath) {
       throw error;
     }
     console.error(`Failed to read config file: ${filePath}`, error);
-    throw new Error('Failed to read OpenCode configuration');
+    throw new Error('Failed to read GeoCode configuration');
   }
 }
 
@@ -558,7 +558,7 @@ function writeConfig(config, filePath = CONFIG_FILE) {
       throw error;
     }
     console.error(`Failed to write config file: ${filePath}`, error);
-    throw new Error('Failed to write OpenCode configuration');
+    throw new Error('Failed to write GeoCode configuration');
   }
 }
 
