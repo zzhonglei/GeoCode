@@ -4,15 +4,31 @@ import path from 'node:path';
 import { app, utilityProcess } from 'electron';
 import { kernelConfigDir } from '@openchamber/web/server/geocode/kernel-paths.js';
 import { withoutAppVariables } from '@openchamber/web/server/geocode/app-variables.js';
+import { createEnvironmentStore } from '@openchamber/web/server/lib/environment/store.js';
+import { overlayEnvironment } from '@openchamber/web/server/lib/environment/variables.js';
 import { createSupervisor } from './geoengine-supervisor.mjs';
 
 const MACHINE_FILE = 'machine.json';
 const TASK_GRACE_MS = 3_000;
 
+// The variables of Settings' environment page, which the kernel takes too, from the file the shell server's
+// environmentStore keeps (web/server/index.js); read as the engine starts, so a change applies once the app restarts.
+const settingsVariables = (log) => {
+  try {
+    return createEnvironmentStore({
+      filePath: path.join(process.env.OPENCHAMBER_DATA_DIR, 'environment.json'),
+    }).userVariables();
+  } catch (error) {
+    // As for the kernel: a file that cannot be read sets no variables, and the engine starts all the same.
+    log.warn(`[geoengine] settings variables not applied: ${error.message}`);
+    return {};
+  }
+};
+
 // Staged by scripts/stage-geoengine.sh; inside app.asar once packaged.
 const enginePath = () => path.join(app.getAppPath(), 'resources', 'geoengine', 'geoengine.mjs');
 
-const fork = () => {
+const fork = (log) => {
   const modulePath = enginePath();
   if (!fs.existsSync(modulePath)) {
     throw Object.assign(new Error(`GeoEngine is missing at ${modulePath}.`), { code: 'ENOENT' });
@@ -21,7 +37,7 @@ const fork = () => {
   fs.mkdirSync(kernelConfigDir(), { recursive: true });
   return utilityProcess.fork(modulePath, [`--machine=${path.join(kernelConfigDir(), MACHINE_FILE)}`], {
     serviceName: 'GeoEngine',
-    env: withoutAppVariables(process.env),
+    env: withoutAppVariables(overlayEnvironment(process.env, settingsVariables(log))),
     stdio: ['ignore', 'inherit', 'pipe'],
   });
 };
@@ -67,7 +83,7 @@ export const startGeoEngine = ({ log, onFailure }) => {
   // A quit can come before startup gets this far.
   if (stopped) return;
   if (!supervisor) {
-    supervisor = createSupervisor({ fork, killTree, log, onFailure });
+    supervisor = createSupervisor({ fork: () => fork(log), killTree, log, onFailure });
     supervisor.onStatus((domain, value) => {
       for (const listener of statusListeners) listener(domain, value);
     });
