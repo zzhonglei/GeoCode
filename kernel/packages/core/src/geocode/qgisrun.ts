@@ -208,7 +208,8 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
       const guarded = GUARDED.has(plan.algorithm.id)
       const guards = [
         ...(guarded ? [{ resource: plan.algorithm.id, save: plan.algorithm.id }] : []),
-        ...external.map((item) => ({ resource: item.resource, save: item.save })),
+        // The directory the card names, not the repository it is in, which other tools save.
+        ...external.map((item) => ({ resource: item.resource, save: item.resource })),
         ...places.map((place) => ({ resource: place, save: place })),
       ]
       yield* permission.assert({

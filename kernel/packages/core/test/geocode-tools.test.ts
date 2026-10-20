@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Deferred, Effect, Exit, Fiber, Layer, Schema, Scope } from "effect"
 import { Bus } from "@opencode/core/bus"
@@ -23,6 +24,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { location } from "./fixture/location"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { executeTool, registerToolPlugin, toolDefinitions, toolIdentity } from "./lib/tool"
@@ -549,6 +551,25 @@ describe("GeoCode: qgisrun", () => {
         },
       })
     }),
+  )
+
+  it.effect("remembers for a run writing into another repository only the directory its card names", () =>
+    Effect.gen(function* () {
+      reset()
+      const repository = yield* tmpdirScoped()
+      yield* Effect.promise(() => fs.mkdir(path.join(repository.path, ".git")))
+      const results = path.join(repository.path, "results")
+      engine({
+        prepare: {
+          plan: plan({
+            outputs: [{ name: "OUTPUT", value: "x", files: [path.join(results, "a.gpkg")], folder: false }],
+          }),
+        },
+      })
+      yield* executeTool(yield* Tool.Service, runs({ algorithm: "native:buffer", parameters: {} }))
+      // Guards against "always allow" reaching every other directory of that repository without asking.
+      expect(assertions[0]).toMatchObject({ save: [path.join(results, "*")] })
+    }).pipe(Effect.scoped),
   )
 
   it.effect("asks about every database a run writes to, once each, as it asks about a listed algorithm", () =>
