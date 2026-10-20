@@ -32,8 +32,7 @@ def composite(images, region, dates=None, method=None, mask=True, min_coverage=0
     covers less than min_coverage. Returns the composite of the dataset's own bands, not clipped, each band on its grid
     in the image at the region's centre."""
     with _run.stage("Compositing the images"):
-        import geedim  # noqa: F401 (registers the .gd accessors)
-
+        _run.geedim()
         if isinstance(dates, str):
             dates = [dates]
         chosen = images.filter(ee.Filter.Or(*[picked(entry) for entry in dates])) if dates else images

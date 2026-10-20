@@ -101,4 +101,4 @@ GeoEngine 只执行任务、管理执行环境。agent、工具的定义与权�
 ## 7. 待定
 
 - 界面上的地理数据预览:显示什么、经什么接口取得。
-- OpenStreetMap 访问外网时怎样跟随用户的网络配置:GEE 的请求由用户的 Python 发出,Python 自己读系统代理;GeoEngine 用的 Node 不读。
+- OpenStreetMap 访问外网时怎样跟随用户的网络配置(GEE 见 `GEE.md` 第 7 节):GeoEngine 用的 Node 不读代理,由 Node 发请求时要另行设置;壳服务端的 `desktop/packages/web/server/lib/outbound-proxy.js` 只认代理变量,不读系统代理。

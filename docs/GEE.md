@@ -79,7 +79,7 @@ GeoCode 的 Python 包 `geocode` 把常见的 GEE 操作做成标准的函数,�
 
 GEE 在用户自己的 Python 里运行,要装齐 earthengine-api、geedim 2.0 以上与 geopandas 1.0 以上:更旧的版本能导入,却缺 `geocode` 包用到的接口;geedim 2.0 只能装在 Python 3.11 以上。下载直接用 geedim,不用 geemap:它的下载只是转调 geedim 已废弃的接口,又带着二十个直接依赖。GeoEngine 不安装软件,也不改动用户的环境(`GEOENGINE.md` 第 1 节)。
 
-Python 与 Google Cloud 项目在设置里选和填,项目 ID 只有用户知道,不猜。登录用 Google 账号,可以在设置里登录,也可以由 GeoAgent 在对话里发起。Earth Engine 的请求由 Python 的 requests 发出,跟随用户的代理配置;`gc.download` 分块下载用的是 geedim 的 aiohttp,不读代理。
+Python 与 Google Cloud 项目在设置里选和填,项目 ID 只有用户知道,不猜。登录用 Google 账号,可以在设置里登录,也可以由 GeoAgent 在对话里发起。Earth Engine 的请求与 GeoCode 的函数里 geedim 的请求(`gc.download` 的分块下载等)都跟随用户的代理配置(GeoEngine 的环境见 `GEOENGINE.md` 第 5 节):设了任一代理变量(`HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY` 等,大小写皆可)就只看变量,一个也没有时才取系统的代理设置。geedim 自己不读代理,`geocode` 的函数在它发出第一个请求之前替它打开;脚本不经这些函数、先直接用 geedim 发出请求时,这次运行里 geedim 的请求都不走代理。
 
 在设置里登录时,GeoEngine 启动的 Python 在本机回环地址上临时监听一个端口,等浏览器带回授权码,登录结束即关闭。本机的其他程序可以借这个端口提前结束登录,但伪造的授权码没有用:换取凭据要用只有这个 Python 持有的校验码。
 

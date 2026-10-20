@@ -48,8 +48,7 @@ def prepared(image, grid):
 def measured(image, grid):
     """The image with only the bands kept, and the grid given or else that of its finest band; one without bounds, or
     without a grid of its own, is refused."""
-    import geedim  # noqa: F401 (registers the .gd accessors)
-
+    _run.geedim()
     without_region(grid)
     # As the signature the agent is shown has it: an argument given as None is not given.
     grid = {key: value for key, value in grid.items() if value is not None}

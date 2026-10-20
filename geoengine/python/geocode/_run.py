@@ -1,12 +1,14 @@
 """The task a run works in, set before GeoAgent's script starts; what GeoCode's folder holds, for the answer's header;
-and what GeoCode's functions tell the tool row they are doing."""
+what GeoCode's functions tell the tool row they are doing; and geedim, as GeoCode's functions use it."""
 
 import contextlib
+import functools
 import itertools
 import json
 import os
 import re
 import threading
+import types
 from concurrent.futures import ThreadPoolExecutor
 
 import ee
@@ -75,6 +77,20 @@ def partial(path):
     it itself, so GeoEngine does once the run's process is gone."""
     if report:
         report({"type": "partial", "path": os.path.abspath(path)})
+
+
+def geedim():
+    """Imports geedim, which registers the .gd accessors, with its requests through the proxy the environment or the
+    system names, as Earth Engine's own go: geedim opens its aiohttp session without trust_env, so it reads neither.
+    Called before geedim's first request, as the session it opens then is kept for the run."""
+    import geedim.utils
+    import aiohttp
+
+    # geedim 2.0's AsyncRunner.session makes the session from the aiohttp this module imported; a geedim that no
+    # longer does only loses the proxy.
+    if getattr(geedim.utils, "aiohttp", None) is aiohttp:
+        trusting = functools.partial(aiohttp.ClientSession, trust_env=True)
+        geedim.utils.aiohttp = types.SimpleNamespace(**{**vars(aiohttp), "ClientSession": trusting})
 
 
 def plural(count, noun):

@@ -28,8 +28,7 @@ def images(collection, region, start, end, **masking):
     Returns the images unmasked, with geedim's mask bands, as geedim composites them: gc.composite masks them with the
     same arguments, and .gd.maskClouds() masks them for other uses."""
     with _run.stage("Finding images of %s" % (collection if isinstance(collection, str) else "the collection")):
-        import geedim  # noqa: F401 (registers the .gd accessors)
-
+        _run.geedim()
         found = ee.ImageCollection(collection).filterDate(start, end).filterBounds(region)
         dataset = found.gd.id
         clouds = found.gd.cloudSupport
