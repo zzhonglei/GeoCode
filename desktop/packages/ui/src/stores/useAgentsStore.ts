@@ -993,7 +993,7 @@ export async function reloadOpenCodeConfiguration(options?: {
     if (payload?.requiresManualRestart) {
       finishConfigUpdate();
       const error = new Error(
-        payload?.message || 'Restart GeoCode to apply the changes.', // GeoCode: one app, no server to restart
+        payload?.message || 'Restart your connected OpenCode server to apply the changes.',
       );
       (error as Error & { requiresManualRestart?: boolean }).requiresManualRestart = true;
       throw error;

@@ -559,7 +559,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       let removed = false;
       if (scope === 'auth') {
         return res.status(409).json({
-          error: 'The kernel stores provider credentials itself. Disconnect the provider in Settings, which asks the kernel to remove it.', // GeoCode: the kernel, not OpenCode
+          error: 'OpenCode 2 stores provider credentials itself. Disconnect the provider in Settings, which asks OpenCode to remove it.',
           code: 'PROVIDER_CREDENTIAL_OWNED_BY_OPENCODE',
         });
       } else if (scope === 'user' || scope === 'project' || scope === 'custom') {

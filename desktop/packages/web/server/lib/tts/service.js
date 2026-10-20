@@ -153,7 +153,7 @@ export class TTSService {
   async generateSpeechBuffer(options) {
     const client = await this._getClient();
     if (!client) {
-      throw new Error('OpenAI API key not configured. Set OPENAI_API_KEY environment variable or configure OpenAI in GeoCode.');
+      throw new Error('OpenAI API key not configured. Set OPENAI_API_KEY environment variable or configure OpenAI in OpenCode.');
     }
 
     const {

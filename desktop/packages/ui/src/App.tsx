@@ -806,8 +806,6 @@ function App({ apis }: AppProps) {
   // Desktop boot view routing.
   // When the boot outcome resolves to a non-main screen (chooser, recovery),
   // render OnboardingScreen with appropriate mode/variant.
-  // GeoCode: a local service that did not start leaves nothing to install, choose or connect to
-  if (isDesktopRuntime && bootView && bootView.screen !== 'main') return <ErrorBoundary><StartupFailure cause="service" /></ErrorBoundary>;
   if (geoEngineFailure) return <ErrorBoundary><StartupFailure cause="geoengine" error={geoEngineFailureText(geoEngineFailure)} /></ErrorBoundary>; // GeoCode: only restarting the app, which starts a new GeoEngine
   if (isDesktopRuntime && bootView && bootView.screen !== 'main') {
     // First-launch chooser

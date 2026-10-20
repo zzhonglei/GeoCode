@@ -844,11 +844,11 @@ function resolveSkillSearchDirectories(workingDirectory) {
   if (workingDirectory) {
     const worktreeRoot = findWorktreeRoot(workingDirectory) || path.resolve(workingDirectory);
     const projectDirs = getAncestors(workingDirectory, worktreeRoot)
-      .map((dir) => path.join(dir, KERNEL_PROJECT_DIR));
+      .map((dir) => path.join(dir, '.opencode'));
     projectDirs.forEach(pushDir);
   }
 
-  pushDir(path.join(os.homedir(), KERNEL_PROJECT_DIR));
+  pushDir(path.join(os.homedir(), '.opencode'));
 
   const customConfigDir = process.env.OPENCODE_CONFIG_DIR
     ? path.resolve(process.env.OPENCODE_CONFIG_DIR)
