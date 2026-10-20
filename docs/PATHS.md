@@ -45,10 +45,10 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 ├── geocode.db-wal, -shm  数据库运行时的附属文件,随数据库一起存在
 ├── log/geocode.log       内核日志,超过 50 MB 时自动截去旧内容;截短时旁边短暂出现锁目录 geocode.log.trim/
 ├── snapshot/             每个项目的检查点仓库,用于撤销 agent 的修改;只保存差异,复用项目自己的 git 对象
-├── tool-output/          过长的工具输出的完整内容,7 天后清理
+├── tool-output/          过长的工具输出的完整内容(地理工具的不存这里),7 天后清理
 ├── shell/                agent 执行命令的输出
 ├── worktree/             为并行任务建立的 git 工作树
-├── repos/                agent 查阅外部代码时克隆的仓库
+├── repos/                配置的 references 列出的仓库,由内核克隆
 ├── plan/                 计划模式写下的计划
 └── desktop/              应用的设置与状态
     ├── settings.json         这台电脑上的状态:窗口位置等
