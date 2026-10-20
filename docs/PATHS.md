@@ -43,7 +43,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 ~/.local/share/geocode/
 ├── geocode.db            数据库:会话与消息、模型服务商的登录凭据、MCP 服务的授权、「始终允许」的权限、模型目录、各会话建过的 GEE 任务名
 ├── geocode.db-wal, -shm  数据库运行时的附属文件,随数据库一起存在
-├── log/geocode.log       内核日志,超过 50 MB 时自动截去旧内容
+├── log/geocode.log       内核日志,超过 50 MB 时自动截去旧内容;截短时旁边短暂出现锁目录 geocode.log.trim/
 ├── snapshot/             每个项目的检查点仓库,用于撤销 agent 的修改;只保存差异,复用项目自己的 git 对象
 ├── tool-output/          过长的工具输出的完整内容,7 天后清理
 ├── shell/                agent 执行命令的输出
@@ -77,7 +77,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
     ├── git-credential-endpoint.json, bin/git-credential-geocode  git 凭据助手与它调用的接口地址和密钥
     ├── tracked-items.json         会话关联的议题与拉取请求的状态
     ├── dispatch-results.json      等待交回发起会话的子会话结果
-    ├── message-search.sqlite      消息搜索的索引,在设置里打开后才建立
+    ├── message-search.sqlite(及 -wal、-shm)  消息搜索的索引,在设置里打开后才建立
     ├── voice-keys.json            语音朗读与转写服务的密钥
     ├── environment.json           设置里填的环境变量,以及各项目的环境变量与环境命令
     ├── quota/                     查询用量所用的密钥
@@ -88,7 +88,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
     └── tmp/                       合并分支时的临时工作树
 ```
 
-`log/`、`repos/`、`desktop/chats/` 与 git 凭据助手的两份文件每次启动就建立,其余的用到对应功能时才会出现,在没用过的电脑上不存在。设置或偏好写到一半时应用崩溃,会留下名字里带 `.tmp-` 的副本,环境变量则留下 `environment.json.<进程号>.tmp`;git 与代码托管的几份存储写入时在旁边建 `.lock` 锁文件与临时副本,崩溃时可能留下;排队的消息读不出时,原文件改名为 `message-queue.json.corrupt-<时间>` 留下。
+`geocode.db`、`log/`、`repos/` 与 `desktop/` 里的 `chats/`、`remote-clients.json`、`geocode.managed.json`、`agent-tool/`、`managed-kernel/`、git 凭据助手的两份文件每次启动就写,其余的用到对应功能时才会出现,在没用过的电脑上不存在。`desktop/` 里的存储都先写旁边名字带 `.tmp` 的副本再改名,写到一半时应用崩溃会留下它(设置与偏好的副本在下次启动时清掉);git、代码托管与项目设置的存储另在旁边建 `.lock` 锁文件,崩溃时可能留下;排队的消息、会话的归档与等待交回的子会话结果读不出时,原文件改名为 `<文件名>.corrupt-<时间>` 留下。
 
 ## 4. 缓存、状态与临时文件
 
@@ -96,7 +96,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 
 ```
 ~/.cache/geocode/
-├── bin/          本机没有 ripgrep 时下载的 rg,内核的持久终端所用的 geocode-pty
+├── bin/          本机没有 ripgrep 时下载的 rg,内核的持久终端所用的 geocode-pty;目录每次启动就建立
 ├── npm/          按需安装的服务商 SDK 与格式化工具
 └── npm-cache/    下载 npm 包的缓存
 ```
@@ -135,7 +135,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 │   ├── agents/  commands/  skills/   项目专属的 agent、命令与技能
 │   └── screenshots/    agent 使用浏览器时保存的截图
 └── .git/
-    ├── geocode         项目标识(根提交),建立或删除工作树时写入;壳用它给工作树的目录命名,仓库没有远程地址时内核也用它认出项目
+    ├── geocode         项目标识(根提交),在新建工作树的对话框里检查名字、建立或删除工作树时写入;壳用它给工作树的目录命名,仓库没有远程地址时内核也用它认出项目
     ├── config          建立工作树时写入 core.longpaths;在设置里给项目套用 git 身份时写入用户名、邮箱与签名的设置;仓库绑定了账号时写入两条 credential.helper(先一条空的,让用户自己的凭据助手在这个仓库里不起作用,再一条指向 GeoCode 的凭据助手)、credential.useHttpPath 与标记它的 geocode.credentialusehttppath,绑定了托管的 SSH 密钥时写入经 GeoCode 运行的 core.sshCommand
     ├── worktrees/      git 为工作树记录的信息,建立工作树时由 git 写入
     └── refs/
@@ -157,7 +157,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 - 清空会话、登录与应用设置:退出 GeoCode 后删除 `~/.local/share/geocode/`。
 - 释放空间:删除 `~/.cache/geocode/`。
 - 重置界面:删除窗口数据目录。
-- 完全卸载:删除程序,再删除第 1 节表里的全部位置。
+- 完全卸载:删除程序与第 1 节表里的全部位置,再删除第 5 节的系统登记(macOS 的偏好文件,并在系统设置里撤销权限与登录项),以及 macOS 上内核持久终端的 `/tmp/opencode-pty-<用户编号>/`(用户自己的 OpenCode 也用它时留着)。
 
 设了 `XDG_*` 的,删的是它们下面的 `geocode/`;`XDG_DATA_HOME` 只设在登录 shell 里时,默认数据目录下的 `desktop/` 也要删(第 1 节)。
 
