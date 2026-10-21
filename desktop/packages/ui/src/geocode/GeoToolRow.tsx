@@ -2,6 +2,7 @@ import React from 'react';
 import { create } from 'zustand';
 
 import { MinDurationShineText } from '@/components/chat/message/parts/MinDurationShineText';
+import { ToolRevealOnMount } from '@/components/chat/message/parts/ToolRevealOnMount';
 import { Icon } from '@/components/icon/Icon';
 import { Text } from '@/components/ui/text';
 import { useI18nStore } from '@/lib/i18n';
@@ -38,6 +39,28 @@ const useExpanded = create<{ runs: ReadonlySet<string>; toggle: (key: string) =>
       return { runs };
     }),
 }));
+
+// The call whose row first stood for its run, by the run's first call: every call joining the run mounts the row anew.
+const useFirstRow = create<{ by: ReadonlyMap<string, string>; claim: (run: string, call: string) => void }>()(
+  (set) => ({
+    by: new Map(),
+    claim: (run, call) => set((state) => (state.by.has(run) ? state : { by: new Map(state.by).set(run, call) })),
+  }),
+);
+
+/**
+ * Whether the row plays the reveal a new tool row plays (`animate`, decided by the message as for its other rows):
+ * only as the row that first stood for its run, so not for a call joining a run already shown, from history too. A new
+ * call renders before its turn publishes its run, so the row decides once it knows the run.
+ */
+const useReveal = (run: string | undefined, call: string, drawn: boolean, animate: boolean) => {
+  const first = useFirstRow((state) => (run === undefined ? undefined : state.by.get(run)));
+  const claim = useFirstRow((state) => state.claim);
+  React.useLayoutEffect(() => {
+    if (run !== undefined && drawn) claim(run, call);
+  }, [run, drawn, claim, call]);
+  return run !== undefined && drawn && animate && (first ?? call) === call;
+};
 
 /** The latest value, changed no sooner than `HOLD_MS` after the last change. */
 const useHeld = (key: string, value: string | undefined, drawn: boolean) => {
@@ -80,7 +103,7 @@ const Title: React.FC<{ active: boolean; title: string }> = ({ active, title }) 
  * calls cannot be opened, and while the model may still read on it says what the latest call reads; a row of
  * readgeodata calls counts the files read and opens to list them.
  */
-export const GeoToolRow: React.FC<{ part: ToolPart }> = ({ part }) => {
+export const GeoToolRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, animate }) => {
   const run = useGeoToolRunStore((state) => state.runs.get(part.id));
   // Subscribed so the titles follow a change of language; passed to the file count, which the compiler keeps while the
   // count stays the same.
@@ -94,27 +117,30 @@ export const GeoToolRow: React.FC<{ part: ToolPart }> = ({ part }) => {
   // By the run's key, so the row stays open as it moves to a call joining the run.
   const open = useExpanded((state) => state.runs.has(key));
   const toggleRun = useExpanded((state) => state.toggle);
+  const reveal = useReveal(run?.first, part.id, drawn, animate);
   if (!drawn) return null;
 
   if (part.tool !== 'readgeodata') {
     return (
-      <div className="oc-static-tool-row flex w-full items-center gap-x-1.5 pe-2 ps-px py-1.5 rounded-xl min-w-0">
-        <div className="inline-flex h-5 items-center flex-shrink-0">
-          <QgisLogo className="h-3.5 w-3.5 flex-shrink-0" />
+      <ToolRevealOnMount animate={reveal} wipe>
+        <div className="oc-static-tool-row flex w-full items-center gap-x-1.5 pe-2 ps-px py-1.5 rounded-xl min-w-0">
+          <div className="inline-flex h-5 items-center flex-shrink-0">
+            <QgisLogo className="h-3.5 w-3.5 flex-shrink-0" />
+          </div>
+          <Title active={active} title={geoRunTitle('qgisdoc', active)} />
+          {active && subject ? (
+            <Text
+              key={subject}
+              variant="generate-effect"
+              className={cn('typography-meta min-w-0 flex-1 truncate whitespace-nowrap', ROW_TEXT_CLASS)}
+              style={{ color: 'var(--tools-description)' }}
+              title={subject}
+            >
+              {subject}
+            </Text>
+          ) : null}
         </div>
-        <Title active={active} title={geoRunTitle('qgisdoc', active)} />
-        {active && subject ? (
-          <Text
-            key={subject}
-            variant="generate-effect"
-            className={cn('typography-meta min-w-0 flex-1 truncate whitespace-nowrap', ROW_TEXT_CLASS)}
-            style={{ color: 'var(--tools-description)' }}
-            title={subject}
-          >
-            {subject}
-          </Text>
-        ) : null}
-      </div>
+      </ToolRevealOnMount>
     );
   }
 
@@ -123,71 +149,74 @@ export const GeoToolRow: React.FC<{ part: ToolPart }> = ({ part }) => {
   const count = new Set(parts.map((call) => geoDataPath(call.state.input)).filter(Boolean)).size;
   const toggle = () => toggleRun(key);
   return (
-    <div className="w-full min-w-0">
-      <div
-        className="group/tool oc-static-tool-row flex w-full items-center gap-x-1.5 pe-2 ps-px py-1.5 rounded-xl min-w-0 cursor-pointer"
-        role="button"
-        tabIndex={0}
-        aria-expanded={open}
-        onClick={toggle}
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter' && event.key !== ' ') return;
-          event.preventDefault();
-          toggle();
-        }}
-      >
-        <div className="relative h-5 w-3.5 flex-shrink-0">
-          <div
-            className={cn(
-              'absolute inset-0 flex items-center justify-center transition-opacity',
-              open ? 'opacity-0' : 'group-hover/tool:opacity-0',
-            )}
-          >
-            <EarthIcon className="h-3.5 w-3.5" />
+    <ToolRevealOnMount animate={reveal} wipe>
+      <div className="w-full min-w-0">
+        <div
+          className="group/tool oc-static-tool-row flex w-full items-center gap-x-1.5 pe-2 ps-px py-1.5 rounded-xl min-w-0 cursor-pointer"
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          onClick={toggle}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            toggle();
+          }}
+        >
+          <div className="relative h-5 w-3.5 flex-shrink-0">
+            <div
+              className={cn(
+                'absolute inset-0 flex items-center justify-center transition-opacity',
+                open ? 'opacity-0' : 'group-hover/tool:opacity-0',
+              )}
+            >
+              <EarthIcon className="h-3.5 w-3.5" />
+            </div>
+            <div
+              className={cn(
+                'absolute inset-0 flex items-center justify-center transition-opacity',
+                open ? 'opacity-100' : 'opacity-0 group-hover/tool:opacity-100',
+              )}
+            >
+              <Icon name={open ? 'arrow-down-s' : 'arrow-right-s'} className="h-3.5 w-3.5" />
+            </div>
           </div>
-          <div
-            className={cn(
-              'absolute inset-0 flex items-center justify-center transition-opacity',
-              open ? 'opacity-100' : 'opacity-0 group-hover/tool:opacity-100',
-            )}
-          >
-            <Icon name={open ? 'arrow-down-s' : 'arrow-right-s'} className="h-3.5 w-3.5" />
-          </div>
+          <Title active={active} title={geoRunTitle('readgeodata', active)} />
+          {count > 0 ? (
+            <Text
+              variant={reveal ? 'generate-effect' : 'static'}
+              className={cn('typography-meta min-w-0 flex-1 truncate whitespace-nowrap', ROW_TEXT_CLASS)}
+              style={{ color: 'var(--tools-description)' }}
+            >
+              {geoFileCount(count, locale)}
+            </Text>
+          ) : null}
         </div>
-        <Title active={active} title={geoRunTitle('readgeodata', active)} />
-        {count > 0 ? (
-          <span
-            className={cn('typography-meta min-w-0 flex-1 truncate whitespace-nowrap', ROW_TEXT_CLASS)}
-            style={{ color: 'var(--tools-description)' }}
-          >
-            {geoFileCount(count, locale)}
-          </span>
+        {open ? (
+          <div className="pb-1 ps-6 pe-2 min-w-0">
+            {files.map((file) => (
+              <div
+                key={file}
+                className={cn('typography-meta truncate whitespace-nowrap', ROW_TEXT_CLASS)}
+                style={{ color: 'var(--tools-description)' }}
+                title={file}
+              >
+                {file}
+              </div>
+            ))}
+          </div>
         ) : null}
       </div>
-      {open ? (
-        <div className="pb-1 ps-6 pe-2 min-w-0">
-          {files.map((file) => (
-            <div
-              key={file}
-              className={cn('typography-meta truncate whitespace-nowrap', ROW_TEXT_CLASS)}
-              style={{ color: 'var(--tools-description)' }}
-              title={file}
-            >
-              {file}
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
+    </ToolRevealOnMount>
   );
 };
 
-/** A geo tool call's own row. */
-export const GeoRow: React.FC<{ part: ToolPart }> = ({ part }) =>
+/** A geo tool call's own row; `animate` when the message reveals the call as a new tool row. */
+export const GeoRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, animate }) =>
   part.tool === 'qgisrun' ? (
-    <QgisRunRow part={part} />
+    <QgisRunRow part={part} animate={animate} />
   ) : part.tool === 'geerun' ? (
-    <GeeRunRow part={part} />
+    <GeeRunRow part={part} animate={animate} />
   ) : (
-    <GeoToolRow part={part} />
+    <GeoToolRow part={part} animate={animate} />
   );

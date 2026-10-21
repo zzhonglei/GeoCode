@@ -14,13 +14,14 @@ import { RunRow } from './RunRow';
  * colour unless it finished. It opens to the English excerpt of the answer: the facts settled before the run, the
  * latest messages QGIS gave, and how the run ended.
  */
-export const QgisRunRow: React.FC<{ part: ToolPart }> = ({ part }) => {
+export const QgisRunRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, animate }) => {
   // Subscribed so the row follows a change of language.
   const locale = useI18nStore((state) => state.locale);
   const view = qgisRunView(part, locale);
   return (
     <RunRow
       id={part.id}
+      animate={animate}
       logo={<QgisLogo className="h-3.5 w-3.5" />}
       title={view.title}
       bad={view.bad}

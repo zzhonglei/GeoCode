@@ -43,7 +43,7 @@ const useRowStatus = (
  * once done, the time it took, the title in the error colour unless it finished. It opens to what the script printed,
  * as it prints it, and how the run ended.
  */
-export const GeeRunRow: React.FC<{ part: ToolPart }> = ({ part }) => {
+export const GeeRunRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, animate }) => {
   // Subscribed so the row follows a change of language.
   const locale = useI18nStore((state) => state.locale);
   // Only a run in the background ends with a notification; looked up on every change of the conversation, so not for
@@ -71,6 +71,7 @@ export const GeeRunRow: React.FC<{ part: ToolPart }> = ({ part }) => {
   return (
     <RunRow
       id={part.id}
+      animate={animate}
       logo={<GeeLogo className="h-3.5 w-3.5" />}
       title={view.title}
       bad={view.bad}

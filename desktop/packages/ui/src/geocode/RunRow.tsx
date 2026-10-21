@@ -1,7 +1,9 @@
 import React from 'react';
 
 import { MinDurationShineText } from '@/components/chat/message/parts/MinDurationShineText';
+import { ToolRevealOnMount } from '@/components/chat/message/parts/ToolRevealOnMount';
 import { Icon } from '@/components/icon/Icon';
+import { Text } from '@/components/ui/text';
 import { useDurationTickerNow } from '@/hooks/useDurationTicker';
 import { cn } from '@/lib/utils';
 
@@ -105,10 +107,12 @@ const Log: React.FC<{ lines: readonly Line[] }> = ({ lines }) => {
 /**
  * A run of a geo tool, as one row: its logo and what GeoAgent says the step is for; while it runs, what it is doing,
  * its percentage when known, and the time so far; once done, the time it took, the title in the error colour when
- * `bad`. It opens to the run's lines, and `note` under them.
+ * `bad`. It opens to the run's lines, and `note` under them. As a new tool row, with `animate`, it wipes in and its
+ * title sweeps in.
  */
 export const RunRow: React.FC<{
   id: string;
+  animate: boolean;
   logo: React.ReactNode;
   title: string;
   bad: boolean;
@@ -118,89 +122,92 @@ export const RunRow: React.FC<{
   end?: number;
   lines: readonly Line[];
   note?: React.ReactNode;
-}> = ({ id, logo, title, bad, doing, percent, start, end, lines, note }) => {
+}> = ({ id, animate, logo, title, bad, doing, percent, start, end, lines, note }) => {
   const counted = useCounted(percent, doing);
   const open = useRunRowOpen(id);
   const toggleOpen = useRunRowToggle();
   const toggle = () => toggleOpen(id);
 
   return (
-    <div className="w-full min-w-0">
-      <div
-        className="group/tool oc-static-tool-row flex w-full min-w-0 cursor-pointer items-center gap-x-1.5 rounded-xl py-1.5 pe-2 ps-px"
-        role="button"
-        tabIndex={0}
-        aria-expanded={open}
-        onClick={toggle}
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter' && event.key !== ' ') return;
-          event.preventDefault();
-          toggle();
-        }}
-      >
-        <div className="relative h-5 w-3.5 flex-shrink-0">
-          <div
-            className={cn(
-              'absolute inset-0 flex items-center justify-center transition-opacity',
-              open ? 'opacity-0' : 'group-hover/tool:opacity-0',
-            )}
-          >
-            {logo}
-          </div>
-          <div
-            className={cn(
-              'absolute inset-0 flex items-center justify-center transition-opacity',
-              open ? 'opacity-100' : 'opacity-0 group-hover/tool:opacity-100',
-            )}
-          >
-            <Icon name={open ? 'arrow-down-s' : 'arrow-right-s'} className="h-3.5 w-3.5" />
-          </div>
-        </div>
-        <span
-          className={cn(
-            'typography-meta max-w-[60%] flex-shrink-0 truncate whitespace-nowrap font-medium',
-            ROW_TEXT_CLASS,
-          )}
-          style={{
-            color: bad ? 'var(--status-error)' : 'var(--tools-title)',
+    <ToolRevealOnMount animate={animate} wipe>
+      <div className="w-full min-w-0">
+        <div
+          className="group/tool oc-static-tool-row flex w-full min-w-0 cursor-pointer items-center gap-x-1.5 rounded-xl py-1.5 pe-2 ps-px"
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          onClick={toggle}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            toggle();
           }}
-          title={title}
         >
-          {title}
-        </span>
-        <span className="min-w-0 flex-1">
-          {doing ? (
-            <MinDurationShineText
-              active
-              className={cn('typography-meta block min-w-0 truncate whitespace-nowrap', ROW_TEXT_CLASS)}
-              style={{ color: 'var(--tools-description)' }}
+          <div className="relative h-5 w-3.5 flex-shrink-0">
+            <div
+              className={cn(
+                'absolute inset-0 flex items-center justify-center transition-opacity',
+                open ? 'opacity-0' : 'group-hover/tool:opacity-0',
+              )}
             >
-              {doing}
-            </MinDurationShineText>
-          ) : null}
-        </span>
-        <span className={cn('flex flex-shrink-0 gap-2 tabular-nums text-muted-foreground/80', ROW_TEXT_CLASS)}>
-          {counted !== undefined ? <span className="text-foreground">{counted}%</span> : null}
-          {start !== undefined ? (
-            <span>
-              <Elapsed start={start} end={end} />
-            </span>
-          ) : null}
-        </span>
-      </div>
-      {open && (lines.length || note) ? (
-        <div className="relative ms-2 min-w-0 ps-3">
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute top-px bottom-0 inset-s-0 w-px"
-            style={{ backgroundColor: 'var(--tools-border)' }}
-          />
-          <div className="min-w-0 py-2 pe-2 ps-4">
-            {lines.length ? <Log lines={lines} /> : null}
-            {note}
+              {logo}
+            </div>
+            <div
+              className={cn(
+                'absolute inset-0 flex items-center justify-center transition-opacity',
+                open ? 'opacity-100' : 'opacity-0 group-hover/tool:opacity-100',
+              )}
+            >
+              <Icon name={open ? 'arrow-down-s' : 'arrow-right-s'} className="h-3.5 w-3.5" />
+            </div>
           </div>
+          <Text
+            variant={animate ? 'generate-effect' : 'static'}
+            className={cn(
+              'typography-meta max-w-[60%] flex-shrink-0 truncate whitespace-nowrap font-medium',
+              ROW_TEXT_CLASS,
+            )}
+            style={{
+              color: bad ? 'var(--status-error)' : 'var(--tools-title)',
+            }}
+            title={title}
+          >
+            {title}
+          </Text>
+          <span className="min-w-0 flex-1">
+            {doing ? (
+              <MinDurationShineText
+                active
+                className={cn('typography-meta block min-w-0 truncate whitespace-nowrap', ROW_TEXT_CLASS)}
+                style={{ color: 'var(--tools-description)' }}
+              >
+                {doing}
+              </MinDurationShineText>
+            ) : null}
+          </span>
+          <span className={cn('flex flex-shrink-0 gap-2 tabular-nums text-muted-foreground/80', ROW_TEXT_CLASS)}>
+            {counted !== undefined ? <span className="text-foreground">{counted}%</span> : null}
+            {start !== undefined ? (
+              <span>
+                <Elapsed start={start} end={end} />
+              </span>
+            ) : null}
+          </span>
         </div>
-      ) : null}
-    </div>
+        {open && (lines.length || note) ? (
+          <div className="relative ms-2 min-w-0 ps-3">
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute top-px bottom-0 inset-s-0 w-px"
+              style={{ backgroundColor: 'var(--tools-border)' }}
+            />
+            <div className="min-w-0 py-2 pe-2 ps-4">
+              {lines.length ? <Log lines={lines} /> : null}
+              {note}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </ToolRevealOnMount>
   );
 };
