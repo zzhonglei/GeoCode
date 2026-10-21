@@ -5,7 +5,7 @@ import { runtimeFetch } from '@/lib/runtime-fetch';
 import { fetchStartupDiagnostics, type StartupDiagnostics } from '@/lib/startupDiagnostics';
 import type { InitFailure } from '@/stores/useConfigStore';
 
-export type StartupCause = 'kernel' | 'settings' | 'service' | 'install' | 'geoengine';
+export type StartupCause = 'kernel' | 'settings' | 'service' | 'install' | 'geoengine' | 'python';
 
 /** What the local service reports outranks what the interface guessed from its own failed step. */
 export const startupCause = (step: InitFailure['step'] | undefined, reported: StartupDiagnostics | null): StartupCause => {

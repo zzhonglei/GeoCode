@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import fs from 'node:fs';
 
-import { GEE_FAILURES, GEE_REFUSALS, GEO_STATUS_EVENT, QGIS_FAILURES } from './geoStatus';
+import { GEE_FAILURES, GEE_REFUSALS, GEO_STATUS_EVENT, NO_GEO_STATUSES, pythonGateOf, QGIS_FAILURES } from './geoStatus';
 
 // Guards against the server and the interface naming the change differently, which leaves the indicator on a stale status.
 test('GeoCode: the interface listens for the change the server sends', () => {
@@ -33,4 +33,19 @@ test('GeoCode: the interface knows every Earth Engine failure and refusal GeoEng
   expect(refusals.length).toBeGreaterThan(0);
   expect([...GEE_FAILURES].sort()).toEqual(failures);
   expect([...GEE_REFUSALS].sort()).toEqual(refusals);
+});
+
+/** A python status as GeoEngine reports it: the State of geoengine/src/python/index.ts, or anything else. */
+const python = <Reported extends { status: string }>(value: Reported) => ({ python: { revision: 1, value } });
+
+// Guards against the loading screen holding a window shut for good, or letting it open before the environment is ready.
+test('GeoCode: a window waits for the Python environment, and opens once it is ready or there is no GeoEngine', () => {
+  expect(pythonGateOf(NO_GEO_STATUSES, undefined)).toEqual({ state: 'waiting' });
+  expect(pythonGateOf(NO_GEO_STATUSES, true)).toEqual({ state: 'waiting' });
+  expect(pythonGateOf(python({ status: 'preparing', step: 'unpacking' }), true)).toEqual({ state: 'waiting' });
+  expect(pythonGateOf(python({ status: 'ready', version: '3.13.16', python: '/p' }), true)).toEqual({ state: 'open' });
+  expect(pythonGateOf(NO_GEO_STATUSES, false)).toEqual({ state: 'open' });
+  const failed = pythonGateOf(python({ status: 'failed', diagnostics: { step: 'unpack', message: 'tar failed', output: 'disk full' } }), true);
+  expect(failed.state === 'failed' && failed.error).toContain('disk full');
+  expect(pythonGateOf(python({ status: 'unknown' }), true).state).toBe('failed');
 });

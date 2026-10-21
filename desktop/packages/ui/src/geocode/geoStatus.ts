@@ -10,6 +10,7 @@ export type GeoStatusEvent = { type: 'geo-status' } & z.infer<typeof geoStatusEv
 export const geoStatusSnapshotSchema = z.object({
   revision: z.number(),
   statuses: z.record(z.string(), z.unknown()),
+  engine: z.boolean(),
 });
 
 type GeoStatusSnapshot = z.infer<typeof geoStatusSnapshotSchema>;
@@ -35,6 +36,33 @@ export const withGeoStatusSnapshot = (current: GeoStatuses, snapshot: GeoStatusS
     next[domain] = { revision: snapshot.revision, value };
   }
   return next;
+};
+
+// State in geoengine/src/python/index.ts; only ready and failed are read here.
+const pythonSchema = z.union([
+  z.object({ status: z.enum(['checking', 'preparing']) }),
+  z.object({ status: z.literal('ready') }),
+  z.object({
+    status: z.literal('failed'),
+    diagnostics: z.object({ step: z.string(), message: z.string(), output: z.string().optional() }),
+  }),
+]);
+
+/** Whether a window may open: it waits for GeoCode's Python environment, unless this server has no GeoEngine. */
+export type PythonGate = { state: 'waiting' } | { state: 'open' } | { state: 'failed'; error: string };
+
+/** `engine` is undefined until the server has said whether it has GeoEngine. */
+export const pythonGateOf = (statuses: GeoStatuses, engine: boolean | undefined): PythonGate => {
+  if (engine === false) return { state: 'open' };
+  const held = statuses.python;
+  if (!held) return { state: 'waiting' };
+  const parsed = pythonSchema.safeParse(held.value);
+  // A value this interface cannot read would otherwise hold the window shut for good.
+  if (!parsed.success) return { state: 'failed', error: JSON.stringify(held.value, null, 2) };
+  if (parsed.data.status === 'ready') return { state: 'open' };
+  if (parsed.data.status !== 'failed') return { state: 'waiting' };
+  const failed = parsed.data.diagnostics;
+  return { state: 'failed', error: [`${failed.step}: ${failed.message}`, failed.output].filter(Boolean).join('\n\n') };
 };
 
 // The failures of State in geoengine/src/qgis/index.ts; geoStatus.test.ts holds the two lists together.

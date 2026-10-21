@@ -7,9 +7,11 @@ import { runtimeFetch } from '@/lib/runtime-fetch';
 import {
   geoStatusSnapshotSchema,
   NO_GEO_STATUSES,
+  pythonGateOf,
   withGeoStatusEvent,
   withGeoStatusSnapshot,
   type GeoStatuses,
+  type PythonGate,
 } from './geoStatus';
 
 // The shell server's routes for GeoEngine, see web/server/geocode/geoengine.js.
@@ -41,8 +43,18 @@ const request = async <T>(path: string, schema: z.ZodType<T>, init?: RequestInit
   return parsed.success ? { ok: true, value: parsed.data } : { ok: false, reason: 'GeoEngine answered in a form this interface cannot read' };
 };
 
-export const useGeoStatuses = (): GeoStatuses => {
+export const useGeoStatuses = (): GeoStatuses => useGeoEngineView().statuses;
+
+/** The window waits on the loading screen until this opens it. */
+export const usePythonGate = (): PythonGate => {
+  const view = useGeoEngineView();
+  return React.useMemo(() => pythonGateOf(view.statuses, view.engine), [view]);
+};
+
+/** `engine`, whether the server has GeoEngine, is undefined until the first snapshot. */
+const useGeoEngineView = (): { statuses: GeoStatuses; engine: boolean | undefined } => {
   const [statuses, setStatuses] = React.useState(NO_GEO_STATUSES);
+  const [engine, setEngine] = React.useState<boolean | undefined>(undefined);
 
   React.useEffect(() => {
     let active = true;
@@ -52,7 +64,9 @@ export const useGeoStatuses = (): GeoStatuses => {
           console.warn('[geocode] could not read the GeoEngine statuses:', outcome.reason);
           return;
         }
-        if (active) setStatuses((current) => withGeoStatusSnapshot(current, outcome.value));
+        if (!active) return;
+        setStatuses((current) => withGeoStatusSnapshot(current, outcome.value));
+        setEngine(outcome.value.engine);
       });
     };
     // Subscribed before the first read, so no change slips between them; changes sent while the stream was down are
@@ -68,7 +82,7 @@ export const useGeoStatuses = (): GeoStatuses => {
     };
   }, []);
 
-  return statuses;
+  return React.useMemo(() => ({ statuses, engine }), [statuses, engine]);
 };
 
 export const fetchQgisInstalls = async (): Promise<Outcome<QgisInstall[]>> => {

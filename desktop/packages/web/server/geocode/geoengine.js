@@ -15,8 +15,9 @@ export const registerGeoEngine = (app, { geoEngine, broadcast }) => {
     broadcast({ type: GEO_STATUS_EVENT, properties: { revision, domain, value } });
   });
 
+  // `engine` tells a window whether to wait for statuses at all: a shell server run outside Electron has no GeoEngine.
   app.get('/api/geocode/geo-status', (_req, res) => {
-    res.json({ revision, statuses: geoEngine?.statuses() ?? {} });
+    res.json({ revision, statuses: geoEngine?.statuses() ?? {}, engine: Boolean(geoEngine) });
   });
 
   const answer = async (res, method, params) => {

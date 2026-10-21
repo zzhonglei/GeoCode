@@ -56,6 +56,7 @@ import { Closed } from '@/geocode/Closed'; // GeoCode: see the startup failure p
 import { KernelStartupFailure, StartupFailure } from '@/geocode/StartupFailure';
 import { useKernelStartFailed } from '@/geocode/kernelStart';
 import { geoEngineFailureText, useGeoEngineFailure } from '@/geocode/geoengine'; // GeoCode: see geoEngineFailure
+import { usePythonGate } from '@/geocode/geoEngineClient'; // GeoCode: see pythonGate
 import { RuntimeAPIProvider } from '@/contexts/RuntimeAPIProvider';
 import { registerRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { useUIStore } from '@/stores/useUIStore';
@@ -232,6 +233,7 @@ function App({ apis }: AppProps) {
   const [initRetryExhausted, setInitRetryExhausted] = React.useState(false);
   const kernelStartFailed = useKernelStartFailed(!isInitialized); // GeoCode: a kernel that failed to start is reported before the retries run out
   const geoEngineFailure = useGeoEngineFailure(); // GeoCode: GeoEngine stopping means the app itself is broken, so the whole window says so
+  const pythonGate = usePythonGate(); // GeoCode: the loading screen stays until the bundled Python environment is ready
   const [initRetryEpoch, setInitRetryEpoch] = React.useState(0);
   const [runtimeEndpointEpoch, setRuntimeEndpointEpoch] = React.useState(0);
   const [manualInitRetrying, setManualInitRetrying] = React.useState(false);
@@ -807,6 +809,7 @@ function App({ apis }: AppProps) {
   // When the boot outcome resolves to a non-main screen (chooser, recovery),
   // render OnboardingScreen with appropriate mode/variant.
   if (geoEngineFailure) return <ErrorBoundary><StartupFailure cause="geoengine" error={geoEngineFailureText(geoEngineFailure)} /></ErrorBoundary>; // GeoCode: only restarting the app, which starts a new GeoEngine
+  if (pythonGate.state === 'failed') return <ErrorBoundary><StartupFailure cause="python" error={pythonGate.error} /></ErrorBoundary>; // GeoCode: restarting prepares it again
   if (isDesktopRuntime && bootView && bootView.screen !== 'main') {
     // First-launch chooser
     if (bootView.screen === 'chooser') {
@@ -885,7 +888,8 @@ function App({ apis }: AppProps) {
                   <OpenCodeUpdateToast />
                   <ProjectConfigErrorToast />
                   <MainLayout />
-                  {isDesktopRuntime ? <AppStartupOverlay ready={bootOutcomeKnown && bootViewIsMain} /> : null}
+                  {/* GeoCode: see pythonGate */}
+                  {isDesktopRuntime ? <AppStartupOverlay ready={bootOutcomeKnown && bootViewIsMain && pythonGate.state !== 'waiting'} /> : null}
                   <Toaster />
                   <AppLinkConfirmDialog />
                   <SharedTrustConfirmDialog />

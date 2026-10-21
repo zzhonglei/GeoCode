@@ -19,6 +19,7 @@ const DESCRIPTION = {
   service: 'The local service did not start, so the workspace cannot open.',
   install: 'The kernel is missing or cannot run. Install GeoCode again.',
   geoengine: 'GeoEngine, which runs geographic work, stopped. Restart the app; if this keeps happening, report the problem.',
+  python: 'GeoCode could not prepare its Python environment. Restart the app; if this keeps happening, report the problem.',
 } satisfies Record<StartupCause, string>;
 
 // English only, like the error text the page shows.
@@ -76,7 +77,7 @@ export const StartupFailure: React.FC<StartupFailureProps> = ({ cause, error, ke
     };
   }, []);
 
-  const title = cause === 'install' ? TEXT.installTitle : cause === 'geoengine' ? TEXT.geoengineTitle : TEXT.title;
+  const title = cause === 'install' ? TEXT.installTitle : cause === 'geoengine' || cause === 'python' ? TEXT.geoengineTitle : TEXT.title;
   const log = logLocation(home);
   const detail = [error?.trim(), kernelVersion ? `Kernel version found: ${kernelVersion}` : null].filter(Boolean).join('\n');
 
