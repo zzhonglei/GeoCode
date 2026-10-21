@@ -1,6 +1,7 @@
 import React from 'react';
 import { create } from 'zustand';
 
+import { isSkippedTimelineMessage } from '@/components/chat/lib/timelineRoles';
 import type { ChatMessageEntry } from '@/components/chat/lib/turns/types';
 import type { Part, ToolPart } from '@/lib/opencode/model';
 
@@ -63,9 +64,10 @@ const same = (left: GeoToolRun, right: GeoToolRun) =>
   left.parts.every((part, index) => part === right.parts[index]);
 
 /**
- * Every merged geo tool call of a turn, by its id, with the run it belongs to; runs cross steps but nothing shown, and
- * a call of another tool ends one. A run that has not changed keeps its object, so its row does not render again for
- * every token streamed elsewhere.
+ * Every merged geo tool call of a turn's replies, or of the side panel's whole conversation, by its id, with the run it
+ * belongs to; runs cross steps but nothing shown, a message the timeline draws other than a reply included, and a call
+ * of another tool ends one. A run that has not changed keeps its object, so its row does not render again for every
+ * token streamed elsewhere.
  */
 const geoToolRuns = (messages: readonly ChatMessageEntry[], showReasoningTraces: boolean, working: boolean, previous: Runs) => {
   const runs = new Map<string, GeoToolRun>();
@@ -81,6 +83,7 @@ const geoToolRuns = (messages: readonly ChatMessageEntry[], showReasoningTraces:
     current = [];
   };
   for (const message of messages) {
+    if (message.info.role !== 'assistant' && !isSkippedTimelineMessage(message.info)) close(false);
     for (const part of message.parts) {
       if (isMergedGeoPart(part)) {
         if (current[0] && current[0].tool !== part.tool) close(false);
@@ -94,11 +97,11 @@ const geoToolRuns = (messages: readonly ChatMessageEntry[], showReasoningTraces:
 
 type RunState = {
   runs: Runs;
-  /** Replaces a turn's runs, leaving any id another turn has claimed since. */
+  /** Replaces a publisher's runs, leaving any id another publisher has claimed since. */
   publish: (runs: Runs, previous: Runs) => void;
 };
 
-// Turns publish their runs here, so a call's row knows its run without the timeline passing it down.
+// The chat's turns and the side panel publish their runs here, so a call's row knows its run without being passed it.
 export const useGeoToolRunStore = create<RunState>()((set) => ({
   runs: new Map(),
   publish: (runs, previous) =>
@@ -113,7 +116,10 @@ export const useGeoToolRunStore = create<RunState>()((set) => ({
 const unchanged = (left: Runs, right: Runs) =>
   left.size === right.size && [...right].every(([id, run]) => left.get(id) === run);
 
-/** Publishes a turn's runs before paint, so a row left out of its run never shows for a frame, and returns them. */
+/**
+ * Publishes the runs of the messages given before paint, so a row left out of its run never shows for a frame, and
+ * returns them.
+ */
 export const usePublishGeoToolRuns = (
   messages: readonly ChatMessageEntry[],
   showReasoningTraces: boolean,

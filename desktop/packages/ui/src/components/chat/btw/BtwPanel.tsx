@@ -10,6 +10,8 @@ import { toast } from '@/components/ui';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/icon/Icon';
 import { useBtwStore } from '@/stores/useBtwStore';
+import { useUIStore } from '@/stores/useUIStore'; // GeoCode: see BtwMessages
+import { usePublishGeoToolRuns } from '@/geocode/geoToolRuns'; // GeoCode: see BtwMessages
 import { useSync } from '@/sync/use-sync';
 import {
     useSessionMessageRecords,
@@ -421,6 +423,10 @@ const BtwMessages: React.FC<{
     maxHeight?: number;
 }> = ({ sessionRef, data, bodyRef, contentRef, onBodyScroll, maxHeight }) => {
     const { t } = useI18n();
+    // --- GeoCode: publishes the panel's runs of geo tool calls, as the chat's turns do, so side-by-side calls show as one row ---
+    const showReasoningTraces = useUIStore((state) => state.showReasoningTraces);
+    usePublishGeoToolRuns(data.messageRecords, showReasoningTraces, data.sessionIsWorking);
+    // --- /GeoCode ---
 
     if (data.isEmpty) {
         return (
