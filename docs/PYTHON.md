@@ -6,7 +6,7 @@ GeoCode 内置一套 Python 环境:GeoAgent 处理数据、GEE 的脚本与以�
 
 地理用户多半不会自己搭 Python 环境:conda 的环境与频道、pip 与 conda 混装的冲突、Windows 上编译不出来的 GDAL,每一样都可能让人在第一步就放弃。而 GeoAgent 几乎每个任务都要用 Python 读写与处理地理数据,`geerun` 也离不开它。所以 GeoCode 自带一套装好常用地理包的环境,用户安装 GeoCode 之后不需要再装任何 Python 软件,也不需要联网准备环境。
 
-这套环境属于 GeoCode:它放在 GeoCode 的数据目录里,只由 GeoCode 准备、修复与替换。用户自己装的 Python、conda 与它们的配置,GeoCode 照旧不碰(`GEOENGINE.md` 第 1 节);QGIS 用它自带的 Python(`QGIS.md` 第 2 节),与这套环境无关。
+这套环境属于 GeoCode:它放在 GeoCode 的数据目录里,只由 GeoCode 准备与替换。用户自己装的 Python、conda 与它们的配置,GeoCode 照旧不碰(`GEOENGINE.md` 第 1 节);QGIS 用它自带的 Python(`QGIS.md` 第 2 节),与这套环境无关。
 
 支持的平台随 GeoCode:Apple 芯片的 Mac,最低 macOS 14;Windows x64。
 
@@ -62,7 +62,7 @@ rasterio 与 pyogrio 各带一份 GDAL,同一个进程里两份并存、各自�
 - `base` 只由解压产生与替换,运行时不往里装包。它带着 `EXTERNALLY-MANAGED` 标记(PEP 668):pip 与 uv 拒绝往里装包,并按标记里写的说明指向 `envs/default`。Python 自己写的字节码缓存不算改动。
 - `envs/default` 是以 `--system-site-packages` 建的虚拟环境:预装的包都能直接导入,GeoAgent 额外装的包只进这里。同名的包在这里装了别的版本,只在这个环境里生效。
 
-GeoAgent 运行的 Python 与 `geerun` 用的都是 `envs/default` 的解释器,所以 GeoAgent 装的包在 GEE 脚本里同样可用。`envs/default` 装坏了,「重置」删掉它再从 `base` 建一个,几秒钟完成,额外装的包随之清空;`base` 自己坏了(文件被删改),「修复」重新解压。
+GeoAgent 运行的 Python 与 `geerun` 用的都是 `envs/default` 的解释器,所以 GeoAgent 装的包在 GEE 脚本里同样可用。恢复不需要专门的入口:GeoEngine 启动时缺什么补什么(第 6 节)。`envs/default` 装坏了,删掉它,下次启动时从 `base` 重建,额外装的包随之清空;`base` 被删改坏了,删掉整个 `python/`,下次启动时重新解压。
 
 只有一个工作环境,不按项目分开:它够用,也最简单。
 
@@ -87,7 +87,7 @@ GeoAgent 的规范:
 - 先用预装的包;缺的包用工作环境的 `python -m pip install` 装进工作环境,照 `shell` 的权限询问。
 - 不往用户自己的 Python 里装包,不全局安装,不另建环境。
 - 不用 `osgeo`;栅格用 rasterio,矢量用 geopandas,坐标系用 pyproj。
-- 工作环境装坏了,告诉用户可以在设置里重置。
+- 工作环境装坏了,删掉 `envs/default` 并告诉用户重启 GeoCode。
 
 pip 与 matplotlib 这类软件把缓存与配置写在它们自己的默认位置(用户的缓存目录、`~/.matplotlib`),照 `GEOENGINE.md` 第 5 节的原则不归 GeoCode 管。
 
@@ -95,9 +95,9 @@ pip 与 matplotlib 这类软件把缓存与配置写在它们自己的默认位�
 
 环境由 GeoEngine 的一个能力模块准备与管理,它也发布环境的状态:准备中(带进度)、就绪、失败(带诊断)。
 
-环境的标识是它的定义的校验和(Python 的版本与平台、锁定清单),由构建脚本写在压缩包旁边:内容不变,重新打包也不变,用户装上只是重新打包的新版时不必重新解压。GeoEngine 启动时比较 `base.json` 与应用自带环境的标识:
+环境的标识是它的定义的校验和(Python 的版本与平台、锁定清单与组装它的构建脚本),由构建脚本写在压缩包旁边:内容不变,重新打包也不变,用户装上只是重新打包的新版时不必重新解压。GeoEngine 启动时比较 `base.json` 与应用自带环境的标识:
 
-- 一致:直接使用,不做任何事。
+- 一致:直接使用;`envs/default` 不在了就从 `base` 重建它。
 - 不存在或不一致:在后台准备。用系统自带的 `tar` 解压到同一目录下的临时目录(macOS 与 Windows 10 起都自带),完成后写入标识,再改名为 `base` 并删掉旧的;然后重建 `envs/default`。中途应用退出,临时目录在下次启动时清掉重来,不会用到解压了一半的环境。
 - 两个 GeoCode 同时启动(如开发版与打包版)时不另加锁:各自解压到自己的临时目录,改名时 `base` 已经存在就失败,后到的丢掉自己的临时目录,改用已有的那个。
 
@@ -116,7 +116,7 @@ GeoCode 没有自动更新,用户卸载旧版、安装新版。卸载只删应�
 
 ## 7. 界面
 
-设置的「地理环境」页增加「Python 环境」一行:状态、Python 版本与工作环境的路径;第一次准备时显示进度;提供「重置工作环境」与「修复」。
+设置的「地理环境」页增加「Python 环境」一行,只显示状态:第一次准备时的进度,就绪后的 Python 版本与工作环境的路径,失败时的诊断。
 
 ## 8. GEE
 
@@ -138,7 +138,7 @@ GEE 由此不再需要的部分:设置里选择与发现 Python、`machine.json`
 - 第一次启动显示准备的进度;准备期间调用的地理工具等环境就绪再执行;预热之后,第一次运行没有明显的等待。
 - 准备中途退出应用,下次启动重新准备,不用半个环境。
 - 重装同一版本不重新解压;装上环境标识不同的新版,环境被替换、工作环境被重建。
-- 往 `base` 装包被拒绝;往工作环境装的包在 GeoAgent 的脚本与 `geerun` 里都可用;重置之后工作环境回到只有预装包的状态。
+- 往 `base` 装包被拒绝;往工作环境装的包在 GeoAgent 的脚本与 `geerun` 里都可用;删掉工作环境再启动,它回到只有预装包的状态。
 - 用户的 `PATH` 里有 QGIS、OSGeo4W 或 conda 的 GDAL 时,环境照常工作。
 - macOS 与 Windows 上都通过第 9 节的检查;准备环境不写 GeoCode 目录以外的地方。
 

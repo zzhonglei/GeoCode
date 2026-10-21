@@ -1,0 +1,18 @@
+# The packages GeoCode's Python environment comes with (docs/PYTHON.md, section 2.2). After changing this file, run
+# scripts/stage-python.sh --lock to resolve both platforms' lock files again.
+earthengine-api
+geedim>=2.0
+geopandas>=1.0
+shapely
+pyproj
+pyogrio
+rasterio
+rioxarray
+xarray
+netCDF4
+numpy
+pandas
+scipy
+matplotlib
+openpyxl
+requests

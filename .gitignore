@@ -6,6 +6,7 @@ dist/
 out/
 *.tsbuildinfo
 desktop/packages/electron/resources/geoengine/
+desktop/packages/electron/resources/python/
 
 # Caches
 .turbo/

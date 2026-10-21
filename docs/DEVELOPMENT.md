@@ -42,6 +42,8 @@ geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
 
 GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/packages/electron/resources/geoengine/geoengine.mjs`,打包时收进 `app.asar`。GEE 脚本导入的 Python 包 `geoengine/python/` 在这一步原样编进 `geoengine.mjs`(原因见 `GEE.md` 第 5 节),改了其中的 `.py` 文件同样要重新构建。开发模式的启动脚本每次启动前都运行它,打包流程也运行它,平时不用手动执行;`geoengine/` 没装依赖时它报错退出。
 
+内置的 Python 环境(见 `PYTHON.md`)由 `./scripts/stage-python.sh` 按 `geoengine/environment/` 里的定义组装,压缩后暂存到 `desktop/packages/electron/resources/python/`,打包时作为额外资源收进应用。它下载固定版本的 Python 独立构建与 uv,核对校验和,下载的文件与 uv 的缓存放在仓库的 `.cache/python/`。环境的标识没变时它直接跳过。默认组装本机平台的环境;给出 `win32-x64` 或 `darwin-arm64` 也能在另一个平台上组装,只是不运行核对。改了 `geoengine/environment/requirements.in` 之后,运行 `./scripts/stage-python.sh --lock` 重新生成两个平台的锁定清单,与清单一起提交。
+
 ## 5. 在沙箱里启动应用
 
 开发时在沙箱主目录里启动。应用把配置、数据与缓存放在主目录下名为 `geocode` 的几个目录里(见 `PATHS.md`),在沙箱里启动,开发与测试留下的会话、登录与设置就不会混进真实主目录里的那一份,删掉沙箱即可从头再来。
