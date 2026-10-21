@@ -1,5 +1,6 @@
 import React from 'react';
 import { useChatSessionSelection } from '@/components/chat/chatColumnSession';
+import { geoStatusPhrase, isGeoTool } from '@/geocode/geoTools'; // GeoCode: see getToolStatusPhrase
 import type { Message, ModelRef, Part, ReasoningPart, TextPart, ToolPart } from '@/lib/opencode/model';
 import { executeHasBackgroundableWork, executeToolCalls, isExecuteTool, isShellTool, isSubagentTool } from '@/lib/opencode/tools';
 
@@ -149,6 +150,7 @@ type ParsedStatusResult = {
 const getToolStatusPhrase = (toolName: string, count = 1): string => {
     const bucket = TOOL_BUCKETS.get(toolName);
     if (!bucket) {
+        if (isGeoTool(toolName)) return geoStatusPhrase(toolName, count); // GeoCode: a geo tool says what it does, not its name
         return `using ${toolName}`;
     }
     const [one, many] = BUCKET_PHRASES[bucket];
