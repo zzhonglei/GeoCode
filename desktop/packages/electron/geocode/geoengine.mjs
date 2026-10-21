@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { app, utilityProcess } from 'electron';
-import { kernelConfigDir } from '@openchamber/web/server/geocode/kernel-paths.js';
+import { kernelConfigDir, kernelDataDir } from '@openchamber/web/server/geocode/kernel-paths.js';
 import { withoutAppVariables } from '@openchamber/web/server/geocode/app-variables.js';
 import { createEnvironmentStore } from '@openchamber/web/server/lib/environment/store.js';
 import { overlayEnvironment } from '@openchamber/web/server/lib/environment/variables.js';
@@ -28,6 +28,10 @@ const settingsVariables = (log) => {
 // Staged by scripts/stage-geoengine.sh; inside app.asar once packaged.
 const enginePath = () => path.join(app.getAppPath(), 'resources', 'geoengine', 'geoengine.mjs');
 
+// Staged by scripts/stage-python.sh; beside app.asar once packaged: the system tar cannot read inside it.
+const pythonBundlePath = () =>
+  app.isPackaged ? path.join(process.resourcesPath, 'python') : path.join(app.getAppPath(), 'resources', 'python');
+
 const fork = (log) => {
   const modulePath = enginePath();
   if (!fs.existsSync(modulePath)) {
@@ -35,7 +39,13 @@ const fork = (log) => {
   }
   // On a first launch the kernel, starting alongside, may not have made it yet, and the engine watches it.
   fs.mkdirSync(kernelConfigDir(), { recursive: true });
-  return utilityProcess.fork(modulePath, [`--machine=${path.join(kernelConfigDir(), MACHINE_FILE)}`], {
+  const args = [
+    `--machine=${path.join(kernelConfigDir(), MACHINE_FILE)}`,
+    `--python=${pythonBundlePath()}`,
+    // GeoCode's data directory, which the kernel shares.
+    `--data=${kernelDataDir()}`,
+  ];
+  return utilityProcess.fork(modulePath, args, {
     serviceName: 'GeoEngine',
     env: withoutAppVariables(overlayEnvironment(process.env, settingsVariables(log))),
     stdio: ['ignore', 'inherit', 'pipe'],

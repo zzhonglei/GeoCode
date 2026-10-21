@@ -42,7 +42,7 @@ geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
 
 GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/packages/electron/resources/geoengine/geoengine.mjs`,打包时收进 `app.asar`。GEE 脚本导入的 Python 包 `geoengine/python/` 在这一步原样编进 `geoengine.mjs`(原因见 `GEE.md` 第 5 节),改了其中的 `.py` 文件同样要重新构建。开发模式的启动脚本每次启动前都运行它,打包流程也运行它,平时不用手动执行;`geoengine/` 没装依赖时它报错退出。
 
-内置的 Python 环境(见 `PYTHON.md`)由 `./scripts/stage-python.sh` 按 `geoengine/environment/` 里的定义组装,压缩后暂存到 `desktop/packages/electron/resources/python/`,打包时作为额外资源收进应用。它下载固定版本的 Python 独立构建与 uv,核对校验和,下载的文件与 uv 的缓存放在仓库的 `.cache/python/`。环境的标识没变时它直接跳过。默认组装本机平台的环境;给出 `win32-x64` 或 `darwin-arm64` 也能在另一个平台上组装,只是不运行核对。改了 `geoengine/environment/requirements.in` 之后,运行 `./scripts/stage-python.sh --lock` 重新生成两个平台的锁定清单,与清单一起提交。
+内置的 Python 环境(见 `PYTHON.md`)由 `./scripts/stage-python.sh` 按 `geoengine/environment/` 里的定义组装,压缩后暂存到 `desktop/packages/electron/resources/python/`,打包时作为额外资源收进应用。它下载固定版本的 Python 独立构建与 uv,核对校验和,下载的文件与 uv 的缓存放在仓库的 `.cache/python/`。环境的标识没变时它直接跳过,所以开发模式的启动脚本每次启动前也运行它。默认组装本机平台的环境;给出 `win32-x64` 或 `darwin-arm64` 也能在另一个平台上组装,只是不运行核对。改了 `geoengine/environment/requirements.in` 之后,运行 `./scripts/stage-python.sh --lock` 重新生成两个平台的锁定清单,与清单一起提交。
 
 ## 5. 在沙箱里启动应用
 
@@ -87,9 +87,10 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 - 上游的测试不保证只写临时目录,`web` 包里就有测试在主目录下建目录、写 npm 缓存。要跑它们时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_STATE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉而不是设成空值,否则 Bun 会把转译缓存写到当前目录下。
 - `geoengine/`:在包目录用 `bun run test`。测试在系统临时目录下建以 `geoengine-` 开头的目录,结束时删掉;有的测试启动外部进程并验证它们被结束,这条命令因此按顺序逐个运行。
 
-GeoEngine 的测试涉及两种外部软件:
+GeoEngine 的测试涉及三种外部软件:
 
 - QGIS:macOS 上接真实的 QGIS,默认用 `/Applications` 下每一个认得出的 `QGIS*.app`,也可以用 `GEOENGINE_QGIS_APPS` 列出应用包的路径(以冒号分隔);本机没有 QGIS 时这几项跳过。QGIS 照常在用户目录下写它自己的配置与缓存。Windows 上认路径与发现安装的逻辑在任何平台上都测,用的是照 OSGeo4W 的真实组件包搭出的假目录树;经启动脚本运行 QGIS 只能在 Windows 上验证。
+- 内置的 Python 环境:测试自己打一个很小的压缩包,里面的 `python3` 转去运行 `PATH` 里的 `python3`,解压用系统的 `tar`,不用真实的环境;没有 `python3` 时与在 Windows 上这些项跳过。真实的环境要在应用里验证。
 - GEE:测试不联网。环境检查与运行脚本都用 `PATH` 里的 `python3` 真实执行,earthengine-api、它用到的 Google 库、requests、geedim 与 geopandas 换成测试自带的替身,没有 `python3` 时这些项跳过。
 
 ## 8. 写入检测

@@ -48,8 +48,10 @@ export interface Options {
   readonly delivery: Delivery
   readonly clocks: Clocks
   readonly cwd?: string
-  /** Laid over the engine's environment, never replacing it: one missing base variable can stop an interpreter. */
+  /** Laid over the engine's environment, unless `inherit` is false: one missing base variable can stop an interpreter. */
   readonly env?: Record<string, string>
+  /** False gives the task `env` alone, for software GeoCode ships, which needs nothing of the user's environment. */
+  readonly inherit?: boolean
   readonly input?: string
   /** A stop through this signal still returns what the run produced, settling as `abort`. */
   readonly signal?: AbortSignal
@@ -164,7 +166,7 @@ function execute(options: Options, ledger: Ledger): Execution {
   const result = new Promise<Result>((resolve, reject) => {
     const child = launch(options.command, [...options.args], {
       cwd: options.cwd,
-      env: overlay(process.env, options.env ?? {}, process.platform),
+      env: overlay(options.inherit === false ? {} : process.env, options.env ?? {}, process.platform),
       stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       // Its own process group on POSIX, so one signal reaches everything the task starts.
       detached: POSIX,

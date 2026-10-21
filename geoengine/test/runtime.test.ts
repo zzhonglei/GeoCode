@@ -59,6 +59,18 @@ test("an override replaces every spelling of a variable's name on Windows, and o
   })
 })
 
+test("a run that does not inherit is given its own variables alone", async () => {
+  process.env.GEOENGINE_TEST_ENGINE_ONLY = "engine"
+  try {
+    const script = `console.log(JSON.stringify([process.env.GEOENGINE_TEST_ENGINE_ONLY, process.env.GEOENGINE_TEST_GIVEN]))`
+    const given = { GEOENGINE_TEST_GIVEN: "given" }
+    assert.deepEqual(JSON.parse((await run(node(script, { env: given }))).stdout), ["engine", "given"])
+    assert.deepEqual(JSON.parse((await run(node(script, { env: given, inherit: false }))).stdout), [null, "given"])
+  } finally {
+    delete process.env.GEOENGINE_TEST_ENGINE_ONLY
+  }
+})
+
 test("the total clock ends a run that outlives it and keeps what it wrote", async () => {
   const result = await run(
     node(`process.stdout.write("started"); setInterval(() => {}, 1000)`, { clocks: { total: "500 millis" } }),

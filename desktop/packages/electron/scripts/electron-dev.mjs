@@ -224,6 +224,7 @@ async function main() {
   ensureElectronInstalled();
   const bundledOpenCodeCliEnv = resolveBundledOpenCodeCliEnv();
   await runProcess('sh', [path.join(repoRoot, '..', 'scripts', 'stage-geoengine.sh')]); // GeoCode: GeoEngine is built from source on every launch
+  await runProcess('sh', [path.join(repoRoot, '..', 'scripts', 'stage-python.sh')]); // GeoCode: stage the bundled Python environment, skipped while its id is unchanged
 
   if (useBundledUi) {
     await runProcess('bun', ['run', '--cwd', 'packages/electron', 'build:web-assets']);
