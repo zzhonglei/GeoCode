@@ -243,6 +243,11 @@ const SHOWN_STATUSES = 20
 const LOG_CHARS = 32 * 1024
 /** How often, at most, the tool row is told: a script may print a line at a time. */
 const SHOW_MS = 250
+/**
+ * How often, at least, the tool row is told while the run goes on: progress reaches only the windows open as it is
+ * sent, so one opened since, as by a reload, shows the row only once it is told again, and a long wait changes nothing.
+ */
+const RESHOW_MS = 5000
 /** GeoEngine tells of a wait every second while it lasts: past this without word, the wait is over. */
 const WAIT_MS = 1500
 /** How long a wait lasts before the row says so: a shorter one would only flash by. */
@@ -507,7 +512,8 @@ export const make = (
                   changed ||= waiting.long
                   waiting = undefined
                 }
-                return changed && performance.now() - shown >= SHOW_MS ? show : Effect.void
+                const gap = performance.now() - shown
+                return (changed && gap >= SHOW_MS) || gap >= RESHOW_MS ? show : Effect.void
               }),
             ),
           ),

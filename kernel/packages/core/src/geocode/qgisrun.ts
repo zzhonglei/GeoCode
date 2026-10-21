@@ -36,6 +36,12 @@ const START_TIMEOUT = 120
 /** The messages the interface is given, the latest; the answer keeps the latest that fit. */
 const SHOWN_MESSAGES = 500
 
+/**
+ * How often, at least, the interface is told while the run goes on: progress reaches only the windows open as it is
+ * sent, so one opened since, as by a reload, shows the row only once it is told again, and QGIS may say nothing for long.
+ */
+const RESHOW_MS = 5000
+
 export const Input = Schema.Struct({
   algorithm: Schema.String.annotate({ description: 'The full algorithm ID, for example "native:buffer"' }),
   parameters: Schema.Record(Schema.String, Schema.Unknown).annotate({
@@ -282,7 +288,7 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
       const watch = Effect.gen(function* () {
         while (now() - heard < limit() * 1000) {
           yield* Effect.sleep("250 millis")
-          if (changed && now() - shown >= 250) yield* show
+          if ((changed && now() - shown >= 250) || now() - shown >= RESHOW_MS) yield* show
         }
       })
 
