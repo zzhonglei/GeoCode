@@ -330,7 +330,7 @@ describe("GeoCode: readgeodata", () => {
     }),
   )
 
-  it.effect("asks once about a dataset two calls read side by side, and shares a refusal without keeping it", () =>
+  it.live("asks once about a dataset two calls read side by side, and shares a refusal without keeping it", () =>
     Effect.gen(function* () {
       reset()
       answer = () => result({ text: "dem.tif: raster, GeoTIFF" })
@@ -348,8 +348,10 @@ describe("GeoCode: readgeodata", () => {
               { concurrency: 2 },
             ),
           )
-          // Both calls are under way while the user has yet to answer the one asking.
-          for (let turn = 0; turn < 100; turn++) yield* Effect.yieldNow
+          // Both calls are under way while the user has yet to answer the one asking: each resolves the path on disk
+          // first, and the other is given time to reach the asking too.
+          for (let turn = 0; turn < 100 && !assertions.length; turn++) yield* Effect.sleep("10 millis")
+          yield* Effect.sleep("50 millis")
           expect(assertions.map((input) => input.action)).toEqual(["external_directory"])
           yield* Deferred.succeed(pending, undefined)
           return yield* Fiber.join(both)
