@@ -3,7 +3,7 @@ export * as Environment from "./index.ts"
 import fs from "node:fs"
 import fsp from "node:fs/promises"
 import path from "node:path"
-import { Data, type Duration, Effect, Exit, Fiber, Schedule, Schema } from "effect"
+import { Data, type Duration, Effect, Exit, Schema } from "effect"
 import type { Engine } from "../engine.ts"
 import { Runtime } from "../runtime.ts"
 import { Status } from "../status.ts"
@@ -23,8 +23,6 @@ const UNPACK_TIMEOUT = "20 minutes"
 const CREATE_TIMEOUT = "2 minutes"
 
 const WARM_TIMEOUT = "10 minutes"
-
-const SHOW_EVERY = "250 millis"
 
 /** Characters kept of what a failed command printed, the latest. */
 const OUTPUT_TAIL = 16 * 1024
@@ -74,7 +72,7 @@ export interface Places {
 }
 
 /** What scripts/stage-python.sh writes beside the archive. */
-const Bundle = Schema.Struct({ id: Schema.String, python: Schema.String, entries: Schema.Number })
+const Bundle = Schema.Struct({ id: Schema.String, python: Schema.String })
 
 const Marker = Schema.Struct({ id: Schema.String })
 
@@ -92,13 +90,7 @@ export interface Diagnostics {
 
 export type State =
   | { readonly status: "checking" }
-  | {
-      readonly status: "preparing"
-      readonly step: "unpacking" | "creating"
-      /** The files unpacked so far, of all of them. */
-      readonly done?: number
-      readonly total?: number
-    }
+  | { readonly status: "preparing"; readonly step: "unpacking" | "creating" }
   /** `python` is the working environment's interpreter, which GeoAgent and the runs use. */
   | { readonly status: "ready"; readonly version: string; readonly python: string }
   | { readonly status: "failed"; readonly diagnostics: Diagnostics }
@@ -149,39 +141,17 @@ export const capability = (places: Places): Engine.Capability =>
       Effect.gen(function* () {
         yield* attempt("unpack", () => fsp.mkdir(where.root, { recursive: true }))
         const into = yield* attempt("unpack", () => fsp.mkdtemp(path.join(where.root, UNPACKING)))
-        // tar names each file it writes on a line of its own.
-        let done = 0
-        let printed = ""
-        const show = Effect.suspend(() =>
-          writer.commit(token, {
-            status: "preparing",
-            step: "unpacking",
-            done,
-            total: bundle.entries,
-          }),
-        )
         yield* Effect.gen(function* () {
-          yield* show
-          const showing = yield* Effect.forkChild(Effect.repeat(show, Schedule.spaced(SHOW_EVERY)))
+          yield* writer.commit(token, { status: "preparing", step: "unpacking" })
           const result = yield* runtime
             .run({
               command: TAR,
-              args: ["-xvzf", path.join(places.bundle, "python.tar.gz"), "-C", into],
-              delivery: {
-                mode: "incremental",
-                source: "all",
-                onChunk: (chunk) => {
-                  done += chunk.split("\n").length - 1
-                  printed = (printed + chunk).slice(-OUTPUT_TAIL)
-                },
-              },
+              args: ["-xzf", path.join(places.bundle, "python.tar.gz"), "-C", into],
+              delivery: { mode: "collect" },
               clocks: { total: UNPACK_TIMEOUT },
             })
-            .pipe(
-              Effect.ensuring(Fiber.interrupt(showing)),
-              Effect.mapError((error) => new Failed({ step: "unpack", message: error.message })),
-            )
-          yield* expect("unpack", "tar", result, printed)
+            .pipe(Effect.mapError((error) => new Failed({ step: "unpack", message: error.message })))
+          yield* expect("unpack", "tar", result, result.stderr || result.stdout)
 
           // The marker is written last: a start that finds it stale, or the interpreter missing, unpacks again.
           yield* attempt("unpack", async () => {
@@ -241,16 +211,17 @@ export const capability = (places: Places): Engine.Capability =>
       yield* writer.commit(token, { status: "ready", version: bundle.python, python: where.envPython })
       yield* warm
     }).pipe(
-      Effect.catchTag("GeoEnginePythonFailed", (failed) =>
-        writer.commit(token, {
-          status: "failed",
-          diagnostics: {
-            step: failed.step,
-            message: failed.message,
-            ...(failed.output ? { output: failed.output } : {}),
-          },
-        }),
-      ),
+      Effect.catchTag("GeoEnginePythonFailed", (failed) => {
+        const diagnostics = {
+          step: failed.step,
+          message: failed.message,
+          ...(failed.output ? { output: failed.output } : {}),
+        }
+        // Into the app's log as well: no window shows the environment.
+        return Effect.logWarning("GeoEngine could not prepare the Python environment", diagnostics).pipe(
+          Effect.andThen(writer.commit(token, { status: "failed", diagnostics })),
+        )
+      }),
     )
 
     yield* Effect.forkScoped(prepare)

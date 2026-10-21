@@ -60,10 +60,7 @@ const bundle = async (directory: string, id: string) => {
   execFileSync("tar", ["-czf", path.join(folder, "python.tar.gz"), "-C", tree, "python"], {
     env: { ...process.env, COPYFILE_DISABLE: "1" },
   })
-  const entries = execFileSync("tar", ["-tzf", path.join(folder, "python.tar.gz")], { encoding: "utf-8" })
-    .trim()
-    .split("\n").length
-  await fs.writeFile(path.join(folder, "python.json"), JSON.stringify({ id, python: "3.13.16", entries }))
+  await fs.writeFile(path.join(folder, "python.json"), JSON.stringify({ id, python: "3.13.16" }))
   return folder
 }
 

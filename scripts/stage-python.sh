@@ -119,9 +119,7 @@ mkdir -p "$STAGE"
 rm -f "$STAGE"/*
 # Without the AppleDouble files macOS's tar adds for extended attributes.
 (cd "$BUILD" && COPYFILE_DISABLE=1 tar -czf "$STAGE/python.tar.gz.tmp" python)
-ENTRIES=$(tar -tzf "$STAGE/python.tar.gz.tmp" | wc -l | tr -d ' ')
 mv "$STAGE/python.tar.gz.tmp" "$STAGE/python.tar.gz"
-printf '{ "id": "%s", "python": "%s", "platform": "%s", "entries": %s }\n' "$ID" "$PYTHON" "$PLATFORM" "$ENTRIES" \
-  > "$STAGE/python.json"
+printf '{ "id": "%s", "python": "%s", "platform": "%s" }\n' "$ID" "$PYTHON" "$PLATFORM" > "$STAGE/python.json"
 rm -rf "$BUILD"
 echo "staged Python environment $ID for $PLATFORM at $STAGE"
