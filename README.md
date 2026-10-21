@@ -24,6 +24,7 @@ GeoCode 建在两个开源项目之上:
 | [`docs/DESKTOP.md`](docs/DESKTOP.md) | 桌面应用由什么组成、守哪些边界 |
 | [`docs/PATHS.md`](docs/PATHS.md) | GeoCode 在用户电脑上与项目里产生与读取的文件,以及怎样删除 |
 | [`docs/GEOENGINE.md`](docs/GEOENGINE.md) | 地理引擎 GeoEngine:各能力域共用的框架 |
+| [`docs/PYTHON.md`](docs/PYTHON.md) | 内置的 Python 环境:组成、构建与分发,在用户电脑上的准备,GeoAgent 怎样使用 |
 | [`docs/QGIS.md`](docs/QGIS.md) | QGIS 能力域:读取地理数据、查阅与执行算法 |
 | [`docs/GEE.md`](docs/GEE.md) | Google Earth Engine 能力域:运行 GEE 脚本,在任务里保存与沿用结果 |
 
