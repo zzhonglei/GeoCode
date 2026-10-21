@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, Logger } from "effect"
 import { Config } from "./config.ts"
 import { Engine } from "./engine.ts"
 import { Gee } from "./gee/index.ts"
@@ -22,7 +22,13 @@ const places = {
 
 const transport = Transport.parentPort()
 
-const layer = Layer.mergeAll(Runtime.layer(Engine.ledger(transport)), Status.layer, Config.layer(machine))
+const layer = Layer.mergeAll(
+  Runtime.layer(Engine.ledger(transport)),
+  Status.layer,
+  Config.layer(machine),
+  // The main process writes the engine's stderr into the app's log; stdout reaches no one in a packaged app.
+  Layer.succeed(Logger.LogToStderr, true),
+)
 
 const fiber = Effect.runFork(
   Effect.scoped(Engine.run(transport, [Environment.capability(places), Qgis.capability, Gee.capability])).pipe(
