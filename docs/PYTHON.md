@@ -119,7 +119,7 @@ pip 与 matplotlib 这类软件把缓存与配置写在它们自己的默认位�
 环境的标识是它的定义的校验和(锁定清单里这个平台的各个包的下载地址、三个工具的版本与准备它的构建脚本;conda-forge 的包名带构建号,同一个地址的内容不变),由构建脚本写在包旁边:内容不变,重新打包也不变,用户装上只是重新打包的新版时不必重新安装。`base.json` 另记着 GeoEngine 自己写进 `base` 的文件(`EXTERNALLY-MANAGED` 标记与启动文件)的校验和:新版 GeoCode 改了它们时同样重新安装,不会有 `base` 留着旧的启动文件。GeoEngine 启动时比较 `base.json` 与应用自带环境的标识:
 
 - 一致,且 `base` 的解释器在:直接使用;`envs/default` 不在了就从 `base` 重建它。
-- 否则在后台准备。先删掉旧的 `base.json`、`base` 与 `envs/default`,再用 pixi-unpack 把包装进 `base`:它把包解到临时目录下的缓存,装好后自己删掉;GeoCode 把它的临时目录设成 `python/` 下的一个 `.unpack-` 目录,缓存因此不出数据目录。装的时候它把 `base` 的位置写进需要它的文件,macOS 上改过的二进制文件当场重新签名。装好后写入 `EXTERNALLY-MANAGED` 标记与设环境变量的启动文件(第 6.1 节),删掉 pixi-unpack 另写在 `python/` 下的激活脚本与只在编译与调试时用的文件(头文件、链接库、调试符号,Windows 上有七百多 MB),最后写入标识;然后重建 `envs/default`。中途应用退出或安装失败,标识不在,下次启动清掉留下的 `.unpack-` 目录,从头再装,不会用到装了一半的环境。
+- 否则在后台准备。先删掉旧的 `base.json`、`base` 与 `envs/default`,再用 pixi-unpack 把包装进 `base`:它把包解到临时目录下的缓存,装好后自己删掉;GeoCode 把它的临时目录设成 `python/` 下的一个 `.unpack-` 目录,缓存因此不出数据目录。装的时候它把 `base` 的位置写进需要它的文件,macOS 上改过的二进制文件当场重新签名。装好后写入 `EXTERNALLY-MANAGED` 标记与设环境变量的启动文件(第 6.1 节),删掉 pixi-unpack 另写在 `python/` 下的激活脚本与只在编译与调试时用的文件(头文件、链接库、调试符号,Windows 上有七百多 MB),最后写入标识;然后重建 `envs/default`。中途应用退出或安装失败,标识不在,下次启动清掉留下的 `.unpack-` 目录与激活脚本,从头再装,不会用到装了一半的环境。
 - 两个 GeoCode 同时启动(只在开发时出现)不另作处理:准备撞在一起时可能有一方失败,下次启动再准备。
 
 旧的 `base` 不留作退路:新环境只能装在 `base` 的位置上,装不好时窗口显示出错页(第 7 节),旧的也用不上。
@@ -130,7 +130,7 @@ pip 与 matplotlib 这类软件把缓存与配置写在它们自己的默认位�
 
 ### 6.1 环境变量
 
-环境自己的变量,即 conda 激活环境时会设的那些,由环境自己设:安装时 GeoEngine 在 `base` 的 `site-packages` 里写入一个启动文件(一个模块与导入它的 `.pth` 文件),这套环境的 Python 每次启动都先执行它,不论由谁、以什么方式启动,工作环境的 Python 也一样。它按解释器自己所在的位置算出路径,覆盖用户环境里的同名变量,Python 启动的子进程(如 GDAL 的命令行工具)也继承它们:
+环境自己的变量,即 conda 激活环境时会设的那些,由环境自己设:安装时 GeoEngine 在 `base` 的 `site-packages` 里写入一个启动文件(一个模块与导入它的 `.pth` 文件),这套环境的 Python 每次启动都先执行它,不论由谁、以什么方式启动,工作环境的 Python 也一样。它按解释器自己所在的位置算出路径,覆盖用户环境里的同名变量(证书的两个除外,见下表),Python 启动的子进程(如 GDAL 的命令行工具)也继承它们:
 
 | 变量 | 作用 |
 |---|---|
@@ -140,7 +140,7 @@ pip 与 matplotlib 这类软件把缓存与配置写在它们自己的默认位�
 | `PROJ_NETWORK` | 设为 `ON`,与没装网格文件(`proj-data`)时 conda 的激活一样:需要网格的转换(如椭球高与 EGM2008 海拔高之间、美国的 NAD27 与 NAD83 之间)从 PROJ 的官方 CDN 只下载用到的部分;不开,这类转换不报错,却退回误差可达几十米的近似转换。不需要网格的转换(投影、TWD97、CGCS2000 等)不联网 |
 | `PROJ_USER_WRITABLE_DIRECTORY` | 下载的网格的缓存,放在数据目录的 `python/proj/`,而不是用户目录里 PROJ 默认的位置 |
 | `GDAL_CONFIG_FILE` | 指向 `base` 里一个不存在的文件。GDAL 本会读用户主目录下的配置文件 `~/.gdal/gdalrc`,里面的选项能关掉驱动、改掉行为;指向别的文件,它就不读用户的那一个 |
-| `SSL_CERT_FILE`、`SSL_CERT_DIR` | 只在 Windows 上设,指向 `base` 带的证书:Windows 上的 OpenSSL 不靠写进文件的位置找证书。用户设了这两个变量时用用户的 |
+| `SSL_CERT_FILE`、`SSL_CERT_DIR` | 只在 Windows 上设,指向 `base` 带的证书:Windows 上的 OpenSSL 不靠写进文件的位置找证书。用户设了这两个变量且不为空时用用户的 |
 | `PATH` | 只在 Windows 上设:把 conda 激活时放在 `PATH` 最前面的 `base` 的几个目录放到最前面,环境与它启动的程序先加载自己的 DLL |
 
 GeoEngine 运行这套环境的 Python 时,以隔离模式(`-I`)启动它,环境变量不继承 GeoEngine 的,只从用户的环境里取网络的与主目录:代理的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`,证书的 `SSL_CERT_FILE`、`SSL_CERT_DIR`、`REQUESTS_CA_BUNDLE`、`CURL_CA_BUNDLE`,名字不分大小写;再加 `HOME`。用户环境里的其余变量一个也不给:conda 的 `PYTHONPATH`、`PATH` 里 QGIS、OSGeo4W 带的 GDAL,都会让它加载不属于自己的东西。
@@ -156,7 +156,7 @@ GeoEngine 运行这套环境的 Python 时,以隔离模式(`-I`)启动它,环境
 GeoCode 没有自动更新,用户卸载旧版、安装新版。卸载只删应用本身,数据目录与其中的环境留着:
 
 - 新版自带的环境标识不变:直接沿用,第一次启动不用等。
-- 标识变了(锁定清单变了):替换 `base`,重建 `envs/default`。GeoAgent 额外装的包随之清空,需要时它再装;它们是对旧的 `base` 装的,留着可能与新的预装包不兼容。
+- 标识变了(锁定清单变了),或新版改了 GeoEngine 写进 `base` 的文件:替换 `base`,重建 `envs/default`。GeoAgent 额外装的包随之清空,需要时它再装;它们是对旧的 `base` 装的,留着可能与新的预装包不兼容。
 
 完全卸载时要删的位置里有这个环境(`PATHS.md`)。
 
