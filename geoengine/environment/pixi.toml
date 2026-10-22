@@ -1,0 +1,39 @@
+# GeoCode's Python environment (docs/PYTHON.md, section 2): what it holds, from conda-forge alone. After a change, run
+# scripts/stage-python.sh --lock to resolve pixi.lock for both platforms again.
+
+[workspace]
+name = "geocode-python"
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "win-64"]
+
+[dependencies]
+python = "3.13.*"
+pip = "*"
+
+# GDAL with its Python interface and command-line tools, and the drivers kept apart as plugins. Not the PDF one: it
+# brings GPL poppler.
+gdal = "*"
+libgdal-netcdf = "*"
+libgdal-hdf5 = "*"
+libgdal-arrow-parquet = "*"
+libgdal-jp2openjpeg = "*"
+
+earthengine-api = "*"
+geedim = ">=2.0"
+# Without the optional dependencies geopandas brings, scikit-learn and folium among them.
+geopandas-base = ">=1.0"
+shapely = "*"
+pyproj = "*"
+pyogrio = "*"
+rasterio = "*"
+rioxarray = "*"
+xarray = "*"
+netcdf4 = "*"
+numpy = "*"
+pandas = "*"
+scipy = "*"
+# OpenBLAS rather than Intel's much larger MKL, Windows's otherwise.
+libblas = { version = "*", build = "*openblas" }
+matplotlib-base = "*"
+openpyxl = "*"
+requests = "*"

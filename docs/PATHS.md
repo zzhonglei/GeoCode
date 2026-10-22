@@ -50,7 +50,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 ├── worktree/             为并行任务建立的 git 工作树
 ├── repos/                配置的 references 列出的仓库,由内核克隆
 ├── plan/                 计划模式写下的计划
-├── python/               内置的 Python 环境,第一次启动时从应用里解压,约 650 MB(见 PYTHON.md 第 3 节)
+├── python/               内置的 Python 环境,第一次启动时从应用里安装;其中 proj/ 是 PROJ 下载的网格的缓存(见 PYTHON.md 第 3、4 节)
 └── desktop/              应用的设置与状态
     ├── settings.json         这台电脑上的状态:窗口位置等
     ├── preferences.json      个人偏好:界面、默认模型等
@@ -89,7 +89,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
     └── tmp/                       合并分支时的临时工作树
 ```
 
-`geocode.db`、`log/`、`repos/`、`python/` 与 `desktop/` 里的 `chats/`、`remote-clients.json`、`geocode.managed.json`、`agent-tool/`、`managed-kernel/`、git 凭据助手的两份文件每次启动就写,其余的用到对应功能时才会出现,在没用过的电脑上不存在。`desktop/` 里的存储都先写旁边名字带 `.tmp` 的副本再改名,写到一半时应用崩溃会留下它(设置与偏好的副本在下次启动时清掉);git、代码托管与项目设置的存储另在旁边建 `.lock` 锁文件,崩溃时可能留下;排队的消息、会话的归档与等待交回的子会话结果读不出时,原文件改名为 `<文件名>.corrupt-<时间>` 留下。准备 Python 环境时先解压到 `python/.unpack-<随机名>/`,解压中途应用退出会留下它,下次启动时清掉;替换环境期间新旧两份同时在,占用约 1.3 GB。
+`geocode.db`、`log/`、`repos/`、`python/` 与 `desktop/` 里的 `chats/`、`remote-clients.json`、`geocode.managed.json`、`agent-tool/`、`managed-kernel/`、git 凭据助手的两份文件每次启动就写,其余的用到对应功能时才会出现,在没用过的电脑上不存在。`desktop/` 里的存储都先写旁边名字带 `.tmp` 的副本再改名,写到一半时应用崩溃会留下它(设置与偏好的副本在下次启动时清掉);git、代码托管与项目设置的存储另在旁边建 `.lock` 锁文件,崩溃时可能留下;排队的消息、会话的归档与等待交回的子会话结果读不出时,原文件改名为 `<文件名>.corrupt-<时间>` 留下。安装 Python 环境时,pixi-unpack 先把包解到 `python/.unpack-<随机名>/`,装好后删掉,安装中途应用退出会留下它与一份激活脚本 `python/activate.*`,下次启动时清掉;安装期间解开的包与装好的环境同时在,占用约 2.3 GB。
 
 ## 4. 缓存、状态与临时文件
 
@@ -157,7 +157,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 - 回到默认配置:删除 `~/.config/geocode/`。
 - 清空会话、登录与应用设置:退出 GeoCode 后删除 `~/.local/share/geocode/`。
 - 释放空间:删除 `~/.cache/geocode/`。
-- 重建 Python 环境:退出 GeoCode 后删除数据目录里的 `python/envs/default/`(只重建工作环境,GeoAgent 装的包随之清空)或整个 `python/`(重新解压),下次启动时自动准备。
+- 重建 Python 环境:退出 GeoCode 后删除数据目录里的 `python/envs/default/`(只重建工作环境,GeoAgent 装的包随之清空)或整个 `python/`(重新安装),下次启动时自动准备。
 - 重置界面:删除窗口数据目录。
 - 完全卸载:删除程序与第 1 节表里的全部位置,再删除第 5 节的系统登记(macOS 的偏好文件,并在系统设置里撤销权限与登录项),以及 macOS 上内核持久终端的 `/tmp/opencode-pty-<用户编号>/`(用户自己的 OpenCode 也用它时留着)。
 

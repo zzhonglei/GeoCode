@@ -42,10 +42,10 @@ const python = <Reported extends { status: string }>(value: Reported) => ({ pyth
 test('GeoCode: a window waits for the Python environment, and opens once it is ready or there is no GeoEngine', () => {
   expect(pythonGateOf(NO_GEO_STATUSES, undefined)).toEqual({ state: 'waiting' });
   expect(pythonGateOf(NO_GEO_STATUSES, true)).toEqual({ state: 'waiting' });
-  expect(pythonGateOf(python({ status: 'preparing', step: 'unpacking' }), true)).toEqual({ state: 'waiting' });
-  expect(pythonGateOf(python({ status: 'ready', version: '3.13.16', python: '/p' }), true)).toEqual({ state: 'open' });
+  expect(pythonGateOf(python({ status: 'preparing', step: 'installing' }), true)).toEqual({ state: 'waiting' });
+  expect(pythonGateOf(python({ status: 'ready', version: '3.13.17', python: '/p' }), true)).toEqual({ state: 'open' });
   expect(pythonGateOf(NO_GEO_STATUSES, false)).toEqual({ state: 'open' });
-  const failed = pythonGateOf(python({ status: 'failed', diagnostics: { step: 'unpack', message: 'tar failed', output: 'disk full' } }), true);
+  const failed = pythonGateOf(python({ status: 'failed', diagnostics: { step: 'install', message: 'pixi-unpack exited with code 1', output: 'disk full' } }), true);
   expect(failed.state === 'failed' && failed.error).toContain('disk full');
   expect(pythonGateOf(python({ status: 'unknown' }), true).state).toBe('failed');
 });

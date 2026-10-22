@@ -42,7 +42,7 @@ geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
 
 GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/packages/electron/resources/geoengine/geoengine.mjs`,打包时收进 `app.asar`。GEE 脚本导入的 Python 包 `geoengine/python/` 在这一步原样编进 `geoengine.mjs`(原因见 `GEE.md` 第 5 节),改了其中的 `.py` 文件同样要重新构建。开发模式的启动脚本每次启动前都运行它,打包流程也运行它,平时不用手动执行;`geoengine/` 没装依赖时它报错退出。
 
-内置的 Python 环境(见 `PYTHON.md`)由 `./scripts/stage-python.sh` 按 `geoengine/environment/` 里的定义组装,压缩后暂存到 `desktop/packages/electron/resources/python/`,打包时作为额外资源收进应用。它下载固定版本的 Python 独立构建与 uv,核对校验和,下载的文件与 uv 的缓存放在仓库的 `.cache/python/`。环境的标识没变时它直接跳过,所以开发模式的启动脚本每次启动前也运行它。默认组装本机平台的环境;给出 `win32-x64` 或 `darwin-arm64` 也能在另一个平台上组装,只是不运行核对。改了 `geoengine/environment/requirements.in` 之后,运行 `./scripts/stage-python.sh --lock` 重新生成两个平台的锁定清单,与清单一起提交。
+内置的 Python 环境(见 `PYTHON.md`)由 `./scripts/stage-python.sh` 按 `geoengine/environment/` 里的定义准备:用 pixi-pack 把锁定清单里这个平台的包打成 `python.tar`,与这个平台的 pixi-unpack 一起暂存到 `desktop/packages/electron/resources/python/`,打包时作为额外资源收进应用。它按 `tools.json` 下载固定版本的工具并核对校验和,工具与下载的包放在仓库的 `.cache/python/`,不读用户自己的 pixi 配置。环境的标识没变时它直接跳过,所以开发模式的启动脚本每次启动前也运行它。默认准备本机平台的环境,并用 pixi-unpack 在 `.cache/python/` 里装一份,核对 Python 的版本并运行 `pip check`;给出 `win32-x64` 或 `darwin-arm64` 也能为另一个平台准备,只是不装、不核对。改了 `geoengine/environment/pixi.toml` 之后,运行 `./scripts/stage-python.sh --lock` 重新生成两个平台的锁定清单 `pixi.lock`,与它一起提交。
 
 ## 5. 在沙箱里启动应用
 
@@ -59,7 +59,7 @@ bun run electron:dev:bundled
 
 壳与内核都从 `HOME` 推导自己的数据、配置与缓存目录,前提是环境里没有设 `XDG_*` 变量,设了的话两者都会改用它们。Electron 自己的配置目录在 macOS 上按系统账户找主目录,不看 `HOME`,所以要用 `OPENCHAMBER_DESKTOP_USER_DATA_DIR` 单独指定。系统的偏好设置同样按系统账户存放,沙箱挡不住:开发时写进 Electron 通用的 `~/Library/Preferences/com.github.Electron.plist`(打包出的应用写的那一份见 `PATHS.md` 第 5 节),里面只有文件对话框的位置这类系统记下的状态。Electron 的日志写在 `$SANDBOX/Library/Logs/` 下,跟着 `HOME` 走。
 
-`electron:dev:bundled` 先构建界面,再用构建好的界面启动,壳使用第 4 节暂存的内核;没有暂存时,启动日志提示「bundled OpenCode CLI missing」,内核起不来。`electron:dev` 用热更新的界面,适合改界面时快速查看,但它另起的壳服务端不在 Electron 里,访问控制(`DESKTOP.md` 第 4 节)在那里不生效,也接不到 GeoEngine,地理环境与地理工具都不可用;验证这些要用 `electron:dev:bundled` 或打包出的应用。这两种启动里,窗口的加载动画都等内置的 Python 环境就绪(`PYTHON.md` 第 7 节),新沙箱第一次启动要多等几秒;`electron:dev` 没有 GeoEngine,不等。
+`electron:dev:bundled` 先构建界面,再用构建好的界面启动,壳使用第 4 节暂存的内核;没有暂存时,启动日志提示「bundled OpenCode CLI missing」,内核起不来。`electron:dev` 用热更新的界面,适合改界面时快速查看,但它另起的壳服务端不在 Electron 里,访问控制(`DESKTOP.md` 第 4 节)在那里不生效,也接不到 GeoEngine,地理环境与地理工具都不可用;验证这些要用 `electron:dev:bundled` 或打包出的应用。这两种启动里,窗口的加载动画都等内置的 Python 环境就绪(`PYTHON.md` 第 7 节),新沙箱第一次启动要多等一会;`electron:dev` 没有 GeoEngine,不等。
 
 沙箱里没有登录信息,要对话就在沙箱里连接一个模型服务,或在沙箱的全局配置里配一个本机的 OpenAI 兼容接口。OpenCode 的免费模型只对 OpenCode 自己的客户端开放,GeoCode 用不了。测完删掉沙箱目录即可。
 
@@ -90,7 +90,7 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 GeoEngine 的测试涉及三种外部软件:
 
 - QGIS:macOS 上接真实的 QGIS,默认用 `/Applications` 下每一个认得出的 `QGIS*.app`,也可以用 `GEOENGINE_QGIS_APPS` 列出应用包的路径(以冒号分隔);本机没有 QGIS 时这几项跳过。QGIS 照常在用户目录下写它自己的配置与缓存。Windows 上认路径与发现安装的逻辑在任何平台上都测,用的是照 OSGeo4W 的真实组件包搭出的假目录树;经启动脚本运行 QGIS 只能在 Windows 上验证。
-- 内置的 Python 环境:测试自己打一个很小的压缩包,里面的 `python3` 转去运行 `PATH` 里的 `python3`,解压用系统的 `tar`,不用真实的环境;没有 `python3` 时与在 Windows 上这些项跳过。真实的环境要在应用里验证。
+- 内置的 Python 环境:测试自己打一个很小的包,配一个替身 pixi-unpack(一段 shell 脚本,像真的那样经临时目录解开它、留下激活脚本),包里的 `python3` 转去运行 `PATH` 里的 `python3`,不用真实的环境与 pixi-unpack;没有 `python3` 时与在 Windows 上这些项跳过。真实的环境要在应用里验证。
 - GEE:测试不联网。环境检查与运行脚本都用 `PATH` 里的 `python3` 真实执行,earthengine-api、它用到的 Google 库、requests、geedim 与 geopandas 换成测试自带的替身,没有 `python3` 时这些项跳过。
 
 ## 8. 写入检测

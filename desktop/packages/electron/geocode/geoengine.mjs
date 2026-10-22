@@ -28,7 +28,7 @@ const settingsVariables = (log) => {
 // Staged by scripts/stage-geoengine.sh; inside app.asar once packaged.
 const enginePath = () => path.join(app.getAppPath(), 'resources', 'geoengine', 'geoengine.mjs');
 
-// Staged by scripts/stage-python.sh; beside app.asar once packaged: the system tar cannot read inside it.
+// Staged by scripts/stage-python.sh; beside app.asar once packaged: pixi-unpack cannot run, nor read, inside it.
 const pythonBundlePath = () =>
   app.isPackaged ? path.join(process.resourcesPath, 'python') : path.join(app.getAppPath(), 'resources', 'python');
 

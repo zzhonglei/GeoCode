@@ -1,0 +1,38 @@
+{
+  "pixi": {
+    "repository": "prefix-dev/pixi",
+    "version": "v0.82.1",
+    "darwin-arm64": {
+      "asset": "pixi-aarch64-apple-darwin.tar.gz",
+      "sha256": "cf02c669b8c4a3d7332b6aa30931d37587c299d906b30d9827b9d40cec9b0c47"
+    },
+    "win32-x64": {
+      "asset": "pixi-x86_64-pc-windows-msvc.zip",
+      "sha256": "fde052c559928823c9cb6f8c629a1c019b92fc5c7d65d7d01fa515987b6973cf"
+    }
+  },
+  "pixi-pack": {
+    "repository": "Quantco/pixi-pack",
+    "version": "v0.7.11",
+    "darwin-arm64": {
+      "asset": "pixi-pack-aarch64-apple-darwin",
+      "sha256": "a94baddab7a1de736f73aebd958cb57aed23f88e5fdb57e7698d4dc4e0ef212b"
+    },
+    "win32-x64": {
+      "asset": "pixi-pack-x86_64-pc-windows-msvc.exe",
+      "sha256": "12dde5b363fb7c5fb6215e0747638b0486a0bd3f47ef653b23ce020bc1936263"
+    }
+  },
+  "pixi-unpack": {
+    "repository": "Quantco/pixi-pack",
+    "version": "v0.7.11",
+    "darwin-arm64": {
+      "asset": "pixi-unpack-aarch64-apple-darwin",
+      "sha256": "0cf9302090b8f5c29945b9d3fbaad7aa10774fa8ac97047f4b16002fbf5de4d0"
+    },
+    "win32-x64": {
+      "asset": "pixi-unpack-x86_64-pc-windows-msvc.exe",
+      "sha256": "4b27cae647100dae4a321954461fe5863d25aa3eb9a919fb302f20509090bc72"
+    }
+  }
+}
