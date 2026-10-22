@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import fs from 'node:fs';
 
-import { GEE_FAILURES, GEE_REFUSALS, GEO_STATUS_EVENT, NO_GEO_STATUSES, pythonGateOf, QGIS_FAILURES } from './geoStatus';
+import { GEE_FAILURES, GEE_REFUSALS, GEO_STATUS_EVENT, NO_GEO_STATUSES, pythonGateOf, pythonOverlayOf, QGIS_FAILURES } from './geoStatus';
 
 // Guards against the server and the interface naming the change differently, which leaves the indicator on a stale status.
 test('GeoCode: the interface listens for the change the server sends', () => {
@@ -42,10 +42,21 @@ const python = <Reported extends { status: string }>(value: Reported) => ({ pyth
 test('GeoCode: a window waits for the Python environment, and opens once it is ready or there is no GeoEngine', () => {
   expect(pythonGateOf(NO_GEO_STATUSES, undefined)).toEqual({ state: 'waiting' });
   expect(pythonGateOf(NO_GEO_STATUSES, true)).toEqual({ state: 'waiting' });
-  expect(pythonGateOf(python({ status: 'preparing', step: 'installing' }), true)).toEqual({ state: 'waiting' });
-  expect(pythonGateOf(python({ status: 'ready', version: '3.13.17', python: '/p' }), true)).toEqual({ state: 'open' });
+  expect(pythonGateOf(python({ status: 'checking' }), true)).toEqual({ state: 'waiting' });
+  expect(pythonGateOf(python({ status: 'preparing', step: 'installing' }), true)).toEqual({ state: 'preparing' });
+  expect(pythonGateOf(python({ status: 'preparing', step: 'warming', name: 'GDAL', number: 9, total: 12 }), true)).toEqual({ state: 'preparing', loading: { name: 'GDAL', number: 9, total: 12 } });
+  expect(pythonGateOf(python({ status: 'ready', version: '3.13.17', python: '/p', base: '/b' }), true)).toEqual({ state: 'open' });
   expect(pythonGateOf(NO_GEO_STATUSES, false)).toEqual({ state: 'open' });
   const failed = pythonGateOf(python({ status: 'failed', diagnostics: { step: 'install', message: 'pixi-unpack exited with code 1', output: 'disk full' } }), true);
   expect(failed.state === 'failed' && failed.error).toContain('disk full');
   expect(pythonGateOf(python({ status: 'unknown' }), true).state).toBe('failed');
+});
+
+// Guards against upstream's slow-start line taking the note's place as the loading screen fades out, and against the
+// note outliving the preparation while the rest of the start keeps the screen up.
+test('GeoCode: the loading screen keeps its note while it fades out, and only then', () => {
+  const loading = { state: 'preparing', loading: { name: 'GeoPandas', number: 12, total: 12 } } as const;
+  expect(pythonOverlayOf(loading, true, undefined)).toEqual({ ready: false, shown: loading });
+  expect(pythonOverlayOf({ state: 'open' }, true, loading)).toEqual({ ready: true, shown: loading });
+  expect(pythonOverlayOf({ state: 'open' }, false, loading)).toEqual({ ready: false, shown: undefined });
 });

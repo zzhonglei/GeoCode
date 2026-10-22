@@ -38,9 +38,11 @@ export const withGeoStatusSnapshot = (current: GeoStatuses, snapshot: GeoStatusS
   return next;
 };
 
-// State in geoengine/src/python/index.ts; only ready and failed are read here.
+// State in geoengine/src/python/index.ts; of preparing, only the warm-up's package is read here.
 const pythonSchema = z.union([
-  z.object({ status: z.enum(['checking', 'preparing']) }),
+  z.object({ status: z.literal('checking') }),
+  z.object({ status: z.literal('preparing'), step: z.literal('warming'), name: z.string(), number: z.number(), total: z.number() }),
+  z.object({ status: z.literal('preparing') }),
   z.object({ status: z.literal('ready') }),
   z.object({
     status: z.literal('failed'),
@@ -48,8 +50,18 @@ const pythonSchema = z.union([
   }),
 ]);
 
-/** Whether a window may open: it waits for GeoCode's Python environment, unless this server has no GeoEngine. */
-export type PythonGate = { state: 'waiting' } | { state: 'open' } | { state: 'failed'; error: string };
+/** The package the warm-up is importing, `number` counting from 1. */
+type PythonLoading = { name: string; number: number; total: number };
+
+/**
+ * Whether a window may open: it waits for GeoCode's Python environment, unless this server has no GeoEngine. While the
+ * environment is installed, created, or warmed up after either, the loading screen says so (docs/PYTHON.md, section 7).
+ */
+export type PythonGate =
+  | { state: 'waiting' }
+  | { state: 'preparing'; loading?: PythonLoading }
+  | { state: 'open' }
+  | { state: 'failed'; error: string };
 
 /** `engine` is undefined until the server has said whether it has GeoEngine. */
 export const pythonGateOf = (statuses: GeoStatuses, engine: boolean | undefined): PythonGate => {
@@ -60,9 +72,25 @@ export const pythonGateOf = (statuses: GeoStatuses, engine: boolean | undefined)
   // A value this interface cannot read would otherwise hold the window shut for good.
   if (!parsed.success) return { state: 'failed', error: JSON.stringify(held.value, null, 2) };
   if (parsed.data.status === 'ready') return { state: 'open' };
-  if (parsed.data.status !== 'failed') return { state: 'waiting' };
+  if (parsed.data.status === 'checking') return { state: 'waiting' };
+  if (parsed.data.status === 'preparing') {
+    if (!('step' in parsed.data)) return { state: 'preparing' };
+    const { name, number, total } = parsed.data;
+    return { state: 'preparing', loading: { name, number, total } };
+  }
   const failed = parsed.data.diagnostics;
   return { state: 'failed', error: [`${failed.step}: ${failed.message}`, failed.output].filter(Boolean).join('\n\n') };
+};
+
+export type PreparingGate = Extract<PythonGate, { state: 'preparing' }>;
+
+/**
+ * Whether the loading screen may go, once the rest of the start is done, and what it says. `shown` is what it said
+ * last: kept once it may go, so the note fades out with the logo instead of giving way to upstream's slow-start line.
+ */
+export const pythonOverlayOf = (gate: PythonGate, started: boolean, shown: PreparingGate | undefined) => {
+  const ready = started && gate.state === 'open';
+  return { ready, shown: ready ? shown : gate.state === 'preparing' ? gate : undefined };
 };
 
 // The failures of State in geoengine/src/qgis/index.ts; geoStatus.test.ts holds the two lists together.

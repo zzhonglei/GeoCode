@@ -8,11 +8,14 @@ import {
   geoStatusSnapshotSchema,
   NO_GEO_STATUSES,
   pythonGateOf,
+  pythonOverlayOf,
   withGeoStatusEvent,
   withGeoStatusSnapshot,
   type GeoStatuses,
   type PythonGate,
+  type PreparingGate,
 } from './geoStatus';
+import { PythonPreparing } from './PythonPreparing';
 
 // The shell server's routes for GeoEngine, see web/server/geocode/geoengine.js.
 const SNAPSHOT_PATH = '/api/geocode/geo-status';
@@ -49,6 +52,15 @@ export const useGeoStatuses = (): GeoStatuses => useGeoEngineView().statuses;
 export const usePythonGate = (): PythonGate => {
   const view = useGeoEngineView();
   return React.useMemo(() => pythonGateOf(view.statuses, view.engine), [view]);
+};
+
+/** The loading screen's `ready` and `note`, as pythonOverlayOf has them, once the rest of the start is done. */
+export const usePythonOverlay = (gate: PythonGate, started: boolean) => {
+  const last = React.useRef<PreparingGate | undefined>(undefined);
+  const { ready, shown } = pythonOverlayOf(gate, started, last.current);
+  // Written as it renders: rendering twice with the same gate keeps the same note.
+  last.current = shown;
+  return { ready, note: shown ? React.createElement(PythonPreparing, { gate: shown }) : undefined };
 };
 
 /** `engine`, whether the server has GeoEngine, is undefined until the first snapshot. */

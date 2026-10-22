@@ -37,23 +37,31 @@ const ACTIVATION = "activate."
 const UNUSED = new Set([".a", ".lib", ".pdb"])
 
 /**
- * Imported before the environment is ready (docs/PYTHON.md, section 6); importing osgeo loads GDAL's driver plugins.
- * matplotlib is left out: importing it writes in the user's home.
+ * Imported before the environment is ready (docs/PYTHON.md, section 6), each with the name the loading screen shows;
+ * importing osgeo loads GDAL's driver plugins. matplotlib is left out: importing it writes in the user's home.
  */
 const WARM = [
-  "numpy",
-  "pandas",
-  "scipy.linalg",
-  "shapely",
-  "pyproj",
-  "pyogrio",
-  "rasterio",
-  "netCDF4",
-  "osgeo.gdal",
-  "ee",
-  "geedim",
-  "geopandas",
-]
+  ["numpy", "NumPy"],
+  ["pandas", "pandas"],
+  ["scipy.linalg", "SciPy"],
+  ["shapely", "Shapely"],
+  ["pyproj", "pyproj"],
+  ["pyogrio", "pyogrio"],
+  ["rasterio", "rasterio"],
+  ["netCDF4", "netCDF4"],
+  ["osgeo.gdal", "GDAL"],
+  ["ee", "Earth Engine"],
+  ["geedim", "geedim"],
+  ["geopandas", "GeoPandas"],
+] as const
+
+/** Prints the number of each module it is given before importing it. */
+const WARMING = [
+  "import importlib, sys",
+  "for number, name in enumerate(sys.argv[1:], 1):",
+  "    print(number)",
+  "    importlib.import_module(name)",
+].join("\n")
 
 /** Written into the base environment's site-packages as STARTUP_MODULE, which a .pth file beside it imports. */
 const STARTUP = `"""Sets GeoCode's Python environment's own variables as Python starts (docs/PYTHON.md, section 6.1)."""
@@ -140,6 +148,14 @@ export interface Diagnostics {
 export type State =
   | { readonly status: "checking" }
   | { readonly status: "preparing"; readonly step: "installing" | "creating" }
+  /** After installing or creating only: another start warms up too quickly to show. `number` counts from 1. */
+  | {
+      readonly status: "preparing"
+      readonly step: "warming"
+      readonly name: string
+      readonly number: number
+      readonly total: number
+    }
   /** `python` is the working environment's interpreter, for GeoAgent; `base` the base environment's. */
   | { readonly status: "ready"; readonly version: string; readonly python: string; readonly base: string }
   | { readonly status: "failed"; readonly diagnostics: Diagnostics }
@@ -235,20 +251,52 @@ export const capability = (places: Places): Engine.Capability =>
         yield* expect("environment", "venv", result, result.stderr || result.stdout)
       })
 
+    const runSync = Effect.runSyncWith(yield* Effect.context<never>())
+
     // Through base, which nothing GeoAgent installs can change; only a speed-up, so a failure is only logged.
-    const warm = python(where.basePython, ["-c", WARM.map((name) => `import ${name}`).join("; ")], WARM_TIMEOUT).pipe(
-      Effect.flatMap((result) =>
-        result.reason === "exit" && result.code === 0
-          ? Effect.void
-          : Effect.logWarning("GeoEngine could not warm up the Python environment", {
-              reason: result.reason,
-              code: result.code,
-              signal: result.signal,
-              stderr: result.stderr.slice(-OUTPUT_TAIL),
+    const warm = (shown: boolean) => {
+      // Off once the run has settled: output delivered after it would commit past ready.
+      let reporting = shown
+      let pending = ""
+      const onChunk = (chunk: string) => {
+        if (!reporting) return
+        const lines = (pending + chunk).split(/\r?\n/)
+        pending = lines.pop() ?? ""
+        for (const line of lines) {
+          const number = Number(line)
+          const name = WARM[number - 1]?.[1]
+          if (name === undefined) continue
+          // Committed at once: a commit left for later could land after ready and take it back.
+          runSync(writer.commit(token, { status: "preparing", step: "warming", name, number, total: WARM.length }))
+        }
+      }
+      return runtime
+        .run({
+          ...Bundled.python(where.basePython, ["-c", WARMING, ...WARM.map(([module]) => module)]),
+          delivery: { mode: "incremental", onChunk },
+          clocks: { total: WARM_TIMEOUT },
+        })
+        .pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              reporting = false
             }),
-      ),
-      Effect.catch((error) => Effect.logWarning("GeoEngine could not warm up the Python environment", error.message)),
-    )
+          ),
+          Effect.flatMap((result) =>
+            result.reason === "exit" && result.code === 0
+              ? Effect.void
+              : Effect.logWarning("GeoEngine could not warm up the Python environment", {
+                  reason: result.reason,
+                  code: result.code,
+                  signal: result.signal,
+                  stderr: result.stderr.slice(-OUTPUT_TAIL),
+                }),
+          ),
+          Effect.catch((error) =>
+            Effect.logWarning("GeoEngine could not warm up the Python environment", error.message),
+          ),
+        )
+    }
 
     const prepare = Effect.gen(function* () {
       const text = yield* attempt("bundle", () => fsp.readFile(path.join(places.bundle, "python.json"), "utf-8"))
@@ -267,10 +315,12 @@ export const capability = (places: Places): Engine.Capability =>
         if (name.startsWith(UNPACKING) || name.startsWith(ACTIVATION)) yield* remove(path.join(where.root, name))
       }
 
-      if (!(yield* Effect.promise(() => installed(where, bundle.id)))) yield* install(bundle)
-      if (!fs.existsSync(where.envPython)) yield* create()
+      const installing = !(yield* Effect.promise(() => installed(where, bundle.id)))
+      if (installing) yield* install(bundle)
+      const creating = !fs.existsSync(where.envPython)
+      if (creating) yield* create()
       // Before ready, so nothing that waits for it meets a library loaded for the first time.
-      yield* warm
+      yield* warm(installing || creating)
       yield* writer.commit(token, {
         status: "ready",
         version: bundle.python,

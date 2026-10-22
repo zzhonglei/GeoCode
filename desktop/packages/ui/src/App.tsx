@@ -56,7 +56,7 @@ import { Closed } from '@/geocode/Closed'; // GeoCode: see the startup failure p
 import { KernelStartupFailure, StartupFailure } from '@/geocode/StartupFailure';
 import { useKernelStartFailed } from '@/geocode/kernelStart';
 import { geoEngineFailureText, useGeoEngineFailure } from '@/geocode/geoengine'; // GeoCode: see geoEngineFailure
-import { usePythonGate } from '@/geocode/geoEngineClient'; // GeoCode: see pythonGate
+import { usePythonGate, usePythonOverlay } from '@/geocode/geoEngineClient'; // GeoCode: see pythonGate
 import { RuntimeAPIProvider } from '@/contexts/RuntimeAPIProvider';
 import { registerRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { useUIStore } from '@/stores/useUIStore';
@@ -344,6 +344,7 @@ function App({ apis }: AppProps) {
 
   const bootOutcomeKnown = bootInjectionStatus === 'valid';
   const bootViewIsMain = bootView?.screen === 'main';
+  const pythonOverlay = usePythonOverlay(pythonGate, bootOutcomeKnown && bootViewIsMain); // GeoCode: see pythonGate
 
   // Splash dismissal: the shell and composer are usable before OpenCode is
   // ready, so the splash leaves as soon as the shell mounts. Desktop shells
@@ -888,8 +889,8 @@ function App({ apis }: AppProps) {
                   <OpenCodeUpdateToast />
                   <ProjectConfigErrorToast />
                   <MainLayout />
-                  {/* GeoCode: see pythonGate */}
-                  {isDesktopRuntime ? <AppStartupOverlay ready={bootOutcomeKnown && bootViewIsMain && pythonGate.state !== 'waiting'} /> : null}
+                  {/* GeoCode: see pythonGate; while the environment is prepared, the loading screen says so */}
+                  {isDesktopRuntime ? <AppStartupOverlay ready={pythonOverlay.ready} note={pythonOverlay.note} /> : null}
                   <Toaster />
                   <AppLinkConfirmDialog />
                   <SharedTrustConfirmDialog />

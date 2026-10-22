@@ -9,7 +9,7 @@ const SLOW_START_HINT_DELAY_MS = 10_000;
 
 // Mount only alongside the real app shell. Earlier auth/connection loaders
 // hand off without fading; this is the single reveal of the interactive UI.
-export const AppStartupOverlay: React.FC<{ ready: boolean; animated?: boolean }> = ({ ready, animated = false }) => {
+export const AppStartupOverlay: React.FC<{ ready: boolean; animated?: boolean; note?: React.ReactNode }> = ({ ready, animated = false, note }) => { // GeoCode: a note, shown at once in the slow line's place
   const { t } = useI18n();
   const [dismissed, setDismissed] = React.useState(false);
   const [slow, setSlow] = React.useState(false);
@@ -41,7 +41,14 @@ export const AppStartupOverlay: React.FC<{ ready: boolean; animated?: boolean }>
       <OpenChamberLogo width={120} height={120} isAnimated={animated} variant="splash" />
       {/* Absolutely positioned below the (still perfectly centered) logo so
           the text never pushes it up. 50% + half the 120px logo + a gap. */}
-      {slow ? (
+      {/* --- GeoCode: the note --- */}
+      {note ? (
+        <div role="status" className="absolute inset-x-0 top-[calc(50%+84px)] px-6 text-center typography-small text-muted-foreground">
+          {note}
+        </div>
+      ) : null}
+      {/* --- /GeoCode --- */}
+      {slow && !note ? ( // GeoCode: the note takes its place
         <p role="status" className="absolute inset-x-0 top-[calc(50%+84px)] px-6 text-center typography-small text-muted-foreground">
           {t('startup.overlay.slow')}
         </p>

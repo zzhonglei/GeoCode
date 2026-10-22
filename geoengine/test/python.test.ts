@@ -71,7 +71,7 @@ const bundle = async (directory: string, id: string, options: { fails?: boolean;
       `{ echo "PYTHON $*"; env; echo END; } >> '${log}'`,
       ...(options.slowWarm
         ? [
-            `case "$*" in *"import numpy"*)`,
+            `case "$*" in *importlib*)`,
             `  sleep 1; '${python3}' "$@"; code=$?`,
             `  touch '${path.join(directory, "warmed")}'; exit $code ;;`,
             "esac",
@@ -161,7 +161,12 @@ test(
       const { last, states } = await settle(directory, await bundle(directory, "one"))
 
       assert.deepEqual(last, { status: "ready", version: "3.13.16", python: where.envPython, base: where.basePython })
-      assert.deepEqual([...new Set(steps(states))], ["installing", "creating"])
+      assert.deepEqual([...new Set(steps(states))], ["installing", "creating", "warming"])
+      // Guards against the loading screen naming another package than the one being imported.
+      assert.deepEqual(
+        states.find((state) => state.status === "preparing" && state.step === "warming"),
+        { status: "preparing", step: "warming", name: "NumPy", number: 1, total: 12 },
+      )
       assert.ok(await exists(path.join(where.base, "from-one")))
       assert.equal(JSON.parse(await fs.readFile(where.marker, "utf-8")).id, "one")
       // Without pixi-unpack's activation script and temporary folder.
@@ -351,7 +356,7 @@ test(
       await fs.rm(where.env, { recursive: true })
       const remade = await settle(directory, bundled)
       assert.equal(remade.last.status, "ready")
-      assert.deepEqual([...new Set(steps(remade.states))], ["creating"])
+      assert.deepEqual([...new Set(steps(remade.states))], ["creating", "warming"])
       assert.ok(await exists(where.envPython))
       assert.ok(await exists(path.join(where.base, "kept")))
     } finally {
@@ -369,7 +374,7 @@ test("a new bundle replaces the base environment and the working one made from i
 
     const { last, states } = await settle(directory, await bundle(directory, "two"))
     assert.equal(last.status, "ready")
-    assert.deepEqual([...new Set(steps(states))], ["installing", "creating"])
+    assert.deepEqual([...new Set(steps(states))], ["installing", "creating", "warming"])
     assert.ok(await exists(path.join(where.base, "from-two")))
     assert.ok(!(await exists(path.join(where.base, "from-one"))))
     assert.ok(!(await exists(path.join(where.env, "installed"))))
@@ -392,13 +397,13 @@ test("a base environment another GeoCode wrote its own files into is installed a
 
     const { last, states } = await settle(directory, bundled)
     assert.equal(last.status, "ready")
-    assert.deepEqual([...new Set(steps(states))], ["installing", "creating"])
+    assert.deepEqual([...new Set(steps(states))], ["installing", "creating", "warming"])
     assert.deepEqual(JSON.parse(await fs.readFile(where.marker, "utf-8")), marker)
 
     // As a GeoCode that wrote no startup file leaves it.
     await fs.writeFile(where.marker, JSON.stringify({ id: marker.id }))
     const older = await settle(directory, bundled)
-    assert.deepEqual([...new Set(steps(older.states))], ["installing", "creating"])
+    assert.deepEqual([...new Set(steps(older.states))], ["installing", "creating", "warming"])
   } finally {
     await fs.rm(directory, { recursive: true, force: true })
   }
