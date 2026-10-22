@@ -5,6 +5,7 @@ import fs from "node:fs"
 import fsp from "node:fs/promises"
 import path from "node:path"
 import { Data, type Duration, Effect, Exit, Schema } from "effect"
+import { Bundled } from "../bundled.ts"
 import type { Engine } from "../engine.ts"
 import { Runtime } from "../runtime.ts"
 import { Status } from "../status.ts"
@@ -12,8 +13,6 @@ import { Status } from "../status.ts"
 const DOMAIN = "python"
 
 const WINDOWS = process.platform === "win32"
-
-const SYSTEM_ROOT = process.env.SystemRoot ?? "C:\\Windows"
 
 /** Staged beside the packages; it installs them as conda would (docs/PYTHON.md, section 4). */
 const UNPACK = WINDOWS ? "pixi-unpack.exe" : "pixi-unpack"
@@ -38,36 +37,23 @@ const ACTIVATION = "activate."
 const UNUSED = new Set([".a", ".lib", ".pdb"])
 
 /**
- * Imported once the environment is ready (docs/PYTHON.md, section 6); importing osgeo loads GDAL's driver plugins.
+ * Imported before the environment is ready (docs/PYTHON.md, section 6); importing osgeo loads GDAL's driver plugins.
  * matplotlib is left out: importing it writes in the user's home.
  */
-const WARM = ["numpy", "pandas", "scipy.linalg", "shapely", "pyproj", "pyogrio", "rasterio", "netCDF4", "osgeo.gdal"]
-
-/** Given to a Python of GeoCode's whatever the case of their names, with HOME (docs/PYTHON.md, section 6.1). */
-const NETWORK = new Set([
-  "HTTP_PROXY",
-  "HTTPS_PROXY",
-  "ALL_PROXY",
-  "NO_PROXY",
-  "SSL_CERT_FILE",
-  "SSL_CERT_DIR",
-  "REQUESTS_CA_BUNDLE",
-  "CURL_CA_BUNDLE",
-])
-
-/**
- * Given with `inherit: false` (docs/PYTHON.md, section 6.1); the environment sets its own variables as it starts
- * (STARTUP). On Windows Node copies the system variables a process needs from the engine's environment when they are
- * missing, PATH among them, so the system's own PATH takes the place of the user's.
- */
-const environment = () => {
-  const result: Record<string, string> = home()
-  for (const [name, value] of Object.entries(process.env)) {
-    if (value !== undefined && NETWORK.has(name.toUpperCase())) result[name] = value
-  }
-  if (WINDOWS) result.PATH = [path.join(SYSTEM_ROOT, "System32"), SYSTEM_ROOT].join(";")
-  return result
-}
+const WARM = [
+  "numpy",
+  "pandas",
+  "scipy.linalg",
+  "shapely",
+  "pyproj",
+  "pyogrio",
+  "rasterio",
+  "netCDF4",
+  "osgeo.gdal",
+  "ee",
+  "geedim",
+  "geopandas",
+]
 
 /** Written into the base environment's site-packages as STARTUP_MODULE, which a .pth file beside it imports. */
 const STARTUP = `"""Sets GeoCode's Python environment's own variables as Python starts (docs/PYTHON.md, section 6.1)."""
@@ -110,9 +96,6 @@ _set_variables()
 const STARTUP_MODULE = "_geocode_environment"
 
 const STARTUP_PTH = `import ${STARTUP_MODULE}\n`
-
-/** Without it a program finds the account's home from the system, past a sandbox that moved it. */
-const home = (): Record<string, string> => (process.env.HOME === undefined ? {} : { HOME: process.env.HOME })
 
 /** pip and uv refuse to install into the base environment (PEP 668). */
 const EXTERNALLY_MANAGED =
@@ -157,8 +140,8 @@ export interface Diagnostics {
 export type State =
   | { readonly status: "checking" }
   | { readonly status: "preparing"; readonly step: "installing" | "creating" }
-  /** `python` is the working environment's interpreter, which GeoAgent and the runs use. */
-  | { readonly status: "ready"; readonly version: string; readonly python: string }
+  /** `python` is the working environment's interpreter, for GeoAgent; `base` the base environment's. */
+  | { readonly status: "ready"; readonly version: string; readonly python: string; readonly base: string }
   | { readonly status: "failed"; readonly diagnostics: Diagnostics }
 
 class Failed extends Data.TaggedError("GeoEnginePythonFailed")<Diagnostics> {}
@@ -183,8 +166,8 @@ export const layout = (data: string) => {
 
 /**
  * Prepares GeoCode's Python environment in the background as the engine starts (docs/PYTHON.md, section 6): installs
- * the bundled one when the data directory has another or none, and makes the working environment when it is missing.
- * A failure is left for the next start to try again.
+ * the bundled one when the data directory has another or none, makes the working environment when it is missing, and
+ * warms the environment up before calling it ready. A failure is left for the next start to try again.
  */
 export const capability = (places: Places): Engine.Capability =>
   Effect.gen(function* () {
@@ -195,16 +178,8 @@ export const capability = (places: Places): Engine.Capability =>
     const token = yield* writer.claim()
     const where = layout(places.data)
 
-    // UTF-8 as a flag: isolated, Python ignores PYTHONUTF8.
     const python = (command: string, args: readonly string[], total: Duration.Input) =>
-      runtime.run({
-        command,
-        args: ["-I", "-X", "utf8", ...args],
-        env: environment(),
-        inherit: false,
-        delivery: { mode: "collect" },
-        clocks: { total },
-      })
+      runtime.run({ ...Bundled.python(command, args), delivery: { mode: "collect" }, clocks: { total } })
 
     // In place: conda's packages note where they are installed, so the base environment cannot be moved there later.
     const install = (bundle: typeof Bundle.Type) =>
@@ -225,7 +200,7 @@ export const capability = (places: Places): Engine.Capability =>
               command: path.join(places.bundle, UNPACK),
               args: [path.join(places.bundle, "python.tar"), "--output-directory", where.root, "--env-name", "base"],
               // Its unpacked packages stay in the data directory, where the next start clears what it leaves.
-              env: { TMPDIR: temporary, TMP: temporary, TEMP: temporary, ...home() },
+              env: { TMPDIR: temporary, TMP: temporary, TEMP: temporary, ...Bundled.home() },
               inherit: false,
               delivery: { mode: "collect" },
               clocks: { total: INSTALL_TIMEOUT },
@@ -260,11 +235,17 @@ export const capability = (places: Places): Engine.Capability =>
         yield* expect("environment", "venv", result, result.stderr || result.stdout)
       })
 
-    const warm = python(where.envPython, ["-c", WARM.map((name) => `import ${name}`).join("; ")], WARM_TIMEOUT).pipe(
+    // Through base, which nothing GeoAgent installs can change; only a speed-up, so a failure is only logged.
+    const warm = python(where.basePython, ["-c", WARM.map((name) => `import ${name}`).join("; ")], WARM_TIMEOUT).pipe(
       Effect.flatMap((result) =>
         result.reason === "exit" && result.code === 0
           ? Effect.void
-          : Effect.logWarning("GeoEngine could not warm up the Python environment", result.stderr.slice(-OUTPUT_TAIL)),
+          : Effect.logWarning("GeoEngine could not warm up the Python environment", {
+              reason: result.reason,
+              code: result.code,
+              signal: result.signal,
+              stderr: result.stderr.slice(-OUTPUT_TAIL),
+            }),
       ),
       Effect.catch((error) => Effect.logWarning("GeoEngine could not warm up the Python environment", error.message)),
     )
@@ -288,8 +269,14 @@ export const capability = (places: Places): Engine.Capability =>
 
       if (!(yield* Effect.promise(() => installed(where, bundle.id)))) yield* install(bundle)
       if (!fs.existsSync(where.envPython)) yield* create()
-      yield* writer.commit(token, { status: "ready", version: bundle.python, python: where.envPython })
+      // Before ready, so nothing that waits for it meets a library loaded for the first time.
       yield* warm
+      yield* writer.commit(token, {
+        status: "ready",
+        version: bundle.python,
+        python: where.envPython,
+        base: where.basePython,
+      })
     }).pipe(
       Effect.catchTag("GeoEnginePythonFailed", (failed) => {
         const diagnostics = {

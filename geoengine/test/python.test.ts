@@ -52,10 +52,12 @@ const executable = async (file: string, text: string) => {
 /**
  * A bundle as scripts/stage-python.sh stages one. Its pixi-unpack unpacks the packed environment through its temporary
  * folder and leaves an activation script beside it, as the real one does; the environment's python3 runs the real one.
- * Both first note their arguments and environment in `calls.log`. The environment holds a file named for the bundle's
- * id, to tell which bundle the base came from, and files of the kinds installing takes away.
+ * Both first note their arguments and environment in `calls.log`. With `slowWarm`, the python3 waits a second before
+ * running the warm-up and then leaves a file `warmed` beside the log; the working environment's python is the real one,
+ * so a warm-up through it leaves none. The environment holds a file named for the bundle's id, to tell which bundle the
+ * base came from, and files of the kinds installing takes away.
  */
-const bundle = async (directory: string, id: string, options: { fails?: boolean } = {}) => {
+const bundle = async (directory: string, id: string, options: { fails?: boolean; slowWarm?: boolean } = {}) => {
   const folder = path.join(directory, `bundle-${id}`)
   const tree = path.join(folder, "tree", "python")
   const log = path.join(directory, "calls.log")
@@ -64,7 +66,19 @@ const bundle = async (directory: string, id: string, options: { fails?: boolean 
   }
   await executable(
     path.join(tree, "bin", "python3"),
-    `#!/bin/sh\n{ echo "PYTHON $*"; env; echo END; } >> '${log}'\nexec '${python3}' "$@"\n`,
+    [
+      "#!/bin/sh",
+      `{ echo "PYTHON $*"; env; echo END; } >> '${log}'`,
+      ...(options.slowWarm
+        ? [
+            `case "$*" in *"import numpy"*)`,
+            `  sleep 1; '${python3}' "$@"; code=$?`,
+            `  touch '${path.join(directory, "warmed")}'; exit $code ;;`,
+            "esac",
+          ]
+        : []),
+      `exec '${python3}' "$@"`,
+    ].join("\n") + "\n",
   )
   await fs.writeFile(path.join(tree, `from-${id}`), id)
   for (const file of [path.join("include", "Python.h"), path.join("lib", "libz.a"), path.join("lib", "libz.dylib")]) {
@@ -146,7 +160,7 @@ test(
       const where = Environment.layout(path.join(directory, "data"))
       const { last, states } = await settle(directory, await bundle(directory, "one"))
 
-      assert.deepEqual(last, { status: "ready", version: "3.13.16", python: where.envPython })
+      assert.deepEqual(last, { status: "ready", version: "3.13.16", python: where.envPython, base: where.basePython })
       assert.deepEqual([...new Set(steps(states))], ["installing", "creating"])
       assert.ok(await exists(path.join(where.base, "from-one")))
       assert.equal(JSON.parse(await fs.readFile(where.marker, "utf-8")).id, "one")
@@ -168,6 +182,18 @@ test(
   },
 )
 
+test("the environment is ready only once the base interpreter has warmed it up", { skip: !python3 }, async () => {
+  const directory = await temporary()
+  try {
+    await settle(directory, await bundle(directory, "one", { slowWarm: true }))
+    // Guards against calling the environment ready before the warm-up is over, or warming it up through the working
+    // environment.
+    assert.ok(await exists(path.join(directory, "warmed")))
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
 test(
   "the Python is run isolated, with the network's variables and HOME of the engine's environment alone",
   { skip: !python3 },
@@ -181,7 +207,7 @@ test(
       const pythons = (await calls(directory)).filter((call) => call.program === "PYTHON")
       assert.ok(pythons.length > 0)
       for (const { args, env } of pythons) {
-        assert.deepEqual(args.slice(0, 3), ["-I", "-X", "utf8"])
+        assert.deepEqual(args.slice(0, 4), ["-I", "-X", "utf8", "-u"])
         assert.equal(env.get("https_proxy"), "http://proxy.test:3128")
         assert.equal(env.get("HOME"), process.env.HOME)
         assert.ok(!env.has("GDAL_DATA"))
