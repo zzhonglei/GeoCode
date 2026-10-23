@@ -150,6 +150,8 @@ export interface Diagnostics {
   readonly refusal?: Refusal
   /** What Google answered, in its own words, when it answered. */
   readonly said?: string
+  /** The HTTP status of an answer from an Earth Engine failing or overloaded. */
+  readonly status?: number
   /** What the Python printed, when the check ended without a report or did not finish. */
   readonly output?: string
   /** Where the failure the check reported arose. */
@@ -529,10 +531,11 @@ function judge(project: string | undefined, result: Runtime.Result): State | und
   if (report.failed === "credentials") {
     return failed("rejected", { ...where, message: error, refusal: "credentials-invalid", ...said, traceback })
   }
-  // Earth Engine failing or overloaded refuses nothing: it is unreachable for now.
   const status = report.status ?? 0
-  if (report.failed === "unreachable" || (report.failed === "rejected" && (status >= 500 || status === 429))) {
-    return failed("unreachable", { ...where, message: error, ...said, traceback })
+  if (report.failed === "unreachable") return failed("unreachable", { ...where, message: error, traceback })
+  // Earth Engine failing or overloaded refuses nothing: it is unreachable for now.
+  if (report.failed === "rejected" && (status >= 500 || status === 429)) {
+    return failed("unreachable", { ...where, message: error, ...said, status, traceback })
   }
   if (report.failed === "rejected") {
     const refusal = refusalOf(report.status, report.reasons ?? [])
@@ -559,8 +562,8 @@ function refusalOf(status: number | undefined, reasons: readonly string[]): Refu
 }
 
 /**
- * What GeoAgent is told when Google Earth Engine is not ready: the facts, and what it can do itself and what only the
- * user can.
+ * What GeoAgent is told when Google Earth Engine is not ready: the facts, and, where there is a sure remedy, what it can
+ * do itself and what only the user can.
  */
 export function hint(state: Exclude<State, Ready>, file: string): string {
   if (state.status === "checking") return STILL_CHECKING
@@ -590,20 +593,11 @@ export function hint(state: Exclude<State, Ready>, file: string): string {
     )
   }
   const project = diagnostics.project ?? ""
-  if (state.status === "unreachable") {
-    return [
-      `Google Earth Engine cannot be reached: ${last(diagnostics.message)}`,
-      ...said,
-      "The local setup is in place; the network, or Google, is at fault. Tell the user, and do not reinstall, reconfigure or sign in again.",
-      again,
-    ].join("\n")
-  }
-  if (state.status === "check-timeout") {
-    return [
-      `Checking Google Earth Engine took longer than ${CHECK_TIMEOUT}: the network is slow or blocked.`,
-      "Tell the user, and do not reinstall, reconfigure or sign in again.",
-      again,
-    ].join("\n")
+  // Only the fact: what the network needs is for GeoAgent and the user to work out.
+  if (state.status === "unreachable" || state.status === "check-timeout") {
+    return diagnostics.status === undefined
+      ? "Cannot connect to Google: there is no network connection, or Google cannot be reached."
+      : `Google Earth Engine is failing or busy right now (HTTP ${diagnostics.status}).`
   }
   if (state.status === "rejected") {
     const refusal = diagnostics.refusal ?? "other"

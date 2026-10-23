@@ -575,11 +575,12 @@ test(
       { project: "absent", status: "rejected", diagnostics: { refusal: "project-not-found" } },
       { project: "refused", status: "rejected", diagnostics: { refusal: "no-permission" } },
       { project: "disabled", status: "rejected", diagnostics: { refusal: "api-disabled" } },
-      { project: "offline", status: "unreachable" },
+      // Without a status, GeoAgent is told there is no network.
+      { project: "offline", status: "unreachable", diagnostics: { status: undefined } },
       // Guards against the network failing at the sign-in's refresh reading as refused credentials.
-      { flags: ["offline-refresh"], project: "majestic", status: "unreachable" },
-      // Guards against Earth Engine failing on its side reading as a refusal of the project.
-      { project: "overloaded", status: "unreachable" },
+      { flags: ["offline-refresh"], project: "majestic", status: "unreachable", diagnostics: { status: undefined } },
+      // Guards against Earth Engine failing on its side reading as a refusal of the project, or as no network.
+      { project: "overloaded", status: "unreachable", diagnostics: { status: 503 } },
       { project: "majestic", status: "ready" },
     ]
     for (const item of cases) {
