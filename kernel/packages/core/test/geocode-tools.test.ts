@@ -825,11 +825,7 @@ const gee = (input: Record<string, unknown>, bare = false) => ({
 })
 
 /** The Python a run went in, as GeoEngine tells it. */
-const PYTHON = {
-  path: "/opt/anaconda3/envs/map/bin/python",
-  version: "3.11.9",
-  packages: { "earthengine-api": "1.7.19", geedim: "2.0.0", geopandas: "1.0.1" },
-}
+const PYTHON = { version: "3.13.17" }
 
 /** A finished run of GeoEngine's, with what the script printed. */
 const ran = (fields: Record<string, unknown> = {}) =>

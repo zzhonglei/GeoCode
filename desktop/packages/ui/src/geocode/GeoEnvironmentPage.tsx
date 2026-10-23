@@ -10,7 +10,7 @@ import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { GeeDetails } from './GeeDetails';
 import { GeeLogo } from './GeeLogo';
-import { geeLabel, geeSummaryOf, geeText } from './geeText';
+import { geeLabel, geeText } from './geeText';
 import { chooseQgis, fetchQgisInstalls, pickQgisApp, recheckQgis, useGeoStatuses, type QgisInstall } from './geoEngineClient';
 import { useGeoSettingsStore } from './geoSettingsStore';
 import { geeStatusOf, lightOf, qgisStatusOf, type GeeView, type QgisView } from './geoStatus';
@@ -45,7 +45,7 @@ const configuredOf = (status: QgisView | undefined): Configured => {
 const lineOf = (status: QgisView | undefined, text: QgisText) =>
   status?.status === 'ready' ? summaryOf(status, text) : undefined;
 
-const geeLineOf = (status: GeeView | undefined) => (status?.status === 'ready' ? geeSummaryOf(status) : undefined);
+const geeLineOf = (status: GeeView | undefined) => (status?.status === 'ready' ? status.project : undefined);
 
 const StatusPill: React.FC<{ status: QgisView | undefined }> = ({ status }) => (
   status ? <SettingsCardPill tone={TONE[lightOf(status.status)]}>{QGIS_STATUS[status.status]}</SettingsCardPill> : null

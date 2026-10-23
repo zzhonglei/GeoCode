@@ -15,9 +15,6 @@ export const BEAT_SECONDS = 1
  */
 export const LONGEST_REQUEST_SECONDS = 10 * 60
 
-/** Run as the user's own Python runs a script: UTF-8 everywhere, and every line written as it is printed. */
-export const ENVIRONMENT = { PYTHONUTF8: "1", PYTHONUNBUFFERED: "1" }
-
 /**
  * What the Python reads from standard input, given as `-`: on the command line the program would pass through whatever
  * starts that Python, and Windows's command interpreter rewrites it there. The request, as JSON text in a string, comes
@@ -46,33 +43,32 @@ export function markedLine(line: string): unknown {
 }
 
 // Embedded, since the engine is bundled into one file. String.raw keeps Python's backslashes, so the Python must not
-// contain a backtick or "${" of its own.
+// contain a backtick or "${" of its own. Run isolated (docs/PYTHON.md, section 6.1), a program read from standard input
+// does not have the current folder on its import path, where a file such as json.py would shadow a module it needs.
 
 /**
- * The first lines of both scripts. A program read from standard input has the current folder first on the import path,
- * where a file named like a module the script needs, such as json.py in the session's folder, would be imported instead.
+ * The credentials, from earthengine-api's own file alone (docs/GEE.md, section 7): Google Cloud's default ones, which
+ * earthengine-api would fall back to, may be another account's or lack Earth Engine's scope. Raises without the file.
  */
-const SAFE_PATH = String.raw`
-import sys
+const CREDENTIALS = String.raw`
+def credentials():
+    import google.oauth2.credentials
+    from ee import oauth
 
-sys.path[:] = [entry for entry in sys.path if entry not in ("", ".")]
+    return google.oauth2.credentials.Credentials(None, **oauth.get_credentials_arguments())
 `
 
 /**
- * Checks, in order, what a run depends on: the packages it is given, then whether the user is signed in, both without
- * the network; then, given a project, whether Google accepts the credentials and Earth Engine answers a minimal
- * computation. The first failure ends the check. Python 2 and the oldest Python 3 still read it, so they fail as a
- * report.
+ * Checks, in order, what a run depends on: whether the user is signed in, without the network; then, given a project,
+ * whether Google accepts the credentials and Earth Engine answers a minimal computation. The first failure ends it.
  */
-export const CHECK =
-  SAFE_PATH +
-  String.raw`
+export const CHECK = String.raw`
 import json
-import os
+import sys
 import traceback
 
 request = json.loads(REQUEST)
-report = {"python": sys.version.split()[0]}
+report = {}
 
 
 def finish():
@@ -96,28 +92,6 @@ def fail(step, error, said=None, **facts):
     finish()
 
 
-import importlib
-import importlib.util
-
-# Each package on its own, so every missing one is named at once. Found but failing to import means installed but
-# broken, which installing it again rarely fixes; a folder an uninstall left behind is found with no origin.
-missing = []
-broken = []
-report["versions"] = {}
-for package in request["packages"]:
-    spec = importlib.util.find_spec(package["module"])
-    if spec is None or spec.origin is None:
-        missing.append(package["name"])
-        continue
-    try:
-        module = importlib.import_module(package["module"])
-        report["versions"][package["name"]] = str(getattr(module, "__version__", ""))
-    except Exception as error:
-        broken.append({"package": package["name"], "error": describe(error)})
-if broken or missing:
-    report.update(failed="broken" if broken else "missing", missing=missing, broken=broken)
-    finish()
-
 import socket
 import ssl
 import urllib.error
@@ -125,36 +99,17 @@ import urllib.error
 import ee
 import google.auth.exceptions
 import google.auth.transport.requests
-import google.oauth2.credentials
 import googleapiclient.errors
 import requests
-from ee import oauth
-from google.auth import _cloud_sdk
 
+${CREDENTIALS}
 
-def stored():
-    """The arguments of earthengine-api's own credentials, when they hold a refresh token."""
-    try:
-        arguments = oauth.get_credentials_arguments()
-    except Exception:
-        return None
-    return arguments if arguments.get("refresh_token") else None
-
-
-def signed_in():
-    """By files alone, where earthengine-api looks: its own credentials, then Google Cloud's default credentials."""
-    if stored():
-        return True
-    named = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-    if named and os.path.exists(named):
-        return True
-    try:
-        return os.path.exists(_cloud_sdk.get_application_default_credentials_path())
-    except Exception:
-        return False
-
-
-if not signed_in():
+# Signed in when earthengine-api's own file holds a refresh token.
+try:
+    stored = credentials()
+except Exception:
+    stored = None
+if stored is None or not stored.refresh_token:
     report["failed"] = "signed-out"
     finish()
 
@@ -219,16 +174,13 @@ def classify(error):
 
 # Refreshed here, not left to earthengine-api, which words a refused refresh as if there were no credentials at all.
 try:
-    arguments = stored()
-    if arguments:
-        google.oauth2.credentials.Credentials(None, **arguments).refresh(google.auth.transport.requests.Request())
-    credentials = ee.data.get_persistent_credentials()
+    stored.refresh(google.auth.transport.requests.Request())
 except Exception as error:
     classify(error)
     fail("credentials", error)
 
 try:
-    ee.Initialize(credentials, project=request["project"])
+    ee.Initialize(stored, project=request["project"])
     ee.Number(1).getInfo()
 except Exception as error:
     classify(error)
@@ -243,13 +195,12 @@ finish()
  * for Earth Engine it reports so, so a long computation is not taken for a silent script:
  * earthengine-api sends every request through requests' sessions, where the wait is watched.
  */
-export const RUN =
-  SAFE_PATH +
-  String.raw`
+export const RUN = String.raw`
 import itertools
 import json
 import linecache
 import os
+import sys
 import threading
 import time
 import traceback
@@ -342,10 +293,12 @@ def beat():
 
 threading.Thread(target=beat, daemon=True).start()
 
+${CREDENTIALS}
+
 try:
     import ee
 
-    ee.Initialize(project=request["project"])
+    ee.Initialize(credentials(), project=request["project"])
 except Exception as error:
     emit({"type": "initialize-failed", "error": "%s: %s" % (type(error).__name__, error)})
     sys.exit(1)
@@ -453,11 +406,10 @@ emit({"type": "end", "ok": True})
  * reason and a page saying so, where earthengine-api's own would fail reading a code from standard input and leave the
  * browser without a page; a stray request, as for the page's icon, is answered and the wait goes on.
  */
-export const SIGN_IN =
-  SAFE_PATH +
-  String.raw`
+export const SIGN_IN = String.raw`
 import json
 import socket
+import sys
 import traceback
 import urllib.parse
 

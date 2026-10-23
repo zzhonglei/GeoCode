@@ -28,17 +28,14 @@ const python3 = (() => {
 
 /**
  * A file in the stubs' "flags" folder that makes them behave as the named environment does: "adc" has no credentials of
- * Earth Engine's own but Google Cloud's default ones; "no-geopandas" leaves the package out; "old-geedim" makes it a 1.x;
- * the "export-" flags say how an export goes (see the stub's `export`).
+ * Earth Engine's own but Google Cloud's default ones; the "export-" flags say how an export goes (see the stub's
+ * `export`).
  */
 type Flag =
   | "signed-out"
   | "adc"
   | "revoked"
   | "offline-refresh"
-  | "no-geopandas"
-  | "broken-geedim"
-  | "old-geedim"
   | "export-refused"
   | "export-fails"
   | "export-running"
@@ -77,26 +74,25 @@ class Timeout(IOError):
     pass
 `,
   "google/__init__.py": "",
-  "google/auth/__init__.py": `from google.auth import exceptions
+  "google/auth/__init__.py": `import flags
+from google.auth import exceptions
 
 
 def default():
+    if flags.raised("adc"):
+        return "application default credentials", "adc-project"
     raise exceptions.DefaultCredentialsError("no application default credentials")
 `,
   "google/auth/exceptions.py": `class TransportError(Exception):
     pass
 
 
+class DefaultCredentialsError(Exception):
+    pass
+
+
 class RefreshError(Exception):
     retryable = False
-`,
-  "google/auth/_cloud_sdk.py": `import os
-
-import flags
-
-
-def get_application_default_credentials_path():
-    return os.path.join(flags.FOLDER, "application_default_credentials.json")
 `,
   "google/auth/transport/__init__.py": "",
   "google/auth/transport/requests.py": `class Request:
@@ -109,7 +105,7 @@ from google.auth import exceptions
 
 class Credentials:
     def __init__(self, token, **arguments):
-        pass
+        self.refresh_token = arguments.get("refresh_token")
 
     def refresh(self, request):
         if flags.raised("revoked"):
@@ -123,14 +119,6 @@ class Credentials:
         Exception.__init__(self, message)
         self.resp = type("Response", (), {"status": status})()
         self.error_details = [{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": reason} for reason in reasons]
-`,
-  "geedim/__init__.py": `import flags
-
-if flags.raised("broken-geedim"):
-    raise ImportError("dlopen(libgdal.37.dylib): image not found", name="rasterio._base")
-__version__ = "1.9.1" if flags.raised("old-geedim") else "2.0.0"
-`,
-  "geopandas/__init__.py": `__version__ = "1.1.3"
 `,
   "ee/ee_exception.py": `class EEException(Exception):
     pass
@@ -201,6 +189,15 @@ from ee.ee_exception import EEException
 
 
 def get_persistent_credentials():
+    """As earthengine-api's: its own credentials, else Google Cloud's default ones."""
+    from ee import oauth
+
+    try:
+        oauth.get_credentials_arguments()
+    except IOError:
+        import google.auth
+
+        return google.auth.default()[0]
     return "credentials"
 
 
@@ -388,6 +385,11 @@ def refuse(status, reasons, message):
 
 def Initialize(credentials=None, project=None):
     print("*** Earth Engine *** Share your feedback")
+    # As earthengine-api does, given none.
+    if credentials is None:
+        import google.auth
+
+        credentials = google.auth.default()[0]
     # The file stands for a project refused after the check passed; the check does not run in the session's folder.
     if project == "refused" or os.path.exists("refuse"):
         refuse(403, ["USER_PROJECT_DENIED"], "Caller does not have required permission to use project %s" % project)
@@ -417,29 +419,45 @@ class Number:
 `,
 }
 
-/** A shell script standing in for the configured Python; `body` reads the program from stdin as Python would. */
-const fakePython = async (directory: string, body: string, name = "python") => {
-  const file = path.join(directory, name)
-  await fs.mkdir(path.dirname(file), { recursive: true })
-  await fs.writeFile(file, `#!/bin/sh\n${body}\n`)
-  await fs.chmod(file, 0o755)
-  return file
-}
-
-/** The real Python 3 with the stubs first on its path, behaving as the flags say. */
+/**
+ * The real Python 3 standing in for the base environment's, with the stubs first on its path, behaving as the flags
+ * say. Isolated as GeoEngine runs it, it ignores PYTHONPATH, so the stubs are put on its path by a line before the
+ * program it reads from standard input, as every GEE program is given.
+ */
 const stubbedPython = async (directory: string, raised: readonly Flag[] = []) => {
   const stubs = path.join(directory, "stubs")
   for (const [name, text] of Object.entries(STUBS)) {
-    if (raised.includes("no-geopandas") && name.startsWith("geopandas/")) continue
     await fs.mkdir(path.dirname(path.join(stubs, name)), { recursive: true })
     await fs.writeFile(path.join(stubs, name), text)
   }
   await fs.mkdir(path.join(stubs, "flags"), { recursive: true })
   for (const flag of raised) await fs.writeFile(path.join(stubs, "flags", flag), "")
-  if (raised.includes("adc"))
-    await fs.writeFile(path.join(stubs, "flags", "application_default_credentials.json"), "{}")
-  return fakePython(directory, `PYTHONPATH='${stubs}' exec '${python3}' "$@"`)
+  const file = path.join(directory, "python")
+  const body = [
+    "#!/bin/sh",
+    `{ echo 'import sys; sys.path.insert(0, ${JSON.stringify(stubs)})'; cat; } | '${python3}' "$@"`,
+  ]
+  await fs.writeFile(file, body.join("\n") + "\n")
+  await fs.chmod(file, 0o755)
+  return file
 }
+
+/**
+ * GeoCode's Python environment as GEE finds it, with the stubbed Python for its base: ready at once, or, given `later`,
+ * being installed until it settles.
+ */
+const environment = (base: string, later?: Promise<void>): Engine.Capability =>
+  Effect.gen(function* () {
+    const status = yield* Status.Service
+    const ready = { status: "ready", version: "3.13.17", python: base, base }
+    const writer = yield* status.register<unknown>(
+      "python",
+      later ? { status: "preparing", step: "installing" } : ready,
+    )
+    const token = yield* writer.claim()
+    if (later) yield* Effect.forkScoped(Effect.promise(() => later).pipe(Effect.andThen(writer.commit(token, ready))))
+    return { domain: "python", methods: {} }
+  })
 
 /** Raises a flag of the stubbed Python made in `directory` while it is in use. */
 const raise = (directory: string, flag: Flag) => fs.writeFile(path.join(directory, "stubs", "flags", flag), "")
@@ -457,10 +475,15 @@ const until = async (predicate: () => boolean | Promise<boolean>, ms: number, wh
   throw new Error(`timed out waiting for ${what}`)
 }
 
-const start = async (block?: (directory: string) => Promise<unknown>) => {
+/**
+ * An engine with GEE configured as `gee` says, in machine.json, and with the stubbed Python behaving as `flags` say.
+ * GeoCode's Python environment is ready at once, or once `later` settles.
+ */
+const start = async (gee?: unknown, flags: readonly Flag[] = [], later?: Promise<void>) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-gee-"))
   const machine = path.join(directory, "machine.json")
-  if (block) await fs.writeFile(machine, JSON.stringify({ gee: await block(directory) }))
+  if (gee !== undefined) await fs.writeFile(machine, JSON.stringify({ gee }))
+  const python = await stubbedPython(directory, flags)
   const sent: Protocol.Outbound[] = []
   let deliver: (message: unknown) => void = () => {}
   const transport: Transport = {
@@ -471,7 +494,9 @@ const start = async (block?: (directory: string) => Promise<unknown>) => {
     },
   }
   const layer = Layer.mergeAll(Runtime.layer(Engine.ledger(transport)), Status.layer, Config.layer(machine))
-  const fiber = Effect.runFork(Effect.scoped(Engine.run(transport, [Gee.capability])).pipe(Effect.provide(layer)))
+  const fiber = Effect.runFork(
+    Effect.scoped(Engine.run(transport, [environment(python, later), Gee.capability])).pipe(Effect.provide(layer)),
+  )
   const states = () =>
     sent.flatMap((message) =>
       message.type === "status" && message.domain === "gee" ? [message.value as Gee.State] : [],
@@ -509,6 +534,7 @@ const start = async (block?: (directory: string) => Promise<unknown>) => {
   return {
     directory,
     machine,
+    python,
     sent,
     states,
     settled,
@@ -531,33 +557,16 @@ test(
   async () => {
     const cases: {
       readonly flags?: readonly Flag[]
-      readonly project?: string
+      /** The "gee" entry of machine.json. */
+      readonly project?: unknown
       readonly status: string
       readonly diagnostics?: Record<string, unknown>
     }[] = [
-      { flags: ["no-geopandas"], status: "packages-missing", diagnostics: { missing: ["geopandas"] } },
-      // Guards against a package that is there but cannot load reading as one to install: installing it again rarely helps.
-      {
-        flags: ["no-geopandas", "broken-geedim"],
-        status: "packages-broken",
-        diagnostics: {
-          missing: ["geopandas"],
-          broken: [{ package: "geedim", error: "ImportError: dlopen(libgdal.37.dylib): image not found" }],
-        },
-      },
-      // Guards against a package that imports but lacks what GeoCode's functions use reading as ready.
-      {
-        flags: ["old-geedim"],
-        project: "majestic",
-        status: "packages-outdated",
-        diagnostics: { outdated: [{ package: "geedim", version: "1.9.1", required: "2.0" }] },
-      },
-      {
-        flags: ["no-geopandas", "old-geedim"],
-        status: "packages-missing",
-        diagnostics: { missing: ["geopandas"], outdated: [{ package: "geedim", version: "1.9.1", required: "2.0" }] },
-      },
+      { project: { project: "majestic" }, status: "config-error" },
       { flags: ["signed-out"], status: "signed-out" },
+      // Guards against signing in as another account, or without Earth Engine's scope, through Google Cloud's default
+      // credentials, which earthengine-api would fall back to.
+      { flags: ["adc"], project: "majestic", status: "signed-out" },
       // Signed in, the project is asked for only then: a missing project never hides a missing sign-in.
       { status: "project-missing" },
       // Guards against a refused refresh reading as no credentials at all, as earthengine-api words it.
@@ -571,15 +580,10 @@ test(
       { flags: ["offline-refresh"], project: "majestic", status: "unreachable" },
       // Guards against Earth Engine failing on its side reading as a refusal of the project.
       { project: "overloaded", status: "unreachable" },
-      // Google Cloud's default credentials sign in as well as Earth Engine's own.
-      { flags: ["adc"], project: "majestic", status: "ready" },
       { project: "majestic", status: "ready" },
     ]
     for (const item of cases) {
-      const engine = await start(async (directory) => ({
-        python: await stubbedPython(directory, item.flags),
-        ...(item.project === undefined ? {} : { project: item.project }),
-      }))
+      const engine = await start(item.project, item.flags)
       try {
         const state = await engine.settled()
         assert.equal(state.status, item.status, JSON.stringify(state))
@@ -599,19 +603,32 @@ test(
   },
 )
 
-// Guards against a Python removed since the check failing every run with no word of why.
+// Guards against checking, or signing in, in a base environment still being installed or warmed up, where a check would
+// time out on libraries loaded for the first time.
+test("Earth Engine is checked only once GeoCode's Python environment is ready", { skip: !python3 }, async () => {
+  let open: () => void = () => {}
+  const engine = await start("majestic", [], new Promise<void>((resolve) => (open = resolve)))
+  try {
+    const early = await engine.response(engine.send({}, "gee.signIn"))
+    assert.equal(!early.ok && early.error.code, "not-ready")
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    assert.deepEqual(engine.states(), [{ status: "checking" }])
+    open()
+    assert.equal((await engine.settled()).status, "ready")
+  } finally {
+    await engine.stop()
+  }
+})
+
+// Guards against an interpreter removed since the check failing every run with no word of why.
 test("a run whose Python is gone checks again, and answers with what is now wrong", { skip: !python3 }, async () => {
-  let python = ""
-  const engine = await start(async (directory) => {
-    python = await stubbedPython(directory)
-    return { python, project: "majestic" }
-  })
+  const engine = await start("majestic")
   try {
     assert.equal((await engine.settled()).status, "ready")
-    await fs.rm(python)
+    await fs.rm(engine.python)
     const response = await engine.response(engine.send({ script: "print(1)", cwd: engine.directory }))
     assert.equal(!response.ok && response.error.code, "not-ready")
-    assert.equal(engine.states().at(-1)?.status, "python-missing")
+    assert.equal(engine.states().at(-1)?.status, "check-failed")
   } finally {
     await engine.stop()
   }
@@ -622,7 +639,7 @@ test(
   "a run whose initialization fails checks again, and answers with what is now wrong",
   { skip: !python3 },
   async () => {
-    const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+    const engine = await start("majestic")
     try {
       assert.equal((await engine.settled()).status, "ready")
       await raise(engine.directory, "revoked")
@@ -637,13 +654,12 @@ test(
   },
 )
 
-test("a project written after the Python is configured is seen by the next run", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory) }))
+test("a project written once signed in is seen by the next run", { skip: !python3 }, async () => {
+  const engine = await start()
   try {
     const state = await engine.settled()
     assert.equal(state.status, "project-missing")
-    const python = (JSON.parse(await fs.readFile(engine.machine, "utf-8")) as { gee: { python: string } }).gee.python
-    await fs.writeFile(engine.machine, JSON.stringify({ gee: { python, project: "majestic" } }))
+    await fs.writeFile(engine.machine, JSON.stringify({ gee: "majestic" }))
     // At once, within the watch's debounce: the run reads the file again itself.
     const done = result(
       await engine.response(engine.send({ script: "print(ee.Number(7).getInfo())", cwd: engine.directory })),
@@ -659,7 +675,7 @@ test(
   "a run hands GeoAgent what the script printed, and nothing printed before it began",
   { skip: !python3 },
   async () => {
-    const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+    const engine = await start("majestic")
     try {
       const ready = await engine.settled()
       assert.ok(ready.status === "ready")
@@ -682,7 +698,7 @@ test(
 )
 
 test("a failing script ends with its traceback, from its own lines", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  const engine = await start("majestic")
   try {
     assert.equal((await engine.settled()).status, "ready")
     const done = result(
@@ -704,7 +720,7 @@ test(
   "a file in the session's folder named like a module the run needs does not replace it, and the script runs as __main__",
   { skip: !python3 },
   async () => {
-    const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+    const engine = await start("majestic")
     try {
       assert.equal((await engine.settled()).status, "ready")
       for (const name of ["json.py", "requests.py", "ee.py"]) {
@@ -727,7 +743,7 @@ test(
   "a request waiting for Earth Engine is reported, without breaking a line the script left open",
   { skip: !python3 },
   async () => {
-    const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+    const engine = await start("majestic")
     try {
       assert.equal((await engine.settled()).status, "ready")
       // Guards against a line left open on stdout, as a progress message is, silencing the reports: the run would be
@@ -747,7 +763,7 @@ test(
 )
 
 test("a run stopped during a download leaves no unfinished file", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  const engine = await start("majestic")
   try {
     assert.equal((await engine.settled()).status, "ready")
     // Guards against the hidden file of a stopped download staying in the user's folder.
@@ -786,7 +802,7 @@ const ROOT = "projects/majestic/assets/GeoCode"
 const folder = (name: string, updateTime: string) => ({ type: "FOLDER", name, id: name, updateTime })
 
 test("a run reads its task in GeoCode's folder, for the answer to start with", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  const engine = await start("majestic")
   try {
     assert.equal((await engine.settled()).status, "ready")
     const task = `${ROOT}/taipei-ndvi-20261008`
@@ -845,7 +861,7 @@ test("a run reads its task in GeoCode's folder, for the answer to start with", {
 })
 
 test("the header stays within the line GeoEngine reads", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  const engine = await start("majestic")
   try {
     assert.equal((await engine.settled()).status, "ready")
     // A hundred assets with descriptions far longer than anyone writes.
@@ -875,7 +891,7 @@ test("the header stays within the line GeoEngine reads", { skip: !python3 }, asy
 })
 
 test("a new task whose name is taken is refused before the script runs", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  const engine = await start("majestic")
   try {
     assert.equal((await engine.settled()).status, "ready")
     const task = `${ROOT}/taipei-ndvi-20261008`
@@ -905,7 +921,7 @@ test("a new task whose name is taken is refused before the script runs", { skip:
 
 // Guards against two runs of one task, from parallel calls or two conversations, racing to save the same assets.
 test("a task runs one call at a time, while other tasks run beside it", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  const engine = await start("majestic")
   try {
     assert.equal((await engine.settled()).status, "ready")
     await holding(engine.directory, [])
@@ -964,7 +980,7 @@ test(
   "gc.save makes the task's folders, and reuses or replaces an asset by its content",
   { skip: !python3 },
   async () => {
-    const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+    const engine = await start("majestic")
     try {
       assert.equal((await engine.settled()).status, "ready")
       await holding(engine.directory, [])
@@ -1005,7 +1021,7 @@ test(
   "a save that reads one of GeoCode's assets is done again once that asset is replaced",
   { skip: !python3 },
   async () => {
-    const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+    const engine = await start("majestic")
     try {
       assert.equal((await engine.settled()).status, "ready")
       await holding(engine.directory, [])
@@ -1027,7 +1043,7 @@ test(
 )
 
 test("a failed save leaves no folder it made, and reports the failure", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  const engine = await start("majestic")
   try {
     assert.equal((await engine.settled()).status, "ready")
     await holding(engine.directory, [])
@@ -1047,7 +1063,7 @@ test("a failed save leaves no folder it made, and reports the failure", { skip: 
 })
 
 test("an export under way is waited for, joined, or replaced", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory), project: "majestic" }))
+  const engine = await start("majestic")
   try {
     assert.equal((await engine.settled()).status, "ready")
     await holding(engine.directory, [])
@@ -1101,32 +1117,15 @@ test("an export under way is waited for, joined, or replaced", { skip: !python3 
   }
 })
 
-// Guards against the settings page losing the project when it chooses a Python, or the Python when it names a project.
-test("the settings write the Python or the project, keeping the other", async () => {
-  const engine = await start(async () => ({ project: "majestic" }))
+// Guards against a configuration written wrong that the settings cannot fix.
+test("the settings write the project, over a block written wrong", async () => {
+  const engine = await start({ project: "majestic" })
   try {
-    // A project before any Python is no configuration yet, though the settings show it.
-    assert.deepEqual(await engine.settled(), { status: "unconfigured", project: "majestic" })
-
-    // Guards against a virtual environment chosen by its folder being configured as the Python it was made from.
-    const base = path.join(engine.directory, "base", "python3.12")
-    await fs.mkdir(path.dirname(base), { recursive: true })
-    await fs.writeFile(base, "")
-    const venv = path.join(engine.directory, "project", ".venv", "bin", "python")
-    await fs.mkdir(path.dirname(venv), { recursive: true })
-    await fs.symlink(base, venv)
-    const chosen = await engine.response(
-      engine.send({ environment: path.join(engine.directory, "project") }, "gee.configure"),
-    )
-    // The Python found is answered, for a page to tell a choice of the folder already configured from a new one.
-    assert.deepEqual(chosen.ok && chosen.result, { python: venv })
-    assert.deepEqual(await machineGee(engine.machine), { project: "majestic", python: venv })
-
-    const python = path.join(engine.directory, "missing", "python")
-    assert.ok((await engine.response(engine.send({ python }, "gee.configure"))).ok)
-    assert.deepEqual(await machineGee(engine.machine), { project: "majestic", python })
-    assert.ok((await engine.response(engine.send({ project: "other-project" }, "gee.configure"))).ok)
-    assert.deepEqual(await machineGee(engine.machine), { project: "other-project", python })
+    assert.equal((await engine.settled()).status, "config-error")
+    const refused = await engine.response(engine.send({ project: "not a project" }, "gee.configure"))
+    assert.equal(!refused.ok && refused.error.code, "invalid-params")
+    assert.ok((await engine.response(engine.send({ project: "majestic" }, "gee.configure"))).ok)
+    assert.equal(await machineGee(engine.machine), "majestic")
   } finally {
     await engine.stop()
   }
@@ -1147,10 +1146,7 @@ const signIn = async (engine: Awaited<ReturnType<typeof start>>, query: string) 
 }
 
 test("signing in through the browser checks again, and finds the user signed in", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({
-    python: await stubbedPython(directory, ["signed-out"]),
-    project: "majestic",
-  }))
+  const engine = await start("majestic", ["signed-out"])
   try {
     assert.equal((await engine.settled()).status, "signed-out")
     const { response, back } = await signIn(engine, "code=granted")
@@ -1165,7 +1161,7 @@ test("signing in through the browser checks again, and finds the user signed in"
 
 // Guards against a denied sign-in hanging until its time is up, as earthengine-api then waits for a code typed in.
 test("access denied in the browser ends the sign-in at once", { skip: !python3 }, async () => {
-  const engine = await start(async (directory) => ({ python: await stubbedPython(directory, ["signed-out"]) }))
+  const engine = await start(undefined, ["signed-out"])
   try {
     assert.equal((await engine.settled()).status, "signed-out")
     const { response } = await signIn(engine, "error=access_denied")

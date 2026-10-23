@@ -133,38 +133,11 @@ export const pickQgisApp = async (titles: { app: string; folder: string }): Prom
 
 const GEE_PATH = '/api/geocode/gee';
 
-const pythonsSchema = z.object({
-  pythons: z.array(z.object({
-    python: z.string(),
-    name: z.string(),
-    version: z.string().optional(),
-    earthengine: z.string().optional(),
-    missing: z.array(z.string()),
-    outdated: z.array(z.object({ package: z.string(), version: z.string() })).optional(),
-    /** The configured Python, by what it is, whatever path names it. */
-    configured: z.boolean().optional(),
-  })),
-  /** The configured path the mark was made against: a mark is stale once the configuration names another. */
-  configured: z.string().optional(),
-});
-
-export type GeePython = z.infer<typeof pythonsSchema>['pythons'][number];
-
-export type GeePythons = z.infer<typeof pythonsSchema>;
-
-export const fetchGeePythons = (): Promise<Outcome<GeePythons>> => request(`${GEE_PATH}/pythons`, pythonsSchema);
-
-/** The Python a write named, as GeoEngine found it in a folder; nothing for a project. */
-const configuredSchema = z.object({ python: z.string().optional() });
-
-/**
- * GeoEngine writes the one setting given, keeps the other, and checks again; the outcome arrives as a status. An
- * environment is a folder GeoEngine finds the Python in.
- */
-export const configureGee = (setting: { python: string } | { environment: string } | { project: string }) => request(GEE_PATH, configuredSchema, {
+/** GeoEngine writes the project and checks again; the outcome arrives as a status. */
+export const configureGee = (project: string) => request(GEE_PATH, doneSchema, {
   method: 'PUT',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(setting),
+  body: JSON.stringify({ project }),
 });
 
 export const recheckGee = () => request(`${GEE_PATH}/recheck`, doneSchema, { method: 'POST' });
@@ -219,19 +192,4 @@ export const signInGee = async (onUrl: (url: string) => void, signal: AbortSigna
     if (chunk.done) break;
   }
   return { ok: false, code: signal.aborted ? 'aborted' : 'unavailable', reason: 'the connection to GeoEngine ended' };
-};
-
-/**
- * The folder of a Python environment the user picks in the system's file dialog, from `near` when given; null when they
- * cancel. A folder rather than the interpreter: on macOS the dialog resolves links, which would turn a virtual
- * environment's python into the Python it was made from.
- */
-export const pickPythonFolder = async (title: string, near?: string): Promise<string | null> => {
-  const picked = pickedSchema.safeParse(await getDesktopBridge()?.openDialog?.({
-    title,
-    directory: true,
-    multiple: false,
-    defaultPath: near,
-  }));
-  return picked.success ? picked.data : null;
 };

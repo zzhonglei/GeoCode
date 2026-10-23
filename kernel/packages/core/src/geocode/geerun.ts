@@ -73,11 +73,7 @@ const Ran = Schema.Struct({
   output: Schema.String,
   truncated: Schema.Boolean,
   durationMs: Schema.Number,
-  python: Schema.Struct({
-    path: Schema.String,
-    version: Schema.String,
-    packages: Schema.Record(Schema.String, Schema.String),
-  }),
+  python: Schema.Struct({ version: Schema.String }),
   /** Missing when the run ended before the task was read; read on its own, so a bad one loses only the header. */
   space: Schema.optionalKey(Schema.Unknown),
   exit: Schema.optionalKey(Schema.String),
@@ -135,11 +131,8 @@ const assetLine = (asset: typeof Asset.Type) => {
   return `- ${asset.name}${facts.length ? ` (${facts.join("; ")})` : ""}${said ? `: ${said}` : ""}`
 }
 
-/** The Python the script ran in, which GeoAgent can use for its own work and look after, by its path. */
-const pythonLine = (python: (typeof Ran.Type)["python"]) => {
-  const packages = Object.entries(python.packages).map(([name, version]) => `${name} ${version}`)
-  return `Python ${python.version} at ${python.path}, with ${packages.join(", ")}.`
-}
+/** The Python the script ran in, by its version alone (docs/GEE.md, section 7). */
+const pythonLine = (python: (typeof Ran.Type)["python"]) => `Python ${python.version}.`
 
 /**
  * What the answer starts with: the Python, then the task GeoAgent works in, what it holds, and the latest other tasks,

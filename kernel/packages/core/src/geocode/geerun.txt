@@ -9,6 +9,7 @@ IMPORTANT:
 - Save with gc.save what is expensive or used again, such as the checked composite: later steps and runs read it instead of computing it again, and a failure later on does not lose it.
 - When the user wants an image, download it with gc.download; export it to Google Drive with gc.to_drive only when the user asks for it.
 - `ee` is already initialized for the user's project: do not call ee.Authenticate() or ee.Initialize().
+- Scripts run in GeoCode's built-in Python, which comes with the common packages for geospatial work: import what you need. Nothing can be installed into it; if an import fails, do that part outside geerun.
 - Do not delete tasks or assets unless the user asks.
 
 ALWAYS use the built-in module "geocode" (import geocode as gc) for these steps instead of writing your own:

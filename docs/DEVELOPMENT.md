@@ -91,7 +91,7 @@ GeoEngine 的测试涉及三种外部软件:
 
 - QGIS:macOS 上接真实的 QGIS,默认用 `/Applications` 下每一个认得出的 `QGIS*.app`,也可以用 `GEOENGINE_QGIS_APPS` 列出应用包的路径(以冒号分隔);本机没有 QGIS 时这几项跳过。QGIS 照常在用户目录下写它自己的配置与缓存。Windows 上认路径与发现安装的逻辑在任何平台上都测,用的是照 OSGeo4W 的真实组件包搭出的假目录树;经启动脚本运行 QGIS 只能在 Windows 上验证。
 - 内置的 Python 环境:测试自己打一个很小的包,配一个替身 pixi-unpack(一段 shell 脚本,像真的那样经临时目录解开它、留下激活脚本),包里的 `python3` 转去运行 `PATH` 里的 `python3`,不用真实的环境与 pixi-unpack;没有 `python3` 时与在 Windows 上这些项跳过。真实的环境要在应用里验证。
-- GEE:在真实的 Earth Engine 上运行。`GEOENGINE_GEE_PYTHON` 指明一套装好的内置环境里 `base` 的解释器(在沙箱里启动过应用后,就是沙箱数据目录里的 `python/base/bin/python3`),`GEOENGINE_GEE_PROJECT` 指明 Cloud 项目;凭据读主目录下 Earth Engine 自己的凭据文件,只读不写。不给这两个变量时这些项跳过,平时的测试不联网。测试只做极小的计算与几 KB 的下载,不存资产。
+- GEE:测试不联网。环境检查、运行与登录的脚本都用 `PATH` 里的 `python3` 真实执行,它代替 `base` 的解释器,同样以隔离模式运行;earthengine-api、它用到的 Google 库与 requests 换成测试自带的替身,替身由标准输入里程序之前的一行加进导入路径(隔离模式不读 `PYTHONPATH`)。没有 `python3` 时与在 Windows 上这些项跳过。
 
 ## 8. 写入检测
 

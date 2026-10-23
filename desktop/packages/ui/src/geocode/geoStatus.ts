@@ -151,10 +151,6 @@ export const qgisStatusOf = (statuses: GeoStatuses): QgisView | undefined => {
 // The failures of State in geoengine/src/gee/index.ts, and why Earth Engine refused; geoStatus.test.ts holds them together.
 export const GEE_FAILURES = [
   'config-error',
-  'python-missing',
-  'packages-missing',
-  'packages-broken',
-  'packages-outdated',
   'signed-out',
   'project-missing',
   'unreachable',
@@ -168,12 +164,7 @@ export const GEE_REFUSALS = ['credentials-invalid', 'project-not-found', 'no-per
 const geeDiagnosticsSchema = z.object({
   message: z.string(),
   file: z.string().optional(),
-  python: z.string().optional(),
-  pythonVersion: z.string().optional(),
   project: z.string().optional(),
-  missing: z.array(z.string()).optional(),
-  broken: z.array(z.object({ package: z.string(), error: z.string() })).optional(),
-  outdated: z.array(z.object({ package: z.string(), version: z.string(), required: z.string() })).optional(),
   refusal: z.enum(GEE_REFUSALS).optional(),
   said: z.string().optional(),
   output: z.string().optional(),
@@ -181,9 +172,8 @@ const geeDiagnosticsSchema = z.object({
 });
 
 const geeSchema = z.union([
-  z.object({ status: z.literal('unconfigured'), project: z.string().optional() }),
-  z.object({ status: z.literal('checking'), python: z.string(), project: z.string().optional() }),
-  z.object({ status: z.literal('ready'), python: z.string(), project: z.string(), versions: z.record(z.string(), z.string()) }),
+  z.object({ status: z.literal('checking'), project: z.string().optional() }),
+  z.object({ status: z.literal('ready'), project: z.string() }),
   z.object({ status: z.enum(GEE_FAILURES), diagnostics: geeDiagnosticsSchema }),
 ]);
 

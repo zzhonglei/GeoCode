@@ -1,20 +1,20 @@
 export * as Gee from "./index.ts"
 
-import fs from "node:fs"
 import fsp from "node:fs/promises"
 import path from "node:path"
-import { Cause, Effect, Exit, Option, PubSub, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Option, PubSub, Schema, Stream } from "effect"
+import { Bundled } from "../bundled.ts"
 import { Config } from "../config.ts"
 import { Engine } from "../engine.ts"
 import { Runtime } from "../runtime.ts"
 import { Status } from "../status.ts"
 import { Library } from "./library.ts"
 import { Python } from "./python.ts"
-import { Pythons } from "./pythons.ts"
 
 const DOMAIN = "gee"
 
-const WINDOWS = process.platform === "win32"
+/** The domain of GeoCode's Python environment, whose base GEE runs in (docs/GEE.md, section 7). */
+const ENVIRONMENT_DOMAIN = "python"
 
 /** Generous: initializing and one minimal computation only have to finish, on a slow connection too. */
 const CHECK_TIMEOUT = "90 seconds"
@@ -48,16 +48,17 @@ const STILL_CHECKING = "Google Earth Engine is still being checked. Call geerun 
 /** Lines of an error GeoAgent is given. */
 const PRINTED_LINES = 20
 
-/** Either may come first: the user can name the project in the settings before choosing the Python. */
-const Block = Schema.Struct({ python: Schema.optionalKey(Schema.String), project: Schema.optionalKey(Schema.String) })
+/** The Google Cloud project's ID, the whole of the block. */
+const Block = Schema.String
 
-/** What the settings page writes, one at a time; the rest of the block is kept. */
-const ConfigureParams = Schema.Union([
-  Schema.Struct({ python: Schema.String }),
-  /** A folder the Python is found in, as the file dialog gives one: it would resolve the interpreter's links. */
-  Schema.Struct({ environment: Schema.String }),
-  Schema.Struct({ project: Schema.String }),
-])
+/** What the settings page writes. */
+const ConfigureParams = Schema.Struct({ project: Schema.String })
+
+/**
+ * What GEE reads of the environment's state, as geoengine/src/python/index.ts publishes it once it is ready: the base
+ * environment's interpreter, and Python's version for the answer.
+ */
+const EnvironmentReady = Schema.Struct({ status: Schema.Literal("ready"), base: Schema.String, version: Schema.String })
 
 /**
  * How long a sign-in waits for the user in the browser. Long enough to find the account and read the consent page;
@@ -72,44 +73,8 @@ const SignInEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("signed-in") }),
 ])
 
-/**
- * What a run needs in the Python, by the name it is installed under and the module it is imported as. requests is
- * earthengine-api's own dependency, which the run watches.
- */
-const PACKAGES = [
-  { name: "earthengine-api", module: "ee" },
-  { name: "geedim", module: "geedim" },
-  { name: "geopandas", module: "geopandas" },
-  { name: "requests", module: "requests" },
-] as const
-
-/** The least version of a package GeoCode needs, for one it needs a version of. */
-const leastOf = (name: string) => Object.entries(Pythons.LEAST).find(([named]) => named === name)?.[1]
-
-/** A package as GeoAgent installs it: with the least version GeoCode needs, should pip or conda pick an older one. */
-const requirement = (name: string) => {
-  const least = leastOf(name)
-  return least ? `"${name}>=${least}"` : name
-}
-
-/** The packages GeoAgent is told GeoCode needs: requests comes with earthengine-api. */
-const NAMED = PACKAGES.filter((item) => item.name !== "requests")
-  .map((item) => {
-    const least = leastOf(item.name)
-    return least ? `${item.name} ${least} or later` : item.name
-  })
-  .join(", ")
-
-const Broken = Schema.Struct({ package: Schema.String, error: Schema.String })
-
 const Report = Schema.Struct({
-  python: Schema.String,
-  versions: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-  failed: Schema.optionalKey(
-    Schema.Literals(["missing", "broken", "signed-out", "credentials", "unreachable", "rejected", "earthengine"]),
-  ),
-  missing: Schema.optionalKey(Schema.Array(Schema.String)),
-  broken: Schema.optionalKey(Schema.Array(Broken)),
+  failed: Schema.optionalKey(Schema.Literals(["signed-out", "credentials", "unreachable", "rejected", "earthengine"])),
   error: Schema.optionalKey(Schema.String),
   traceback: Schema.optionalKey(Schema.String),
   status: Schema.optionalKey(Schema.Number),
@@ -156,7 +121,7 @@ const Event = Schema.Union([
   Schema.Struct({ type: Schema.Literal("partial"), path: Schema.String }),
 ])
 
-const decodeBlock = Schema.decodeUnknownExit(Block)
+const decodeEnvironmentReady = Schema.decodeUnknownExit(EnvironmentReady)
 const decodeReport = Schema.decodeUnknownExit(Report)
 const decodeRunParams = Schema.decodeUnknownExit(RunParams)
 const decodeCheckParams = Schema.decodeUnknownExit(CheckParams)
@@ -166,10 +131,6 @@ const decodeSignInEvent = Schema.decodeUnknownExit(SignInEvent)
 
 export type Failed =
   | "config-error"
-  | "python-missing"
-  | "packages-missing"
-  | "packages-broken"
-  | "packages-outdated"
   | "signed-out"
   | "project-missing"
   | "unreachable"
@@ -185,16 +146,7 @@ export interface Diagnostics {
   readonly message: string
   /** machine.json, when it is the file at fault. */
   readonly file?: string
-  readonly python?: string
-  /** Python's own version, when a package is missing or too old: a new enough package may not install on it. */
-  readonly pythonVersion?: string
   readonly project?: string
-  /** The packages not installed, by the names they install under. */
-  readonly missing?: readonly string[]
-  /** The packages installed that fail to import, with their errors. */
-  readonly broken?: readonly { readonly package: string; readonly error: string }[]
-  /** The packages older than GeoCode needs, with their versions and the least GeoCode needs. */
-  readonly outdated?: readonly { readonly package: string; readonly version: string; readonly required: string }[]
   readonly refusal?: Refusal
   /** What Google answered, in its own words, when it answered. */
   readonly said?: string
@@ -205,29 +157,18 @@ export interface Diagnostics {
 }
 
 export type State =
-  /** The project, when it was named before the Python, so the settings show it. */
-  | { readonly status: "unconfigured"; readonly project?: string }
-  | { readonly status: "checking"; readonly python: string; readonly project?: string }
-  | {
-      readonly status: "ready"
-      readonly python: string
-      readonly project: string
-      /** Python's, and each package's by the name it installs under. */
-      readonly versions: Readonly<Record<string, string>>
-    }
+  /** Also until GeoCode's Python environment is ready; the project, when there is one, so the settings show it. */
+  | { readonly status: "checking"; readonly project?: string }
+  | { readonly status: "ready"; readonly project: string }
   | { readonly status: Failed; readonly diagnostics: Diagnostics }
 
 type Ready = Extract<State, { readonly status: "ready" }>
 
 /**
- * What looking at the Python and Earth Engine found, which can change with nothing in machine.json changing, as when a
- * package is installed, the user signs in or the network comes back; each tool call checks again.
+ * What looking at Earth Engine found, which can change with nothing in machine.json changing, as when the user signs in
+ * or the network comes back; each tool call checks again.
  */
 const RECHECKED: ReadonlySet<State["status"]> = new Set([
-  "python-missing",
-  "packages-missing",
-  "packages-broken",
-  "packages-outdated",
   "signed-out",
   "unreachable",
   "rejected",
@@ -242,34 +183,39 @@ export const capability: Engine.Capability = Effect.gen(function* () {
   const config = yield* Config.Service
   const runtime = yield* Runtime.Service
   const block = yield* config.block(DOMAIN, Block)
-  const writer = yield* status.register<State>(DOMAIN, settledOrChecking(yield* block.current))
+  const writer = yield* status.register<State>(DOMAIN, { status: "checking" })
+  const environment = yield* Deferred.make<typeof EnvironmentReady.Type>()
 
   /** Undefined when the check was stopped, as at shutdown, which says nothing about the environment. */
   const inspect = (python: string, project: string | undefined) =>
     runtime
       .run({
-        command: python,
-        args: ["-"],
-        input: Python.program(Python.CHECK, { project: project ?? null, packages: PACKAGES }),
-        env: Python.ENVIRONMENT,
+        ...Bundled.python(python, ["-"]),
+        input: Python.program(Python.CHECK, { project: project ?? null }),
         delivery: { mode: "collect" },
         clocks: { total: CHECK_TIMEOUT },
       })
       .pipe(
-        Effect.map((result) => judge(python, project, result)),
-        // A Python that cannot be started fails here, before it has a pid or, on Windows, just after.
-        Effect.catch((error) => Effect.succeed(failed("python-missing", { python, project, message: error.message }))),
+        Effect.map((result) => judge(project, result)),
+        // An interpreter that cannot be started fails here, before it has a pid or, on Windows, just after.
+        Effect.catch((error) => Effect.succeed(failed("check-failed", { project, message: error.message }))),
       )
 
-  const check = (state: Config.BlockState<typeof Block.Type>) =>
+  const check = (python: string, state: Config.BlockState<typeof Block.Type>) =>
     Effect.gen(function* () {
       const token = yield* writer.claim()
-      const settled = settledOrChecking(state)
-      yield* writer.commit(token, settled)
-      if (settled.status !== "checking") return
+      if (!state.ok) {
+        yield* writer.commit(
+          token,
+          failed("config-error", { message: state.failure.message, file: state.failure.file }),
+        )
+        return
+      }
+      const project = state.value
+      const where = project === undefined ? {} : { project }
+      yield* writer.commit(token, { status: "checking", ...where })
       // An unexpected error would otherwise end the watch for good, leaving the domain checking forever.
-      const where = { python: settled.python, ...(settled.project === undefined ? {} : { project: settled.project }) }
-      const next = yield* inspect(settled.python, settled.project).pipe(
+      const next = yield* inspect(python, project).pipe(
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.failCause(cause)
@@ -287,8 +233,21 @@ export const capability: Engine.Capability = Effect.gen(function* () {
     block.watch,
     Stream.fromSubscription(asked).pipe(Stream.mapEffect(() => config.reload().pipe(Effect.andThen(block.current)))),
   )
-  // A new configuration or recheck interrupts the check still running, ending its Python.
-  yield* Effect.forkScoped(Stream.runDrain(Stream.switchMap(triggers, (state) => Stream.fromEffect(check(state)))))
+  // Nothing is checked before the environment is ready: its base, which GEE runs in, is only then installed and warmed
+  // up. A new configuration or recheck interrupts the check still running, ending its Python.
+  yield* Effect.forkScoped(
+    Effect.gen(function* () {
+      const found = yield* status.watch(ENVIRONMENT_DOMAIN).pipe(
+        Stream.map((value) => decodeEnvironmentReady(value)),
+        Stream.filter(Exit.isSuccess),
+        Stream.runHead,
+      )
+      if (Option.isNone(found)) return
+      const ready = found.value.value
+      yield* Deferred.succeed(environment, ready)
+      yield* Stream.runDrain(Stream.switchMap(triggers, (state) => Stream.fromEffect(check(ready.base, state))))
+    }),
+  )
 
   // The state a recheck was last asked from. Calls that find the same one ask once: a second ask would restart the
   // check, killing a Python that may have begun while the file was read again.
@@ -297,8 +256,8 @@ export const capability: Engine.Capability = Effect.gen(function* () {
   /**
    * The ready environment, once a check in progress settles; otherwise the state and what GeoAgent should do about it.
    * A state found by looking at the environment is checked again first; calls arriving once it has begun find it
-   * checking and wait for it. Without a Python to look at, or a project, the file is read again instead, since GeoAgent
-   * is told it takes effect as soon as it is saved.
+   * checking and wait for it. Without a project, or a file to read it from, the file is read again instead, since
+   * GeoAgent is told it takes effect as soon as it is saved.
    */
   const ready = (signal: AbortSignal) =>
     Effect.gen(function* () {
@@ -307,11 +266,7 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       if (stale && rechecked !== stale) {
         rechecked = stale
         yield* PubSub.publish(rechecks, undefined)
-      } else if (
-        found.status === "unconfigured" ||
-        found.status === "config-error" ||
-        found.status === "project-missing"
-      ) {
+      } else if (found.status === "config-error" || found.status === "project-missing") {
         // By the block's state itself, which a read replaces only when the block changed: a missing project is found by
         // the check, never by reading the file, so the states cannot be compared.
         const before = yield* block.current
@@ -332,81 +287,45 @@ export const capability: Engine.Capability = Effect.gen(function* () {
   const recheck: Engine.Method = () => PubSub.publish(rechecks, undefined).pipe(Effect.as({}))
 
   /**
-   * The Pythons on this computer with earthengine-api installed, found without starting any, with the configured one
-   * marked whatever path names it; `configured` is the path it was compared with, so a page whose configuration has
-   * changed since does not trust the mark.
+   * Writes the project named in the settings; the watch then checks again. Over a block written wrong too: saving the
+   * project fixes it.
    */
-  const discover: Engine.Method = () =>
-    Effect.gen(function* () {
-      const current = yield* block.current
-      const configured = current.ok ? current.value?.python : undefined
-      const pythons = yield* Effect.promise(async () =>
-        Pythons.mark(await Pythons.discover(await Pythons.places()), configured),
-      )
-      return configured === undefined ? { pythons } : { pythons, configured }
-    })
-
-  /** Writes the Python or the project chosen in the settings, keeping the other; the watch then checks again. */
   const configure: Engine.Method = (raw) =>
     Effect.gen(function* () {
       const decoded = decodeConfigureParams(raw)
       if (Exit.isFailure(decoded)) {
         return yield* new Engine.Failure({ code: "invalid-params", message: String(decoded.cause) })
       }
-      const params = decoded.value
-      const chosen = "project" in params ? undefined : "python" in params ? params.python : params.environment
-      if (chosen !== undefined && !path.isAbsolute(chosen)) {
-        return yield* new Engine.Failure({ code: "invalid-params", message: `${chosen} is not an absolute path` })
-      }
+      const project = decoded.value.project
       // In ASCII, as a request header carries it; with a domain and a colon before it for some older projects. Anything
       // else is left to Earth Engine to accept or refuse.
-      if ("project" in params && !/^[A-Za-z0-9][A-Za-z0-9.:_-]*$/.test(params.project)) {
-        return yield* new Engine.Failure({ code: "invalid-params", message: `"${params.project}" is not a project ID` })
+      if (!/^[A-Za-z0-9][A-Za-z0-9.:_-]*$/.test(project)) {
+        return yield* new Engine.Failure({ code: "invalid-params", message: `"${project}" is not a project ID` })
       }
-      let setting: { readonly python: string } | { readonly project: string }
-      if ("environment" in params) {
-        const python = yield* Effect.promise(() => Pythons.interpreterIn(params.environment))
-        if (python === undefined) {
-          return yield* new Engine.Failure({
-            code: "invalid-params",
-            message: `no Python environment found in ${params.environment}`,
-          })
-        }
-        setting = { python }
-      } else setting = params
-      // Refused before the write, whose own message would carry the file's location.
-      const held = yield* block.current
-      if (!held.ok) {
-        return yield* new Engine.Failure({
-          code: "config-unreadable",
-          message: `${held.failure.message}; machine.json is left as it is`,
-        })
-      }
-      // From the file as it is now, keeping a change GeoAgent made a moment ago that the watch has not read yet.
       yield* block
-        .update((current) => ({ ...current, ...setting }))
+        .write(project)
         .pipe(Effect.mapError((error) => new Engine.Failure({ code: "write-failed", message: error.message })))
-      // The Python written, as found in a folder: the same as before writes nothing new, and no status follows.
-      return "python" in setting ? { python: setting.python } : {}
+      return {}
     })
 
   // One sign-in at a time: one started from another window ends the one before, whose browser page is then stale.
   let signing: AbortController | undefined
 
   /**
-   * Signs the user in with the configured Python, reporting the address the browser is to open; the check that follows
-   * finds the credentials. Ends when the user finishes or denies access in the browser, or after SIGN_IN_TIMEOUT.
+   * Signs the user in with the base environment's Python, reporting the address the browser is to open; the check that
+   * follows finds the credentials. Ends when the user finishes or denies access in the browser, or after
+   * SIGN_IN_TIMEOUT. machine.json has no part in it.
    */
   const signIn: Engine.Method = (_raw, context) =>
     Effect.gen(function* () {
-      const current = yield* block.current
-      if (!current.ok) {
-        return yield* new Engine.Failure({ code: "config-unreadable", message: current.failure.message })
+      // The main window opens once it is ready; a request before then is refused rather than left waiting.
+      if (!(yield* Deferred.isDone(environment))) {
+        return yield* new Engine.Failure({
+          code: "not-ready",
+          message: "GeoCode's Python environment is not ready yet",
+        })
       }
-      const python = current.value?.python
-      if (python === undefined) {
-        return yield* new Engine.Failure({ code: "invalid-params", message: "no Python is configured to sign in with" })
-      }
+      const python = (yield* Deferred.await(environment)).base
       signing?.abort()
       const mine = new AbortController()
       signing = mine
@@ -433,10 +352,8 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       }
       const result = yield* runtime
         .run({
-          command: python,
-          args: ["-"],
+          ...Bundled.python(python, ["-"]),
           input: Python.program(Python.SIGN_IN, {}),
-          env: Python.ENVIRONMENT,
           delivery: { mode: "incremental", source: "all", onChunk },
           clocks: { total: SIGN_IN_TIMEOUT },
           signal: AbortSignal.any([context.signal, mine.signal]),
@@ -512,7 +429,7 @@ export const capability: Engine.Capability = Effect.gen(function* () {
   /** The tasks being run, by project and name: two runs of one task, from any conversation, would race to save. */
   const running = new Set<string>()
 
-  /** Runs GeoAgent's script in the configured Python, ending it after IDLE_SECONDS with neither output nor a wait. */
+  /** Runs GeoAgent's script in the base environment, ending it after IDLE_SECONDS with neither output nor a wait. */
   const run: Engine.Method = (raw, context) =>
     Effect.gen(function* () {
       const decoded = decodeRunParams(raw)
@@ -530,6 +447,9 @@ export const capability: Engine.Capability = Effect.gen(function* () {
         { cwd: params.cwd, ...("file" in params ? { file: params.file } : {}) },
         context.signal,
       )
+      // Ready only once the environment was. Awaited before the task is looked up: nothing may yield between finding it
+      // free and taking it.
+      const python = yield* Deferred.await(environment)
       const key = `${current.project}/${params.task.name}`
       if (running.has(key)) {
         return yield* new Engine.Failure({
@@ -538,9 +458,9 @@ export const capability: Engine.Capability = Effect.gen(function* () {
         })
       }
       running.add(key)
-      return yield* execute(runtime, current, params, context).pipe(
-        // The environment changed since it was found ready, as when the credentials were revoked or the Python removed:
-        // it is checked again, so this call says what is wrong and the indicator stops showing it ready.
+      return yield* execute(runtime, python, current, params, context).pipe(
+        // The environment changed since it was found ready, as when the credentials were revoked: it is checked again,
+        // so this call says what is wrong and the indicator stops showing it ready.
         Effect.catchIf(
           (failure) => failure.code === "initialize-failed" || failure.code === "start-failed",
           (failure) =>
@@ -557,18 +477,8 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       )
     })
 
-  return { domain: DOMAIN, methods: { check: precheck, run, recheck, discover, configure, signIn } }
+  return { domain: DOMAIN, methods: { check: precheck, run, recheck, configure, signIn } }
 })
-
-/** The state a configuration settles on at once, or `checking` when it names a Python to look at. */
-function settledOrChecking(state: Config.BlockState<typeof Block.Type>): State {
-  if (!state.ok) return failed("config-error", { message: state.failure.message, file: state.failure.file })
-  const python = state.value?.python
-  const project = state.value?.project
-  if (python === undefined)
-    return project === undefined ? { status: "unconfigured" } : { status: "unconfigured", project }
-  return project === undefined ? { status: "checking", python } : { status: "checking", python, project }
-}
 
 /** Waits for a check in progress, or one replacing `stale`, to settle, within a limit; undefined when it has not. */
 function settledState(status: Status.Interface, stale?: State) {
@@ -591,9 +501,9 @@ function cancelled(signal: AbortSignal) {
   })
 }
 
-function judge(python: string, project: string | undefined, result: Runtime.Result): State | undefined {
+function judge(project: string | undefined, result: Runtime.Result): State | undefined {
   if (result.reason === "abort") return
-  const where = { python, ...(project === undefined ? {} : { project }) }
+  const where = project === undefined ? {} : { project }
   const printed = tail(`${result.stdout}\n${result.stderr}`.trim())
   if (result.reason === "timeout") {
     return failed("check-timeout", {
@@ -612,30 +522,6 @@ function judge(python: string, project: string | undefined, result: Runtime.Resu
   const report = decoded.value
   const error = report.error ?? ""
   const traceback = report.traceback
-  // Only the packages that import report a version.
-  const outdated = Object.entries(Pythons.LEAST).flatMap(([name, required]) => {
-    const version = report.versions?.[name]
-    return version !== undefined && Pythons.older(version, required) ? [{ package: name, version, required }] : []
-  })
-  const old = outdated.length ? { outdated } : {}
-  const packaged = { ...where, pythonVersion: report.python }
-  if (report.failed === "broken") {
-    const broken = report.broken ?? []
-    const message = `installed but failing to import: ${broken.map((item) => item.package).join(", ")}`
-    return failed("packages-broken", { ...packaged, message, broken, missing: report.missing ?? [], ...old })
-  }
-  if (report.failed === "missing") {
-    const missing = report.missing ?? []
-    return failed("packages-missing", { ...packaged, message: `not installed: ${missing.join(", ")}`, missing, ...old })
-  }
-  if (outdated.length) {
-    const named = outdated.map((item) => `${item.package} ${item.version} (${item.required} or later)`)
-    return failed("packages-outdated", {
-      ...packaged,
-      message: `older than GeoCode needs: ${named.join(", ")}`,
-      outdated,
-    })
-  }
   if (report.failed === "signed-out") {
     return failed("signed-out", { ...where, message: "no Earth Engine credentials on this computer" })
   }
@@ -656,7 +542,7 @@ function judge(python: string, project: string | undefined, result: Runtime.Resu
   if (project === undefined) {
     return failed("project-missing", { ...where, message: "no Google Cloud project is configured" })
   }
-  return { status: "ready", python, project, versions: { python: report.python, ...report.versions } }
+  return { status: "ready", project }
 }
 
 /**
@@ -666,7 +552,7 @@ function judge(python: string, project: string | undefined, result: Runtime.Resu
  */
 function refusalOf(status: number | undefined, reasons: readonly string[]): Refusal {
   if (reasons.includes("SERVICE_DISABLED")) return "api-disabled"
-  // Credentials without Earth Engine's scope, as Google Cloud's default credentials can be, need signing in again too.
+  // Credentials without Earth Engine's scope need signing in again too.
   if (status === 401 || reasons.includes("ACCESS_TOKEN_SCOPE_INSUFFICIENT")) return "credentials-invalid"
   if (reasons.includes("USER_PROJECT_DENIED")) return status === 400 ? "project-not-found" : "no-permission"
   return "other"
@@ -682,79 +568,15 @@ export function hint(state: Exclude<State, Ready>, file: string): string {
     const at = state.diagnostics.file ?? file
     return `${at} cannot be read: ${state.diagnostics.message}. No geo tool works until it is fixed; it is checked as soon as the file is saved.`
   }
-  const configured = `The configuration is the "gee" block of ${file}: {"python": "<absolute path of the Python>", "project": "<Google Cloud project ID>"}. It is checked as soon as the file is saved; then call geerun again.`
-  const needs = `GeoCode needs ${NAMED} in that Python.`
+  const configured = `The configuration is the "gee" entry of ${file}, the Google Cloud project ID: "gee": "<project ID>". It is checked as soon as the file is saved; then call geerun again.`
   const again = "It is checked again the next time geerun is called."
   const projectId =
     "Ask the user for the ID of their Google Cloud project registered for Earth Engine, which the Code Editor (https://code.earthengine.google.com) shows at its top; never guess it."
-  const finding =
-    "Look for a Python on this computer with earthengine-api installed, such as a conda environment, and let the user choose if there are several. If there is none, offer to create one; a conda environment installs every package from conda-forge, without pip."
-  if (state.status === "unconfigured") {
-    // A project the user named in the settings first is kept, and not asked for again.
-    const named = state.project
-    return [
-      `Google Earth Engine is not set up. Setting it up takes, in order: a Python ${Pythons.LEAST_PYTHON} or later with ${NAMED} installed; signing in with the user's Google account; and the user's Google Cloud project.`,
-      configured,
-      finding,
-      named === undefined ? projectId : `The project is already set to ${named}; keep it when adding the Python.`,
-    ].join("\n")
-  }
   const diagnostics = state.diagnostics
-  const python = diagnostics.python ?? ""
   const last = (text: string) => text.trim().split("\n").slice(-PRINTED_LINES).join("\n")
   const said = diagnostics.said === undefined ? [] : [`Google said: ${last(diagnostics.said)}`]
-  const signIn = (force: boolean) =>
-    `The user must sign in with their Google account. They can do it themselves in GeoCode's settings, under Geo environment, Google Earth Engine. Or ask them to get it ready; once they say so, run \`${signInCommand(python, force)}\` with a timeout of 10 minutes. It opens their browser and ends when they finish there.`
-  if (state.status === "python-missing") {
-    return [`The configured Python, ${python}, cannot be started: ${diagnostics.message}.`, configured, finding].join(
-      "\n",
-    )
-  }
-  if (
-    state.status === "packages-missing" ||
-    state.status === "packages-broken" ||
-    state.status === "packages-outdated"
-  ) {
-    const broken = (diagnostics.broken ?? []).map((item) => `- ${item.package}: ${last(item.error)}`)
-    const missing = diagnostics.missing ?? []
-    const outdated = diagnostics.outdated ?? []
-    // One command for both: pip and conda alike install what a requirement asks for over an older version.
-    const wanted = [...missing, ...outdated.map((item) => item.package)].map(requirement)
-    const having = outdated.map((item) => `${item.package} ${item.version}`).join(", ")
-    const needing = outdated.map((item) => `${item.package} ${item.required} or later`).join(", ")
-    const fixing = broken.length
-      ? [
-          `In the configured Python, ${python}, these packages are installed but fail to import:`,
-          ...broken,
-          "Installing them again rarely helps. Show the user the errors; with their consent, repair the environment or set up another one.",
-        ]
-      : []
-    // Below it, pip quietly picks an older geedim, and conda may upgrade the environment's Python with no one asked.
-    const version = diagnostics.pythonVersion
-    if (wanted.length && version !== undefined && Pythons.older(version, Pythons.LEAST_PYTHON)) {
-      return [
-        ...fixing,
-        `The configured Python, ${python}, is Python ${version}, which cannot install geedim ${Pythons.LEAST.geedim}: it needs Python ${Pythons.LEAST_PYTHON} or later.`,
-        `With the user's consent, set up another environment with Python ${Pythons.LEAST_PYTHON} or later and ${NAMED}, rather than upgrading this one.`,
-        configured,
-      ].join("\n")
-    }
-    return [
-      ...fixing,
-      ...(missing.length ? [`The configured Python, ${python}, lacks ${missing.join(", ")}. ${needs}`] : []),
-      ...(outdated.length
-        ? [
-            `${missing.length ? "That Python" : `The configured Python, ${python},`} has ${having}, older than GeoCode needs: ${needing}.`,
-          ]
-        : []),
-      ...(wanted.length
-        ? [
-            `With the user's consent, ${missing.length ? "install" : "upgrade"} them: \`${installCommand(python, wanted)}\`.`,
-          ]
-        : []),
-      configured,
-    ].join("\n")
-  }
+  const signIn = (retry: boolean) =>
+    `Ask the user to sign in${retry ? " again" : ""} with their Google account in GeoCode's settings, under Geo environment, Google Earth Engine.`
   if (state.status === "signed-out") {
     return [
       "Google Earth Engine is not signed in: there are no Earth Engine credentials on this computer.",
@@ -787,7 +609,7 @@ export function hint(state: Exclude<State, Ready>, file: string): string {
     const refusal = diagnostics.refusal ?? "other"
     if (refusal === "credentials-invalid") {
       return [
-        "Google refused the Earth Engine credentials on this computer: they have expired, been revoked, or do not cover Earth Engine.",
+        "Google refused the Earth Engine credentials on this computer: they have expired or been revoked.",
         ...said,
         signIn(true),
         again,
@@ -814,59 +636,16 @@ export function hint(state: Exclude<State, Ready>, file: string): string {
   // Without a report, GeoEngine's own message says only that there was none; what the Python printed says why.
   const printed = diagnostics.output ? [last(diagnostics.output)] : []
   return [
-    `Checking Google Earth Engine with the configured Python, ${python}, failed: ${last(diagnostics.message)}`,
+    `Checking Google Earth Engine failed: ${last(diagnostics.message)}`,
     ...printed,
     "Show the user the error.",
     again,
   ].join("\n")
 }
 
-/**
- * Signs in with the configured Python's own earthengine command, through the browser on this computer: left to choose,
- * it would sign in through the Google Cloud CLI where that is installed, whose credentials earthengine-api reads only
- * as a fallback.
- */
-function signInCommand(python: string, force: boolean) {
-  const folder = path.dirname(python)
-  const candidates = WINDOWS
-    ? [path.join(folder, "Scripts", "earthengine.exe"), path.join(folder, "earthengine.exe")]
-    : [path.join(folder, "earthengine")]
-  const found = candidates.find((candidate) => fs.existsSync(candidate))
-  const flags = `authenticate --auth_mode=localhost${force ? " --force" : ""}`
-  return found ? `${invoke(found)} ${flags}` : `${invoke(python)} -m ee.cli.eecli ${flags}`
-}
-
-/**
- * Installs into the configured Python: with conda for a conda environment, from conda-forge, since pip's builds of the
- * geospatial packages each bring their own GDAL; with that Python's pip otherwise.
- */
-function installCommand(python: string, packages: readonly string[]) {
-  const folder = path.dirname(python)
-  // A conda environment's interpreter is in its bin folder on macOS, at its root on Windows.
-  const prefix = [folder, path.dirname(folder)].find((candidate) => fs.existsSync(path.join(candidate, "conda-meta")))
-  if (!prefix) return `${invoke(python)} -m pip install ${packages.join(" ")}`
-  return `${invoke(condaOf(prefix))} install --prefix "${prefix}" -c conda-forge -y ${packages.join(" ")}`
-}
-
-/**
- * The conda that manages an environment, by its path: GeoAgent's shell starts without the setup that puts conda on the
- * PATH. An environment in the envs folder belongs to the conda two folders up; any other is the base environment.
- */
-function condaOf(prefix: string) {
-  const base = path.basename(path.dirname(prefix)) === "envs" ? path.dirname(path.dirname(prefix)) : prefix
-  const candidates = WINDOWS
-    ? [path.join(base, "Scripts", "conda.exe"), path.join(base, "condabin", "conda.bat")]
-    : [path.join(base, "bin", "conda"), path.join(base, "condabin", "conda")]
-  return candidates.find((candidate) => fs.existsSync(candidate)) ?? "conda"
-}
-
-/** A program by its path, as the shell GeoAgent runs it in takes it: PowerShell, on Windows, runs a quoted path with &. */
-function invoke(program: string) {
-  return program === "conda" ? program : WINDOWS ? `& "${program}"` : `"${program}"`
-}
-
 function execute(
   runtime: Runtime.Interface,
+  python: typeof EnvironmentReady.Type,
   current: Ready,
   params: typeof RunParams.Type,
   context: Engine.MethodContext,
@@ -977,10 +756,8 @@ function execute(
 
   return runtime
     .run({
-      command: current.python,
-      args: ["-"],
+      ...Bundled.python(python.base, ["-"]),
       input: Python.program(Python.RUN, request),
-      env: Python.ENVIRONMENT,
       cwd: params.cwd,
       delivery: { mode: "incremental", source: "all", onChunk },
       clocks: { idle: `${IDLE_SECONDS} seconds` },
@@ -1046,17 +823,8 @@ function execute(
             output: begun.stdout || begun.stderr ? output : noise,
             truncated,
             durationMs: result.durationMs,
-            // The Python the script ran in, so GeoAgent can use and look after the same one.
-            python: {
-              path: current.python,
-              version: current.versions.python ?? "",
-              packages: Object.fromEntries(
-                PACKAGES.filter((item) => item.name !== "requests").map((item) => [
-                  item.name,
-                  current.versions[item.name] ?? "",
-                ]),
-              ),
-            },
+            // Its version alone: given the interpreter's path, GeoAgent could take the base environment for its work.
+            python: { version: python.version },
             ...(space === undefined ? {} : { space }),
             ...(outcome === "crashed" ? { exit } : {}),
             ...(outcome === "idle" ? { idleSeconds: IDLE_SECONDS } : {}),
