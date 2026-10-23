@@ -64,10 +64,14 @@ const WARMING = [
 ].join("\n")
 
 /** Written into the base environment's site-packages as STARTUP_MODULE, which a .pth file beside it imports. */
-const STARTUP = `"""Sets GeoCode's Python environment's own variables as Python starts (docs/PYTHON.md, section 6.1)."""
+const STARTUP = `"""Sets GeoCode's Python environment's own variables as Python starts, and has it take its proxy
+from the proxy variables alone, as GeoCode's kernel does (docs/PYTHON.md, section 6.1)."""
 
 import os
 import sys
+
+# Always reached directly, as the kernel and the shell reach them; urllib compares an IPv6 host with its brackets.
+_LOOPBACK = ("localhost", "127.0.0.1", "::1", "[::1]")
 
 
 def _set_variables():
@@ -97,7 +101,73 @@ def _set_variables():
         os.environ["PATH"] = os.pathsep.join(first + rest)
 
 
+def _arrange_proxy():
+    environ = os.environ
+    # Neither the kernel's model requests nor the shell server follow it.
+    environ.pop("ALL_PROXY", None)
+    environ.pop("all_proxy", None)
+    # libcurl, as GDAL and PROJ use it, reads http_proxy in lowercase alone.
+    if "http_proxy" not in environ and environ.get("HTTP_PROXY"):
+        environ["http_proxy"] = environ["HTTP_PROXY"]
+    if not any(environ.get(name) for name in ("http_proxy", "https_proxy", "HTTPS_PROXY")):
+        return
+    bypass = environ.get("no_proxy", environ.get("NO_PROXY", ""))
+    hosts = [host.strip() for host in bypass.split(",") if host.strip()]
+    # "*" stands for every host only alone.
+    if hosts == ["*"]:
+        return
+    hosts += [host for host in _LOOPBACK if host not in hosts]
+    environ["no_proxy"] = environ["NO_PROXY"] = ",".join(hosts)
+
+
+def _proxies_from_variables(request):
+    # Without a variable, urllib would take the system's proxy settings; requests and aiohttp take theirs from it.
+    request.getproxies = request.getproxies_environment
+    request.proxy_bypass = request.proxy_bypass_environment
+
+
+def _sessions_read_variables(client):
+    session = client.ClientSession
+    init = session.__init__
+
+    # As requests' sessions do, unless told not to.
+    def __init__(self, *args, trust_env=True, **kwargs):
+        init(self, *args, trust_env=trust_env, **kwargs)
+
+    session.__init__ = __init__
+
+
+# By module, once it has run: neither is imported here, which would slow every start.
+_ADJUSTED = {"urllib.request": _proxies_from_variables, "aiohttp.client": _sessions_read_variables}
+
+
+class _Adjusting:
+    def find_spec(self, name, path=None, target=None):
+        adjust = _ADJUSTED.get(name)
+        if adjust is None:
+            return None
+        from importlib.machinery import PathFinder
+
+        spec = PathFinder.find_spec(name, path)
+        if spec is None or not hasattr(spec.loader, "exec_module"):
+            return spec
+        execute = spec.loader.exec_module
+
+        def exec_module(module):
+            execute(module)
+            adjust(module)
+
+        spec.loader.exec_module = exec_module
+        return spec
+
+
 _set_variables()
+_arrange_proxy()
+for _name, _adjust in _ADJUSTED.items():
+    if _name in sys.modules:
+        _adjust(sys.modules[_name])
+del _name, _adjust
+sys.meta_path.insert(0, _Adjusting())
 `
 
 /** The module STARTUP is written as, and the name of the .pth file that imports it. */

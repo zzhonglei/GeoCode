@@ -10,7 +10,6 @@ const SYSTEM_ROOT = process.env.SystemRoot ?? "C:\\Windows"
 const NETWORK = new Set([
   "HTTP_PROXY",
   "HTTPS_PROXY",
-  "ALL_PROXY",
   "NO_PROXY",
   "SSL_CERT_FILE",
   "SSL_CERT_DIR",
