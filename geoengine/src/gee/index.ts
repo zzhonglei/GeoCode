@@ -10,6 +10,7 @@ import { Runtime } from "../runtime.ts"
 import { Status } from "../status.ts"
 import { Library } from "./library.ts"
 import { Python } from "./python.ts"
+import { Quota } from "./quota.ts"
 
 const DOMAIN = "gee"
 
@@ -479,7 +480,14 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       )
     })
 
-  return { domain: DOMAIN, methods: { check: precheck, run, recheck, configure, signIn } }
+  const quota: Engine.Method = (_raw, context) =>
+    Effect.gen(function* () {
+      const current = yield* ready(context.signal)
+      const python = yield* Deferred.await(environment)
+      return yield* Quota.query(runtime, python.base, current.project, context.signal)
+    })
+
+  return { domain: DOMAIN, methods: { check: precheck, run, recheck, configure, signIn, quota } }
 })
 
 /** Waits for a check in progress, or one replacing `stale`, to settle, within a limit; undefined when it has not. */

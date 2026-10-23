@@ -1,0 +1,199 @@
+import assert from "node:assert/strict"
+import fs from "node:fs/promises"
+import path from "node:path"
+import { test } from "node:test"
+import { python3, start } from "../../support/gee.ts"
+
+const METRIC = "earthengine.googleapis.com/monthly_eecu_usage_time"
+
+const point = (at: string, value: number) => ({
+  timeInterval: { endTime: at },
+  values: [{ int64Value: String(value) }],
+})
+
+const limit = (value = "540000") => ({
+  metric: METRIC,
+  consumerQuotaLimits: [{ unit: "1/{project}", quotaBuckets: [{ effectiveLimit: value }] }],
+})
+
+// The real Python reads paged replies instead of the network, and uses the fixture's clock at month boundaries.
+const SESSION = `
+import datetime
+import json
+import os
+import flags
+import requests.exceptions
+
+with open(os.path.join(flags.FOLDER, "quota.json")) as source:
+    fixture = json.load(source)
+
+original_datetime = datetime.datetime
+
+
+class Clock(original_datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return original_datetime.fromisoformat(fixture["now"]).astimezone(tz)
+
+
+datetime.datetime = Clock
+
+
+class HTTPError(Exception):
+    def __init__(self, response):
+        self.response = response
+
+
+requests.exceptions.HTTPError = HTTPError
+
+
+class Response:
+    def __init__(self, reply):
+        self.status_code = reply.get("status", 200)
+        self.body = reply["body"]
+
+    def raise_for_status(self):
+        if self.status_code != 200:
+            raise HTTPError(self)
+
+    def json(self):
+        return self.body
+
+
+class AuthorizedSession:
+    def __init__(self, credentials):
+        assert credentials.refresh_token == "token"
+        self.headers = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+    def request(self, method, url, params=None, json=None, timeout=None):
+        assert self.headers["X-Goog-User-Project"] == "majestic"
+        assert "/projects/majestic/" in url
+        if method == "GET":
+            assert url.endswith("/consumerQuotaMetrics")
+            replies = fixture["limits"]
+            token = (params or {}).get("pageToken", "0")
+        else:
+            assert method == "POST" and url.endswith("/timeSeries:query")
+            assert "monthly_eecu_usage_time" in json["query"]
+            assert 'resource.project_id == "majestic"' in json["query"]
+            replies = fixture["usage"]
+            token = json.get("pageToken", "0")
+        return Response(replies[int(token)])
+`
+
+const query = async (limits: unknown[], usage: unknown[], now = "2026-10-23T09:00:00+00:00") => {
+  const engine = await start("majestic")
+  try {
+    assert.equal((await engine.settled()).status, "ready")
+    await fs.writeFile(path.join(engine.directory, "stubs/flags/quota.json"), JSON.stringify({ limits, usage, now }))
+    await fs.appendFile(path.join(engine.directory, "stubs/google/auth/transport/requests.py"), SESSION)
+    const response = await engine.response(engine.send({}, "gee.quota"))
+    assert.equal(engine.states().at(-1)?.status, "ready")
+    return response
+  } finally {
+    await engine.stop()
+  }
+}
+
+test(
+  "quota takes the actual limit and latest monthly sample across pages, not a sum or maximum value",
+  { skip: !python3 },
+  async () => {
+    const response = await query(
+      [{ body: { metrics: [], nextPageToken: "1" } }, { body: { metrics: [limit("3600000")] } }],
+      [
+        { body: { timeSeriesData: [{ pointData: [point("2026-10-23T08:28:00Z", 90582)] }], nextPageToken: "1" } },
+        {
+          body: {
+            timeSeriesData: [
+              { pointData: [point("2026-10-23T08:57:56Z", 90476), point("2026-10-22T08:00:00Z", 90000)] },
+            ],
+          },
+        },
+      ],
+    )
+    assert.ok(response.ok, JSON.stringify(response))
+    assert.deepEqual(response.result, {
+      project: "majestic",
+      limitSeconds: 3600000,
+      usedSeconds: 90476,
+      sampledAt: "2026-10-23T08:57:56Z",
+      resetsAt: "2026-11-01T07:00:00Z",
+    })
+  },
+)
+
+test(
+  "missing samples remain unknown, zero is a value, and unlimited is not an enormous finite quota",
+  { skip: !python3 },
+  async () => {
+    for (const value of ["0", "-1", "9223372036854775807"]) {
+      const response = await query([{ body: { metrics: [limit(value)] } }], [{ body: {} }])
+      assert.ok(response.ok, JSON.stringify(response))
+      assert.deepEqual(response.result, {
+        project: "majestic",
+        limitSeconds: value === "0" ? 0 : null,
+        usedSeconds: null,
+        sampledAt: null,
+        resetsAt: "2026-11-01T07:00:00Z",
+      })
+    }
+    const response = await query(
+      [{ body: { metrics: [limit()] } }],
+      [{ body: { timeSeriesData: [{ pointData: [point("2026-10-23T08:00:00Z", 0)] }] } }],
+    )
+    assert.ok(response.ok, JSON.stringify(response))
+    assert.equal((response.result as { usedSeconds: number }).usedSeconds, 0)
+  },
+)
+
+test(
+  "a new Pacific month excludes old samples and resets across daylight saving and the year",
+  { skip: !python3 },
+  async () => {
+    for (const [now, reset] of [
+      ["2026-11-01T07:30:00+00:00", "2026-12-01T08:00:00Z"],
+      ["2027-01-01T08:30:00+00:00", "2027-02-01T08:00:00Z"],
+    ]) {
+      const previous = new Date(Date.parse(now) - 3600000).toISOString()
+      const response = await query(
+        [{ body: { metrics: [limit()] } }],
+        [{ body: { timeSeriesData: [{ pointData: [point(previous, 500000)] }] } }],
+        now,
+      )
+      assert.ok(response.ok, JSON.stringify(response))
+      assert.equal((response.result as { usedSeconds: null }).usedSeconds, null)
+      assert.equal((response.result as { resetsAt: string }).resetsAt, reset)
+    }
+  },
+)
+
+test(
+  "a refusal, partial query or absent quota fails without inventing zero usage or a default tier",
+  { skip: !python3 },
+  async () => {
+    const refused = await query([{ status: 403, body: { error: { message: "Monitoring permission denied" } } }], [])
+    assert.equal(!refused.ok && refused.error.code, "quota-failed")
+    assert.equal(!refused.ok && refused.error.message, "Monitoring permission denied")
+    const partial = await query(
+      [{ body: { metrics: [limit()] } }],
+      [
+        {
+          body: {
+            timeSeriesData: [{ pointData: [point("2026-10-23T08:00:00Z", 100)] }],
+            partialErrors: [{ code: 13, message: "incomplete" }],
+          },
+        },
+      ],
+    )
+    assert.equal(!partial.ok && partial.error.code, "quota-failed")
+    const missing = await query([{ body: { metrics: [] } }], [])
+    assert.equal(!missing.ok && missing.error.code, "quota-failed")
+  },
+)

@@ -37,6 +37,7 @@ export const registerGeoEngine = (app, { geoEngine, broadcast }) => {
 
   app.put('/api/geocode/gee', express.json({ limit: '64kb' }), (req, res) => answer(res, 'gee.configure', { project: req.body?.project }));
   app.post('/api/geocode/gee/recheck', (_req, res) => answer(res, 'gee.recheck'));
+  app.get('/api/geocode/gee/quota', (_req, res) => answer(res, 'gee.quota'));
   // Waits for the user in the browser, reporting the address to open first; leaving the page's request cancels it.
   app.post('/api/geocode/gee/sign-in', (_req, res) => streamGeoEngine(res, geoEngine, 'gee.signIn', {}));
 };

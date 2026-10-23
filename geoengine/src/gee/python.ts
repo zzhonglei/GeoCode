@@ -50,7 +50,7 @@ export function markedLine(line: string): unknown {
  * The credentials, from earthengine-api's own file alone (docs/GEE.md, section 7): Google Cloud's default ones, which
  * earthengine-api would fall back to, may be another account's or lack Earth Engine's scope. Raises without the file.
  */
-const CREDENTIALS = String.raw`
+export const CREDENTIALS = String.raw`
 def credentials():
     import google.oauth2.credentials
     from ee import oauth
