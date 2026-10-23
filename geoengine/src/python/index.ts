@@ -183,7 +183,7 @@ const EXTERNALLY_MANAGED =
  * What GeoEngine writes into the base environment beside the packages, noted in the marker: a GeoCode that writes it
  * otherwise installs the environment again, so no base keeps an older startup file.
  */
-const WRITTEN = createHash("sha256")
+export const WRITTEN = createHash("sha256")
   .update(EXTERNALLY_MANAGED)
   .update(STARTUP_MODULE)
   .update(STARTUP_PTH)
