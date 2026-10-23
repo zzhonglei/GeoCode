@@ -85,7 +85,7 @@ Google Cloud 项目在设置里填,写进 `machine.json` 的 `"gee": "<项目 ID
 
 凭据只认 earthengine-api 自己的那一份,位置固定为主目录下的 `.config/earthengine/credentials`(macOS 按 `HOME`,Windows 按 `USERPROFILE`),设置里的登录写的就是它。检查与运行都从这个文件显式加载凭据,不像 earthengine-api 缺省那样退回 Google Cloud 的默认凭据(ADC):ADC 可以经环境变量指向一个服务账号,让 GEE 悄悄换一个身份;gcloud 登录得到的凭据常缺 Earth Engine 的授权范围;隔离运行时,它在两个平台上找得到的程度也不同。没有这个文件就是没登录,即使本机有 ADC。
 
-Earth Engine 的请求与 GeoCode 的函数里 geedim 的请求(`gc.download` 的分块下载等)都跟随用户的代理配置(GeoEngine 交给 Python 的网络变量见 `PYTHON.md` 第 6.1 节):设了任一代理变量(`HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY` 等,大小写皆可)就只看变量,一个也没有时才取系统的代理设置。geedim 自己不读代理,`geocode` 的函数在它发出第一个请求之前替它打开;脚本不经这些函数、先直接用 geedim 发出请求时,这次运行里 geedim 的请求都不走代理。
+Earth Engine 的请求与 geedim 的请求(`gc.download` 的分块下载等)都只按代理变量走,与模型服务的请求一样;不读系统设置里的代理。这是内置环境自己的做法(`PYTHON.md` 第 6.1 节),GEE 不另作处理。
 
 在设置里登录时,GeoEngine 启动的 Python 在本机回环地址上临时监听一个端口,等浏览器带回授权码,登录结束即关闭。本机的其他程序可以借这个端口提前结束登录,但伪造的授权码没有用:换取凭据要用只有这个 Python 持有的校验码。
 
@@ -115,6 +115,7 @@ Earth Engine 的请求与 GeoCode 的函数里 geedim 的请求(`gc.download` �
 - 答复列出任务里已有的东西,不耗计算配额;答复不超过内核的上限,脚本的报错总在结尾;运行中的计时与进度只出现在工具行。
 - 运行中重新载入窗口或另开窗口,工具行在几秒内恢复状态、计时与脚本已打印的内容,脚本在这期间一直等服务器、没有输出也一样。
 - 每种环境问题各自报告,GeoAgent 照提示能补齐它能做的部分,修好后不用重启应用;macOS 与 Windows 都能就绪,中文的路径与打印无误。
+- 设了代理变量时,检查、运行与 `gc.download` 的请求都经过代理,脚本直接用 geedim 也一样;只在系统设置里配了代理时,它们不经过代理。
 - 第一次启动与重装内置环境之后,GEE 的检查在环境就绪之后才开始、不超时,马上开始的第一次运行也不被空闲时限中止。
 - GeoAgent 往工作环境里装的包影响不到 GEE;本机只有 Google Cloud 的默认凭据、没有 Earth Engine 自己的凭据时报未登录。
 

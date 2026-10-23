@@ -143,13 +143,15 @@ pip 与 matplotlib 这类软件把缓存与配置写在它们自己的默认位�
 | `SSL_CERT_FILE`、`SSL_CERT_DIR` | 只在 Windows 上设,指向 `base` 带的证书:Windows 上的 OpenSSL 不靠写进文件的位置找证书。用户设了这两个变量且不为空时用用户的 |
 | `PATH` | 只在 Windows 上设:把 conda 激活时放在 `PATH` 最前面的 `base` 的几个目录放到最前面,环境与它启动的程序先加载自己的 DLL |
 
-GeoEngine 运行这套环境的 Python 时,以隔离模式(`-I`)启动它,环境变量不继承 GeoEngine 的,只从用户的环境里取网络的与主目录:代理的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`,证书的 `SSL_CERT_FILE`、`SSL_CERT_DIR`、`REQUESTS_CA_BUNDLE`、`CURL_CA_BUNDLE`,名字不分大小写;再加 `HOME`。用户环境里的其余变量一个也不给:conda 的 `PYTHONPATH`、`PATH` 里 QGIS、OSGeo4W 带的 GDAL,都会让它加载不属于自己的东西。
+GeoEngine 运行这套环境的 Python 时,以隔离模式(`-I`)启动它,环境变量不继承 GeoEngine 的,只从用户的环境里取网络的与主目录:代理的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`,证书的 `SSL_CERT_FILE`、`SSL_CERT_DIR`、`REQUESTS_CA_BUNDLE`、`CURL_CA_BUNDLE`,名字不分大小写;再加 `HOME`。用户环境里的其余变量一个也不给:conda 的 `PYTHONPATH`、`PATH` 里 QGIS、OSGeo4W 带的 GDAL,都会让它加载不属于自己的东西。
 
 `HOME` 不让 Python 加载别处的东西(主目录下的个人 `site-packages` 由 `-I` 关掉,GDAL 的配置文件由启动文件挡开),只指明主目录。不给它,Python 从系统账户查出真实的主目录,结果对用户相同,但开发时的沙箱(`DEVELOPMENT.md` 第 5 节)就挡不住它:matplotlib 会写真实主目录下的缓存,GEE 会读真实的凭据。
 
-其余的它不需要:编码由 Python 自己定,临时目录退回系统的默认位置;在系统设置里配的代理不经环境变量,Python 自己去读。Windows 上 Node 启动子进程时,会从 GeoEngine 的环境里补上进程必需而缺少的系统变量(`SystemRoot`、`TEMP`、`USERPROFILE` 等),其中也有 `PATH`,所以 `PATH` 一定要给,挡住用户的那一个。
+其余的它不需要:编码由 Python 自己定,临时目录退回系统的默认位置。Windows 上 Node 启动子进程时,会从 GeoEngine 的环境里补上进程必需而缺少的系统变量(`SystemRoot`、`TEMP`、`USERPROFILE` 等),其中也有 `PATH`,所以 `PATH` 一定要给,挡住用户的那一个。
 
 隔离模式下 Python 不读任何 `PYTHON` 开头的变量,要它做的设置都以参数给:输出用 UTF-8 是 `-X utf8`,不缓冲输出是 `-u`。
+
+代理也是环境的一部分:用户给 GeoCode 设了代理,这套环境的 Python 默认就走它,GeoAgent 工作时用不着考虑代理,工具说明与提示词也不提;需要时 GeoAgent 仍可以在脚本里自己设。规则与内核、壳服务端相同(`DESKTOP.md` 第 5 节):只按 `HTTP_PROXY`、`HTTPS_PROXY` 与 `NO_PROXY` 联网,大小写皆可,两种都有时与模型服务的请求一样以小写的为准;本机的回环地址(`localhost`、`127.0.0.1`、`::1`)总是直连;不读系统设置里的代理,`ALL_PROXY` 也不认。用户要走代理,就在登录 shell 或 GeoCode 设置的「环境变量」页里设,模型服务、GEE、GDAL 与 GeoAgent 的脚本都跟着走;GeoEngine 只在启动时读设置页的变量,改了要重启应用(`GEOENGINE.md` 第 5 节)。环境里的库本来各有各的做法:urllib 与经过它的 requests 没有变量时去读系统设置,aiohttp(geedim 用它)默认连变量也不读;它们与 GDAL、PROJ 用的 libcurl 都认 `ALL_PROXY`;两种大小写的先后,它们本来就是小写优先。所以启动文件在每个 Python 启动时把变量整理成这条规则:libcurl 只认小写的 `http_proxy`,只有大写的 `HTTP_PROXY` 时补上小写的;设了代理时 `NO_PROXY` 补上回环地址;去掉 `ALL_PROXY`。Python 启动的子进程也继承整理后的变量。再在 urllib 与 aiohttp 被导入时调整它们:urllib 取代理与例外时只看变量,aiohttp 的会话默认读变量。启动时不导入它们,不拖慢每次启动。这些都只是默认:脚本在请求里显式给的代理、显式写的 `trust_env=False`、GDAL 的 `GDAL_HTTP_PROXY` 照样优先;运行中改的代理变量对之后的请求生效;两种大小写都在时以小写的为准,改的要是小写的那一份。自动代理脚本(PAC)不支持。
 
 ### 6.2 重装与更新
 
@@ -172,7 +174,7 @@ GeoCode 没有自动更新,用户卸载旧版、安装新版。卸载只删应�
 
 ## 8. GEE
 
-GEE 只用 `base`,不用工作环境,也不支持用户自己的 Python。环境由 GeoCode 保证,包的版本是锁定的:GEE 依赖的 earthengine-api 与 geedim 的接口(包括 `geocode` 包对 geedim 的代理补丁,`GEE.md` 第 7 节)只需要对一个确定的版本核对,运行出了问题也不必先分辨是不是环境不对。不用工作环境,是因为 GeoAgent 往里装的包可能盖过预装的,GEE 就跟着坏;`base` 只由安装改变,GEE 的运行因此总是确定的。代价是 GEE 的脚本只能用预装的包。
+GEE 只用 `base`,不用工作环境,也不支持用户自己的 Python。环境由 GeoCode 保证,包的版本是锁定的:GEE 依赖的 earthengine-api 与 geedim 的接口只需要对一个确定的版本核对,运行出了问题也不必先分辨是不是环境不对。不用工作环境,是因为 GeoAgent 往里装的包可能盖过预装的,GEE 就跟着坏;`base` 只由安装改变,GEE 的运行因此总是确定的。代价是 GEE 的脚本只能用预装的包。
 
 GEE 从 `python` 的状态取 `base` 的解释器,在环境就绪之前停在检查中。怎样运行、怎样登录与读取凭据,见 `GEE.md` 第 7 节。
 
@@ -182,8 +184,8 @@ GEE 从 `python` 的状态取 `base` 的解释器,在环境就绪之前停在检
 - 准备环境不联网;运行时只有需要网格的坐标转换联网(第 6.1 节)。
 - 环境只写在 GeoCode 的数据目录里,安装时的缓存也在其中。
 - 两个平台用同一份锁定清单,只用 conda-forge 一个频道。
-- 环境自己的变量只由它的启动文件设(第 6.1 节);运行它的一方(GeoEngine、GeoAgent 的 shell 与以后别的入口)不设,也不必知道,就不会漏设。
-- 环境的检查在工作环境里运行,不设任何变量,并另跑一遍:用户环境里的 `GDAL_DATA`、`PROJ_DATA` 等指向别处、`~/.gdal/gdalrc` 关掉了驱动。覆盖:工作环境的 Python 启动时不打印任何错误,第 6.1 节的变量都指向 `base`(启动文件出错时 Python 照常运行,只是变量没设,所以要专门查);每个预装的包都能导入;经 pyogrio 读写 GeoPackage、经 rasterio 读写 GeoTIFF,两者与 `osgeo` 用的是同一份 GDAL;GDAL 的驱动插件都能加载;`gdalwarp`、`ogr2ogr` 能运行;一次真实的坐标变换(投影数据库缺失时它才失败,见 `QGIS.md` 第 3 节);Python 的 `urllib`、requests 与 GDAL 读网上的文件都能经 HTTPS 连上(证书的位置错了才失败);装到带空格与中文的路径后照样通过。
+- 环境自己的变量与对代理的做法只由它的启动文件定(第 6.1 节);运行它的一方(GeoEngine、GeoAgent 的 shell 与以后别的入口)不设,也不必知道,就不会漏设。
+- 环境的检查在工作环境里运行,不设任何变量,并另跑一遍:用户环境里的 `GDAL_DATA`、`PROJ_DATA` 等指向别处、`~/.gdal/gdalrc` 关掉了驱动。覆盖:工作环境的 Python 启动时不打印任何错误,第 6.1 节的变量都指向 `base`(启动文件出错时 Python 照常运行,只是变量没设,所以要专门查);每个预装的包都能导入;经 pyogrio 读写 GeoPackage、经 rasterio 读写 GeoTIFF,两者与 `osgeo` 用的是同一份 GDAL;GDAL 的驱动插件都能加载;`gdalwarp`、`ogr2ogr` 能运行;一次真实的坐标变换(投影数据库缺失时它才失败,见 `QGIS.md` 第 3 节);Python 的 `urllib`、requests 与 GDAL 读网上的文件都能经 HTTPS 连上(证书的位置错了才失败);设了代理变量时,urllib、requests、aiohttp 与 GDAL 的请求都经过它(本机一个只记录、不转发的代理就能查,不联网),没设时系统设置里的代理不被读到;装到带空格与中文的路径后照样通过。
 
 ## 10. 验收
 
