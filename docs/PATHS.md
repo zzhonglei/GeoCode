@@ -148,7 +148,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 
 ## 7. 读取的用户环境
 
-为了让 git、npm 与云服务照常工作,GeoCode 会读用户为这些工具配置的内容:git 的全局配置,GitHub CLI 的登录(`gh auth token`),`~/.npmrc`,在设置里查找可导入的 SSH 密钥时 `~/.ssh` 下的密钥(选中的复制进数据目录),以及选用对应服务商时 AWS 与 Google Cloud 的凭据。内核启动时还为服务商的登录选项读 AWS 的配置名(`~/.aws/config` 与 `~/.aws/credentials`)、gcloud 配置里的项目与区域;选用 Azure 并以 Azure CLI 登录时,内核调用 `az` 取令牌。启动时读取登录 shell 的环境变量,agent 执行的命令与终端因此能找到 conda、GDAL 等工具。GEE 的检查与运行读 Earth Engine 自己的凭据 `~/.config/earthengine/credentials`,不读 Google Cloud 的默认凭据。
+为了让 git、npm 与云服务照常工作,GeoCode 会读用户为这些工具配置的内容:git 的全局配置,GitHub CLI 的登录(`gh auth token`),`~/.npmrc`,在设置里查找可导入的 SSH 密钥时 `~/.ssh` 下的密钥(选中的复制进数据目录),以及选用对应服务商时 AWS 与 Google Cloud 的凭据。内核启动时还为服务商的登录选项读 AWS 的配置名(`~/.aws/config` 与 `~/.aws/credentials`)、gcloud 配置里的项目与区域;选用 Azure 并以 Azure CLI 登录时,内核调用 `az` 取令牌。启动时读取登录 shell 的环境变量,agent 执行的命令与终端因此能找到 conda、GDAL 等工具。GEE 的检查与运行读 Earth Engine 自己的凭据 `~/.config/earthengine/credentials`,不读 Google Cloud 的默认凭据。内置 Python 环境里的 requests 与 aiohttp 联网时照惯例读 `~/.netrc`,有对应主机的账号就带上(`PYTHON.md` 第 6.1 节)。
 
 这些只读不写,例外是在设置里登录 GEE 时,由 earthengine-api 写入它的凭据文件。
 
