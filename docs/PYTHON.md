@@ -56,7 +56,7 @@ GDAL 找驱动插件与数据、PROJ 找投影数据库,有的靠安装时写进
 
 ```
 <数据目录>/python/
-├── base/              基础环境:装好的 conda 环境,解释器、预装的包与 GDAL
+├── base/              基础环境:装好的 conda 环境,解释器、预装的包与 GDAL,以及 GeoCode 的包 geocodekit
 ├── base.json          base 的标识,安装完成后最后写入
 ├── .unpack-<随机名>/  安装时 pixi-unpack 的缓存,中途退出时留下,下次启动清掉
 ├── proj/              PROJ 下载的网格的缓存,用到需要网格的转换时才出现(第 6.1 节)
@@ -66,7 +66,7 @@ GDAL 找驱动插件与数据、PROJ 找投影数据库,有的靠安装时写进
 
 两层分开,是为了让 GeoAgent 能自由装包,而预装的部分不会被它改坏。
 
-- `base` 只由安装产生与替换,运行时不往里装包。它带着 `EXTERNALLY-MANAGED` 标记(PEP 668):pip 与 uv 拒绝往里装包。Python 自己写的字节码缓存不算改动。
+- `base` 只由安装产生与替换,运行时不往里装包。它带着 `EXTERNALLY-MANAGED` 标记(PEP 668):pip 与 uv 拒绝往里装包。Python 自己写的字节码缓存不算改动。GeoCode 的包 `geocodekit` 由 GeoEngine 在安装时装进去,包变了时单独替换(`GEOCODEKIT.md` 第 6 节)。
 - `envs/default` 是以 `--system-site-packages` 建的虚拟环境:预装的包都能直接导入,GeoAgent 额外装的包只进这里。同名的包在这里装了别的版本,只在这个环境里生效。
 
 GeoAgent 运行的 Python 是 `envs/default` 的解释器;`geerun` 用的是 `base` 的(第 8 节),GeoAgent 装的包不进 GEE 的脚本。恢复不需要专门的入口:GeoEngine 启动时缺什么补什么(第 6 节)。`envs/default` 装坏了,删掉它,下次启动时从 `base` 重建,额外装的包随之清空;`base` 被删改坏了,删掉整个 `python/`,下次启动时重新安装。
@@ -116,10 +116,10 @@ pip 与 matplotlib 这类软件把缓存与配置写在它们自己的默认位�
 
 环境由 GeoEngine 的一个能力模块准备与管理,它也发布环境的状态(能力域 `python`):检查中、准备中(安装、建立工作环境,或其后的预热,预热时带正在导入的包、它的序号与总数)、就绪(带 Python 版本、`base` 与工作环境的解释器)、失败(带诊断:哪一步、原因与命令打印的内容)。失败不重试,下次启动再准备。主进程启动 GeoEngine 时告诉它两个位置:应用自带环境的目录与数据目录。
 
-环境的标识是它的定义的校验和(锁定清单里这个平台的各个包的下载地址、三个工具的版本与准备它的构建脚本;conda-forge 的包名带构建号,同一个地址的内容不变),由构建脚本写在包旁边:内容不变,重新打包也不变,用户装上只是重新打包的新版时不必重新安装。`base.json` 另记着 GeoEngine 自己写进 `base` 的文件(`EXTERNALLY-MANAGED` 标记与启动文件)的校验和:新版 GeoCode 改了它们时同样重新安装,不会有 `base` 留着旧的启动文件。GeoEngine 启动时比较 `base.json` 与应用自带环境的标识:
+环境的标识是它的定义的校验和(锁定清单里这个平台的各个包的下载地址、三个工具的版本与准备它的构建脚本;conda-forge 的包名带构建号,同一个地址的内容不变),由构建脚本写在包旁边:内容不变,重新打包也不变,用户装上只是重新打包的新版时不必重新安装。`base.json` 另记着 GeoEngine 自己写进 `base` 的文件(`EXTERNALLY-MANAGED` 标记与启动文件)的校验和:新版 GeoCode 改了它们时同样重新安装,不会有 `base` 留着旧的启动文件。GeoCode 的包另记一份校验和,它变了只换包(`GEOCODEKIT.md` 第 6 节)。GeoEngine 启动时比较 `base.json` 与应用自带环境的标识:
 
-- 一致,且 `base` 的解释器在:直接使用;`envs/default` 不在了就从 `base` 重建它。
-- 否则在后台准备。先删掉旧的 `base.json`、`base` 与 `envs/default`,再用 pixi-unpack 把包装进 `base`:它把包解到临时目录下的缓存,装好后自己删掉;GeoCode 把它的临时目录设成 `python/` 下的一个 `.unpack-` 目录,缓存因此不出数据目录。装的时候它把 `base` 的位置写进需要它的文件,macOS 上改过的二进制文件当场重新签名。装好后写入 `EXTERNALLY-MANAGED` 标记与设环境变量的启动文件(第 6.1 节),删掉 pixi-unpack 另写在 `python/` 下的激活脚本与只在编译与调试时用的文件(头文件、链接库、调试符号,Windows 上有七百多 MB),最后写入标识;然后重建 `envs/default`。中途应用退出或安装失败,标识不在,下次启动清掉留下的 `.unpack-` 目录与激活脚本,从头再装,不会用到装了一半的环境。
+- 一致,且 `base` 的解释器在:直接使用;`base.json` 记的 GeoCode 的包与应用自带的不同时,只换掉包;`envs/default` 不在了就从 `base` 重建它。
+- 否则在后台准备。先删掉旧的 `base.json`、`base` 与 `envs/default`,再用 pixi-unpack 把包装进 `base`:它把包解到临时目录下的缓存,装好后自己删掉;GeoCode 把它的临时目录设成 `python/` 下的一个 `.unpack-` 目录,缓存因此不出数据目录。装的时候它把 `base` 的位置写进需要它的文件,macOS 上改过的二进制文件当场重新签名。装好后写入 `EXTERNALLY-MANAGED` 标记与设环境变量的启动文件(第 6.1 节),装上 GeoCode 的包,删掉 pixi-unpack 另写在 `python/` 下的激活脚本与只在编译与调试时用的文件(头文件、链接库、调试符号,Windows 上有七百多 MB),最后写入标识;然后重建 `envs/default`。中途应用退出或安装失败,标识不在,下次启动清掉留下的 `.unpack-` 目录与激活脚本,从头再装,不会用到装了一半的环境。
 - 两个 GeoCode 同时启动(只在开发时出现)不另作处理:准备撞在一起时可能有一方失败,下次启动再准备。
 
 旧的 `base` 不留作退路:新环境只能装在 `base` 的位置上,装不好时窗口显示出错页(第 7 节),旧的也用不上。
@@ -157,7 +157,7 @@ GeoEngine 运行这套环境的 Python 时,以隔离模式(`-I`)启动它,环境
 
 GeoCode 没有自动更新,用户卸载旧版、安装新版。卸载只删应用本身,数据目录与其中的环境留着:
 
-- 新版自带的环境标识不变:直接沿用,第一次启动不用等。
+- 新版自带的环境标识不变:直接沿用,第一次启动不用等;只改了 GeoCode 的包时只换包。
 - 标识变了(锁定清单变了),或新版改了 GeoEngine 写进 `base` 的文件:替换 `base`,重建 `envs/default`。GeoAgent 额外装的包随之清空,需要时它再装;它们是对旧的 `base` 装的,留着可能与新的预装包不兼容。
 
 完全卸载时要删的位置里有这个环境(`PATHS.md`)。
@@ -180,7 +180,7 @@ GEE 从 `python` 的状态取 `base` 的解释器,在环境就绪之前停在检
 
 ## 9. 约束
 
-- `base` 只由安装改变;GeoAgent 与任何运行都不往里装包。
+- `base` 只由安装改变;GeoAgent 与任何运行都不往里装包。GeoCode 的包由 GeoEngine 装进去,算作安装的一部分。
 - 准备环境不联网;运行时只有需要网格的坐标转换联网(第 6.1 节)。
 - 环境只写在 GeoCode 的数据目录里,安装时的缓存也在其中。
 - 两个平台用同一份锁定清单,只用 conda-forge 一个频道。

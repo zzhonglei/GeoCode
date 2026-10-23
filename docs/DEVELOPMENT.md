@@ -40,7 +40,7 @@ geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
 
 改动 `kernel/` 之后要重新运行它,应用才会用上新的内核。
 
-GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/packages/electron/resources/geoengine/geoengine.mjs`,打包时收进 `app.asar`。GEE 脚本导入的 Python 包 `geoengine/python/` 在这一步原样编进 `geoengine.mjs`(原因见 `GEE.md` 第 5 节),改了其中的 `.py` 文件同样要重新构建。开发模式的启动脚本每次启动前都运行它,打包流程也运行它,平时不用手动执行;`geoengine/` 没装依赖时它报错退出。
+GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/packages/electron/resources/geoengine/geoengine.mjs`,打包时收进 `app.asar`。GeoCode 的 Python 包 `geocodekit`(`geoengine/python/`)在这一步原样编进 `geoengine.mjs`,由 GeoEngine 装进内置环境(`GEOCODEKIT.md` 第 6 节),改了其中的 `.py` 文件同样要重新构建。开发模式的启动脚本每次启动前都运行它,打包流程也运行它,平时不用手动执行;`geoengine/` 没装依赖时它报错退出。
 
 内置的 Python 环境(见 `PYTHON.md`)由 `./scripts/stage-python.sh` 按 `geoengine/environment/` 里的定义准备:用 pixi-pack 把锁定清单里这个平台的包打成 `python.tar`,与这个平台的 pixi-unpack 一起暂存到 `desktop/packages/electron/resources/python/`,打包时作为额外资源收进应用。它按 `tools.json` 下载固定版本的工具并核对校验和,工具与下载的包放在仓库的 `.cache/python/`,不读用户自己的 pixi 配置。环境的标识没变时它直接跳过,所以开发模式的启动脚本每次启动前也运行它。默认准备本机平台的环境,并用 pixi-unpack 在 `.cache/python/` 里装一份,核对 Python 的版本并运行 `pip check`;给出 `win32-x64` 或 `darwin-arm64` 也能为另一个平台准备,只是不装、不核对。改了 `geoengine/environment/pixi.toml` 之后,运行 `./scripts/stage-python.sh --lock` 重新生成两个平台的锁定清单 `pixi.lock`,与它一起提交。
 
