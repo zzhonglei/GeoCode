@@ -48,9 +48,9 @@ GeoEngine 是 GeoCode 自己的代码,用 TypeScript 与 Effect 编写,写法照
 
 它在 Electron 的辅助进程里以 Node 运行,所以 `src/` 只用 Node 的 API,不用 Bun 的;Bun 只用来安装依赖与打包,只有 `script/` 下的构建脚本能用 Bun 的 API,也只有它的类型检查带着 Bun 的类型。相对导入写 `.ts` 扩展名,只用能直接擦除的类型语法,测试因此由 Node 直接运行。
 
-检查在 `geoengine/` 执行 `bun run typecheck` 与 `bun run test`。
+检查在 `geoengine/` 执行 `bun run typecheck`,测试用 `scripts/test.mjs`(`DEVELOPMENT.md` 第 7 节)。
 
-`geoengine/python/` 是 GEE 脚本导入的 Python 包 `geocode`,在内置 Python 环境的 `base` 里运行(`PYTHON.md` 第 8 节),所以可以用 `base` 里预装的包。写法照 PEP 8,行宽 120。交给 GeoAgent 的名字列在包的 `__all__` 里,其余模块以下划线开头,不写进工具说明。它由 GeoEngine 的测试经替身的 earthengine-api 运行检查,改动后再跑用真实 Earth Engine 的几项(`DEVELOPMENT.md` 第 7 节);存资产的 `gc.save` 不在其中,改动它时另做冒烟。运行替身测试的是 `PATH` 里的 `python3`,可能比 `base` 的 3.13 旧(macOS 自带的是 3.9),所以包里只用两者都支持的写法。
+`geoengine/python/` 是 GEE 脚本导入的 Python 包 `geocode`,在内置 Python 环境的 `base` 里运行(`PYTHON.md` 第 8 节),所以可以用 `base` 里预装的包。写法照 PEP 8,行宽 120。交给 GeoAgent 的名字列在包的 `__all__` 里,其余模块以下划线开头,不写进工具说明。它由 GeoEngine 的单元测试经替身的 earthengine-api 运行检查,改动后再跑 `gee` 套件(`DEVELOPMENT.md` 第 7 节);存资产的 `gc.save` 不在其中,改动它时另做冒烟。运行替身测试的是 `PATH` 里的 `python3`,可能比 `base` 的 3.13 旧(macOS 自带的是 3.9),所以包里只用两者都支持的写法。
 
 ### 2.4 `scripts/`
 
@@ -115,7 +115,9 @@ GeoCode 只有桌面应用一种形式,补丁不判断运行方式。提前返�
 - 补丁的机械检查有两项:`vendor.sh` 的文件集对账与写入检测。
 - 测试只写在审阅看不出来的运行时行为上。配不配逐处权衡:值得配的,是会被静默破坏(例如跨文件的副本)或破坏后果严重(损坏用户数据、写入别的产品的目录)的地方;改动很小、审阅时一眼能看出的不配,一条路径已被别的测试覆盖的也不再加。界面的外观与交互不写测试,在应用里实际操作查看。断言后果,不断言措辞。交给模型与用户的文字(工具的返回、出错的说明、界面上的文字)靠撰写时认真设计与审阅来保证,不写测试守护:GeoCode 写的与改的都出现在 diff 中,上游新加的在合并时核对(`UPSTREAM.md` 第 4 节第 9 步)。
 - 写一条检查,先证明它会失败:撤掉它保护的改动,确认它变红。
-- 上游测试文件里新加的用例,名称以 `GeoCode: ` 开头,可以在包目录用 `bun run test <文件> -t "GeoCode:"` 单独运行。
+- 只碰替身的写成单元测试;接真实的外部软件(QGIS、Earth Engine)的写成真实软件的测试,只测替身证明不了的。两种不放进同一个文件;几个文件共用的夹具放进共用的模块,不在文件之间复制(分层与 GeoEngine 测试的布局见 `DEVELOPMENT.md` 第 7 节)。
+- 提交前运行 `node scripts/test.mjs changed`;路线的每一步(`DESIGN.md` 第 5 节)结束与升级上游之后运行 `all`,并设上 `GEOENGINE_GEE_PROJECT`,让 `gee` 套件也运行,再在写入检测的监视下跑一次真实会话。
+- 上游测试文件里新加的用例,名称以 `GeoCode: ` 开头,`scripts/test.mjs` 凭这个前缀找到并只运行它们;单独运行时在包目录用 `bun run test <文件> -t "GeoCode:"`。
 - 凡是「写入配置、期望某个服务读到」的改动,追到读取方,在运行时确认。
 
 可能写盘的操作,前后都要运行写入检测(用法见 `DEVELOPMENT.md` 第 8 节);影响运行时路径的改动,还要在它的监视下跑一次真实会话。它只看写入,不看读取。
