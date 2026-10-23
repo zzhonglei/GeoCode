@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Effect, Fiber } from "effect"
-import { Runtime } from "../src/runtime.ts"
+import { Runtime } from "../../src/runtime.ts"
+import { alive } from "../support/common.ts"
 
 const NODE = process.execPath
 
@@ -24,15 +25,6 @@ const node = (script: string, extra: Partial<Runtime.Options> = {}): Runtime.Opt
   clocks: { total: "10 seconds" },
   ...extra,
 })
-
-const alive = (pid: number) => {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 200))
 

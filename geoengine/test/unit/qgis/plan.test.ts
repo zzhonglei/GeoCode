@@ -3,8 +3,8 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
-import type { Catalog } from "../src/qgis/catalog.ts"
-import { Plan } from "../src/qgis/plan.ts"
+import type { Catalog } from "../../../src/qgis/catalog.ts"
+import { Plan } from "../../../src/qgis/plan.ts"
 
 const parameter = (fields: Partial<Catalog.Parameter> & { name: string; type: string }): Catalog.Parameter => ({
   description: fields.name,

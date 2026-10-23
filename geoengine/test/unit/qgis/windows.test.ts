@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import path from "node:path"
 import { test } from "node:test"
-import { Windows } from "../src/qgis/windows.ts"
+import { Windows } from "../../../src/qgis/windows.ts"
 
 const win = path.win32
 

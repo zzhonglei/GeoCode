@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
 import { Effect, Fiber, Schema, type Scope, Stream } from "effect"
-import { Config } from "../src/config.ts"
+import { Config } from "../../src/config.ts"
 
 const Location = Schema.Struct({ path: Schema.String })
 

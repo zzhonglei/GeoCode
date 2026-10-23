@@ -4,12 +4,13 @@ import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
 import { Effect, Fiber, Layer } from "effect"
-import { Config } from "../src/config.ts"
-import { Engine } from "../src/engine.ts"
-import type { Protocol } from "../src/protocol.ts"
-import { Runtime } from "../src/runtime.ts"
-import { Status } from "../src/status.ts"
-import type { Transport } from "../src/transport.ts"
+import { Config } from "../../src/config.ts"
+import { Engine } from "../../src/engine.ts"
+import type { Protocol } from "../../src/protocol.ts"
+import { Runtime } from "../../src/runtime.ts"
+import { Status } from "../../src/status.ts"
+import type { Transport } from "../../src/transport.ts"
+import { alive } from "../support/common.ts"
 
 const probe: Engine.Capability = Effect.gen(function* () {
   const status = yield* Status.Service
@@ -93,15 +94,6 @@ const start = async (capabilities: readonly Engine.Capability[] = [probe]) => {
     throw error
   }
   return { sent, deliver: (message: unknown) => deliver(message), waitFor, response, stop }
-}
-
-const alive = (pid: number) => {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
 }
 
 const pidOf = (sent: Protocol.Outbound[], id: number) => {

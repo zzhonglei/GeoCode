@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Geodata } from "../src/qgis/geodata.ts"
-import type { Reader } from "../src/qgis/reader.ts"
+import { Geodata } from "../../../src/qgis/geodata.ts"
+import type { Reader } from "../../../src/qgis/reader.ts"
 
 const WGS84: Reader.Crs = {
   name: "WGS 84",
