@@ -480,6 +480,7 @@ export const capability: Engine.Capability = Effect.gen(function* () {
       )
     })
 
+  /** The configured project's monthly quota, for the user (Quota.query), once GEE is ready. */
   const quota: Engine.Method = (_raw, context) =>
     Effect.gen(function* () {
       const current = yield* ready(context.signal)

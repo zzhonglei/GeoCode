@@ -93,6 +93,8 @@ Earth Engine 的请求与 geedim 的请求(`gc.download` 的分块下载等)都�
 
 没有就绪时不执行脚本,告诉 GeoAgent 缺什么、谁来补:没登录或凭据失效时,请用户在设置里登录;项目 ID 只能问用户,得到之后 GeoAgent 可以自己写进配置。连不上时提示只说连不上 Google,Earth Engine 的服务器出错或限流时只说它正忙,不附别的:网络的情况太多,怎样处理留给 GeoAgent 与用户在对话里商量。
 
+项目本月的 Earth Engine 额度只给用户看,不给 GeoAgent。GeoEngine 在被问到时才查,用 `base` 的 Python 与同一份凭据:上限读 Service Usage,用量读 Cloud Monitoring,项目里要开着这两个服务。读用量用的 MQL 接口 Google 已宣布弃用,另一种读法要项目绑定结算账户,多数非商业项目没有。还没有本月的用量样本时用量为未知,不当作 0;查不到时说明原因,不改变 GEE 的状态。
+
 ## 8. 权限
 
 `geerun` 执行任意 Python,风险与 `shell` 相同,所以权限与默认规则都照 `shell`:agent 本来就能经 `shell` 运行 Python,只问 `geerun` 守不住什么。它在设置里有自己的一行,用户给 `shell` 设的规则不管它;GeoCode 改动 GeoAgent 对 `shell` 的默认规则时,对 `geerun` 同样改动。规则与「始终允许」都按整个工具:脚本每次不同,按内容记住没有意义。询问之前先查环境、参数与脚本文件,不让用户批准一个注定执行不了的请求;任务被占用、不存在或正在运行,要到运行开始时才查得出。

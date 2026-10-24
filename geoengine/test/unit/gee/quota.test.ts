@@ -57,6 +57,9 @@ class Response:
             raise HTTPError(self)
 
     def json(self):
+        # A reply with no body stands for a page, such as a proxy's, that is not JSON.
+        if self.body is None:
+            raise ValueError("Expecting value: line 1 column 1 (char 0)")
         return self.body
 
 
@@ -82,16 +85,20 @@ class AuthorizedSession:
             assert method == "POST" and url.endswith("/timeSeries:query")
             assert "monthly_eecu_usage_time" in json["query"]
             assert 'resource.project_id == "majestic"' in json["query"]
+            if "window" in fixture:
+                assert json["query"].endswith("| within " + fixture["window"]), json["query"]
             replies = fixture["usage"]
             token = json.get("pageToken", "0")
         return Response(replies[int(token)])
 `
 
-const query = async (limits: unknown[], usage: unknown[], now = "2026-10-23T09:00:00+00:00") => {
+/** `window`, when given, is how far back the usage query must reach. */
+const query = async (limits: unknown[], usage: unknown[], now = "2026-10-23T09:00:00+00:00", window?: string) => {
   const engine = await start("majestic")
   try {
     assert.equal((await engine.settled()).status, "ready")
-    await fs.writeFile(path.join(engine.directory, "stubs/flags/quota.json"), JSON.stringify({ limits, usage, now }))
+    const fixture = JSON.stringify({ limits, usage, now, window })
+    await fs.writeFile(path.join(engine.directory, "stubs/flags/quota.json"), fixture)
     await fs.appendFile(path.join(engine.directory, "stubs/google/auth/transport/requests.py"), SESSION)
     const response = await engine.response(engine.send({}, "gee.quota"))
     assert.equal(engine.states().at(-1)?.status, "ready")
@@ -117,6 +124,9 @@ test(
           },
         },
       ],
+      // Guards against missing this month's usage written only early in the month, reaching back a fixed time alone.
+      "2026-10-23T09:00:00+00:00",
+      "23d",
     )
     assert.ok(response.ok, JSON.stringify(response))
     assert.deepEqual(response.result, {
@@ -166,6 +176,7 @@ test(
         [{ body: { metrics: [limit()] } }],
         [{ body: { timeSeriesData: [{ pointData: [point(previous, 500000)] }] } }],
         now,
+        "1d",
       )
       assert.ok(response.ok, JSON.stringify(response))
       assert.equal((response.result as { usedSeconds: null }).usedSeconds, null)
@@ -181,6 +192,12 @@ test(
     const refused = await query([{ status: 403, body: { error: { message: "Monitoring permission denied" } } }], [])
     assert.equal(!refused.ok && refused.error.code, "quota-failed")
     assert.equal(!refused.ok && refused.error.message, "Monitoring permission denied")
+    // Guards against an answer that is not JSON, such as a proxy's error page, ending the query without its status.
+    for (const body of [null, [], { error: "Bad gateway" }]) {
+      const page = await query([{ status: 502, body }], [])
+      assert.equal(!page.ok && page.error.code, "quota-failed")
+      assert.equal(!page.ok && (page.error.details as { status?: number }).status, 502)
+    }
     const partial = await query(
       [{ body: { metrics: [limit()] } }],
       [
