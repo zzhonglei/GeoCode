@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { Effect, Fiber, Layer } from "effect"
 import { Config } from "../../src/config.ts"
 import { Engine } from "../../src/engine.ts"
@@ -418,10 +419,13 @@ class Number:
 `,
 }
 
+/** geocodekit's source, which the stubbed Python imports in place of the package installed in the base environment. */
+export const SOURCE = fileURLToPath(new URL("../../python/", import.meta.url))
+
 /**
- * The real Python 3 standing in for the base environment's, with the stubs first on its path, behaving as the flags
- * say. Isolated as GeoEngine runs it, it ignores PYTHONPATH, so the stubs are put on its path by a line before the
- * program it reads from standard input, as every GEE program is given.
+ * The real Python 3 standing in for the base environment's, with the stubs and geocodekit's source first on its path,
+ * behaving as the flags say. Isolated as GeoEngine runs it, it ignores PYTHONPATH, so they are put on its path by a
+ * line before the program it reads from standard input, as every GEE program is given.
  */
 const stubbedPython = async (directory: string, raised: readonly Flag[] = []) => {
   const stubs = path.join(directory, "stubs")
@@ -434,7 +438,7 @@ const stubbedPython = async (directory: string, raised: readonly Flag[] = []) =>
   const file = path.join(directory, "python")
   const body = [
     "#!/bin/sh",
-    `{ echo 'import sys; sys.path.insert(0, ${JSON.stringify(stubs)})'; cat; } | '${python3}' "$@"`,
+    `{ echo 'import sys; sys.path[:0] = ${JSON.stringify([stubs, SOURCE])}'; cat; } | '${python3}' "$@"`,
   ]
   await fs.writeFile(file, body.join("\n") + "\n")
   await fs.chmod(file, 0o755)

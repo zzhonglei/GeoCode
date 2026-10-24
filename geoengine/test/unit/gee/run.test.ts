@@ -108,10 +108,10 @@ test("a run stopped during a download leaves no unfinished file", { skip: !pytho
     await fs.writeFile(kept, "mine")
     const script = [
       "import time",
-      "from geocode import _run",
-      `_run.partial(${JSON.stringify(unfinished)})`,
+      "from geocodekit import _tool",
+      `_tool.partial(${JSON.stringify(unfinished)})`,
       `open(${JSON.stringify(unfinished)}, "w").write("half")`,
-      `_run.partial(${JSON.stringify(kept)})`,
+      `_tool.partial(${JSON.stringify(kept)})`,
       'print("downloading", flush=True)',
       "time.sleep(60)",
     ].join("\n")

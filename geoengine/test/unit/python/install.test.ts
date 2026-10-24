@@ -4,19 +4,10 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { test } from "node:test"
 import { Environment } from "../../../src/python/index.ts"
-import { python3, bundle, calls, settle, temporary } from "../../support/python.ts"
+import { python3, bundle, calls, exists, settle, steps, temporary } from "../../support/python.ts"
 
 /** In order: a folder's listing is not in one on every file system. */
 const listed = async (folder: string) => (await fs.readdir(folder)).sort()
-
-const exists = (file: string) =>
-  fs.access(file).then(
-    () => true,
-    () => false,
-  )
-
-const steps = (states: readonly Environment.State[]) =>
-  states.flatMap((state) => (state.status === "preparing" ? [state.step] : []))
 
 test(
   "a first start installs the bundled environment and makes the working one from it",
@@ -130,30 +121,6 @@ test("a new bundle replaces the base environment and the working one made from i
     assert.ok(!(await exists(path.join(where.env, "installed"))))
     assert.equal(JSON.parse(await fs.readFile(where.marker, "utf-8")).id, "two")
     assert.deepEqual(await listed(where.root), ["base", "base.json", "envs"])
-  } finally {
-    await fs.rm(directory, { recursive: true, force: true })
-  }
-})
-
-test("a base environment another GeoCode wrote its own files into is installed again", { skip: !python3 }, async () => {
-  const directory = await temporary()
-  try {
-    const where = Environment.layout(path.join(directory, "data"))
-    const bundled = await bundle(directory, "one")
-    await settle(directory, bundled)
-    // As a GeoCode with another startup file leaves it.
-    const marker = JSON.parse(await fs.readFile(where.marker, "utf-8"))
-    await fs.writeFile(where.marker, JSON.stringify({ ...marker, written: "an older GeoCode's" }))
-
-    const { last, states } = await settle(directory, bundled)
-    assert.equal(last.status, "ready")
-    assert.deepEqual([...new Set(steps(states))], ["installing", "creating", "warming"])
-    assert.deepEqual(JSON.parse(await fs.readFile(where.marker, "utf-8")), marker)
-
-    // As a GeoCode that wrote no startup file leaves it.
-    await fs.writeFile(where.marker, JSON.stringify({ id: marker.id }))
-    const older = await settle(directory, bundled)
-    assert.deepEqual([...new Set(steps(older.states))], ["installing", "creating", "warming"])
   } finally {
     await fs.rm(directory, { recursive: true, force: true })
   }

@@ -4,7 +4,7 @@ import os
 
 import ee
 
-from geocode import _run
+from geocodekit import _tool
 
 # Every request that uses the region carries all its vertices, and grows slower with them.
 MOST_VERTICES = 10000
@@ -19,7 +19,7 @@ STEP = {False: 5000.0, True: 0.05}
 def region(path, layer=None):
     """Reads the one polygon of a local vector file as the study region, an ee.Geometry whose edges are straight in the
     file's coordinate system, as a GIS draws them. "layer" names the layer of a file that holds several."""
-    with _run.stage("Reading the region from %s" % os.path.basename(path)):
+    with _tool.stage("Reading the region from %s" % os.path.basename(path)):
         import geopandas
         import shapely
         import shapely.ops
@@ -79,7 +79,7 @@ def region(path, layer=None):
         else:
             # An older datum, or a system Earth Engine cannot read: in lon/lat as QGIS converts each point, with points
             # close enough together to keep the file's straight edges.
-            with _run.stage("Converting the region to WGS 84"):
+            with _tool.stage("Converting the region to WGS 84"):
                 dense = shapely.segmentize(geometry, STEP[degrees])
                 shape = unwrapped(shapely.ops.transform(to_lonlat, dense))
                 text = "EPSG:4326"

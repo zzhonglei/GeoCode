@@ -8,7 +8,8 @@ import time
 
 import ee
 
-from geocode import _outputs, _run
+from geocodekit import _tool
+from geocodekit.gee import _outputs, _run
 
 # What a save waits for or cancels: one already being cancelled is ending either way.
 UNDER_WAY = ("PENDING", "RUNNING")
@@ -74,13 +75,13 @@ def load(name):
     """Reads a saved asset: "composite" of this task, "other-task/composite" of another task, or "projects/..." by its
     full path. Returns an ee.Image, ee.FeatureCollection or ee.ImageCollection, as the asset is."""
     if not isinstance(name, str):
-        raise TypeError('gc.load takes an asset\'s name as a string, such as "composite".')
-    with _run.stage("Loading %s" % name):
+        raise TypeError('gee.load takes an asset\'s name as a string, such as "composite".')
+    with _tool.stage("Loading %s" % name):
         return read(located(name))
 
 
 def located(name):
-    """The full path of an asset gc.load names."""
+    """The full path of an asset gee.load names."""
     if name.startswith("projects/"):
         return name
     parts = name.split("/")
@@ -89,8 +90,8 @@ def located(name):
     if len(parts) == 2:
         return "%s/%s/%s" % (_run.root, checked(parts[0], "task"), checked(parts[1], "asset"))
     raise ValueError(
-        'gc.load takes "asset" of this task, "task/asset" of another, or a full path starting with "projects/", not %r.'
-        % name
+        'gee.load takes "asset" of this task, "task/asset" of another, or a full path starting with "projects/",'
+        " not %r." % name
     )
 
 
@@ -136,11 +137,11 @@ def save(data, name, *, title, description, **grid):
     checked(name, "asset")
     for key, text in (("title", title), ("description", description)):
         if not isinstance(text, str) or not text.strip():
-            raise ValueError("gc.save needs a %s: say what the asset is, in the user's language." % key)
+            raise ValueError("gee.save needs a %s: say what the asset is, in the user's language." % key)
     image = isinstance(data, ee.Image)
     if not image and not isinstance(data, ee.FeatureCollection):
         raise TypeError(
-            "gc.save takes an ee.Image or an ee.FeatureCollection, not %s; reduce a collection to an image first, as "
+            "gee.save takes an ee.Image or an ee.FeatureCollection, not %s; reduce a collection to an image first, as "
             "by composite or mosaic." % type(data).__name__
         )
     # As the signature the agent is shown has it: an argument given as None is not given.
@@ -150,14 +151,14 @@ def save(data, name, *, title, description, **grid):
     _outputs.without_region(grid)
     others = sorted(set(grid) - set(GRID))
     if others:
-        raise TypeError("gc.save takes %s, not %s." % (", ".join(GRID), ", ".join(others)))
+        raise TypeError("gee.save takes %s, not %s." % (", ".join(GRID), ", ".join(others)))
     # The same grid written another way, as 10 and 10.0, is the same content.
     if "scale" in grid:
         grid["scale"] = number(grid["scale"], "scale")
     if "crs_transform" in grid:
         grid["crs_transform"] = [number(value, "crs_transform") for value in grid["crs_transform"]]
 
-    with _run.stage("Saving %s to the task" % name):
+    with _tool.stage("Saving %s to the task" % name):
         serialized = ee.serializer.toJSON(data)
         text = json.dumps({"data": serialized, "grid": grid, "sources": sources(serialized)}, sort_keys=True)
         fingerprint = hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -247,7 +248,7 @@ def finish(operation, path, name, made, text):
     """Waits for an export, telling the tool row what it is doing and its progress, and reads the saved asset; a failed
     one leaves no empty folder."""
     started = time.monotonic()
-    with _run.stage(text, 0):
+    with _tool.stage(text, 0):
         error = _outputs.failure(operation)
     if error is None:
         print("Saved %s after %d s." % (name, time.monotonic() - started))

@@ -29,12 +29,14 @@ const realBase = async () => {
     process.env.GEOENGINE_GEE_DATA ??
     path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "geocode")
   const where = Environment.layout(data)
-  const marker = JSON.parse(await fs.readFile(where.marker, "utf-8").catch(() => "{}")) as { written?: string }
-  // Guards against a base an older GeoCode wrote, whose startup file differs.
-  assert.equal(marker.written, Environment.WRITTEN, `start GeoCode once, to install its base environment in ${data}`)
+  const started = `start GeoCode once, to install its base environment in ${data}`
+  await fs.access(where.basePython).catch(() => assert.fail(started))
   // Imported once first, as the warm-up does: a check, timed, of a base never warmed up would run out of time.
   const asked = ["-I", "-c", "import platform, ee, geedim, geopandas, rasterio; print(platform.python_version())"]
   const version = execFileSync(where.basePython, asked, { encoding: "utf-8" }).trim()
+  // Guards against running another GeoCode's startup file or geocodekit than this one's.
+  const { write, remove } = await Environment.compare(where, version)
+  assert.deepEqual([...write, ...remove], [], started)
   return { python: where.basePython, version, prefix: where.base }
 }
 
@@ -234,11 +236,11 @@ test(
           await fs.mkdir(path.join(engine.directory, "数据"))
           await fs.writeFile(path.join(engine.directory, "数据", "台北.geojson"), JSON.stringify(TAIPEI))
           const script = [
-            "import geocode as gc",
-            'region = gc.region("数据/台北.geojson")',
-            'images = gc.images("COPERNICUS/S2_SR_HARMONIZED", region, "2024-10-01", "2025-01-01")',
-            "composite = gc.composite(images, region).clip(region)",
-            'print(gc.download(composite.select(["B4", "B3", "B2"]), "台北_rgb.tif", scale=100))',
+            "import geocodekit.gee as gee",
+            'region = gee.region("数据/台北.geojson")',
+            'images = gee.images("COPERNICUS/S2_SR_HARMONIZED", region, "2024-10-01", "2025-01-01")',
+            "composite = gee.composite(images, region).clip(region)",
+            'print(gee.download(composite.select(["B4", "B3", "B2"]), "台北_rgb.tif", scale=100))',
           ].join("\n")
           const done = result(await engine.response(engine.send({ script, cwd: engine.directory }), COMPOSED))
           assert.equal(done.outcome, "finished", done.output)

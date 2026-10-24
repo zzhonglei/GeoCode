@@ -89,7 +89,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
     └── tmp/                       合并分支时的临时工作树
 ```
 
-`geocode.db`、`log/`、`repos/`、`python/` 与 `desktop/` 里的 `chats/`、`remote-clients.json`、`geocode.managed.json`、`agent-tool/`、`managed-kernel/`、git 凭据助手的两份文件每次启动就写,其余的用到对应功能时才会出现,在没用过的电脑上不存在。`desktop/` 里的存储都先写旁边名字带 `.tmp` 的副本再改名,写到一半时应用崩溃会留下它(设置与偏好的副本在下次启动时清掉);git、代码托管与项目设置的存储另在旁边建 `.lock` 锁文件,崩溃时可能留下;排队的消息、会话的归档与等待交回的子会话结果读不出时,原文件改名为 `<文件名>.corrupt-<时间>` 留下。安装 Python 环境时,pixi-unpack 先把包解到 `python/.unpack-<随机名>/`,装好后删掉,安装中途应用退出会留下它与一份激活脚本 `python/activate.*`,下次启动时清掉;安装期间解开的包与装好的环境同时在,占用约 2.3 GB。
+`geocode.db`、`log/`、`repos/`、`python/` 与 `desktop/` 里的 `chats/`、`remote-clients.json`、`geocode.managed.json`、`agent-tool/`、`managed-kernel/`、git 凭据助手的两份文件每次启动就写,其余的用到对应功能时才会出现,在没用过的电脑上不存在。`desktop/` 里的存储都先写旁边名字带 `.tmp` 的副本再改名,写到一半时应用崩溃会留下它(设置与偏好的副本在下次启动时清掉);git、代码托管与项目设置的存储另在旁边建 `.lock` 锁文件,崩溃时可能留下;排队的消息、会话的归档与等待交回的子会话结果读不出时,原文件改名为 `<文件名>.corrupt-<时间>` 留下。安装 Python 环境时,pixi-unpack 先把包解到 `python/.unpack-<随机名>/`,装好后删掉,安装中途应用退出会留下它与一份激活脚本 `python/activate.*`,下次启动时清掉;安装期间解开的包与装好的环境同时在,占用约 2.3 GB。GeoEngine 重写 `base` 里自己的文件时,先写成 `python/.writing-<随机名>` 再改名挪到位,写到一半时应用退出会留下它,下次启动时清掉。
 
 ## 4. 缓存、状态与临时文件
 

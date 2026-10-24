@@ -26,6 +26,23 @@ export const python3 = (() => {
   }
 })()
 
+/** The Python version a bundle says its environment has. */
+export const VERSION = "3.13.16"
+
+/** The base environment's site-packages, as a bundle stages it. */
+export const sitePackages = (where: ReturnType<typeof Environment.layout>) =>
+  path.join(where.stdlib(VERSION), "site-packages")
+
+export const exists = (file: string) =>
+  fs.access(file).then(
+    () => true,
+    () => false,
+  )
+
+/** The steps of preparing the environment, in the order the states went through them. */
+export const steps = (states: readonly Environment.State[]) =>
+  states.flatMap((state) => (state.status === "preparing" ? [state.step] : []))
+
 const executable = async (file: string, text: string) => {
   await fs.writeFile(file, text)
   await fs.chmod(file, 0o755)
@@ -80,7 +97,7 @@ export const bundle = async (directory: string, id: string, options: { fails?: b
       'tar -xf "$pack" -C "$TMPDIR" && mv "$TMPDIR/python" "$out/$name" && echo "# activate" > "$out/activate.sh"',
     ].join("\n") + "\n",
   )
-  await fs.writeFile(path.join(folder, "python.json"), JSON.stringify({ id, python: "3.13.16" }))
+  await fs.writeFile(path.join(folder, "python.json"), JSON.stringify({ id, python: VERSION }))
   return folder
 }
 

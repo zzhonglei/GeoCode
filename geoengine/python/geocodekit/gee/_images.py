@@ -4,7 +4,8 @@ import json
 
 import ee
 
-from geocode import _run
+from geocodekit import _tool
+from geocodekit.gee import _run
 
 # Acquisitions listed at most; past these, those with the most cloud-free cover of the region.
 MOST_ROWS = 40
@@ -25,9 +26,9 @@ def images(collection, region, start, end, **masking):
     """Finds a dataset's images over the region from start to end, the end excluded, and prints each acquisition's
     cover of the region and the cloud-free share of that cover, its clouds found as geedim finds them. "collection" is
     a dataset's ID or an ee.ImageCollection; "masking" takes geedim's cloud masking arguments, such as score=0.5.
-    Returns the images unmasked, with geedim's mask bands, as geedim composites them: gc.composite masks them with the
+    Returns the images unmasked, with geedim's mask bands, as geedim composites them: gee.composite masks them with the
     same arguments, and .gd.maskClouds() masks them for other uses."""
-    with _run.stage("Finding images of %s" % (collection if isinstance(collection, str) else "the collection")):
+    with _tool.stage("Finding images of %s" % (collection if isinstance(collection, str) else "the collection")):
         _run.geedim()
         found = ee.ImageCollection(collection).filterDate(start, end).filterBounds(region)
         dataset = found.gd.id
@@ -75,14 +76,14 @@ def images(collection, region, start, end, **masking):
                 % (dataset or "the collection", start, end)
             )
         rows = []
-        _run.update("Measuring %s over the region" % _run.plural(len(keys), "acquisition"), 0)
+        _tool.update("Measuring %s over the region" % _run.plural(len(keys), "acquisition"), 0)
         for first in range(0, len(keys), BATCH):
             batch = keys[first : first + BATCH]
             # The batch's own days: picking each acquisition out of a whole year's images also runs out of memory.
             near = marked.filterDate(batch[0][:10], ee.Date(batch[-1][:10]).advance(1, "day"))
             measured = ee.FeatureCollection(ee.List(batch).map(lambda key: row(key, near))).getInfo()
             rows += [feature["properties"] for feature in measured["features"]]
-            _run.update(progress=len(rows) / len(keys))
+            _tool.update(progress=len(rows) / len(keys))
 
         for item in rows:
             item["covered"] = item["fill"] / item["region"]
@@ -120,5 +121,5 @@ def images(collection, region, start, end, **masking):
         widths = [max(len(cells[column]) for cells in table) for column in range(len(table[0]) - 1)]
         for cells in table:
             print("  ".join([cell.ljust(width) for cell, width in zip(cells, widths)] + cells[len(widths) :]))
-        # For gc.composite, which masks the images as they were measured here.
+        # For gee.composite, which masks the images as they were measured here.
         return marked.set(MASKING, json.dumps(masking, default=str))

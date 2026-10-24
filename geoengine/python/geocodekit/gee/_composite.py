@@ -4,8 +4,9 @@ import json
 
 import ee
 
-from geocode import _run
-from geocode._images import MASKING
+from geocodekit import _tool
+from geocodekit.gee import _run
+from geocodekit.gee._images import MASKING
 
 # geedim's mask bands, which its composite keeps: none is the dataset's.
 MASK_BANDS = [
@@ -25,13 +26,13 @@ MASK_BANDS = [
 
 
 def composite(images, region, dates=None, method=None, mask=True, min_coverage=0.999):
-    """Composites the images as geedim does, masking their clouds as gc.images measured them unless mask is False and
+    """Composites the images as geedim does, masking their clouds as gee.images measured them unless mask is False and
     ordering them by the cloud-free share of their cover of the region; "dates" keeps only those of the given days
     ("2024-06-07") or acquisitions ("2024-06-07 Sentinel-2B R108"). Prints the share of the region the composite's
     first band covers and, of the rest, where no image reaches and where every image is masked, and stops when it
     covers less than min_coverage. Returns the composite of the dataset's own bands, not clipped, each band on its grid
     in the image at the region's centre."""
-    with _run.stage("Compositing the images"):
+    with _tool.stage("Compositing the images"):
         _run.geedim()
         if isinstance(dates, str):
             dates = [dates]
@@ -98,7 +99,7 @@ def composite(images, region, dates=None, method=None, mask=True, min_coverage=0
             return made
         fixes = {
             "none": "where no image reaches, take more acquisitions or another dataset",
-            "cloud": "where every image is masked, take more acquisitions or loosen the masking in gc.images",
+            "cloud": "where every image is masked, take more acquisitions or loosen the masking in gee.images",
         }
         head = "%s covers %.2f%% of the region, less than min_coverage=%g." % (
             taken,
@@ -110,7 +111,7 @@ def composite(images, region, dates=None, method=None, mask=True, min_coverage=0
 
 
 def picked(entry):
-    """The images of a day, or of one acquisition as gc.images lists it."""
+    """The images of a day, or of one acquisition as gee.images lists it."""
     if len(entry) == 10:
         return ee.Filter.date(entry, ee.Date(entry).advance(1, "day"))
     # A row copied from the table is spaced out to its columns.

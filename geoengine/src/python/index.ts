@@ -1,6 +1,6 @@
 export * as Environment from "./index.ts"
 
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import fs from "node:fs"
 import fsp from "node:fs/promises"
 import path from "node:path"
@@ -9,6 +9,7 @@ import { Bundled } from "../bundled.ts"
 import type { Engine } from "../engine.ts"
 import { Runtime } from "../runtime.ts"
 import { Status } from "../status.ts"
+import { Geocodekit } from "./geocodekit.ts"
 
 const DOMAIN = "python"
 
@@ -179,16 +180,11 @@ const STARTUP_PTH = `import ${STARTUP_MODULE}\n`
 const EXTERNALLY_MANAGED =
   "[externally-managed]\nError=No packages can be installed into GeoCode's base Python environment.\n"
 
-/**
- * What GeoEngine writes into the base environment beside the packages, noted in the marker: a GeoCode that writes it
- * otherwise installs the environment again, so no base keeps an older startup file.
- */
-export const WRITTEN = createHash("sha256")
-  .update(EXTERNALLY_MANAGED)
-  .update(STARTUP_MODULE)
-  .update(STARTUP_PTH)
-  .update(STARTUP)
-  .digest("hex")
+/** How the names of the files GeoEngine writes before moving them into place start; a start cut short leaves them. */
+const WRITING = ".writing-"
+
+/** geocodekit's dist-info folders, of any version. */
+const DIST_INFO = new RegExp(`^${Geocodekit.NAME}-.+\\.dist-info$`)
 
 /** Both from the main process. */
 export interface Places {
@@ -201,12 +197,12 @@ export interface Places {
 /** What scripts/stage-python.sh writes beside the packages. */
 const Bundle = Schema.Struct({ id: Schema.String, python: Schema.String })
 
-const Marker = Schema.Struct({ id: Schema.String, written: Schema.String })
+const Marker = Schema.Struct({ id: Schema.String })
 
 const decodeBundle = Schema.decodeUnknownExit(Schema.fromJsonString(Bundle))
 const decodeMarker = Schema.decodeUnknownExit(Schema.fromJsonString(Marker))
 
-type Step = "bundle" | "install" | "environment"
+type Step = "bundle" | "install" | "files" | "environment"
 
 export interface Diagnostics {
   readonly step: Step
@@ -252,8 +248,9 @@ export const layout = (data: string) => {
 
 /**
  * Prepares GeoCode's Python environment in the background as the engine starts (docs/PYTHON.md, section 6): installs
- * the bundled one when the data directory has another or none, makes the working environment when it is missing, and
- * warms the environment up before calling it ready. A failure is left for the next start to try again.
+ * the bundled one when the data directory has another or none, brings the files GeoEngine writes into it to this
+ * GeoCode's, makes the working environment when it is missing, and warms the environment up before calling it ready.
+ * A failure is left for the next start to try again.
  */
 export const capability = (places: Places): Engine.Capability =>
   Effect.gen(function* () {
@@ -298,13 +295,8 @@ export const capability = (places: Places): Engine.Capability =>
             for (const name of await fsp.readdir(where.root)) {
               if (name.startsWith(ACTIVATION)) await fsp.rm(path.join(where.root, name))
             }
-            const stdlib = where.stdlib(bundle.python)
-            await fsp.writeFile(path.join(stdlib, "EXTERNALLY-MANAGED"), EXTERNALLY_MANAGED)
-            const site = path.join(stdlib, "site-packages")
-            await fsp.writeFile(path.join(site, `${STARTUP_MODULE}.py`), STARTUP)
-            await fsp.writeFile(path.join(site, `${STARTUP_MODULE}.pth`), STARTUP_PTH)
             await prune(where.base)
-            await fsp.writeFile(where.marker, JSON.stringify({ id: bundle.id, written: WRITTEN }) + "\n")
+            await fsp.writeFile(where.marker, JSON.stringify({ id: bundle.id }) + "\n")
           })
         }).pipe(Effect.ensuring(remove(temporary)))
       })
@@ -382,11 +374,15 @@ export const capability = (places: Places): Engine.Capability =>
       // What an installation cut short left behind.
       const left = yield* Effect.promise(() => fsp.readdir(where.root).catch(() => [] as string[]))
       for (const name of left) {
-        if (name.startsWith(UNPACKING) || name.startsWith(ACTIVATION)) yield* remove(path.join(where.root, name))
+        if (name.startsWith(UNPACKING) || name.startsWith(ACTIVATION) || name.startsWith(WRITING)) {
+          yield* remove(path.join(where.root, name))
+        }
       }
 
       const installing = !(yield* Effect.promise(() => installed(where, bundle.id)))
       if (installing) yield* install(bundle)
+      // At every start, installed now or before; a base without them is not one this GeoCode can use.
+      yield* attempt("files", () => update(where, bundle.python))
       const creating = !fs.existsSync(where.envPython)
       if (creating) yield* create()
       // Before ready, so nothing that waits for it meets a library loaded for the first time.
@@ -454,13 +450,98 @@ async function prune(base: string) {
   }
 }
 
-/**
- * The base environment of this bundle, as this GeoCode writes it, is in place: its marker says so, and its interpreter
- * is there.
- */
+/** The base environment of this bundle is in place: its marker says so, and its interpreter is there. */
 async function installed(where: ReturnType<typeof layout>, id: string) {
   const text = await fsp.readFile(where.marker, "utf-8").catch(() => undefined)
   const marker = text === undefined ? undefined : decodeMarker(text)
   if (marker === undefined || Exit.isFailure(marker)) return false
-  return marker.value.id === id && marker.value.written === WRITTEN && fs.existsSync(where.basePython)
+  return marker.value.id === id && fs.existsSync(where.basePython)
+}
+
+/**
+ * What GeoEngine writes into the base environment beside the packages, by path, as this GeoCode writes it: the
+ * EXTERNALLY-MANAGED file, the startup file, and geocodekit with its dist-info. The startup module comes before the
+ * .pth file that imports it, so a start cut short never leaves the .pth file without the module.
+ */
+function own(where: ReturnType<typeof layout>, python: string) {
+  const stdlib = where.stdlib(python)
+  const site = path.join(stdlib, "site-packages")
+  const files = Object.entries(Geocodekit.PACKAGE.files)
+  const written = new Map([
+    [path.join(stdlib, "EXTERNALLY-MANAGED"), EXTERNALLY_MANAGED],
+    [path.join(site, `${STARTUP_MODULE}.py`), STARTUP],
+    [path.join(site, `${STARTUP_MODULE}.pth`), STARTUP_PTH],
+  ])
+  for (const [file, text] of [...files, ...distInfo(Geocodekit.PACKAGE.version, files)]) {
+    written.set(path.join(site, ...file.split("/")), text)
+  }
+  return { site, written }
+}
+
+/**
+ * geocodekit's dist-info, as pip writes one: its metadata with GeoCode's version, who installed it, and the record of
+ * the package's files and their hashes. By paths under site-packages.
+ */
+function distInfo(version: string, files: readonly (readonly [string, string])[]) {
+  // A dash in a version would be taken for the end of the name.
+  const folder = `${Geocodekit.NAME}-${version.replaceAll("-", "_")}.dist-info`
+  const listed: [string, string][] = [
+    [`${folder}/METADATA`, `Metadata-Version: 2.1\nName: ${Geocodekit.NAME}\nVersion: ${version}\n`],
+    [`${folder}/INSTALLER`, "GeoCode\n"],
+  ]
+  const hash = (text: string) => `sha256=${createHash("sha256").update(text).digest("base64url")}`
+  const record = [...files, ...listed].map(([file, text]) => `${file},${hash(text)},${Buffer.byteLength(text)}`)
+  return [...listed, [`${folder}/RECORD`, [...record, `${folder}/RECORD,,`].join("\n") + "\n"] as const]
+}
+
+/**
+ * How the base environment differs from what this GeoCode writes into it (docs/PYTHON.md, section 6), by each file's
+ * content: the files to write, missing or other, with their texts, and what of geocodekit's is there besides, to
+ * remove. Python's bytecode caches are its own.
+ */
+export async function compare(where: ReturnType<typeof layout>, python: string) {
+  const { site, written } = own(where, python)
+  const write: [string, string][] = []
+  for (const [file, text] of written) {
+    const found = await fsp.readFile(file).catch(() => undefined)
+    if (!found?.equals(Buffer.from(text))) write.push([file, text])
+  }
+  // The folders under site-packages holding a file that is written.
+  const kept = new Set<string>()
+  for (const file of written.keys()) {
+    for (let folder = path.dirname(file); folder.startsWith(site + path.sep); folder = path.dirname(folder)) {
+      kept.add(folder)
+    }
+  }
+  const remove: string[] = []
+  const visit = async (folder: string) => {
+    for (const entry of await fsp.readdir(folder, { withFileTypes: true }).catch(() => [])) {
+      const inside = path.join(folder, entry.name)
+      if (entry.isDirectory() && entry.name === "__pycache__") continue
+      if (entry.isDirectory() && kept.has(inside)) await visit(inside)
+      else if (!written.has(inside)) remove.push(inside)
+    }
+  }
+  for (const name of await fsp.readdir(site).catch(() => [])) {
+    if (name !== Geocodekit.NAME && !DIST_INFO.test(name)) continue
+    if (kept.has(path.join(site, name))) await visit(path.join(site, name))
+    else remove.push(path.join(site, name))
+  }
+  return { write, remove }
+}
+
+/**
+ * Brings what GeoEngine writes into the base environment to this GeoCode's: only what differs is written, each file
+ * moved into place whole, so a start with nothing changed writes nothing, and a Python running meanwhile never reads
+ * half a file.
+ */
+async function update(where: ReturnType<typeof layout>, python: string) {
+  const { write, remove } = await compare(where, python)
+  for (const target of remove) await fsp.rm(target, { recursive: true, force: true })
+  for (const [file, text] of write) {
+    await fsp.mkdir(path.dirname(file), { recursive: true })
+    const temporary = path.join(where.root, `${WRITING}${randomUUID()}`)
+    await fsp.writeFile(temporary, text)
+    await fsp.rename(temporary, file)
+  }
 }

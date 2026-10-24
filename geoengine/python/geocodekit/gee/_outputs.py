@@ -1,5 +1,5 @@
 """Exporting an image within its bounds, on its own grid unless told otherwise: to a local GeoTIFF, to Google Drive,
-or, by gc.save, to the task."""
+or, by gee.save, to the task."""
 
 import contextlib
 import math
@@ -11,7 +11,8 @@ import warnings
 
 import ee
 
-from geocode import _run
+from geocodekit import _files, _tool
+from geocodekit.gee import _run
 
 # How often a download looks at its share done, reporting it when it moved; and how often it reports it at least,
 # which also tells GeoEngine the run is alive.
@@ -31,7 +32,7 @@ def without_region(grid):
     if "region" in grid:
         # Earth Engine's own exports take one, so the agent may give it out of habit.
         raise ValueError(
-            "gc.save, gc.download and gc.to_drive take no region; clip the image first with image.clip(region)."
+            "gee.save, gee.download and gee.to_drive take no region; clip the image first with image.clip(region)."
         )
 
 
@@ -64,7 +65,7 @@ def measured(image, grid):
         if own.get("crs") == "EPSG:4326" and own["transform"] == NO_GRID:
             raise ValueError(
                 "The image has no grid of its own, as after median() or mosaic(); give one, such as "
-                'crs="EPSG:32651", scale=10, or composite with gc.composite.'
+                'crs="EPSG:32651", scale=10, or composite with gee.composite.'
             )
         grid = {"crs": own.get("crs") or own["wkt"], "crs_transform": own["transform"], **grid}
     return image, grid
@@ -77,14 +78,14 @@ def download(image, path, **grid):
     arguments, such as dtype or bands, apply too. Returns the path it saved to."""
     target, notes = destination(path)
     folder, name = os.path.split(target)
-    with _run.stage("Preparing %s" % name):
+    with _tool.stage("Preparing %s" % name):
         ready = prepared(image, grid).gd
     # Hidden beside the target, so that the target is never a partial file and the rename is atomic.
     partial = os.path.join(folder, ".%s.%d.part" % (name, os.getpid()))
-    _run.partial(partial)
+    _tool.partial(partial)
     started = time.monotonic()
     try:
-        with _run.stage("Downloading %s" % name, 0):
+        with _tool.stage("Downloading %s" % name, 0):
             with reporting(), warnings.catch_warnings():
                 # geedim looks every image up among the public datasets for its bands' descriptions: an asset of a
                 # task is not one, which only leaves the descriptions out.
@@ -93,15 +94,15 @@ def download(image, path, **grid):
                 # geedim no longer cuts a float64 image in whole blocks of the GeoTIFF it writes.
                 ready.toGeoTIFF(partial, overwrite=True, max_tile_size=2)
             # Looked at only every second, so a download of one tile would show none of it done.
-            _run.update(progress=1)
-        saved = numbered(target)
+            _tool.update(progress=1)
+        saved = _files.numbered(target)
         os.replace(partial, saved)
     except BaseException:
         with contextlib.suppress(OSError):
             os.remove(partial)
         raise
     if saved != target:
-        notes.append("%s exists, so it was saved as %s." % (shown(target), os.path.basename(saved)))
+        notes.append("%s exists, so it was saved as %s." % (_files.shown(target), os.path.basename(saved)))
     import rasterio.crs
 
     profile = ready.profile
@@ -113,7 +114,7 @@ def download(image, path, **grid):
     print(
         "Downloaded %s: %s of %s (nodata %s), %d × %d pixels on %s at %s%s, %s, after %d s."
         % (
-            shown(saved),
+            _files.shown(saved),
             _run.plural(profile["count"], "band"),
             profile["dtype"],
             figure(ready.nodata),
@@ -128,7 +129,7 @@ def download(image, path, **grid):
     )
     for note in notes:
         print(note)
-    return shown(saved)
+    return _files.shown(saved)
 
 
 def to_drive(image, name, folder="GeoCode", **grid):
@@ -139,7 +140,7 @@ def to_drive(image, name, folder="GeoCode", **grid):
     if extension.lower() in GEOTIFF:
         # Earth Engine adds .tif itself.
         name = stem
-    with _run.stage("Exporting %s to Google Drive" % name):
+    with _tool.stage("Exporting %s to Google Drive" % name):
         ready = prepared(image, grid)
         # The name Earth Engine's task list shows; it takes only these characters.
         label = re.sub(r"[^A-Za-z0-9.,:;_-]", "_", name)[:100]
@@ -162,7 +163,7 @@ def failure(operation):
             break
         # Earth Engine's share can fall back between the export's stages.
         done = max(done, metadata.get("progress", 0))
-        _run.update(progress=done)
+        _tool.update(progress=done)
         time.sleep(POLL_SECONDS)
     if metadata.get("state") == "SUCCEEDED":
         return None
@@ -178,27 +179,12 @@ def destination(path):
     if not extension:
         target += ".tif"
     elif extension.lower() not in GEOTIFF:
-        raise ValueError("gc.download saves GeoTIFF files; name the file with .tif, not %s." % extension)
+        raise ValueError("gee.download saves GeoTIFF files; name the file with .tif, not %s." % extension)
     folder = os.path.dirname(target)
     if os.path.isdir(folder):
         return target, []
     moved = os.path.join(os.getcwd(), os.path.basename(target))
-    return moved, ["There is no folder %s, so the file was saved in the workspace." % shown(folder)]
-
-
-def numbered(target):
-    stem, extension = os.path.splitext(target)
-    count = 0
-    while os.path.exists(target):
-        count += 1
-        target = "%s_%d%s" % (stem, count, extension)
-    return target
-
-
-def shown(path):
-    """A path relative to the workspace when it is in there; os.path.relpath fails across Windows drives."""
-    workspace = os.path.join(os.getcwd(), "")
-    return path[len(workspace) :] if path.startswith(workspace) else path
+    return moved, ["There is no folder %s, so the file was saved in the workspace." % _files.shown(folder)]
 
 
 def figure(value):
@@ -229,7 +215,7 @@ def reporting():
         while not stopped.wait(LOOK_SECONDS):
             share = bars[-1].n / bars[-1].total if bars else 0
             if share != told or time.monotonic() - at >= REPORT_SECONDS:
-                _run.update(progress=share)
+                _tool.update(progress=share)
                 told, at = share, time.monotonic()
 
     stopped = threading.Event()

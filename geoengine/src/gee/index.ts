@@ -38,7 +38,7 @@ const OUTPUT_TAIL = 16 * 1024
 const LINE_LIMIT = 64 * 1024
 
 /**
- * The name gc.download gives a download's unfinished file. Only such a file is removed: the event is a line of output,
+ * The name gee.download gives a download's unfinished file. Only such a file is removed: the event is a line of output,
  * which anything the script prints could also make.
  */
 const PARTIAL = /^\..+\.\d+\.part$/
@@ -744,7 +744,6 @@ function execute(
     project: current.project,
     task: params.task,
     folder: Library.FOLDER,
-    package: Library.FILES,
     ...("file" in params ? { file: params.file } : { script: params.script }),
   }
 

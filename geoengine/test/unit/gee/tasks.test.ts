@@ -178,17 +178,17 @@ const exported = (held: Stored) => held.operations.map((operation) => operation.
  */
 const saving = (...lines: string[]) =>
   [
-    "import geocode as gc",
-    "import geocode._outputs",
-    "geocode._outputs.POLL_SECONDS = 0",
-    "geocode._outputs.measured = lambda image, grid: (image, grid)",
+    "import geocodekit.gee as gee",
+    "import geocodekit.gee._outputs",
+    "geocodekit.gee._outputs.POLL_SECONDS = 0",
+    "geocodekit.gee._outputs.measured = lambda image, grid: (image, grid)",
     ...lines,
   ].join("\n")
 
 const TASK = { name: "t-20261008", new: true, started: false }
 
 test(
-  "gc.save makes the task's folders, and reuses or replaces an asset by its content",
+  "gee.save makes the task's folders, and reuses or replaces an asset by its content",
   { skip: !python3 },
   async () => {
     const engine = await start("majestic")
@@ -196,17 +196,17 @@ test(
       assert.equal((await engine.settled()).status, "ready")
       await holding(engine.directory, [])
       const save = (graph: string, scale: string) =>
-        `saved = gc.save(ee.Image("${graph}"), "ndvi", title="台北 NDVI", description="夏季中值", scale=${scale})`
+        `saved = gee.save(ee.Image("${graph}"), "ndvi", title="台北 NDVI", description="夏季中值", scale=${scale})`
       const script = saving(
         save("ndvi", "10"),
         "print(type(saved).__name__, saved.graph)",
         // The same grid written another way is the same content.
         save("ndvi", "10.0"),
         save("ndvi masked", "10"),
-        'gc.save(ee.FeatureCollection("area"), "area", title="范围", description="研究区")',
+        'gee.save(ee.FeatureCollection("area"), "area", title="范围", description="研究区")',
       )
       const done = result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
-      // What gc.save returns is the saved asset, read back.
+      // What gee.save returns is the saved asset, read back.
       assert.match(done.output, new RegExp(`^Image ${ROOT}/t-20261008/ndvi$`, "m"))
       const after = await stored(engine.directory)
       assert.deepEqual(
@@ -236,13 +236,13 @@ test(
     try {
       assert.equal((await engine.settled()).status, "ready")
       await holding(engine.directory, [])
-      const save = (data: string, name: string) => `gc.save(${data}, "${name}", title="t", description="d", scale=10)`
+      const save = (data: string, name: string) => `gee.save(${data}, "${name}", title="t", description="d", scale=10)`
       const script = saving(
         `composite = ${save('ee.Image("composite")', "composite")}`,
         save("composite", "copy"),
         save("composite", "copy"),
         save('ee.Image("composite, cloudless")', "composite"),
-        save('gc.load("composite")', "copy"),
+        save('gee.load("composite")', "copy"),
       )
       result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
       // The copy is reused while the composite it reads is unchanged, and exported again once that is replaced.
@@ -258,14 +258,14 @@ test("a failed save leaves no folder it made, and reports the failure", { skip: 
   try {
     assert.equal((await engine.settled()).status, "ready")
     await holding(engine.directory, [])
-    const script = saving('gc.save(ee.Image("ndvi"), "ndvi", title="t", description="d", scale=10)')
+    const script = saving('gee.save(ee.Image("ndvi"), "ndvi", title="t", description="d", scale=10)')
     for (const flag of ["export-fails", "export-refused"] as const) {
       await raise(engine.directory, flag)
       const done = result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
       await lower(engine.directory, flag)
       assert.equal(done.outcome, "failed")
-      // GeoCode's own lines, by the package's file names, as an installed package's would be.
-      assert.match(done.output, /File "geocode\/_assets\.py", line \d+, in save\n {4}\S/)
+      // GeoCode's own lines, quoted from the package's files.
+      assert.match(done.output, /File "[^"]*geocodekit\/gee\/_assets\.py", line \d+, in save\n {4}\S/)
       assert.deepEqual((await stored(engine.directory)).assets, [])
     }
   } finally {
@@ -279,7 +279,7 @@ test("an export under way is waited for, joined, or replaced", { skip: !python3 
     assert.equal((await engine.settled()).status, "ready")
     await holding(engine.directory, [])
     await raise(engine.directory, "export-slow")
-    const save = (graph: string) => `gc.save(ee.Image("${graph}"), "ndvi", title="t", description="d", scale=10)`
+    const save = (graph: string) => `gee.save(ee.Image("${graph}"), "ndvi", title="t", description="d", scale=10)`
     const id = engine.send({ script: saving(save("ndvi")), cwd: engine.directory, task: TASK })
     assert.equal(result(await engine.response(id)).outcome, "finished")
     await lower(engine.directory, "export-slow")

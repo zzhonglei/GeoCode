@@ -191,7 +191,7 @@ finish()
 
 /**
  * Initializes Earth Engine with the configured project and reads the run's task in GeoCode's folder, then runs
- * GeoAgent's script, inline or from a file, with `ee` at hand and GeoCode's package importable. While a request waits
+ * GeoAgent's script, inline or from a file, with `ee` at hand and geocodekit.gee set up for it. While a request waits
  * for Earth Engine it reports so, so a long computation is not taken for a silent script:
  * earthengine-api sends every request through requests' sessions, where the wait is watched.
  */
@@ -303,49 +303,18 @@ except Exception as error:
     emit({"type": "initialize-failed", "error": "%s: %s" % (type(error).__name__, error)})
     sys.exit(1)
 
-import importlib.util
-
-
-class Package:
-    """Imports GeoCode's package from its files' texts, which the request carries, by their paths under the package's
-    folder: a traceback names them and quotes their lines, as it does a package installed on disk."""
-
-    def __init__(self, files):
-        self.files = files
-
-    def find_spec(self, name, path=None, target=None):
-        base = name.replace(".", "/")
-        for file, package in ((base + "/__init__.py", True), (base + ".py", False)):
-            if file in self.files:
-                spec = importlib.util.spec_from_loader(name, self, origin=file, is_package=package)
-                spec.has_location = True
-                return spec
-        return None
-
-    def create_module(self, spec):
-        return None
-
-    def get_source(self, name):
-        # Asked for when the quoted lines are gone, so they are not looked for in the session's folder.
-        spec = self.find_spec(name)
-        return None if spec is None else self.files[spec.origin]
-
-    def exec_module(self, module):
-        file = module.__spec__.origin
-        source = self.files[file]
-        linecache.cache[file] = (len(source), None, source.splitlines(True), file)
-        exec(compile(source, file, "exec"), module.__dict__)
-
-
-# GeoCode's package, importable as geocode, set to the run's task; what it reads of GeoCode's folder starts the answer.
-sys.meta_path.insert(0, Package(request["package"]))
+# GeoCode's package, installed in the base environment: told that geerun runs the script and where its statuses go,
+# before geocodekit.gee, which refuses to load otherwise, is set to the run's task. What that reads of GeoCode's folder
+# starts the answer.
 try:
-    import geocode._run
+    import geocodekit._tool
+
+    geocodekit._tool.name = "geerun"
+    geocodekit._tool.report = emit
+    import geocodekit.gee._run
 
     task = request["task"]
-    space = geocode._run.start(
-        request["project"], request["folder"], task["name"], task["new"], task["started"], emit
-    )
+    space = geocodekit.gee._run.start(request["project"], request["folder"], task["name"], task["new"], task["started"])
 except Exception as error:
     emit({"type": "space-failed", "error": "%s: %s" % (type(error).__name__, error)})
     sys.exit(1)
