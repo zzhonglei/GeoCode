@@ -83,11 +83,11 @@ region = gee.region("数据/台北.geojson")
 
 源码在 `geoengine/python/`:一个标准的 Python 项目,`pyproject.toml` 写明包名与版本,版本与 GeoCode 相同。构建 GeoEngine 时包的文件原样编进它的代码,随它分发:打包版里 GeoEngine 在应用的归档中,Python 读不到那里的文件,编进代码的文件 GeoEngine 随时取得到。构建因此不需要 Python。
 
-GeoEngine 装好 `base` 之后,自己把包的文件写进 `base` 的 `site-packages`,并写下标准的安装记录(`dist-info`):`pip show geocodekit` 看得到它,`importlib.metadata` 读得到版本,报错的 traceback 指向磁盘上的文件。`base` 的 `EXTERNALLY-MANAGED` 标记照旧挡住 pip 与 uv,GeoAgent 与任何运行都不往 `base` 里装包;装这个包的只有 GeoEngine,方式与它写启动文件相同(`PYTHON.md` 第 6 节)。
+GeoEngine 自己把包的文件写进 `base` 的 `site-packages`(每次启动核对,见下),并写下标准的安装记录(`dist-info`):`pip show geocodekit` 看得到它,`importlib.metadata` 读得到版本,报错的 traceback 指向磁盘上的文件。`base` 的 `EXTERNALLY-MANAGED` 标记照旧挡住 pip 与 uv,GeoAgent 与任何运行都不往 `base` 里装包;装这个包的只有 GeoEngine,方式与它写启动文件相同(`PYTHON.md` 第 6 节)。
 
 工作环境继承 `base`(`--system-site-packages`),所以 GeoAgent 的脚本直接导入就能用;GeoCode 的工具在 `base` 里运行,同样直接导入。
 
-`base.json` 另记着包的校验和。包变了而环境没变时(开发时改了包,或装上只改了包的新版),GeoEngine 启动时只换掉包,不重装环境:换包不到一秒,重装环境连同预热要几分钟。换包时先删掉这份记录,包装好后再写回;中途退出时没有记录,下次启动再换,不会用到装了一半的包。换包在预热之前,窗口与工具碰到的总是新的包。
+包没有自己的版本记录,跟着 GeoCode 走:每次启动时,GeoEngine 把磁盘上包的每个文件(连同安装记录)与这一版 GeoCode 自带的逐个比较内容,不同的与缺了的重写,多出来的删掉,与启动文件一样(`PYTHON.md` 第 6 节)。包很小,比较很快,比的又是文件本身:用到的总是这一版 GeoCode 的包,开发时改了包,下次启动用的就是改过的;中途退出留下的半截包、被改坏的包,下次启动同样被换掉。环境只在锁定清单变了时才重装。核对在预热之前,窗口与工具碰到的总是这一版的包。
 
 开发版与打包版共用数据目录时,后启动的那个换上自己的包;两个同时开着,先开的那个会用到另一个的包。开发时在沙箱主目录里启动(`DEVELOPMENT.md` 第 5 节),碰不到这种情况。
 
@@ -96,6 +96,8 @@ GeoEngine 装好 `base` 之后,自己把包的文件写进 `base` 的 `site-pack
 - 随每次运行把包的源码交给 Python:只到得了 GeoCode 的工具,GeoAgent 自己的脚本用不上。
 - 做成 conda 包写进锁定清单:包每改一次,环境的标识就变,环境整个重装。
 - 只装进工作环境:GeoCode 的工具在 `base` 里运行,用不到;工作环境又会被 GeoAgent 改动。
+- 按 GeoCode 的版本号判断要不要重写:开发时版本号不变,改了包也不会重写。
+- 每次启动先删掉整个包再写:删与写之间,别的 GeoCode 或还没结束的运行可能导入到缺了的文件。
 
 ## 7. 依赖
 
@@ -121,6 +123,6 @@ GeoEngine 装好 `base` 之后,自己把包的文件写进 `base` 的 `site-pack
 ## 10. 验收
 
 - `base` 与工作环境的 Python 都能 `import geocodekit`,`pip show geocodekit` 显示与 GeoCode 相同的版本;往 `base` 装别的包仍被拒绝。
-- 只改了这个包时,启动时只换包,不重装环境,工具与 GeoAgent 的脚本用到的是改过的包。
+- 只改了这个包时,启动时不重装环境,工具与 GeoAgent 的脚本用到的是改过的包。
 - 在 `geerun` 之外导入 `geocodekit.gee`,报错说明它只能在 `geerun` 里用。
 - GEE 照常运行:第 4 节的约定、`GEE.md` 第 10 节的验收不变。
