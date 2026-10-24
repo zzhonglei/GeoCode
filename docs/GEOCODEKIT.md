@@ -73,7 +73,7 @@ region = gee.region("数据/台北.geojson")
 | 进度 | 报给工具行 | 不报 |
 | 能用的子包 | 全部 | 不依赖工具场合的子包 |
 
-工具的运行脚本在 GeoAgent 的脚本开始之前设好场合:报告进度的出口,以及能力域要的准备(GEE 初始化 Earth Engine、设好任务)。没有设好场合时,函数照常运行,只是不报进度:GeoAgent 的脚本在 shell 里运行,它的输出全部进了模型的上下文,进度行对模型写脚本没有用。
+工具的运行脚本在 GeoAgent 的脚本开始之前设好场合:先在共用的内部模块里记下是哪个工具在运行、进度往哪里报,再导入子包,做能力域要的准备(GEE 初始化 Earth Engine、设好任务)。没有设好场合时,函数照常运行,只是不报进度:GeoAgent 的脚本在 shell 里运行,它的输出全部进了模型的上下文,进度行对模型写脚本没有用。
 
 依赖工具场合的子包(如 `gee`,`GEE.md` 第 5 节)在场合之外导入即报错,说明它只能在哪个工具里用。
 
@@ -81,7 +81,7 @@ region = gee.region("数据/台北.geojson")
 
 ## 6. 安装与更新
 
-源码在 `geoengine/python/`:一个标准的 Python 项目,`pyproject.toml` 写明包名;它不经 pip 构建与安装(见下),所以不声明构建后端。版本就是 GeoCode 的版本号(`DESKTOP.md` 第 6 节),`pyproject.toml` 只声明它是动态的,不另写一份:GeoEngine 写安装记录时从 GeoCode 的版本号取,改了 GeoCode 的版本号,包的版本随之改,没有第二处要对齐。构建 GeoEngine 时包的文件原样编进它的代码,随它分发:打包版里 GeoEngine 在应用的归档中,Python 读不到那里的文件,编进代码的文件 GeoEngine 随时取得到。构建因此不需要 Python。
+源码在 `geoengine/python/`:一个标准的 Python 项目,`pyproject.toml` 写明包名;它不经 pip 构建与安装(见下),所以不声明构建后端。版本就是 GeoCode 的版本号(`DESKTOP.md` 第 6 节),`pyproject.toml` 只声明它是动态的,不另写一份:GeoEngine 写安装记录时从 GeoCode 的版本号取,改了 GeoCode 的版本号,包的版本随之改,没有第二处要对齐。构建 GeoEngine 时包的文件与 GeoCode 的版本号原样编进它的代码,随它分发:打包版里 GeoEngine 在应用的归档中,Python 读不到那里的文件,应用里也没有写着版本号的源码,编进代码的 GeoEngine 随时取得到。构建因此不需要 Python。
 
 GeoEngine 自己把包的文件写进 `base` 的 `site-packages`(每次启动核对,见下),并写下标准的安装记录(`dist-info`):`pip show geocodekit` 看得到它,`importlib.metadata` 读得到版本,报错的 traceback 指向磁盘上的文件。`base` 的 `EXTERNALLY-MANAGED` 标记照旧挡住 pip 与 uv,GeoAgent 与任何运行都不往 `base` 里装包;装这个包的只有 GeoEngine,方式与它写启动文件相同(`PYTHON.md` 第 6 节)。
 
