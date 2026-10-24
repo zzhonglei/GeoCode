@@ -6,8 +6,11 @@ import { Engine } from "../engine.ts"
 import type { Runtime } from "../runtime.ts"
 import { Python } from "./python.ts"
 
-/** Generous: two small queries to Google, on a slow connection too. */
-const QUERY_TIMEOUT = "90 seconds"
+/**
+ * Generous for two small queries to Google and the sign-in's refresh, each tried again once, on a slow connection too;
+ * past it, Google is taken as unreachable, as GEE's check takes its own running out of time.
+ */
+const QUERY_TIMEOUT = "3 minutes"
 
 /**
  * The project's monthly Earth Engine quota (docs/GEE.md, section 7), in EECU-seconds, for the user, never GeoAgent.
@@ -29,7 +32,12 @@ export type Snapshot = typeof Snapshot.Type
 
 const Report = Schema.Union([
   Schema.Struct({ quota: Snapshot }),
-  Schema.Struct({ error: Schema.String, status: Schema.optionalKey(Schema.Number) }),
+  Schema.Struct({
+    error: Schema.String,
+    status: Schema.optionalKey(Schema.Number),
+    /** Google could not be reached, or was failing or busy, twice over. */
+    unreachable: Schema.Boolean,
+  }),
 ])
 const decodeReport = Schema.decodeUnknownExit(Report)
 
@@ -53,7 +61,7 @@ export const query = (runtime: Runtime.Interface, python: string, project: strin
     }
     if (result.reason === "timeout") {
       return yield* new Engine.Failure({
-        code: "timeout",
+        code: "unreachable",
         message: `the quota query did not finish within ${QUERY_TIMEOUT}`,
       })
     }
@@ -67,7 +75,9 @@ export const query = (runtime: Runtime.Interface, python: string, project: strin
     }
     if ("error" in decoded.value) {
       return yield* new Engine.Failure({
-        code: "quota-failed",
+        // A code of its own, so the interface says only that Google cannot be reached, as GEE's check does
+        // (docs/GEE.md, section 7).
+        code: decoded.value.unreachable ? "unreachable" : "quota-failed",
         message: decoded.value.error,
         details: { project, status: decoded.value.status },
       })
@@ -80,6 +90,7 @@ const PROGRAM = String.raw`
 import datetime as dt
 import json
 import sys
+import time
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -87,6 +98,7 @@ import requests
 from google.auth.transport.requests import AuthorizedSession
 
 ${Python.CREDENTIALS}
+${Python.UNREACHABLE}
 
 request = json.loads(REQUEST)
 project = request["project"]
@@ -97,9 +109,27 @@ def timestamp(value):
     return value.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def busy(response):
+    """Google failing or overloaded, which refuses nothing: unreachable for now, as GEE's check has it."""
+    return response.status_code >= 500 or response.status_code == 429
+
+
+def send(session, method, url, params, body):
+    """The request, tried once more a second later when Google cannot be reached or is busy, which often passes."""
+    try:
+        response = session.request(method, url, params=params, json=body, timeout=(10, 25))
+        if not busy(response):
+            return response
+    except Exception as error:
+        if not unreachable(error):
+            raise
+    time.sleep(1)
+    return session.request(method, url, params=params, json=body, timeout=(10, 25))
+
+
 def pages(session, method, url, collection, params=None, body=None):
     while True:
-        response = session.request(method, url, params=params, json=body, timeout=(10, 25))
+        response = send(session, method, url, params, body)
         response.raise_for_status()
         data = response.json()
         if data.get("partialErrors"):
@@ -176,9 +206,9 @@ except requests.exceptions.HTTPError as error:
         said = response.json()["error"]["message"]
     except (ValueError, KeyError, TypeError):
         said = None
-    report = {"error": said or str(error), "status": response.status_code}
+    report = {"error": said or str(error), "status": response.status_code, "unreachable": busy(response)}
 except Exception as error:
-    report = {"error": "%s: %s" % (type(error).__name__, error)}
+    report = {"error": "%s: %s" % (type(error).__name__, error), "unreachable": unreachable(error)}
 
 sys.stdout.write("${Python.MARKER}" + json.dumps(report) + "\n")
 sys.stdout.flush()

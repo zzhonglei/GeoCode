@@ -59,6 +59,50 @@ def credentials():
 `
 
 /**
+ * Whether an error means Google cannot be reached for now: the network failing anywhere in what led to it, or a refused
+ * refresh that Google says may get through when tried again. GEE's check and the quota query read errors the same way.
+ */
+export const UNREACHABLE = String.raw`
+import socket
+import ssl
+import urllib.error
+
+import google.auth.exceptions
+import requests
+
+NETWORK = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    google.auth.exceptions.TransportError,
+    urllib.error.URLError,
+    socket.gaierror,
+    socket.timeout,
+    ConnectionError,
+    TimeoutError,
+    ssl.SSLError,
+)
+
+
+def chain(error):
+    while error is not None:
+        yield error
+        error = error.__cause__ or error.__context__
+
+
+def refreshing(error):
+    """A refused refresh, by Google's own words, and whether trying again may get through."""
+    for link in chain(error):
+        if isinstance(link, google.auth.exceptions.RefreshError):
+            said = link.args[0] if link.args else str(link)
+            return {"said": str(said), "retryable": bool(getattr(link, "retryable", False))}
+
+
+def unreachable(error):
+    refused = refreshing(error)
+    return any(isinstance(link, NETWORK) for link in chain(error)) or bool(refused and refused["retryable"])
+`
+
+/**
  * Checks, in order, what a run depends on: whether the user is signed in, without the network; then, given a project,
  * whether Google accepts the credentials and Earth Engine answers a minimal computation. The first failure ends it.
  */
@@ -92,17 +136,12 @@ def fail(step, error, said=None, **facts):
     finish()
 
 
-import socket
-import ssl
-import urllib.error
-
 import ee
-import google.auth.exceptions
 import google.auth.transport.requests
 import googleapiclient.errors
-import requests
 
 ${CREDENTIALS}
+${UNREACHABLE}
 
 # Signed in when earthengine-api's own file holds a refresh token.
 try:
@@ -115,37 +154,6 @@ if stored is None or not stored.refresh_token:
 
 if request.get("project") is None:
     finish()
-
-NETWORK = (
-    requests.exceptions.ConnectionError,
-    requests.exceptions.Timeout,
-    google.auth.exceptions.TransportError,
-    urllib.error.URLError,
-    socket.gaierror,
-    socket.timeout,
-    ConnectionError,
-    TimeoutError,
-    ssl.SSLError,
-)
-
-
-def chain(error):
-    while error is not None:
-        yield error
-        error = error.__cause__ or error.__context__
-
-
-def refreshing(error):
-    """A refused refresh, by Google's own words, and whether trying again may get through."""
-    for link in chain(error):
-        if isinstance(link, google.auth.exceptions.RefreshError):
-            said = link.args[0] if link.args else str(link)
-            return {"said": str(said), "retryable": bool(getattr(link, "retryable", False))}
-
-
-def unreachable(error):
-    refused = refreshing(error)
-    return any(isinstance(link, NETWORK) for link in chain(error)) or bool(refused and refused["retryable"])
 
 
 def refusal(error):

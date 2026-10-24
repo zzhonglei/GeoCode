@@ -21,7 +21,7 @@ import { PythonPreparing } from './PythonPreparing';
 const SNAPSHOT_PATH = '/api/geocode/geo-status';
 const QGIS_PATH = '/api/geocode/qgis';
 
-const refusalSchema = z.object({ error: z.string() });
+const refusalSchema = z.object({ error: z.string(), code: z.string().optional() });
 
 const installsSchema = z.object({
   installs: z.array(z.object({ app: z.string(), version: z.string().optional() })),
@@ -31,8 +31,11 @@ const doneSchema = z.object({});
 
 export type QgisInstall = z.infer<typeof installsSchema>['installs'][number];
 
-/** A refusal or a lost connection carries the reason to show; it is never read as an empty answer. */
-type Outcome<T> ={ ok: true; value: T } | { ok: false; reason: string };
+/**
+ * A refusal or a lost connection carries the reason to show, and GeoEngine's code for a refusal; it is never read as an
+ * empty answer.
+ */
+type Outcome<T> ={ ok: true; value: T } | { ok: false; reason: string; code?: string };
 
 const request = async <T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<Outcome<T>> => {
   const response = await runtimeFetch(path, init).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
@@ -40,7 +43,9 @@ const request = async <T>(path: string, schema: z.ZodType<T>, init?: RequestInit
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const refusal = refusalSchema.safeParse(body);
-    return { ok: false, reason: refusal.success ? refusal.data.error : `GeoEngine request failed (${response.status})` };
+    return refusal.success
+      ? { ok: false, reason: refusal.data.error, code: refusal.data.code }
+      : { ok: false, reason: `GeoEngine request failed (${response.status})` };
   }
   const parsed = schema.safeParse(body);
   return parsed.success ? { ok: true, value: parsed.data } : { ok: false, reason: 'GeoEngine answered in a form this interface cannot read' };
@@ -141,6 +146,20 @@ export const configureGee = (project: string) => request(GEE_PATH, doneSchema, {
 });
 
 export const recheckGee = () => request(`${GEE_PATH}/recheck`, doneSchema, { method: 'POST' });
+
+/** As GeoEngine's Quota.Snapshot (geoengine/src/gee/quota.ts): EECU-seconds, and times in ISO 8601. */
+const quotaSchema = z.object({
+  project: z.string(),
+  limitSeconds: z.number().nullable(),
+  usedSeconds: z.number().nullable(),
+  sampledAt: z.string().nullable(),
+  resetsAt: z.string(),
+});
+
+export type GeeQuota = z.infer<typeof quotaSchema>;
+
+/** The configured project's monthly quota, asked of Google now; GEE's state is the same whatever the outcome. */
+export const fetchGeeQuota = () => request(`${GEE_PATH}/quota`, quotaSchema);
 
 const signInLineSchema = z.union([
   z.object({ type: z.literal('progress'), data: z.object({ url: z.string() }) }),

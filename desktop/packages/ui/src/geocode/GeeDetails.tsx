@@ -11,6 +11,7 @@ import { copyTextToClipboard } from '@/lib/clipboard';
 import { openExternalUrl } from '@/lib/url';
 import { cn } from '@/lib/utils';
 import { configureGee, recheckGee } from './geoEngineClient';
+import { GeeQuotaSection } from './GeeQuota';
 import { useGeeSignIn, type SignIn } from './geeSignIn';
 import { GeeStatusDetails } from './GeeStatusDetails';
 import { ACCOUNT_MARK, isProjectId, projectOf, stepsOf, type Account, type Mark } from './geeSteps';
@@ -103,6 +104,8 @@ export const GeeDetails: React.FC<{
       >
         <ProjectRow configured={project} text={text} />
       </SettingsSection>
+      {/* Last on the page, and kept while the same project is checked again, so it never moves the steps above. */}
+      {standing?.status === 'ready' ? <GeeQuotaSection project={standing.project} text={text.quota} /> : null}
     </SettingsPageLayout>
   );
 };

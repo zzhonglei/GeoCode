@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/useUIStore';
 import { GeeLogo } from './GeeLogo';
 import { GeeStatusDetails } from './GeeStatusDetails';
-import { geeLabel } from './geeText';
+import { geeLabel, geeText } from './geeText';
 import { useGeoStatuses } from './geoEngineClient';
 import { useGeoSettingsStore } from './geoSettingsStore';
 import { DOT_CLASS, geeStatusOf, lightOf, qgisStatusOf } from './geoStatus';
@@ -77,6 +77,7 @@ const GeoIndicator: React.FC<{
 export const GeoStatusButtons: React.FC<{ className?: string }> = ({ className }) => {
   const { locale } = useI18n();
   const text = qgisText(locale);
+  const quota = geeText(locale).quota;
   const statuses = useGeoStatuses();
   const qgis = React.useMemo(() => qgisStatusOf(statuses), [statuses]);
   const gee = React.useMemo(() => geeStatusOf(statuses), [statuses]);
@@ -111,7 +112,7 @@ export const GeoStatusButtons: React.FC<{ className?: string }> = ({ className }
           logo={GeeLogo}
           status={gee.status}
           label={geeLabel(gee)}
-          details={<GeeStatusDetails status={gee} text={text} />}
+          details={<GeeStatusDetails status={gee} text={text} quota={quota} />}
           manage={manage('gee')}
           className={className}
         />

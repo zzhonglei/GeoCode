@@ -89,7 +89,16 @@ class AuthorizedSession:
                 assert json["query"].endswith("| within " + fixture["window"]), json["query"]
             replies = fixture["usage"]
             token = json.get("pageToken", "0")
-        return Response(replies[int(token)])
+        reply = replies[int(token)]
+        # A reply with "timeouts" stands for Google not answering in time that many times before it answers.
+        if reply.get("timeouts", 0) > 0:
+            reply["timeouts"] -= 1
+            raise requests.exceptions.Timeout("Read timed out. (read timeout=10)")
+        # And "busy", for Google answering that it is overloaded that many times before it answers.
+        if reply.get("busy", 0) > 0:
+            reply["busy"] -= 1
+            return Response({"status": 503, "body": {"error": {"message": "The service is currently unavailable."}}})
+        return Response(reply)
 `
 
 /** `window`, when given, is how far back the usage query must reach. */
@@ -194,9 +203,9 @@ test(
     assert.equal(!refused.ok && refused.error.message, "Monitoring permission denied")
     // Guards against an answer that is not JSON, such as a proxy's error page, ending the query without its status.
     for (const body of [null, [], { error: "Bad gateway" }]) {
-      const page = await query([{ status: 502, body }], [])
+      const page = await query([{ status: 407, body }], [])
       assert.equal(!page.ok && page.error.code, "quota-failed")
-      assert.equal(!page.ok && (page.error.details as { status?: number }).status, 502)
+      assert.equal(!page.ok && (page.error.details as { status?: number }).status, 407)
     }
     const partial = await query(
       [{ body: { metrics: [limit()] } }],
@@ -212,5 +221,42 @@ test(
     assert.equal(!partial.ok && partial.error.code, "quota-failed")
     const missing = await query([{ body: { metrics: [] } }], [])
     assert.equal(!missing.ok && missing.error.code, "quota-failed")
+  },
+)
+
+test(
+  "a request Google does not answer in time is tried once more, and a network failing twice is unreachable",
+  { skip: !python3 },
+  async () => {
+    // Guards against one slow answer failing the query, as a network that stutters makes it.
+    const late = await query(
+      [{ timeouts: 1, body: { metrics: [limit()] } }],
+      [{ body: { timeSeriesData: [{ pointData: [point("2026-10-23T08:00:00Z", 100)] }] } }],
+    )
+    assert.ok(late.ok, JSON.stringify(late))
+    assert.equal((late.result as { usedSeconds: number }).usedSeconds, 100)
+    // Guards against a network failing for good reading as Google refusing, which the interface words otherwise.
+    const gone = await query([{ timeouts: 2, body: { metrics: [limit()] } }], [])
+    assert.equal(!gone.ok && gone.error.code, "unreachable")
+    assert.match((!gone.ok && gone.error.message) || "", /Timeout: Read timed out/)
+  },
+)
+
+test(
+  "Google busy is tried once more, and busy twice is unreachable with its status, not a refusal",
+  { skip: !python3 },
+  async () => {
+    // Guards against one overloaded answer failing the query.
+    const once = await query(
+      [{ body: { metrics: [limit()] } }],
+      [{ busy: 1, body: { timeSeriesData: [{ pointData: [point("2026-10-23T08:00:00Z", 100)] }] } }],
+    )
+    assert.ok(once.ok, JSON.stringify(once))
+    // Guards against Google failing or overloaded reading as a refusal, which sends the user to the project's APIs.
+    for (const status of [502, 429]) {
+      const twice = await query([{ status, body: { error: { message: "Try again later" } } }], [])
+      assert.equal(!twice.ok && twice.error.code, "unreachable")
+      assert.equal(!twice.ok && (twice.error.details as { status?: number }).status, status)
+    }
   },
 )

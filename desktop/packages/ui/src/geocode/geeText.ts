@@ -76,6 +76,31 @@ export type GeeText = {
   saveFailed: (reason: string) => string;
   recheckFailed: (reason: string) => string;
   marks: { done: string; todo: string; problem: string; busy: string };
+  /** The project's monthly quota, in the status card and on this page; hours and times come formatted. */
+  quota: {
+    heading: string;
+    /** The refresh button's name, which says what it refreshes, and its tooltip. */
+    refresh: string;
+    refreshTitle: string;
+    loading: string;
+    /** Beside the bar, in place of the share used. */
+    unlimited: string;
+    used: (used: string, limit: string) => string;
+    usedNoLimit: (used: string) => string;
+    /** Two facts on one line, as when it resets and when it was sampled. */
+    together: (first: string, second: string) => string;
+    noData: string;
+    resets: (when: string) => string;
+    sampled: (when: string) => string;
+    failedBecause: (reason: string) => string;
+    /** The status card's line for a failure, which has no room for the reason. */
+    failedSee: string;
+    /** Google could not be reached, after one more try: only the fact, as GEE's check says it. */
+    unreachable: string;
+    /** The status card's, which has no refresh button. */
+    cardUnreachable: string;
+    needs: string;
+  };
 };
 
 const PAGE_TEXT: { en: GeeText } & Partial<Record<Locale, GeeText>> = {
@@ -103,6 +128,24 @@ const PAGE_TEXT: { en: GeeText } & Partial<Record<Locale, GeeText>> = {
     saveFailed: (reason) => `Could not save the project: ${reason}`,
     recheckFailed: (reason) => `Could not check Google Earth Engine again: ${reason}`,
     marks: { done: 'Done', todo: 'To do', problem: 'Needs attention', busy: 'Checking' },
+    quota: {
+      heading: 'This month\'s quota',
+      refresh: 'Refresh this month\'s quota',
+      refreshTitle: 'Refresh',
+      loading: 'Checking…',
+      unlimited: 'No limit',
+      used: (used, limit) => `Used ${used} of ${limit} h`,
+      usedNoLimit: (used) => `Used ${used} h`,
+      together: (first, second) => `${first} · ${second}`,
+      noData: 'No usage recorded this month yet',
+      resets: (when) => `Resets ${when}`,
+      sampled: (when) => `as of ${when}`,
+      failedBecause: (reason) => `Could not get this month's quota: ${reason}`,
+      failedSee: 'Could not get this month\'s quota; see Settings.',
+      unreachable: 'Cannot reach Google right now; refresh again in a moment.',
+      cardUnreachable: 'Cannot reach Google right now.',
+      needs: 'The quota is read through the project\'s Service Usage and Cloud Monitoring APIs; GEE itself works as usual.',
+    },
   },
   'zh-CN': {
     accountHeading: 'Google 账号',
@@ -128,6 +171,24 @@ const PAGE_TEXT: { en: GeeText } & Partial<Record<Locale, GeeText>> = {
     saveFailed: (reason) => `无法保存项目：${reason}`,
     recheckFailed: (reason) => `无法重新检查 Google Earth Engine：${reason}`,
     marks: { done: '已完成', todo: '未完成', problem: '有问题', busy: '检查中' },
+    quota: {
+      heading: '本月额度',
+      refresh: '刷新本月额度',
+      refreshTitle: '刷新',
+      loading: '正在查询…',
+      unlimited: '不限额',
+      used: (used, limit) => `已用 ${used} / ${limit} 小时`,
+      usedNoLimit: (used) => `已用 ${used} 小时`,
+      together: (first, second) => `${first} · ${second}`,
+      noData: '本月暂无用量数据',
+      resets: (when) => `${when} 重置`,
+      sampled: (when) => `统计于 ${when}`,
+      failedBecause: (reason) => `无法获取本月额度：${reason}`,
+      failedSee: '无法获取本月额度，详情见设置页。',
+      unreachable: '暂时连不上 Google，稍后再刷新。',
+      cardUnreachable: '暂时连不上 Google。',
+      needs: '查额度要用项目里的 Service Usage 与 Cloud Monitoring 两个服务；GEE 本身照常可用。',
+    },
   },
   'zh-TW': {
     accountHeading: 'Google 帳號',
@@ -153,6 +214,24 @@ const PAGE_TEXT: { en: GeeText } & Partial<Record<Locale, GeeText>> = {
     saveFailed: (reason) => `無法儲存專案：${reason}`,
     recheckFailed: (reason) => `無法重新檢查 Google Earth Engine：${reason}`,
     marks: { done: '已完成', todo: '未完成', problem: '有問題', busy: '檢查中' },
+    quota: {
+      heading: '本月額度',
+      refresh: '重新整理本月額度',
+      refreshTitle: '重新整理',
+      loading: '正在查詢…',
+      unlimited: '不限額',
+      used: (used, limit) => `已用 ${used} / ${limit} 小時`,
+      usedNoLimit: (used) => `已用 ${used} 小時`,
+      together: (first, second) => `${first} · ${second}`,
+      noData: '本月尚無用量資料',
+      resets: (when) => `${when} 重置`,
+      sampled: (when) => `統計於 ${when}`,
+      failedBecause: (reason) => `無法取得本月額度：${reason}`,
+      failedSee: '無法取得本月額度，詳情見設定頁。',
+      unreachable: '暫時連不上 Google，稍後再重新整理。',
+      cardUnreachable: '暫時連不上 Google。',
+      needs: '查額度要用專案裡的 Service Usage 與 Cloud Monitoring 兩項服務；GEE 本身照常可用。',
+    },
   },
 };
 
