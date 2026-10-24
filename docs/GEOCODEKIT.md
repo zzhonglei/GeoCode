@@ -81,7 +81,7 @@ region = gee.region("数据/台北.geojson")
 
 ## 6. 安装与更新
 
-源码在 `geoengine/python/`:一个标准的 Python 项目,`pyproject.toml` 写明包名与版本,版本与 GeoCode 相同。构建 GeoEngine 时包的文件原样编进它的代码,随它分发:打包版里 GeoEngine 在应用的归档中,Python 读不到那里的文件,编进代码的文件 GeoEngine 随时取得到。构建因此不需要 Python。
+源码在 `geoengine/python/`:一个标准的 Python 项目,`pyproject.toml` 写明包名。版本就是 GeoCode 的版本号(`DESKTOP.md` 第 6 节),`pyproject.toml` 只声明它是动态的,不另写一份:GeoEngine 写安装记录时从 GeoCode 的版本号取,改了 GeoCode 的版本号,包的版本随之改,没有第二处要对齐。构建 GeoEngine 时包的文件原样编进它的代码,随它分发:打包版里 GeoEngine 在应用的归档中,Python 读不到那里的文件,编进代码的文件 GeoEngine 随时取得到。构建因此不需要 Python。
 
 GeoEngine 自己把包的文件写进 `base` 的 `site-packages`(每次启动核对,见下),并写下标准的安装记录(`dist-info`):`pip show geocodekit` 看得到它,`importlib.metadata` 读得到版本,报错的 traceback 指向磁盘上的文件。`base` 的 `EXTERNALLY-MANAGED` 标记照旧挡住 pip 与 uv,GeoAgent 与任何运行都不往 `base` 里装包;装这个包的只有 GeoEngine,方式与它写启动文件相同(`PYTHON.md` 第 6 节)。
 
