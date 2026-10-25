@@ -14,7 +14,7 @@ GeoCode is a desktop AI application for geographic work, built on two upstreams 
 - Before committing, audit the entire diff. When a batch is split into several commits, verify each slice on its own.
 - Ask before changing anything outside the repository, such as a Python environment or global tool configuration.
 - Before deleting anything, look at the target and confirm with the maintainer.
-- Change existing files, notes included, with the edit tool, one change at a time. Never rewrite a file with a script or `sed -i`; scripts only generate new artifacts or read.
+- Change existing files, notes included, with the edit tool, one change at a time, or, when most of a file changes, with the write tool after reading the whole file. Never rewrite a file with a script or `sed -i`; scripts only generate new artifacts or read.
 - Before committing code, have two read-only subagents review it: one against the conventions, one against the design in `docs/`. Documentation changes need no review.
 - Every text handed to the model (tool names, descriptions, parameters, replies, errors) is drafted with care and settled by the maintainer.
 - After each stage, reread and tidy the documentation.
