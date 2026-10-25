@@ -50,7 +50,7 @@ GeoEngine 是 GeoCode 自己的代码,用 TypeScript 与 Effect 编写,写法照
 
 检查在 `geoengine/` 执行 `bun run typecheck`,测试用 `scripts/test.mjs`(`DEVELOPMENT.md` 第 7 节)。
 
-`geoengine/python/` 是 GeoCode 的 Python 包 `geocodekit`(`GEOCODEKIT.md`),装在内置 Python 环境的 `base` 里,所以可以用 `base` 里预装的包。写法照 PEP 8,行宽 120;结构、公开的名字与函数的约定照 `GEOCODEKIT.md` 第 2 至 4 节。GEE 的函数由 GeoEngine 的单元测试经替身的 earthengine-api 运行检查,改动后再跑 `gee` 套件(`DEVELOPMENT.md` 第 7 节);存资产的 `gee.save` 不在其中,改动它时另做冒烟。运行替身测试的是 `PATH` 里的 `python3`,可能比 `base` 的 3.13 旧(macOS 自带的是 3.9),所以包里只用两者都支持的写法。
+`geoengine/python/` 是 GeoCode 的 Python 包 `geocodekit`(`GEOCODEKIT.md`),装在内置 Python 环境的 `base` 里,所以可以用 `base` 里预装的包。写法照 PEP 8,行宽 120;结构、公开的名字与函数的约定照 `GEOCODEKIT.md` 第 2 至 4 节。GEE 的函数由 GeoEngine 的单元测试经替身的 earthengine-api 运行检查,改动后再跑 `gee` 套件(`DEVELOPMENT.md` 第 7 节);存资产的 `gee.save` 不在其中,改动它时另做冒烟。OSM 的模块对着本机的假服务检查,检索与查看在单元测试里,下载在 `osm` 套件里;改动请求公共服务的方式之后,另对真实的服务做一次冒烟。运行替身测试的是 `PATH` 里的 `python3`,可能比 `base` 的 3.13 旧(macOS 自带的是 3.9),所以包里只用两者都支持的写法。
 
 ### 2.4 `scripts/`
 

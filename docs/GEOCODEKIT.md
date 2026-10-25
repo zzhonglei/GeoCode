@@ -19,10 +19,11 @@ GeoCode 的地理能力多半以这个包的新函数出现,所以它的结构�
 ```
 geocodekit/
 ├── gee/      Google Earth Engine
+├── osm/      OpenStreetMap 工具运行的模块与它们读的预设库
 └── _*        各子包共用的内部模块
 ```
 
-以后的能力域各加一个子包,以能力域的简称命名,已预留 `osm`(OpenStreetMap)与 `carto`(制图)。制图不用 `map`:`from geocodekit import map` 会盖掉 Python 自带的 `map`。
+以后的能力域各加一个子包,以能力域的简称命名,已预留 `carto`(制图)。`osm` 是 OSM 工具运行的模块与它们读的预设库,还没有公开的函数(`OSM.md` 第 11 节)。制图不用 `map`:`from geocodekit import map` 会盖掉 Python 自带的 `map`。
 
 脚本按能力域导入子包,用简短的名字:
 
@@ -109,8 +110,8 @@ GeoEngine 自己把包的文件写进 `base` 的 `site-packages`(每次启动核
 
 测试照 `DEVELOPMENT.md` 第 7 节分层,每个子包对应自己的一组:
 
-- 单元测试:只用替身,不需要装好的环境,包从 `geoengine/python/` 的源码导入。GEE 的函数用替身的 earthengine-api,在 `PATH` 里的 `python3` 上运行(`CONVENTIONS.md` 第 2.3 节)。
-- 真实软件的测试:接真实的服务,如 Earth Engine。
+- 单元测试:只用替身,不需要装好的环境,包从 `geoengine/python/` 的源码导入。GEE 的函数用替身的 earthengine-api,OSM 的检索与查看对着本机的假服务,都在 `PATH` 里的 `python3` 上运行(`CONVENTIONS.md` 第 2.3 节)。
+- 真实软件的测试:接替身证明不了的真实软件,如 Earth Engine;OSM 的下载要 shapely 与 GDAL,在装好的 `base` 上对着本机的假服务运行。
 
 ## 9. 约束
 

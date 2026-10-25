@@ -40,7 +40,9 @@ geoengine/   GeoEngine,GeoCode 自己的地理引擎(见 GEOENGINE.md)
 
 改动 `kernel/` 之后要重新运行它,应用才会用上新的内核。
 
-GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/packages/electron/resources/geoengine/geoengine.mjs`,打包时收进 `app.asar`。GeoCode 的 Python 包 `geocodekit`(`geoengine/python/`)在这一步原样编进 `geoengine.mjs`,由 GeoEngine 装进内置环境(`GEOCODEKIT.md` 第 6 节),改了其中的 `.py` 文件同样要重新构建。开发模式的启动脚本每次启动前都运行它,打包流程也运行它,平时不用手动执行;`geoengine/` 没装依赖时它报错退出。
+GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/packages/electron/resources/geoengine/geoengine.mjs`,打包时收进 `app.asar`。GeoCode 的 Python 包 `geocodekit`(`geoengine/python/`)在这一步原样编进 `geoengine.mjs`,由 GeoEngine 装进内置环境(`GEOCODEKIT.md` 第 6 节),改了其中的 `.py` 与 `.json` 文件同样要重新构建。开发模式的启动脚本每次启动前都运行它,打包流程也运行它,平时不用手动执行;`geoengine/` 没装依赖时它报错退出。
+
+OSM 工具读的预设库 `geocodekit/osm/_data.json`(`OSM.md` 第 2 节)由 `geoengine/` 里的 `bun ./script/osm-data.ts` 按脚本里锁定的版本下载、裁剪后写出,改了版本之后运行它,与写出的文件一起提交。
 
 内置的 Python 环境(见 `PYTHON.md`)由 `./scripts/stage-python.sh` 按 `geoengine/environment/` 里的定义准备:用 pixi-pack 把锁定清单里这个平台的包打成 `python.tar`,与这个平台的 pixi-unpack 一起暂存到 `desktop/packages/electron/resources/python/`,打包时作为额外资源收进应用。它按 `tools.json` 下载固定版本的工具并核对校验和,工具与下载的包放在仓库的 `.cache/python/`,不读用户自己的 pixi 配置。环境的标识没变时它直接跳过,所以开发模式的启动脚本每次启动前也运行它。默认准备本机平台的环境,并用 pixi-unpack 在 `.cache/python/` 里装一份,核对 Python 的版本并运行 `pip check`;给出 `win32-x64` 或 `darwin-arm64` 也能为另一个平台准备,只是不装、不核对。改了 `geoengine/environment/pixi.toml` 之后,运行 `./scripts/stage-python.sh --lock` 重新生成两个平台的锁定清单 `pixi.lock`,与它一起提交。
 
@@ -84,8 +86,8 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 
 GeoCode 的测试分三层,分开运行:
 
-- 单元测试:只碰替身与假对象(替身的 earthengine-api、假的 QGIS 应用包、测试自己打的环境包、上游的夹具),只写临时目录,不联网。
-- 真实软件的测试:接本机真实的 QGIS 与真实的 Earth Engine,测替身证明不了的。它们慢,GEE 的还用用户的额度,所以不和单元测试一起跑,只在改动可能影响它们时跑。
+- 单元测试:只碰替身与假对象(替身的 earthengine-api、假的 QGIS 应用包、测试自己打的环境包、本机的假 OSM 服务、上游的夹具),只写临时目录,不联网。
+- 真实软件的测试:接本机真实的 QGIS、真实的 Earth Engine 与 GeoCode 装好的 `base`,测替身证明不了的。它们慢,GEE 的还用用户的额度,所以不和单元测试一起跑,只在改动可能影响它们时跑。
 - 应用:开发版或打包版里的真实会话,在写入检测(第 8 节)的监视下。
 
 什么时候跑哪一层,见 `CONVENTIONS.md` 第 4 节。
@@ -108,6 +110,7 @@ node scripts/test.mjs --list changed    # 只列出要跑的套件与原因,不�
 | `geoengine` | GeoEngine 的单元测试(`geoengine/test/unit/`) |
 | `qgis` | 在本机每一套 QGIS 上运行的测试(`geoengine/test/real/` 里 QGIS 的) |
 | `gee` | 在真实 Earth Engine 上运行的测试(`geoengine/test/real/` 里 GEE 的),设了 `GEOENGINE_GEE_PROJECT=<项目 ID>` 才跑,没设时只提示 |
+| `osm` | 在 GeoCode 装好的 `base` 上运行的 OSM 下载测试(`geoengine/test/real/` 里 OSM 的),服务是本机的假服务 |
 
 套件依次运行,一个失败不影响后面的,最后列出每个套件的结果与用时;GeoEngine 的套件还列出跳过了几项,全部跳过的算没跑。有套件失败时退出码为 1;没有失败、但有套件没跑(如没设项目时的 `gee`、本机没有 QGIS 时的 `qgis`)时为 3;用法错误时为 2。
 
@@ -122,13 +125,14 @@ node scripts/test.mjs --list changed    # 只列出要跑的套件与原因,不�
 - `kernel/`:GeoCode 的测试有两种,加在上游测试文件里的用例(命名见 `CONVENTIONS.md` 第 4 节)与 GeoCode 自己的测试文件(位置见 `CONVENTIONS.md` 第 3.4 节),都借用上游的夹具,在包目录以 `bun run test <文件>` 运行。`packages/core` 的这条命令把主目录、`XDG_*` 与 `TMPDIR` 换成临时目录,其他包(如 `packages/server`)的不换,所以 `scripts/test.mjs` 给每次运行一个临时主目录;在包里单独跑时照下面上游测试的办法换。不要在包里直接执行 `bun test`。
 - `desktop/`:GeoCode 的测试在各包的 `geocode/` 目录。包的 `bun run test` 会连上游的测试一起跑,所以只跑这些目录。
 - 上游的测试不保证只写临时目录,`web` 包里就有测试在主目录下建目录、写 npm 缓存。要跑它们时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_STATE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉而不是设成空值,否则 Bun 会把转译缓存写到当前目录下。
-- `geoengine/`:单元测试在 `test/unit/`,按能力域分目录(`qgis`、`gee`、`python`,引擎本身的直接放在 `test/unit/` 下);真实软件的测试在 `test/real/`,每个能力域一个文件,以能力域命名;共用的夹具在 `test/support/`。包的 `bun run test` 只跑单元测试,`bun run test:qgis` 与 `bun run test:gee` 各跑一种真实软件的测试,`scripts/test.mjs` 照这几条命令运行它们。测试在系统临时目录下建以 `geoengine-` 开头的目录,结束时删掉;有的测试启动外部进程并验证它们被结束,所以按顺序逐个运行。
+- `geoengine/`:单元测试在 `test/unit/`,按能力域分目录(`qgis`、`gee`、`osm`、`python`,引擎本身的直接放在 `test/unit/` 下);真实软件的测试在 `test/real/`,每个能力域一个文件,以能力域命名;共用的夹具在 `test/support/`。包的 `bun run test` 只跑单元测试,`bun run test:qgis`、`bun run test:gee` 与 `bun run test:osm` 各跑一种真实软件的测试,`scripts/test.mjs` 照这几条命令运行它们。测试在系统临时目录下建以 `geoengine-` 开头的目录,结束时删掉;有的测试启动外部进程并验证它们被结束,所以按顺序逐个运行。
 
-GeoEngine 的测试涉及三种外部软件:
+GeoEngine 的测试涉及四种外部软件:
 
 - QGIS:单元测试里经 QGIS 运行的几项用假的应用包,里面的解释器是一段 shell 脚本,只在 macOS 上跑。真实软件的测试在 macOS 上接真实的 QGIS,默认用 `/Applications` 下每一个认得出的 `QGIS*.app`,也可以用 `GEOENGINE_QGIS_APPS` 列出应用包的路径(以冒号分隔);本机没有 QGIS 时这几项记为跳过;`/Applications` 下有、但找不到它的 Python 的,也各记一项跳过。QGIS 照常在用户目录下写它自己的配置与缓存。Windows 上认路径与发现安装的逻辑在任何平台上都测,用的是照 OSGeo4W 的真实组件包搭出的假目录树;经启动脚本运行 QGIS 只能在 Windows 上验证。
 - 内置的 Python 环境:测试自己打一个很小的包,配一个替身 pixi-unpack(一段 shell 脚本,像真的那样经临时目录解开它、留下激活脚本),包里的 `python3` 转去运行 `PATH` 里的 `python3`,不用真实的环境与 pixi-unpack;没有 `python3` 时与在 Windows 上这些项跳过。真实的环境要在应用里验证。
 - GEE:单元测试不联网。环境检查、运行、登录与查额度的脚本都用 `PATH` 里的 `python3` 真实执行,它代替 `base` 的解释器,同样以隔离模式运行;earthengine-api、它用到的 Google 库与 requests 换成测试自带的替身,`geocodekit` 直接用 `geoengine/python/` 里的源码,两者都由标准输入里程序之前的一行加进导入路径(隔离模式不读 `PYTHONPATH`)。没有 `python3` 时与在 Windows 上这些项跳过。真实软件的测试用真实的 Earth Engine,测替身证明不了的:没有 Earth Engine 自己的凭据时报未登录,缺项目时报缺项目、写进项目后就绪,不可能存在的项目 ID 被报为项目不存在,运行用的是 `base` 的解释器、以 Earth Engine 自己的报错结束,以及检查与核心链路都经过本机的一个转发代理(geedim 的请求也要经过它)。它们用这台电脑上登录的账号与它的额度,设了 `GEOENGINE_GEE_PROJECT=<项目 ID>` 才跑;只读 Earth Engine 自己的凭据,只查询、下载到临时目录,不存资产。解释器是数据目录里 GeoCode 装好的 `base`,或 `GEOENGINE_GEE_DATA` 所指的数据目录里的;它的启动文件与 `geocodekit` 要是当前代码写的(改了之后启动一次开发版),否则这几项失败并说明。改了环境的定义(`environment/`)之后同样先启动一次开发版,让它装上新的环境;这一点测试查不出,装着的旧环境照样能跑过。
+- OSM:都不联网,Overpass、Nominatim、Photon 与 Wikidata 换成测试在本机回环地址上开的一个假服务,GeoEngine 拿到的是它的地址,它记下收到的每个请求。检索与查看用不到几何库,单元测试用 `PATH` 里的 `python3` 运行,`geocodekit` 的源码照 GEE 的办法加进导入路径。下载要 shapely 与 GDAL,由 `osm` 套件在数据目录里 GeoCode 装好的 `base` 上运行(或 `GEOENGINE_OSM_DATA` 所指的数据目录里的),同样用源码里的 `geocodekit`,所以不必先启动开发版;没有装好的 `base` 时这几项跳过。对真实公共服务的检查不做成自动测试:那会给社区的服务器添负担,结果又随它们的忙闲而变。
 
 ## 8. 写入检测
 

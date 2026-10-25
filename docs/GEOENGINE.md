@@ -1,6 +1,6 @@
 # 地理引擎
 
-GeoEngine(地理引擎)是 GeoCode 自己的组件,提供应用的全部地理能力。本文档讲各能力域共用的框架;能力域各成一篇:`QGIS.md`、`GEE.md`。内置的 Python 环境(`PYTHON.md`)也由 GeoEngine 的一个模块管理:它照框架登记状态,但没有配置块,也不提供工具,所以没有未配置与配置错误这两种状态;标题栏没有它的指示灯,设置里也没有它的一行;窗口的加载动画等它就绪,准备失败时显示出错页(`PYTHON.md` 第 7 节)。
+GeoEngine(地理引擎)是 GeoCode 自己的组件,提供应用的全部地理能力。本文档讲各能力域共用的框架;能力域各成一篇:`QGIS.md`、`GEE.md`、`OSM.md`。OpenStreetMap 能力域没有要配置与检查的东西,不登记状态,标题栏没有它的指示灯,设置里也没有它的一行(`OSM.md` 第 2 节)。内置的 Python 环境(`PYTHON.md`)也由 GeoEngine 的一个模块管理:它照框架登记状态,但没有配置块,也不提供工具,所以没有未配置与配置错误这两种状态;标题栏没有它的指示灯,设置里也没有它的一行;窗口的加载动画等它就绪,准备失败时显示出错页(`PYTHON.md` 第 7 节)。
 
 ## 1. 定位
 
@@ -101,4 +101,3 @@ GeoEngine 只执行任务、管理执行环境。agent、工具的定义与权�
 ## 7. 待定
 
 - 界面上的地理数据预览:显示什么、经什么接口取得。
-- OpenStreetMap 访问外网时照全应用同一条代理规则(`DESKTOP.md` 第 5 节,内置 Python 环境的做法见 `PYTHON.md` 第 6.1 节):GeoEngine 用的 Node 不读代理,由 Node 发请求时要另行设置;壳服务端的 `desktop/packages/web/server/lib/outbound-proxy.js` 只认代理变量,不读系统代理。

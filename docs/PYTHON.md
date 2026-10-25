@@ -211,4 +211,4 @@ GEE 从 `python` 的状态取 `base` 的解释器,在环境就绪之前停在检
 ## 12. 待定
 
 - 第 9 节的环境检查还没有做成脚本,更新锁定清单时手动跑。构建脚本可以在本机平台上用 pixi-unpack 装一份到临时目录来跑它;要不要这样做、放在构建里还是测试里(放进测试就是真实软件的测试,`DEVELOPMENT.md` 第 7 节),下次更新锁定清单时定。
-- cartopy、scikit-learn、osmnx 要不要预装:osmnx 随 OpenStreetMap 能力域一起定。
+- cartopy、scikit-learn 要不要预装。osmnx 不预装:OSM 的工具不以它为底(`OSM.md` 第 2 节),要用它建路网时 GeoAgent 装进工作环境。
