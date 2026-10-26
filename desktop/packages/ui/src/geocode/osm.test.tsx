@@ -201,7 +201,7 @@ describe("GeoCode: the OSM tools' rows", () => {
     );
     expect(stalled).toMatchObject({ bad: true, notes: [{ tone: 'error', text: zh.failures.stalledDownload(5) }] });
     const refused = osmProbeView(
-      failed('osmprobe', "OpenStreetMap's Overpass service refused the query: …", {
+      failed('osmprobe', "OpenStreetMap's server refused the query: …", {
         failure: { code: 'refused', said: 'line 1: parse error: Invalid regular expression' },
       }),
       'zh-CN',

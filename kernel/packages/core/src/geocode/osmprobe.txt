@@ -1,7 +1,7 @@
-Look at what an area holds in OpenStreetMap (OSM), to choose what to download from it. Give "area" and exactly one of:
+Count what an area holds in OpenStreetMap (OSM), to choose what to download from it. Returns counts, not the features. Give "area" and exactly one of:
 
-- "term": an everyday English word or phrase, such as "hospital", "park" or "bus stop". The answer lists the tags the OSM community uses for such things, each with how many features in the area carry it. One kind of thing is often tagged in several ways, and a download naming only one of them misses the rest.
-- "tags": tag filters, each with how many features in the area meet it, and how many meet any of them.
-- "keys": up to 5 tag keys, such as ["amenity", "shop"], each with the values it takes in the area and how many features have each.
+- "term": an everyday English word or phrase, such as "hospital", "park" or "bus stop". Returns the tags of up to 6 kinds of thing matching it, some of them unrelated, each with how many features in the area carry it.
+- "tags": tag filters. Returns how many features in the area meet each, and how many meet any of them.
+- "keys": up to 5 tag keys, such as ["amenity", "shop"]. Returns each key's 30 most common values in the area, with how many features have each.
 
-A download sizes itself, so there is no need to look before every one: look to choose tags, or to tell the user how much data there is.
+Download with every tag of the kind wanted that has features, not only the most common. A download sizes itself, so there is no need to look before every one: look to choose tags, or to tell the user how much data there is.

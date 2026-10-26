@@ -16,7 +16,8 @@ export const description = DESCRIPTION
 export const Input = Schema.Struct({
   area: GeoOsm.Area,
   term: Schema.optionalKey(Schema.String).annotate({
-    description: 'An everyday English word or phrase for a kind of thing, such as "hospital" or "bus stop"',
+    description:
+      'An everyday word or phrase for a kind of thing, in English, whatever language the user writes in, such as "hospital" or "bus stop"',
   }),
   tags: Schema.optionalKey(GeoOsm.Tags),
   keys: Schema.optionalKey(Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(5))).annotate({
@@ -80,10 +81,10 @@ const WHY = {
 }
 
 const answer = (looked: typeof Looked.Type) => {
-  const stopped = looked.remark ? [`Overpass stopped early, so the counts may be low: ${looked.remark}`] : []
+  const stopped = looked.remark ? [`The server stopped early, so the counts may be low: ${looked.remark}`] : []
   const uncounted =
     "uncounted" in looked && looked.uncounted.length
-      ? [`Not counted before Overpass stopped: ${looked.uncounted.join(", ")}`]
+      ? [`Not counted before the server stopped: ${looked.uncounted.join(", ")}`]
       : []
   if ("term" in looked) {
     if (!looked.rows.length && !looked.uncounted.length) {

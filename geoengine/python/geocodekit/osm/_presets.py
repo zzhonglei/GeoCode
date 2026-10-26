@@ -114,7 +114,8 @@ def category(preset, tags):
     return conditions[0] if len(conditions) == 1 else "".join("[%s]" % condition for condition in conditions)
 
 
-WORD = re.compile(r"[a-z0-9]+")
+# Letters of any script, so that a word with an accent, as "café", is not cut into a shorter one.
+WORD = re.compile(r"[^\W_]+")
 
 
 def _words(text):

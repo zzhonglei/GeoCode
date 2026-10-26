@@ -202,7 +202,7 @@ const TEXT: { en: OsmText } & Partial<Record<Locale, OsmText>> = {
       stalledDownload: (minutes) =>
         `No progress for ${minutes} minutes, so the download stopped and what it had was discarded. OpenStreetMap’s public servers may be too busy; try again later.`,
       unanswered: 'OpenStreetMap’s public servers cannot be reached, or are all too busy.',
-      refused: 'Overpass refused the query.',
+      refused: 'The server refused the query.',
       invalid: 'The request was not written right.',
       tooLarge: 'OpenStreetMap’s answer was too large to take.',
       unwritable: 'No file can be written in this folder, so nothing was downloaded.',
@@ -302,7 +302,7 @@ const TEXT: { en: OsmText } & Partial<Record<Locale, OsmText>> = {
       stalledDownload: (minutes) =>
         `${minutes} 分钟没有进展，已经停下，下了的部分已丢弃。OpenStreetMap 的公共服务器可能太忙，可以过一会儿再试。`,
       unanswered: 'OpenStreetMap 的公共服务器连不上，或者都太忙。',
-      refused: 'Overpass 拒绝了这次查询。',
+      refused: '服务器拒绝了这次查询。',
       invalid: '请求写得不对。',
       tooLarge: 'OpenStreetMap 的回答太大，收不下。',
       unwritable: '这个文件夹里写不了文件，没有下载。',
@@ -402,7 +402,7 @@ const TEXT: { en: OsmText } & Partial<Record<Locale, OsmText>> = {
       stalledDownload: (minutes) =>
         `${minutes} 分鐘沒有進展，已經停下，已下載的部分已捨棄。OpenStreetMap 的公共伺服器可能太忙，可以過一會兒再試。`,
       unanswered: 'OpenStreetMap 的公共伺服器連不上，或者都太忙。',
-      refused: 'Overpass 拒絕了這次查詢。',
+      refused: '伺服器拒絕了這次查詢。',
       invalid: '請求寫得不對。',
       tooLarge: 'OpenStreetMap 的回答太大，收不下。',
       unwritable: '這個資料夾裡寫不了檔案，沒有下載。',

@@ -10,12 +10,12 @@ import { GeoEngine } from "./geoengine.js"
 /** The parameters the OSM tools share, as GeoAgent reads them (docs/OSM.md, section 5). */
 export const Area = Schema.String.annotate({
   description:
-    'Where to look: the id of an area found with osmsearch, such as "R10958940", or several joined by commas; "bbox:south,west,north,east" in degrees; "around:latitude,longitude,meters"; "around:<id>,meters" for an object and everything within that distance of it; or "file:<path>" of a boundary file in any coordinate system, with "|layername=<name>" for one of its layers. Latitude always comes first. An area of more than 8 separate parts is counted and asked for as the box around them all, so places far apart are better looked at and downloaded one at a time.',
+    'Where to look: the id of an area found with osmsearch, such as "R65066", or several joined by commas; "bbox:south,west,north,east" in degrees; "around:latitude,longitude,meters"; "around:<id>,meters" for an object and everything within that distance of it; or "file:<path>" of a boundary file in any coordinate system, with "|layername=<name>" for one of its layers. Latitude always comes first. An area of more than 8 separate parts is counted and asked for as the box around them all, so places far apart are better looked at and downloaded one at a time.',
 })
 
 export const Tags = Schema.Array(Schema.String).check(Schema.isMinLength(1)).annotate({
   description:
-    'Tag filters, any of which a feature may meet: "key=value"; "key" for any value; "key~regex"; "key!~regex" for the key with a value not matching, such as "amenity!~bench|waste_basket"; or conditions in brackets that must all hold, such as "[natural=water][water=reservoir]". Regexes are unanchored and case-sensitive.',
+    'Tag filters, any of which a feature may meet: "key=value"; "key" for any value; "key~regex"; "key!~regex" for the key with a value not matching, such as "amenity!~bench|waste_basket"; or conditions in brackets that must all hold, such as "[natural=water][water=reservoir]". Regexes are unanchored and case-sensitive. A candidate\'s category from osmsearch can be given as it stands.',
 })
 
 export const Fields = Schema.Array(Schema.String).annotate({
@@ -33,16 +33,16 @@ export const Label = Schema.String.annotate({
 })
 
 /** What GeoAgent reads when GeoEngine did not answer; a request written wrong is told how to write it right. */
-const failureMessage = (failure: GeoEngine.Failure) => {
+const failureMessage = (failure: GeoEngine.Failure, tool: string) => {
   if (failure.code === "invalid" || failure.code === "not-ready") return failure.message
   if (failure.code === "invalid-params") return `${failure.message}.`
-  if (failure.code === "refused") return `OpenStreetMap's Overpass service refused the query: ${failure.message}`
+  if (failure.code === "refused") return `OpenStreetMap's server refused the query: ${failure.message}`
   if (failure.code === "unanswered") {
     return "OpenStreetMap's public servers cannot be reached from here, or are too busy to answer right now."
   }
   if (failure.code === "stalled") {
     const seconds = stalledFor(failure)
-    return `No progress for ${seconds === undefined ? "too long" : `${Math.round(seconds / 60)} minutes`}: OpenStreetMap's public servers were too busy, or did not answer. Nothing was written.`
+    return `No progress for ${seconds === undefined ? "too long" : `${Math.round(seconds / 60)} minutes`}: OpenStreetMap's public servers were too busy, or did not answer.${tool.startsWith("osmget") ? " Nothing was written." : ""}`
   }
   if (failure.code === "too-large") {
     return `OpenStreetMap's answer was too large to take (${failure.message}). Ask for fewer objects at a time.`
@@ -88,7 +88,7 @@ export const failed =
       details: failure.details,
     }).pipe(
       Effect.andThen(context.progress({ ...shown(), failure: failureOf(failure) })),
-      Effect.andThen(Effect.fail(new ToolFailure({ message: failureMessage(failure) }))),
+      Effect.andThen(Effect.fail(new ToolFailure({ message: failureMessage(failure, tool) }))),
     )
 
 /** The area with the path of a boundary file made absolute, as read and write resolve theirs. */
@@ -103,7 +103,7 @@ export const resolveArea = (access: FileAccess.Interface, area: string) =>
 /**
  * Asks GeoEngine, before the user is asked, whether a call could start: GeoCode's Python environment ready, waited for
  * as a call waits, the params whole and the boundary file there. It runs nothing; how an area or tags are written is
- * checked once the call starts, as reading one names OSM objects that only Overpass knows.
+ * checked once the call starts, as reading one names OSM objects that only OSM's servers know.
  */
 export const check = (action: "search" | "probe" | "objects" | "features", params: object) =>
   GeoEngine.call("osm.check", { ...params, action })
