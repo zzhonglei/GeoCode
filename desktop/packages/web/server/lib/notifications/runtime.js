@@ -1,6 +1,7 @@
 import { unwrapOpenCodeResponse } from '../opencode/response-envelope.js';
 import { createSessionActivityProbe } from '../opencode/session-activity.js';
 import { isEnterpriseMode } from '../enterprise-mode.js';
+import { geoPermissionLabel } from '../../geocode/geo-permissions.js'; // GeoCode: see permission, in permission.asked
 
 /** The session id OpenCode gives an MCP elicitation form, which no session owns. */
 const LOCATION_SCOPED_FORM_SESSION_ID = 'global';
@@ -714,6 +715,7 @@ export const createNotificationTriggerRuntime = (deps) => {
         : '';
       const permissionMessage = typeof payload.properties?.message === 'string' ? payload.properties.message.trim() : '';
       const permission = permissionMessage
+        || geoPermissionLabel(permissionAction, payload.properties?.resources) // GeoCode: a geo tool by its title, as the tray names it
         || (permissionAction && permissionResource ? `${permissionAction}: ${permissionResource}` : permissionAction);
       const requestKey = typeof requestId === 'string' ? `${sessionId}:${requestId}` : null;
       if (requestKey && notifiedPermissionRequests.has(requestKey)) {

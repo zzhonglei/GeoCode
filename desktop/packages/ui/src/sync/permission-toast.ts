@@ -1,3 +1,4 @@
+import { geoTrayLabel } from '@/geocode/geoTools'; // GeoCode: see showPermissionNeededToast
 import type { PermissionRequest } from '@/types/permission';
 
 type PermissionToastOptions = {
@@ -31,6 +32,7 @@ export const showPermissionNeededToast = ({
 
   pendingIds.add(key);
   const description = permission.message?.trim()
+    || geoTrayLabel(permission.action, permission.resources) // GeoCode: a geo tool by its title, as the tray names it
     || permission.action.trim()
     || 'Agent needs your approval';
   show('Permission needed', {

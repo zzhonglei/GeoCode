@@ -28,15 +28,21 @@ const asking = z.object({
   guarded: z.boolean().catch(false),
 });
 
-const LINE_CLASS = 'typography-meta min-w-0 truncate whitespace-nowrap';
-
-/** A line of a geo tool's permission card: its label, then the value, cut short where it runs long. */
+/** A line of a geo tool's permission card: its label, then the value, cut short where it runs long or wrapped whole. */
 export const Labelled: React.FC<{
   label: string;
   children: React.ReactNode;
   mono?: boolean;
-}> = ({ label, children, mono }) => (
-  <div className={cn(LINE_CLASS, 'text-foreground', mono && 'font-mono')}>
+  /** For paths, which the user reads whole before allowing the call, as upstream's card shows them. */
+  wrap?: boolean;
+}> = ({ label, children, mono, wrap }) => (
+  <div
+    className={cn(
+      'typography-meta min-w-0 text-foreground',
+      wrap ? 'break-all' : 'truncate whitespace-nowrap',
+      mono && 'font-mono',
+    )}
+  >
     <span className={cn('text-muted-foreground', mono ? 'me-2 font-sans' : undefined)}>{label}</span>
     {children}
   </div>
@@ -52,8 +58,8 @@ export const Warning: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 /**
  * qgisrun's permission card, line by line: why GeoAgent asks, what the algorithm does, what to heed, then its inputs,
- * parameters and outputs a line each, cut short where they run long. An output outside the project, or one that is no
- * file, shows in the warning colour.
+ * parameters and outputs a line each, the paths wrapped whole and the parameters cut short where they run long. An
+ * output outside the project, or one that is no file, shows in the warning colour.
  */
 export const QgisRunPermission: React.FC<{ permission: PermissionRequest }> = ({ permission }) => {
   // Subscribed so the card follows a change of language.
@@ -78,7 +84,7 @@ export const QgisRunPermission: React.FC<{ permission: PermissionRequest }> = ({
       ))}
       {run.guarded ? <Warning>{text.guarded}</Warning> : null}
       {run.inputs.length ? (
-        <Labelled label={text.input} mono>
+        <Labelled label={text.input} mono wrap>
           {run.inputs.map((input) => path(input.value)).join(', ')}
         </Labelled>
       ) : null}
@@ -88,7 +94,7 @@ export const QgisRunPermission: React.FC<{ permission: PermissionRequest }> = ({
         </Labelled>
       ) : null}
       {run.outputs.length ? (
-        <Labelled label={text.output} mono>
+        <Labelled label={text.output} mono wrap>
           {run.outputs.map((output, index) => (
             <React.Fragment key={output.name}>
               {index > 0 ? ', ' : null}

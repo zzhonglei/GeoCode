@@ -17,13 +17,11 @@ const asking = z.object({
   path: z.string().min(1).optional().catch(undefined),
 });
 
-// Flush with the card's lines, without a box of its own; a long line scrolls rather than wrapping, so the excerpt keeps
-// its height.
+// Flush with the card's lines, without a box of its own.
 const EXCERPT_STYLE: React.CSSProperties = {
   background: 'transparent',
   fontSize: 'var(--text-meta)',
   lineHeight: '1.25rem',
-  overflowX: 'auto',
 };
 
 /** geerun's permission card: why GeoAgent asks, then the first lines of the script, or the file it runs. */
@@ -41,12 +39,18 @@ export const GeeRunPermission: React.FC<{ permission: PermissionRequest }> = ({ 
       {run.description ? <Labelled label={`${text.reason}${text.colon}`}>{run.description}</Labelled> : null}
       {excerpt.shown ? (
         <div className="min-w-0">
-          <WorkerHighlightedCode code={excerpt.shown} language="python" style={EXCERPT_STYLE} />
+          <WorkerHighlightedCode
+            code={excerpt.shown}
+            language="python"
+            // A long line is cut short rather than scrolled.
+            className="[&_pre]:overflow-hidden [&_pre]:text-ellipsis"
+            style={EXCERPT_STYLE}
+          />
           {excerpt.rest ? <div className="typography-micro text-muted-foreground">{text.rest(excerpt.rest)}</div> : null}
         </div>
       ) : null}
       {run.path ? (
-        <Labelled label={text.file} mono>
+        <Labelled label={text.file} mono wrap>
           {formatPathForDisplay(run.path, home)}
         </Labelled>
       ) : null}

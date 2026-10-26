@@ -170,7 +170,7 @@ export const OsmPermissionBody: React.FC<{
       {area}
       {call.geometry === 'point' ? <Labelled label={label(words.geometry)}>{words.point}</Labelled> : null}
       {call.output ? (
-        <Labelled label={text.output} mono>
+        <Labelled label={text.output} mono wrap>
           <span className={outside ? 'text-[var(--status-warning)]' : undefined}>
             {formatPathForDisplay(call.output, home)}
           </span>

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useI18n } from '@/lib/i18n';
 import { useUIStore } from '@/stores/useUIStore';
 import { geoDrawnRows, geoRowParts, type Runs as GeoToolRuns } from '@/geocode/geoToolRuns'; // GeoCode: see the trim
+import { geoActivity } from '@/geocode/geoTools'; // GeoCode: see details
 import {
     ActivityRowSkipContext,
     LIVE_ACTIVITY_VISIBLE_ROWS,
@@ -29,7 +30,7 @@ interface LiveTurnActivityProps {
 }
 
 export function LiveTurnActivity({ turn, hasLaterAssistant, expanded, onToggle, renderMessage, geoRuns }: LiveTurnActivityProps) { // GeoCode: see geoRuns
-    const { t } = useI18n();
+    const { t, locale } = useI18n(); // GeoCode: see details
     const contentId = React.useId();
     const finalContentId = React.useId();
     const finalMessage = getLiveFinalMessage(turn.assistantMessages);
@@ -78,6 +79,7 @@ export function LiveTurnActivity({ turn, hasLaterAssistant, expanded, onToggle, 
         ? t(summary.files === 1 ? 'chat.liveActivity.changedFile' : 'chat.liveActivity.changedFiles', { count: summary.files })
         : null;
     const details = summary ? [
+        ...geoActivity(turn.assistantMessages, locale), // GeoCode: what the geo tools did, which upstream does not count
         summary.explored ? t('chat.liveActivity.explored') : null,
         summary.commands > 0 ? t(summary.commands === 1 ? 'chat.liveActivity.ranCommand' : 'chat.liveActivity.ranCommands', { count: summary.commands }) : null,
         summary.researched ? t('chat.liveActivity.researched') : null,

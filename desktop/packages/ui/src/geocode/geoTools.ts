@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import type { ChatMessageEntry } from '@/components/chat/lib/turns/types';
 import { useI18nStore, type Locale } from '@/lib/i18n';
 import type { ToolInput } from '@/lib/opencode/model';
 import type { PermissionRequest } from '@/types/permission';
@@ -65,6 +66,16 @@ type Texts = {
     /** Under a script's first lines, what is left out. */
     rest: (count: number) => string;
   };
+  /** What a settled turn's folded activity says the geo tools did, beside what it says of upstream's. */
+  activity: {
+    read: string;
+    docs: string;
+    qgis: (count: number) => string;
+    gee: (count: number) => string;
+    /** A search or a look. */
+    searched: string;
+    downloaded: string;
+  };
   /** Earth Engine runs in the background, beside the background commands. */
   background: {
     /** A session's mark in the session list, while its run goes on. */
@@ -127,6 +138,14 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
       file: 'Script file',
       rest: (count) => `… ${count} more ${count === 1 ? 'line' : 'lines'}`,
     },
+    activity: {
+      read: 'Read geospatial data',
+      docs: 'Read QGIS docs',
+      qgis: (count) => (count === 1 ? 'Ran 1 QGIS algorithm' : `Ran ${count} QGIS algorithms`),
+      gee: (count) => (count === 1 ? 'Ran 1 Earth Engine script' : `Ran ${count} Earth Engine scripts`),
+      searched: 'Searched OpenStreetMap',
+      downloaded: 'Downloaded from OpenStreetMap',
+    },
     background: {
       running: 'Earth Engine script running in the background',
       count: (count) => `Background Earth Engine scripts: ${count}`,
@@ -168,6 +187,14 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
       file: '脚本文件',
       rest: (count) => `…… 其余 ${count} 行`,
     },
+    activity: {
+      read: '读取了地理数据',
+      docs: '查阅了 QGIS 文档',
+      qgis: (count) => `运行了 ${count} 个 QGIS 算法`,
+      gee: (count) => `运行了 ${count} 个 Earth Engine 脚本`,
+      searched: '查询了 OpenStreetMap',
+      downloaded: '从 OpenStreetMap 下载了数据',
+    },
     background: {
       running: 'Earth Engine 脚本正在后台运行',
       count: (count) => `后台 Earth Engine 脚本：${count}`,
@@ -208,6 +235,14 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
       output: '輸出',
       file: '腳本檔案',
       rest: (count) => `…… 其餘 ${count} 行`,
+    },
+    activity: {
+      read: '讀取了地理資料',
+      docs: '查閱了 QGIS 文件',
+      qgis: (count) => `執行了 ${count} 個 QGIS 演算法`,
+      gee: (count) => `執行了 ${count} 個 Earth Engine 腳本`,
+      searched: '查詢了 OpenStreetMap',
+      downloaded: '從 OpenStreetMap 下載了資料',
     },
     background: {
       running: 'Earth Engine 腳本正在背景執行',
@@ -298,13 +333,44 @@ export const qgisRunning = (algorithm: string, locale: Locale) => textIn(locale)
 /** The labels and warnings the geo tools' own permission cards share. */
 export const geoCardText = (locale: Locale) => textIn(locale).card;
 
-/** How many of a script's lines geerun's card shows; scripts run long, so the rest is only counted. */
+/** How many lines of a script geerun's card shows, blank ones aside; scripts run long, so the rest is only counted. */
 const EXCERPT_LINES = 4;
 
-/** A script's first lines, past any blank ones, and how many lines follow them. */
+/** A script's first lines, from its first that is not blank, and how many lines follow them. */
 export const excerptOf = (script: string) => {
   const lines = script.replace(/^(?:[ \t]*\r?\n)+/, '').trimEnd().split(/\r?\n/);
-  return { shown: lines.slice(0, EXCERPT_LINES).join('\n'), rest: Math.max(0, lines.length - EXCERPT_LINES) };
+  const ends = lines.flatMap((line, index) => (line.trim() ? [index + 1] : []));
+  const end = ends[EXCERPT_LINES - 1] ?? lines.length;
+  return { shown: lines.slice(0, end).join('\n'), rest: lines.length - end };
+};
+
+/**
+ * What a settled turn's folded activity says its finished geo calls did, a phrase each kind; runs are counted, as the
+ * status over the composer counts them.
+ */
+export const geoActivity = (messages: readonly ChatMessageEntry[], locale: Locale): string[] => {
+  const finished = new Map<string, number>();
+  const seen = new Set<string>();
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.type !== 'tool' || part.state.status !== 'completed') continue;
+      // Each call once, keyed as upstream's summary keys it.
+      const key = `${message.info.id}:${part.callID || part.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      finished.set(part.tool, (finished.get(part.tool) ?? 0) + 1);
+    }
+  }
+  const count = (tool: GeoTool) => finished.get(tool) ?? 0;
+  const words = textIn(locale).activity;
+  return [
+    count('readgeodata') ? words.read : undefined,
+    count('qgisdoc') ? words.docs : undefined,
+    count('qgisrun') ? words.qgis(count('qgisrun')) : undefined,
+    count('geerun') ? words.gee(count('geerun')) : undefined,
+    count('osmsearch') || count('osmprobe') ? words.searched : undefined,
+    count('osmgetobjects') || count('osmgetfeatures') ? words.downloaded : undefined,
+  ].filter((phrase) => phrase !== undefined);
 };
 
 /** How many files a row of readgeodata calls read. */
