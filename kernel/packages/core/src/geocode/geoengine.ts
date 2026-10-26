@@ -25,8 +25,8 @@ export class Failure extends Data.TaggedError("GeoEngineFailure")<{
 
 const unavailable = (message: string) => new Failure({ code: "unavailable", message })
 
-/** What GeoAgent can do about a failure inside GeoCode, whose details are for the log, not for it. */
-export const UNAVAILABLE = "The QGIS tools are not available right now. Tell the user; restarting GeoCode may fix it."
+/** What GeoAgent is told of a failure inside GeoCode, whose details are for the log, not for it. */
+export const UNAVAILABLE = "The QGIS tools are not available right now; restarting GeoCode may fix it."
 
 /**
  * Calls a GeoEngine method through the shell server, handing on its progress as GeoEngine reports it. An interrupted
