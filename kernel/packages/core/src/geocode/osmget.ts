@@ -15,7 +15,7 @@ import { GeoRunActivity } from "./run-activity.js"
 export const ObjectsInput = Schema.Struct({
   ids: Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(25)).annotate({
     description:
-      'OSM ids found with osmsearch, such as ["R10958940", "W208549334"]: R for a relation, W for a way, N for a node. At most 25',
+      'OSM ids found with osmsearch, such as ["R65066", "W427818536"]: R for a relation, W for a way, N for a node. At most 25',
   }),
   output: GeoOsm.Output,
   fields: Schema.optionalKey(GeoOsm.Fields),

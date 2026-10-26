@@ -1,7 +1,7 @@
 """The attributes a downloaded feature carries (docs/OSM.md, section 7): osm_id, name and category always; then the
 keys the filters named, the keys worth recording of the kind they name, the keys the features' own presets say are
 worth recording where enough of them carry one, and the keys asked for. Every other key is dropped and counted, unless
-all tags were asked for, which keep in one column."""
+all tags were asked for: they are then kept in one column besides."""
 
 import json
 import math
@@ -46,10 +46,7 @@ def columns(features, named, worth, asked, extra):
     many features carry it. `worth` is the keys worth recording of the kind the filters name. A key differing from a
     column's name in case only is dropped too: GeoPackage, as SQLite, does not tell such names apart."""
     everything = ALL in (asked or [])
-    wanted = list(named) + [key for key in asked or [] if key != ALL]
-    if not everything:
-        wanted.extend(worth)
-        wanted.extend(_common(features))
+    wanted = list(named) + [key for key in asked or [] if key != ALL] + list(worth) + _common(features)
     present = Counter(key for feature in features for key in feature.tags)
     taken = {name.lower() for name in CORE + extra + ([TAGS_COLUMN] if everything else [])}
     chosen = []

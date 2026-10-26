@@ -34,6 +34,8 @@ export const Label = Schema.String.annotate({
 
 /** What GeoAgent reads when GeoEngine did not answer; a request written wrong is told how to write it right. */
 const failureMessage = (failure: GeoEngine.Failure, tool: string) => {
+  // A download that ended so wrote nothing; a look writes nothing either way.
+  const download = tool.startsWith("osmget")
   if (failure.code === "invalid" || failure.code === "not-ready") return failure.message
   if (failure.code === "invalid-params") return `${failure.message}.`
   if (failure.code === "refused") return `OpenStreetMap's server refused the query: ${failure.message}`
@@ -42,13 +44,13 @@ const failureMessage = (failure: GeoEngine.Failure, tool: string) => {
   }
   if (failure.code === "stalled") {
     const seconds = stalledFor(failure)
-    return `No progress for ${seconds === undefined ? "too long" : `${Math.round(seconds / 60)} minutes`}: OpenStreetMap's public servers were too busy, or did not answer.${tool.startsWith("osmget") ? " Nothing was written." : ""}`
+    return `No progress for ${seconds === undefined ? "too long" : `${Math.round(seconds / 60)} minutes`}: OpenStreetMap's public servers were too busy, or did not answer.${download ? " Nothing was written." : ""}`
   }
   if (failure.code === "too-large") {
-    return `OpenStreetMap's answer was too large to take (${failure.message}). Ask for fewer objects at a time.`
+    return `OpenStreetMap's answer was too large to take (${failure.message}).${download ? " Nothing was written." : ""}`
   }
   if (failure.code === "unwritable") return `Nothing was downloaded: no file can be written in ${failure.message}.`
-  return "The OSM tools are not available right now. Tell the user; restarting GeoCode may fix it."
+  return `Something went wrong inside GeoCode${download ? ", and nothing was written" : ""}.`
 }
 
 const decodeStalled = Schema.decodeUnknownExit(Schema.Struct({ seconds: Schema.Number }))
@@ -186,9 +188,6 @@ export const queue = (context: Tool.Context) => (data: unknown) => {
   return type === "queued" || type === "started" ? context.progress({ queued: type === "queued" }) : Effect.void
 }
 
-/** Keys listed one by one in the answer; the rest are counted together, with how few features carry each. */
-const DROPPED_SHOWN = 40
-
 /**
  * The answer of a download: what was written, what each layer holds, which keys were kept and dropped, and what is
  * missing; and the same for the tool row, the file's path as GeoAgent would give it.
@@ -222,11 +221,11 @@ export const downloadAnswer = (result: unknown, directory: string, what: string)
     })
   }
   const layers = Object.entries(done.layers).map(([layer, features]) => `  ${layer}: ${count(features, "feature")}`)
-  const listed = done.dropped.slice(0, DROPPED_SHOWN).map(([key, features]) => `${key} ${features}`)
-  const rest = done.dropped.slice(DROPPED_SHOWN)
-  const others = rest.length ? [`and ${count(rest.length, "more key")}, on at most ${rest[0][1]} features each`] : []
+  // Every one, so that GeoAgent can name any of them in "fields".
   const dropped = done.dropped.length
-    ? [`Dropped keys, with how many features carried each: ${[...listed, ...others].join(", ")}.`]
+    ? [
+        `Dropped keys, with how many features carried each: ${done.dropped.map(([key, features]) => `${key} ${features}`).join(", ")}.`,
+      ]
     : []
   return answered(
     [

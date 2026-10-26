@@ -592,6 +592,8 @@ test(
         file.lines.rows.map((row: { osm_id: string }) => row.osm_id),
         ["W4"],
       )
+      // Guards against all tags asked for taking the columns that say what a feature is.
+      assert.equal(file.polygons.rows[0].building, "yes")
       const tags = JSON.parse(file.polygons.rows[0].osm_tags)
       assert.equal(tags["building:levels"], "3")
       assert.equal(tags.name, "Library")
