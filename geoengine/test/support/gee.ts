@@ -3,7 +3,6 @@ import { execFileSync } from "node:child_process"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
 import { Effect, Fiber, Layer } from "effect"
 import { Config } from "../../src/config.ts"
 import { Engine } from "../../src/engine.ts"
@@ -12,7 +11,7 @@ import type { Protocol } from "../../src/protocol.ts"
 import { Runtime } from "../../src/runtime.ts"
 import { Status } from "../../src/status.ts"
 import type { Transport } from "../../src/transport.ts"
-import { until } from "./common.ts"
+import { SOURCE, until } from "./common.ts"
 
 const posix = process.platform !== "win32"
 
@@ -418,9 +417,6 @@ class Number:
         return self.value
 `,
 }
-
-/** geocodekit's source, which the stubbed Python imports in place of the package installed in the base environment. */
-export const SOURCE = fileURLToPath(new URL("../../python/", import.meta.url))
 
 /**
  * The real Python 3 standing in for the base environment's, with the stubs and geocodekit's source first on its path,

@@ -1,0 +1,239 @@
+import assert from "node:assert/strict"
+import { test } from "node:test"
+import { Geocodekit } from "../../../src/python/geocodekit.ts"
+import { answer, serve, start, type Reply } from "../../support/osm.ts"
+import { python3 } from "../../support/python.ts"
+
+const campus = { lat: "24.9387", lon: "121.3615" }
+
+/** Nominatim describing the university, a station named after it and a park, as its lookup does. */
+const nominatim = (where: string, params: URLSearchParams): Reply => {
+  if (where === "search") {
+    return {
+      json: [
+        // Better known than the park, and found by two services: only its being a station puts it after the park.
+        { osm_type: "node", osm_id: 7, importance: 0.6 },
+        { osm_type: "relation", osm_id: 1, importance: 0.5 },
+      ],
+    }
+  }
+  const described: Record<string, object> = {
+    R1: {
+      osm_type: "relation",
+      osm_id: 1,
+      category: "amenity",
+      type: "university",
+      ...campus,
+      boundingbox: ["24.9387", "24.9477", "121.3615", "121.3740"],
+      namedetails: { name: "國立臺北大學", "name:en": "National Taipei University" },
+      extratags: { wikidata: "Q707456" },
+      address: { city: "New Taipei", country: "Taiwan" },
+    },
+    N7: {
+      osm_type: "node",
+      osm_id: 7,
+      category: "railway",
+      type: "station",
+      ...campus,
+      boundingbox: ["24.9389", "24.9389", "121.3671", "121.3671"],
+      namedetails: { name: "臺北大學" },
+      extratags: { public_transport: "station" },
+      address: { city: "New Taipei", country: "Taiwan" },
+    },
+    W5: {
+      osm_type: "way",
+      osm_id: 5,
+      category: "leisure",
+      type: "park",
+      ...campus,
+      boundingbox: ["24.94", "24.95", "121.36", "121.37"],
+      namedetails: { name: "臺北大學公園" },
+      address: { town: "Sanxia", country: "Taiwan" },
+    },
+  }
+  const ids = (params.get("osm_ids") ?? "").split(",")
+  return { json: ids.flatMap((id) => (described[id] ? [described[id]] : [])) }
+}
+
+const photon = (): Reply => ({
+  json: {
+    features: [
+      { properties: { osm_type: "R", osm_id: 1 } },
+      { properties: { osm_type: "W", osm_id: 5 } },
+      { properties: { osm_type: "N", osm_id: 7 } },
+    ],
+  },
+})
+
+const wikidata = (params: URLSearchParams): Reply =>
+  params.get("action") === "wbsearchentities"
+    ? { json: { search: [{ id: "Q707456" }] } }
+    : { json: { entities: { Q707456: { descriptions: { en: { value: "national university in Taiwan" } } } } } }
+
+/** Overpass finding the university by its Wikidata item. */
+const overpass = (query: string): Reply =>
+  query.includes('"wikidata"="Q707456"')
+    ? answer([
+        {
+          type: "relation",
+          id: 1,
+          tags: { type: "multipolygon", amenity: "university", name: "國立臺北大學", wikidata: "Q707456" },
+          bounds: { minlat: 24.9387, minlon: 121.3615, maxlat: 24.9477, maxlon: 121.374 },
+        },
+      ])
+    : answer([])
+
+const ids = (result: unknown) => (result as { candidates: { id: string }[] }).candidates.map((found) => found.id)
+
+test(
+  "a search puts the place before what is named after it, each candidate described alike",
+  { skip: !python3 },
+  async () => {
+    const services = await serve({ nominatim, photon, wikidata, overpass })
+    const engine = await start(python3!, services.services)
+    try {
+      const done = await engine.call("search", { name: "國立臺北大學" })
+      assert.ok(done.ok, JSON.stringify(done))
+      // Guards against a stop or station named after the place outranking it, as they outnumber it.
+      assert.deepEqual(ids(done.result), ["R1", "W5", "N7"])
+      const [first] = (done.result as { candidates: Record<string, unknown>[] }).candidates
+      assert.equal(first.location, "New Taipei, Taiwan")
+      assert.equal(first.name_en, "National Taipei University")
+      assert.equal(first.description, "national university in Taiwan")
+      assert.equal((done.result as { incomplete: boolean }).incomplete, false)
+    } finally {
+      await engine.stop()
+      await services.close()
+    }
+  },
+)
+
+test(
+  "a service that does not answer leaves the others' candidates, said to be incomplete",
+  { skip: !python3 },
+  async () => {
+    const services = await serve({ nominatim, wikidata, overpass, photon: () => ({ status: 503, body: "busy" }) })
+    const engine = await start(python3!, services.services)
+    try {
+      const done = await engine.call("search", { name: "國立臺北大學" })
+      assert.ok(done.ok, JSON.stringify(done))
+      assert.ok(ids(done.result).includes("R1"))
+      assert.equal((done.result as { incomplete: boolean }).incomplete, true)
+    } finally {
+      await engine.stop()
+      await services.close()
+    }
+  },
+)
+
+test(
+  "a search Nominatim stops answering partway through is said to be incomplete, and so is a place it did not look up",
+  { skip: !python3 },
+  async () => {
+    const busy: Reply = { status: 503, body: "busy" }
+    let fails = (_where: string, _params: URLSearchParams) => false
+    const services = await serve({
+      nominatim: (where, params) => (fails(where, params) ? busy : nominatim(where, params)),
+      photon,
+      wikidata,
+      overpass,
+    })
+    const engine = await start(python3!, services.services)
+    try {
+      fails = (where) => where === "lookup"
+      const described = await engine.call("search", { name: "國立臺北大學" })
+      assert.ok(described.ok, JSON.stringify(described))
+      // Guards against the candidates Nominatim could not describe vanishing as if nothing had been found.
+      assert.ok(ids(described.result).includes("R1"))
+      assert.equal((described.result as { incomplete: boolean }).incomplete, true)
+      fails = (where, params) => where === "search" && params.get("q") === "新北市"
+      const placed = await engine.call("search", { name: "國立臺北大學", context: "新北市" })
+      assert.ok(placed.ok, JSON.stringify(placed))
+      const result = placed.result as { context_found: boolean | null; incomplete: boolean }
+      // Guards against a place that was never looked up being reported as one that does not exist.
+      assert.deepEqual([result.context_found, result.incomplete], [null, true])
+    } finally {
+      await engine.stop()
+      await services.close()
+    }
+  },
+)
+
+test(
+  "every request names GeoCode and its version, and Nominatim is asked once a second at most across calls",
+  { skip: !python3 },
+  async () => {
+    const services = await serve({ nominatim, photon, wikidata, overpass })
+    const engine = await start(python3!, services.services)
+    try {
+      // Two searches at once, each asking Nominatim twice: the services' limits count the app's calls together.
+      const calls = [engine.send("search", { name: "國立臺北大學" }), engine.send("search", { name: "臺北大學" })]
+      for (const id of calls) assert.ok((await engine.response(id)).ok)
+      // Guards against a library's default agent, which the services refuse, or one telling users apart.
+      const agents = new Set(services.asked.map((request) => request.agent))
+      assert.deepEqual(
+        [...agents],
+        [`GeoCode/${Geocodekit.PACKAGE.version} (+https://github.com/zzhonglei/GeoCode-Release)`],
+      )
+      const times = services.asked.filter((request) => request.service === "nominatim").map((request) => request.at)
+      assert.equal(times.length, 4)
+      for (let index = 1; index < times.length; index++)
+        assert.ok(times[index] - times[index - 1] >= 990, String(times))
+    } finally {
+      await engine.stop()
+      await services.close()
+    }
+  },
+)
+
+test(
+  "a name Wikidata matches in other characters than OSM's puts its object first, with Overpass not answering",
+  { skip: !python3 },
+  async () => {
+    // Two universities Nominatim finds for the simplified name, the better known first; Wikidata matches the other.
+    const universities = (where: string, params: URLSearchParams): Reply => {
+      const described = {
+        R1: { osm_id: 1, name: "國立臺北大學", importance: 0.3, wikidata: "Q707456" },
+        R2: { osm_id: 2, name: "國立臺灣大學", importance: 0.7, wikidata: "Q32746" },
+      }
+      const shown = Object.entries(described).filter(
+        ([id]) => where === "search" || (params.get("osm_ids") ?? "").split(",").includes(id),
+      )
+      return {
+        json: shown.map(([, university]) => ({
+          osm_type: "relation",
+          osm_id: university.osm_id,
+          importance: university.importance,
+          category: "amenity",
+          type: "university",
+          ...campus,
+          boundingbox: ["24.9387", "24.9477", "121.3615", "121.3740"],
+          namedetails: { name: university.name },
+          extratags: { wikidata: university.wikidata },
+          address: { city: "Taipei", country: "Taiwan" },
+        })),
+      }
+    }
+    const matched = (params: URLSearchParams): Reply =>
+      params.get("action") === "wbsearchentities"
+        ? { json: { search: [{ id: "Q707456", match: { type: "alias", language: "zh", text: "国立台北大学" } }] } }
+        : { json: { entities: {} } }
+    const services = await serve({
+      nominatim: universities,
+      wikidata: matched,
+      // Photon finds the other one too: only the name Wikidata matched can put the right one first.
+      photon: () => ({ json: { features: [{ properties: { osm_type: "R", osm_id: 2 } }] } }),
+      overpass: () => ({ status: 504, body: "busy" }),
+    })
+    const engine = await start(python3!, services.services)
+    try {
+      const done = await engine.call("search", { name: "国立台北大学" })
+      assert.ok(done.ok, JSON.stringify(done))
+      // Guards against comparing names character by character alone: simplified and traditional share few.
+      assert.deepEqual(ids(done.result), ["R1", "R2"])
+    } finally {
+      await engine.stop()
+      await services.close()
+    }
+  },
+)

@@ -2,6 +2,7 @@ import { Cause, Effect, Exit, Layer, Logger } from "effect"
 import { Config } from "./config.ts"
 import { Engine } from "./engine.ts"
 import { Gee } from "./gee/index.ts"
+import { Osm } from "./osm/index.ts"
 import { Environment } from "./python/index.ts"
 import { Qgis } from "./qgis/index.ts"
 import { Runtime } from "./runtime.ts"
@@ -31,9 +32,9 @@ const layer = Layer.mergeAll(
 )
 
 const fiber = Effect.runFork(
-  Effect.scoped(Engine.run(transport, [Environment.capability(places), Qgis.capability, Gee.capability])).pipe(
-    Effect.provide(layer),
-  ),
+  Effect.scoped(
+    Engine.run(transport, [Environment.capability(places), Qgis.capability, Gee.capability, Osm.capability()]),
+  ).pipe(Effect.provide(layer)),
 )
 
 // Exiting is what lets the main process notice: a utility process stays alive with nothing left to do.

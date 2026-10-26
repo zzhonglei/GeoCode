@@ -1,3 +1,8 @@
+import { fileURLToPath } from "node:url"
+
+/** geocodekit's source, which the tests' Python imports in place of the package installed in the base environment. */
+export const SOURCE = fileURLToPath(new URL("../../python/", import.meta.url))
+
 export const until = async (predicate: () => boolean | Promise<boolean>, ms: number, what: string) => {
   for (let elapsed = 0; elapsed < ms; elapsed += 20) {
     if (await predicate()) return

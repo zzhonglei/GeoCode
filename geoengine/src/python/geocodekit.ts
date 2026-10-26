@@ -23,14 +23,14 @@ export const PACKAGE: Package =
   (globalThis as { GEOCODEKIT?: Package }).GEOCODEKIT ?? read(fileURLToPath(new URL("../../", import.meta.url)))
 
 /**
- * The package's Python files under `geoengine`, and GeoCode's version number from the app's package.json, where it is
- * written alone (docs/DESKTOP.md, section 6).
+ * The package's Python files and the JSON data they read under `geoengine`, and GeoCode's version number from the
+ * app's package.json, where it is written alone (docs/DESKTOP.md, section 6).
  */
 export function read(geoengine: string): Package {
   const root = path.join(geoengine, "python")
   const files = fs
     .readdirSync(path.join(root, NAME), { recursive: true, encoding: "utf-8" })
-    .filter((file) => file.endsWith(".py"))
+    .filter((file) => file.endsWith(".py") || file.endsWith(".json"))
     .map((file) => [NAME, ...file.split(path.sep)].join("/"))
     .toSorted()
   const app = path.join(geoengine, "..", "desktop", "packages", "electron", "package.json")

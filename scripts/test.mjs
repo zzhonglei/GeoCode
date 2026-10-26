@@ -1,10 +1,11 @@
 // Runs GeoCode's own tests by suite (docs/DEVELOPMENT.md, section 7): each part's
-// unit tests, which touch stand-ins alone, and the tests on the real QGIS and the
-// real Earth Engine, which run only when named or when a change calls for them.
-// The suites run one after another, and a failed one does not stop the rest.
+// unit tests, which touch stand-ins alone, and the tests on the real QGIS, the
+// real Earth Engine and the installed base environment, which run only when named
+// or when a change calls for them. The suites run one after another, and a failed
+// one does not stop the rest.
 //
 // Usage:  node scripts/test.mjs [--list] <suite|changed|all>...
-//   suites   kernel ui web electron geoengine qgis gee
+//   suites   kernel ui web electron geoengine qgis gee osm
 //   changed  the suites the working tree's changes against HEAD call for
 //   all      every suite
 //   --list   prints the suites and why each is run, and runs none
@@ -74,14 +75,15 @@ const SUITES = {
   geoengine: geoengineRuns('test'),
   qgis: geoengineRuns('test:qgis'),
   gee: geoengineRuns('test:gee'),
+  osm: geoengineRuns('test:osm'),
 }
 
 // The gee tests use the user's credentials and quota, and need to know the project.
 const WITHHELD = { gee: process.env.GEOENGINE_GEE_PROJECT ? null : 'set GEOENGINE_GEE_PROJECT=<project ID> to run it' }
 
-const REAL = ['qgis', 'gee']
+const REAL = ['qgis', 'gee', 'osm']
 // Whose scripts run in the bundled Python environment.
-const ENVIRONMENT = ['gee']
+const ENVIRONMENT = ['gee', 'osm']
 
 // Several tests of the kernel and the desktop read or import another part's sources, so a change anywhere but in
 // GeoEngine's tests runs them all; they are quick. GeoEngine's own tests touch GeoEngine alone.

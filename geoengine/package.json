@@ -9,6 +9,7 @@
     "test": "node --test --test-concurrency=1 \"test/unit/**/*.test.ts\"",
     "test:qgis": "node --test test/real/qgis.test.ts",
     "test:gee": "node --test test/real/gee.test.ts",
+    "test:osm": "node --test test/real/osm.test.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json && tsgo --noEmit -p script/tsconfig.json"
   },
   "dependencies": {

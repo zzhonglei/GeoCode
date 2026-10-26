@@ -3,7 +3,20 @@ import express from 'express';
 export const GEO_TOOL_PATH = '/api/geocode/geo-tool';
 
 // The GeoEngine methods the kernel's geo tools call; nothing else reaches GeoEngine this way.
-const TOOL_METHODS = new Set(['qgis.doc', 'qgis.read', 'qgis.locate', 'qgis.prepare', 'qgis.run', 'gee.check', 'gee.run']);
+const TOOL_METHODS = new Set([
+  'qgis.doc',
+  'qgis.read',
+  'qgis.locate',
+  'qgis.prepare',
+  'qgis.run',
+  'gee.check',
+  'gee.run',
+  'osm.check',
+  'osm.search',
+  'osm.probe',
+  'osm.objects',
+  'osm.features',
+]);
 
 /**
  * Answers with a GeoEngine request that takes a while: lines of JSON, its progress and then its result. A request closed
