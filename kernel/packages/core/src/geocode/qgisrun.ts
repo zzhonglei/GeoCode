@@ -7,7 +7,6 @@ import fs from "fs/promises"
 import { FileAccess } from "../file-access.js"
 import type { Location } from "../location.js"
 import type { Permission } from "../permission.js"
-import { Wildcard } from "../util/wildcard.js"
 import { GeoAnswer } from "./answer.js"
 import { GeoEngine } from "./geoengine.js"
 import { GeoRunActivity } from "./run-activity.js"
@@ -168,30 +167,11 @@ const reasonsOf = (text: string) => text.slice(text.indexOf("\n\n") + 2)
 const labelOf = (input: { readonly description?: string }) =>
   input.description === undefined ? {} : { description: input.description }
 
-type Verdict = typeof Permission.Effect.Type
-
-/**
- * A run asks when its algorithm is on the list, it writes outside the project, or it writes somewhere that is no file,
- * even where the rules allow the tool, unless "always allow" was given for each of those: by algorithm, by directory,
- * and by database. A saved "*" allows the tool, not these.
- */
-export const evaluate = (
-  event: { readonly action: string; readonly effect: Verdict; readonly metadata?: Record<string, unknown> },
-  saved: ReadonlyArray<{ readonly action: string; readonly resource: string }>,
-): Verdict => {
-  const guards = event.metadata?.guards
-  if (event.action !== name || event.effect !== "allow" || !Array.isArray(guards)) return event.effect
-  const kept = saved.filter((item) => item.action === name && item.resource !== "*")
-  const allowed = guards.every(
-    (guard) => typeof guard === "string" && kept.some((item) => Wildcard.match(guard, item.resource)),
-  )
-  return allowed ? "allow" : "ask"
-}
-
 export const make = (permission: Permission.Interface, access: FileAccess.Interface, location: Location.Interface) => {
   /**
    * One asking for the whole run: the rules, the list, every directory outside the project it writes to, and every
-   * place that is no file, such as a database, where a table of the same name may be replaced.
+   * place that is no file, such as a database, where a table of the same name may be replaced. All but the rules are
+   * its guards, asked about even where the rules allow the tool (GeoGuards).
    */
   const authorize = (plan: Plan, input: typeof Input.Type, context: Tool.Context) =>
     Effect.gen(function* () {

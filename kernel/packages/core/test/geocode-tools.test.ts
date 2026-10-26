@@ -1304,3 +1304,321 @@ describe("GeoCode: geerun", () => {
     }),
   )
 })
+
+const osm = (name: string, input: Record<string, unknown>) => ({
+  sessionID,
+  ...toolIdentity,
+  call: { type: "tool-call" as const, id: `call-${name}`, name, input },
+})
+
+/** GeoEngine finding that an OSM call could start, then answering the call with `lines`. */
+const started = (lines: () => string[]) => (body: { method: string }) =>
+  body.method === "osm.check" ? [JSON.stringify({ type: "result", ok: true, result: {} })] : lines()
+
+describe("GeoCode: the OSM tools", () => {
+  it.effect("a download gets its output and boundary file in the session's directory, and asks its own rule", () =>
+    Effect.gen(function* () {
+      reset()
+      const output = path.join(PROJECT, "data", "roads.gpkg")
+      answer = started(() => [
+        JSON.stringify({
+          type: "result",
+          ok: true,
+          result: {
+            path: output,
+            layers: { lines: 3 },
+            timestamp: "2026-10-24T21:00:00Z",
+            fields: ["osm_id", "name", "category", "highway"],
+            dropped: [["surface", 2]],
+            missing: [],
+            gaps: [],
+          },
+        }),
+      ])
+      const registry = yield* Tool.Service
+      const names = (yield* toolDefinitions(registry)).map((tool) => tool.name)
+      for (const name of ["osmsearch", "osmprobe", "osmgetobjects", "osmgetfeatures"]) expect(names).toContain(name)
+      const result = yield* executeTool(
+        registry,
+        osm("osmgetfeatures", {
+          area: "file:boundary.gpkg|layername=campus",
+          tags: ["highway"],
+          output: "data/roads.gpkg",
+          description: "下载道路",
+        }),
+      )
+      expect(result).toMatchObject({ status: "completed" })
+      // Guards against GeoEngine reading a path relative to its own folder rather than the session's.
+      const params = { area: `file:${path.join(PROJECT, "boundary.gpkg")}|layername=campus`, tags: ["highway"], output }
+      expect(calls.map((made) => made.body)).toEqual([
+        { method: "osm.check", params: { ...params, action: "features" } },
+        { method: "osm.features", params },
+      ])
+      expect(assertions.map((input) => input.action)).toEqual(["osmgetfeatures"])
+    }),
+  )
+
+  it.effect("a boundary file outside the project is used as where to look, without asking to read it", () =>
+    Effect.gen(function* () {
+      reset()
+      const outside = path.join(path.parse(PROJECT).root, "geocode-test-elsewhere", "area.geojson")
+      answer = started(() => [
+        JSON.stringify({
+          type: "result",
+          ok: true,
+          result: { area: `file:${outside}`, rows: [], uncounted: [], together: null, remark: null },
+        }),
+      ])
+      const registry = yield* Tool.Service
+      const result = yield* executeTool(registry, osm("osmprobe", { area: `file:${outside}`, tags: ["building"] }))
+      expect(result).toMatchObject({ status: "completed" })
+      expect(assertions.map((input) => input.action)).toEqual(["osmprobe"])
+    }),
+  )
+
+  it.effect("a download outside the project is asked about on its own card, and remembers only that directory", () =>
+    Effect.gen(function* () {
+      reset()
+      const repository = yield* tmpdirScoped()
+      yield* Effect.promise(() => fs.mkdir(path.join(repository.path, ".git")))
+      const elsewhere = path.join(repository.path, "exports")
+      const empty = { empty: true, missing: [], gaps: [], timestamp: "2026-10-25T08:00:00Z" }
+      answer = started(() => [JSON.stringify({ type: "result", ok: true, result: empty })])
+      const registry = yield* Tool.Service
+      const output = path.join(elsewhere, "campus.gpkg")
+      const download = (to: string) => osm("osmgetobjects", { ids: ["R1"], output: to, description: "下载校园" })
+      const outside = yield* executeTool(registry, download(output))
+      const inside = yield* executeTool(registry, download("campus.gpkg"))
+      expect([outside.status, inside.status]).toEqual(["completed", "completed"])
+      // Guards against a second card: the directory is not asked about apart, as write asks about it.
+      expect(assertions).toHaveLength(2)
+      expect(assertions[0]).toMatchObject({
+        action: "osmgetobjects",
+        resources: [path.join(elsewhere, "*")],
+        // Guards against "always allow" reaching every other directory of the repository it is in.
+        save: [path.join(elsewhere, "*")],
+        metadata: {
+          ids: ["R1"],
+          output,
+          description: "下载校园",
+          external: [elsewhere],
+          guards: [path.join(elsewhere, "*")],
+        },
+      })
+      expect(assertions[1]).toMatchObject({
+        resources: ["*"],
+        save: ["*"],
+        metadata: { output: path.join(PROJECT, "campus.gpkg"), external: [], guards: [] },
+      })
+    }).pipe(Effect.scoped),
+  )
+
+  it.effect("a download outside the project asks where the rules allow it, unless its directory was allowed", () =>
+    Effect.gen(function* () {
+      reset()
+      const verdict = (event: Partial<PermissionEvaluation>) =>
+        Effect.gen(function* () {
+          const full = { sessionID, action: "osmgetfeatures", resources: [], effect: "allow" as const, ...event }
+          yield* evaluate!(full)
+          return full.effect
+        })
+      const outside = { guards: ["/exports/*"] }
+      expect(yield* verdict({ metadata: { guards: [] } })).toBe("allow")
+      expect(yield* verdict({ metadata: outside })).toBe("ask")
+      // Guards against "always allow" for the tool, or for another tool's directory, reaching a write outside.
+      saved = [
+        { action: "osmgetfeatures", resource: "*" },
+        { action: "osmgetobjects", resource: "/exports/*" },
+      ]
+      expect(yield* verdict({ metadata: outside })).toBe("ask")
+      saved.push({ action: "osmgetfeatures", resource: "/exports/*" })
+      expect(yield* verdict({ metadata: outside })).toBe("allow")
+      expect(yield* verdict({ metadata: outside, action: "osmgetobjects" })).toBe("allow")
+    }),
+  )
+
+  it.effect("a call written so it cannot work is refused before GeoEngine or the user is asked", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      const ids = Array.from({ length: 26 }, (_, index) => `N${index + 1}`)
+      const label = { output: "a.gpkg", description: "下载" }
+      const written = [
+        osm("osmgetobjects", { ids, ...label }),
+        osm("osmgetobjects", { ids: [], ...label }),
+        osm("osmgetfeatures", { area: "R1", tags: [], ...label }),
+        osm("osmprobe", { area: "R1", term: "school", tags: ["amenity"] }),
+        osm("osmprobe", { area: "R1" }),
+        osm("osmprobe", { area: "R1", keys: ["a", "b", "c", "d", "e", "f"] }),
+      ]
+      for (const call of written) expect((yield* executeTool(registry, call)).status).toBe("error")
+      // Guards against the user approving a call that fails the moment it starts.
+      expect(assertions).toEqual([])
+      expect(calls).toEqual([])
+    }),
+  )
+
+  it.effect("a call GeoEngine finds cannot start yet ends without asking, and its tool row says why", () =>
+    Effect.gen(function* () {
+      reset()
+      answer = () => [
+        JSON.stringify({
+          type: "result",
+          ok: false,
+          error: { code: "not-ready", message: "GeoCode's Python environment is still being prepared." },
+        }),
+      ]
+      const registry = yield* Tool.Service
+      const inputs = {
+        osmsearch: { name: "臺北大學" },
+        osmprobe: { area: "R1", tags: ["building"] },
+        osmgetobjects: { ids: ["R1"], output: "campus.gpkg", description: "下载校园" },
+        osmgetfeatures: { area: "R1", tags: ["highway"], output: "roads.gpkg", description: "下载道路" },
+      }
+      for (const [name, input] of Object.entries(inputs)) {
+        const updates: Tool.Metadata[] = []
+        const done = yield* executeTool(registry, {
+          ...osm(name, input),
+          progress: (update) => Effect.sync(() => void updates.push(update)),
+        })
+        expect(done.status).toBe("error")
+        expect(updates.at(-1)).toEqual({ failure: { code: "not-ready" } })
+      }
+      // Guards against the user being asked about a call that could not start.
+      expect(assertions).toEqual([])
+      expect(calls.map((made) => (made.body as { method: string }).method)).toEqual(Array(4).fill("osm.check"))
+    }),
+  )
+
+  it.effect("a download tells its tool row each step as it goes, and ends with what it wrote", () =>
+    Effect.gen(function* () {
+      reset()
+      const output = path.join(PROJECT, "data", "pois.gpkg")
+      const shown = (osm: unknown) => progress({ osm })
+      answer = started(() => [
+        shown({ type: "step", step: "area" }),
+        shown({ type: "step", step: "count" }),
+        shown({ type: "counted", features: 1290, parts: 4 }),
+        shown({ type: "step", step: "download" }),
+        shown({ type: "part", part: 2, parts: 4 }),
+        shown({ type: "received", bytes: 2048 }),
+        shown({ type: "busy" }),
+        shown({ type: "step", step: "assemble" }),
+        shown({ type: "step", step: "write" }),
+        JSON.stringify({
+          type: "result",
+          ok: true,
+          result: {
+            path: output,
+            layers: { points: 1234, polygons: 56 },
+            timestamp: "2026-10-25T08:00:00Z",
+            fields: ["osm_id", "name", "category", "amenity"],
+            dropped: [],
+            missing: ["the part 0.00000,0.00000,1.00000,1.00000: runtime error"],
+            gaps: [{ part: [0, 0, 1, 1], said: "runtime error" }],
+          },
+        }),
+      ])
+      const updates: Tool.Metadata[] = []
+      const registry = yield* Tool.Service
+      const done = yield* executeTool(registry, {
+        ...osm("osmgetfeatures", { area: "R1", tags: ["amenity"], output: "data/pois.gpkg", description: "下载 POI" }),
+        progress: (update) => Effect.sync(() => void updates.push(update)),
+      })
+      expect(done.status).toBe("completed")
+      // Guards against the row losing its place: a busy instance is no progress, the steps before it are.
+      expect(updates.at(-3)).toMatchObject({ part: { part: 2, parts: 4 }, received: 2048, busy: true })
+      expect(done.metadata).toMatchObject({
+        description: "下载 POI",
+        counted: { features: 1290, parts: 4 },
+        busy: false,
+        result: {
+          path: path.join("data", "pois.gpkg"),
+          layers: { points: 1234, polygons: 56 },
+          timestamp: "2026-10-25T08:00:00Z",
+          gaps: [{ part: [0, 0, 1, 1], said: "runtime error" }],
+        },
+      })
+      const steps = (done.metadata as { steps: { step: string; ended?: number }[] }).steps
+      expect(steps.map((step) => step.step)).toEqual(["area", "count", "download", "assemble", "write"])
+      expect(steps.every((step) => typeof step.ended === "number")).toBe(true)
+      expect(isJsonRecord(done.metadata)).toBe(true)
+    }),
+  )
+
+  it.effect("a call that fails leaves its tool row how, and a stalled download how long it waited", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      const failing = (name: string, input: Record<string, unknown>, error: object) => {
+        answer = started(() => [
+          progress({ osm: { type: "step", step: "download" } }),
+          JSON.stringify({ type: "result", ok: false, error }),
+        ])
+        const updates: Tool.Metadata[] = []
+        return executeTool(registry, {
+          ...osm(name, input),
+          progress: (update) => Effect.sync(() => void updates.push(update)),
+        }).pipe(Effect.map((done) => ({ done, last: updates.at(-1) })))
+      }
+      const stalled = yield* failing(
+        "osmgetobjects",
+        { ids: ["R1"], output: "data/campus.gpkg", description: "下载校园" },
+        { code: "stalled", message: "no progress for 300 seconds", details: { seconds: 300 } },
+      )
+      expect(stalled.done.status).toBe("error")
+      expect(stalled.last).toMatchObject({
+        description: "下载校园",
+        steps: [{ step: "download" }],
+        failure: { code: "stalled", seconds: 300 },
+      })
+      const refused = yield* failing(
+        "osmprobe",
+        { area: "R1", tags: ["name~("] },
+        { code: "refused", message: "line 1: parse error: Invalid regular expression" },
+      )
+      expect(refused.done.status).toBe("error")
+      expect(refused.last).toEqual({
+        failure: { code: "refused", said: "line 1: parse error: Invalid regular expression" },
+      })
+      const unanswered = yield* failing("osmsearch", { name: "臺北大學" }, { code: "unanswered", message: "x" })
+      // Guards against the words of a failure that is not the request's reaching the row as if they explained it.
+      expect(unanswered.last).toEqual({ failure: { code: "unanswered" } })
+    }),
+  )
+
+  it.effect("a search gives its tool row the candidates without their centres and descriptions", () =>
+    Effect.gen(function* () {
+      reset()
+      const candidate = {
+        id: "R10958940",
+        kind: "area",
+        size: [1.1, 0.9],
+        preset: "University",
+        category: "amenity=university",
+        name: "國立臺北大學",
+        name_en: "National Taipei University",
+        location: "New Taipei, Taiwan",
+        center: [24.94, 121.37],
+        description: "public university in Taiwan",
+        transit: false,
+      }
+      const found = {
+        name: "臺北大學",
+        context: null,
+        context_found: null,
+        category: null,
+        fallback: false,
+        candidates: [candidate],
+        total: 1,
+        incomplete: false,
+      }
+      answer = started(() => [JSON.stringify({ type: "result", ok: true, result: found })])
+      const done = yield* executeTool(yield* Tool.Service, osm("osmsearch", { name: "臺北大學" }))
+      const { center: _center, description: _description, ...shown } = candidate
+      expect(done.metadata).toEqual({ found: { ...found, candidates: [shown] } })
+      // Guards against the model losing what the row leaves out.
+      expect(JSON.stringify(done.content)).toContain("public university in Taiwan")
+    }),
+  )
+})

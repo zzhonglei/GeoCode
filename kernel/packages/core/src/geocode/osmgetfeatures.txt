@@ -1,0 +1,9 @@
+Download every OpenStreetMap (OSM) feature in an area that meets tag filters into a GeoPackage: roads, buildings, water, land use, points of interest.
+
+- One kind of thing a call: download roads, water and buildings in separate calls, each to its own file.
+- One kind of thing is often tagged in several ways: give them all. When unsure which, look with osmprobe and a "term".
+- For points of interest, use geometry "point" rather than keeping nodes alone: many places are mapped as areas, and would be lost.
+- A large download is split into parts and joined again by the tool; one too large for OSM's public servers is refused, with how many features it would hold. The answer says what could not be downloaded, if anything.
+- Features crossing the edge of the area are kept whole, not cut.
+
+The file has a layer for each kind of geometry it holds: points, lines and polygons. Coordinates are in EPSG:4326, as OSM's are, and no geometry is simplified. Every feature has osm_id, name and category; the keys the filters name and those worth recording for that kind of thing are kept as columns too. The answer lists the keys dropped, with how many features carried each, so another download can keep them with "fields". Tag values are as OSM has them.

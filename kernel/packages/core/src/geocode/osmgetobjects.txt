@@ -1,0 +1,3 @@
+Download OpenStreetMap (OSM) objects by id into a GeoPackage: the shape of a campus, a lake, a park or a district, found with osmsearch.
+
+The file has a layer for each kind of geometry it holds: points, lines and polygons. Coordinates are in EPSG:4326, as OSM's are, and no geometry is simplified. Every feature has osm_id, name and category; the tags that say what it is and those worth recording for its kind are kept as columns too. The answer lists the keys dropped, with how many features carried each, so another download can keep them with "fields". Tag values are as OSM has them.
