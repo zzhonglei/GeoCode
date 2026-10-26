@@ -15,11 +15,11 @@ export const description = DESCRIPTION
 export const Input = Schema.Struct({
   name: Schema.String.annotate({
     description:
-      'The name to search for, as OSM writes it, such as "武汉大学" or "广州白云国际机场". Only the name: give where the place is in "context"',
+      'The name to search for, as OSM writes it, such as "Massachusetts Institute of Technology", "武汉大学" or "香港大學". Only the name: give where the place is in "context"',
   }),
   context: Schema.optionalKey(Schema.String).annotate({
     description:
-      'Where the place is, to tell places of the same name apart: its city, such as "Wuhan" or "Wuhan, China". Not a district or a smaller place. Objects far from it are left out',
+      'Where the place is, to tell places of the same name apart: its city, such as "Cambridge, United States", "武汉" or "香港". Not a district or a smaller place. Objects far from it are left out',
   }),
   category: Schema.optionalKey(Schema.String).annotate({
     description:

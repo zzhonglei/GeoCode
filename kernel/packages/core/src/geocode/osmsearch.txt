@@ -2,6 +2,6 @@ Find OpenStreetMap (OSM) objects by name, such as a place, a campus, a lake, a p
 
 Pass a candidate's id to osmgetobjects to download its shape, or an area's id as the area of osmprobe and osmgetfeatures. To find every object of a kind, such as all the cafés on a campus, use osmprobe and osmgetfeatures instead.
 
-- Search one name at a time, as OSM writes it: the full official name in the local language. Many places, such as most in Chinese-speaking regions, have no English name. Write abbreviations and nicknames out in full first, such as 地大 as 中国地质大学.
+- Search one name at a time, as OSM writes it: the full official name in the local language. Many places have no English name in OSM. Write abbreviations and nicknames out in full first, such as MIT as Massachusetts Institute of Technology, 武大 as 武汉大学, or 港大 as 香港大學.
 - Candidates include things named after the place, such as its stops, buildings or other campuses. Check what each is, where it is and how large before using its id. If more than one fits the user's words, ask the user which.
 - If nothing fits, try another form of the name, such as the full official name or the local name instead of an English one.
