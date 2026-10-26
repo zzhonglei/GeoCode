@@ -1,17 +1,24 @@
 """The two downloads (docs/OSM.md, section 7): OSM objects by id, and the features meeting tag filters in an area. A
 download too large for one request is split into parts by counting first, a part that still fails is split again, and
-one too large for the public services altogether is refused before anything is downloaded."""
+one too large for the public services altogether is refused before anything is downloaded. The parts are counted and
+downloaded on every Overpass instance found free at once, one part each at a time."""
 
-from geocodekit.osm import _area, _elements, _filters, _geometry, _http, _output, _presets, _records, _steps
+import threading
+from collections import deque
+from datetime import datetime, timezone
+
+from geocodekit.osm import _area, _elements, _filters, _geometry, _http, _lookup, _output, _presets, _records, _steps
 
 # How many features one request asks for at most, and a download at most; deeper than DEPTH, a part is not split.
 PART = 50000
 LIMIT = 1000000
 DEPTH = 6
-SECONDS = 180
+SECONDS = _http.DOWNLOAD_SECONDS
 # Counting is light: an instance silent for longer than this is too busy to download from anyway.
 COUNT_SECONDS = 60
 IDS = 25
+# The order Overpass gives elements in, which features keep however their parts arrived.
+ORDER = {"node": 0, "way": 1, "relation": 2}
 
 
 class TooMany(Exception):
@@ -38,6 +45,47 @@ def _count(area, alternatives, cell):
     return int(answer["elements"][0]["tags"]["total"])
 
 
+def _shared(tasks, work):
+    """Does `work` on each task, and on the tasks it gives back, on as many threads as there are Overpass instances:
+    each query goes to whichever instance is free, one query each at a time. The first error stops the rest from
+    starting and is raised."""
+    queue = deque(tasks)
+    running = 0
+    failure = None
+    turn = threading.Condition()
+
+    def worker():
+        nonlocal running, failure
+        while True:
+            with turn:
+                while not queue and running and failure is None:
+                    turn.wait()
+                if failure is not None or not queue:
+                    return
+                task = queue.popleft()
+                running += 1
+            try:
+                more = work(task)
+            except Exception as error:
+                with turn:
+                    failure = failure or error
+                    running -= 1
+                    turn.notify_all()
+                return
+            with turn:
+                queue.extend(more)
+                running -= 1
+                turn.notify_all()
+
+    for _ in range(len(_http.services["overpass"])):
+        threading.Thread(target=worker, daemon=True).start()
+    with turn:
+        while (queue or running) and failure is None:
+            turn.wait()
+        if failure is not None:
+            raise failure
+
+
 def plan(area, alternatives):
     """How many features there are, None when a count did not answer, and the parts to download, each a box of the
     area or None for all of it."""
@@ -51,23 +99,28 @@ def plan(area, alternatives):
     # once every part was counted. A feature crossing a part's edge is counted in each.
     summed = 0
     uncounted = False
-    # The whole area is too much for one request, or could not be counted: its quarters are counted next.
-    boxes = [(quarter, 1) for quarter in _quarters(area.bounds)]
-    while boxes:
-        box, depth = boxes.pop()
+    lock = threading.Lock()
+
+    def counted(task):
+        nonlocal summed, uncounted
+        box, depth = task
         count = _count(area, alternatives, box)
         if count == 0:
-            continue
+            return []
         if count is not None and count <= PART or depth == DEPTH:
-            parts.append(box)
-            uncounted = uncounted or count is None
-            summed += count or 0
-            # As the whole area's count would have been, once the parts counted so far are too many.
-            if total is None and summed > LIMIT:
-                raise TooMany(summed)
-        else:
-            boxes.extend((quarter, depth + 1) for quarter in _quarters(box))
-    return (total if total is not None else None if uncounted else summed), parts
+            with lock:
+                parts.append(box)
+                uncounted = uncounted or count is None
+                summed += count or 0
+                # As the whole area's count would have been, once the parts counted so far are too many.
+                if total is None and summed > LIMIT:
+                    raise TooMany(summed)
+            return []
+        return [(quarter, depth + 1) for quarter in _quarters(box)]
+
+    # The whole area is too much for one request, or could not be counted: its quarters are counted next.
+    _shared([(quarter, 1) for quarter in _quarters(area.bounds)], counted)
+    return (total if total is not None else None if uncounted else summed), sorted(parts)
 
 
 def _missing(gaps):
@@ -80,28 +133,58 @@ def _missing(gaps):
             texts.append("OSM has no %s" % ", ".join(gap["absent"]))
         elif "unassembled" in gap:
             texts.append("no geometry could be assembled for %s" % ", ".join(gap["unassembled"]))
+        elif "undownloaded" in gap:
+            why = (
+                "OpenStreetMap's public servers made no progress for %d minutes" % round(_http.stall / 60)
+                if gap["code"] == "stalled"
+                else "OpenStreetMap's public servers could not be reached, or did not answer"
+            )
+            texts.append("%s could not be downloaded: %s" % (", ".join(gap["undownloaded"]), why))
         else:
             texts.append(gap["said"])
     return texts
 
 
-def _fetch(area, alternatives, box, depth, found, gaps, stamps):
-    try:
-        answer = _http.overpass(_query(area, alternatives, box, "out geom;", SECONDS), SECONDS)
-        remark = answer.get("remark")
-    except _http.TooLarge as error:
-        answer, remark = None, str(error)
-    if remark and depth < DEPTH:
-        whole = box or area.bounds
-        for quarter in _quarters(whole):
-            _fetch(area, alternatives, quarter, depth + 1, found, gaps, stamps)
-        return
-    if remark:
-        gaps.append({"part": [round(value, 5) for value in box or area.bounds], "said": remark})
-    if answer is not None:
-        stamps.append(answer["osm3s"]["timestamp_osm_base"])
-        for element in answer["elements"]:
-            found[(element["type"], element["id"])] = element
+def _download(area, alternatives, parts):
+    """The elements of the parts, each once and in Overpass's order, what is missing and the times of their data. A part
+    the server stopped early is split again; the tool row is told how many parts are done as each is."""
+    found, gaps, stamps = {}, [], []
+    lock = threading.Lock()
+    # Each part's downloads not yet done, its quarters among them once it is split.
+    left = [1] * len(parts)
+    done = 0
+
+    def fetched(task):
+        nonlocal done
+        index, box, depth = task
+        try:
+            answer = _http.overpass(_query(area, alternatives, box, "out geom;", SECONDS), SECONDS)
+            remark = answer.get("remark")
+        except _http.TooLarge as error:
+            answer, remark = None, str(error)
+        more = []
+        if remark and depth < DEPTH:
+            more = [(index, quarter, depth + 1) for quarter in _quarters(box or area.bounds)]
+        with lock:
+            if not more and remark:
+                gaps.append({"part": [round(value, 5) for value in box or area.bounds], "said": remark})
+            if not more and answer is not None:
+                stamps.append(answer["osm3s"]["timestamp_osm_base"])
+                for element in answer["elements"]:
+                    found[(element["type"], element["id"])] = element
+            left[index] += len(more) - 1
+            if left[index] == 0:
+                done += 1
+                if done < len(parts):
+                    _steps.part(done + 1, len(parts))
+        return more
+
+    if len(parts) > 1:
+        _steps.part(1, len(parts))
+    _shared([(index, box, 0) for index, box in enumerate(parts)], fetched)
+    gaps.sort(key=lambda gap: gap["part"])
+    elements = [found[key] for key in sorted(found, key=lambda key: (ORDER[key[0]], key[1]))]
+    return elements, gaps, stamps
 
 
 def _features(elements, exact):
@@ -152,7 +235,8 @@ def _save(path, features, named, worth, asked, geometry, what, stamps, gaps):
 
 
 def objects(request):
-    refs = [_elements.parse(text) for text in request["ids"]]
+    # Each object once, however often it is named.
+    refs = list(dict.fromkeys(_elements.parse(text) for text in request["ids"]))
     if not refs:
         raise _elements.Invalid("ids lists no OSM object")
     if len(refs) > IDS:
@@ -162,28 +246,49 @@ def objects(request):
         )
     _output.ready(request["output"])
     _steps.step("download")
-    answer = _http.overpass("[out:json][timeout:%d];%s;out geom;" % (SECONDS, _elements.select(refs)), SECONDS)
-    found = {(element["type"], element["id"]) for element in answer["elements"]}
+    # No Overpass instance is free: Nominatim gives what it has, and only the rest waits for one (section 7).
+    looked_up = not _http.answering()
+    looked = _lookup.objects(refs) if looked_up else {}
+    rest = [ref for ref in refs if ref not in looked]
+    elements, remark, stamps, unasked = [], None, [], None
+    if rest:
+        try:
+            answer = _http.overpass("[out:json][timeout:%d];%s;out geom;" % (SECONDS, _elements.select(rest)), SECONDS)
+            elements, remark = answer["elements"], answer.get("remark")
+            stamps.append(answer["osm3s"]["timestamp_osm_base"])
+        except (_http.Stalled, _http.Unanswered) as error:
+            # Overpass could not be asked, as when every instance kept turning the query away: Nominatim gives what
+            # it has, unless it was asked already.
+            if not looked_up:
+                looked = _lookup.objects(rest)
+            if not looked:
+                raise
+            unasked = {
+                "undownloaded": [_elements.name(ref) for ref in rest if ref not in looked],
+                "code": "stalled" if isinstance(error, _http.Stalled) else "unanswered",
+            }
+    if looked:
+        # Nominatim's data follows OSM's within minutes: when it does not say how old it is, it is as of now.
+        stamps.append(_lookup.timestamp() or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    found = {(element["type"], element["id"]) for element in elements}
     # An id missing from an answer the server says it stopped early is not known to be missing from OSM.
-    absent = [] if answer.get("remark") else [
-        "%s%d" % (_elements.LETTERS[kind], number) for kind, number in refs if (kind, number) not in found
-    ]
+    absent = [] if remark or unasked else [_elements.name(ref) for ref in rest if ref not in found]
     _steps.step("assemble")
-    features, unassembled = _features(answer["elements"], None)
+    features, unassembled = _features(elements, None)
+    for ref in refs:
+        if ref in looked:
+            kind, geometry, tags = looked[ref]
+            features.append(_records.Feature(_elements.name(ref), kind, geometry, tags))
     gaps = [{"absent": absent}] if absent else []
     if unassembled:
         gaps.append({"unassembled": unassembled})
-    if answer.get("remark"):
-        gaps.append({"said": answer["remark"]})
+    if unasked and unasked["undownloaded"]:
+        gaps.append(unasked)
+    if remark:
+        gaps.append({"said": remark})
     if not features:
-        return {
-            "empty": True,
-            "missing": _missing(gaps),
-            "gaps": gaps,
-            "timestamp": answer["osm3s"]["timestamp_osm_base"],
-        }
-    what = "the OSM objects %s" % ", ".join(request["ids"])
-    stamps = [answer["osm3s"]["timestamp_osm_base"]]
+        return {"empty": True, "missing": _missing(gaps), "gaps": gaps, "timestamp": min(stamps)}
+    what = "the OSM objects %s" % ", ".join(_elements.name(ref) for ref in refs)
     return _save(request["output"], features, [], [], request.get("fields"), "original", what, stamps, gaps)
 
 
@@ -199,14 +304,10 @@ def features(request):
     except TooMany as many:
         return {"refused": many.count, "limit": LIMIT}
     _steps.counted(total, len(parts))
-    found, gaps, stamps = {}, [], []
     _steps.step("download")
-    for index, box in enumerate(parts):
-        if len(parts) > 1:
-            _steps.part(index + 1, len(parts))
-        _fetch(area, alternatives, box, 0, found, gaps, stamps)
+    elements, gaps, stamps = _download(area, alternatives, parts)
     _steps.step("assemble")
-    features, unassembled = _features(found.values(), area.exact)
+    features, unassembled = _features(elements, area.exact)
     if unassembled:
         gaps.append({"unassembled": unassembled})
     if not features:

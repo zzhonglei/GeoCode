@@ -1,3 +1,4 @@
+import path from "node:path"
 import { Cause, Effect, Exit, Layer, Logger } from "effect"
 import { Config } from "./config.ts"
 import { Engine } from "./engine.ts"
@@ -20,6 +21,7 @@ const places = {
   bundle: argument("python", "folder of the bundled Python environment"),
   data: argument("data", "GeoCode's data directory"),
 }
+const locks = path.join(argument("state", "GeoCode's state directory"), "locks")
 
 const transport = Transport.parentPort()
 
@@ -33,7 +35,7 @@ const layer = Layer.mergeAll(
 
 const fiber = Effect.runFork(
   Effect.scoped(
-    Engine.run(transport, [Environment.capability(places), Qgis.capability, Gee.capability, Osm.capability()]),
+    Engine.run(transport, [Environment.capability(places), Qgis.capability, Gee.capability, Osm.capability(locks)]),
   ).pipe(Effect.provide(layer)),
 )
 

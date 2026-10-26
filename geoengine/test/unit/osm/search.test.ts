@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Geocodekit } from "../../../src/python/geocodekit.ts"
-import { answer, serve, start, type Reply } from "../../support/osm.ts"
+import { answer, instanceOf, isProbe, serve, start, type Reply } from "../../support/osm.ts"
 import { python3 } from "../../support/python.ts"
 
 const campus = { lat: "24.9387", lon: "121.3615" }
@@ -231,6 +231,82 @@ test(
       assert.ok(done.ok, JSON.stringify(done))
       // Guards against comparing names character by character alone: simplified and traditional share few.
       assert.deepEqual(ids(done.result), ["R1", "R2"])
+    } finally {
+      await engine.stop()
+      await services.close()
+    }
+  },
+)
+
+test("a search asks first the Overpass instance that answered the call before it", { skip: !python3 }, async () => {
+  const services = await serve({
+    nominatim,
+    photon,
+    wikidata,
+    // The last instance's probe answers first, so the look's query goes to it; none is found busy.
+    overpass: (query, index) => (index !== 2 && isProbe(query) ? { after: 300, reply: answer([]) } : overpass(query)),
+  })
+  const engine = await start(python3!, services.services)
+  try {
+    assert.ok((await engine.call("probe", { area: "bbox:24.93,121.36,24.96,121.39", tags: ["building"] })).ok)
+    const before = services.asked.length
+    assert.ok((await engine.call("search", { name: "國立臺北大學" })).ok)
+    const first = services.asked.slice(before).find((request) => request.service === "overpass")
+    // Guards against each search waiting out first an instance the call before it found busy.
+    assert.equal(first && instanceOf(first), 2)
+  } finally {
+    await engine.stop()
+    await services.close()
+  }
+})
+
+test("a search does not ask an instance an earlier call found busy", { skip: !python3 }, async () => {
+  let searching = false
+  const services = await serve({
+    nominatim,
+    photon,
+    wikidata,
+    overpass: (query, index) => {
+      if (index === 0) return { status: 503, body: "busy" }
+      // The look's query goes to the last instance, whose probe answers first; the search finds it busy.
+      if (index === 1) return isProbe(query) ? { after: 300, reply: answer([]) } : overpass(query)
+      return searching ? { status: 503, body: "busy" } : overpass(query)
+    },
+  })
+  const engine = await start(python3!, services.services, { pause: 10 })
+  try {
+    assert.ok((await engine.call("probe", { area: "bbox:24.93,121.36,24.96,121.39", tags: ["building"] })).ok)
+    searching = true
+    const before = services.asked.length
+    assert.ok((await engine.call("search", { name: "國立臺北大學" })).ok)
+    const asked = services.asked.slice(before).filter((request) => request.service === "overpass")
+    // Guards against a search asking at once the instance a call before it found busy, as the policy asks not to.
+    assert.ok(!asked.some((request) => instanceOf(request) === 0), JSON.stringify(asked.map(instanceOf)))
+    assert.deepEqual([...new Set(asked.map(instanceOf))], [2, 1])
+  } finally {
+    await engine.stop()
+    await services.close()
+  }
+})
+
+test(
+  "an instance a search finds busy is not asked by the next call before its pause ends",
+  { skip: !python3 },
+  async () => {
+    const services = await serve({
+      nominatim,
+      photon,
+      wikidata,
+      overpass: (query, index) => (index === 0 ? { status: 429, body: "rate limited" } : overpass(query)),
+    })
+    const engine = await start(python3!, services.services, { pause: 10 })
+    try {
+      assert.ok((await engine.call("search", { name: "國立臺北大學" })).ok)
+      const before = services.asked.length
+      assert.ok((await engine.call("probe", { area: "bbox:24.93,121.36,24.96,121.39", tags: ["building"] })).ok)
+      const asked = services.asked.slice(before).filter((request) => request.service === "overpass")
+      // Guards against a search's 429 going unheeded: the next call would ask that instance at once.
+      assert.ok(!asked.some((request) => instanceOf(request) === 0), JSON.stringify(asked.map(instanceOf)))
     } finally {
       await engine.stop()
       await services.close()

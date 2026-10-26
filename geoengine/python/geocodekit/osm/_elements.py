@@ -20,8 +20,14 @@ def parse(text):
     return TYPES[found.group(1).upper()], int(found.group(2))
 
 
+def name(ref):
+    """An element's id as the tools write it, from its type and number."""
+    kind, number = ref
+    return "%s%d" % (LETTERS[kind], number)
+
+
 def ref(element):
-    return "%s%d" % (LETTERS[element["type"]], element["id"])
+    return name((element["type"], element["id"]))
 
 
 def select(refs):

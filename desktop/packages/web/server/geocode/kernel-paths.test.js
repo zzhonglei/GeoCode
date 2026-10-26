@@ -28,12 +28,13 @@ afterEach(() => {
 describe('GeoCode: kernel paths', () => {
   it.each([
     ['unset', {}],
-    ['set', { XDG_CONFIG_HOME: '/xdg/config', XDG_DATA_HOME: '/xdg/data' }],
-    ['empty', { XDG_CONFIG_HOME: '', XDG_DATA_HOME: '' }],
+    ['set', { XDG_CONFIG_HOME: '/xdg/config', XDG_DATA_HOME: '/xdg/data', XDG_STATE_HOME: '/xdg/state' }],
+    ['empty', { XDG_CONFIG_HOME: '', XDG_DATA_HOME: '', XDG_STATE_HOME: '' }],
   ])('match the kernel with XDG variables %s', async (_name, env) => {
     const { shell, kernel } = await load(env);
     expect(shell.kernelConfigDir()).toBe(kernel.config);
     expect(shell.kernelDataDir()).toBe(kernel.data);
+    expect(shell.kernelStateDir()).toBe(kernel.state);
     expect(shell.kernelTmpDir()).toBe(kernel.tmp);
   });
 
@@ -41,5 +42,6 @@ describe('GeoCode: kernel paths', () => {
     const { shell } = await load({});
     expect(shell.kernelConfigDir()).toBe(path.join(os.homedir(), '.config', 'geocode'));
     expect(shell.kernelDataDir()).toBe(path.join(os.homedir(), '.local', 'share', 'geocode'));
+    expect(shell.kernelStateDir()).toBe(path.join(os.homedir(), '.local', 'state', 'geocode'));
   });
 });

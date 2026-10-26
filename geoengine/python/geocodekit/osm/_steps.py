@@ -22,5 +22,6 @@ def counted(features, parts):
 
 
 def part(index, parts):
-    """The part about to be downloaded, from 1."""
+    """How far a download of several parts has got, as the part it would be on were they downloaded one at a time:
+    one more than those done, from 1. Several are downloaded at once."""
     _tell({"type": "part", "part": index, "parts": parts})

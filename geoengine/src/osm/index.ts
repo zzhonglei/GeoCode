@@ -18,16 +18,14 @@ const ENVIRONMENT_DOMAIN = "python"
 const MARKER = "__GEOCODE_OSM__"
 
 /**
- * The public services, in the order asked (docs/OSM.md, section 3): Overpass's official instance and its two named
- * backends first, then mirrors holding the whole planet. Written here alone and given to the Python with each call.
+ * The public services (docs/OSM.md, section 3): the Overpass instances free to all that hold the whole planet, the
+ * official one at its own address alone, as its two servers are one instance. Written here alone and given to the
+ * Python with each call.
  */
 export const SERVICES = {
   overpass: [
     "https://overpass-api.de/api/interpreter",
-    "https://lz4.overpass-api.de/api/interpreter",
-    "https://z.overpass-api.de/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
   ],
   nominatim: "https://nominatim.openstreetmap.org/",
@@ -46,17 +44,20 @@ const AGENT = `GeoCode/${Geocodekit.PACKAGE.version} (+https://github.com/zzhong
  */
 const IDLE_SECONDS = 300
 
-/**
- * How long a call may make no progress before it stops (docs/OSM.md, section 7): longer than Overpass may compute a
- * query before it sends anything.
- */
-const STALL_SECONDS = 300
+/** How long calls wait, in seconds (docs/OSM.md, sections 3 and 7). */
+export const TIMING = {
+  /** How long a call may make no progress before it stops: longer than Overpass may compute and send nothing. */
+  stall: 300,
+  /** How long an Overpass instance that said it was busy is not asked again, as the official one's policy asks. */
+  pause: 30,
+  /** How long a probe of an instance is waited for: a server holds a request it has no slot for 15 seconds at most. */
+  probe: 20,
+}
+
+export type Timing = typeof TIMING
 
 /** How long a call waits for GeoCode's Python environment to be ready, as just after the app started. */
 const ENVIRONMENT_TIMEOUT = "100 seconds"
-
-/** Nominatim is asked at most once a second, the whole app's calls counted together. */
-const NOMINATIM_GAP_MS = 1000
 
 /** Characters kept of what the Python printed besides its answer, for the diagnostics. */
 const OUTPUT_TAIL = 16 * 1024
@@ -104,15 +105,21 @@ const Shown = Schema.Union([
   Schema.Struct({ type: Schema.Literal("counted"), features: Schema.NullOr(Schema.Number), parts: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("part"), part: Schema.Number, parts: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("received"), bytes: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("busy") }),
+  // What the call waits on: a query out, an answer arriving, or every instance it may ask busy.
+  Schema.Struct({
+    type: Schema.Literal("server"),
+    asking: Schema.Boolean,
+    arriving: Schema.Boolean,
+    busy: Schema.Boolean,
+  }),
   // Seconds since the call last made progress, while a request waits.
   Schema.Struct({ type: Schema.Literal("waiting"), quiet: Schema.Number }),
 ])
 
 const Event = Schema.Union([
   Shown,
-  Schema.Struct({ type: Schema.Literal("nominatim") }),
   Schema.Struct({ type: Schema.Literal("overpass"), index: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("paused"), index: Schema.Number, seconds: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("partial"), path: Schema.String }),
   Schema.Struct({ type: Schema.Literal("result"), result: Schema.Unknown }),
   Schema.Struct({
@@ -162,17 +169,22 @@ const validate = (action: Action, raw: unknown) =>
     return params
   })
 
-export const capability = (services: Services = SERVICES, stall = STALL_SECONDS): Engine.Capability =>
+/**
+ * The OSM tools, asking `services` and keeping when Nominatim was last asked in a file among `locks`, the app's lock
+ * files (docs/PATHS.md, section 4).
+ */
+export const capability = (locks: string, services: Services = SERVICES, timing: Timing = TIMING): Engine.Capability =>
   Effect.gen(function* () {
     const status = yield* Status.Service
     const runtime = yield* Runtime.Service
     const environment = yield* Deferred.make<string>()
-    // A search asks Nominatim, whose limit counts every call together: one search at a time, each told how long to
-    // wait after the last one's request.
-    const searching = yield* Semaphore.make(1)
-    let nominatimAt = 0
-    // The Overpass instance that answered last, which the next call starts from rather than waiting out one found busy.
+    // Looks and downloads ask Overpass, whose public instances give an IP address a few slots and whose policy rules
+    // out parallel scripts: one at a time, each spreading its own queries over the instances (docs/OSM.md, section 3).
+    const asking = yield* Semaphore.make(1)
+    // The Overpass instance that answered last, where the next search starts rather than waiting out one found busy;
+    // and when each instance found busy may be asked again, by any call (docs/OSM.md, section 3).
     let overpass = 0
+    const pausedUntil = services.overpass.map(() => 0)
 
     yield* Effect.forkScoped(
       status.watch(ENVIRONMENT_DOMAIN).pipe(
@@ -202,7 +214,6 @@ export const capability = (services: Services = SERVICES, stall = STALL_SECONDS)
     const call = (action: Action, params: object, context: Engine.MethodContext) =>
       Effect.gen(function* () {
         const python = yield* base
-        const wait = Math.max(0, nominatimAt + NOMINATIM_GAP_MS - Date.now()) / 1000
         const request = {
           ...params,
           action,
@@ -210,18 +221,33 @@ export const capability = (services: Services = SERVICES, stall = STALL_SECONDS)
           marker: MARKER,
           agent: AGENT,
           services,
-          stall,
-          wait,
+          locks,
+          ...timing,
           overpass,
+          paused: pausedUntil.map((until) => Math.max(0, until - Date.now()) / 1000),
         }
         return yield* execute(runtime, python, request, context, {
-          nominatim: () => {
-            nominatimAt = Date.now()
-          },
-          overpass: (index) => {
+          answered: (index) => {
             overpass = index
           },
+          paused: (index, seconds) => {
+            pausedUntil[index] = Date.now() + seconds * 1000
+          },
         })
+      })
+
+    /**
+     * A look or a download, once the one before it has ended. Its row is told, besides what the Python tells, when it
+     * waits and when it begins.
+     */
+    const queued = (running: Effect.Effect<unknown, Engine.Failure>, context: Engine.MethodContext) =>
+      Effect.gen(function* () {
+        if (!(yield* Semaphore.takeIfAvailable(asking, 1))) {
+          context.progress({ osm: { type: "queued" } })
+          yield* Effect.raceFirst(Semaphore.take(asking, 1), cancelled(context.signal))
+          context.progress({ osm: { type: "started" } })
+        }
+        return yield* running.pipe(Effect.ensuring(Semaphore.release(asking, 1)))
       })
 
     const method =
@@ -230,7 +256,8 @@ export const capability = (services: Services = SERVICES, stall = STALL_SECONDS)
         Effect.gen(function* () {
           const params = yield* validate(action, raw)
           const running = call(action, params, context)
-          return yield* action === "search" ? searching.withPermits(1)(running) : running
+          // A search's queries can be done without and are brief: it does not wait behind a download.
+          return yield* action === "search" ? running : queued(running, context)
         })
 
     /** Whether a call could start now, asked before the user is asked about it; runs nothing. */
@@ -257,11 +284,25 @@ export const capability = (services: Services = SERVICES, stall = STALL_SECONDS)
     }
   })
 
-interface Learned {
-  readonly nominatim: () => void
-  readonly overpass: (index: number) => void
+const cancellation = () => new Engine.Failure({ code: "cancelled", message: "the call was cancelled" })
+
+/** Waits for an abort of the signal, and fails as a cancelled call. */
+function cancelled(signal: AbortSignal) {
+  return Effect.callback<never, Engine.Failure>((resume) => {
+    const abort = () => resume(Effect.fail(cancellation()))
+    if (signal.aborted) return abort()
+    signal.addEventListener("abort", abort, { once: true })
+    return Effect.sync(() => signal.removeEventListener("abort", abort))
+  })
 }
 
+/** What a call's Python tells of the Overpass instances, which GeoEngine keeps for the calls after it. */
+interface Learned {
+  readonly answered: (index: number) => void
+  readonly paused: (index: number, seconds: number) => void
+}
+
+/** Runs a call's Python, passing what it tells on to its row and what it learns of the instances to `learned`. */
 function execute(
   runtime: Runtime.Interface,
   python: string,
@@ -285,8 +326,8 @@ function execute(
     }
     const event = decoded.value
     if (isShown(event)) context.progress({ osm: event })
-    if (event.type === "nominatim") learned.nominatim()
-    if (event.type === "overpass") learned.overpass(event.index)
+    if (event.type === "overpass") learned.answered(event.index)
+    if (event.type === "paused") learned.paused(event.index, event.seconds)
     if (event.type === "partial" && PARTIAL.test(path.basename(event.path))) partials.add(event.path)
     if (event.type === "result") outcome = { result: event.result }
     if (event.type === "failure") outcome = event
@@ -322,7 +363,7 @@ function execute(
             Promise.all([...partials].map((file) => fsp.rm(file, { force: true }).catch(() => undefined))),
           )
           if (result.reason === "abort") {
-            return yield* new Engine.Failure({ code: "cancelled", message: "the call was cancelled" })
+            return yield* cancellation()
           }
           if (outcome && "result" in outcome) return outcome.result
           if (outcome) {

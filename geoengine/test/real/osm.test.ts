@@ -6,7 +6,18 @@ import path from "node:path"
 import { test } from "node:test"
 import { isDeepStrictEqual } from "node:util"
 import { Environment } from "../../src/python/index.ts"
-import { answer, counts, serve, start, type Reply } from "../support/osm.ts"
+import {
+  answer,
+  counts,
+  instanceOf,
+  isProbe,
+  queriesOf,
+  serve,
+  start,
+  waitedOn,
+  type Asked,
+  type Reply,
+} from "../support/osm.ts"
 
 /**
  * Downloads on the base environment GeoCode installed in its data directory, or in the one GEOENGINE_OSM_DATA names:
@@ -195,20 +206,26 @@ test(
 )
 
 test(
-  "a download too large for one request is split into parts, each feature kept once",
+  "a download too large for one request is split into parts, downloaded on several instances at once, each kept once",
   { skip: missing },
   async () => {
     // 120,000 features in all, 30,000 a quarter: each quarter is downloaded on its own.
     const quarter = /\)\(([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)\);/
     const services = await serve({
       overpass: (query) => {
+        if (isProbe(query)) return answer([])
         const box = quarter.exec(query)
         if (query.includes("out count")) return counts(box ? 30000 : 120000)
         const [south, west] = box!.slice(1).map(Number)
         // One building in the south-west quarter, and one across its edge with the south-east, which both answer.
-        if (south === 0 && west === 0) return answer([building(1, 0.1, 0.1, 0.2, 0.2), building(2, 0.1, 0.4, 0.2, 0.6)])
-        if (south === 0) return answer([building(2, 0.1, 0.4, 0.2, 0.6)])
-        return answer([])
+        const elements =
+          south === 0 && west === 0
+            ? [building(1, 0.1, 0.1, 0.2, 0.2), building(2, 0.1, 0.4, 0.2, 0.6)]
+            : south === 0
+              ? [building(2, 0.1, 0.4, 0.2, 0.6)]
+              : []
+        // Long enough to tell parts downloaded at once from parts downloaded in turn.
+        return { after: 600, reply: answer(elements) }
       },
     })
     const engine = await start(base, services.services)
@@ -223,6 +240,16 @@ test(
       assert.deepEqual((done.result as { layers: object }).layers, { polygons: 2 })
       const downloads = services.asked.filter((request) => request.query.includes("out geom"))
       assert.equal(downloads.length, 4)
+      // Guards against the parts going one at a time to one instance, or several at once to the same one.
+      assert.ok(new Set(downloads.map(instanceOf)).size > 1, JSON.stringify(downloads.map(instanceOf)))
+      assert.ok(downloads[1].at - downloads[0].at < 300, JSON.stringify(downloads.map((request) => request.at)))
+      for (const [index, request] of downloads.entries()) {
+        const before = downloads.slice(0, index).filter((other) => instanceOf(other) === instanceOf(request))
+        assert.ok(
+          before.every((other) => request.at - other.at >= 590),
+          JSON.stringify(downloads.map(instanceOf)),
+        )
+      }
       const shown = engine.sent.flatMap((message) =>
         message.type === "progress" && message.id === id ? [(message.data as { osm: object }).osm] : [],
       )
@@ -456,6 +483,168 @@ test("a part Overpass stops early on is downloaded again in quarters", { skip: m
     assert.deepEqual((done.result as { missing: string[] }).missing, [])
     assert.deepEqual((done.result as { layers: object }).layers, { polygons: 1 })
     assert.equal(services.asked.filter((request) => request.query.includes("out geom")).length, 5)
+  } finally {
+    await engine.stop()
+    await services.close()
+  }
+})
+
+/** Nominatim's answer to a lookup: a feature for each object it has, with its tags as Nominatim keeps them. */
+const looked = (...features: readonly object[]): Reply => ({ json: { type: "FeatureCollection", features } })
+const place = (kind: string, id: number, tag: string, geometry: object, extra: object = {}) => ({
+  type: "Feature",
+  properties: {
+    osm_type: kind,
+    osm_id: id,
+    category: tag.split("=")[0],
+    type: tag.split("=")[1],
+    extratags: {},
+    namedetails: {},
+    ...extra,
+  },
+  geometry,
+})
+const polygon = (south: number, west: number, north: number, east: number) => ({
+  type: "Polygon",
+  coordinates: [
+    [
+      [west, south],
+      [east, south],
+      [east, north],
+      [west, north],
+      [west, south],
+    ],
+  ],
+})
+const queries = (asked: readonly Asked[]) => queriesOf(asked).map((request) => request.query)
+
+test(
+  "an area by id is read from Nominatim, and Overpass asked only for the objects Nominatim lacks",
+  { skip: missing },
+  async () => {
+    const services = await serve({
+      nominatim: (where) =>
+        where === "lookup"
+          ? looked(place("relation", 10, "boundary=administrative", polygon(0, 0, 0.1, 0.1)))
+          : { json: {} },
+      overpass: (query) => {
+        if (!query.includes("nwr")) return answer([building(20, 0.1, 0, 0.2, 0.1)])
+        if (query.includes("out count")) return counts(2)
+        return answer([building(1, 0.12, 0.01, 0.13, 0.02), building(2, 0.01, 0.01, 0.02, 0.02)])
+      },
+    })
+    const engine = await start(base, services.services)
+    try {
+      const done = await engine.call("features", {
+        area: "R10,W20",
+        tags: ["building"],
+        output: path.join(engine.directory, "two.gpkg"),
+      })
+      assert.ok(done.ok, JSON.stringify(done))
+      assert.deepEqual((done.result as { layers: object }).layers, { polygons: 2 })
+      const lookup = services.asked.find((request) => request.service === "nominatim" && request.where === "lookup")
+      assert.equal(lookup?.params.get("osm_ids"), "R10,W20")
+      // Guards against asking Overpass for an area Nominatim gave: it costs the busy servers a query.
+      const objects = queries(services.asked).filter((query) => !query.includes("nwr"))
+      assert.equal(objects.length, 1)
+      assert.match(objects[0], /way\(id:20\)/)
+      assert.doesNotMatch(objects[0], /rel\(id/)
+    } finally {
+      await engine.stop()
+      await services.close()
+    }
+  },
+)
+
+test(
+  "a download by id no Overpass instance would answer writes what Nominatim has, and names the rest as not downloaded",
+  { skip: missing },
+  async () => {
+    const services = await serve({
+      overpass: () => ({ status: 503, body: "busy" }),
+      nominatim: (where) =>
+        where === "lookup"
+          ? looked(
+              place("way", 1, "building=yes", polygon(0, 0, 0.01, 0.01), {
+                namedetails: { name: "Library", "_place_name:ja": "図書館" },
+                extratags: { "building:levels": "3", linked_place: "city" },
+              }),
+              place("way", 4, "highway=residential", polygon(0, 0.02, 0.01, 0.03), { namedetails: { name: "Ring" } }),
+              place("node", 2, "amenity=cafe", { type: "Point", coordinates: [0.005, 0.005] }),
+            )
+          : { json: { status: 0, data_updated: "2026-10-26T03:10:00+00:00" } },
+    })
+    const engine = await start(base, services.services, { stall: 3, pause: 1 })
+    try {
+      const done = await engine.call("objects", {
+        ids: ["W1", "N2", "W4", "R3", "w1"],
+        fields: ["*"],
+        output: path.join(engine.directory, "objects.gpkg"),
+      })
+      assert.ok(done.ok, JSON.stringify(done))
+      const result = done.result as { path: string; layers: object; gaps: object[]; timestamp: string }
+      assert.deepEqual(result.layers, { points: 1, lines: 1, polygons: 1 })
+      assert.deepEqual(result.gaps, [{ undownloaded: ["R3"], code: "stalled" }])
+      assert.equal(result.timestamp, "2026-10-26T03:10:00Z")
+      const file = read(result.path)
+      // Guards against taking Nominatim's shape for GeoCode's rule: a closed residential road is a line.
+      assert.deepEqual(
+        file.lines.rows.map((row: { osm_id: string }) => row.osm_id),
+        ["W4"],
+      )
+      const tags = JSON.parse(file.polygons.rows[0].osm_tags)
+      assert.equal(tags["building:levels"], "3")
+      assert.equal(tags.name, "Library")
+      // Guards against what Nominatim adds of its own being written as one of the object's tags, and an object named
+      // twice being written twice.
+      assert.ok(!("linked_place" in tags) && !("_place_name:ja" in tags), JSON.stringify(tags))
+      assert.equal(file.polygons.rows.length, 1)
+      assert.deepEqual(queries(services.asked), [])
+      // Guards against the row still saying the servers are busy once the download goes on without them.
+      assert.deepEqual(waitedOn(engine.sent).at(-1), { asking: false, arriving: false, busy: false })
+    } finally {
+      await engine.stop()
+      await services.close()
+    }
+  },
+)
+
+test(
+  "a download by id Overpass keeps turning away, though its probes answered, still writes what Nominatim has",
+  { skip: missing },
+  async () => {
+    const services = await serve({
+      overpass: (query) => (isProbe(query) ? answer([]) : { status: 429, body: "rate limited" }),
+      nominatim: (where) =>
+        where === "lookup"
+          ? looked(place("way", 1, "building=yes", polygon(0, 0, 0.01, 0.01), { namedetails: { name: "Library" } }))
+          : { json: { status: 0, data_updated: "2026-10-26T03:10:00+00:00" } },
+    })
+    const engine = await start(base, services.services, { stall: 3, pause: 1 })
+    try {
+      const done = await engine.call("objects", { ids: ["W1"], output: path.join(engine.directory, "o.gpkg") })
+      // Guards against a call whose instances take the probe but not the query ending with nothing written.
+      assert.ok(done.ok, JSON.stringify(done))
+      assert.deepEqual((done.result as { layers: object; gaps: object[] }).layers, { polygons: 1 })
+      assert.deepEqual((done.result as { gaps: object[] }).gaps, [])
+      assert.ok(queries(services.asked).length > 0)
+    } finally {
+      await engine.stop()
+      await services.close()
+    }
+  },
+)
+
+test("a download by id no service has an object for asks Nominatim for it once", { skip: missing }, async () => {
+  const services = await serve({ overpass: () => ({ status: 503, body: "busy" }) })
+  const engine = await start(base, services.services, { stall: 3, pause: 1 })
+  try {
+    const done = await engine.call("objects", { ids: ["W1"], output: path.join(engine.directory, "o.gpkg") })
+    assert.ok(!done.ok)
+    assert.equal(done.error.code, "stalled")
+    // Guards against Nominatim being asked again, once Overpass stops, for what it did not have before.
+    const lookups = services.asked.filter((request) => request.service === "nominatim" && request.where === "lookup")
+    assert.equal(lookups.length, 1)
   } finally {
     await engine.stop()
     await services.close()

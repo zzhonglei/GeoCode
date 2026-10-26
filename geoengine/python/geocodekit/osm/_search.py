@@ -79,7 +79,7 @@ def _bounds(context):
     whether Nominatim answered at all."""
     parts = [part.strip() for part in context.split(",")]
     if all(_elements.REF.match(part) for part in parts):
-        refs = ",".join("%s%d" % (_elements.LETTERS[kind], number) for kind, number in map(_elements.parse, parts))
+        refs = ",".join(_elements.name(_elements.parse(part)) for part in parts)
         hits = _http.get("nominatim", "lookup", {"osm_ids": refs, "format": "jsonv2"})
     else:
         hits = _http.get("nominatim", "search", {"q": context, "format": "jsonv2", "limit": 1})
@@ -165,7 +165,7 @@ def _overpass(query):
     """The answer to a query the search can do without, or None: from one of two instances, each given a moment, so
     a search waits little when Overpass is busy."""
     try:
-        return _http.overpass(query, SECONDS, PATIENCE, TRIES)
+        return _http.overpass(query, PATIENCE, TRIES)
     except (_http.Unanswered, _http.TooLarge):
         return None
 

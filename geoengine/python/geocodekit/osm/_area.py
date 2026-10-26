@@ -104,7 +104,7 @@ def _around(text):
         meters = _numbers(parts[-1], 1, text, "around:<ids>,meters, as around:R10958940,1000")[0]
         if meters <= 0:
             raise Invalid('"%s" needs a distance above 0 meters' % text)
-        return _polygon(text, _buffered([_shape(element) for element in _found(refs)], meters))
+        return _polygon(text, _buffered([geometry for _name, _kind, geometry in _found(refs)], meters))
     latitude, longitude, meters = _numbers(
         text[7:], 3, text, "around:latitude,longitude,meters, as around:25.0339,121.5645,1000"
     )
@@ -123,30 +123,39 @@ def _bounds_of(element):
 
 
 def _found(refs):
-    """The objects the ids name, with their geometries. An id OSM lacks was written wrong, unless the server stopped
-    early: then its own words say why the object is not there."""
-    found = _http.overpass("[out:json][timeout:%d];%s;out geom;" % (SECONDS, _elements.select(refs)), SECONDS)
-    have = {(element["type"], element["id"]) for element in found["elements"]}
-    lost = [ref for ref in refs if ref not in have]
-    if lost and found.get("remark"):
-        raise _http.Refused(found["remark"])
-    if lost:
-        names = ", ".join("%s%d" % (_elements.LETTERS[kind], number) for kind, number in lost)
-        raise Invalid("OSM has no %s" % names)
-    return found["elements"]
-
-
-def _shape(element):
-    """An object's geometry, or the box around it when it has none, as a relation of another kind."""
+    """The objects the ids name, each as its id, its kind and its geometry, or the box around it when it has none, as
+    a relation of another kind: from Nominatim, and from Overpass those Nominatim lacks (docs/OSM.md, section 5). An
+    id neither has was written wrong, unless the server stopped early: then its own words say why the object is not
+    there."""
     from shapely.geometry import box
 
-    from geocodekit.osm import _geometry
+    from geocodekit.osm import _geometry, _lookup
 
-    _kind, geometry = _geometry.of(element)
-    if geometry is not None:
-        return geometry
-    south, west, north, east = _bounds_of(element)
-    return box(west, south, east, north)
+    # The Overpass instances are probed while Nominatim is asked, in case it lacks some of the objects.
+    _http.warm()
+    looked = _lookup.objects(refs)
+    rest = [ref for ref in refs if ref not in looked]
+    have = {}
+    if rest:
+        found = _http.overpass("[out:json][timeout:%d];%s;out geom;" % (SECONDS, _elements.select(rest)), SECONDS)
+        have = {(element["type"], element["id"]): element for element in found["elements"]}
+        lost = [ref for ref in rest if ref not in have]
+        if lost and found.get("remark"):
+            raise _http.Refused(found["remark"])
+        if lost:
+            names = ", ".join(_elements.name(ref) for ref in lost)
+            raise Invalid("OSM has no %s" % names)
+    shapes = []
+    for ref in refs:
+        if ref in looked:
+            kind, geometry, _tags = looked[ref]
+        else:
+            kind, geometry = _geometry.of(have[ref])
+            if geometry is None:
+                south, west, north, east = _bounds_of(have[ref])
+                geometry = box(west, south, east, north)
+        shapes.append((_elements.name(ref), kind, geometry))
+    return shapes
 
 
 def _buffered(shapes, meters):
@@ -166,14 +175,10 @@ def _buffered(shapes, meters):
 def _objects(text):
     from shapely.ops import unary_union
 
-    from geocodekit.osm import _geometry
-
     refs = [_elements.parse(part) for part in text.split(",")]
     areas = []
-    for element in _found(refs):
-        kind, geometry = _geometry.of(element)
+    for name, kind, geometry in _found(refs):
         if kind != "area":
-            name = _elements.ref(element)
             shape = {"point": "a point", "line": "a line"}.get(kind, "not an area")
             raise Invalid(
                 "%s is %s, so it has no inside to look in; use around:%s,<meters> for what is near it"

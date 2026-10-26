@@ -1,8 +1,9 @@
-"""Geometries of OSM elements as Overpass gives them with `out geom` (docs/OSM.md, section 7): a closed way is an area
-when the community's rules say so, a multipolygon relation is assembled from its members' rings, and a route relation
-is its members' lines. An element whose rings do not close has no geometry rather than a part of one."""
+"""Geometries of OSM elements as Overpass gives them with `out geom` (docs/OSM.md, section 7), or as Nominatim gives
+their shapes: a closed way is an area when the community's rules say so, a multipolygon relation is assembled from its
+members' rings, and a route relation is its members' lines. An element whose rings do not close has no geometry rather
+than a part of one."""
 
-from shapely.geometry import LineString, MultiLineString, Point, Polygon
+from shapely.geometry import LineString, MultiLineString, Point, Polygon, shape
 from shapely.ops import linemerge, polygonize, unary_union
 from shapely.prepared import prep
 from shapely.validation import make_valid
@@ -80,6 +81,32 @@ def of(element):
             return None, None
         merged = linemerge(lines)
         return "line", merged if merged.geom_type == "MultiLineString" else MultiLineString([merged])
+    return None, None
+
+
+def of_shape(kind, geojson, tags):
+    """An object's kind and geometry from a GeoJSON geometry, as Nominatim gives one (docs/OSM.md, section 5): a way's
+    points are judged by the same rule as above, a relation's areas and lines are taken as they are assembled.
+    (None, None) for a shape that says less, as a point given for a relation."""
+    form = geojson.get("type")
+    if kind == "node":
+        return ("point", shape(geojson)) if form == "Point" else (None, None)
+    if kind == "way":
+        coordinates = geojson.get("coordinates") or []
+        ring = coordinates[0] if form == "Polygon" and coordinates else coordinates if form == "LineString" else []
+        points = [tuple(point) for point in ring]
+        if len(points) < 2:
+            return None, None
+        if _closed(points) and _presets.is_area(tags):
+            area = _polygonal(Polygon(points))
+            return ("area", area) if area is not None else (None, None)
+        return "line", LineString(points)
+    if form in ("Polygon", "MultiPolygon"):
+        area = _polygonal(shape(geojson))
+        return ("area", area) if area is not None else (None, None)
+    if form in ("LineString", "MultiLineString"):
+        lines = shape(geojson)
+        return "line", lines if form == "MultiLineString" else MultiLineString([lines])
     return None, None
 
 

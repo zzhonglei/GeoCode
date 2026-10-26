@@ -15,17 +15,22 @@ import { SOURCE, until } from "./common.ts"
 
 /**
  * What one of the fake services answers: JSON, or a status with a body of its own; or nothing at all, the request
- * held until the services close; or JSON sent in pieces, one every `every` milliseconds.
+ * held until the services close; or JSON sent in pieces, one every `every` milliseconds; or another reply, `after`
+ * milliseconds.
  */
 export type Reply =
   | { readonly json: unknown }
   | { readonly status: number; readonly body: string }
   | { readonly silent: true }
   | { readonly trickle: unknown; readonly pieces: number; readonly every: number }
+  | { readonly after: number; readonly reply: Reply }
 
 export interface Asked {
   readonly service: "overpass" | "nominatim" | "photon" | "wikidata"
-  /** For Overpass, which instance in the order GeoEngine asks them; for the others, the path after the service. */
+  /**
+   * For Overpass, the instance's place in the list GeoEngine is given and "/interpreter"; for the others, the path
+   * after the service.
+   */
   readonly where: string
   readonly params: URLSearchParams
   /** Overpass's query. */
@@ -42,6 +47,29 @@ export interface Handlers {
 }
 
 export const INSTANCES = 3
+
+/** Whether a query is the probe that finds an instance free, rather than one a call asks for its own sake. */
+export const isProbe = (query: string) => query.includes("node(1);out ids;")
+
+/** The Overpass instance a request went to, by its place in the list. */
+export const instanceOf = (request: Asked) => Number(request.where.split("/")[0])
+
+/** The requests that asked an Overpass instance a call's own query, not a probe. */
+export const queriesOf = (asked: readonly Asked[]) =>
+  asked.filter((request) => request.service === "overpass" && !isProbe(request.query))
+
+/** What the engine sent, as the tests read it. */
+type Sent = readonly { type: string; id?: number; data?: unknown }[]
+
+/** The progress of one kind the engine passed on, in order. */
+export const told = (sent: Sent, type: string) =>
+  sent.filter((message) => message.type === "progress" && (message.data as { osm: { type: string } }).osm.type === type)
+
+/** What each call's row was told it waits on, in order. */
+export const waitedOn = (sent: Sent) =>
+  told(sent, "server")
+    .map((message) => message.data as { osm: { asking: boolean; arriving: boolean; busy: boolean } })
+    .map(({ osm: { asking, arriving, busy } }) => ({ asking, arriving, busy }))
 
 /** When Overpass's data is from, as a current instance answers: the day before. */
 export const fresh = () => new Date(Date.now() - 86400000).toISOString().replace(/\.\d+Z$/, "Z")
@@ -62,6 +90,29 @@ export const counts = (...totals: readonly number[]): Reply =>
   )
 
 const empty: Reply = { json: [] }
+
+const respond = (response: http.ServerResponse, reply: Reply): void => {
+  if ("silent" in reply) return
+  if ("after" in reply) return void setTimeout(() => respond(response, reply.reply), reply.after)
+  if ("trickle" in reply) {
+    const text = JSON.stringify(reply.trickle)
+    const size = Math.ceil(text.length / reply.pieces)
+    response.writeHead(200, { "Content-Type": "application/json" })
+    const send = (at: number) => {
+      if (at >= text.length) return void response.end()
+      response.write(text.slice(at, at + size))
+      setTimeout(() => send(at + size), reply.every)
+    }
+    return send(0)
+  }
+  if ("json" in reply) {
+    response.writeHead(200, { "Content-Type": "application/json" })
+    response.end(JSON.stringify(reply.json))
+  } else {
+    response.writeHead(reply.status, { "Content-Type": "text/html" })
+    response.end(reply.body)
+  }
+}
 
 /** The fake services on a port of their own, recording every request, with the addresses GeoEngine is given. */
 export const serve = async (handlers: Handlers) => {
@@ -91,25 +142,7 @@ export const serve = async (handlers: Handlers) => {
             : service === "photon"
               ? (handlers.photon?.(params) ?? { json: { features: [] } })
               : (handlers.wikidata?.(params) ?? { json: {} })
-      if ("silent" in reply) return
-      if ("trickle" in reply) {
-        const text = JSON.stringify(reply.trickle)
-        const size = Math.ceil(text.length / reply.pieces)
-        response.writeHead(200, { "Content-Type": "application/json" })
-        const send = (at: number) => {
-          if (at >= text.length) return void response.end()
-          response.write(text.slice(at, at + size))
-          setTimeout(() => send(at + size), reply.every)
-        }
-        return send(0)
-      }
-      if ("json" in reply) {
-        response.writeHead(200, { "Content-Type": "application/json" })
-        response.end(JSON.stringify(reply.json))
-      } else {
-        response.writeHead(reply.status, { "Content-Type": "text/html" })
-        response.end(reply.body)
-      }
+      respond(response, reply)
     })
   })
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
@@ -133,10 +166,11 @@ type Response = Extract<Protocol.Outbound, { type: "response" }>
 
 /**
  * An engine with GeoCode's Python environment ready on `python`, which runs geocodekit from its source, and the OSM
- * module asking the fake services, stopping a call after `stall` seconds without progress when given. Requests to them
- * go direct: a proxy in the tests' own environment would take them elsewhere.
+ * module asking the fake services, waiting as `timing` says where it differs from the app, and keeping its lock files
+ * in a folder of its own. Requests to the services go direct: a proxy in the tests' own environment would take them
+ * elsewhere.
  */
-export const start = async (python: string, services: Osm.Services, stall?: number) => {
+export const start = async (python: string, services: Osm.Services, timing: Partial<Osm.Timing> = {}) => {
   process.env.NO_PROXY = process.env.no_proxy = "127.0.0.1,localhost"
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-osm-"))
   const wrapper = path.join(directory, "python")
@@ -162,7 +196,12 @@ export const start = async (python: string, services: Osm.Services, stall?: numb
   const machine = path.join(directory, "machine.json")
   const layer = Layer.mergeAll(Runtime.layer(Engine.ledger(transport)), Status.layer, Config.layer(machine))
   const fiber = Effect.runFork(
-    Effect.scoped(Engine.run(transport, [environment, Osm.capability(services, stall)])).pipe(Effect.provide(layer)),
+    Effect.scoped(
+      Engine.run(transport, [
+        environment,
+        Osm.capability(path.join(directory, "locks"), services, { ...Osm.TIMING, ...timing }),
+      ]),
+    ).pipe(Effect.provide(layer)),
   )
   let nextId = 0
   const send = (method: string, params: object) => {
