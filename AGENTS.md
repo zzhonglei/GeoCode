@@ -14,7 +14,7 @@ GeoCode is a desktop AI application for geographic work, built on two upstreams 
 - Before committing, audit the entire diff. When a batch is split into several commits, verify each slice on its own.
 - Ask before changing anything outside the repository, such as a Python environment or global tool configuration.
 - Before deleting anything, look at the target and confirm with the maintainer.
-- Change existing files, notes included, with the edit tool, one change at a time, or, when most of a file changes, with the write tool after reading the whole file. Never rewrite a file with a script or `sed -i`; scripts only generate new artifacts or read.
+- Change files in whatever way is most direct: the edit tool for a change in place, the write tool for a new file or one rewritten whole after reading it, the formatter for formatting, and shell commands such as `sed` for a mechanical change across many lines or files. Afterwards, read what changed in `git diff`: a command can change more than was meant.
 - Before committing code, have two read-only subagents review it: one against the conventions, one against the design in `docs/`. Documentation changes need no review.
 - Every text handed to the model (tool names, descriptions, parameters, replies, errors) is drafted with care and settled by the maintainer.
 - After each stage, reread and tidy the documentation.
@@ -24,6 +24,7 @@ GeoCode is a desktop AI application for geographic work, built on two upstreams 
 - A change is complete only when the project's checks pass.
 - Before trusting a locator, guard, or tripwire, prove that it can fail: feed it a known match, or revert the change it protects and confirm that it turns red.
 - Run `scripts/foreign-writes.sh before` and `after` around any operation that may write to disk, and around at least one real application session when a change affects runtime paths. It observes writes, not reads.
+- Run tests through `node scripts/test.mjs` or the package's `bun run test` (`docs/DEVELOPMENT.md` section 7). In `kernel/`, a bare `bun test` runs with the real home directory.
 - After an edit, run `node scripts/dead-code.mjs` on the touched files.
 - Before committing changes to `desktop/`, run `node scripts/own-anti-slop.mjs`.
 - Treat conclusions from delegated agents as leads, and verify the ones a decision depends on.
