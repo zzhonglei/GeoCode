@@ -127,6 +127,7 @@ const Gap = Schema.Union([
   Schema.Struct({ part: Schema.Array(Schema.Number), said: Schema.String }),
   Schema.Struct({ absent: Schema.Array(Schema.String) }),
   Schema.Struct({ unassembled: Schema.Array(Schema.String) }),
+  Schema.Struct({ undownloaded: Schema.Array(Schema.String), code: Schema.Literals(["stalled", "unanswered"]) }),
   Schema.Struct({ said: Schema.String }),
 ])
 
@@ -150,7 +151,7 @@ const Downloaded = Schema.Union([
 ])
 const decodeDownloaded = Schema.decodeUnknownExit(Downloaded)
 
-/** What a download tells as it goes (docs/OSM.md, section 9), as GeoEngine passes it on. */
+/** What a look or a download tells as it goes (docs/OSM.md, section 9), as GeoEngine passes it on. */
 const Progress = Schema.Struct({
   osm: Schema.Union([
     Schema.Struct({
@@ -160,11 +161,30 @@ const Progress = Schema.Struct({
     Schema.Struct({ type: Schema.Literal("counted"), features: Schema.NullOr(Schema.Number), parts: Schema.Number }),
     Schema.Struct({ type: Schema.Literal("part"), part: Schema.Number, parts: Schema.Number }),
     Schema.Struct({ type: Schema.Literal("received"), bytes: Schema.Number }),
-    Schema.Struct({ type: Schema.Literal("busy") }),
+    Schema.Struct({
+      type: Schema.Literal("server"),
+      asking: Schema.Boolean,
+      arriving: Schema.Boolean,
+      busy: Schema.Boolean,
+    }),
     Schema.Struct({ type: Schema.Literal("waiting"), quiet: Schema.Number }),
+    // GeoEngine's own: the call waits for the look or download before it, then begins.
+    Schema.Struct({ type: Schema.Literal("queued") }),
+    Schema.Struct({ type: Schema.Literal("started") }),
   ]),
 })
 const decodeProgress = Schema.decodeUnknownExit(Progress)
+
+/**
+ * A look's state as its tool row shows it while it runs: whether it waits for the call before it (docs/OSM.md,
+ * section 9).
+ */
+export const queue = (context: Tool.Context) => (data: unknown) => {
+  const decoded = decodeProgress(data)
+  if (Exit.isFailure(decoded)) return Effect.void
+  const type = decoded.value.osm.type
+  return type === "queued" || type === "started" ? context.progress({ queued: type === "queued" }) : Effect.void
+}
 
 /** Keys listed one by one in the answer; the rest are counted together, with how few features carry each. */
 const DROPPED_SHOWN = 40
@@ -230,7 +250,8 @@ export const downloadAnswer = (result: unknown, directory: string, what: string)
 /**
  * A download's state as its tool row shows it (docs/OSM.md, section 9), kept in the call's metadata: its label, when
  * it began, each step with when it began and ended, the count and the part, the bytes received, when it last made
- * progress, and whether an instance just said it was busy.
+ * progress, what it waits on (a query out, an answer arriving, or every instance busy), and whether it waits for the
+ * call before it.
  */
 export const watch = (context: Tool.Context, label: string) => {
   const started = Date.now()
@@ -239,7 +260,10 @@ export const watch = (context: Tool.Context, label: string) => {
   let part: { part: number; parts: number } | undefined
   let received: number | undefined
   let progressed = started
+  let asking = false
+  let arriving = false
   let busy = false
+  let queued = false
 
   const state = () => ({
     description: label,
@@ -249,11 +273,13 @@ export const watch = (context: Tool.Context, label: string) => {
     ...(part ? { part } : {}),
     ...(received === undefined ? {} : { received }),
     progressed,
+    asking,
+    arriving,
     busy,
+    queued,
   })
   const moved = () => {
     progressed = Date.now()
-    busy = false
   }
   const heed = (data: unknown) => {
     const decoded = decodeProgress(data)
@@ -267,10 +293,15 @@ export const watch = (context: Tool.Context, label: string) => {
     if (event.type === "counted") counted = { features: event.features, parts: event.parts }
     if (event.type === "part") part = { part: event.part, parts: event.parts }
     if (event.type === "received") received = event.bytes
-    if (event.type === "busy") busy = true
+    if (event.type === "server") {
+      asking = event.asking
+      arriving = event.arriving
+      busy = event.busy
+    }
+    queued = event.type === "queued"
     // The Python knows when it last made progress: an answer it turned down was received, but was none.
     if (event.type === "waiting") progressed = Date.now() - event.quiet * 1000
-    if (event.type !== "waiting" && event.type !== "busy") moved()
+    if (event.type !== "waiting" && event.type !== "server") moved()
     return context.progress(state())
   }
   /** The state once the download has ended, its last step closed. */

@@ -1496,13 +1496,17 @@ describe("GeoCode: the OSM tools", () => {
       const output = path.join(PROJECT, "data", "pois.gpkg")
       const shown = (osm: unknown) => progress({ osm })
       answer = started(() => [
+        shown({ type: "queued" }),
+        shown({ type: "started" }),
         shown({ type: "step", step: "area" }),
         shown({ type: "step", step: "count" }),
         shown({ type: "counted", features: 1290, parts: 4 }),
         shown({ type: "step", step: "download" }),
         shown({ type: "part", part: 2, parts: 4 }),
         shown({ type: "received", bytes: 2048 }),
-        shown({ type: "busy" }),
+        shown({ type: "waiting", quiet: 50 }),
+        shown({ type: "server", asking: false, arriving: false, busy: true }),
+        shown({ type: "server", asking: true, arriving: false, busy: false }),
         shown({ type: "step", step: "assemble" }),
         shown({ type: "step", step: "write" }),
         JSON.stringify({
@@ -1526,12 +1530,19 @@ describe("GeoCode: the OSM tools", () => {
         progress: (update) => Effect.sync(() => void updates.push(update)),
       })
       expect(done.status).toBe("completed")
-      // Guards against the row losing its place: a busy instance is no progress, the steps before it are.
-      expect(updates.at(-3)).toMatchObject({ part: { part: 2, parts: 4 }, received: 2048, busy: true })
+      // Guards against the row losing its place: what the call waits on is no progress, the steps before it are.
+      const busy = updates.findIndex((update) => (update as { busy?: boolean }).busy === true)
+      expect(updates[busy]).toMatchObject({ part: { part: 2, parts: 4 }, received: 2048 })
+      expect(updates[busy].progressed).toBe(updates[busy - 1].progressed)
+      expect(updates[busy + 1]).toMatchObject({ asking: true, busy: false })
+      // Guards against a row still saying it waits for the call before it once its own has begun.
+      expect(updates[1]).toMatchObject({ queued: true })
+      expect(updates[2]).toMatchObject({ queued: false })
       expect(done.metadata).toMatchObject({
         description: "下载 POI",
         counted: { features: 1290, parts: 4 },
         busy: false,
+        queued: false,
         result: {
           path: path.join("data", "pois.gpkg"),
           layers: { points: 1234, polygons: 56 },
@@ -1543,6 +1554,61 @@ describe("GeoCode: the OSM tools", () => {
       expect(steps.map((step) => step.step)).toEqual(["area", "count", "download", "assemble", "write"])
       expect(steps.every((step) => typeof step.ended === "number")).toBe(true)
       expect(isJsonRecord(done.metadata)).toBe(true)
+    }),
+  )
+
+  it.effect("a download by id names the objects it could not download, and why", () =>
+    Effect.gen(function* () {
+      reset()
+      const output = path.join(PROJECT, "campus.gpkg")
+      const missing = "R3 could not be downloaded: OpenStreetMap's public servers made no progress for 5 minutes"
+      answer = started(() => [
+        JSON.stringify({
+          type: "result",
+          ok: true,
+          result: {
+            path: output,
+            layers: { polygons: 1 },
+            timestamp: "2026-10-26T03:10:00Z",
+            fields: ["osm_id", "name", "category"],
+            dropped: [],
+            missing: [missing],
+            gaps: [{ undownloaded: ["R3"], code: "stalled" }],
+          },
+        }),
+      ])
+      const registry = yield* Tool.Service
+      const done = yield* executeTool(
+        registry,
+        osm("osmgetobjects", { ids: ["W1", "R3"], output: "campus.gpkg", description: "下载校园" }),
+      )
+      // Guards against a download that wrote some of the objects being taken as unreadable, or quiet on the rest.
+      expect(done.status).toBe("completed")
+      expect(JSON.stringify(done.content)).toContain(missing)
+      expect(done.metadata).toMatchObject({ result: { gaps: [{ undownloaded: ["R3"], code: "stalled" }] } })
+    }),
+  )
+
+  it.effect("a look tells its tool row while it waits for the call before it", () =>
+    Effect.gen(function* () {
+      reset()
+      const looked = { area: "R1", rows: [], uncounted: [], together: null, remark: null }
+      answer = started(() => [
+        progress({ osm: { type: "queued" } }),
+        progress({ osm: { type: "received", bytes: 512 } }),
+        progress({ osm: { type: "started" } }),
+        JSON.stringify({ type: "result", ok: true, result: looked }),
+      ])
+      const updates: Tool.Metadata[] = []
+      const registry = yield* Tool.Service
+      const done = yield* executeTool(registry, {
+        ...osm("osmprobe", { area: "R1", tags: ["building"] }),
+        progress: (update) => Effect.sync(() => void updates.push(update)),
+      })
+      expect(done.status).toBe("completed")
+      // Guards against a look's row sitting silent behind a download, and against it saying more than that.
+      expect(updates).toEqual([{ queued: true }, { queued: false }])
+      expect(done.metadata).toEqual({ looked })
     }),
   )
 

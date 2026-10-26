@@ -150,7 +150,9 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
         agent: context.agent,
         source: { type: "tool", messageID: context.messageID, id: context.id },
       })
-      const result = yield* GeoEngine.call("osm.probe", { ...input, area }).pipe(Effect.catch(failed))
+      const result = yield* GeoEngine.call("osm.probe", { ...input, area }, GeoOsm.queue(context)).pipe(
+        Effect.catch(failed),
+      )
       const looked = decodeLooked(result)
       if (Exit.isFailure(looked)) {
         return yield* failed(new GeoEngine.Failure({ code: "unreadable", message: String(looked.cause) }))
