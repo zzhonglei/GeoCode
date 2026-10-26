@@ -584,7 +584,7 @@ test(
       assert.ok(done.ok, JSON.stringify(done))
       const result = done.result as { path: string; layers: object; gaps: object[]; timestamp: string }
       assert.deepEqual(result.layers, { points: 1, lines: 1, polygons: 1 })
-      assert.deepEqual(result.gaps, [{ undownloaded: ["R3"], code: "stalled" }])
+      assert.deepEqual(result.gaps, [{ undownloaded: ["R3"], code: "stalled", seconds: 3 }])
       assert.equal(result.timestamp, "2026-10-26T03:10:00Z")
       const file = read(result.path)
       // Guards against taking Nominatim's shape for GeoCode's rule: a closed residential road is a line.

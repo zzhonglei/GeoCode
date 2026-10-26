@@ -82,8 +82,8 @@ export type OsmText = {
   partMissing: (box: string) => string;
   absent: (ids: string) => string;
   unassembled: (ids: string) => string;
-  /** Objects a download by id did not get, as no server made progress or none could be reached. */
-  undownloaded: (ids: string, stalled: boolean) => string;
+  /** Objects a download by id did not get, as no server made progress for `minutes`, or none could be reached. */
+  undownloaded: (ids: string, minutes: number | undefined) => string;
   serverStopped: string;
   empty: (tags: string) => string;
   emptyObjects: string;
@@ -141,7 +141,7 @@ const TEXT: { en: OsmText } & Partial<Record<Locale, OsmText>> = {
     moreValues: (count) => `${count} more`,
     contextMissing: (place) => `No place called “${place}” was found, so the search was not narrowed to it.`,
     incomplete: 'Some of the search services did not answer, so this may not be everything.',
-    fallback: (category) => `No ${category} object has this name; these are the ${category} objects there.`,
+    fallback: (category) => `No ${category} object has this name; these are the named ${category} objects there.`,
     nothingFound: 'Nothing found.',
     noTerm: (term) => `OSM’s tagging conventions have nothing called “${term}”.`,
     noneHere: 'None here: ',
@@ -169,7 +169,7 @@ const TEXT: { en: OsmText } & Partial<Record<Locale, OsmText>> = {
     },
     downloadingPart: (part, parts) => `Downloading part ${part} of ${parts}`,
     busy: 'Servers busy, trying again',
-    queued: 'Waiting for the one before it to finish',
+    queued: 'Queued until the check or download before it finishes',
     querying: (since) => `Server working on the query, ${since} so far`,
     waiting: (since) => `Waiting for the server, ${since} so far`,
     counted: (features, parts) =>
@@ -187,10 +187,10 @@ const TEXT: { en: OsmText } & Partial<Record<Locale, OsmText>> = {
     partMissing: (box) => `One part was not downloaded in full: ${box}. A smaller area may come through.`,
     absent: (ids) => `OSM has no ${ids}.`,
     unassembled: (ids) => `No whole geometry could be assembled for ${ids}, so they were left out.`,
-    undownloaded: (ids, stalled) =>
-      stalled
-        ? `${ids} could not be downloaded: OpenStreetMap’s public servers made no progress, and may be too busy.`
-        : `${ids} could not be downloaded: OpenStreetMap’s public servers cannot be reached, or are all too busy.`,
+    undownloaded: (ids, minutes) =>
+      minutes === undefined
+        ? `${ids} could not be downloaded: OpenStreetMap’s public servers cannot be reached, or are all too busy.`
+        : `${ids} could not be downloaded: OpenStreetMap’s public servers made no progress for ${minutes} minutes, and may be too busy.`,
     serverStopped: 'The server stopped early, so the data may be incomplete.',
     empty: (tags) => `There is no ${tags} here, so no file was written.`,
     emptyObjects: 'OSM has none of these objects, so no file was written.',
@@ -248,7 +248,7 @@ const TEXT: { en: OsmText } & Partial<Record<Locale, OsmText>> = {
     moreValues: (count) => `还有 ${count} 种`,
     contextMissing: (place) => `没有找到“${place}”这个地方，检索没有限定在那里。`,
     incomplete: '有一部分检索服务没有回答，结果可能不全。',
-    fallback: (category) => `没有叫这个名字的 ${category} 对象，下面是那里带 ${category} 的对象。`,
+    fallback: (category) => `没有叫这个名字的 ${category} 对象，下面是那里有名字的 ${category} 对象。`,
     nothingFound: '没有找到。',
     noTerm: (term) => `OSM 的标注规范里没有叫“${term}”的东西。`,
     noneHere: '这里没有：',
@@ -270,7 +270,7 @@ const TEXT: { en: OsmText } & Partial<Record<Locale, OsmText>> = {
     },
     downloadingPart: (part, parts) => `正在下载第 ${part} 块，共 ${parts} 块`,
     busy: '服务器繁忙，正在重试',
-    queued: '排队中，等前一个完成',
+    queued: '排队中，等上一个查看或下载完成',
     querying: (since) => `服务器正在查询，已等 ${since}`,
     waiting: (since) => `等服务器回应，已等 ${since}`,
     counted: (features, parts) =>
@@ -288,10 +288,10 @@ const TEXT: { en: OsmText } & Partial<Record<Locale, OsmText>> = {
     partMissing: (box) => `有一块没有下全，范围是 ${box}。缩小范围再下一次可能就有了。`,
     absent: (ids) => `OSM 里没有 ${ids}。`,
     unassembled: (ids) => `${ids} 拼不出完整的几何，没有写入。`,
-    undownloaded: (ids, stalled) =>
-      stalled
-        ? `${ids} 没能下载：OpenStreetMap 的公共服务器一直没有进展，可能太忙。`
-        : `${ids} 没能下载：OpenStreetMap 的公共服务器连不上，或者都太忙。`,
+    undownloaded: (ids, minutes) =>
+      minutes === undefined
+        ? `${ids} 没能下载：OpenStreetMap 的公共服务器连不上，或者都太忙。`
+        : `${ids} 没能下载：OpenStreetMap 的公共服务器 ${minutes} 分钟没有进展，可能太忙。`,
     serverStopped: '服务器中途停下了，数据可能不全。',
     empty: (tags) => `这个范围里没有 ${tags} 的要素，没有写文件。`,
     emptyObjects: 'OSM 里没有这些对象，没有写文件。',
@@ -348,7 +348,7 @@ const TEXT: { en: OsmText } & Partial<Record<Locale, OsmText>> = {
     moreValues: (count) => `還有 ${count} 種`,
     contextMissing: (place) => `找不到「${place}」這個地方，檢索沒有限定在那裡。`,
     incomplete: '有一部分檢索服務沒有回應，結果可能不完整。',
-    fallback: (category) => `沒有叫這個名稱的 ${category} 物件，以下是那裡帶 ${category} 的物件。`,
+    fallback: (category) => `沒有叫這個名稱的 ${category} 物件，以下是那裡有名稱的 ${category} 物件。`,
     nothingFound: '沒有找到。',
     noTerm: (term) => `OSM 的標註規範裡沒有叫「${term}」的東西。`,
     noneHere: '這裡沒有：',
@@ -370,7 +370,7 @@ const TEXT: { en: OsmText } & Partial<Record<Locale, OsmText>> = {
     },
     downloadingPart: (part, parts) => `正在下載第 ${part} 塊，共 ${parts} 塊`,
     busy: '伺服器忙碌，正在重試',
-    queued: '排隊中，等前一個完成',
+    queued: '排隊中，等上一個查看或下載完成',
     querying: (since) => `伺服器正在查詢，已等 ${since}`,
     waiting: (since) => `等待伺服器回應，已等 ${since}`,
     counted: (features, parts) =>
@@ -388,10 +388,10 @@ const TEXT: { en: OsmText } & Partial<Record<Locale, OsmText>> = {
     partMissing: (box) => `有一塊沒有下載完整，範圍是 ${box}。縮小範圍再下載一次可能就有了。`,
     absent: (ids) => `OSM 裡沒有 ${ids}。`,
     unassembled: (ids) => `${ids} 組不出完整的幾何，沒有寫入。`,
-    undownloaded: (ids, stalled) =>
-      stalled
-        ? `${ids} 沒能下載：OpenStreetMap 的公共伺服器一直沒有進展，可能太忙。`
-        : `${ids} 沒能下載：OpenStreetMap 的公共伺服器連不上，或者都太忙。`,
+    undownloaded: (ids, minutes) =>
+      minutes === undefined
+        ? `${ids} 無法下載：OpenStreetMap 的公共伺服器連不上，或者都太忙。`
+        : `${ids} 無法下載：OpenStreetMap 的公共伺服器 ${minutes} 分鐘沒有進展，可能太忙。`,
     serverStopped: '伺服器中途停下了，資料可能不完整。',
     empty: (tags) => `這個範圍裡沒有 ${tags} 的圖徵，沒有寫入檔案。`,
     emptyObjects: 'OSM 裡沒有這些物件，沒有寫入檔案。',

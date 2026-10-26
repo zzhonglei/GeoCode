@@ -391,7 +391,7 @@ def _by_category(alternative, bounds, found):
 def search(request):
     name = (request.get("name") or "").strip()
     if not name:
-        raise Invalid("name is empty")
+        raise Invalid("name is empty: give the name to search for")
     alternative = _filters.parse(request["category"]) if request.get("category") else None
     context = (request.get("context") or "").strip()
     bounds, answered = _bounds(context) if context else (None, True)

@@ -135,7 +135,7 @@ def _missing(gaps):
             texts.append("no geometry could be assembled for %s" % ", ".join(gap["unassembled"]))
         elif "undownloaded" in gap:
             why = (
-                "OpenStreetMap's public servers made no progress for %d minutes" % round(_http.stall / 60)
+                "OpenStreetMap's public servers made no progress for %d minutes" % round(gap["seconds"] / 60)
                 if gap["code"] == "stalled"
                 else "OpenStreetMap's public servers could not be reached, or did not answer"
             )
@@ -263,10 +263,13 @@ def objects(request):
                 looked = _lookup.objects(rest)
             if not looked:
                 raise
-            unasked = {
-                "undownloaded": [_elements.name(ref) for ref in rest if ref not in looked],
-                "code": "stalled" if isinstance(error, _http.Stalled) else "unanswered",
-            }
+            missed = [_elements.name(ref) for ref in rest if ref not in looked]
+            # A call that stopped for no progress says for how long, as the answer and the tool row tell it.
+            unasked = (
+                {"undownloaded": missed, "code": "stalled", "seconds": _http.stall}
+                if isinstance(error, _http.Stalled)
+                else {"undownloaded": missed, "code": "unanswered"}
+            )
     if looked:
         # Nominatim's data follows OSM's within minutes: when it does not say how old it is, it is as of now.
         stamps.append(_lookup.timestamp() or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))

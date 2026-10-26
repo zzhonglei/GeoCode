@@ -131,6 +131,12 @@ export const make = (permission: Permission.Interface) => ({
   execute: (input: typeof Input.Type, context: Tool.Context) =>
     Effect.gen(function* () {
       const failed = GeoOsm.failed(name, context)
+      // Refused before GeoEngine or the user is asked, as the search itself would refuse it.
+      if (!input.name.trim()) {
+        return yield* failed(
+          new GeoEngine.Failure({ code: "invalid-params", message: "name is empty: give the name to search for" }),
+        )
+      }
       yield* GeoOsm.check("search", input).pipe(Effect.catch(failed))
       // As websearch asks: allowed by the default rules, so a rule can still make it ask or hide it.
       yield* permission.assert({

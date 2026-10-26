@@ -129,7 +129,8 @@ const Gap = Schema.Union([
   Schema.Struct({ part: Schema.Array(Schema.Number), said: Schema.String }),
   Schema.Struct({ absent: Schema.Array(Schema.String) }),
   Schema.Struct({ unassembled: Schema.Array(Schema.String) }),
-  Schema.Struct({ undownloaded: Schema.Array(Schema.String), code: Schema.Literals(["stalled", "unanswered"]) }),
+  Schema.Struct({ undownloaded: Schema.Array(Schema.String), code: Schema.Literal("stalled"), seconds: Schema.Number }),
+  Schema.Struct({ undownloaded: Schema.Array(Schema.String), code: Schema.Literal("unanswered") }),
   Schema.Struct({ said: Schema.String }),
 ])
 

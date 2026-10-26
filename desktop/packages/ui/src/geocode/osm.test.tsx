@@ -231,13 +231,13 @@ describe("GeoCode: the OSM tools' rows", () => {
     // Guards against objects whose rings do not close reading as objects OSM lacks.
     expect(unassembled.notes).toEqual([{ tone: 'warning', text: zh.unassembled('R1') }]);
     // Guards against objects no server answered for reading as objects OSM lacks, or without why.
-    const result = {
+    const result: Metadata = {
       path: 'data/campus.gpkg',
       layers: { polygons: 1 },
       timestamp: '2026-10-26T03:10:00Z',
       fields: ['osm_id', 'name', 'category'],
       gaps: [
-        { undownloaded: ['R3'], code: 'stalled' },
+        { undownloaded: ['R3'], code: 'stalled', seconds: 300 },
         { undownloaded: ['R4'], code: 'unanswered' },
       ],
     };
@@ -253,8 +253,8 @@ describe("GeoCode: the OSM tools' rows", () => {
       NOW,
     );
     expect(partial.notes).toEqual([
-      { tone: 'warning', text: zh.undownloaded('R3', true) },
-      { tone: 'warning', text: zh.undownloaded('R4', false) },
+      { tone: 'warning', text: zh.undownloaded('R3', 5) },
+      { tone: 'warning', text: zh.undownloaded('R4', undefined) },
     ]);
     const refusedDownload = osmDownloadView(ended({ result: { refused: 3912406, limit: 1000000 } }), 'en', NOW);
     expect(refusedDownload).toMatchObject({

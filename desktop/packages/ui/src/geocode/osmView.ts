@@ -293,7 +293,8 @@ const gap = z.union([
   z.object({ part: z.array(z.number()), said: z.string() }),
   z.object({ absent: z.array(z.string()) }),
   z.object({ unassembled: z.array(z.string()) }),
-  z.object({ undownloaded: z.array(z.string()), code: z.enum(['stalled', 'unanswered']) }),
+  z.object({ undownloaded: z.array(z.string()), code: z.literal('stalled'), seconds: z.number() }),
+  z.object({ undownloaded: z.array(z.string()), code: z.literal('unanswered') }),
   z.object({ said: z.string() }),
 ]);
 
@@ -379,7 +380,8 @@ const gapNote = (words: OsmText, missing: z.infer<typeof gap>): Note => {
   if ('absent' in missing) return { tone: 'warning', text: words.absent(missing.absent.join(', ')) };
   if ('unassembled' in missing) return { tone: 'warning', text: words.unassembled(missing.unassembled.join(', ')) };
   if ('undownloaded' in missing) {
-    return { tone: 'warning', text: words.undownloaded(missing.undownloaded.join(', '), missing.code === 'stalled') };
+    const minutes = missing.code === 'stalled' ? Math.round(missing.seconds / 60) : undefined;
+    return { tone: 'warning', text: words.undownloaded(missing.undownloaded.join(', '), minutes) };
   }
   return { tone: 'warning', text: words.serverStopped, said: missing.said };
 };

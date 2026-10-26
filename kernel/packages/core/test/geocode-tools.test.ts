@@ -1450,6 +1450,7 @@ describe("GeoCode: the OSM tools", () => {
         osm("osmprobe", { area: "R1", term: "school", tags: ["amenity"] }),
         osm("osmprobe", { area: "R1" }),
         osm("osmprobe", { area: "R1", keys: ["a", "b", "c", "d", "e", "f"] }),
+        osm("osmsearch", { name: "  " }),
       ]
       for (const call of written) expect((yield* executeTool(registry, call)).status).toBe("error")
       // Guards against the user approving a call that fails the moment it starts.
@@ -1573,7 +1574,7 @@ describe("GeoCode: the OSM tools", () => {
             fields: ["osm_id", "name", "category"],
             dropped: [],
             missing: [missing],
-            gaps: [{ undownloaded: ["R3"], code: "stalled" }],
+            gaps: [{ undownloaded: ["R3"], code: "stalled", seconds: 300 }],
           },
         }),
       ])
@@ -1585,7 +1586,9 @@ describe("GeoCode: the OSM tools", () => {
       // Guards against a download that wrote some of the objects being taken as unreadable, or quiet on the rest.
       expect(done.status).toBe("completed")
       expect(JSON.stringify(done.content)).toContain(missing)
-      expect(done.metadata).toMatchObject({ result: { gaps: [{ undownloaded: ["R3"], code: "stalled" }] } })
+      expect(done.metadata).toMatchObject({
+        result: { gaps: [{ undownloaded: ["R3"], code: "stalled", seconds: 300 }] },
+      })
     }),
   )
 
