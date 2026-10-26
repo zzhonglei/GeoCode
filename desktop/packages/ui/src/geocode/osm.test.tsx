@@ -38,8 +38,11 @@ const ended = (metadata: Metadata) =>
 const failed = (tool: string, error: string, metadata: Metadata = {}) =>
   call(tool, { status: 'error', input: FEATURES, error, metadata, time: { start: NOW - 100_000, end: NOW } });
 
-/** A download in its third part of four, last making progress `quiet` seconds ago. */
-const downloading = (quiet: number, busy = false) =>
+/** What a download waits on, as the kernel keeps it: by default, an answer arriving. */
+type Waits = { asking?: boolean; arriving?: boolean; busy?: boolean };
+
+/** A download in its third part of four, 6.4 MB received so far, last making progress `quiet` seconds ago. */
+const downloading = (quiet: number, waits: Waits = { asking: true, arriving: true }) =>
   running({
     description: FEATURES.description,
     started: NOW - 90_000,
@@ -52,14 +55,15 @@ const downloading = (quiet: number, busy = false) =>
     part: { part: 3, parts: 4 },
     received: 6.4 * 1024 * 1024,
     progressed: NOW - quiet * 1000,
-    busy,
+    ...waits,
   });
 
 describe("GeoCode: the OSM tools' rows", () => {
   const en = osmText('en');
 
-  // Guards against a stalled download looking like one still moving, and a busy server like a silent one.
-  test('a download says its part as it goes, and how long it has waited once a server keeps it waiting', () => {
+  // Guards against a busy server reading as one working on the query, an answer arriving as one not yet sent, and one
+  // that stopped arriving as one still moving.
+  test('a download says its part and what it has received as an answer arrives, and what keeps it waiting', () => {
     const moving = osmDownloadView(downloading(5), 'en', NOW);
     expect(moving.doing).toBe(en.downloadingPart(3, 4));
     expect(moving.percent).toBe(50);
@@ -70,11 +74,76 @@ describe("GeoCode: the OSM tools' rows", () => {
       share: 50,
       warn: undefined,
     });
+    const busy = osmDownloadView(downloading(80, { busy: true }), 'en', NOW);
+    expect(busy.doing).toBe(en.busy);
+    expect(busy.steps?.[2]).toMatchObject({ info: `${en.part(3, 4)} · ${en.received('6.4 MB')}`, warn: en.busy });
+    const stopped = osmDownloadView(downloading(80), 'en', NOW);
+    expect(stopped.doing).toBe(en.waiting(en.duration(80)));
+    expect(stopped.steps?.[2].warn).toBe(en.waiting(en.duration(80)));
+  });
 
-    const waiting = osmDownloadView(downloading(80), 'en', NOW);
-    expect(waiting.doing).toBe(en.waiting(en.duration(80)));
-    expect(waiting.steps?.[2].warn).toBe(en.waiting(en.duration(80)));
-    expect(osmDownloadView(downloading(80, true), 'en', NOW).doing).toBe(en.busy);
+  // Guards against what earlier parts brought reading as this part's answer arriving: the server sends it at once.
+  test('a step whose answer has not begun to arrive says the server is working on it, and for how long', () => {
+    const working = osmDownloadView(downloading(12, { asking: true }), 'en', NOW);
+    expect(working.doing).toBe(en.downloadingPart(3, 4));
+    expect(working.steps?.[2]).toMatchObject({
+      info: `${en.part(3, 4)} · ${en.querying(en.duration(12))}`,
+      warn: undefined,
+    });
+    const long = osmDownloadView(downloading(80, { asking: true }), 'en', NOW);
+    expect(long.doing).toBe(en.querying(en.duration(80)));
+    const counting = osmDownloadView(
+      running({
+        description: FEATURES.description,
+        started: NOW - 10_000,
+        steps: [
+          { step: 'area', started: NOW - 10_000, ended: NOW - 9_000 },
+          { step: 'count', started: NOW - 9_000 },
+        ],
+        progressed: NOW - 9_000,
+        asking: true,
+      }),
+      'en',
+      NOW,
+    );
+    expect(counting.steps?.[1]).toMatchObject({ state: 'now', info: en.querying(en.duration(9)) });
+    // Guards against a step with no query out, as one reading its boundary file, saying a server works on it.
+    const reading = osmDownloadView(downloading(12, {}), 'en', NOW);
+    expect(reading.steps?.[2].info).toBe(`${en.part(3, 4)} · ${en.received('6.4 MB')}`);
+  });
+
+  // Guards against a queued call reading as one a server keeps waiting, as it has asked none yet, and one that began
+  // as still queued.
+  test('a look or a download waiting for the one before it says so on its row, and no longer once it begins', () => {
+    const zh = osmText('zh-CN');
+    const queued = osmDownloadView(
+      running({
+        description: FEATURES.description,
+        started: NOW - 60_000,
+        steps: [],
+        progressed: NOW - 60_000,
+        busy: true,
+        queued: true,
+      }),
+      'zh-CN',
+      NOW,
+    );
+    expect(queued.doing).toBe(zh.queued);
+    expect(queued.steps?.map((step) => step.state)).toEqual(['later', 'later', 'later', 'later', 'later']);
+    expect(osmDownloadView(downloading(5), 'zh-CN', NOW).doing).toBe(zh.downloadingPart(3, 4));
+    const input = { area: 'R1', tags: ['building'] };
+    const looking = (metadata: Metadata) =>
+      call('osmprobe', { status: 'running', input, metadata, time: { start: NOW } });
+    const looked = call('osmprobe', {
+      status: 'completed',
+      input,
+      output: '',
+      metadata: { queued: true },
+      time: { start: NOW, end: NOW },
+    });
+    expect(osmProbeView(looking({ queued: true }), 'zh-CN').doing).toBe(zh.queued);
+    expect(osmProbeView(looking({ queued: false }), 'zh-CN').doing).toBeUndefined();
+    expect(osmProbeView(looked, 'zh-CN').doing).toBeUndefined();
   });
 
   test('a finished download says how many features it wrote, and opens to its file and what it misses', () => {
@@ -161,6 +230,32 @@ describe("GeoCode: the OSM tools' rows", () => {
     );
     // Guards against objects whose rings do not close reading as objects OSM lacks.
     expect(unassembled.notes).toEqual([{ tone: 'warning', text: zh.unassembled('R1') }]);
+    // Guards against objects no server answered for reading as objects OSM lacks, or without why.
+    const result = {
+      path: 'data/campus.gpkg',
+      layers: { polygons: 1 },
+      timestamp: '2026-10-26T03:10:00Z',
+      fields: ['osm_id', 'name', 'category'],
+      gaps: [
+        { undownloaded: ['R3'], code: 'stalled' },
+        { undownloaded: ['R4'], code: 'unanswered' },
+      ],
+    };
+    const partial = osmDownloadView(
+      call('osmgetobjects', {
+        status: 'completed',
+        input: { ids: ['W1', 'R3', 'R4'], output: 'data/campus.gpkg', description: '下载校园' },
+        output: 'Wrote …',
+        metadata: { result },
+        time: { start: NOW - 100_000, end: NOW },
+      }),
+      'zh-CN',
+      NOW,
+    );
+    expect(partial.notes).toEqual([
+      { tone: 'warning', text: zh.undownloaded('R3', true) },
+      { tone: 'warning', text: zh.undownloaded('R4', false) },
+    ]);
     const refusedDownload = osmDownloadView(ended({ result: { refused: 3912406, limit: 1000000 } }), 'en', NOW);
     expect(refusedDownload).toMatchObject({
       bad: true,

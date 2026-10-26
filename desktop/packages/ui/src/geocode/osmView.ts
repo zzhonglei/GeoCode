@@ -207,6 +207,7 @@ const looked = z.union([
 const probeMetadata = z.object({
   looked: looked.optional().catch(undefined),
   failure: failure.optional().catch(undefined),
+  queued: z.boolean().catch(false),
 });
 
 /** How many of the values a look at keys shows before the rest are folded away. */
@@ -226,7 +227,7 @@ export type Counts = {
   readonly foot?: string;
 };
 
-/** What a look's row shows: its counts, then notes on how the look went. */
+/** What a look's row shows: that it waits for the call before it while it does; then its counts, and how it went. */
 export const osmProbeView = (part: ToolPart, locale: Locale) => {
   const words = osmText(locale);
   const { running, error, metadata } = stateOf(part);
@@ -278,6 +279,7 @@ export const osmProbeView = (part: ToolPart, locale: Locale) => {
     title: words.probe,
     description: input.term ?? input.tags?.join(', ') ?? (input.keys ? words.values(input.keys.join(', ')) : ''),
     running,
+    doing: running && parsed?.queued ? words.queued : undefined,
     bad: error !== undefined,
     groups,
     notes,
@@ -290,6 +292,7 @@ const gap = z.union([
   z.object({ part: z.array(z.number()), said: z.string() }),
   z.object({ absent: z.array(z.string()) }),
   z.object({ unassembled: z.array(z.string()) }),
+  z.object({ undownloaded: z.array(z.string()), code: z.enum(['stalled', 'unanswered']) }),
   z.object({ said: z.string() }),
 ]);
 
@@ -308,7 +311,10 @@ const downloadMetadata = z.object({
   part: z.object({ part: z.number(), parts: z.number() }).optional().catch(undefined),
   received: z.number().optional().catch(undefined),
   progressed: z.number().optional().catch(undefined),
+  asking: z.boolean().catch(false),
+  arriving: z.boolean().catch(false),
   busy: z.boolean().catch(false),
+  queued: z.boolean().catch(false),
   result: z
     .union([
       z.object({
@@ -371,6 +377,9 @@ const gapNote = (words: OsmText, missing: z.infer<typeof gap>): Note => {
   }
   if ('absent' in missing) return { tone: 'warning', text: words.absent(missing.absent.join(', ')) };
   if ('unassembled' in missing) return { tone: 'warning', text: words.unassembled(missing.unassembled.join(', ')) };
+  if ('undownloaded' in missing) {
+    return { tone: 'warning', text: words.undownloaded(missing.undownloaded.join(', '), missing.code === 'stalled') };
+  }
   return { tone: 'warning', text: words.serverStopped, said: missing.said };
 };
 
@@ -387,17 +396,24 @@ export const osmDownloadView = (part: ToolPart, locale: Locale, now: number) => 
   const current = state?.steps.at(-1);
   const quiet = state?.progressed === undefined ? 0 : Math.max(0, Math.floor((now - state.progressed) / 1000));
   const network = current !== undefined && current.ended === undefined && NETWORK.includes(current.step);
-  // Said while the row waits on a server: busy, or silent for a while.
-  const held = !running
+  // While a query is out and its answer has not begun to arrive, the server is working on it: what has come so far is
+  // only the answer's head, or nothing (docs/OSM.md, section 9).
+  const querying = network && state?.asking && !state.arriving ? words.querying(words.duration(quiet)) : undefined;
+  // Said on the step, and on the row: waiting for the call before it, for a free server, or for a server gone silent.
+  const blocked = !running
     ? undefined
-    : state?.busy
-      ? words.busy
-      : network && quiet >= WAITING_AFTER_S
-        ? words.waiting(words.duration(quiet))
-        : undefined;
+    : state?.queued
+      ? words.queued
+      : state?.busy
+        ? words.busy
+        : network && !querying && quiet >= WAITING_AFTER_S
+          ? words.waiting(words.duration(quiet))
+          : undefined;
+  const held = blocked ?? (querying && quiet >= WAITING_AFTER_S ? querying : undefined);
   const downloading = current?.step === 'download' && current.ended === undefined ? state?.part : undefined;
   const share = downloading ? Math.round(((downloading.part - 1) / downloading.parts) * 100) : undefined;
   const received = state?.received === undefined ? undefined : words.received(size(state.received));
+  const onPart = downloading ? words.part(downloading.part, downloading.parts) : undefined;
 
   const steps = running
     ? order.map((name): StepRow => {
@@ -407,11 +423,11 @@ export const osmDownloadView = (part: ToolPart, locale: Locale, now: number) => 
         const info =
           name === 'count' && status === 'done' && counted
             ? words.counted(counted.features === null ? undefined : count(counted.features), counted.parts)
-            : name === 'download' && status !== 'later'
-              ? [downloading ? words.part(downloading.part, downloading.parts) : undefined, received]
-                  .filter(Boolean)
-                  .join(' · ') || undefined
-              : undefined;
+            : status === 'now' && querying
+              ? [onPart, querying].filter(Boolean).join(' · ')
+              : name === 'download' && status !== 'later'
+                ? [onPart, received].filter(Boolean).join(' · ') || undefined
+                : undefined;
         return {
           step: name,
           label: words.steps[name],
@@ -419,7 +435,7 @@ export const osmDownloadView = (part: ToolPart, locale: Locale, now: number) => 
           info,
           share: name === 'download' && status === 'now' ? share : undefined,
           time: status === 'done' && entry?.ended !== undefined ? seconds(entry.started, entry.ended) : undefined,
-          warn: status === 'now' ? held : undefined,
+          warn: status === 'now' ? blocked : undefined,
         };
       })
     : undefined;

@@ -287,8 +287,8 @@ const Written: React.FC<{ file: FileCard }> = ({ file }) => (
 );
 
 /**
- * A search's or a look's row: the OSM logo, the tool's title, dimmed while the call runs and red once it failed, and
- * what it is about; once it has ended, it opens to a panel of its own.
+ * A search's or a look's row: the OSM logo, the tool's title, dimmed while the call runs and red once it failed, what
+ * it is about, and what it waits for when it does; once it has ended, it opens to a panel of its own.
  */
 const OsmCallRow: React.FC<{
   part: ToolPart;
@@ -296,9 +296,10 @@ const OsmCallRow: React.FC<{
   title: string;
   description: string;
   running: boolean;
+  doing?: string;
   bad: boolean;
   panel: React.ReactNode;
-}> = ({ part, animate, title, description, running, bad, panel }) => {
+}> = ({ part, animate, title, description, running, doing, bad, panel }) => {
   const open = useRunRowOpen(part.id);
   const toggleOpen = useRunRowToggle();
   const opens = !running;
@@ -358,6 +359,15 @@ const OsmCallRow: React.FC<{
           >
             {description}
           </Text>
+          {doing ? (
+            <MinDurationShineText
+              active
+              className={cn('typography-meta flex-shrink-0 truncate whitespace-nowrap', ROW_TEXT_CLASS)}
+              style={{ color: 'var(--tools-description)' }}
+            >
+              {doing}
+            </MinDurationShineText>
+          ) : null}
         </div>
         {opens ? (
           <Slide open={open}>
@@ -403,6 +413,7 @@ const OsmProbeRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, ani
       title={view.title}
       description={view.description}
       running={view.running}
+      doing={view.doing}
       bad={view.bad}
       panel={
         <>
