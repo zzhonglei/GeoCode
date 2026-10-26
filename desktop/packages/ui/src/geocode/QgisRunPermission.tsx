@@ -42,7 +42,8 @@ export const Labelled: React.FC<{
   </div>
 );
 
-const Warning: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+/** A line of a geo tool's permission card in the warning colour, such as a write outside the project. */
+export const Warning: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="typography-meta flex items-start gap-1.5 text-[var(--status-warning)]">
     <Icon name="error-warning" className="mt-0.5 size-3.5 shrink-0" />
     <span className="min-w-0 break-words">{children}</span>

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { I18nKey } from '@/lib/i18n';
+import { geoSavePatterns } from '@/geocode/geoTools'; // GeoCode: see describeSavePatterns
 
 /**
  * What a permission request asks for, in the user's terms. OpenCode names the
@@ -121,6 +122,7 @@ export const canSavePermission = (save: readonly string[] | undefined): boolean 
  */
 export const describeSavePatterns = (action: string, save: readonly string[]): string[] => {
   if (save.length === 0 || save.every((pattern) => pattern === '*')) return [];
-  if (action === 'qgisrun') return []; // GeoCode: its card names the algorithm and the directories, never their IDs and globs
+  const geo = geoSavePatterns(action, save); // GeoCode: a geo tool's own saves, as its card names them
+  if (geo) return geo; // GeoCode: see above
   return action.toLowerCase() === 'external_directory' ? save.map(stripDirectoryGlob) : [...save];
 };

@@ -4,18 +4,37 @@ import { useI18nStore, type Locale } from '@/lib/i18n';
 import type { ToolInput } from '@/lib/opencode/model';
 import type { PermissionRequest } from '@/types/permission';
 
+import { osmText } from './osmText';
+
 /** The permission actions of the geo tools that have a rule of their own; readgeodata asks as read. */
-export const GEO_TOOL_ACTIONS = ['qgisdoc', 'qgisrun', 'geerun'] as const;
+export const GEO_TOOL_ACTIONS = [
+  'qgisdoc',
+  'qgisrun',
+  'geerun',
+  'osmsearch',
+  'osmprobe',
+  'osmgetobjects',
+  'osmgetfeatures',
+] as const;
 
 /** The geo tools, which the conversation shows with their own icons and titles. */
-const GEO_TOOLS = ['qgisdoc', 'readgeodata', 'qgisrun', 'geerun'] as const;
+const GEO_TOOLS = [
+  'qgisdoc',
+  'readgeodata',
+  'qgisrun',
+  'geerun',
+  'osmsearch',
+  'osmprobe',
+  'osmgetobjects',
+  'osmgetfeatures',
+] as const;
 
 type GeoTool = (typeof GEO_TOOLS)[number];
 
 type GeoAction = (typeof GEO_TOOL_ACTIONS)[number];
 
 /** The tools whose calls show as rows of their own merged ones. */
-type MergedTool = Exclude<GeoTool, 'qgisrun' | 'geerun'>;
+type MergedTool = 'qgisdoc' | 'readgeodata';
 
 type Texts = {
   /** The title of each tool with a rule of its own, which is also its settings row's label. */
@@ -29,7 +48,7 @@ type Texts = {
   files: (count: number) => string;
   /** qgisrun's row while it runs, naming the algorithm. */
   runs: (algorithm: string) => string;
-  /** The lines of qgisrun's and geerun's permission cards. */
+  /** The lines the geo tools' own permission cards share. */
   card: {
     /** What follows a label on the card's first lines. */
     colon: string;
@@ -62,10 +81,34 @@ type Texts = {
   };
 };
 
+/** The OSM tools' titles and askings, kept with their other texts. */
+const osmActions = (locale: Locale) => {
+  const words = osmText(locale);
+  return {
+    titles: {
+      osmsearch: words.search,
+      osmprobe: words.probe,
+      osmgetobjects: words.downloadObjects,
+      osmgetfeatures: words.downloadFeatures,
+    },
+    asks: words.asks,
+  };
+};
+
 const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
   en: {
-    titles: { qgisdoc: 'QGIS Docs', qgisrun: 'Run QGIS Algorithm', geerun: 'Run Earth Engine Script' },
-    asks: { qgisdoc: 'Look up QGIS algorithms', qgisrun: 'Request to run QGIS algorithm', geerun: 'Request to run Earth Engine script' },
+    titles: {
+      qgisdoc: 'QGIS Docs',
+      qgisrun: 'Run QGIS Algorithm',
+      geerun: 'Run Earth Engine Script',
+      ...osmActions('en').titles,
+    },
+    asks: {
+      qgisdoc: 'Look up QGIS algorithms',
+      qgisrun: 'Request to run QGIS algorithm',
+      geerun: 'Request to run Earth Engine script',
+      ...osmActions('en').asks,
+    },
     allGroups: 'All groups',
     running: { qgisdoc: 'Reading QGIS Documentation', readgeodata: 'Reading Geospatial Data' },
     done: { qgisdoc: 'QGIS Documentation Read', readgeodata: 'Geospatial Data Read' },
@@ -95,8 +138,18 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
     },
   },
   'zh-CN': {
-    titles: { qgisdoc: 'QGIS 文档', qgisrun: '运行 QGIS 算法', geerun: '运行 Earth Engine 脚本' },
-    asks: { qgisdoc: '查阅 QGIS 算法', qgisrun: '请求执行 QGIS 算法', geerun: '请求执行 Earth Engine 脚本' },
+    titles: {
+      qgisdoc: 'QGIS 文档',
+      qgisrun: '运行 QGIS 算法',
+      geerun: '运行 Earth Engine 脚本',
+      ...osmActions('zh-CN').titles,
+    },
+    asks: {
+      qgisdoc: '查阅 QGIS 算法',
+      qgisrun: '请求执行 QGIS 算法',
+      geerun: '请求执行 Earth Engine 脚本',
+      ...osmActions('zh-CN').asks,
+    },
     allGroups: '全部分组',
     running: { qgisdoc: '正在阅读 QGIS 文档', readgeodata: '正在读取地理数据' },
     done: { qgisdoc: '已阅读 QGIS 文档', readgeodata: '已读取地理数据' },
@@ -126,8 +179,18 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
     },
   },
   'zh-TW': {
-    titles: { qgisdoc: 'QGIS 文件', qgisrun: '執行 QGIS 演算法', geerun: '執行 Earth Engine 腳本' },
-    asks: { qgisdoc: '查閱 QGIS 演算法', qgisrun: '請求執行 QGIS 演算法', geerun: '請求執行 Earth Engine 腳本' },
+    titles: {
+      qgisdoc: 'QGIS 文件',
+      qgisrun: '執行 QGIS 演算法',
+      geerun: '執行 Earth Engine 腳本',
+      ...osmActions('zh-TW').titles,
+    },
+    asks: {
+      qgisdoc: '查閱 QGIS 演算法',
+      qgisrun: '請求執行 QGIS 演算法',
+      geerun: '請求執行 Earth Engine 腳本',
+      ...osmActions('zh-TW').asks,
+    },
     allGroups: '全部分組',
     running: { qgisdoc: '正在閱讀 QGIS 文件', readgeodata: '正在讀取地理資料' },
     done: { qgisdoc: '已閱讀 QGIS 文件', readgeodata: '已讀取地理資料' },
@@ -232,7 +295,7 @@ export const geeBackgroundText = (locale: Locale) => textIn(locale).background;
 /** What qgisrun's row says while the algorithm runs. */
 export const qgisRunning = (algorithm: string, locale: Locale) => textIn(locale).runs(algorithm);
 
-/** The labels and warnings of qgisrun's and geerun's permission cards. */
+/** The labels and warnings the geo tools' own permission cards share. */
 export const geoCardText = (locale: Locale) => textIn(locale).card;
 
 /** How many of a script's lines geerun's card shows; scripts run long, so the rest is only counted. */
@@ -253,14 +316,15 @@ export const geoPermissionTitle = (action: string): string | undefined => (isGeo
 const askingAlgorithm = z.object({ algorithm: qgisAlgorithm.optional().catch(undefined) });
 
 /**
- * The name a permission request shows beside its tool's icon: qgisrun's asks to run the algorithm it names, geerun's to
- * run a script, qgisdoc's is the tool's title.
+ * The name a permission request shows beside its tool's icon: qgisrun's asks to run the algorithm it names, qgisdoc's is
+ * the tool's title, the other geo tools' say what they ask to do.
  */
 export const geoPermissionName = (permission: PermissionRequest, locale: Locale): string => {
   const words = textIn(locale);
-  if (permission.action === 'geerun') return words.asks.geerun;
   if (permission.action === 'qgisdoc') return words.titles.qgisdoc;
-  if (permission.action !== 'qgisrun') return permission.action;
+  if (permission.action !== 'qgisrun') {
+    return isGeoAction(permission.action) ? words.asks[permission.action] : permission.action;
+  }
   const algorithm = askingAlgorithm.safeParse(permission.metadata ?? {}).data?.algorithm;
   return algorithm ? `${words.asks.qgisrun} ${qgisAlgorithmText(algorithm, locale).name}` : words.asks.qgisrun;
 };
@@ -268,10 +332,29 @@ export const geoPermissionName = (permission: PermissionRequest, locale: Locale)
 /** The settings label of a geo tool's permission rule; undefined for any other key. */
 export const geoActionLabel = (key: string): string | undefined => (isGeoAction(key) ? text().titles[key] : undefined);
 
-/** A run is approved on its card, which shows what it will do and its warnings; the tray can only deny it or open it. */
-export const reviewInApp = (action: string) => action === 'qgisrun' || action === 'geerun';
+/**
+ * What "always allow" names for a geo tool's own saves; undefined for any other action. Nothing for qgisrun, whose
+ * card names the algorithm and the directories, never their ids and globs; the directory an OSM download writes in
+ * outside the project, without its glob.
+ */
+export const geoSavePatterns = (action: string, save: readonly string[]): string[] | undefined => {
+  if (action === 'qgisrun') return [];
+  if (action !== 'osmgetobjects' && action !== 'osmgetfeatures') return undefined;
+  return save.map((pattern) => (pattern === '/*' ? pattern : pattern.replace(/\/\*$/, '')));
+};
 
-/** The tray's label for a geo tool's request, in English like the rest of the tray; a run shows no algorithm id. */
+const IN_APP: ReadonlySet<string> = new Set(['qgisrun', 'geerun', 'osmgetobjects', 'osmgetfeatures']);
+
+/**
+ * A run or a download is approved on its card, which shows what it will do, where it writes and its warnings; the tray
+ * can only deny it or open it.
+ */
+export const reviewInApp = (action: string) => IN_APP.has(action);
+
+/**
+ * The tray's label for a geo tool's request, in English like the rest of the tray; a run shows no algorithm id, nor a
+ * download its folder.
+ */
 export const geoTrayLabel = (action: string, resources: readonly string[]): string | undefined => {
   if (!isGeoAction(action)) return undefined;
   const title = TEXT.en.titles[action];
@@ -279,13 +362,17 @@ export const geoTrayLabel = (action: string, resources: readonly string[]): stri
   return resource ? `${title}: ${resource}` : title;
 };
 
-// In English like the status's other phrases. Reads and lookups are not counted: parallel reads may page through one
-// file, and upstream counts no searches either.
+// In English like the status's other phrases. Reads, lookups and downloads are not counted: parallel reads may page
+// through one file, upstream counts no searches either, and a download is one whatever it holds.
 const STATUS = {
   readgeodata: () => 'reading geospatial data',
   qgisdoc: () => 'reading QGIS docs',
   qgisrun: (count) => (count === 1 ? 'running a QGIS algorithm' : `running ${count} QGIS algorithms`),
   geerun: (count) => (count === 1 ? 'running an Earth Engine script' : `running ${count} Earth Engine scripts`),
+  osmsearch: () => 'searching OpenStreetMap',
+  osmprobe: () => 'checking OpenStreetMap tags',
+  osmgetobjects: () => 'downloading from OpenStreetMap',
+  osmgetfeatures: () => 'downloading from OpenStreetMap',
 } satisfies Record<GeoTool, (count: number) => string>;
 
 /** What the status over the composer says while `count` calls of a geo tool run. */

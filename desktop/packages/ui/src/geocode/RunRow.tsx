@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 
 import type { Line, Tone } from './runLines';
 import { useRunRowOpen, useRunRowToggle } from './runRowOpen';
+import { Slide } from './Slide';
 
 // As the static tool rows draw theirs.
 const ROW_TEXT_CLASS = '!text-[length:var(--text-meta)] !leading-5 sm:!leading-6 tracking-normal';
@@ -105,10 +106,10 @@ const Log: React.FC<{ lines: readonly Line[] }> = ({ lines }) => {
 };
 
 /**
- * A run of a geo tool, as one row: its logo and what GeoAgent says the step is for; while it runs, what it is doing,
- * its percentage when known, and the time so far; once done, the time it took, the title in the error colour when
- * `bad`. It opens to the run's lines, and `note` under them. As a new tool row, with `animate`, it wipes in and its
- * title sweeps in.
+ * A run of a geo tool, as one row: its logo and what GeoAgent says the step is for, and `after` it what the run made;
+ * while it runs, what it is doing, its percentage when known, and the time so far; once done, the time it took, the
+ * title in the error colour when `bad`. It opens to the run's lines, and `note` under them, or to a `panel` of its
+ * own that slides open. As a new tool row, with `animate`, it wipes in and its title sweeps in.
  */
 export const RunRow: React.FC<{
   id: string;
@@ -116,13 +117,15 @@ export const RunRow: React.FC<{
   logo: React.ReactNode;
   title: string;
   bad: boolean;
+  after?: React.ReactNode;
   doing?: string;
   percent?: number;
   start?: number;
   end?: number;
   lines: readonly Line[];
   note?: React.ReactNode;
-}> = ({ id, animate, logo, title, bad, doing, percent, start, end, lines, note }) => {
+  panel?: React.ReactNode;
+}> = ({ id, animate, logo, title, bad, after, doing, percent, start, end, lines, note, panel }) => {
   const counted = useCounted(percent, doing);
   const open = useRunRowOpen(id);
   const toggleOpen = useRunRowToggle();
@@ -174,6 +177,7 @@ export const RunRow: React.FC<{
           >
             {title}
           </Text>
+          {after}
           <span className="min-w-0 flex-1">
             {doing ? (
               <MinDurationShineText
@@ -194,7 +198,9 @@ export const RunRow: React.FC<{
             ) : null}
           </span>
         </div>
-        {open && (lines.length || note) ? (
+        {panel !== undefined ? (
+          <Slide open={open}>{panel}</Slide>
+        ) : open && (lines.length || note) ? (
           <div className="relative ms-2 min-w-0 ps-3">
             <span
               aria-hidden="true"

@@ -1722,7 +1722,7 @@ const AssistantMessageBody = React.memo(({
                     continue;
                 }
 
-                // --- GeoCode: side-by-side calls of a geo tool show as one row of its own, as does a QGIS or Earth Engine run; new, they reveal as the rows below do ---
+                // --- GeoCode: side-by-side calls of a geo tool show as one row of its own, as does each QGIS or Earth Engine run and OSM call; new, they reveal as the rows below do ---
                 if (hasGeoRow(toolName)) {
                     rendered.push(
                         <FadeInOnReveal key={`tool-${toolPart.id}`}>

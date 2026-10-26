@@ -5,6 +5,8 @@ import { isSkippedTimelineMessage } from '@/components/chat/lib/timelineRoles';
 import type { ChatMessageEntry } from '@/components/chat/lib/turns/types';
 import type { Part, ToolPart } from '@/lib/opencode/model';
 
+import { isOsmTool } from './osmView';
+
 /** Calls of one geo tool with nothing shown between them, which the conversation shows as one row. */
 type GeoToolRun = {
   /**
@@ -46,9 +48,12 @@ export const isMergedGeoTool = (toolName: string) => MERGED.has(toolName);
 
 export const isMergedGeoPart = (part: Part): part is ToolPart => part.type === 'tool' && isMergedGeoTool(part.tool);
 
-/** Whether a tool's calls show as a geo tool's own rows: runs of merged calls, or a QGIS or Earth Engine run each. */
+/**
+ * Whether a tool's calls show as a geo tool's own rows: runs of merged calls, or a QGIS or Earth Engine run or an OSM
+ * call each.
+ */
 export const hasGeoRow = (toolName: string) =>
-  isMergedGeoTool(toolName) || toolName === 'qgisrun' || toolName === 'geerun';
+  isMergedGeoTool(toolName) || toolName === 'qgisrun' || toolName === 'geerun' || isOsmTool(toolName);
 
 /** Whether a part shows in the conversation, and so parts the calls on either side of it. */
 const shows = (part: Part, showReasoningTraces: boolean) => {

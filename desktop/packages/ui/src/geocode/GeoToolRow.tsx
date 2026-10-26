@@ -13,6 +13,8 @@ import { EarthIcon } from './EarthIcon';
 import { GeeRunRow } from './GeeRunRow';
 import { geoDataPath, geoFileCount, geoRunTitle, geoToolDescription } from './geoTools';
 import { isGeoRunRow, useGeoToolRunStore } from './geoToolRuns';
+import { OsmRow } from './OsmRows';
+import { isOsmTool } from './osmView';
 import { QgisLogo } from './QgisLogo';
 import { QgisRunRow } from './QgisRunRow';
 
@@ -217,6 +219,8 @@ export const GeoRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, a
     <QgisRunRow part={part} animate={animate} />
   ) : part.tool === 'geerun' ? (
     <GeeRunRow part={part} animate={animate} />
+  ) : isOsmTool(part.tool) ? (
+    <OsmRow part={part} animate={animate} />
   ) : (
     <GeoToolRow part={part} animate={animate} />
   );
