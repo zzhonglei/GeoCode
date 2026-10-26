@@ -27,7 +27,7 @@ export const FeaturesInput = Schema.Struct({
   tags: GeoOsm.Tags,
   geometry: Schema.optionalKey(Schema.Literals(["original", "point"])).annotate({
     description:
-      '"original" (the default) keeps each feature as mapped; "point" makes each one a point inside it, and records whether it was mapped as a point, a line or an area in a column, original_geometry',
+      '"original" (the default) keeps each feature as mapped; "point" makes each one a point on or inside it, and records whether it was mapped as a point, a line or an area in a column, original_geometry',
   }),
   fields: Schema.optionalKey(GeoOsm.Fields),
   output: GeoOsm.Output,
