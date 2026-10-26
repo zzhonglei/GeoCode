@@ -104,7 +104,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 
 使用 GitLab 服务商时,这里还有两份 GitLab 模型信息的缓存。
 
-状态目录 `~/.local/state/geocode/` 每次启动就建立。里面有 `locks/` 下的锁文件,安装 npm 包与克隆外部仓库时使用;内核的持久终端启动过时,还有它的运行目录 `pty/`。
+状态目录 `~/.local/state/geocode/` 每次启动就建立。里面有 `locks/` 下的锁文件,安装 npm 包与克隆外部仓库时使用,OSM 的工具用其中一个记下上一次请求 Nominatim 的时刻(`OSM.md` 第 3 节);内核的持久终端启动过时,还有它的运行目录 `pty/`。
 
 临时目录 `$TMPDIR/geocode/` 是提示 agent 存放临时文件的地方,agent 可以不经询问读写。系统临时目录下另有几类以 `geocode-` 开头的短期文件:查看 git 差异与暂存部分修改时的中间文件(`geocode-branch-diff-*`、`geocode-hunk-*`)、内核列出项目改动时未跟踪文件的中间文件(`geocode-untracked-*`)、多方案运行保存快照时的中间文件(`geocode-snapshot-*`),经应用推送 Git LFS 文件与在贡献者的工作树里执行检出钩子时的中间目录(`geocode-lfs-upload-*`、`geocode-checkout-hook-*`),用户的 git 配置里有 `safe.directory` 条目时,经应用拉取或推送前抄出这些条目的 `geocode-git-trust-*`(每次运行至多一个,不删),macOS 上还有转换应用图标时的 `geocode-icon-*.png`。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`。每次启动时,运行时还会在系统临时目录解出一个 `.bun-*.dylib` 库文件。这些都是临时文件,删除不影响使用。
 
