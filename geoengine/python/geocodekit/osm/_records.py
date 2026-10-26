@@ -65,7 +65,7 @@ def columns(features, named, worth, asked, extra):
 
 
 def category(feature, named):
-    """What a feature is: its preset's tags, else the first key the filters named that it carries."""
+    """What a feature is: its preset's category, else the first key the filters named that it carries."""
     if feature.preset is not None:
         found = _presets.category(feature.preset, feature.tags)
         if found:

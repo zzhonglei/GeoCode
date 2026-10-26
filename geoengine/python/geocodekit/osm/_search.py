@@ -276,12 +276,15 @@ def _descriptions(items):
     return found
 
 
-def _location(address, own):
+def _location(address):
+    """Where an object is, as Nominatim's address has it: its city, its state and its country. The city is the address's
+    own, which in mainland China is the district (Hongshan District, not Wuhan)."""
     if not address:
         return None
-    city = next((address[part] for part in CITY if address.get(part) and address[part] not in own), None)
-    parts = [part for part in (city, address.get("country")) if part]
-    return ", ".join(parts) or None
+    city = next((address[part] for part in CITY if address.get(part)), None)
+    parts = [city, address.get("state"), address.get("country")]
+    # A place with no city below its state names the state once.
+    return ", ".join(part for at, part in enumerate(parts) if part and part not in parts[:at]) or None
 
 
 def _kind(ref, tags):
@@ -326,7 +329,6 @@ def _describe(ref, entry, overpass, nominatim, items):
             names.setdefault(key, value)
     kind = _kind(ref, tags)
     preset = _presets.match(tags, kind)
-    own = {value for value in (names.get("name"), names.get("name:en"), hit.get("name")) if value}
     sources = set(entry["sources"])
     matched = []
     if tags.get("wikidata") in items:
@@ -340,7 +342,7 @@ def _describe(ref, entry, overpass, nominatim, items):
         "category": _presets.category(preset, tags) if preset else None,
         "name": names.get("name"),
         "name_en": names.get("name:en"),
-        "location": _location(hit.get("address"), own),
+        "location": _location(hit.get("address")),
         "center": [round(center["lat"], 6), round(center["lon"], 6)] if center else None,
         # Ranked after the place it is named after, and shown fainter.
         "transit": _transit(tags),

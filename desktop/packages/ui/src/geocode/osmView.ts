@@ -144,7 +144,8 @@ export const osmSearchView = (part: ToolPart, locale: Locale) => {
   if (found?.context && found.context_found === false)
     notes.push({ tone: 'info', text: words.contextMissing(found.context) });
   if (found?.incomplete) notes.push({ tone: 'warning', text: words.incomplete });
-  if (found?.fallback) notes.push({ tone: 'info', text: words.fallback(found.category ?? '') });
+  if (found?.fallback && found.candidates.length)
+    notes.push({ tone: 'info', text: words.fallback(found.category ?? '') });
   if (found && !found.candidates.length) notes.push({ tone: 'info', text: words.nothingFound });
   const candidates = (found?.candidates ?? []).map(
     (item): Candidate => ({

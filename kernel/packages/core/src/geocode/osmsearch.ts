@@ -15,15 +15,15 @@ export const description = DESCRIPTION
 export const Input = Schema.Struct({
   name: Schema.String.annotate({
     description:
-      'The name, best the official one in the local language as OSM writes it, such as "國立臺灣大學" or "广州白云国际机场"',
+      'The name to search for, as OSM writes it, such as "武汉大学" or "广州白云国际机场". Only the name: give where the place is in "context"',
   }),
   context: Schema.optionalKey(Schema.String).annotate({
     description:
-      'Where it is, to tell places of the same name apart: a place name, such as "Wuhan" or "新北市", or the id of an area found before, such as "R3076268"',
+      'Where the place is, to tell places of the same name apart: its city, such as "Wuhan" or "Wuhan, China". Not a district or a smaller place. Objects far from it are left out',
   }),
   category: Schema.optionalKey(Schema.String).annotate({
     description:
-      'What it is, as a tag filter such as "amenity=university" or "aeroway": only such objects are kept; with "context", the named objects of that kind there are listed when no name matches',
+      'A tag filter for what the place is, such as "amenity=university", or "aeroway" for any value. Only objects meeting it are returned, so a wrong filter hides the right one. With "context", if nothing found meets it, lists named objects of this kind there instead',
   }),
 })
 
@@ -70,7 +70,7 @@ const candidateLines = (candidate: typeof Candidate.Type, index: number) => {
   const what = [
     candidate.preset && candidate.category
       ? `${candidate.preset} (${candidate.category})`
-      : (candidate.category ?? "unknown kind"),
+      : candidate.preset || candidate.category || "unknown kind",
     candidate.size && candidate.kind !== "point"
       ? `${candidate.kind}, about ${candidate.size[0]} × ${candidate.size[1]} km`
       : candidate.kind,
@@ -79,7 +79,7 @@ const candidateLines = (candidate: typeof Candidate.Type, index: number) => {
   const where = [
     names.join(" / ") || "(no name)",
     candidate.location,
-    candidate.center ? `${candidate.center[0]}, ${candidate.center[1]}` : undefined,
+    candidate.center ? `centre ${candidate.center[0]}, ${candidate.center[1]} (lat, lon)` : undefined,
   ].filter(Boolean)
   return [
     `${index + 1}. ${candidate.id}: ${what.join(", ")}`,
@@ -90,24 +90,36 @@ const candidateLines = (candidate: typeof Candidate.Type, index: number) => {
 
 const answer = (found: typeof Found.Type) => {
   const within = found.context && found.context_found ? ` in ${found.context}` : ""
-  const notes = [
+  const narrowed = [
     ...(found.context && found.context_found === false
       ? [`No place named "${found.context}" was found, so the search was not narrowed to it.`]
       : []),
     ...(found.context && found.context_found === null
       ? [`"${found.context}" could not be looked up, so the search was not narrowed to it.`]
       : []),
-    ...(found.incomplete ? ["Part of the search did not complete, so these candidates may be incomplete."] : []),
   ]
-  if (!found.candidates.length) {
-    return [...notes, `No object named "${found.name}"${within} was found.`].join("\n")
-  }
+  const none = `No ${found.category ? `${found.category} object` : "object"} named "${found.name}"${within} was found`
+  // Said apart from a search that completed: the object may well be there.
+  const missed = found.incomplete
+    ? `${none}, but part of the search did not complete, so it may still exist.`
+    : `${none}.`
+  const listed = found.candidates.length
+  if (!listed) return [...narrowed, missed].join("\n")
   const opening = found.fallback
-    ? `No object named "${found.name}"${within} was found. These are the named ${found.category} objects there:`
-    : found.total > found.candidates.length
-      ? `${found.total} candidates for "${found.name}"${within}; the ${found.candidates.length} best:`
+    ? `${missed} These are ${found.total > listed ? `${listed} of the` : "the"} named ${found.category} objects there:`
+    : found.total > listed
+      ? `${found.total} candidates for "${found.name}"${within}; the ${listed} best:`
       : `${found.total} candidate${found.total === 1 ? "" : "s"} for "${found.name}"${within}:`
-  return [...notes, opening, "", found.candidates.map(candidateLines).join("\n\n")].join("\n")
+  // A list the search fell back to says already that the search did not complete.
+  return [
+    ...narrowed,
+    ...(found.incomplete && !found.fallback
+      ? ["Part of the search did not complete, so these candidates may be incomplete."]
+      : []),
+    opening,
+    "",
+    found.candidates.map(candidateLines).join("\n\n"),
+  ].join("\n")
 }
 
 export const make = (permission: Permission.Interface) => ({

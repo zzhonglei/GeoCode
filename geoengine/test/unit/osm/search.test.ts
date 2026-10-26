@@ -77,7 +77,13 @@ const overpass = (query: string): Reply =>
         {
           type: "relation",
           id: 1,
-          tags: { type: "multipolygon", amenity: "university", name: "國立臺北大學", wikidata: "Q707456" },
+          tags: {
+            type: "multipolygon",
+            amenity: "university",
+            education: "university",
+            name: "國立臺北大學",
+            wikidata: "Q707456",
+          },
           bounds: { minlat: 24.9387, minlon: 121.3615, maxlat: 24.9477, maxlon: 121.374 },
         },
       ])
@@ -98,6 +104,8 @@ test(
       assert.deepEqual(ids(done.result), ["R1", "W5", "N7"])
       const [first] = (done.result as { candidates: Record<string, unknown>[] }).candidates
       assert.equal(first.location, "New Taipei, Taiwan")
+      // Guards against the newer of two ways of tagging the same thing being given: most such objects in OSM lack it.
+      assert.equal(first.category, "amenity=university")
       assert.equal(first.name_en, "National Taipei University")
       assert.equal(first.description, "national university in Taiwan")
       assert.equal((done.result as { incomplete: boolean }).incomplete, false)

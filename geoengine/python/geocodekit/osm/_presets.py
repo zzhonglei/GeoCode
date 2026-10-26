@@ -12,19 +12,31 @@ _by_key = None
 # Every key a match depends on, so features differing in no other key share one match.
 _scored = None
 _matched = {}
+# By a preset's id, the unsearchable preset of the same name whose tags it adds: the older tagging of the same thing, as
+# amenity=university for education=university.
+_older = None
 
 
 def data():
-    global _data, _by_key, _scored
+    global _data, _by_key, _scored, _older
     if _data is None:
         with open(os.path.join(os.path.dirname(__file__), "_data.json"), encoding="utf-8") as source:
             _data = json.load(source)
         _by_key = {}
         _scored = set()
+        named = {}
         for preset in _data["presets"]:
             for key in preset["tags"]:
                 _by_key.setdefault(key, []).append(preset)
             _scored.update(preset["tags"], preset.get("addTags") or {})
+            named.setdefault(preset["name"], []).append(preset)
+        _older = {}
+        for preset in _data["presets"]:
+            added = preset.get("addTags") or {}
+            for other in named[preset["name"]]:
+                kept = other.get("searchable") is False and other["tags"] != preset["tags"]
+                if kept and all(added.get(key) == value for key, value in other["tags"].items()):
+                    _older[preset["id"]] = other
     return _data
 
 
@@ -88,12 +100,18 @@ def match(tags, kind):
 
 
 def category(preset, tags):
-    """A feature's category as the tags its preset is matched by, with the feature's own value for a wildcard."""
-    return ";".join(
+    """A feature's category as the tags its preset is matched by, with the feature's own value for a wildcard, written
+    as a tag filter is, so that a look or a download can be asked for it as it stands: the older tags of the same thing
+    when the feature carries them, as many features carry only those, and several tags each in brackets."""
+    older = _older.get(preset["id"])
+    if older is not None and all(_holds(tags, key, value) for key, value in older["tags"].items()):
+        preset = older
+    conditions = [
         "%s=%s" % (key, tags.get(key, value) if value == "*" else value)
         for key, value in preset["tags"].items()
         if not key.endswith(":*")
-    )
+    ]
+    return conditions[0] if len(conditions) == 1 else "".join("[%s]" % condition for condition in conditions)
 
 
 WORD = re.compile(r"[a-z0-9]+")
