@@ -9,7 +9,7 @@ GeoCode 建在两个开源项目之上:
 - [OpenCode](https://github.com/anomalyco/opencode):Agent 引擎,位于 `kernel/`;
 - [OpenChamber](https://github.com/openchamber/openchamber):桌面应用,位于 `desktop/`。
 
-地理能力由 GeoCode 自己的地理引擎 GeoEngine 提供,位于 `geoengine/`(见 [`docs/GEOENGINE.md`](docs/GEOENGINE.md))。
+地理能力由 GeoCode 自己的地理引擎 GeoEngine 提供,位于 `geoengine/`(见 [`docs/geoengine/GEOENGINE.md`](docs/geoengine/GEOENGINE.md))。
 
 ## 文档
 
@@ -20,7 +20,7 @@ GeoCode 建在两个开源项目之上:
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 设计大纲:定位、原则与路线 |
 | [`docs/DESKTOP.md`](docs/DESKTOP.md) | 桌面应用由什么组成、守哪些边界 |
 | [`docs/PATHS.md`](docs/PATHS.md) | GeoCode 在用户电脑上与项目里产生与读取的文件,以及怎样删除 |
-| [`docs/GEOENGINE.md`](docs/GEOENGINE.md) | 地理引擎 GeoEngine:各能力域共用的框架 |
+| [`docs/geoengine/GEOENGINE.md`](docs/geoengine/GEOENGINE.md) | 地理引擎 GeoEngine:各能力域共用的框架 |
 | [`docs/PYTHON.md`](docs/PYTHON.md) | 内置的 Python 环境:组成、构建与分发,在用户电脑上的准备,GeoAgent 怎样使用 |
 | [`docs/GEOCODEKIT.md`](docs/GEOCODEKIT.md) | GeoCode 的 Python 包 `geocodekit`:结构、函数的约定、运行的场合与安装 |
 | [`docs/QGIS.md`](docs/QGIS.md) | QGIS 能力域:读取地理数据、查阅与执行算法 |

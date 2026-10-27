@@ -26,7 +26,7 @@ GeoCode 与用户自己装的 OpenCode、OpenChamber 可以同时安装、同时
 ```
 ~/.config/geocode/
 ├── geocode.json        全局配置:模型与服务商、权限、MCP 服务、网页搜索等。也可以写成 geocode.jsonc(允许注释)
-├── machine.json        本机地理执行环境的配置:QGIS 的位置与 GEE 的 Cloud 项目,GeoEngine 写入,也可以手改(见 GEOENGINE.md 第 3.2 节)
+├── machine.json        本机地理执行环境的配置:QGIS 的位置与 GEE 的 Cloud 项目,GeoEngine 写入,也可以手改(见 GEOENGINE.md 第 3.3 节)
 ├── AGENTS.md           写给所有项目的指示,每次对话都会带上
 ├── agents/             自定义 agent,每个一份 .md
 ├── commands/           自定义命令,每个一份 .md
