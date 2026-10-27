@@ -193,7 +193,10 @@ const make = Effect.gen(function* () {
     "bin",
     process.platform === "win32" ? "opencode.exe" : "opencode",
   )
+  /* --- GeoCode: not looked up on disk, where it is the user's own OpenCode; the kernel never runs from there ---
   const curlBinary = yield* fs.realPath(curlPath).pipe(Effect.orElseSucceed(() => curlPath))
+  --- /GeoCode --- */
+  const curlBinary = curlPath // GeoCode: see above
 
   // On Windows a bare `bash` may be the WSL launcher, which cannot run the installer against Windows paths.
   const installerBash = Effect.fnUntraced(function* () {

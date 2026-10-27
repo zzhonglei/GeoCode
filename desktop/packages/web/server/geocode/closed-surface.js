@@ -46,6 +46,9 @@ const CLOSED_PATTERNS = Object.freeze([
   ['PUT', /^\/api\/projects\/[^/]+\/config\/shared$/],
   ['POST', /^\/api\/pty\/[^/]+\/connect-token$/],
   ['POST', /^\/api\/experimental\/persistent-pty\/[^/]+\/connect-token$/],
+  // The kernel's persistent terminals, which the app does not use. Creating one is what starts the kernel's terminal
+  // daemon, whose sockets go under /tmp/opencode-pty-<uid>; the kernel's plugins can only read a terminal.
+  ['POST', /^\/api\/experimental\/session\/[^/]+\/terminal$/],
 ]);
 
 // Express matches routes case-insensitively, and runs GET routes for HEAD, so the comparison must too.

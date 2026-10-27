@@ -107,7 +107,9 @@ export const createServerUtilsRuntime = (dependencies) => {
       scoopGlobal ? path.join(scoopGlobal, 'shims') : '',
       path.join(programData, 'chocolatey', 'bin'),
       path.join(localAppData, 'Microsoft', 'WindowsApps'),
+      /* --- GeoCode: not the folder the user's own OpenCode installs itself into; what the user's PATH holds stays ---
       path.join(userProfile, '.opencode', 'bin'),
+      --- /GeoCode --- */
       path.join(userProfile, '.local', 'bin'),
     ];
 
