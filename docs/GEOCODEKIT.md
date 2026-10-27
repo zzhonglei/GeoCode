@@ -23,7 +23,7 @@ geocodekit/
 └── _*        各子包共用的内部模块
 ```
 
-以后的能力域各加一个子包,以能力域的简称命名,已预留 `carto`(制图)。`osm` 是 OSM 工具运行的模块与它们读的预设库,还没有公开的函数(`OSM.md` 第 11 节)。制图不用 `map`:`from geocodekit import map` 会盖掉 Python 自带的 `map`。
+以后的能力域各加一个子包,以能力域的简称命名,已预留 `carto`(制图)。`osm` 是 OSM 工具运行的模块与它们读的预设库,给 GeoAgent 的说明里不提它。制图不用 `map`:`from geocodekit import map` 会盖掉 Python 自带的 `map`。
 
 脚本按能力域导入子包,用简短的名字:
 
