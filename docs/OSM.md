@@ -27,7 +27,7 @@ GeoAgent 得到四个工具:
 
 工具在内置 Python 环境的 `base` 里执行(`PYTHON.md` 第 3 节),链路与 `geerun` 相同:内核里的工具请 GeoEngine 确认这次调用能开始,再按权限询问(第 8 节),GeoEngine 启动 `base` 的 Python 运行 GeoCode 的运行脚本,由它调用 `geocodekit` 的子包 `osm`(`GEOCODEKIT.md`)。一次调用一个进程,结束就退出。
 
-放在 Python 里,是因为内置环境已经只按代理变量联网(`PYTHON.md` 第 6.1 节),OSM 的请求照全应用的代理规则走,不必另做;GeoEngine 用的 Node 不读代理。几何的运算(凸包、带洞多面的收回、代表点)交给 shapely,写 GeoPackage 交给 GDAL,都是现成的实现。
+放在 Python 里,是因为内置环境已经只按代理变量联网(`PYTHON.md` 第 6 节),OSM 的请求照全应用的代理规则走,不必另做;GeoEngine 用的 Node 不读代理。几何的运算(凸包、带洞多面的收回、代表点)交给 shapely,写 GeoPackage 交给 GDAL,都是现成的实现。
 
 OSM 没有要配置与检查的东西:服务是公共的,环境是内置的。所以它不登记状态,没有指示灯,也不在「地理环境」设置页里(`GEOENGINE.md` 第 3.4 节);一个指示灯只能说「公共服务此刻不顺」,用户既无从修,也不必修。工具调用时等内置环境就绪,服务答不上就在答复里如实说明。
 

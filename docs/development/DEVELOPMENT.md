@@ -43,6 +43,14 @@ OSM 工具读的预设库 `geocodekit/osm/_data.json` 由 `geoengine/` 里的 `b
 
 内置的 Python 环境(`PYTHON.md`)由 `./scripts/stage-python.sh` 按 `geoengine/environment/` 里的定义准备:用 pixi-pack 把锁定清单里这个平台的包打成 `python.tar`,与这个平台的 pixi-unpack 一起暂存到 `desktop/packages/electron/resources/python/`,打包时作为额外资源收进应用。它按 `tools.json` 下载固定版本的工具并核对校验和,工具与下载的包放在仓库的 `.cache/python/`,不读用户自己的 pixi 配置。环境的标识没变时它直接跳过,所以开发模式的启动脚本每次启动前也运行它。默认准备本机平台的环境,并在 `.cache/python/` 里装一份,核对 Python 的版本并运行 `pip check`;给出 `win32-x64` 或 `darwin-arm64` 也能为另一个平台准备,只是不装、不核对。改了 `geoengine/environment/pixi.toml` 之后,运行 `./scripts/stage-python.sh --lock` 重新生成两个平台的锁定清单 `pixi.lock`,与它一起提交。
 
+更新锁定清单之后,在两个平台上检查环境(还没有做成脚本,手动运行)。检查在工作环境里运行,不设任何变量,再在用户环境里的 `GDAL_DATA`、`PROJ_DATA` 等指向别处、`~/.gdal/gdalrc` 关掉了驱动时另跑一遍:
+
+- 工作环境的 Python 启动时不打印任何错误,启动文件设的变量都指向 `base`(启动文件出错时 Python 照常运行,只是变量没设,所以要专门查)。
+- 每个预装的包都能导入;经 pyogrio 读写 GeoPackage、经 rasterio 读写 GeoTIFF,两者与 `osgeo` 用的是同一份 GDAL;GDAL 的驱动插件都能加载;`gdalwarp`、`ogr2ogr` 能运行;一次真实的坐标变换成功(投影数据库缺失时它才失败)。
+- Python 的 `urllib`、requests 与 GDAL 读网上的文件都能经 HTTPS 连上(证书的位置错了才失败)。
+- 设了代理变量时,urllib、requests、aiohttp 与 GDAL 的请求都经过它(本机一个只记录、不转发的代理就能查,不联网);没设时系统设置里的代理不被读到。
+- 装到带空格与中文的路径后照样通过。
+
 ## 5. 在沙箱里启动应用
 
 开发时在沙箱主目录里启动。应用把配置、数据与缓存放在主目录下名为 `geocode` 的几个目录里(`PATHS.md`),在沙箱里启动,开发与测试留下的会话、登录与设置就不会混进真实主目录里的那一份,删掉沙箱即可从头再来。
@@ -58,7 +66,7 @@ bun run electron:dev:bundled
 
 壳与内核都从 `HOME` 推导自己的数据、配置与缓存目录,前提是环境里没有设 `XDG_*` 变量,设了的话两者都会改用它们。Electron 自己的配置目录在 macOS 上按系统账户找主目录,不看 `HOME`,所以要用 `OPENCHAMBER_DESKTOP_USER_DATA_DIR` 单独指定。系统的偏好设置同样按系统账户存放,沙箱挡不住:开发时写进 Electron 通用的 `~/Library/Preferences/com.github.Electron.plist`(打包出的应用写的那一份见 `PATHS.md` 第 5 节),里面只有文件对话框的位置这类系统记下的状态。Electron 的日志写在 `$SANDBOX/Library/Logs/` 下。
 
-`electron:dev:bundled` 先构建界面,再用构建好的界面启动,使用第 4 节暂存的内核;没有暂存时启动日志提示「bundled OpenCode CLI missing」,内核起不来。`electron:dev` 用热更新的界面,适合改界面时快速查看,但它另起的壳服务端不在 Electron 里,本机访问控制(`DESKTOP.md` 第 4 节)在那里不生效,也接不到 GeoEngine,地理环境与地理工具都不可用;验证这些要用 `electron:dev:bundled` 或打包出的应用。窗口的加载动画等内置的 Python 环境就绪(`PYTHON.md` 第 7 节),新沙箱第一次启动要多等一会;`electron:dev` 没有 GeoEngine,不等。
+`electron:dev:bundled` 先构建界面,再用构建好的界面启动,使用第 4 节暂存的内核;没有暂存时启动日志提示「bundled OpenCode CLI missing」,内核起不来。`electron:dev` 用热更新的界面,适合改界面时快速查看,但它另起的壳服务端不在 Electron 里,本机访问控制(`DESKTOP.md` 第 4 节)在那里不生效,也接不到 GeoEngine,地理环境与地理工具都不可用;验证这些要用 `electron:dev:bundled` 或打包出的应用。窗口的加载动画等内置的 Python 环境就绪(`PYTHON.md` 第 8 节),新沙箱第一次启动要多等一会;`electron:dev` 没有 GeoEngine,不等。
 
 沙箱里没有登录信息,要对话就在沙箱里连接一个模型服务,或在沙箱的全局配置里配一个本机的 OpenAI 兼容接口。opencode.ai 的免费模型不对 GeoCode 开放。测完删掉沙箱目录即可。
 

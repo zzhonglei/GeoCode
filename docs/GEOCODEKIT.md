@@ -69,7 +69,7 @@ region = gee.region("数据/台北.geojson")
 
 | | GeoCode 的工具 | GeoAgent 自己的脚本 |
 |---|---|---|
-| 环境 | `base`(结果确定,`PYTHON.md` 第 8 节) | 工作环境 |
+| 环境 | `base`(结果确定,`PYTHON.md` 第 11 节) | 工作环境 |
 | 谁启动 | GeoEngine | GeoAgent 在 shell 里 |
 | 进度 | 报给工具行 | 不报 |
 | 能用的子包 | 全部 | 不依赖工具场合的子包 |
@@ -84,11 +84,11 @@ region = gee.region("数据/台北.geojson")
 
 源码在 `geoengine/python/`:一个标准的 Python 项目,`pyproject.toml` 写明包名;它不经 pip 构建与安装(见下),所以不声明构建后端。版本就是 GeoCode 的版本号(`DESKTOP.md` 第 6 节),`pyproject.toml` 只声明它是动态的,不另写一份:GeoEngine 写安装记录时从 GeoCode 的版本号取,改了 GeoCode 的版本号,包的版本随之改,没有第二处要对齐。构建 GeoEngine 时包的文件与 GeoCode 的版本号原样编进它的代码,随它分发:打包版里 GeoEngine 在应用的归档中,Python 读不到那里的文件,应用里也没有写着版本号的源码,编进代码的 GeoEngine 随时取得到。构建因此不需要 Python。
 
-GeoEngine 自己把包的文件写进 `base` 的 `site-packages`(每次启动核对,见下),并写下标准的安装记录(`dist-info`):`pip show geocodekit` 看得到它,`importlib.metadata` 读得到版本,报错的 traceback 指向磁盘上的文件。`base` 的 `EXTERNALLY-MANAGED` 标记照旧挡住 pip 与 uv,GeoAgent 与任何运行都不往 `base` 里装包;装这个包的只有 GeoEngine,方式与它写启动文件相同(`PYTHON.md` 第 6 节)。
+GeoEngine 自己把包的文件写进 `base` 的 `site-packages`(每次启动核对,见下),并写下标准的安装记录(`dist-info`):`pip show geocodekit` 看得到它,`importlib.metadata` 读得到版本,报错的 traceback 指向磁盘上的文件。`base` 的 `EXTERNALLY-MANAGED` 标记照旧挡住 pip 与 uv,GeoAgent 与任何运行都不往 `base` 里装包;装这个包的只有 GeoEngine,方式与它写启动文件相同(`PYTHON.md` 第 5 节)。
 
 工作环境继承 `base`(`--system-site-packages`),所以 GeoAgent 的脚本直接导入就能用;GeoCode 的工具在 `base` 里运行,同样直接导入。
 
-包没有自己的版本记录,跟着 GeoCode 走:每次启动时,GeoEngine 把磁盘上包的每个文件(连同安装记录)与这一版 GeoCode 自带的逐个比较内容,不同的与缺了的重写,多出来的删掉,与启动文件一样(`PYTHON.md` 第 6 节)。包很小,比较很快,比的又是文件本身:用到的总是这一版 GeoCode 的包,开发时改了包,下次启动用的就是改过的;中途退出留下的半截包、被改坏的包,下次启动同样被换掉。环境只在锁定清单变了时才重装。核对在预热之前,窗口与工具碰到的总是这一版的包。
+包没有自己的版本记录,跟着 GeoCode 走:每次启动时,GeoEngine 把磁盘上包的每个文件(连同安装记录)与这一版 GeoCode 自带的逐个比较内容,不同的与缺了的重写,多出来的删掉,与启动文件一样(`PYTHON.md` 第 5 节)。包很小,比较很快,比的又是文件本身:用到的总是这一版 GeoCode 的包,开发时改了包,下次启动用的就是改过的;中途退出留下的半截包、被改坏的包,下次启动同样被换掉。环境只在锁定清单变了时才重装。核对在预热之前,窗口与工具碰到的总是这一版的包。
 
 开发版与打包版共用数据目录时,后启动的那个换上自己的包;两个同时开着,先开的那个会用到另一个的包。开发时在沙箱主目录里启动(`DEVELOPMENT.md` 第 5 节),碰不到这种情况。
 
@@ -104,7 +104,7 @@ GeoEngine 自己把包的文件写进 `base` 的 `site-packages`(每次启动核
 
 包只用 `base` 里预装的包。新函数要用新的包,同一批改动里把它加进锁定清单(`PYTHON.md` 第 4 节);用户更新到这一版时环境随之重装。
 
-在 GeoAgent 的脚本里,函数用的是工作环境里的包。GeoAgent 照规范不用 pip 重装预装的包(`PYTHON.md` 第 5 节)时,它们与 `base` 里的版本一致;重装过的,函数可能出错。
+在 GeoAgent 的脚本里,函数用的是工作环境里的包。GeoAgent 照规范不用 pip 重装预装的包(`PYTHON.md` 第 7 节)时,它们与 `base` 里的版本一致;重装过的,函数可能出错。
 
 ## 8. 测试
 

@@ -73,15 +73,15 @@ GEE 的函数是 GeoCode 的 Python 包 `geocodekit` 的子包 `gee`(`GEOCODEKIT
 
 ## 7. 环境
 
-GEE 只在内置 Python 环境的 `base` 里运行(`PYTHON.md` 第 8 节),不用 GeoAgent 的工作环境,也不支持用户自己的 Python。包的版本由锁定清单定下,GEE 的函数用到的 earthengine-api 与 geedim 的接口只需要对一个确定的版本核对;GeoAgent 往工作环境里装的包碰不到 GEE。代价是脚本只能用预装的包,工具说明写明这一点:要别的包的处理放到 `geerun` 之外,用工作环境去做。答复只写 Python 的版本,不写解释器的路径:知道了 `base` 在哪,GeoAgent 就可能拿它做自己的事、往里装包。下载直接用 geedim,不用 geemap:它的下载只是转调 geedim 已废弃的接口,又带着二十个直接依赖。
+GEE 只在内置 Python 环境的 `base` 里运行(`PYTHON.md` 第 11 节),不用 GeoAgent 的工作环境,也不支持用户自己的 Python。包的版本由锁定清单定下,GEE 的函数用到的 earthengine-api 与 geedim 的接口只需要对一个确定的版本核对;GeoAgent 往工作环境里装的包碰不到 GEE。代价是脚本只能用预装的包,工具说明写明这一点:要别的包的处理放到 `geerun` 之外,用工作环境去做。答复只写 Python 的版本,不写解释器的路径:知道了 `base` 在哪,GeoAgent 就可能拿它做自己的事、往里装包。下载直接用 geedim,不用 geemap:它的下载只是转调 geedim 已废弃的接口,又带着二十个直接依赖。
 
-GEE 的检查等内置环境就绪才开始,在那之前状态停在检查中;环境准备失败时也一直停在检查中,窗口这时显示出错页,不经窗口的调用只得到「还在检查」。环境就绪时预热已经做完(`PYTHON.md` 第 6 节),检查与第一次运行碰不上冷加载:检查有时限,运行按空闲计时,而第一次加载动态库时脚本可能几十秒一声不响。GeoEngine 运行 `base` 的方式与运行内置环境的其他地方相同:隔离模式,只给网络相关的变量与 `HOME`(`PYTHON.md` 第 6.1 节)。
+GEE 的检查等内置环境就绪才开始,在那之前状态停在检查中;环境准备失败时也一直停在检查中,窗口这时显示出错页,不经窗口的调用只得到「还在检查」。环境就绪时预热已经做完(`PYTHON.md` 第 5 节),检查与第一次运行碰不上冷加载:检查有时限,运行按空闲计时,而第一次加载动态库时脚本可能几十秒一声不响。GeoEngine 运行 `base` 的方式与运行内置环境的其他地方相同:隔离模式,只给网络相关的变量与 `HOME`(`PYTHON.md` 第 6 节)。
 
 Google Cloud 项目在设置里填,写进 `machine.json` 的 `"gee": "<项目 ID>"`;项目 ID 只有用户知道,不猜。登录用 Google 账号,只在设置里完成:GeoAgent 不发起登录,因为登录的命令要写明 `base` 的解释器。
 
 凭据只认 earthengine-api 自己的那一份,位置固定为主目录下的 `.config/earthengine/credentials`(macOS 按 `HOME`,Windows 按 `USERPROFILE`),设置里的登录写的就是它。检查与运行都从这个文件显式加载凭据,不像 earthengine-api 缺省那样退回 Google Cloud 的默认凭据(ADC):ADC 可以经环境变量指向一个服务账号,让 GEE 悄悄换一个身份;gcloud 登录得到的凭据常缺 Earth Engine 的授权范围;隔离运行时,它在两个平台上找得到的程度也不同。没有这个文件就是没登录,即使本机有 ADC。
 
-Earth Engine 的请求与 geedim 的请求(`gee.download` 的分块下载等)都只按代理变量走,与模型服务的请求一样;不读系统设置里的代理。这是内置环境自己的做法(`PYTHON.md` 第 6.1 节),GEE 不另作处理。
+Earth Engine 的请求与 geedim 的请求(`gee.download` 的分块下载等)都只按代理变量走,与模型服务的请求一样;不读系统设置里的代理。这是内置环境自己的做法(`PYTHON.md` 第 6 节),GEE 不另作处理。
 
 在设置里登录时,GeoEngine 启动的 Python 在本机回环地址上临时监听一个端口,等浏览器带回授权码,登录结束即关闭。本机的其他程序可以借这个端口提前结束登录,但伪造的授权码没有用:换取凭据要用只有这个 Python 持有的校验码。
 
