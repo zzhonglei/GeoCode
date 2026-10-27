@@ -2,13 +2,15 @@ export * as GeoGuards from "./guards.js"
 
 import type { Permission } from "../permission.js"
 import { Wildcard } from "../util/wildcard.js"
+import { OsmGetTools } from "./osmget.js"
+import { QgisRunTool } from "./qgisrun.js"
 
 /**
  * The geo tools that ask about some calls even where the rules allow them: qgisrun about a listed algorithm, a write
  * outside the project or into a database (docs/QGIS.md, section 4), and the OSM downloads about a write outside the
  * project (docs/OSM.md, section 8). A call names what it asks about in its asking's metadata, as `guards`.
  */
-export const TOOLS: ReadonlySet<string> = new Set(["qgisrun", "osmgetobjects", "osmgetfeatures"])
+export const TOOLS: ReadonlySet<string> = new Set([QgisRunTool.name, OsmGetTools.objectsName, OsmGetTools.featuresName])
 
 type Verdict = typeof Permission.Effect.Type
 

@@ -38,7 +38,7 @@ def _rows(term):
     rows = []
     seen = set()
     for preset in _presets.search(term, PRESETS):
-        own = {key: value for key, value in preset["tags"].items()}
+        own = dict(preset["tags"])
         found = [(own, "preset")]
         extra = {key: value for key, value in (preset.get("addTags") or {}).items() if key not in own}
         found.extend(({key: value}, "added") for key, value in extra.items())

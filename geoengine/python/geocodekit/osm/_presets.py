@@ -6,6 +6,9 @@ import json
 import os
 import re
 
+# Letters of any script, so that a word with an accent, as "café", is not cut into a shorter one.
+WORD = re.compile(r"[^\W_]+")
+
 _data = None
 # Presets by the keys of their tags: a feature is matched only against those its own keys can satisfy.
 _by_key = None
@@ -112,10 +115,6 @@ def category(preset, tags):
         if not key.endswith(":*")
     ]
     return conditions[0] if len(conditions) == 1 else "".join("[%s]" % condition for condition in conditions)
-
-
-# Letters of any script, so that a word with an accent, as "café", is not cut into a shorter one.
-WORD = re.compile(r"[^\W_]+")
 
 
 def _words(text):

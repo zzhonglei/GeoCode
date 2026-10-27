@@ -22,7 +22,7 @@ const MARKER = "__GEOCODE_OSM__"
  * official one at its own address alone, as its two servers are one instance. Written here alone and given to the
  * Python with each call.
  */
-export const SERVICES = {
+const SERVICES = {
   overpass: [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",

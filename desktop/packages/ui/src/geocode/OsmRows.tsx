@@ -10,9 +10,10 @@ import type { ToolPart } from '@/lib/opencode/model';
 import { cn } from '@/lib/utils';
 
 import { OsmLogo } from './OsmLogo';
-import { osmText } from './osmText';
+import { type Kind, osmText } from './osmText';
 import {
   type Candidate,
+  count,
   type Counts,
   type FileCard,
   type Note,
@@ -32,7 +33,7 @@ const ROW_TEXT_CLASS = '!text-[length:var(--text-meta)] !leading-5 sm:!leading-6
 const SHOWN_CANDIDATES = 5;
 
 /** What an OSM object was mapped as: a dot, a line or an outline. */
-const GeometryMark: React.FC<{ kind: 'point' | 'line' | 'area'; label: string; className?: string }> = ({
+const GeometryMark: React.FC<{ kind: Kind; label: string; className?: string }> = ({
   kind,
   label,
   className,
@@ -157,8 +158,6 @@ const Candidates: React.FC<{
     </>
   );
 };
-
-const count = (value: number) => value.toLocaleString('en-US');
 
 const CountBars: React.FC<{
   counts: Counts;
@@ -476,7 +475,6 @@ const OsmDownloadRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, 
       percent={view.percent}
       start={view.start}
       end={view.end}
-      lines={[]}
       panel={<Panel>{panel}</Panel>}
     />
   );

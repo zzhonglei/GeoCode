@@ -1,8 +1,12 @@
 import type { Locale } from '@/lib/i18n';
 
-type Kind = 'point' | 'line' | 'area';
+export type Kind = 'point' | 'line' | 'area';
 type Layer = 'points' | 'lines' | 'polygons';
-export type OsmStep = 'area' | 'count' | 'download' | 'assemble' | 'write';
+
+/** A download's steps, in the order it takes them. */
+export const OSM_STEPS = ['area', 'count', 'download', 'assemble', 'write'] as const;
+
+export type OsmStep = (typeof OSM_STEPS)[number];
 
 /**
  * What the OSM tools' rows say (docs/OSM.md, section 9), in the interface's language: the tools' results are facts

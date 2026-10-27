@@ -32,7 +32,13 @@ const missing = await fs.access(base).then(
   () => `start GeoCode once, to install its base environment in ${data}`,
 )
 
-/** The layers of a GeoPackage, each with its features' attributes and geometry as WKT, and its description. */
+/** A layer of a GeoPackage as read: its coordinate system, its features' attributes, and their geometry as WKT. */
+type Layer = { crs: string; rows: ({ osm_id: string } & Record<string, unknown>)[]; wkt: string[] }
+
+/**
+ * The layers of a GeoPackage, each with its features' attributes and geometry as WKT, and its description. A file
+ * holds only the layers it has features for; the type names those the tests read.
+ */
 const read = (file: string) => {
   const script = [
     "import json, sqlite3, sys, pyogrio",
@@ -45,7 +51,12 @@ const read = (file: string) => {
     "out['descriptions'] = [row[0] for row in sqlite3.connect(path).execute('select description from gpkg_contents')]",
     "print(json.dumps(out, ensure_ascii=False))",
   ].join("\n")
-  return JSON.parse(execFileSync(base, ["-I", "-c", script, file], { encoding: "utf-8" })) as Record<string, any>
+  return JSON.parse(execFileSync(base, ["-I", "-c", script, file], { encoding: "utf-8" })) as {
+    points: Layer
+    lines: Layer
+    polygons: Layer
+    descriptions: string[]
+  }
 }
 
 const ring = (points: readonly (readonly [number, number])[]) => points.map(([lat, lon]) => ({ lat, lon }))
@@ -133,11 +144,11 @@ test(
       const polygons = layers.polygons
       assert.equal(polygons.crs, "EPSG:4326")
       // Guards against a hole taken as part of the area, and against cutting what crosses its edge.
-      assert.deepEqual(polygons.rows.map((row: { osm_id: string }) => row.osm_id).sort(), ["R9", "W1", "W3"])
-      const crossing = polygons.wkt[polygons.rows.findIndex((row: { osm_id: string }) => row.osm_id === "W3")]
+      assert.deepEqual(polygons.rows.map((row) => row.osm_id).sort(), ["R9", "W1", "W3"])
+      const crossing = polygons.wkt[polygons.rows.findIndex((row) => row.osm_id === "W3")]
       assert.match(crossing, /1\.1 1\.1/)
       // Guards against a multipolygon losing its inner ring.
-      const water = polygons.wkt[polygons.rows.findIndex((row: { osm_id: string }) => row.osm_id === "R9")]
+      const water = polygons.wkt[polygons.rows.findIndex((row) => row.osm_id === "R9")]
       assert.equal(water.split("), (").length, 2, water)
       // Guards against "*" keeping every tag only when asked alone.
       assert.ok("osm_tags" in polygons.rows[0], JSON.stringify(polygons.rows[0]))
@@ -156,6 +167,8 @@ test(
   "points of interest come as one point inside each, mapped as an area or not, in a file of their own",
   { skip: missing },
   async () => {
+    // Guards against a place mapped as an area lost to points alone, its point falling outside it, and a file of the
+    // same name overwritten.
     // An L-shaped school, whose centroid lies outside it, and a café mapped as a point.
     const school = {
       type: "way",
@@ -272,6 +285,7 @@ test(
   "a download too large for OSM's public servers is refused before anything is downloaded",
   { skip: missing },
   async () => {
+    // Guards against a download the servers cannot bear being started anyway, and leaving a file behind.
     const services = await serve({ overpass: overpass(2_000_000, []) })
     const engine = await start(base, services.services)
     try {
@@ -292,6 +306,7 @@ test(
   "a download whose whole area goes uncounted is still refused once its parts count too many",
   { skip: missing },
   async () => {
+    // Guards against a download let through because the server could not count its whole area.
     // Two million features spread evenly over the box; the count of the whole times out on the server.
     const cell = /\)\(([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)\);/
     const services = await serve({
@@ -389,6 +404,7 @@ test(
 )
 
 test("objects the server stopped early on are not taken for objects OSM lacks", { skip: missing }, async () => {
+  // Guards against an object missing from an answer cut short being reported as one OSM does not have.
   const remark = "runtime error: Query run out of memory using about 2048 MB of RAM."
   const services = await serve({ overpass: () => answer([], { remark }) })
   const engine = await start(base, services.services)
@@ -451,7 +467,7 @@ test("around an object is the object itself and all within that distance of it",
       output: path.join(engine.directory, "near.gpkg"),
     })
     assert.ok(done.ok, JSON.stringify(done))
-    const rows = read((done.result as { path: string }).path).points.rows as { osm_id: string }[]
+    const rows = read((done.result as { path: string }).path).points.rows
     // Guards against taking only a band on both sides of the object's edge, or everything the server answered.
     assert.deepEqual(rows.map((row) => row.osm_id).sort(), ["N1", "N2"])
   } finally {
@@ -589,12 +605,12 @@ test(
       const file = read(result.path)
       // Guards against taking Nominatim's shape for GeoCode's rule: a closed residential road is a line.
       assert.deepEqual(
-        file.lines.rows.map((row: { osm_id: string }) => row.osm_id),
+        file.lines.rows.map((row) => row.osm_id),
         ["W4"],
       )
       // Guards against all tags asked for taking the columns that say what a feature is.
       assert.equal(file.polygons.rows[0].building, "yes")
-      const tags = JSON.parse(file.polygons.rows[0].osm_tags)
+      const tags = JSON.parse(String(file.polygons.rows[0].osm_tags))
       assert.equal(tags["building:levels"], "3")
       assert.equal(tags.name, "Library")
       // Guards against what Nominatim adds of its own being written as one of the object's tags, and an object named

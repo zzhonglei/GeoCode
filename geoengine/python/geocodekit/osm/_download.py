@@ -34,8 +34,12 @@ def _query(area, alternatives, cell, output, seconds):
 def _quarters(box):
     south, west, north, east = box
     middle, centre = (south + north) / 2, (west + east) / 2
-    return [(south, west, middle, centre), (south, centre, middle, east), (middle, west, north, centre),
-            (middle, centre, north, east)]
+    return [
+        (south, west, middle, centre),
+        (south, centre, middle, east),
+        (middle, west, north, centre),
+        (middle, centre, north, east),
+    ]
 
 
 def _count(area, alternatives, cell):

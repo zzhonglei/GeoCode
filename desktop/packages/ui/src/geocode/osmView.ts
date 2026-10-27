@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { Locale } from '@/lib/i18n';
 import type { Part, ToolPart } from '@/lib/opencode/model';
 
-import { osmText, type OsmStep, type OsmText } from './osmText';
+import { type Kind, OSM_STEPS, osmText, type OsmStep, type OsmText } from './osmText';
 import { descriptionOf, wasDeclined, wasInterrupted } from './runLines';
 
 /** The OSM tools, each call a row of its own (docs/OSM.md, section 9). */
@@ -16,7 +16,6 @@ export const isOsmTool = (name: string): name is OsmTool => OSM_TOOLS.some((tool
 /** How long a download may go without progress before its row says how long it has been waiting. */
 const WAITING_AFTER_S = 30;
 
-const STEPS: readonly OsmStep[] = ['area', 'count', 'download', 'assemble', 'write'];
 /** The steps a request waits on a server in. */
 const NETWORK: readonly OsmStep[] = ['area', 'count', 'download'];
 
@@ -38,9 +37,8 @@ type NoteTone = 'info' | 'warning' | 'error';
 /** A sentence in the interface's language, with what a server said under it when there is anything. */
 export type Note = { readonly tone: NoteTone; readonly text: string; readonly said?: string };
 
-type Kind = 'point' | 'line' | 'area';
-
-const count = (value: number) => value.toLocaleString('en-US');
+/** A number as the rows write it, with thousands separators whatever the interface's language. */
+export const count = (value: number) => value.toLocaleString('en-US');
 
 const stateOf = (part: ToolPart) => {
   const state = part.state;
@@ -141,11 +139,13 @@ export const osmSearchView = (part: ToolPart, locale: Locale) => {
   const found = parsed?.found;
   const notes: Note[] = [];
   if (error !== undefined) notes.push(failureNote(words, parsed?.failure, error, false));
-  if (found?.context && found.context_found === false)
+  if (found?.context && found.context_found === false) {
     notes.push({ tone: 'info', text: words.contextMissing(found.context) });
+  }
   if (found?.incomplete) notes.push({ tone: 'warning', text: words.incomplete });
-  if (found?.fallback && found.candidates.length)
+  if (found?.fallback && found.candidates.length) {
     notes.push({ tone: 'info', text: words.fallback(found.category ?? '') });
+  }
   if (found && !found.candidates.length) notes.push({ tone: 'info', text: words.nothingFound });
   const candidates = (found?.candidates ?? []).map(
     (item): Candidate => ({
@@ -303,7 +303,7 @@ const downloadMetadata = z.object({
   steps: z
     .array(
       z.object({
-        step: z.enum(['area', 'count', 'download', 'assemble', 'write']),
+        step: z.enum(OSM_STEPS),
         started: z.number(),
         ended: z.number().optional().catch(undefined),
       }),
@@ -395,7 +395,7 @@ export const osmDownloadView = (part: ToolPart, locale: Locale, now: number) => 
   const { running, error, metadata, end } = stateOf(part);
   const input = callInput.parse(part.state.input);
   const state = downloadMetadata.safeParse(metadata).data;
-  const order = part.tool === 'osmgetfeatures' ? STEPS : STEPS.slice(2);
+  const order = part.tool === 'osmgetfeatures' ? OSM_STEPS : OSM_STEPS.slice(2);
   const current = state?.steps.at(-1);
   const quiet = state?.progressed === undefined ? 0 : Math.max(0, Math.floor((now - state.progressed) / 1000));
   const network = current !== undefined && current.ended === undefined && NETWORK.includes(current.step);

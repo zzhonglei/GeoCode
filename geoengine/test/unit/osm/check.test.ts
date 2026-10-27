@@ -4,6 +4,7 @@ import path from "node:path"
 import { test } from "node:test"
 import { serve, start } from "../../support/osm.ts"
 
+// Guards against the user being asked about a call that cannot run, and against a check that already sends a query.
 test("a check, asked before the user is, looks at the params and the boundary file and runs nothing", async () => {
   const services = await serve({})
   // No Python is there: a check that started it would fail.

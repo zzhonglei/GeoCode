@@ -12,6 +12,10 @@ import OBJECTS from "./osmgetobjects.txt"
 import FEATURES from "./osmgetfeatures.txt"
 import { GeoRunActivity } from "./run-activity.js"
 
+export const objectsName = "osmgetobjects"
+
+export const featuresName = "osmgetfeatures"
+
 export const ObjectsInput = Schema.Struct({
   ids: Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(25)).annotate({
     description:
@@ -100,7 +104,7 @@ export const makeObjects = (
   access: FileAccess.Interface,
   location: Location.Interface,
 ) => ({
-  name: "osmgetobjects",
+  name: objectsName,
   // On the provider's tool list, as the built-in tools are, rather than inside Code Mode's catalog.
   options: { codemode: false },
   description: OBJECTS,
@@ -111,7 +115,7 @@ export const makeObjects = (
         const output = yield* access.resolve({ path: input.output, kind: "file" })
         const params = { ids: input.ids, output: output.absolute, ...(input.fields ? { fields: input.fields } : {}) }
         const what = `the OSM objects ${input.ids.join(", ")}`
-        return { tool: "osmgetobjects", action: "objects", label: input.description, output, params, what } as const
+        return { tool: objectsName, action: "objects", label: input.description, output, params, what } as const
       }),
       permission,
       location,
@@ -124,7 +128,7 @@ export const makeFeatures = (
   access: FileAccess.Interface,
   location: Location.Interface,
 ) => ({
-  name: "osmgetfeatures",
+  name: featuresName,
   // On the provider's tool list, as the built-in tools are, rather than inside Code Mode's catalog.
   options: { codemode: false },
   description: FEATURES,
@@ -142,7 +146,7 @@ export const makeFeatures = (
           ...(input.fields ? { fields: input.fields } : {}),
         }
         const what = `${input.tags.join(", ")} in ${input.area}`
-        return { tool: "osmgetfeatures", action: "features", label: input.description, output, params, what } as const
+        return { tool: featuresName, action: "features", label: input.description, output, params, what } as const
       }),
       permission,
       location,

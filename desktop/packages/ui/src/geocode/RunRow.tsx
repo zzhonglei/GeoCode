@@ -122,7 +122,7 @@ export const RunRow: React.FC<{
   percent?: number;
   start?: number;
   end?: number;
-  lines: readonly Line[];
+  lines?: readonly Line[];
   note?: React.ReactNode;
   panel?: React.ReactNode;
 }> = ({ id, animate, logo, title, bad, after, doing, percent, start, end, lines, note, panel }) => {
@@ -200,7 +200,7 @@ export const RunRow: React.FC<{
         </div>
         {panel !== undefined ? (
           <Slide open={open}>{panel}</Slide>
-        ) : open && (lines.length || note) ? (
+        ) : open && (lines?.length || note) ? (
           <div className="relative ms-2 min-w-0 ps-3">
             <span
               aria-hidden="true"
@@ -208,7 +208,7 @@ export const RunRow: React.FC<{
               style={{ backgroundColor: 'var(--tools-border)' }}
             />
             <div className="min-w-0 py-2 pe-2 ps-4">
-              {lines.length ? <Log lines={lines} /> : null}
+              {lines?.length ? <Log lines={lines} /> : null}
               {note}
             </div>
           </div>

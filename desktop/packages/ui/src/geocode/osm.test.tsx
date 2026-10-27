@@ -146,6 +146,7 @@ describe("GeoCode: the OSM tools' rows", () => {
     expect(osmProbeView(looked, 'zh-CN').doing).toBeUndefined();
   });
 
+  // Guards against a file missing a part reading as complete, and the count leaving out a layer.
   test('a finished download says how many features it wrote, and opens to its file and what it misses', () => {
     const view = osmDownloadView(
       ended({
@@ -264,6 +265,8 @@ describe("GeoCode: the OSM tools' rows", () => {
     });
   });
 
+  // Guards against a search that did not finish reading as one that did, and a name shown twice where OSM's English
+  // one is the same.
   test('a search lists its candidates as found, with how the search went before them', () => {
     const candidate = (fields: Metadata) => ({
       id: 'R10958940',
@@ -333,6 +336,8 @@ describe("GeoCode: the OSM tools' rows", () => {
     ]);
   });
 
+  // Guards against a tag no feature carries being listed as one to download with, and the features meeting any of
+  // several tags read as their sum, which counts a feature carrying two of them twice.
   test('a look names the tagging found nowhere apart, and gives the features meeting any tag, not their sum', () => {
     const looked = (result: Metadata) =>
       osmProbeView(

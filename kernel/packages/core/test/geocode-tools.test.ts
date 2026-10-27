@@ -1358,6 +1358,7 @@ describe("GeoCode: the OSM tools", () => {
     }),
   )
 
+  // Guards against a look asking to read its boundary file, which GeoEngine reads only to know where to look.
   it.effect("a boundary file outside the project is used as where to look, without asking to read it", () =>
     Effect.gen(function* () {
       reset()

@@ -37,6 +37,7 @@ const searched = (status: 'running' | 'completed', candidates: Metadata[]): Part
 
 describe("GeoCode: the OSM tools' permission cards", () => {
   test('a download warns of a directory outside the project it writes in, and of none inside it', () => {
+    // Guards against a write outside the project allowed with no warning, or every write warned of.
     const outside = `${HOME}/Desktop/osm`;
     const download = (output: string, external: string[]) =>
       card(asking('osmgetfeatures', { area: 'R1', tags: ['amenity'], output, description: 'POIs', external }));
@@ -56,6 +57,7 @@ describe("GeoCode: the OSM tools' permission cards", () => {
   });
 
   test('an area is taken apart as the tools read it, and one written otherwise stays as written', () => {
+    // Guards against the card naming another place than the call looks in.
     expect(osmArea('r1, W2')).toEqual({ kind: 'objects', places: ['R1', 'W2'] });
     expect(osmArea('around:R1,W2,200')).toEqual({ kind: 'around', places: ['R1', 'W2'], meters: '200' });
     expect(osmArea('around:24.9431,121.3684,300')).toEqual({
@@ -75,6 +77,7 @@ describe("GeoCode: the OSM tools' permission cards", () => {
   });
 
   test("names come from the session's finished searches alone", () => {
+    // Guards against an id named after a candidate a search still running may yet drop.
     const names = osmNames([
       searched('completed', [{ id: 'R1', name: '國立臺北大學' }, { id: 'W2', name: null, name_en: 'Campus' }]),
       searched('running', [{ id: 'R3', name: 'Not yet' }]),
@@ -83,7 +86,8 @@ describe("GeoCode: the OSM tools' permission cards", () => {
   });
 
   test('a download is approved on its card alone, and "always allow" remembers the directory it names', () => {
-    // Guards against a download approved where what it writes, and where, cannot be seen.
+    // Guards against a download approved where what it writes, and where, cannot be seen, and "always allow" naming a
+    // pattern rather than the directory it remembers, or naming one where it allows the whole tool.
     expect([reviewInApp('osmgetobjects'), reviewInApp('osmgetfeatures'), reviewInApp('osmsearch')]).toEqual([
       true,
       true,
