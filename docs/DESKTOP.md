@@ -90,7 +90,7 @@ GeoCode 的标志是一个带波纹的球体、一道倾斜的轨道与轨道上
 ## 9. 与其他部分的关系
 
 - `DESIGN.md`:GeoCode 的定位与原则,这里的边界由它们而来。
-- `PATHS.md`:应用、内核与 GeoEngine 的数据、配置与缓存放在哪里,怎样与用户装的 OpenCode、OpenChamber 分开。
+- `PATHS.md`:应用、内核与 GeoEngine 在用户电脑上与项目里产生的文件,以及读取的用户环境。
 - `GEOENGINE.md`:GeoEngine 作为主进程的辅助进程运行,地理工具经壳服务端的回调接口到达它,出错时用这里的出错页。
 - `PYTHON.md`:内置的 Python 环境拿哪些环境变量、怎样处理代理。
 - `DEVELOPMENT.md`:构建内核、开发时怎样启动,以及开发版与打包版在访问控制与环境变量上的差别。
