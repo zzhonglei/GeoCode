@@ -1,4 +1,4 @@
-"""Finding OSM objects by name (docs/OSM.md, section 4). Several services are asked at once, each only for the OSM
+"""Finding OSM objects by name. Several services are asked at once, each only for the OSM
 objects it finds; then every candidate is described alike, ranked, and the best few kept. A service that does not
 answer leaves the others' candidates, and the answer says it may be incomplete."""
 

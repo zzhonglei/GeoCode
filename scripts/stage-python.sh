@@ -1,5 +1,5 @@
 #!/bin/sh
-# Prepare GeoCode's Python environment (docs/PYTHON.md, section 4) from geoengine/environment/ and stage it where the
+# Prepare GeoCode's Python environment from geoengine/environment/ and stage it where the
 # desktop app bundles it from: one platform's conda packages packed by pixi-pack, and pixi-unpack, which installs them
 # on the user's computer. The desktop's prepare:python runs this. With --lock, resolve pixi.lock for both platforms
 # again instead, after a change to pixi.toml.
@@ -74,8 +74,8 @@ esac
 
 # What the environment is: the addresses of the platform's packages in pixi.lock, which name each build, the tools and
 # this script, which prepares them.
-# Unchanged, it stays the same through a rebuild, so an installed copy of it is not installed again (docs/PYTHON.md,
-# section 6). Printed with the Python version its packages hold.
+# Unchanged, it stays the same through a rebuild, so an installed copy of it is not installed again. Printed with the
+# Python version its packages hold.
 DEFINED=$(node -e '
   const fs = require("fs"), crypto = require("crypto")
   const [lock, platform, tools, script] = process.argv.slice(1)

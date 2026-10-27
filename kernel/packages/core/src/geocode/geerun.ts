@@ -131,7 +131,7 @@ const assetLine = (asset: typeof Asset.Type) => {
   return `- ${asset.name}${facts.length ? ` (${facts.join("; ")})` : ""}${said ? `: ${said}` : ""}`
 }
 
-/** The Python the script ran in, by its version alone (docs/GEE.md, section 7). */
+/** The Python the script ran in, by its version alone. */
 const pythonLine = (python: (typeof Ran.Type)["python"]) => `Python ${python.version}.`
 
 /**

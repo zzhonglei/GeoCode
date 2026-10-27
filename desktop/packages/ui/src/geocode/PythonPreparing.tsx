@@ -20,7 +20,7 @@ const TEXT: { en: PreparingText } & Partial<Record<Locale, PreparingText>> = {
   },
 };
 
-/** What the loading screen says while GeoCode's Python environment is prepared (docs/PYTHON.md, section 7). */
+/** What the loading screen says while GeoCode's Python environment is prepared. */
 export const PythonPreparing: React.FC<{ gate: PreparingGate }> = ({ gate }) => {
   const { locale } = useI18n();
   const text = TEXT[locale] ?? TEXT.en;

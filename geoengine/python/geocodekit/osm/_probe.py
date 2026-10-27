@@ -1,4 +1,4 @@
-"""Looking at what an area holds before downloading (docs/OSM.md, section 6): the tags an English word names and how
+"""Looking at what an area holds before downloading: the tags an English word names and how
 many of each, how many features tag filters meet, or which values some keys take."""
 
 from collections import Counter

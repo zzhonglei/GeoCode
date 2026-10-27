@@ -1,4 +1,4 @@
-"""The areas the OSM tools look in (docs/OSM.md, section 5), as the agent writes one: ids of OSM areas, bbox:,
+"""The areas the OSM tools look in, as the agent writes one: ids of OSM areas, bbox:,
 around: a point or objects, or file: a local boundary. An area becomes what a query filters by, and, when it is a
 polygon, the polygon itself, which features are kept within once Overpass has answered."""
 
@@ -124,7 +124,7 @@ def _bounds_of(element):
 
 def _found(refs):
     """The objects the ids name, each as its id, its kind and its geometry, or the box around it when it has none, as
-    a relation of another kind: from Nominatim, and from Overpass those Nominatim lacks (docs/OSM.md, section 5). An
+    a relation of another kind: from Nominatim, and from Overpass those Nominatim lacks. An
     id neither has was written wrong, unless the server stopped early: then its own words say why the object is not
     there."""
     from shapely.geometry import box

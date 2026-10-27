@@ -69,7 +69,7 @@ const GeometryMark: React.FC<{ kind: Kind; label: string; className?: string }> 
   </svg>
 );
 
-/** The panel a row opens to, aligned with the row's title (docs/OSM.md, section 9). */
+/** The panel a row opens to, aligned with the row's title. */
 const Panel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="mb-1.5 ms-[21px] rounded-[10px] bg-[var(--surface-muted)] p-1.5 text-[length:var(--text-meta)] leading-normal">
     {children}
@@ -480,7 +480,7 @@ const OsmDownloadRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, 
   );
 };
 
-/** An OSM tool call's own row (docs/OSM.md, section 9). */
+/** An OSM tool call's own row. */
 export const OsmRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, animate }) =>
   part.tool === 'osmsearch' ? (
     <OsmSearchRow part={part} animate={animate} />

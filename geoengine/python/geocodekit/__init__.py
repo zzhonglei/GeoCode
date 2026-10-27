@@ -3,7 +3,7 @@ short name, as `import geocodekit.gee as gee`."""
 
 import importlib
 
-# Imported only once used, so that adding a subpackage never slows an import of another (docs/GEOCODEKIT.md, section 5).
+# Imported only once used, so that adding a subpackage never slows an import of another.
 SUBPACKAGES = ("gee",)
 
 __all__ = list(SUBPACKAGES)

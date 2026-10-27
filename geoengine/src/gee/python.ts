@@ -43,11 +43,11 @@ export function markedLine(line: string): unknown {
 }
 
 // Embedded, since the engine is bundled into one file. String.raw keeps Python's backslashes, so the Python must not
-// contain a backtick or "${" of its own. Run isolated (docs/PYTHON.md, section 6.1), a program read from standard input
+// contain a backtick or "${" of its own. Run isolated, a program read from standard input
 // does not have the current folder on its import path, where a file such as json.py would shadow a module it needs.
 
 /**
- * The credentials, from earthengine-api's own file alone (docs/GEE.md, section 7): Google Cloud's default ones, which
+ * The credentials, from earthengine-api's own file alone: Google Cloud's default ones, which
  * earthengine-api would fall back to, may be another account's or lack Earth Engine's scope. Raises without the file.
  */
 export const CREDENTIALS = String.raw`

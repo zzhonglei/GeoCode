@@ -1,4 +1,4 @@
-"""The tag filters the OSM tools take (docs/OSM.md, section 5): a list of alternatives, any of which a feature may meet;
+"""The tag filters the OSM tools take: a list of alternatives, any of which a feature may meet;
 each is one condition, or several in brackets that must all hold, as Overpass writes them."""
 
 import re

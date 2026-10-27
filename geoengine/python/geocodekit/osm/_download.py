@@ -1,4 +1,4 @@
-"""The two downloads (docs/OSM.md, section 7): OSM objects by id, and the features meeting tag filters in an area. A
+"""The two downloads: OSM objects by id, and the features meeting tag filters in an area. A
 download too large for one request is split into parts by counting first, a part that still fails is split again, and
 one too large for the public services altogether is refused before anything is downloaded. The parts are counted and
 downloaded on every Overpass instance found free at once, one part each at a time."""

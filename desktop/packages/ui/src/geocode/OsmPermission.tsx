@@ -90,7 +90,7 @@ const Area: React.FC<{ area: string; names: Names; words: OsmText['card']; home:
 };
 
 /**
- * An OSM tool's permission card, line by line (docs/OSM.md, section 8). A download's says why GeoAgent asks, warns of a
+ * An OSM tool's permission card, line by line. A download's says why GeoAgent asks, warns of a
  * write outside the project, then what it downloads and where it writes; a search's and a look's say in a line what
  * they look for and where.
  */

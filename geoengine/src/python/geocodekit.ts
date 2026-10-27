@@ -8,14 +8,14 @@ import { fileURLToPath } from "node:url"
 export const NAME = "geocodekit"
 
 export interface Package {
-  /** GeoCode's version number, the package's version (docs/GEOCODEKIT.md, section 6). */
+  /** GeoCode's version number, the package's version. */
   readonly version: string
   /** The package's files' texts, by their paths under geoengine/python with "/" between the parts. */
   readonly files: Readonly<Record<string, string>>
 }
 
 /**
- * GeoCode's Python package as GeoEngine installs it into the base environment (docs/GEOCODEKIT.md, section 6). The
+ * GeoCode's Python package as GeoEngine installs it into the base environment. The
  * build (script/build.ts) puts it in place of `globalThis.GEOCODEKIT`, as it was when the engine was built: the app
  * keeps the engine in its archive, where nothing could read the package's files; run from source, it is read here.
  */
@@ -24,7 +24,7 @@ export const PACKAGE: Package =
 
 /**
  * The package's Python files and the JSON data they read under `geoengine`, and GeoCode's version number from the
- * app's package.json, where it is written alone (docs/DESKTOP.md, section 6).
+ * app's package.json, where it is written alone.
  */
 export function read(geoengine: string): Package {
   const root = path.join(geoengine, "python")

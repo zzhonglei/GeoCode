@@ -158,7 +158,7 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
       if (Exit.isFailure(looked)) {
         return yield* failed(new GeoEngine.Failure({ code: "unreadable", message: String(looked.cause) }))
       }
-      // The counts as the tool row shows them (docs/OSM.md, section 9).
+      // The counts as the tool row shows them.
       return { content: answer(looked.value), metadata: { looked: looked.value } }
     }).pipe(
       Effect.mapError((error) =>

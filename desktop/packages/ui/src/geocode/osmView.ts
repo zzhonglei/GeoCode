@@ -6,7 +6,7 @@ import type { Part, ToolPart } from '@/lib/opencode/model';
 import { type Kind, OSM_STEPS, osmText, type OsmStep, type OsmText } from './osmText';
 import { descriptionOf, wasDeclined, wasInterrupted } from './runLines';
 
-/** The OSM tools, each call a row of its own (docs/OSM.md, section 9). */
+/** The OSM tools, each call a row of its own. */
 const OSM_TOOLS = ['osmsearch', 'osmprobe', 'osmgetobjects', 'osmgetfeatures'] as const;
 
 type OsmTool = (typeof OSM_TOOLS)[number];
@@ -400,7 +400,7 @@ export const osmDownloadView = (part: ToolPart, locale: Locale, now: number) => 
   const quiet = state?.progressed === undefined ? 0 : Math.max(0, Math.floor((now - state.progressed) / 1000));
   const network = current !== undefined && current.ended === undefined && NETWORK.includes(current.step);
   // While a query is out and its answer has not begun to arrive, the server is working on it: what has come so far is
-  // only the answer's head, or nothing (docs/OSM.md, section 9).
+  // only the answer's head, or nothing.
   const querying = network && state?.asking && !state.arriving ? words.querying(words.duration(quiet)) : undefined;
   // Said on the step, and on the row: waiting for the call before it, for a free server, or for a server gone silent.
   const blocked = !running
@@ -518,7 +518,7 @@ type OsmArea =
   | { readonly kind: 'text'; readonly text: string };
 
 /**
- * An area as GeoAgent wrote it (docs/OSM.md, section 5), taken apart for a permission card to word: the places are OSM
+ * An area as GeoAgent wrote it, taken apart for a permission card to word: the places are OSM
  * ids or a point as "latitude, longitude"; an area written otherwise stays as written.
  */
 export const osmArea = (area: string): OsmArea => {

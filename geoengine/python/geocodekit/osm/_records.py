@@ -1,4 +1,4 @@
-"""The attributes a downloaded feature carries (docs/OSM.md, section 7): osm_id, name and category always; then the
+"""The attributes a downloaded feature carries: osm_id, name and category always; then the
 keys the filters named, the keys worth recording of the kind they name, the keys the features' own presets say are
 worth recording where enough of them carry one, and the keys asked for. Every other key is dropped and counted, unless
 all tags were asked for: they are then kept in one column besides."""

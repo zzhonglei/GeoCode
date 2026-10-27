@@ -1,4 +1,4 @@
-"""OSM objects by id as Nominatim gives them (docs/OSM.md, sections 5 and 7): their geometry and tags, without asking
+"""OSM objects by id as Nominatim gives them: their geometry and tags, without asking
 Overpass. Nominatim lacks some objects, many of those without names among them, and gives some relations as a point
 alone; those are left to Overpass."""
 

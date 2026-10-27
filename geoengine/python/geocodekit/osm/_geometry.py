@@ -1,4 +1,4 @@
-"""Geometries of OSM elements as Overpass gives them with `out geom` (docs/OSM.md, section 7), or as Nominatim gives
+"""Geometries of OSM elements as Overpass gives them with `out geom`, or as Nominatim gives
 their shapes: a closed way is an area when the community's rules say so, a multipolygon relation is assembled from its
 members' rings, and a route relation is its members' lines. An element whose rings do not close has no geometry rather
 than a part of one."""
@@ -85,7 +85,7 @@ def of(element):
 
 
 def of_shape(kind, geojson, tags):
-    """An object's kind and geometry from a GeoJSON geometry, as Nominatim gives one (docs/OSM.md, section 5): a way's
+    """An object's kind and geometry from a GeoJSON geometry, as Nominatim gives one: a way's
     points are judged by the same rule as above, a relation's areas and lines are taken as they are assembled.
     (None, None) for a shape that says less, as a point given for a relation."""
     form = geojson.get("type")

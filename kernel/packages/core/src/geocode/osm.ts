@@ -7,7 +7,7 @@ import { Effect, Exit, Schema } from "effect"
 import type { FileAccess } from "../file-access.js"
 import { GeoEngine } from "./geoengine.js"
 
-/** The parameters the OSM tools share, as GeoAgent reads them (docs/OSM.md, section 5). */
+/** The parameters the OSM tools share, as GeoAgent reads them. */
 export const Area = Schema.String.annotate({
   description:
     'Where to look: the id of an area found with osmsearch, such as "R65066", or several joined by commas; "bbox:south,west,north,east" in degrees; "around:latitude,longitude,meters"; "around:<id>,meters" for an object and everything within that distance of it; or "file:<path>" of a boundary file in any coordinate system, with "|layername=<name>" for one of its layers. Latitude always comes first. An area of more than 8 separate parts is counted and asked for as the box around them all, so places far apart are better looked at and downloaded one at a time.',
@@ -62,7 +62,7 @@ const stalledFor = (failure: GeoEngine.Failure) => {
 }
 
 /**
- * A failure as the tool row tells it (docs/OSM.md, section 9): its kind, with the words that say what was wrong with
+ * A failure as the tool row tells it: its kind, with the words that say what was wrong with
  * the request or the folder it was to write in, and how long a stalled call waited.
  */
 const failureOf = (failure: GeoEngine.Failure) => {
@@ -154,7 +154,7 @@ const Downloaded = Schema.Union([
 ])
 const decodeDownloaded = Schema.decodeUnknownExit(Downloaded)
 
-/** What a look or a download tells as it goes (docs/OSM.md, section 9), as GeoEngine passes it on. */
+/** What a look or a download tells as it goes, as GeoEngine passes it on. */
 const Progress = Schema.Struct({
   osm: Schema.Union([
     Schema.Struct({
@@ -179,8 +179,7 @@ const Progress = Schema.Struct({
 const decodeProgress = Schema.decodeUnknownExit(Progress)
 
 /**
- * A look's state as its tool row shows it while it runs: whether it waits for the call before it (docs/OSM.md,
- * section 9).
+ * A look's state as its tool row shows it while it runs: whether it waits for the call before it.
  */
 export const queue = (context: Tool.Context) => (data: unknown) => {
   const decoded = decodeProgress(data)
@@ -248,7 +247,7 @@ export const downloadAnswer = (result: unknown, directory: string, what: string)
 }
 
 /**
- * A download's state as its tool row shows it (docs/OSM.md, section 9), kept in the call's metadata: its label, when
+ * A download's state as its tool row shows it, kept in the call's metadata: its label, when
  * it began, each step with when it began and ended, the count and the part, the bytes received, when it last made
  * progress, what it waits on (a query out, an answer arriving, or every instance busy), and whether it waits for the
  * call before it.

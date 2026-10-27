@@ -1,4 +1,4 @@
-"""Requests to the public services the OSM tools use (docs/OSM.md, section 3), as their usage policies ask: naming
+"""Requests to the public services the OSM tools use, as their usage policies ask: naming
 GeoCode, Nominatim at most once a second however many of the app's calls ask it, and a look's or a download's query
 given to an Overpass instance a probe found free, one query at a time each. Proxies are the environment's to set:
 urllib follows its proxy variables."""
@@ -26,7 +26,7 @@ else:
     import fcntl
 
 # Set by the run from its request: who is asking, where each service is, the folder of the app's lock files, how long
-# a call may go without progress before it stops (docs/OSM.md, section 7), how long an instance that said it was busy
+# a call may go without progress before it stops, how long an instance that said it was busy
 # is not asked again, and how long a probe is waited for.
 agent = "GeoCode"
 services = {}
@@ -52,7 +52,7 @@ TIMEOUTS = (TimeoutError, socket.timeout)
 # How a request fails, but for an HTTP status: no connection, no answer in time, or an answer broken off or corrupt.
 FAILURES = (OSError, http.client.HTTPException, zlib.error)
 # The bytes an answer holds once it is arriving: while an instance works on a query it sends nothing, or only the
-# head of its answer, and then the rest at once (docs/OSM.md, section 9).
+# head of its answer, and then the rest at once.
 ARRIVING_BYTES = 64 * 1024
 # How often the bytes received so far are told, at most, in seconds.
 RECEIVED_EVERY = 0.5
@@ -189,7 +189,7 @@ def _tell_received(force=False):
 
 def _tell_state():
     """Tells the row what the call waits on, when that changes: whether a query is out, whether an answer to one has
-    begun to arrive, and whether every instance it may ask is busy (docs/OSM.md, section 9). Told under the lock, so
+    begun to arrive, and whether every instance it may ask is busy. Told under the lock, so
     that a thread's state is never told after a newer one."""
     global _state_told
     with _instances:

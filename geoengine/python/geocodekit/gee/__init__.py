@@ -6,7 +6,7 @@ initialized, and the task's folder is projects/<project>/assets/GeoCode/<task>.
 
 from geocodekit import _tool
 
-# Every function needs what geerun sets up first (docs/GEOCODEKIT.md, section 5).
+# Every function needs what geerun sets up first.
 if _tool.name != "geerun":
     raise ImportError(
         "geocodekit.gee works only in a script run by GeoCode's geerun tool, which initializes Earth Engine and sets up"

@@ -1,4 +1,4 @@
-"""What a download tells its tool row as it goes (docs/OSM.md, section 9): the step it is on, and how far it has got.
+"""What a download tells its tool row as it goes: the step it is on, and how far it has got.
 Each is progress, so a download moving on is never stopped for having made none (section 7)."""
 
 from geocodekit import _tool

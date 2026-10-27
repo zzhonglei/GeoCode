@@ -13,7 +13,7 @@ import { Python } from "./python.ts"
 const QUERY_TIMEOUT = "3 minutes"
 
 /**
- * The project's monthly Earth Engine quota (docs/GEE.md, section 7), in EECU-seconds, for the user, never GeoAgent.
+ * The project's monthly Earth Engine quota, in EECU-seconds, for the user, never GeoAgent.
  * Times are ISO 8601 in UTC.
  */
 const Snapshot = Schema.Struct({
@@ -75,8 +75,7 @@ export const query = (runtime: Runtime.Interface, python: string, project: strin
     }
     if ("error" in decoded.value) {
       return yield* new Engine.Failure({
-        // A code of its own, so the interface says only that Google cannot be reached, as GEE's check does
-        // (docs/GEE.md, section 7).
+        // A code of its own, so the interface says only that Google cannot be reached, as GEE's check does.
         code: decoded.value.unreachable ? "unreachable" : "quota-failed",
         message: decoded.value.error,
         details: { project, status: decoded.value.status },
@@ -85,7 +84,7 @@ export const query = (runtime: Runtime.Interface, python: string, project: strin
     return decoded.value.quota
   })
 
-/** The limit from Service Usage, and the usage from Cloud Monitoring (docs/GEE.md, section 7). */
+/** The limit from Service Usage, and the usage from Cloud Monitoring. */
 const PROGRAM = String.raw`
 import datetime as dt
 import json

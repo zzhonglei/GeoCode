@@ -1,4 +1,4 @@
-"""What GeoEngine runs for an OSM tool (docs/OSM.md, section 2): one call, its request JSON text, answered with lines
+"""What GeoEngine runs for an OSM tool: one call, its request JSON text, answered with lines
 on standard output that start with the marker the request names. A request written wrong, one no service would
 answer, one that made no progress for too long, an answer too large to take and a folder no file can be written in
 end with a failure saying so; anything else unexpected ends with Python's traceback."""

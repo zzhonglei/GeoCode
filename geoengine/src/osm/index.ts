@@ -11,14 +11,14 @@ import { Status } from "../status.ts"
 
 const DOMAIN = "osm"
 
-/** The domain of GeoCode's Python environment, whose base the OSM tools run in (docs/OSM.md, section 2). */
+/** The domain of GeoCode's Python environment, whose base the OSM tools run in. */
 const ENVIRONMENT_DOMAIN = "python"
 
 /** Prefixes every line the Python answers with; anything else it prints is for the diagnostics. */
 const MARKER = "__GEOCODE_OSM__"
 
 /**
- * The public services (docs/OSM.md, section 3): the Overpass instances free to all that hold the whole planet, the
+ * The public services: the Overpass instances free to all that hold the whole planet, the
  * official one at its own address alone, as its two servers are one instance. Written here alone and given to the
  * Python with each call.
  */
@@ -44,7 +44,7 @@ const AGENT = `GeoCode/${Geocodekit.PACKAGE.version} (+https://github.com/zzhong
  */
 const IDLE_SECONDS = 300
 
-/** How long calls wait, in seconds (docs/OSM.md, sections 3 and 7). */
+/** How long calls wait, in seconds. */
 export const TIMING = {
   /** How long a call may make no progress before it stops: longer than Overpass may compute and send nothing. */
   stall: 300,
@@ -99,7 +99,7 @@ const DECODERS: Record<Action, (raw: unknown) => Exit.Exit<object, Schema.Schema
 const CheckParams = Schema.Struct({ action: Schema.Literals(["search", "probe", "objects", "features"]) })
 const decodeCheckParams = Schema.decodeUnknownExit(CheckParams)
 
-/** What a call tells its tool row as it goes (docs/OSM.md, section 9), passed on as the Python wrote it. */
+/** What a call tells its tool row as it goes, passed on as the Python wrote it. */
 const Shown = Schema.Union([
   Schema.Struct({ type: Schema.Literal("step"), step: Schema.String }),
   Schema.Struct({ type: Schema.Literal("counted"), features: Schema.NullOr(Schema.Number), parts: Schema.Number }),
@@ -171,7 +171,7 @@ const validate = (action: Action, raw: unknown) =>
 
 /**
  * The OSM tools, asking `services` and keeping when Nominatim was last asked in a file among `locks`, the app's lock
- * files (docs/PATHS.md, section 4).
+ * files.
  */
 export const capability = (locks: string, services: Services = SERVICES, timing: Timing = TIMING): Engine.Capability =>
   Effect.gen(function* () {
@@ -179,10 +179,10 @@ export const capability = (locks: string, services: Services = SERVICES, timing:
     const runtime = yield* Runtime.Service
     const environment = yield* Deferred.make<string>()
     // Looks and downloads ask Overpass, whose public instances give an IP address a few slots and whose policy rules
-    // out parallel scripts: one at a time, each spreading its own queries over the instances (docs/OSM.md, section 3).
+    // out parallel scripts: one at a time, each spreading its own queries over the instances.
     const asking = yield* Semaphore.make(1)
     // The Overpass instance that answered last, where the next search starts rather than waiting out one found busy;
-    // and when each instance found busy may be asked again, by any call (docs/OSM.md, section 3).
+    // and when each instance found busy may be asked again, by any call.
     let overpass = 0
     const pausedUntil = services.overpass.map(() => 0)
 

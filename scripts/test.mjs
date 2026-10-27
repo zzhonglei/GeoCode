@@ -1,4 +1,4 @@
-// Runs GeoCode's own tests by suite (docs/development/DEVELOPMENT.md, section 7): each part's
+// Runs GeoCode's own tests by suite: each part's
 // unit tests, which touch stand-ins alone, and the tests on the real QGIS, the
 // real Earth Engine and the installed base environment, which run only when named
 // or when a change calls for them. The suites run one after another, and a failed
@@ -20,7 +20,7 @@ const at = (...parts) => path.join(top, ...parts)
 const run = (where, command, ...args) => ({ cwd: at(where), command, args })
 
 // In a kernel package's test folder: GeoCode's own files and the upstream ones
-// holding GeoCode cases (docs/development/CONVENTIONS.md, section 4).
+// holding GeoCode cases.
 const OWN = /(^|\/)(geocode-[^/]*\.test\.tsx?|geocode\/.*\.test\.tsx?)$/
 const CASES = /\b(?:test|it|describe)(?:\.\w+)?\(\s*["'`]GeoCode: /
 

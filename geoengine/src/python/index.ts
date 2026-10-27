@@ -15,7 +15,7 @@ const DOMAIN = "python"
 
 const WINDOWS = process.platform === "win32"
 
-/** Staged beside the packages; it installs them as conda would (docs/PYTHON.md, section 4). */
+/** Staged beside the packages; it installs them as conda would. */
 const UNPACK = WINDOWS ? "pixi-unpack.exe" : "pixi-unpack"
 
 /** A slow disk, or a scan of each new file, can take minutes over the many small files. */
@@ -38,7 +38,7 @@ const ACTIVATION = "activate."
 const UNUSED = new Set([".a", ".lib", ".pdb"])
 
 /**
- * Imported before the environment is ready (docs/PYTHON.md, section 6), each with the name the loading screen shows;
+ * Imported before the environment is ready, each with the name the loading screen shows;
  * importing osgeo loads GDAL's driver plugins. matplotlib is left out: importing it writes in the user's home.
  */
 const WARM = [
@@ -66,7 +66,7 @@ const WARMING = [
 
 /** Written into the base environment's site-packages as STARTUP_MODULE, which a .pth file beside it imports. */
 const STARTUP = `"""Sets GeoCode's Python environment's own variables as Python starts, and has it take its proxy
-from the proxy variables alone, as GeoCode's kernel does (docs/PYTHON.md, section 6.1)."""
+from the proxy variables alone, as GeoCode's kernel does."""
 
 import os
 import sys
@@ -228,7 +228,7 @@ export type State =
 
 class Failed extends Data.TaggedError("GeoEnginePythonFailed")<Diagnostics> {}
 
-/** The folders and interpreters under the data directory (docs/PYTHON.md, section 3). */
+/** The folders and interpreters under the data directory. */
 export const layout = (data: string) => {
   const root = path.join(data, "python")
   const base = path.join(root, "base")
@@ -247,7 +247,7 @@ export const layout = (data: string) => {
 }
 
 /**
- * Prepares GeoCode's Python environment in the background as the engine starts (docs/PYTHON.md, section 6): installs
+ * Prepares GeoCode's Python environment in the background as the engine starts: installs
  * the bundled one when the data directory has another or none, brings the files GeoEngine writes into it to this
  * GeoCode's, makes the working environment when it is missing, and warms the environment up before calling it ready.
  * A failure is left for the next start to try again.
@@ -438,7 +438,7 @@ function remove(target: string) {
   )
 }
 
-/** Takes away what only building and debugging use (docs/PYTHON.md, section 6). */
+/** Takes away what only building and debugging use. */
 async function prune(base: string) {
   for (const headers of [path.join(base, "include"), path.join(base, "Library", "include")]) {
     await fsp.rm(headers, { recursive: true, force: true })
@@ -495,7 +495,7 @@ function distInfo(version: string, files: readonly (readonly [string, string])[]
 }
 
 /**
- * How the base environment differs from what this GeoCode writes into it (docs/PYTHON.md, section 6), by each file's
+ * How the base environment differs from what this GeoCode writes into it, by each file's
  * content: the files to write, missing or other, with their texts, and what of geocodekit's is there besides, to
  * remove. Python's bytecode caches are its own.
  */

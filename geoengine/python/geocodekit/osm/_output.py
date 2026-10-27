@@ -1,4 +1,4 @@
-"""Writing downloaded features into one GeoPackage (docs/OSM.md, section 7): a layer for each family of geometry, each
+"""Writing downloaded features into one GeoPackage: a layer for each family of geometry, each
 described with the attribution OSM's licence asks for, when its data is from and what was downloaded. The file is
 written beside its place under a hidden name and moved there once whole, numbered rather than over a file there."""
 

@@ -1,10 +1,10 @@
 [project]
 name = "geocodekit"
 # GeoCode's own version number, build.extraMetadata.version in desktop/packages/electron/package.json: GeoEngine
-# writes it into the dist-info it installs the package with (docs/GEOCODEKIT.md, section 6).
+# writes it into the dist-info it installs the package with.
 dynamic = ["version"]
 description = "GeoCode's standard functions for geographic work, a subpackage for each capability domain"
 # The base environment's Python; the unit tests run the package on macOS's own python3 too.
 requires-python = ">=3.9"
-# None declared: the package uses only what the base environment comes with (docs/GEOCODEKIT.md, section 7).
+# None declared: the package uses only what the base environment comes with.
 dependencies = []

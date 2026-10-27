@@ -14,7 +14,7 @@ import { Quota } from "./quota.ts"
 
 const DOMAIN = "gee"
 
-/** The domain of GeoCode's Python environment, whose base GEE runs in (docs/GEE.md, section 7). */
+/** The domain of GeoCode's Python environment, whose base GEE runs in. */
 const ENVIRONMENT_DOMAIN = "python"
 
 /** Generous: initializing and one minimal computation only have to finish, on a slow connection too. */

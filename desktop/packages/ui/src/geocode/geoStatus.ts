@@ -55,7 +55,7 @@ type PythonLoading = { name: string; number: number; total: number };
 
 /**
  * Whether a window may open: it waits for GeoCode's Python environment, unless this server has no GeoEngine. While the
- * environment is installed, created, or warmed up after either, the loading screen says so (docs/PYTHON.md, section 7).
+ * environment is installed, created, or warmed up after either, the loading screen says so.
  */
 export type PythonGate =
   | { state: 'waiting' }

@@ -9,7 +9,7 @@ export const OSM_STEPS = ['area', 'count', 'download', 'assemble', 'write'] as c
 export type OsmStep = (typeof OSM_STEPS)[number];
 
 /**
- * What the OSM tools' rows say (docs/OSM.md, section 9), in the interface's language: the tools' results are facts
+ * What the OSM tools' rows say, in the interface's language: the tools' results are facts
  * the interface words itself. What a server said stays as it said it.
  */
 export type OsmText = {
@@ -22,7 +22,7 @@ export type OsmText = {
   downloadFeatures: string;
   /** The permission card's summary of what each tool asks to do. */
   asks: Record<'osmsearch' | 'osmprobe' | 'osmgetobjects' | 'osmgetfeatures', string>;
-  /** The lines of the tools' permission cards (docs/OSM.md, section 8). */
+  /** The lines of the tools' permission cards. */
   card: {
     objects: string;
     tags: string;

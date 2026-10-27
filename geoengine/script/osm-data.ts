@@ -1,7 +1,7 @@
 import path from "node:path"
 
-// Writes python/geocodekit/osm/_data.json, the community's tagging conventions geocodekit.osm works by (docs/OSM.md,
-// section 2): the iD editor's presets, deprecated tags and fields as id-tagging-schema publishes them, in English, and
+// Writes python/geocodekit/osm/_data.json, the community's tagging conventions geocodekit.osm works by: the iD
+// editor's presets, deprecated tags and fields as id-tagging-schema publishes them, in English, and
 // when a closed way is an area, as osm-polygon-features publishes it. Run it after changing a version below, then
 // commit what it wrote.
 const SCHEMA = "7.3.0"

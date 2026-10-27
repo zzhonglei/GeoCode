@@ -55,7 +55,7 @@ const Found = Schema.Struct({
 const decodeFound = Schema.decodeUnknownExit(Found)
 
 /**
- * The search as its tool row shows it (docs/OSM.md, section 9): the candidates without their centre and description.
+ * The search as its tool row shows it: the candidates without their centre and description.
  */
 const shown = (found: typeof Found.Type) => ({
   ...found,

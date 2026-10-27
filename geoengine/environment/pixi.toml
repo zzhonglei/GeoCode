@@ -1,4 +1,4 @@
-# GeoCode's Python environment (docs/PYTHON.md, section 2): what it holds, from conda-forge alone. After a change, run
+# GeoCode's Python environment: what it holds, from conda-forge alone. After a change, run
 # scripts/stage-python.sh --lock to resolve pixi.lock for both platforms again.
 
 [workspace]
