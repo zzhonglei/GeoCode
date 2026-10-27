@@ -56,7 +56,7 @@ GeoCode 通过界面配置,不接受以环境变量给出的配置。用户环�
 
 用户在应用里看到的产品只有 GeoCode:菜单、窗口标题、通知、设置里的说明与出错提示都用这个名字(出错页里照原样给出的错误原文除外,见下),需要单独指内核这个部件时叫「内核」(英文 kernel,繁体中文「核心」)。OpenCode Zen 这类可以连接的第三方服务,保留它们自己的名字。应用里指向 GeoCode 与上游的链接只有两个:About 里的发布仓库 `https://github.com/zzhonglei/GeoCode-Release`,以及报告问题时打开的源码仓库 `https://github.com/zzhonglei/GeoCode`;上游的社区、文档站与发布页不出现。GeoCode 有自己的版本号,与两个上游的版本号无关:它只写在 `desktop/packages/electron/package.json` 的 `build.extraMetadata.version`,打包时盖掉上游的版本,GeoCode 的其他部分(如 Python 包 `geocodekit`,`GEOCODEKIT.md` 第 6 节)也从这里取;两个上游 `package.json` 里的 `version` 是上游的,合并时照上游。About 只显示名字、版本与发布仓库的链接;两个上游的许可证声明放在发布仓库里,不进安装包。
 
-壳交给 agent 的工具(浏览器、通知等)以 `geocode` 命名;地理工具是内核的内置工具,照 OpenCode 自带工具的写法命名(见 `QGIS.md` 第 1 节)。在应用里登录 GitHub 账号时,用户授权的是 GeoCode 自己登记的应用,默认不申请修改工作流文件的权限。
+壳交给 agent 的工具(浏览器、通知等)以 `geocode` 命名;地理工具是内核的内置工具,照 OpenCode 自带工具的写法命名(见 `GEOENGINE.md` 第 3.6 节)。在应用里登录 GitHub 账号时,用户授权的是 GeoCode 自己登记的应用,默认不申请修改工作流文件的权限。
 
 只换用户看得到的名字。内部的名字照上游:界面的协议与来源、事件与 IPC 的名字、环境变量、存储键、接口路径与包名。改它们用户看不到任何区别,却让每次合并上游都多出冲突;改界面的来源还会清空界面记住的状态。
 

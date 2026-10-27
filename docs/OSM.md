@@ -15,7 +15,7 @@ GeoAgent 得到四个工具:
 | `osmgetobjects` | 按 id 下载对象,如校园、湖泊与行政区的边界 | 见第 8 节 |
 | `osmgetfeatures` | 按范围与标签下载一类要素,如道路、建筑、POI | 见第 8 节 |
 
-工作的顺序是先定研究区与内容,看清有什么、有多少,再下载,最后由 GeoAgent 用 `readgeodata` 检查结果。工具名照 OpenCode 自带工具的写法(`QGIS.md` 第 1 节)。
+工作的顺序是先定研究区与内容,看清有什么、有多少,再下载,最后由 GeoAgent 用 `readgeodata` 检查结果。工具名照 OpenCode 自带工具的写法(`GEOENGINE.md` 第 3.6 节)。
 
 每个工具独立完成自己那一步:结果落成文件,答复只陈述拿到了什么、缺了什么,不把数据本身交给模型。
 
