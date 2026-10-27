@@ -25,7 +25,7 @@ GeoCode 建在两个开源项目之上:
 | [`docs/geoengine/GEOCODEKIT.md`](docs/geoengine/GEOCODEKIT.md) | GeoCode 的 Python 包 `geocodekit`:结构、函数的约定、运行的场合与安装 |
 | [`docs/geoengine/QGIS.md`](docs/geoengine/QGIS.md) | QGIS 能力域:读取地理数据、查阅与执行算法 |
 | [`docs/geoengine/GEE.md`](docs/geoengine/GEE.md) | Google Earth Engine 能力域:运行 GEE 脚本,在任务里保存与沿用结果 |
-| [`docs/OSM.md`](docs/OSM.md) | OpenStreetMap 能力域:按名字检索、查看区域里的标签与数量、下载干净的矢量数据 |
+| [`docs/geoengine/OSM.md`](docs/geoengine/OSM.md) | OpenStreetMap 能力域:按名字检索、查看区域里的标签与数量、下载干净的矢量数据 |
 
 开发文档:
 
