@@ -1,30 +1,35 @@
-# 设计大纲
+# 设计总纲
 
-本文档是 GeoCode 的大纲:定位、建在什么之上、遵循什么原则、还有哪些问题没有决定、按什么顺序推进。各部分的具体设计,做到那一部分时再决定、再写。
+本文档是 GeoCode 设计说明的入口:它是什么、由哪几部分组成、各部分怎样配合,以及贯穿各部分的几条设计原则。各部分的设计在各自的文档里,本文只讲到能找到它们为止。
 
 ## 1. 定位
 
-GeoCode 是面向地理数据处理任务的桌面端智能体应用。用户通过自然语言描述地理任务,派遣内置的 GeoAgent 调用 QGIS、GDAL、Google Earth Engine 与 OpenStreetMap 等工具或者 Python 代码,完成各种 GIS 与遥感数据的处理分析任务。
+GeoCode 是面向地理数据处理任务的桌面端智能体应用。用户用自然语言描述地理任务,内置的 GeoAgent 调用 QGIS、GDAL、Google Earth Engine 与 OpenStreetMap 等工具或者 Python 代码,完成各种 GIS 与遥感数据的处理分析。
 
 GeoCode 只做桌面应用,支持 Apple 芯片的 macOS 13 以上与 Windows(x64)。macOS 的下限来自内核:以 Bun 编译的内核可执行文件要求 macOS 13。
 
-## 2. 基础
+## 2. 整体架构
 
-GeoCode 建在两个开源项目之上,两者的源码都放在本仓库里:
+```
+Electron 主进程
+ ├─ 壳服务端(在主进程内运行)
+ │    └─ 子进程:内核(GeoAgent 所在)
+ ├─ 辅助进程:GeoEngine
+ │    └─ 任务进程:QGIS 的 Python、内置的 Python 环境
+ └─ 界面(渲染进程)── 只与壳服务端通信
+```
 
-- OpenCode,位于 `kernel/`:Agent 引擎,负责会话、模型接入与登录、权限裁决与工具调度,并提供在内核进程里运行的插件接口。
-- OpenChamber,位于 `desktop/`:桌面应用。它的 Electron 主进程里运行一个服务端,为界面提供文件、终端、设置等接口,以子进程启动 OpenCode 的内核,并把内核的接口代理给界面。
+- 桌面应用(`desktop/`,`DESKTOP.md`):主进程管理窗口与各个进程;壳服务端为界面提供文件、终端、设置等接口,启动内核并把它的接口代理给界面,也守着本机的访问控制。
+- 内核(`kernel/`):agent 引擎,负责会话、模型接入与登录、权限裁决与工具调度。GeoAgent 与地理工具都在这里;地理工具接到任务,交给 GeoEngine 去做。
+- 地理引擎 GeoEngine(`geoengine/`,`GEOENGINE.md`):管理用户电脑上的地理执行环境,执行地理任务。它的各能力域互不依赖:QGIS(`QGIS.md`)、Google Earth Engine(`GEE.md`)与 OpenStreetMap(`OSM.md`);后两者运行在 GeoCode 自带的 Python 环境里(`PYTHON.md`),用 GeoCode 自己的 Python 包 `geocodekit`(`GEOCODEKIT.md`)。
+- 文件与存储:各部分在用户电脑上与项目里产生与读取的文件,见 `PATHS.md`。
 
-两者怎样组成一个应用,见 `DESKTOP.md`。
+`kernel/` 与 `desktop/` 分别基于开源项目 OpenCode 与 OpenChamber。GeoCode 用不到的上游功能只是关掉,不删源码,以便持续合并上游的更新。
 
-## 3. 原则
+## 3. 设计原则
 
-装配优先。定制尽量通过配置、环境变量与插件完成;这些手段做不到时才修改上游源码,每处修改都要能被找到、写明理由。这样上游升级时,需要做的是「换版本、重新验证」,而不是「把定制重新移植一遍」。
-
-边界靠装配,不靠删除。上游里产品不需要的功能不删源码,只是不启用、不显示。删掉的上游代码,上游每改动一次,合并时就要重新解一次冲突。
-
-只关该关的。上游的功能与 GeoCode 的定位明显冲突,或会把对话、凭据交给第三方时,才把它关掉;上游有意这样设计、要几个条件同时满足才会出问题的,照上游,不为假想的情况打补丁。补丁越少,合并越省事。
-
-## 4. 路线
-
-每一步都能单独验证。先把两个上游封装成一个应用(见 `DESKTOP.md`),再屏蔽 GeoCode 用不到的上游功能,再把路径与存储同用户安装的 OpenCode、OpenChamber 分开(见 `PATHS.md`),再把用户看到的名字、链接、版本、图标与标志换成 GeoCode 自己的(见 `DESKTOP.md` 第 6 节)。再建地理引擎 GeoEngine(见 `GEOENGINE.md`):先搭框架,再按 QGIS、Google Earth Engine、OpenStreetMap、GDAL 的顺序接入能力域;接入 OpenStreetMap 之前先内置 Python 环境(见 `PYTHON.md`),GEE 随后迁移到它上面。之后的内核装配(agent 阵容、权限、屏蔽项)、壳的定制、地理界面、双平台打包、与第一版逐项对照验收,顺序待定。
+- 一个应用,只在本机为一个用户工作。安装、启动、退出都只有一个入口;不让其他设备连进来,只有应用自己的窗口能使用它(`DESKTOP.md`)。
+- agent 与地理执行分开。内核管 agent、工具与权限,GeoEngine 只负责做事。一次空间分析可能运行很久、占用大量内存,调用的外部程序可能卡住或崩溃,所以 GeoEngine 单独成一个进程,任务出了问题拖不垮应用(`GEOENGINE.md` 第 1 节)。
+- 用用户已有的软件,不替用户改环境。QGIS 由用户自己安装,GeoCode 找到它、验证它能否运行,不安装软件,也不改动用户已有的环境;GeoCode 自带的只有一个内置的 Python 环境,放在它自己的数据目录里(`PYTHON.md`)。
+- 地理结果要可信。地理数据没有撤销:工具的输出不覆盖已有的文件,不留下写了一半的文件;请求或读取失败时报告失败,不当作没有数据(`CONVENTIONS.md` 第 2 节)。
+- 数据只去用户选的地方。GeoCode 自己不收集、不上传任何运行数据与对话:没有遥测,没有崩溃上报,也不检查更新。对话只发给用户选择的模型服务商。agent 使用工具时,工具请求所需的内容发给对应的服务,例如搜索词发给用户选的搜索服务,GEE 脚本发给 Google Earth Engine,地名发给 OpenStreetMap 的检索服务。
