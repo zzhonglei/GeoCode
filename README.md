@@ -11,16 +11,13 @@ GeoCode 建在两个开源项目之上:
 
 地理能力由 GeoCode 自己的地理引擎 GeoEngine 提供,位于 `geoengine/`(见 [`docs/GEOENGINE.md`](docs/GEOENGINE.md))。
 
-两个上游的源码放在本仓库里,并持续合并上游的新版本(见 [`docs/UPSTREAM.md`](docs/UPSTREAM.md))。GeoCode 尽量通过配置与装配来定制它们,做不到时才修改上游源码,对上游的全部修改都能用 git 列出来。
-
 ## 文档
+
+设计说明:
 
 | 文档 | 内容 |
 |---|---|
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 设计大纲:定位、原则与路线 |
-| [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) | 开发规范:代码、对上游的修改、测试、文档与提交怎样写 |
-| [`docs/UPSTREAM.md`](docs/UPSTREAM.md) | 两个上游怎样导入与升级 |
-| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | 怎样安装、构建、运行、打包与检查 |
 | [`docs/DESKTOP.md`](docs/DESKTOP.md) | 桌面应用由什么组成、守哪些边界 |
 | [`docs/PATHS.md`](docs/PATHS.md) | GeoCode 在用户电脑上与项目里产生与读取的文件,以及怎样删除 |
 | [`docs/GEOENGINE.md`](docs/GEOENGINE.md) | 地理引擎 GeoEngine:各能力域共用的框架 |
@@ -30,6 +27,13 @@ GeoCode 建在两个开源项目之上:
 | [`docs/GEE.md`](docs/GEE.md) | Google Earth Engine 能力域:运行 GEE 脚本,在任务里保存与沿用结果 |
 | [`docs/OSM.md`](docs/OSM.md) | OpenStreetMap 能力域:按名字检索、查看区域里的标签与数量、下载干净的矢量数据 |
 
+开发文档:
+
+| 文档 | 内容 |
+|---|---|
+| [`docs/development/CONVENTIONS.md`](docs/development/CONVENTIONS.md) | 开发规范:原则、产品约束、代码、测试、文档与提交 |
+| [`docs/development/DEVELOPMENT.md`](docs/development/DEVELOPMENT.md) | 怎样安装、构建、运行、打包、检查与测试 |
+
 ## 许可
 
-MIT,见 [`LICENSE`](LICENSE)。`kernel/` 与 `desktop/` 下的代码分别保留 OpenCode 与 OpenChamber 的版权声明,见各自目录里的 `LICENSE`。
+GeoCode 以 MIT 许可证发布,见 [`LICENSE`](LICENSE)。`kernel/` 与 `desktop/` 下的代码基于 OpenCode 与 OpenChamber,保留它们各自的版权声明与许可证,见 [`kernel/LICENSE`](kernel/LICENSE) 与 [`desktop/LICENSE`](desktop/LICENSE)。

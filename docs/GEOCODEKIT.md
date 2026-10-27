@@ -110,7 +110,7 @@ GeoEngine 自己把包的文件写进 `base` 的 `site-packages`(每次启动核
 
 测试照 `DEVELOPMENT.md` 第 7 节分层,每个子包对应自己的一组:
 
-- 单元测试:只用替身,不需要装好的环境,包从 `geoengine/python/` 的源码导入。GEE 的函数用替身的 earthengine-api,OSM 的检索与查看对着本机的假服务,都在 `PATH` 里的 `python3` 上运行(`CONVENTIONS.md` 第 2.3 节)。
+- 单元测试:只用替身,不需要装好的环境,包从 `geoengine/python/` 的源码导入。GEE 的函数用替身的 earthengine-api,OSM 的检索与查看对着本机的假服务,都在 `PATH` 里的 `python3` 上运行(`CONVENTIONS.md` 第 3.3 节)。
 - 真实软件的测试:接替身证明不了的真实软件,如 Earth Engine;OSM 的下载要 shapely 与 GDAL,在装好的 `base` 上对着本机的假服务运行。
 
 ## 9. 约束
