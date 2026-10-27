@@ -13,7 +13,7 @@ GeoCode is a desktop AI application for geographic work, built on two upstreams 
 - Never commit, push, or release unless explicitly asked. A request to commit does not include pushing, and "go on" does not approve the commits that follow.
 - Before committing, audit the entire diff. When a batch is split into several commits, verify each slice on its own.
 - Ask before changing anything outside the repository, such as a Python environment or global tool configuration.
-- Before deleting anything, look at the target and confirm with the maintainer.
+- Before deleting anything, look at the target and confirm with the maintainer. Test sandboxes you created yourself are the exception: once nothing runs in them, delete them without asking.
 - Change files in whatever way is most direct: the edit tool for a change in place, the write tool for a new file or one rewritten whole after reading it, the formatter for formatting, and shell commands such as `sed` for a mechanical change across many lines or files. Afterwards, read what changed in `git diff`: a command can change more than was meant.
 - Before committing code, have two read-only subagents review it: one against the conventions, one against the design in `docs/`. Documentation changes need no review.
 - Every text handed to the model (tool names, descriptions, parameters, replies, errors) is drafted with care and settled by the maintainer.
