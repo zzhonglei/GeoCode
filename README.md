@@ -33,7 +33,8 @@ GeoCode 建在两个开源项目之上:
 | 文档 | 内容 |
 |---|---|
 | [`docs/development/CONVENTIONS.md`](docs/development/CONVENTIONS.md) | 开发规范:原则、产品约束、代码、测试、文档与提交 |
-| [`docs/development/DEVELOPMENT.md`](docs/development/DEVELOPMENT.md) | 怎样安装、构建、运行、打包、检查与测试 |
+| [`docs/development/DEVELOPMENT.md`](docs/development/DEVELOPMENT.md) | 怎样安装、构建、运行、打包与检查 |
+| [`docs/development/TESTING.md`](docs/development/TESTING.md) | 怎样运行测试、读结果,以及写入检测 |
 
 ## 许可
 

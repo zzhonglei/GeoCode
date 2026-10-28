@@ -1,6 +1,6 @@
 # 开发环境与运行
 
-怎样安装依赖、构建、在沙箱里启动应用、打包,以及怎样运行检查、测试与写入检测。要守的规则见 `CONVENTIONS.md`。
+怎样安装依赖、构建、在沙箱里启动应用、打包与运行检查。测试与写入检测见 `TESTING.md`,要守的规则见 `CONVENTIONS.md`。
 
 ## 1. 仓库结构
 
@@ -83,9 +83,7 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 
 在沙箱里运行打包出的应用,直接执行 `.app/Contents/MacOS/` 下的可执行文件,带上第 5 节的 `HOME`,Electron 的配置目录改用参数 `--user-data-dir=<沙箱里的目录>` 指定:打包出的应用不接受 `OPENCHAMBER_` 开头的环境变量(`ENVIRONMENT.md` 第 2.1 节)。这个参数来自 Chromium,Electron 的文档没有列出,升级 Electron 后要确认它仍然有效。再加上 `--remote-debugging-port=<端口>`,就能以 DevTools 协议从外部检查各个窗口。
 
-## 7. 检查与测试
-
-### 7.1 检查
+## 7. 检查
 
 | 部分 | 命令 |
 |---|---|
@@ -97,59 +95,4 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 
 `node scripts/dead-code.mjs <文件…>` 列出文件里没有被调用的函数与默认导入,可在改完代码后作参考。它只看单个文件,导出给别处用的也会报出,具名导入不查。
 
-### 7.2 测试的三层
-
-- 单元测试:只碰替身与假对象,只写临时目录,不联网。
-- 真实软件的测试:接本机真实的 QGIS、真实的 Earth Engine 与装好的内置 Python 环境,测替身证明不了的。它们慢,GEE 的还用用户的额度,所以不和单元测试一起跑。
-- 应用:开发版或打包版里的真实会话,在写入检测(第 8 节)的监视下。
-
-### 7.3 运行
-
-前两层都用仓库根目录的 `scripts/test.mjs` 按套件运行:
-
-```bash
-node scripts/test.mjs changed           # 工作区相对 HEAD 的改动要求的套件
-node scripts/test.mjs geoengine qgis    # 指名的套件
-node scripts/test.mjs all               # 全部套件
-node scripts/test.mjs --list changed    # 只列出要跑的套件与原因,不运行
-```
-
-| 套件 | 内容 |
-|---|---|
-| `kernel` | 内核各包里 GeoCode 的测试:GeoCode 自己的测试文件整份运行,其余测试文件里只运行以 `GeoCode: ` 开头的用例 |
-| `ui`、`web`、`electron` | 桌面端这三个包 `geocode/` 目录下的测试 |
-| `geoengine` | GeoEngine 的单元测试(`geoengine/test/unit/`) |
-| `qgis` | 在本机每一套 QGIS 上运行的测试 |
-| `gee` | 在真实 Earth Engine 上运行的测试,设了 `GEOENGINE_GEE_PROJECT=<项目 ID>` 才跑 |
-| `osm` | 在装好的内置 Python 环境上运行的 OSM 下载测试,服务是本机的假服务 |
-
-套件依次运行,一个失败不影响后面的,最后列出每个套件的结果与用时;GeoEngine 的套件还列出跳过了几项,全部跳过的算没跑。有套件失败时退出码为 1;没有失败、但有套件没跑(如没设项目时的 `gee`、本机没有 QGIS 时的 `qgis`)时为 3;用法错误时为 2。`changed` 按改动的路径挑选套件,规则写在脚本里;加了新的能力域,在那里登记它有没有真实软件的测试、用不用内置环境。
-
-改代码、反复试的时候,在包目录直接跑改到的那个测试文件,如在 `geoengine/` 里 `node --test <文件>`;`kernel/` 的包里用 `bun run test <文件>`,只跑其中 GeoCode 的用例时加 `-t "GeoCode:"`。
-
-### 7.4 各部分的测试
-
-各部分的测试都不能写真实的主目录:
-
-- `kernel/`:在包目录以 `bun run test <文件>` 运行。`packages/core` 的这条命令把主目录、`XDG_*` 与 `TMPDIR` 换成临时目录,其他包(如 `packages/server`)的不换,所以 `scripts/test.mjs` 给每次运行一个临时主目录;在包里单独跑时自己换(见下)。不要在包里直接执行 `bun test`,它用真实的主目录。
-- `desktop/`:包的 `bun run test` 会连包里其余的测试一起跑,所以只跑 `geocode/` 目录。其余的测试不保证只写临时目录,要跑它们时换一个临时主目录:`env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_STATE_HOME HOME=<临时目录> bun run test -- <路径>`。`XDG_*` 要去掉而不是设成空值,否则 Bun 会把转译缓存写到当前目录下。
-- `geoengine/`:单元测试在 `test/unit/`,按能力域分目录(`qgis`、`gee`、`osm`、`python`,引擎本身的直接放在 `test/unit/` 下);真实软件的测试在 `test/real/`,每个能力域一个文件;共用的夹具在 `test/support/`。包的 `bun run test` 只跑单元测试,`bun run test:qgis`、`test:gee` 与 `test:osm` 各跑一种真实软件的测试。测试在系统临时目录下建以 `geoengine-` 开头的目录,结束时删掉;有的测试启动外部进程并验证它们被结束,所以按顺序逐个运行。
-
-GeoEngine 的测试涉及四种外部软件:
-
-- QGIS:单元测试用假的应用包,其中的解释器是一段 shell 脚本,只在 macOS 上跑。真实软件的测试默认用 `/Applications` 下每一个认得出的 `QGIS*.app`,也可以用 `GEOENGINE_QGIS_APPS` 列出应用包的路径(以冒号分隔);本机没有 QGIS 时记为跳过。Windows 上认路径与发现安装的逻辑在任何平台上都测,用照 OSGeo4W 的组件包搭出的假目录树;经启动脚本运行 QGIS 只能在 Windows 上验证。
-- 内置的 Python 环境:单元测试自己打一个很小的包,配一个替身 pixi-unpack,包里的 `python3` 转去运行 `PATH` 里的 `python3`;没有 `python3` 时与在 Windows 上这些项跳过。真实的环境要在应用里验证。
-- GEE:单元测试不联网,环境检查、运行、登录与查额度的脚本用 `PATH` 里的 `python3` 以隔离模式真实执行,earthengine-api 与它用到的 Google 库换成测试自带的替身,`geocodekit` 用 `geoengine/python/` 里的源码。存资产的 `gee.save` 不在其中,改动它时另在真实 Earth Engine 上试一次。真实软件的测试用这台电脑上登录的账号与它的额度,只读 Earth Engine 自己的凭据,只查询、下载到临时目录,不存资产;解释器是数据目录里装好的内置环境,或 `GEOENGINE_GEE_DATA` 所指的数据目录里的,它的启动文件与 `geocodekit` 要是当前代码写的(改了之后启动一次开发版),否则这几项失败并说明。
-- OSM:都不联网,Overpass、Nominatim、Photon 与 Wikidata 换成测试在本机回环地址上开的一个假服务。检索与查看在单元测试里用 `PATH` 里的 `python3` 运行;下载要 shapely 与 GDAL,由 `osm` 套件在数据目录里装好的内置环境上运行(或 `GEOENGINE_OSM_DATA` 所指的),用源码里的 `geocodekit`;没有装好的环境时这几项跳过。对真实公共服务的检查不做成自动测试,它会给社区的服务器添负担,结果又随服务的忙闲而变;改了请求公共服务的方式之后,另对真实服务手动试一次。
-
-## 8. 写入检测
-
-安装依赖、启动应用这类可能写盘的操作,前后各运行一次:
-
-```bash
-./scripts/foreign-writes.sh before
-# 安装、构建、启动应用并操作
-./scripts/foreign-writes.sh after
-```
-
-它检查 OpenCode、OpenChamber(包括它在 `~/Library` 下的窗口数据与日志)的目录、Claude 的技能、`CLAUDE.md` 与凭据,以及通用的 `~/.agents` 目录有没有被写入,文件的新增、修改、删除与权限变化都算。无论在沙箱里还是在真实主目录下启动,结果都应当是干净的。退出码:0 干净;1 发现写入;3 需要人确认,表示变动全在 OpenChamber 与 OpenCode 自己的目录里,而本机的 OpenChamber 在这段时间里运行过,多半是它自己写的,关掉它重跑才能得出结论。
+测试怎样运行与读结果、写入检测,见 `TESTING.md`。

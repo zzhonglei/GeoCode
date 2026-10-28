@@ -1,6 +1,6 @@
 # 开发规范
 
-开发 GeoCode 时要守的规则:原则、产品约束、代码、测试、文档与提交。怎样安装、构建、运行与测试,见 `DEVELOPMENT.md`。
+开发 GeoCode 时要守的规则:原则、产品约束、代码、测试、文档与提交。怎样安装、构建与运行,见 `DEVELOPMENT.md`;怎样测试,见 `TESTING.md`。
 
 ## 1. 原则
 
@@ -75,7 +75,7 @@ shell 脚本用 POSIX sh(`#!/bin/sh`),要能在 macOS 自带的 sh 上运行。
 - 测试只写临时目录,不写真实的主目录。
 - 「写入配置、期望某个服务读到」的改动,追到读取方,在运行时确认。
 - 测试失败时,先分清是代码的问题还是环境的问题。不为了让测试通过而改测试,除非测试本身写错了。
-- 提交前运行类型检查、lint 与 `node scripts/test.mjs changed`;改动涉及文件的位置与读写时,在写入检测的监视下跑一次真实会话(`DEVELOPMENT.md` 第 7、8 节)。
+- 提交前运行类型检查、lint 与 `node scripts/test.mjs changed`;改动涉及文件的位置与读写时,在写入检测的监视下跑一次真实会话(`DEVELOPMENT.md` 第 5、7 节,`TESTING.md` 第 7 节)。
 
 测试放在:`kernel/` 的包的 `test/` 目录,文件名以 `geocode-` 开头或放进 `test/geocode/`,在那里已有的测试文件中加的用例,名称以 `GeoCode: ` 开头;`desktop/` 各包的 `geocode/` 目录;`geoengine/` 的 `test/unit/`(单元测试)、`test/real/`(真实软件的测试)与 `test/support/`(共用的夹具)。
 
@@ -87,7 +87,7 @@ shell 脚本用 POSIX sh(`#!/bin/sh`),要能在 macOS 自带的 sh 上运行。
 |---|---|---|
 | `README.md` | 所有人 | GeoCode 是什么、由什么组成、文档在哪 |
 | `docs/` 下的设计说明 | 想了解 GeoCode 的人 | 各部分的核心设计思想 |
-| `docs/development/` 下的开发文档 | 开发 GeoCode 的人 | 本文档,以及怎样构建、运行与测试 |
+| `docs/development/` 下的开发文档 | 开发 GeoCode 的人 | 本文档,怎样构建与运行,以及怎样测试 |
 | `AGENTS.md` | AI 助手 | 在本仓库工作的指令 |
 
 设计说明按层级组织:`docs/` 下是总体设计 `DESIGN.md`、应用外壳 `DESKTOP.md`、环境变量 `ENVIRONMENT.md` 与文件和存储 `PATHS.md`;`docs/geoengine/` 下是地理引擎的框架 `GEOENGINE.md` 与它的各部分(内置 Python 环境、Python 包与各能力域)。新的能力域加在 `docs/geoengine/` 里。
