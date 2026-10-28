@@ -2,13 +2,16 @@
 # The changes against the pristine branch for one vendor root: which files,
 # how many upstream lines were deleted or rewritten, and which patched upstream
 # files carry a GeoCode marker. Markers are optional, so this only reports.
+# With --hunks, every patch in turn: where, how many lines it adds and removes,
+# and whether a marker explains it.
 #
 # Measures the working tree, not the last commit.
 #
-# Usage:  ./scripts/patch-surface.sh <kernel|desktop>
+# Usage:  ./scripts/patch-surface.sh <kernel|desktop> [--hunks]
 set -e
 
 ROOT="$1"
+HUNKS="${2:-}"
 case "$ROOT" in
   kernel)  BRANCH=kernel-upstream ;;
   desktop) BRANCH=chamber-upstream ;;
@@ -57,14 +60,49 @@ fi
 echo
 
 echo "== markers =="
+# Files that cannot hold a comment, or that are generated: images, icons, JSON, the lockfile.
+ASSETS='\.(png|jpe?g|gif|webp|svg|icns|ico|car|json)$|(^|/)bun\.lock$|/AppIcon\.icon/'
 awk -F'\t' '$1=="M" {print $2}' "$tmp/surface" | LC_ALL=C sort > "$tmp/patched"
-grep -rl --exclude-dir=node_modules 'GeoCode:' "$ROOT" 2>/dev/null \
-  | sed "s|^$ROOT/||" | LC_ALL=C sort > "$tmp/marked"
+grep -Ev "$ASSETS" "$tmp/patched" > "$tmp/code" || true
+assets=$(grep -Ec "$ASSETS" "$tmp/patched" || true)
+git grep -l 'GeoCode' "$TREE" -- "$ROOT" | sed "s|^$TREE:$ROOT/||" | LC_ALL=C sort > "$tmp/marked"
 # `comm` collates with the locale, so it must agree with the `sort` above.
-unmarked=$(LC_ALL=C comm -23 "$tmp/patched" "$tmp/marked")
+unmarked=$(LC_ALL=C comm -23 "$tmp/code" "$tmp/marked")
 n=$(printf '%s' "$unmarked" | grep -c . || true)
-printf "  patched upstream files carrying a marker  %s / %s\n" "$((modified - n))" "$modified"
+code=$(wc -l < "$tmp/code" | tr -d ' ')
+printf "  patched upstream code files carrying a marker  %s / %s\n" "$((code - n))" "$code"
+printf "  patched images, icons, JSON and lockfiles, which hold none  %s\n" "$assets"
 if [ "$n" -gt 0 ]; then
-  echo "  without a marker (their commit messages should say what they do):"
+  echo "  code without a marker (their commit messages should say what they do):"
   echo "$unmarked" | sed 's/^/    /'
 fi
+if [ "$deleted" -gt 0 ]; then
+  echo
+  echo "== upstream files deleted =="
+  awk -F'\t' '$1=="D" {print "    " $2}' "$tmp/surface"
+fi
+
+[ "$HUNKS" = "--hunks" ] || exit 0
+echo
+# Each patch: the line it starts at in GeoCode's file, lines added and removed, and its marker: one among its own lines,
+# the nearest one in the 15 lines above (which may or may not speak for it), or none.
+echo "== patches: file:line  +added -removed  marker =="
+while IFS= read -r file; do
+  git -c core.quotePath=false diff -U0 "$BRANCH" "$TREE:$ROOT" -- "$file" \
+    | awk '/^@@/ { if (start) print start, add, del, own; split($3, at, ","); start = substr(at[1], 2); add = 0; del = 0; own = 0; next }
+           /^\+\+\+|^---/ { next }
+           /^\+/ { add++; if (/GeoCode/) own = 1; next }
+           /^-/ { del++ }
+           END { if (start) print start, add, del, own }' > "$tmp/hunks"
+  git show "$TREE:$ROOT/$file" > "$tmp/new" 2>/dev/null || : > "$tmp/new"
+  while read -r start add del own; do
+    if [ "$own" = 1 ]; then
+      marker=own
+    else
+      near=$(awk -v s="$start" 'NR >= s - 15 && NR < s && /GeoCode/ { n = NR } END { if (n) print n }' "$tmp/new")
+      marker=${near:+"above at $near"}
+      marker=${marker:-none}
+    fi
+    printf "  %s:%s  +%s -%s  %s\n" "$file" "$start" "$add" "$del" "$marker"
+  done < "$tmp/hunks"
+done < "$tmp/code"
