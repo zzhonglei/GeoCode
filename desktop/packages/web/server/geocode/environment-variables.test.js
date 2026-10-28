@@ -1,8 +1,11 @@
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { createEnvironmentRuntime } from '../lib/environment/runtime.js';
+import { createOpenCodeLifecycleRuntime } from '../lib/opencode/lifecycle.js';
 import { createTerminalRuntime } from '../lib/terminal/runtime.js';
 
 // Guards against Settings handing the kernel a variable that moves its configuration, loads a binary or turns on telemetry.
@@ -31,6 +34,57 @@ describe('GeoCode: environment variables', () => {
     expect(runtime.forOpenCode()).toEqual({ GDAL_DATA: '/gdal' });
     expect(await runtime.forDirectory('/project', { refresh: false })).toEqual({ GDAL_DATA: '/gdal' });
   });
+
+  // Guards against an OpenChamber the user installed, run by the agent, taking the shell's own directories for its own.
+  it('starts the kernel without the shell directories', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'geocode-kernel-env-'));
+    const saved = { data: process.env.OPENCHAMBER_DATA_DIR, registry: process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY };
+    process.env.OPENCHAMBER_DATA_DIR = path.join(root, 'desktop');
+    process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY = path.join(root, 'desktop', 'managed-kernel');
+    // A kernel that writes down the variables it was started with.
+    await fs.writeFile(path.join(root, 'serve'), `
+      require('node:fs').writeFileSync(${JSON.stringify(path.join(root, 'env.json'))}, JSON.stringify(process.env));
+      const server = require('node:net').createServer((socket) => socket.end());
+      server.listen(0, '127.0.0.1', () => {
+        process.stdout.write(JSON.stringify({ url: 'http://127.0.0.1:' + server.address().port }) + '\\n');
+      });
+      process.stdin.resume();
+      process.stdin.on('end', () => server.close(() => process.exit(0)));
+    `);
+    const state = { openCodeWorkingDirectory: root, useWslForOpencode: false };
+    const noop = () => {};
+    const runtime = createOpenCodeLifecycleRuntime({
+      state,
+      env: { ENV_CONFIGURED_OPENCODE_HOSTNAME: '127.0.0.1' },
+      syncToHmrState: noop,
+      syncFromHmrState: noop,
+      checkOpenCodeBinary: async () => '2.0.28',
+      ensureOpencodeCliEnv: () => process.execPath,
+      applyOpencodeBinaryFromSettings: async () => {},
+      ensureLocalOpenCodeServerPassword: async () => 'test-only',
+      resolveManagedOpenCodeLaunchSpec: (value) => ({ binary: value, args: [] }),
+      normalizeApiPrefix: (value) => value,
+      setOpenCodePort: noop,
+      setDetectedOpenCodeApiPrefix: noop,
+      waitForReady: async () => true,
+      topUpV1SessionMigration: () => ({ status: 'skipped' }),
+    });
+    try {
+      state.openCodeProcess = await runtime.startOpenCode();
+      const started = JSON.parse(await fs.readFile(path.join(root, 'env.json'), 'utf8'));
+      expect(started).not.toHaveProperty('OPENCHAMBER_DATA_DIR');
+      expect(started).not.toHaveProperty('OPENCHAMBER_MANAGED_PROCESS_REGISTRY');
+      // As the shell gives it: what the kernel's own lines read.
+      expect(started).toHaveProperty('OPENCODE_SERVER_PASSWORD', 'test-only');
+    } finally {
+      await state.openCodeProcess?.close();
+      for (const [name, value] of [['OPENCHAMBER_DATA_DIR', saved.data], ['OPENCHAMBER_MANAGED_PROCESS_REGISTRY', saved.registry]]) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  }, 30000);
 
   // Guards against an OpenChamber the user installed, run in a terminal, taking the shell's own directories for its own.
   it('starts a terminal without the shell directories, whatever the project variables put back', async () => {

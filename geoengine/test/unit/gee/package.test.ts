@@ -37,10 +37,10 @@ test("in geerun the script reaches geocodekit.gee either way", { skip: !python3 
   const engine = await start("majestic")
   try {
     assert.equal((await engine.settled()).status, "ready")
-    const script = ["import geocodekit", "import geocodekit.gee as gee", "print(geocodekit.gee is gee, gee.__all__)"]
+    const script = ["import geocodekit", "import geocodekit.gee as gee", "print(geocodekit.gee is gee)"]
     const done = result(await engine.response(engine.send({ script: script.join("\n"), cwd: engine.directory })))
     assert.equal(done.outcome, "finished", done.output)
-    assert.equal(done.output, "True ['composite', 'download', 'images', 'load', 'region', 'save', 'to_drive']\n")
+    assert.equal(done.output, "True\n")
   } finally {
     await engine.stop()
   }

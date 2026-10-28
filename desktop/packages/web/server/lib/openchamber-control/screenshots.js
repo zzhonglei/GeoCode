@@ -13,9 +13,10 @@
  */
 import path from 'node:path';
 import fsPromises from 'node:fs/promises';
+import { KERNEL_PROJECT_DIR } from '../../geocode/kernel-paths.js'; // GeoCode: see below
 
 /** Project-relative home for agent screenshots. */
-export const SCREENSHOT_DIRECTORY = path.join('.geocode', 'screenshots'); // GeoCode: its project directory
+export const SCREENSHOT_DIRECTORY = path.join(KERNEL_PROJECT_DIR, 'screenshots'); // GeoCode: its project directory
 
 const MAX_LABEL_LENGTH = 48;
 

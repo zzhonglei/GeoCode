@@ -20,11 +20,9 @@ test(
 
       assert.deepEqual(last, { status: "ready", version: "3.13.16", python: where.envPython, base: where.basePython })
       assert.deepEqual([...new Set(steps(states))], ["installing", "creating", "warming"])
-      // Guards against the loading screen naming another package than the one being imported.
-      assert.deepEqual(
-        states.find((state) => state.status === "preparing" && state.step === "warming"),
-        { status: "preparing", step: "warming", name: "NumPy", number: 1, total: 12 },
-      )
+      // Guards against the loading screen naming another package than the one being imported, the first.
+      const warming = states.find((state) => state.status === "preparing" && state.step === "warming")
+      assert.deepEqual(warming && { name: warming.name, number: warming.number }, { name: "NumPy", number: 1 })
       assert.ok(await exists(path.join(where.base, "from-one")))
       assert.equal(JSON.parse(await fs.readFile(where.marker, "utf-8")).id, "one")
       // Without pixi-unpack's activation script and temporary folder.

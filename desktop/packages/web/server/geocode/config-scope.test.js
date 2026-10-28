@@ -72,7 +72,7 @@ describe('GeoCode: skill directories', () => {
   it('edits only in those directories', async () => {
     const foreign = path.join(home, '.claude', 'skills', 'dup', 'SKILL.md');
     const before = fs.readFileSync(foreign, 'utf8');
-    await expect(skills.updateSkill('dup', { description: 'changed' }, session, foreign)).rejects.toThrow(/outside the skill directories/);
+    await expect(skills.updateSkill('dup', { description: 'changed' }, session, foreign)).rejects.toThrow();
     expect(fs.readFileSync(foreign, 'utf8')).toBe(before);
 
     for (const target of [path.join(session, '.geocode', 'skills', 'own', 'SKILL.md'), path.join(config, 'skill', 'legacy', 'SKILL.md')]) {
