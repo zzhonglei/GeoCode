@@ -16,11 +16,12 @@ GeoCode 自己的测试怎样组织、怎样运行、结果怎样读,以及写�
 node scripts/test.mjs --file <测试文件>   # 改代码、反复试时:只跑这一个文件,像它的套件那样跑
 node scripts/test.mjs changed            # 完工前:工作区的改动要求的套件
 node scripts/test.mjs geoengine qgis     # 指名的套件
+node scripts/test.mjs geoengine/osm      # GeoEngine 单元测试里一个能力域的
 node scripts/test.mjs all                # 全部套件,升级上游之后
 node scripts/test.mjs --list changed     # 只列出要跑什么与原因,不运行
 ```
 
-`changed` 看的是工作区相对 `HEAD` 的改动,包括还没加入 git 的文件;已经提交的不算。它按改动的路径挑选套件,规则写在脚本的 `calledFor` 里:`geoengine/` 以外的改动跑内核与桌面的四个套件,GeoEngine 的改动另跑它的单元测试与涉及的能力域的真实软件测试;`src/`、`test/` 以外的 Markdown 不挑套件,改了运行器自己就跑全部。
+`changed` 看的是工作区相对 `HEAD` 的改动,包括还没加入 git 的文件;已经提交的不算。它按改动的路径挑选套件,规则写在脚本的 `calledFor` 里:`geoengine/` 以外的改动跑内核与桌面的四个套件,GeoEngine 的改动只跑涉及的能力域的单元测试与真实软件测试,改了引擎本身或各能力域共用的部分(内置环境、启动解释器的方式)才跑得更多;`src/`、`test/` 以外的 Markdown 不挑套件,改了运行器自己就跑全部。
 
 不在包目录里直接执行测试命令(`bun test`、`vitest`、`node --test` 或包的 `test` 脚本):它们不换主目录,有的会写真实的主目录,上游的测试也会一起跑,结果也没人核对。`--file` 给的就是单个文件的跑法。
 
@@ -30,13 +31,15 @@ node scripts/test.mjs --list changed     # 只列出要跑什么与原因,不运
 |---|---|---|---|
 | `kernel` | 内核各包里 GeoCode 的测试:GeoCode 自己的测试文件整份运行,上游测试文件里只运行名称含 `GeoCode:` 的用例 | 无 | 约半分钟 |
 | `ui`、`web`、`electron` | 桌面端这三个包 `geocode/` 目录下的测试;界面的每个文件单独一个进程 | 无 | 几秒 |
-| `geoengine` | GeoEngine 的单元测试(`geoengine/test/unit/`),逐个文件运行 | `PATH` 里的 `python3`,没有时相关的用例跳过 | 约两分半 |
+| `geoengine` | GeoEngine 的单元测试(`geoengine/test/unit/`),逐个文件运行;`geoengine/<能力域>` 只跑 `engine`(引擎本身,直接放在 `test/unit/` 下的)、`python`、`qgis`、`gee` 或 `osm` 目录下的 | `PATH` 里的 `python3`,没有时相关的用例跳过 | 约两分半 |
 | `qgis` | 在本机每一套 QGIS 上运行 | macOS 上的 QGIS | 约一分钟 |
 | `gee` | 在真实 Earth Engine 上运行 | `GEOENGINE_GEE_PROJECT=<项目 ID>`、登录过 Earth Engine、装好的内置环境 | 几分钟 |
 | `osm` | 在装好的内置环境上运行 OSM 下载,服务是本机的假服务 | 装好的内置环境 | 约半分钟 |
 | `scripts` | `scripts/test.mjs` 自己的测试 | 无 | 一秒 |
 
-GeoEngine 的单元测试慢在 OSM 与 GEE:它们验证暂停、重试、每秒一次请求这类与时间有关的行为,测试里真的等这些时间。产品代码里不为测试加缩短等待的开关;改到别处时 `changed` 不挑它们。
+GeoEngine 的单元测试慢在 OSM 与 GEE:它们验证暂停、重试、每秒一次请求这类与时间有关的行为,测试里真的等这些时间。产品代码里不为测试加缩短等待的开关;`changed` 只在改到它们的能力域或引擎本身时才挑它们。
+
+内核与桌面的测试不按能力域分:四个套件加起来约半分钟,大半是内核两个真等的用例,细分省不下多少;内核的地理工具测试一个文件里同时测 QGIS、GEE 与 OSM,要分就得按用例名挑,再维护一张源码属于哪个能力域的对照表,它本身就会悄悄过期。
 
 新的测试文件放在约定的位置(`CONVENTIONS.md` 第 4 节)就会被运行。测试目录里文件名像测试、却没有套件运行的文件,运行器报用法错误,而不是悄悄漏掉;加了新的能力域,在脚本里登记它的真实软件测试与 `changed` 的规则。
 

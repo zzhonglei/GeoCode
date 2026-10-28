@@ -5,12 +5,29 @@ import { test } from 'node:test'
 import { SUITES, calledFor, cases, fileStep, judge, parse, sandboxed, top, unrun } from './test.mjs'
 
 test('a change calls for the suites of what it touches, and for the real suites of the domain it is in', () => {
+  const desktop = ['kernel', 'ui', 'web', 'electron']
   assert.deepEqual(calledFor('docs/DESIGN.md'), [])
-  assert.deepEqual(calledFor('geoengine/test/unit/osm/search.test.ts'), ['geoengine'])
-  assert.deepEqual(calledFor('geoengine/src/osm/index.ts'), ['kernel', 'ui', 'web', 'electron', 'geoengine', 'osm'])
+  assert.deepEqual(calledFor('desktop/packages/ui/src/geocode/osm.ts'), desktop)
+  // GeoEngine's unit tests of the domain alone, and the domain's real ones.
+  assert.deepEqual(calledFor('geoengine/src/osm/index.ts'), [...desktop, 'geoengine/osm', 'osm'])
+  assert.deepEqual(calledFor('geoengine/python/geocodekit/gee/_outputs.py'), [...desktop, 'geoengine/gee', 'gee'])
+  assert.deepEqual(calledFor('geoengine/test/unit/osm/search.test.ts'), ['geoengine/osm'])
+  assert.deepEqual(calledFor('geoengine/test/unit/runtime.test.ts'), ['geoengine/engine'])
+  assert.deepEqual(calledFor('geoengine/test/support/qgis.ts'), ['geoengine/qgis', 'qgis'])
   assert.deepEqual(calledFor('geoengine/test/real/qgis.test.ts'), ['qgis'])
+  // What the domains' Python runs on, and what every domain stands on.
+  assert.deepEqual(calledFor('geoengine/src/bundled.ts'), [
+    ...desktop,
+    'geoengine/python',
+    'geoengine/gee',
+    'geoengine/osm',
+    'gee',
+    'osm',
+  ])
+  assert.deepEqual(calledFor('geoengine/src/runtime.ts'), [...desktop, 'geoengine', 'qgis', 'gee', 'osm'])
+  assert.deepEqual(calledFor('geoengine/test/support/engine.ts'), ['geoengine', 'qgis', 'gee', 'osm'])
   // geocodekit is installed at the app's version.
-  assert.ok(calledFor('desktop/packages/electron/package.json').includes('geoengine'))
+  assert.ok(calledFor('desktop/packages/electron/package.json').includes('geoengine/python'))
   assert.deepEqual(calledFor('scripts/test.mjs'), Object.keys(SUITES))
 })
 
@@ -30,8 +47,14 @@ test('the arguments name suites, changes and files, and a mistake in them is a u
   assert.match(parse([]).error, /usage/)
   assert.match(parse(['--file']).error, /needs a test file/)
   assert.match(parse(['kernal']).error, /unknown suite/)
-  const chosen = parse(['changed'], () => ['geoengine/src/gee/run.ts']).chosen
-  assert.deepEqual([...chosen.keys()], ['kernel', 'ui', 'web', 'electron', 'geoengine', 'gee'])
+  const gee = parse(['changed'], () => ['geoengine/src/gee/run.ts'])
+  assert.deepEqual([...gee.chosen.keys()], ['kernel', 'ui', 'web', 'electron', 'geoengine', 'gee'])
+  assert.deepEqual(gee.domains.get('geoengine'), ['gee'])
+  // A change to what every domain stands on asks for all of GeoEngine's unit tests, whatever else asks for some.
+  const both = parse(['changed'], () => ['geoengine/src/gee/run.ts', 'geoengine/src/engine.ts'])
+  assert.equal(both.domains.get('geoengine'), null)
+  assert.deepEqual(parse(['geoengine/osm', 'geoengine/qgis']).domains.get('geoengine'), ['osm', 'qgis'])
+  assert.match(parse(['geoengine/web']).error, /unknown suite/)
   // No change is nothing to run, not a usage error.
   assert.equal(parse(['changed'], () => []).error, undefined)
 })

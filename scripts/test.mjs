@@ -86,10 +86,14 @@ const electronSteps = () => {
   return files.length ? [step(ELECTRON, 'node', 'node', ['--test', '--test-timeout=10000'], files)] : []
 }
 
+// GeoEngine's unit tests by the domain whose folder holds them; the engine's own sit in no folder.
+const UNIT = ['engine', 'python', 'qgis', 'gee', 'osm']
+export const unitDomain = (file) => /^geoengine\/test\/unit\/([^/]+)\//.exec(file)?.[1] ?? 'engine'
+
 // One file after another: some tests start processes and check that they were ended.
 // Given no file, node would look for tests itself and run the real ones.
-const geoengineSteps = () => {
-  const files = walk('geoengine/test/unit', /\.test\.ts$/)
+const geoengineSteps = (domains = UNIT) => {
+  const files = walk('geoengine/test/unit', /\.test\.ts$/).filter((file) => domains.includes(unitDomain(file)))
   return files.length ? [step('geoengine', 'node', 'node', ['--test', '--test-concurrency=1'], files)] : []
 }
 
@@ -136,25 +140,31 @@ const ENVIRONMENT = ['gee', 'osm']
 // GeoEngine's tests runs them all; they are quick. GeoEngine's own tests touch GeoEngine alone.
 const EVERY = ['kernel', 'ui', 'web', 'electron']
 
+/**
+ * The suites a changed file calls for. `geoengine/<domain>` is the part of GeoEngine's unit tests in that domain's
+ * folder, `geoengine` all of them.
+ */
 export const calledFor = (file) => {
   // Markdown under src/ or test/ can be source or a fixture, as the kernel's skills are.
   if (file.endsWith('.md') && !/(^|\/)(src|test)\//.test(file)) return []
   if (/^scripts\/test(\.test)?\.mjs$/.test(file)) return Object.keys(SUITES)
   // The app's version is the one geocodekit is installed at.
-  if (file === `${ELECTRON}/package.json`) return [...EVERY, 'geoengine']
+  if (file === `${ELECTRON}/package.json`) return [...EVERY, 'geoengine/python']
   if (!file.startsWith('geoengine/')) return EVERY
   const inside = file.slice('geoengine/'.length)
   // A test file touches only its own layer; a support file, the layers of the domain it serves.
-  if (inside.startsWith('test/unit/')) return ['geoengine']
+  if (inside.startsWith('test/unit/')) return [`geoengine/${unitDomain(file)}`]
   const real = /^test\/real\/([^/.]+)\./.exec(inside)
   if (real) return [real[1]]
   const support = /^test\/support\/([^/.]+)\.ts$/.exec(inside)?.[1]
-  if (support) return ['geoengine', ...(support === 'common' ? REAL : REAL.filter((domain) => domain === support))]
-  const domain = /^src\/([^/]+)\//.exec(inside)?.[1]
-  if (REAL.includes(domain)) return [...EVERY, 'geoengine', domain]
-  // The geocode package, the environment's manifest and lock, and how its interpreters start.
+  if (REAL.includes(support)) return [`geoengine/${support}`, support]
+  if (support === 'python') return ['geoengine/python']
+  if (support) return ['geoengine', ...REAL]
+  const domain = /^(?:src|python\/geocodekit)\/([^/]+)\//.exec(inside)?.[1]
+  if (REAL.includes(domain)) return [...EVERY, `geoengine/${domain}`, domain]
+  // The rest of the geocode package, the environment's manifest and lock, and how its interpreters start.
   if (/^(python|environment|src\/python)\//.test(inside) || inside === 'src/bundled.ts') {
-    return [...EVERY, 'geoengine', ...ENVIRONMENT]
+    return [...EVERY, 'geoengine/python', ...ENVIRONMENT.map((each) => `geoengine/${each}`), ...ENVIRONMENT]
   }
   // What every domain stands on: the engine, its runtime and configuration.
   return [...EVERY, 'geoengine', ...REAL]
@@ -422,9 +432,19 @@ const summary = ({ status, counts, reasons }, seconds) => {
 /** The suites and files the arguments ask for, with why; or a usage error. */
 export const parse = (args, changed = changes) => {
   const listOnly = args.includes('--list')
+  // Suite name to the reasons it is run, and to the domains of it asked for: null, or none asked, is all of it.
   const chosen = new Map()
+  const domains = new Map()
   const files = []
-  const choose = (suite, reason) => chosen.set(suite, [...(chosen.get(suite) ?? []), reason])
+  const choose = (selector, reason) => {
+    const [suite, domain] = selector.split('/')
+    if (!(suite in SUITES) || (domain !== undefined && (suite !== 'geoengine' || !UNIT.includes(domain)))) return false
+    chosen.set(suite, [...(chosen.get(suite) ?? []), reason])
+    const asked = domains.get(suite)
+    if (domain === undefined) domains.set(suite, null)
+    else if (asked !== null) domains.set(suite, [...new Set([...(asked ?? []), domain])])
+    return true
+  }
   for (let index = 0; index < args.length; index++) {
     const name = args[index]
     if (name === '--list') continue
@@ -435,22 +455,20 @@ export const parse = (args, changed = changes) => {
     } else if (name === 'all') for (const suite of Object.keys(SUITES)) choose(suite, 'all')
     else if (name === 'changed') {
       for (const file of changed()) {
-        for (const suite of calledFor(file)) {
+        for (const selector of calledFor(file)) {
           // A real test of a domain not yet registered here would otherwise be skipped without a word.
-          if (!(suite in SUITES))
+          if (!choose(selector, file))
             return {
-              error: `${file} calls for a suite "${suite}" that scripts/test.mjs does not have: register it there.`,
+              error: `${file} calls for a suite "${selector}" that scripts/test.mjs does not have: register it there.`,
             }
-          choose(suite, file)
         }
       }
-    } else if (name in SUITES) choose(name, 'named')
-    else return { error: `unknown suite: ${name}` }
+    } else if (!choose(name, 'named')) return { error: `unknown suite: ${name}` }
   }
   if (!chosen.size && !files.length && !args.some((arg) => arg === 'changed')) {
     return { error: 'usage: node scripts/test.mjs [--list] <suite|changed|all>... [--file <test file>]...' }
   }
-  return { listOnly, chosen, files }
+  return { listOnly, chosen, domains, files }
 }
 
 /** The step that runs one file as its suite would, and the suite it belongs to. */
@@ -479,12 +497,15 @@ const main = () => {
   // Each entry: a label, the steps it runs, why, and what keeps it from running here.
   const plan = Object.keys(SUITES)
     .filter((suite) => parsed.chosen.has(suite))
-    .map((suite) => ({
-      label: suite,
-      steps: SUITES[suite](),
-      why: parsed.chosen.get(suite),
-      withheld: withheld(suite),
-    }))
+    .map((suite) => {
+      const domains = parsed.domains.get(suite)
+      return {
+        label: domains ? `${suite} (${UNIT.filter((each) => domains.includes(each)).join(', ')})` : suite,
+        steps: domains ? SUITES[suite](domains) : SUITES[suite](),
+        why: parsed.chosen.get(suite),
+        withheld: withheld(suite),
+      }
+    })
   for (const file of parsed.files) {
     const found = fileStep(file)
     if (!found) {
