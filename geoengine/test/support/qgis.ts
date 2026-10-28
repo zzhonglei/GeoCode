@@ -1,16 +1,8 @@
 import fs from "node:fs/promises"
-import os from "node:os"
 import path from "node:path"
-import { Effect, Fiber, Layer } from "effect"
-import { Config } from "../../src/config.ts"
-import { Engine } from "../../src/engine.ts"
-import type { Protocol } from "../../src/protocol.ts"
 import { Python } from "../../src/qgis/python.ts"
 import { Qgis } from "../../src/qgis/index.ts"
-import { Runtime } from "../../src/runtime.ts"
-import { Status } from "../../src/status.ts"
-import type { Transport } from "../../src/transport.ts"
-import { until } from "./common.ts"
+import { start as engineStart } from "./engine.ts"
 
 export const darwin = process.platform === "darwin"
 
@@ -89,62 +81,19 @@ export const fake = (probe: string, run: string, catalog = mark(CATALOG), inspec
   `case "$program" in *processing.run*) ${run} ;; *parameterTypes*) ${catalog} ;; ` +
   `*GT_IsSurface*) ${inspect} ;; *) ${probe} ;; esac`
 
-type Response = Extract<Protocol.Outbound, { type: "response" }>
-
+/** An engine with QGIS, as machine.json says when `configured` names a path. */
 export const start = async (configured: string | undefined) => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-qgis-"))
-  const machine = path.join(directory, "machine.json")
-  if (configured !== undefined) await fs.writeFile(machine, JSON.stringify({ qgis: { path: configured } }))
-  const sent: Protocol.Outbound[] = []
-  let deliver: (message: unknown) => void = () => {}
-  const transport: Transport = {
-    send: (message) => void sent.push(structuredClone(message)),
-    listen: (handler) => {
-      deliver = handler
-      return () => {}
-    },
-  }
-  const layer = Layer.mergeAll(Runtime.layer(Engine.ledger(transport)), Status.layer, Config.layer(machine))
-  const fiber = Effect.runFork(Effect.scoped(Engine.run(transport, [Qgis.capability])).pipe(Effect.provide(layer)))
-  const states = () =>
-    sent.flatMap((message) =>
-      message.type === "status" && message.domain === "qgis" ? [message.value as Qgis.State] : [],
-    )
-  const settled = async (ms = 10000) => {
-    await until(() => (states().at(-1)?.status ?? "checking") !== "checking", ms, "QGIS to settle")
-    return states().at(-1)!
-  }
-  const response = async (id: number, ms = 10000) => {
-    const find = () => sent.find((message): message is Response => message.type === "response" && message.id === id)
-    await until(() => find() !== undefined, ms, `the response to ${id}`)
-    return find()!
-  }
-  let nextId = 0
-  const send = (params: unknown, method = "qgis.run") => {
-    nextId += 1
-    deliver({ type: "request", id: nextId, method, params })
-    return nextId
-  }
-  const request = (params: unknown, ms = 10000, method = "qgis.run") => response(send(params, method), ms)
-  const stop = async () => {
-    await Effect.runPromise(Fiber.interrupt(fiber))
-    await fs.rm(directory, { recursive: true, force: true })
-  }
-  try {
-    await until(() => sent.some((message) => message.type === "ready"), 10000, "the engine")
-  } catch (error) {
-    await stop()
-    throw error
-  }
+  const engine = await engineStart(
+    "qgis",
+    () => [Qgis.capability],
+    configured === undefined ? undefined : { qgis: { path: configured } },
+  )
+  const send = (params: unknown, method = "qgis.run") => engine.send(method, params)
   return {
-    directory,
-    sent,
-    states,
-    settled,
+    ...engine,
+    states: () => engine.states<Qgis.State>("qgis"),
+    settled: (ms = 10000) => engine.settled<Qgis.State>("qgis", ms),
     send,
-    response,
-    request,
-    deliver: (message: unknown) => deliver(message),
-    stop,
+    request: (params: unknown, ms = 10000, method = "qgis.run") => engine.response(send(params, method), ms),
   }
 }

@@ -13,7 +13,7 @@ import {
   waitedOn,
   type Asked,
 } from "../../support/osm.ts"
-import { python3 } from "../../support/python.ts"
+import { python3 } from "../../support/common.ts"
 
 const BOX = "bbox:24.93,121.36,24.96,121.39"
 

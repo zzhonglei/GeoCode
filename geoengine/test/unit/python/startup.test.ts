@@ -4,7 +4,8 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { test } from "node:test"
 import { Environment } from "../../../src/python/index.ts"
-import { python3, bundle, calls, settle, temporary } from "../../support/python.ts"
+import { python3 } from "../../support/common.ts"
+import { bundle, calls, settle, temporary } from "../../support/python.ts"
 
 test(
   "the Python is run isolated, with the network's variables and HOME of the engine's environment alone",

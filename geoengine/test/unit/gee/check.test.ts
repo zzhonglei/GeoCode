@@ -3,7 +3,8 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { test } from "node:test"
 import { Gee } from "../../../src/gee/index.ts"
-import { python3, type Flag, raise, start, result } from "../../support/gee.ts"
+import { python3 } from "../../support/common.ts"
+import { type Flag, raise, start, result } from "../../support/gee.ts"
 
 test(
   "each finding of the check settles on its own state, and nothing runs until it is ready",

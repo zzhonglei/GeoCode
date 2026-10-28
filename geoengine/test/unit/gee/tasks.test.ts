@@ -2,8 +2,8 @@ import assert from "node:assert/strict"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { test } from "node:test"
-import { until } from "../../support/common.ts"
-import { python3, raise, lower, start, result } from "../../support/gee.ts"
+import { until, python3 } from "../../support/common.ts"
+import { raise, lower, start, result } from "../../support/gee.ts"
 
 /** Writes the user's assets the stubbed earthengine-api lists, in the project "majestic", with no exports yet. */
 const holding = (directory: string, assets: readonly object[]) =>

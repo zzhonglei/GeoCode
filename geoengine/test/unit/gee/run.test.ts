@@ -3,8 +3,8 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { test } from "node:test"
 import { Python } from "../../../src/gee/python.ts"
-import { until } from "../../support/common.ts"
-import { python3, start, result } from "../../support/gee.ts"
+import { until, python3 } from "../../support/common.ts"
+import { start, result } from "../../support/gee.ts"
 
 test(
   "a run hands GeoAgent what the script printed, and nothing printed before it began",

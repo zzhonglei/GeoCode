@@ -4,7 +4,8 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { test } from "node:test"
 import { Environment } from "../../../src/python/index.ts"
-import { python3, bundle, calls, exists, settle, steps, temporary } from "../../support/python.ts"
+import { python3 } from "../../support/common.ts"
+import { bundle, calls, exists, settle, steps, temporary } from "../../support/python.ts"
 
 /** In order: a folder's listing is not in one on every file system. */
 const listed = async (folder: string) => (await fs.readdir(folder)).sort()

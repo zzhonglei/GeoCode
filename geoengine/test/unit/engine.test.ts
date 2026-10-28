@@ -1,16 +1,12 @@
 import assert from "node:assert/strict"
-import fs from "node:fs/promises"
-import os from "node:os"
-import path from "node:path"
 import { test } from "node:test"
-import { Effect, Fiber, Layer } from "effect"
-import { Config } from "../../src/config.ts"
+import { Effect } from "effect"
 import { Engine } from "../../src/engine.ts"
 import type { Protocol } from "../../src/protocol.ts"
 import { Runtime } from "../../src/runtime.ts"
 import { Status } from "../../src/status.ts"
-import type { Transport } from "../../src/transport.ts"
 import { alive } from "../support/common.ts"
+import { start as engineStart } from "../support/engine.ts"
 
 const probe: Engine.Capability = Effect.gen(function* () {
   const status = yield* Status.Service
@@ -51,50 +47,7 @@ const lingering: Engine.Capability = Effect.succeed({
   methods: { wait: () => Effect.sleep("300 millis").pipe(Effect.as("finished")) },
 })
 
-type Response = Extract<Protocol.Outbound, { type: "response" }>
-
-const start = async (capabilities: readonly Engine.Capability[] = [probe]) => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-engine-"))
-  const sent: Protocol.Outbound[] = []
-  let deliver: (message: unknown) => void = () => {}
-  const transport: Transport = {
-    send: (message) => void sent.push(structuredClone(message)),
-    listen: (handler) => {
-      deliver = handler
-      return () => {}
-    },
-  }
-  const layer = Layer.mergeAll(
-    Runtime.layer(Engine.ledger(transport)),
-    Status.layer,
-    Config.layer(path.join(directory, "machine.json")),
-  )
-  const fiber = Effect.runFork(Effect.scoped(Engine.run(transport, capabilities)).pipe(Effect.provide(layer)))
-
-  const waitFor = async (find: (message: Protocol.Outbound) => boolean) => {
-    for (let elapsed = 0; elapsed < 5000; elapsed += 20) {
-      const found = sent.find(find)
-      if (found) return found
-      await new Promise((resolve) => setTimeout(resolve, 20))
-    }
-    throw new Error("timed out waiting for a message")
-  }
-  const response = async (id: number) => {
-    await waitFor((message) => message.type === "response" && message.id === id)
-    return sent.find((message): message is Response => message.type === "response" && message.id === id)!
-  }
-  const stop = async () => {
-    await Effect.runPromise(Fiber.interrupt(fiber))
-    await fs.rm(directory, { recursive: true, force: true })
-  }
-  try {
-    await waitFor((message) => message.type === "ready")
-  } catch (error) {
-    await stop()
-    throw error
-  }
-  return { sent, deliver: (message: unknown) => deliver(message), waitFor, response, stop }
-}
+const start = (capabilities: readonly Engine.Capability[] = [probe]) => engineStart("engine", () => capabilities)
 
 const pidOf = (sent: Protocol.Outbound[], id: number) => {
   const first = sent.find((message) => message.type === "progress" && message.id === id)

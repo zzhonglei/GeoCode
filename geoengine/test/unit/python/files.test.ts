@@ -4,7 +4,8 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { test } from "node:test"
 import { Environment } from "../../../src/python/index.ts"
-import { python3, VERSION, bundle, exists, settle, sitePackages, steps, temporary } from "../../support/python.ts"
+import { python3 } from "../../support/common.ts"
+import { VERSION, bundle, exists, settle, sitePackages, steps, temporary } from "../../support/python.ts"
 
 const posix = process.platform !== "win32"
 

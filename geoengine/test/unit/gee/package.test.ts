@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
 import { test } from "node:test"
-import { SOURCE } from "../../support/common.ts"
-import { python3, start, result } from "../../support/gee.ts"
+import { SOURCE, python3 } from "../../support/common.ts"
+import { start, result } from "../../support/gee.ts"
 
 /** What a script prints run by geocodekit's source alone, as in GeoAgent's shell: no tool has set anything up. */
 const outside = (script: string) =>

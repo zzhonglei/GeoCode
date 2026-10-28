@@ -1,29 +1,9 @@
 import assert from "node:assert/strict"
-import { execFileSync } from "node:child_process"
 import fs from "node:fs/promises"
-import os from "node:os"
 import path from "node:path"
-import { Effect, Fiber, Layer } from "effect"
-import { Config } from "../../src/config.ts"
-import { Engine } from "../../src/engine.ts"
 import { Gee } from "../../src/gee/index.ts"
-import type { Protocol } from "../../src/protocol.ts"
-import { Runtime } from "../../src/runtime.ts"
-import { Status } from "../../src/status.ts"
-import type { Transport } from "../../src/transport.ts"
-import { SOURCE, until } from "./common.ts"
-
-const posix = process.platform !== "win32"
-
-/** A Python 3 to run the real scripts with, or none, which skips the tests that need one. */
-export const python3 = (() => {
-  if (!posix) return
-  try {
-    return execFileSync("/bin/sh", ["-c", "command -v python3"], { encoding: "utf-8" }).trim() || undefined
-  } catch {
-    return
-  }
-})()
+import { SOURCE, python3, pythonWith } from "./common.ts"
+import { start as engineStart, pythonReady, type Response } from "./engine.ts"
 
 /**
  * A file in the stubs' "flags" folder that makes them behave as the named environment does: "adc" has no credentials of
@@ -431,41 +411,14 @@ const stubbedPython = async (directory: string, raised: readonly Flag[] = []) =>
   }
   await fs.mkdir(path.join(stubs, "flags"), { recursive: true })
   for (const flag of raised) await fs.writeFile(path.join(stubs, "flags", flag), "")
-  const file = path.join(directory, "python")
-  const body = [
-    "#!/bin/sh",
-    `{ echo 'import sys; sys.path[:0] = ${JSON.stringify([stubs, SOURCE])}'; cat; } | '${python3}' "$@"`,
-  ]
-  await fs.writeFile(file, body.join("\n") + "\n")
-  await fs.chmod(file, 0o755)
-  return file
+  return pythonWith(path.join(directory, "python"), python3!, [stubs, SOURCE])
 }
-
-/**
- * GeoCode's Python environment as GEE finds it, with the stubbed Python for its base unless the test gives a real one:
- * ready at once, or, given `later`, being installed until it settles.
- */
-const environment = (base: string, later?: Promise<void>, version = "3.13.17"): Engine.Capability =>
-  Effect.gen(function* () {
-    const status = yield* Status.Service
-    const ready = { status: "ready", version, python: base, base }
-    const writer = yield* status.register<unknown>(
-      "python",
-      later ? { status: "preparing", step: "installing" } : ready,
-    )
-    const token = yield* writer.claim()
-    if (later) yield* Effect.forkScoped(Effect.promise(() => later).pipe(Effect.andThen(writer.commit(token, ready))))
-    return { domain: "python", methods: {} }
-  })
 
 /** Raises a flag of the stubbed Python made in `directory` while it is in use. */
 export const raise = (directory: string, flag: Flag) => fs.writeFile(path.join(directory, "stubs", "flags", flag), "")
 
 export const lower = (directory: string, flag: Flag) =>
   fs.rm(path.join(directory, "stubs", "flags", flag), { force: true })
-
-type Response = Extract<Protocol.Outbound, { type: "response" }>
-type Progress = Extract<Protocol.Outbound, { type: "progress" }>
 
 /** A base environment GeoCode installed, run in place of the stubbed Python. */
 interface Base {
@@ -478,71 +431,28 @@ interface Base {
  * or the real `base`. GeoCode's Python environment is ready at once, or once `later` settles.
  */
 export const start = async (gee?: unknown, flags: readonly Flag[] = [], later?: Promise<void>, base?: Base) => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-gee-"))
-  const machine = path.join(directory, "machine.json")
-  if (gee !== undefined) await fs.writeFile(machine, JSON.stringify({ gee }))
-  const python = base?.python ?? (await stubbedPython(directory, flags))
-  const sent: Protocol.Outbound[] = []
-  let deliver: (message: unknown) => void = () => {}
-  const transport: Transport = {
-    send: (message) => void sent.push(structuredClone(message)),
-    listen: (handler) => {
-      deliver = handler
-      return () => {}
+  let python = ""
+  const engine = await engineStart(
+    "gee",
+    async (directory) => {
+      python = base?.python ?? (await stubbedPython(directory, flags))
+      return [pythonReady(python, base?.version ?? "3.13.17", later), Gee.capability]
     },
-  }
-  const layer = Layer.mergeAll(Runtime.layer(Engine.ledger(transport)), Status.layer, Config.layer(machine))
-  const fiber = Effect.runFork(
-    Effect.scoped(Engine.run(transport, [environment(python, later, base?.version), Gee.capability])).pipe(
-      Effect.provide(layer),
-    ),
+    gee === undefined ? undefined : { gee },
   )
-  const states = () =>
-    sent.flatMap((message) =>
-      message.type === "status" && message.domain === "gee" ? [message.value as Gee.State] : [],
-    )
-  const settled = async (ms = 10000) => {
-    await until(() => (states().at(-1)?.status ?? "checking") !== "checking", ms, "GEE to settle")
-    return states().at(-1)!
-  }
-  let nextId = 0
   /** A run in a task with nothing saved yet, unless the test names one. */
-  const send = (params: Record<string, unknown>, method = "gee.run") => {
-    nextId += 1
-    const sent =
-      method === "gee.run" ? { task: { name: "test-20261008", new: false, started: true }, ...params } : params
-    deliver({ type: "request", id: nextId, method, params: sent })
-    return nextId
-  }
-  const response = async (id: number, ms = 20000) => {
-    const find = () => sent.find((message): message is Response => message.type === "response" && message.id === id)
-    await until(() => find() !== undefined, ms, `the response to ${id}`)
-    return find()!
-  }
-  const progress = (id: number) =>
-    sent.flatMap((message) => (message.type === "progress" && message.id === id ? [(message as Progress).data] : []))
-  const stop = async () => {
-    await Effect.runPromise(Fiber.interrupt(fiber))
-    await fs.rm(directory, { recursive: true, force: true })
-  }
-  try {
-    await until(() => sent.some((message) => message.type === "ready"), 10000, "the engine")
-  } catch (error) {
-    await stop()
-    throw error
-  }
+  const send = (params: Record<string, unknown>, method = "gee.run") =>
+    engine.send(
+      method,
+      method === "gee.run" ? { task: { name: "test-20261008", new: false, started: true }, ...params } : params,
+    )
   return {
-    directory,
-    machine,
+    ...engine,
     python,
-    sent,
-    states,
-    settled,
+    states: () => engine.states<Gee.State>("gee"),
+    settled: (ms = 10000) => engine.settled<Gee.State>("gee", ms),
     send,
-    response,
-    progress,
-    deliver: (m: unknown) => deliver(m),
-    stop,
+    response: (id: number, ms = 20000) => engine.response(id, ms),
   }
 }
 

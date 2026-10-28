@@ -2,29 +2,9 @@ import { execFileSync } from "node:child_process"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { Effect, Fiber, Layer } from "effect"
-import { Config } from "../../src/config.ts"
-import { Engine } from "../../src/engine.ts"
-import type { Protocol } from "../../src/protocol.ts"
 import { Environment } from "../../src/python/index.ts"
-import { Runtime } from "../../src/runtime.ts"
-import { Status } from "../../src/status.ts"
-import type { Transport } from "../../src/transport.ts"
-import { until } from "./common.ts"
-
-const posix = process.platform !== "win32"
-
-/** The real interpreter behind `python3`, to stand in for the bundled one; none skips these tests. */
-export const python3 = (() => {
-  if (!posix) return
-  try {
-    return (
-      execFileSync("python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf-8" }).trim() || undefined
-    )
-  } catch {
-    return
-  }
-})()
+import { python3 } from "./common.ts"
+import { start } from "./engine.ts"
 
 /** The Python version a bundle says its environment has. */
 export const VERSION = "3.13.16"
@@ -113,33 +93,13 @@ export const calls = async (directory: string) =>
       return { program, args, env }
     })
 
-const start = async (directory: string, bundled: string) => {
-  const sent: Protocol.Outbound[] = []
-  const transport: Transport = { send: (message) => void sent.push(structuredClone(message)), listen: () => () => {} }
-  const layer = Layer.mergeAll(
-    Runtime.layer(Engine.ledger(transport)),
-    Status.layer,
-    Config.layer(path.join(directory, "machine.json")),
-  )
-  const capability = Environment.capability({ bundle: bundled, data: path.join(directory, "data") })
-  const fiber = Effect.runFork(Effect.scoped(Engine.run(transport, [capability])).pipe(Effect.provide(layer)))
-  const states = () =>
-    sent.flatMap((message) =>
-      message.type === "status" && message.domain === "python" ? [message.value as Environment.State] : [],
-    )
-  const settled = async () => {
-    const pending = new Set(["checking", "preparing"])
-    await until(() => !pending.has(states().at(-1)?.status ?? "checking"), 30000, "the environment to settle")
-    return states().at(-1)!
-  }
-  return { states, settled, stop: () => Effect.runPromise(Fiber.interrupt(fiber)) }
-}
-
 /** Starts the engine, waits for the environment to settle, and stops the engine. */
 export const settle = async (directory: string, bundled: string) => {
-  const engine = await start(directory, bundled)
+  const capability = Environment.capability({ bundle: bundled, data: path.join(directory, "data") })
+  const engine = await start("python", () => [capability])
   try {
-    return { last: await engine.settled(), states: engine.states() }
+    const last = await engine.settled<Environment.State>("python", 30000, ["checking", "preparing"])
+    return { last, states: engine.states<Environment.State>("python") }
   } finally {
     await engine.stop()
   }

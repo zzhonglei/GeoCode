@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Geocodekit } from "../../../src/python/geocodekit.ts"
 import { answer, instanceOf, isProbe, serve, start, type Reply } from "../../support/osm.ts"
-import { python3 } from "../../support/python.ts"
+import { python3 } from "../../support/common.ts"
 
 const campus = { lat: "24.9387", lon: "121.3615" }
 

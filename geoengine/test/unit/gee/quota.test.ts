@@ -2,7 +2,8 @@ import assert from "node:assert/strict"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { test } from "node:test"
-import { python3, start } from "../../support/gee.ts"
+import { python3 } from "../../support/common.ts"
+import { start } from "../../support/gee.ts"
 
 const METRIC = "earthengine.googleapis.com/monthly_eecu_usage_time"
 

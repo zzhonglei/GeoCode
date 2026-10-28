@@ -1,17 +1,9 @@
-import fs from "node:fs/promises"
 import http from "node:http"
 import type { AddressInfo } from "node:net"
-import os from "node:os"
 import path from "node:path"
-import { Effect, Fiber, Layer } from "effect"
-import { Config } from "../../src/config.ts"
-import { Engine } from "../../src/engine.ts"
 import { Osm } from "../../src/osm/index.ts"
-import type { Protocol } from "../../src/protocol.ts"
-import { Runtime } from "../../src/runtime.ts"
-import { Status } from "../../src/status.ts"
-import type { Transport } from "../../src/transport.ts"
-import { SOURCE, until } from "./common.ts"
+import { SOURCE, pythonWith } from "./common.ts"
+import { start as engineStart, pythonReady } from "./engine.ts"
 
 /**
  * What one of the fake services answers: JSON, or a status with a body of its own; or nothing at all, the request
@@ -162,63 +154,36 @@ export const serve = async (handlers: Handlers) => {
   return { asked, services, close }
 }
 
-type Response = Extract<Protocol.Outbound, { type: "response" }>
-
 /**
  * An engine with GeoCode's Python environment ready on `python`, which runs geocodekit from its source, and the OSM
  * module asking the fake services, waiting as `timing` says where it differs from the app, and keeping its lock files
  * in a folder of its own. Requests to the services go direct: a proxy in the tests' own environment would take them
- * elsewhere.
+ * elsewhere, so the variables saying so are set while the engine runs and put back as they were when it stops.
  */
 export const start = async (python: string, services: Osm.Services, timing: Partial<Osm.Timing> = {}) => {
+  const inherited = { NO_PROXY: process.env.NO_PROXY, no_proxy: process.env.no_proxy }
   process.env.NO_PROXY = process.env.no_proxy = "127.0.0.1,localhost"
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-osm-"))
-  const wrapper = path.join(directory, "python")
-  // No bytecode beside the sources: the package's own folder is not the tests' to write in.
-  const preamble = `import sys; sys.dont_write_bytecode = True; sys.path[:0] = [${JSON.stringify(SOURCE)}]`
-  await fs.writeFile(wrapper, `#!/bin/sh\n{ echo '${preamble}'; cat; } | '${python}' "$@"\n`)
-  await fs.chmod(wrapper, 0o755)
-  const sent: Protocol.Outbound[] = []
-  let deliver: (message: unknown) => void = () => {}
-  const transport: Transport = {
-    send: (message) => void sent.push(structuredClone(message)),
-    listen: (handler) => {
-      deliver = handler
-      return () => {}
-    },
+  const restore = () => {
+    for (const [name, value] of Object.entries(inherited)) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
   }
-  const environment: Engine.Capability = Effect.gen(function* () {
-    const status = yield* Status.Service
-    const writer = yield* status.register<unknown>("python", { status: "ready", version: "3.13", base: wrapper })
-    yield* writer.claim()
-    return { domain: "python", methods: {} }
+  const engine = await engineStart("osm", async (directory) => [
+    pythonReady(await pythonWith(path.join(directory, "python"), python, [SOURCE]), "3.13"),
+    Osm.capability(path.join(directory, "locks"), services, { ...Osm.TIMING, ...timing }),
+  ]).catch((error) => {
+    restore()
+    throw error
   })
-  const machine = path.join(directory, "machine.json")
-  const layer = Layer.mergeAll(Runtime.layer(Engine.ledger(transport)), Status.layer, Config.layer(machine))
-  const fiber = Effect.runFork(
-    Effect.scoped(
-      Engine.run(transport, [
-        environment,
-        Osm.capability(path.join(directory, "locks"), services, { ...Osm.TIMING, ...timing }),
-      ]),
-    ).pipe(Effect.provide(layer)),
-  )
-  let nextId = 0
-  const send = (method: string, params: object) => {
-    nextId += 1
-    deliver({ type: "request", id: nextId, method: `osm.${method}`, params })
-    return nextId
+  const send = (method: string, params: object) => engine.send(`osm.${method}`, params)
+  const response = (id: number, ms = 60000) => engine.response(id, ms)
+  return {
+    ...engine,
+    send,
+    response,
+    call: async (method: string, params: object) => response(send(method, params)),
+    cancel: (id: number) => engine.deliver({ type: "cancel", id }),
+    stop: () => engine.stop().finally(restore),
   }
-  const response = async (id: number, ms = 60000) => {
-    const find = () => sent.find((message): message is Response => message.type === "response" && message.id === id)
-    await until(() => find() !== undefined, ms, `the response to ${id}`)
-    return find()!
-  }
-  const call = async (method: string, params: object) => response(send(method, params))
-  const stop = async () => {
-    await Effect.runPromise(Fiber.interrupt(fiber))
-    await fs.rm(directory, { recursive: true, force: true })
-  }
-  await until(() => sent.some((message) => message.type === "ready"), 10000, "the engine")
-  return { directory, sent, send, response, call, cancel: (id: number) => deliver({ type: "cancel", id }), stop }
 }
