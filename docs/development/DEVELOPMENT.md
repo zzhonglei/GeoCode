@@ -6,7 +6,7 @@
 
 ```
 docs/        设计说明;docs/development/ 下是开发文档
-scripts/     内核、GeoEngine 与 Python 环境的构建与暂存,按套件运行测试,写入检测,检查用的小工具
+scripts/     内核、GeoEngine 与 Python 环境的构建与暂存,按套件运行测试,打包版的检查(app/),写入检测,检查用的小工具
 kernel/      内核,基于 OpenCode
 desktop/     桌面应用,基于 OpenChamber
 geoengine/   地理引擎 GeoEngine,以及 Python 包 geocodekit(geoengine/python/)

@@ -17,7 +17,7 @@ ROOTS="$HOME/.config/opencode $HOME/.local/share/opencode $HOME/.cache/opencode
 # schedule. Only those children are skipped; `synced` itself is still watched.
 PRUNE="*/.claude/skills/synced/*"
 
-# The gate adds GeoCode's own roots through this.
+# More folders to watch, for a run that has its own to add.
 ROOTS="$ROOTS ${FOREIGN_WRITES_EXTRA_ROOTS:-}"
 SNAP="${FOREIGN_WRITES_SNAPSHOT:-/tmp/geocode-foreign-writes}"
 

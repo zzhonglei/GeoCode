@@ -101,7 +101,7 @@ const realSteps = (domain) => () => [
   step('geoengine', 'node', 'node', ['--test'], [`geoengine/test/real/${domain}.test.ts`], { real: domain }),
 ]
 
-const scriptsSteps = () => [step('', 'node', 'node', ['--test'], ['scripts/test.test.mjs'])]
+const scriptsSteps = () => [step('', 'node', 'node', ['--test'], walk('scripts', /\.test\.mjs$/))]
 
 export const SUITES = {
   kernel: kernelSteps,
@@ -118,7 +118,7 @@ export const SUITES = {
 // Where a test file belongs, for --file; and every file that looks like a test in the folders above, so that one no
 // suite would run is reported rather than passed over.
 const LOOKS_LIKE_A_TEST = /\.(test|spec|vitest)\.[cm]?[jt]sx?$/
-const OWN_FOLDERS = [`${UI}/src/geocode`, `${WEB}/server/geocode`, `${ELECTRON}/geocode`, 'geoengine/test']
+const OWN_FOLDERS = [`${UI}/src/geocode`, `${WEB}/server/geocode`, `${ELECTRON}/geocode`, 'geoengine/test', 'scripts']
 const OWN_IN_KERNEL = /(^|\/)(geocode-[^/]*|geocode\/.*)$/
 
 export const unrun = () => {
@@ -148,6 +148,9 @@ export const calledFor = (file) => {
   // Markdown under src/ or test/ can be source or a fixture, as the kernel's skills are.
   if (file.endsWith('.md') && !/(^|\/)(src|test)\//.test(file)) return []
   if (/^scripts\/test(\.test)?\.mjs$/.test(file)) return Object.keys(SUITES)
+  if (/^scripts\/foreign-writes\./.test(file)) return ['scripts']
+  // The checks of the packaged app are tried by running them on it.
+  if (file.startsWith('scripts/app/')) return []
   // The app's version is the one geocodekit is installed at.
   if (file === `${ELECTRON}/package.json`) return [...EVERY, 'geoengine/python']
   if (!file.startsWith('geoengine/')) return EVERY

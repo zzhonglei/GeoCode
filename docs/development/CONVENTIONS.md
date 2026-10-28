@@ -75,7 +75,7 @@ shell 脚本用 POSIX sh(`#!/bin/sh`),要能在 macOS 自带的 sh 上运行。
 - 测试只写临时目录,不写真实的主目录。
 - 「写入配置、期望某个服务读到」的改动,追到读取方,在运行时确认。
 - 测试失败时,先分清是代码的问题还是环境的问题。不为了让测试通过而改测试,除非测试本身写错了。
-- 提交前运行类型检查、lint 与 `node scripts/test.mjs changed`;改动涉及文件的位置与读写时,在写入检测的监视下跑一次真实会话(`DEVELOPMENT.md` 第 5、7 节,`TESTING.md` 第 7 节)。
+- 提交前运行类型检查、lint 与 `node scripts/test.mjs changed`;改动涉及文件的位置与读写时,打包一次,跑打包版的检查(`TESTING.md` 第 7 节)。
 
 测试放在:`kernel/` 的包的 `test/` 目录,文件名以 `geocode-` 开头或放进 `test/geocode/`,在那里已有的测试文件中加的用例,名称以 `GeoCode: ` 开头;`desktop/` 各包的 `geocode/` 目录;`geoengine/` 的 `test/unit/`(单元测试)、`test/real/`(真实软件的测试)与 `test/support/`(共用的夹具)。
 
