@@ -145,8 +145,8 @@ const EVERY = ['kernel', 'ui', 'web', 'electron']
  * folder, `geoengine` all of them.
  */
 export const calledFor = (file) => {
-  // The paths check reads where the app may write from PATHS.md, and its test reads it too.
-  if (file === 'docs/PATHS.md' || /^scripts\/app\/paths\./.test(file)) return ['scripts']
+  // The parts of the app's checks that have tests of their own; the paths check reads PATHS.md, as its test does.
+  if (file === 'docs/PATHS.md' || /^scripts\/app\/(paths|network)\./.test(file)) return ['scripts']
   // Markdown under src/ or test/ can be source or a fixture, as the kernel's skills are.
   if (file.endsWith('.md') && !/(^|\/)(src|test)\//.test(file)) return []
   if (/^scripts\/test(\.test)?\.mjs$/.test(file)) return Object.keys(SUITES)

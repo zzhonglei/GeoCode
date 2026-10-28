@@ -1,12 +1,13 @@
 // What the checks of the packaged app share: a sandbox home, a model that answers as a check scripts it, the app
-// started in the sandbox and spoken to through its window's API, and the write check around it. macOS only, as the
-// packaged app the checks start is.
+// started in the sandbox and spoken to through its window's API, and the write and network checks around it. macOS
+// only, as the packaged app the checks start is.
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
+import { networkCheck } from './network.mjs'
 import { pathsCheck } from './paths.mjs'
 
 export const top = path.resolve(import.meta.dirname, '..', '..')
@@ -361,13 +362,18 @@ export const writeCheck = (box) => {
   }
 }
 
+// What any run reaches through the proxy: the model catalog the kernel refreshes.
+const ALWAYS_REACHED = ['models.dev', 'models.opencode.ai']
+const matches = (expected, host) => (expected instanceof RegExp ? expected.test(host) : expected === host)
+
 /**
  * Runs a check of the app: the write check started, the app started in the sandbox, `body` given its API and `record`
- * and `item` to note each result with, then the app quit, what it left running and where it wrote noted too. Each item
+ * and `item` to note each result with, then the app quit, what it left running, where it wrote and what it reached
+ * noted too; `reaches` names the hosts its own calls reach beyond those of any run, as a name or a pattern. Each item
  * is printed as it is recorded; at the end the sandbox is removed unless an item failed or `keep` asks to keep it, but
  * for a copy of the user's credentials, which goes in any case. An interruption still quits the app.
  */
-export const check = async ({ app, box, model, keep, ms, credentials = [] }, body) => {
+export const check = async ({ app, box, model, keep, ms, credentials = [], reaches = [] }, body) => {
   const items = []
   const record = (name, pass, detail = '') => {
     items.push({ name, pass })
@@ -382,6 +388,7 @@ export const check = async ({ app, box, model, keep, ms, credentials = [] }, bod
   }
   const writes = writeCheck(box)
   const paths = pathsCheck(box)
+  const network = await networkCheck(box)
   let child
   const interrupted = (signal) => {
     if (child) for (const each of processesOf(child.pid)) spawnSync('kill', ['-KILL', String(each.pid)])
@@ -402,6 +409,14 @@ export const check = async ({ app, box, model, keep, ms, credentials = [] }, bod
       const left = await quit(child, box)
       record('app: quits leaving nothing running', !left.length, left.join('; '))
     }
+    const { outside, local } = await network.after()
+    record('app: keeps this machine’s addresses off the proxy', !local.length, local.join(' '))
+    const unexpected = outside.filter((host) => ![...ALWAYS_REACHED, ...reaches].some((each) => matches(each, host)))
+    record(
+      'app: reaches only what it is expected to',
+      !unexpected.length,
+      `${outside.join(' ')}; not expected: ${unexpected.join(' ') || 'none'}`,
+    )
     await model.close()
     const found = writes.after()
     record('app: writes in no other product’s folders', !found.length, found.join('\n'))

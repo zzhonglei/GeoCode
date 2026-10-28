@@ -119,7 +119,7 @@ const tools = (turn) => toolsOf(turn).map((part) => `${part.name}:${part.state?.
 const summary = (turn) =>
   turn.error ?? `${turn.seconds}s tools=[${tools(turn).join(',')}] reply=${JSON.stringify(textsOf(turn).slice(0, 120))}`
 
-await check({ app, box, model, keep }, async ({ api, record, item }) => {
+await check({ app, box, model, keep, reaches: ['example.com'] }, async ({ api, record, item }) => {
   await item('api: read-only endpoints', async () => {
     const routes = [
       '/api/info',

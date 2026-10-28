@@ -139,7 +139,9 @@ const centroids = () => {
   return points.length === 2 && near(points[0], 0.5, 0.5) && near(points[1], 0.5, 60.5) ? '' : JSON.stringify(points)
 }
 
-await check({ app, box, model, keep, credentials, ms: 600000 }, async ({ api, record, item }) => {
+// The QGIS manual, and with --gee the Earth Engine and Google sign-in endpoints.
+const reaches = ['docs.qgis.org', ...(gee ? [/\.googleapis\.com$/] : [])]
+await check({ app, box, model, keep, credentials, reaches, ms: 600000 }, async ({ api, record, item }) => {
   const created = await api('/api/session', {
     method: 'POST',
     body: JSON.stringify({ location: { directory: box.project } }),
