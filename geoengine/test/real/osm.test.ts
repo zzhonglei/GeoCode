@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
 import fs from "node:fs/promises"
-import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
 import { isDeepStrictEqual } from "node:util"
@@ -20,15 +19,17 @@ import {
 } from "../support/osm.ts"
 
 /**
- * Downloads on the base environment GeoCode installed in its data directory, or in the one GEOENGINE_OSM_DATA names:
- * its shapely and GDAL assemble and write what the fake services answer. Nothing goes to OSM's servers.
+ * Downloads on the base environment GeoCode installed in the data directory GEOENGINE_DATA names, as scripts/test.mjs
+ * hands it over: its shapely and GDAL assemble and write what the fake services answer. Nothing goes to OSM's servers.
  */
-const data = process.env.GEOENGINE_OSM_DATA ?? path.join(os.homedir(), ".local", "share", "geocode")
-const base = Environment.layout(data).basePython
-const missing = await fs.access(base).then(
-  () => false,
-  () => `start GeoCode once, to install its base environment in ${data}`,
-)
+const data = process.env.GEOENGINE_DATA
+const base = data ? Environment.layout(data).basePython : ""
+const missing = !data
+  ? "run through scripts/test.mjs, which hands over GeoCode's data directory"
+  : await fs.access(base).then(
+      () => false,
+      () => `start GeoCode once, to install its base environment in ${data}`,
+    )
 
 /** A layer of a GeoPackage as read: its coordinate system, its features' attributes, and their geometry as WKT. */
 type Layer = { crs: string; rows: ({ osm_id: string } & Record<string, unknown>)[]; wkt: string[] }

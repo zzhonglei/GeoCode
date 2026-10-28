@@ -13,11 +13,21 @@ import { start, result } from "../support/gee.ts"
 
 /**
  * The real Earth Engine, with the user's credentials and quota: only with GEOENGINE_GEE_PROJECT naming their project,
- * through the base environment GeoCode installed in its data directory, or in the one GEOENGINE_GEE_DATA names.
+ * through the base environment GeoCode installed in the data directory GEOENGINE_DATA names. scripts/test.mjs hands
+ * both over, with a copy of the credentials in the home it gives the tests.
  */
 const PROJECT = process.env.GEOENGINE_GEE_PROJECT ?? ""
+const DATA = process.env.GEOENGINE_DATA
+const where = DATA ? Environment.layout(DATA) : undefined
 
-const LIVE = PROJECT ? false : "set GEOENGINE_GEE_PROJECT to run on the real Earth Engine"
+const LIVE = !PROJECT
+  ? "set GEOENGINE_GEE_PROJECT to run on the real Earth Engine"
+  : !where
+    ? "run through scripts/test.mjs, which hands over GeoCode's data directory"
+    : await fs.access(where.basePython).then(
+        () => false,
+        () => `start GeoCode once, to install its base environment in ${DATA}`,
+      )
 
 /** Long enough for Earth Engine to answer a check, or to compose and download a small image. */
 const CHECKED = 120000
@@ -25,10 +35,8 @@ const COMPOSED = 600000
 
 /** The base environment, once found to be one this GeoCode installed. */
 const realBase = async () => {
-  const data = process.env.GEOENGINE_GEE_DATA ?? path.join(os.homedir(), ".local", "share", "geocode")
-  const where = Environment.layout(data)
-  const started = `start GeoCode once, to install its base environment in ${data}`
-  await fs.access(where.basePython).catch(() => assert.fail(started))
+  const where = Environment.layout(DATA!)
+  const started = `start this GeoCode once, to install its base environment in ${DATA}`
   // Imported once first, as the warm-up does: a check, timed, of a base never warmed up would run out of time.
   const asked = ["-I", "-c", "import platform, ee, geedim, geopandas, rasterio; print(platform.python_version())"]
   const version = execFileSync(where.basePython, asked, { encoding: "utf-8" }).trim()

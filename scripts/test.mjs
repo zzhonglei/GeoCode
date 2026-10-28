@@ -1,85 +1,132 @@
-// Runs GeoCode's own tests by suite: each part's
-// unit tests, which touch stand-ins alone, and the tests on the real QGIS, the
-// real Earth Engine and the installed base environment, which run only when named
-// or when a change calls for them. The suites run one after another, and a failed
-// one does not stop the rest.
+// Runs GeoCode's own tests by suite: each part's unit tests, which touch stand-ins alone, and the tests on the real
+// QGIS, the real Earth Engine and the installed base environment. Every run gets a home and a temporary folder of its
+// own, so no test reaches the user's files but what is handed to it, and every result is read from the runner's JUnit
+// report: what ran, what was skipped and why, and where a failure is.
 //
-// Usage:  node scripts/test.mjs [--list] <suite|changed|all>...
-//   suites   kernel ui web electron geoengine qgis gee osm
+// Usage:  node scripts/test.mjs [--list] <suite|changed|all>... [--file <test file>]...
+//   suites   kernel ui web electron geoengine qgis gee osm scripts
 //   changed  the suites the working tree's changes against HEAD call for
 //   all      every suite
-//   --list   prints the suites and why each is run, and runs none
-// Exits 1 when a suite failed, 3 when none failed but one was not run, and 2 on a usage error.
+//   --file   one test file, run as its suite runs it
+//   --list   prints what would run and why, and runs nothing
+// Exits 1 when something failed, 3 when nothing failed but something was not run, and 2 on a usage error.
 import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
-const top = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
+export const top = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
 const at = (...parts) => path.join(top, ...parts)
-const run = (where, command, ...args) => ({ cwd: at(where), command, args })
+const relative = (file) => path.relative(top, file).split(path.sep).join('/')
 
-// In a kernel package's test folder: GeoCode's own files and the upstream ones
-// holding GeoCode cases.
-const OWN = /(^|\/)(geocode-[^/]*\.test\.tsx?|geocode\/.*\.test\.tsx?)$/
-const CASES = /\b(?:test|it|describe)(?:\.\w+)?\(\s*["'`]GeoCode: /
-
-const walk = (root, found = []) => {
-  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+/** Files under a folder of the repository whose name `keep` matches, as repository paths. */
+export const walk = (root, keep, found = []) => {
+  if (!fs.existsSync(at(root))) return found
+  for (const entry of fs.readdirSync(at(root), { withFileTypes: true })) {
     if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue
-    const full = path.join(root, entry.name)
-    if (entry.isDirectory()) walk(full, found)
-    else if (/\.test\.tsx?$/.test(entry.name)) found.push(full)
+    const inside = `${root}/${entry.name}`
+    if (entry.isDirectory()) walk(inside, keep, found)
+    else if (keep.test(entry.name)) found.push(inside)
   }
-  return found
+  return found.sort()
 }
 
-// Each package's GeoCode tests: its own files whole, and the GeoCode cases of upstream files.
-const kernelRuns = () =>
+/**
+ * A run of one runner over some files. `tool` says how to ask it for a JUnit report; `only` picks the cases counted
+ * when the runner is told to run some of a file's; `real` names what a real-software run is handed.
+ */
+const step = (cwd, tool, command, args, files, extra = {}) => ({
+  cwd,
+  tool,
+  command,
+  args: [...args, ...files.map((file) => argument(tool, cwd, file))],
+  files,
+  ...extra,
+})
+
+// Bun takes a file it is given as a part of paths to match, and would run `x.test.tsx` beside `x.test.ts`.
+const argument = (tool, cwd, file) => `${tool === 'bun' ? './' : ''}${path.posix.relative(cwd, file)}`
+
+// In a kernel package's test folder: GeoCode's own files, run whole, and upstream files holding GeoCode cases, of
+// which only those whose name has `GeoCode:` run.
+const OWN = /(^|\/)(geocode-[^/]*\.test\.tsx?|geocode\/.*\.test\.tsx?)$/
+const MENTIONS = /["'`]GeoCode: /
+
+const kernelSteps = () =>
   fs.readdirSync(at('kernel', 'packages')).flatMap((name) => {
     const where = `kernel/packages/${name}`
-    if (!fs.existsSync(at(where, 'test'))) return []
-    const files = walk(at(where, 'test')).map((file) => path.relative(at(where), file).split(path.sep).join('/'))
+    const files = walk(`${where}/test`, /\.test\.tsx?$/)
     const own = files.filter((file) => OWN.test(file))
-    const cases = files.filter((file) => !OWN.test(file) && CASES.test(fs.readFileSync(at(where, file), 'utf8')))
+    const cases = files.filter((file) => !OWN.test(file) && MENTIONS.test(fs.readFileSync(at(file), 'utf8')))
     return [
-      ...(own.length ? [run(where, 'bun', 'run', 'test', ...own)] : []),
-      ...(cases.length ? [run(where, 'bun', 'run', 'test', ...cases, '-t', 'GeoCode:')] : []),
-    ].map((each) => ({ ...each, home: true }))
+      ...(own.length ? [step(where, 'bun', 'bun', ['run', 'test'], own)] : []),
+      ...(cases.length
+        ? [step(where, 'bun', 'bun', ['run', 'test', '-t', 'GeoCode:'], cases, { only: /GeoCode:/ })]
+        : []),
+    ]
   })
 
-const electronRuns = () => {
-  const files = fs
-    .readdirSync(at('desktop', 'packages', 'electron', 'geocode'))
-    .filter((name) => name.endsWith('.test.mjs'))
-    .map((name) => `geocode/${name}`)
-  // Given no file, node --test would run the package's upstream tests. The time limit turns a wait the test forgot into
-  // a failure, not a hang.
-  return files.length ? [run('desktop/packages/electron', 'node', '--test', '--test-timeout=10000', ...files)] : []
+// The desktop's GeoCode tests live in each package's geocode folder.
+const UI = 'desktop/packages/ui'
+const WEB = 'desktop/packages/web'
+const ELECTRON = 'desktop/packages/electron'
+
+// One process a file, as the package's own script runs them: the UI's modules keep state for the process.
+const uiSteps = () => walk(`${UI}/src/geocode`, /\.test\.tsx?$/).map((file) => step(UI, 'bun', 'bun', ['test'], [file]))
+
+const webSteps = () => {
+  const files = walk(`${WEB}/server/geocode`, /\.test\.m?js$/)
+  return files.length ? [step(WEB, 'vitest', 'bun', ['run', 'test'], files)] : []
 }
 
-// A script of GeoEngine's package, run as written there but for the report `tally` adds (below).
-const geoengineRuns = (script) => () => {
-  const line = JSON.parse(fs.readFileSync(at('geoengine', 'package.json'), 'utf8')).scripts?.[script]
-  if (!line) throw new Error(`geoengine/package.json has no script "${script}"`)
-  const [command, ...args] = line.match(/"[^"]*"|\S+/g).map((word) => word.replace(/^"(.*)"$/, '$1'))
-  return [{ ...run('geoengine', command, ...args), tally: command === 'node' }]
+// The time limit turns a wait a test forgot into a failure, not a hang.
+const electronSteps = () => {
+  const files = walk(`${ELECTRON}/geocode`, /\.test\.mjs$/)
+  return files.length ? [step(ELECTRON, 'node', 'node', ['--test', '--test-timeout=10000'], files)] : []
 }
 
-// What each suite runs. `home` gives the runs a home of their own: the packages' test scripts do not all swap it.
-const SUITES = {
-  kernel: kernelRuns,
-  ui: () => [run('desktop/packages/ui', 'node', '../../scripts/run-isolated-tests.mjs', 'src/geocode')],
-  web: () => [run('desktop/packages/web', 'bun', 'run', 'test', '--', 'server/geocode/')],
-  electron: electronRuns,
-  geoengine: geoengineRuns('test'),
-  qgis: geoengineRuns('test:qgis'),
-  gee: geoengineRuns('test:gee'),
-  osm: geoengineRuns('test:osm'),
+// One file after another: some tests start processes and check that they were ended.
+// Given no file, node would look for tests itself and run the real ones.
+const geoengineSteps = () => {
+  const files = walk('geoengine/test/unit', /\.test\.ts$/)
+  return files.length ? [step('geoengine', 'node', 'node', ['--test', '--test-concurrency=1'], files)] : []
 }
 
-// The gee tests use the user's credentials and quota, and need to know the project.
-const WITHHELD = { gee: process.env.GEOENGINE_GEE_PROJECT ? null : 'set GEOENGINE_GEE_PROJECT=<project ID> to run it' }
+const realSteps = (domain) => () => [
+  step('geoengine', 'node', 'node', ['--test'], [`geoengine/test/real/${domain}.test.ts`], { real: domain }),
+]
+
+const scriptsSteps = () => [step('', 'node', 'node', ['--test'], ['scripts/test.test.mjs'])]
+
+export const SUITES = {
+  kernel: kernelSteps,
+  ui: uiSteps,
+  web: webSteps,
+  electron: electronSteps,
+  geoengine: geoengineSteps,
+  qgis: realSteps('qgis'),
+  gee: realSteps('gee'),
+  osm: realSteps('osm'),
+  scripts: scriptsSteps,
+}
+
+// Where a test file belongs, for --file; and every file that looks like a test in the folders above, so that one no
+// suite would run is reported rather than passed over.
+const LOOKS_LIKE_A_TEST = /\.(test|spec|vitest)\.[cm]?[jt]sx?$/
+const OWN_FOLDERS = [`${UI}/src/geocode`, `${WEB}/server/geocode`, `${ELECTRON}/geocode`, 'geoengine/test']
+const OWN_IN_KERNEL = /(^|\/)(geocode-[^/]*|geocode\/.*)$/
+
+export const unrun = () => {
+  const run = new Set(Object.values(SUITES).flatMap((steps) => steps().flatMap((each) => each.files)))
+  const kernel = fs
+    .readdirSync(at('kernel', 'packages'))
+    .flatMap((name) => walk(`kernel/packages/${name}/test`, LOOKS_LIKE_A_TEST))
+    .filter((file) => OWN_IN_KERNEL.test(file))
+  return [...OWN_FOLDERS.flatMap((folder) => walk(folder, LOOKS_LIKE_A_TEST)), ...kernel].filter(
+    (file) => !run.has(file),
+  )
+}
 
 const REAL = ['qgis', 'gee', 'osm']
 // Whose scripts run in the bundled Python environment.
@@ -89,10 +136,12 @@ const ENVIRONMENT = ['gee', 'osm']
 // GeoEngine's tests runs them all; they are quick. GeoEngine's own tests touch GeoEngine alone.
 const EVERY = ['kernel', 'ui', 'web', 'electron']
 
-const calledFor = (file) => {
+export const calledFor = (file) => {
   // Markdown under src/ or test/ can be source or a fixture, as the kernel's skills are.
   if (file.endsWith('.md') && !/(^|\/)(src|test)\//.test(file)) return []
-  if (file === 'scripts/test.mjs') return Object.keys(SUITES)
+  if (/^scripts\/test(\.test)?\.mjs$/.test(file)) return Object.keys(SUITES)
+  // The app's version is the one geocodekit is installed at.
+  if (file === `${ELECTRON}/package.json`) return [...EVERY, 'geoengine']
   if (!file.startsWith('geoengine/')) return EVERY
   const inside = file.slice('geoengine/'.length)
   // A test file touches only its own layer; a support file, the layers of the domain it serves.
@@ -114,116 +163,375 @@ const calledFor = (file) => {
 const changes = () => {
   // Paths as they are: quoted, a Chinese one would match no part.
   const git = (...args) => execFileSync('git', ['-c', 'core.quotePath=false', ...args], { cwd: top, encoding: 'utf8' })
-  const listed = (...args) => git(...args).split('\n').filter(Boolean)
+  const listed = (...args) =>
+    git(...args)
+      .split('\n')
+      .filter(Boolean)
   // Both sides of a rename: what moved away can break the tests where it was.
   const tracked = listed('diff', '--name-only', '--no-renames', 'HEAD')
   const untracked = listed('ls-files', '--others', '--exclude-standard')
   return [...new Set([...tracked, ...untracked])]
 }
 
-const args = process.argv.slice(2)
-const listOnly = args.includes('--list')
-const named = args.filter((arg) => arg !== '--list')
-if (!named.length) {
-  console.error('usage: node scripts/test.mjs [--list] <suite|changed|all>...')
-  process.exit(2)
+// What the real suites are handed from the user's own files, found before the home is swapped. The data folder holds
+// the base environment GeoCode installed; GEOENGINE_DATA names another.
+const realData = () => process.env.GEOENGINE_DATA ?? path.join(os.homedir(), '.local', 'share', 'geocode')
+const CREDENTIALS = path.join('.config', 'earthengine', 'credentials')
+
+// Why a suite is not run here, or null. The gee tests use the user's credentials and quota, so they run only when
+// told the project.
+const withheld = (suite) => {
+  if (suite !== 'gee') return null
+  if (!process.env.GEOENGINE_GEE_PROJECT) return 'set GEOENGINE_GEE_PROJECT=<project ID> to run it on your quota'
+  if (!fs.existsSync(path.join(os.homedir(), CREDENTIALS))) return `no Earth Engine credentials in ~/${CREDENTIALS}`
+  return null
 }
 
-// Suite name to the reasons it is run.
-const chosen = new Map()
-const choose = (suite, reason) => chosen.set(suite, [...(chosen.get(suite) ?? []), reason])
-for (const name of named) {
-  if (name === 'all') for (const suite of Object.keys(SUITES)) choose(suite, 'all')
-  else if (name === 'changed') {
-    for (const file of changes()) {
-      for (const suite of calledFor(file)) {
-        // A real test of a domain not yet registered here would otherwise be skipped without a word.
-        if (!(suite in SUITES)) {
-          console.error(`${file} calls for a suite "${suite}" that scripts/test.mjs does not have: register it there.`)
-          process.exit(2)
+// The user's variables that would point a test at their own folders, accounts or repositories, or at an upstream
+// app's; the switches of the runtimes the app runs on, which it removes for itself; and keys and secrets, as the
+// kernel's own test script removes them.
+const MOVED = [
+  /^(XDG_(CONFIG|DATA|CACHE|STATE)_HOME|GEOENGINE_DATA|CODEX_HOME|CLAUDE_CONFIG_DIR|SSH_AUTH_SOCK)$/i,
+  /^(OPENCODE|OPENCHAMBER|OTEL|BUN|ELECTRON|GIT|CLOUDSDK)_/i,
+  /^(AWS|AZURE|GOOGLE|GCP|GCLOUD|VERTEX|OPENAI|ANTHROPIC|GEMINI|XAI|CLOUDFLARE|CF_AIG|SNOWFLAKE|AICORE|GITLAB|NPM_CONFIG)_/i,
+  /(^|_)(API_KEY|AUTHORIZATION|TOKEN|SECRET|PASSWORD|CREDENTIALS?)$/i,
+]
+
+/** The environment of a run: the user's, with a home and temporary folder of its own and nothing pointing elsewhere. */
+export const sandboxed = (environment, home, platform = process.platform) => {
+  const temporary = path.join(home, 'tmp')
+  const kept = Object.entries(environment).filter(([name]) => !MOVED.some((pattern) => pattern.test(name)))
+  return {
+    ...Object.fromEntries(kept),
+    HOME: home,
+    TMPDIR: temporary,
+    ...(platform === 'win32'
+      ? {
+          USERPROFILE: home,
+          TMP: temporary,
+          TEMP: temporary,
+          APPDATA: path.join(home, 'AppData', 'Roaming'),
+          LOCALAPPDATA: path.join(home, 'AppData', 'Local'),
         }
-        choose(suite, file)
-      }
-    }
-  } else if (name in SUITES) choose(name, 'named')
-  else {
-    console.error(`unknown suite: ${name}`)
-    process.exit(2)
+      : {}),
   }
 }
-const order = Object.keys(SUITES).filter((suite) => chosen.has(suite))
-if (!order.length) console.log('nothing to run: no change calls for a suite.')
 
-const withheld = (suite) => WITHHELD[suite] ?? (SUITES[suite]().length ? null : 'it has no tests')
-
-if (listOnly) {
-  for (const suite of order) {
-    const reasons = chosen.get(suite)
-    const shown = reasons.length > 3 ? [...reasons.slice(0, 3), `${reasons.length - 3} more`] : reasons
-    console.log(`${suite.padEnd(10)}${withheld(suite) ? `not run: ${withheld(suite)}` : shown.join(', ')}`)
-  }
-  process.exit(0)
-}
-
-const isolated = () => {
+/** A run's own home, with what a real suite is handed. */
+const homeFor = (each) => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-test-home-'))
-  // Windows finds the home in USERPROFILE.
-  const env = { ...process.env, HOME: home, ...(process.platform === 'win32' ? { USERPROFILE: home } : {}) }
-  // Removed, not emptied: Bun writes its transpiler cache in the current directory when they are empty.
-  for (const name of ['XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME']) delete env[name]
+  fs.mkdirSync(path.join(home, 'tmp'))
+  const env = sandboxed(process.env, home)
+  if (each.real) env.GEOENGINE_DATA = realData()
+  // A copy: what the test does with it stays in the home that is removed after.
+  if (each.real === 'gee') {
+    fs.mkdirSync(path.dirname(path.join(home, CREDENTIALS)), { recursive: true })
+    fs.copyFileSync(path.join(os.homedir(), CREDENTIALS), path.join(home, CREDENTIALS))
+  }
   return { home, env }
 }
 
-// A TAP report beside the screen's, for how many tests ran: node --test passes a file whose tests were all skipped.
-const tallied = (args) => {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-test-report-'))
-  const report = path.join(folder, 'report.tap')
-  const reporters = ['--test-reporter=spec', '--test-reporter-destination=stdout', '--test-reporter=tap']
-  const count = (text, name) => Number(new RegExp(`^# ${name} (\\d+)$`, 'm').exec(text)?.[1] ?? 0)
-  const read = () => {
-    const text = fs.existsSync(report) ? fs.readFileSync(report, 'utf8') : ''
-    fs.rmSync(folder, { recursive: true, force: true })
-    return { tests: count(text, 'tests'), skipped: count(text, 'skipped') }
+/** The arguments asking a runner for a JUnit report in `report`, beside its usual output. */
+const reported = (each, report) => {
+  if (each.tool === 'node') {
+    // Before the files: given after them, node takes the options for none.
+    const reporters = ['--test-reporter=spec', '--test-reporter-destination=stdout', '--test-reporter=junit']
+    return [each.args[0], ...reporters, `--test-reporter-destination=${report}`, ...each.args.slice(1)]
   }
-  // Before the files: given after them, node takes the options for none.
-  return { args: [...reporters, `--test-reporter-destination=${report}`, ...args], read }
+  if (each.tool === 'vitest')
+    return [...each.args, '--reporter=default', '--reporter=junit', `--outputFile.junit=${report}`]
+  return [...each.args, '--reporter=junit', `--reporter-outfile=${report}`]
 }
 
-const results = []
-for (const suite of order) {
-  if (withheld(suite)) {
-    results.push({ suite, failed: false, unrun: true, outcome: `NOT RUN: ${withheld(suite)}` })
-    continue
-  }
-  console.log(`\n=== ${suite}`)
-  const begun = Date.now()
-  let failed = false
-  let counted = null
-  for (const step of SUITES[suite]()) {
-    const isolation = step.home ? isolated() : null
-    const tally = step.tally ? tallied(step.args) : null
-    const args = tally?.args ?? step.args
-    console.log(`--- ${path.relative(top, step.cwd)}: ${step.command} ${args.join(' ')}`)
-    const env = isolation?.env ?? process.env
-    const ran = spawnSync(step.command, args, { cwd: step.cwd, env, stdio: 'inherit' })
-    if (isolation) fs.rmSync(isolation.home, { recursive: true, force: true })
-    if (tally) {
-      const { tests, skipped } = tally.read()
-      counted = { tests: (counted?.tests ?? 0) + tests, skipped: (counted?.skipped ?? 0) + skipped }
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
+const decode = (text) =>
+  text.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (whole, name) =>
+    name.startsWith('#x') || name.startsWith('#X')
+      ? point(parseInt(name.slice(2), 16), whole)
+      : name.startsWith('#')
+        ? point(Number(name.slice(1)), whole)
+        : (ENTITIES[name] ?? whole),
+  )
+const point = (code, whole) => (code <= 0x10ffff ? String.fromCodePoint(code) : whole)
+// A tag's attributes, short of the `/` that closes an empty one; a value may hold `>`.
+const TAG = '((?:[^>"/]|"[^"]*"|/(?!>))*)'
+const attributes = (text) =>
+  Object.fromEntries([...text.matchAll(/([\w:.-]+)="([^"]*)"/g)].map(([, k, v]) => [k, decode(v)]))
+
+/**
+ * The cases of a JUnit report, each with its file as a repository path. Bun and node name the file in `file`, vitest
+ * in `classname`; only Bun gives the line, so for the others it is taken from where the failure points into the file.
+ * Bun's `classname` is the case's describe blocks, which `-t` matches with its name.
+ */
+export const cases = (xml, cwd, tool) =>
+  [...xml.matchAll(new RegExp(`<testcase\\b${TAG}(?:/>|>([\\s\\S]*?)</testcase>)`, 'g'))].flatMap(
+    ([, head, body = '']) => {
+      const tag = attributes(head)
+      const file = relative(path.resolve(at(cwd), tag.file ?? tag.classname ?? ''))
+      const skipped = new RegExp(`<skipped\\b${TAG}`).exec(body)
+      const failure = new RegExp(`<(failure|error)\\b${TAG}(?:/>|>([\\s\\S]*?)</\\1>)`).exec(body)
+      const name = tool === 'bun' && tag.classname ? `${tag.classname} › ${tag.name}` : tag.name
+      // Node reports a file that holds no test as a case named as the file was given: no test, unless it failed to load.
+      if (!failure && tag.name === path.relative(at(cwd), at(file)).split(path.sep).join('/')) return []
+      const detail = failure ? decode(failure[3] ?? '') : ''
+      const line = tag.line ?? new RegExp(`${path.basename(file).replace(/\./g, '\\.')}:(\\d+)`).exec(detail)?.[1]
+      return {
+        file,
+        line: line ? Number(line) : undefined,
+        name,
+        // Node lists a todo case that threw as failed too, and does not count it as a failure itself.
+        status:
+          skipped && (!failure || attributes(skipped[1]).type === 'todo') ? 'skipped' : failure ? 'failed' : 'passed',
+        reason: skipped ? attributes(skipped[1]).message || undefined : undefined,
+        // The element's text keeps the lines node's attribute runs together.
+        message: failure ? (detail || attributes(failure[2]).message || 'failed').trim() : undefined,
+      }
+    },
+  )
+
+/**
+ * A suite's outcome from its runs: each with the files it was given, how it ended, and the cases its report holds.
+ * FAIL when a run failed or a case did, or a file ran no test; NOT RUN when every case was skipped; PASS otherwise.
+ */
+export const judge = (runs) => {
+  const all = runs.flatMap((each) => each.cases)
+  const failed = all.filter((each) => each.status === 'failed')
+  const skipped = all.filter((each) => each.status === 'skipped')
+  const problems = []
+  for (const each of runs) {
+    const ended = each.ended
+    if (ended.error) problems.push({ run: each, text: `could not start ${each.command}: ${ended.error}` })
+    else if (ended.timedOut) problems.push({ run: each, text: `stopped after ${ended.timedOut} min` })
+    else if (ended.signal) problems.push({ run: each, text: `ended by ${ended.signal}` })
+    else if (ended.status !== 0 && !each.cases.some((one) => one.status === 'failed')) {
+      problems.push({ run: each, text: `exited with ${ended.status} with no failed case in its report` })
     }
-    if (ran.error) console.log(`--- could not run ${step.command}: ${ran.error.message}`)
-    else if (ran.signal) console.log(`--- ended by ${ran.signal}`)
-    if (ran.status !== 0) failed = true
+    if (!each.files.length) problems.push({ run: each, text: 'was given no files' })
+    for (const file of each.files) {
+      if (!each.cases.some((one) => one.file === file)) problems.push({ run: each, text: `${file} ran no tests` })
+    }
+    for (const file of each.focused ?? []) {
+      problems.push({ run: each, text: `${file} has a .only, which keeps the file's other cases from running` })
+    }
   }
-  const seconds = Math.round((Date.now() - begun) / 1000)
-  const unrun = !failed && counted !== null && counted.tests === counted.skipped
-  const skips = counted?.skipped ? `, ${counted.skipped} of ${counted.tests} skipped` : ''
-  const outcome = unrun
-    ? `NOT RUN: ${counted.tests ? `all ${counted.tests} skipped` : 'no tests'}`
-    : `${failed ? 'FAILED' : 'passed'} in ${seconds} s${skips}`
-  results.push({ suite, failed, unrun, outcome })
+  if (!runs.length) problems.push({ text: 'found no test files' })
+  const counts = {
+    tests: all.length,
+    passed: all.length - failed.length - skipped.length,
+    failed: failed.length,
+    skipped: skipped.length,
+  }
+  const reasons = [...new Set(skipped.map((each) => each.reason ?? 'skipped'))]
+  const status = failed.length || problems.length ? 'FAIL' : counts.passed === 0 ? 'NOT RUN' : 'PASS'
+  return { status, counts, failed, problems, reasons }
 }
 
-console.log('')
-for (const { suite, outcome } of results) console.log(`${suite.padEnd(10)}${outcome}`)
-process.exit(results.some((result) => result.failed) ? 1 : results.some((result) => result.unrun) ? 3 : 0)
+const FOCUSED = /\b(?:test|it|describe|suite)(?:\.\w+)*\.only\b/
+
+// Long enough for the real Earth Engine to compose and download its images.
+const LIMIT_MINUTES = 30
+
+/** Runs one step in a home of its own; its output goes to a log beside its report. */
+const execute = (each, logs, index) => {
+  const report = path.join(logs, `${index}.xml`)
+  const log = path.join(logs, `${index}.log`)
+  const args = reported(each, report)
+  const { home, env } = homeFor(each)
+  const output = fs.openSync(log, 'w')
+  const ran = spawnSync(each.command, args, {
+    cwd: at(each.cwd),
+    env,
+    stdio: ['ignore', output, output],
+    timeout: LIMIT_MINUTES * 60 * 1000,
+  })
+  fs.closeSync(output)
+  try {
+    fs.rmSync(home, { recursive: true, force: true })
+  } catch (error) {
+    console.log(`\n  could not remove ${home}: ${error.message}`)
+  }
+  const xml = fs.existsSync(report) ? fs.readFileSync(report, 'utf8') : ''
+  const found = cases(xml, each.cwd, each.tool)
+    .filter((one) => !each.only || each.only.test(one.name))
+    .map((one) => ({ ...one, log }))
+  const timedOut = ran.error?.code === 'ETIMEDOUT' ? LIMIT_MINUTES : undefined
+  return {
+    ...each,
+    args,
+    log,
+    // Bun runs only a file's focused cases and reports none of the rest.
+    focused: each.files.filter((file) => FOCUSED.test(fs.readFileSync(at(file), 'utf8'))),
+    cases: found,
+    ended: {
+      status: ran.status,
+      signal: timedOut ? null : ran.signal,
+      error: timedOut ? undefined : ran.error?.message,
+      timedOut,
+    },
+  }
+}
+
+const quoted = (word) => (/^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`)
+const lines = (text, count) => text.split('\n').slice(0, count).join('\n')
+const indent = (text, by = '    ') => text.replace(/^/gm, by)
+
+const tail = (log) =>
+  fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trimEnd().split('\n').slice(-40).join('\n') : ''
+
+/**
+ * What to read when a suite failed: each failed case where it is, and the end of the log of a run that broke or of
+ * a failure with no line in the file, as a file that would not load: its report says only that it failed.
+ */
+const explain = (suite, outcome) => {
+  const shown = []
+  const logs = new Set()
+  const ending = (log) => {
+    if (!log || logs.has(log)) return
+    logs.add(log)
+    if (tail(log)) shown.push(indent(tail(log)))
+  }
+  for (const each of outcome.failed.slice(0, 20)) {
+    shown.push(`  ${each.file}${each.line ? `:${each.line}` : ''}  ${each.name}`)
+    if (each.message) shown.push(indent(lines(each.message, 15)))
+    if (!each.line) ending(each.log)
+  }
+  if (outcome.failed.length > 20) shown.push(`  and ${outcome.failed.length - 20} more failed cases`)
+  for (const { run, text } of outcome.problems) {
+    shown.push(`  ${text}`)
+    ending(run?.log)
+  }
+  const files = [
+    ...new Set([
+      ...outcome.failed.map((each) => each.file),
+      ...outcome.problems.flatMap(({ run }) => run?.files ?? []),
+    ]),
+  ]
+  for (const file of files) shown.push(`  rerun: node scripts/test.mjs --file ${quoted(file)}`)
+  for (const log of new Set([...outcome.failed.map((each) => each.log), ...logs])) shown.push(`  full output: ${log}`)
+  return `\nFAIL ${suite}\n${shown.join('\n')}`
+}
+
+const summary = ({ status, counts, reasons }, seconds) => {
+  const time = `${seconds} s`
+  if (status === 'NOT RUN') return `NOT RUN  all ${counts.tests} skipped: ${reasons.join('; ')}`
+  const skips = counts.skipped ? `, ${counts.skipped} skipped (${reasons.join('; ')})` : ''
+  const failures = counts.failed ? `, ${counts.failed} failed` : ''
+  return `${status.padEnd(8)} ${counts.passed} passed${failures}${skips}, ${time}`
+}
+
+/** The suites and files the arguments ask for, with why; or a usage error. */
+export const parse = (args, changed = changes) => {
+  const listOnly = args.includes('--list')
+  const chosen = new Map()
+  const files = []
+  const choose = (suite, reason) => chosen.set(suite, [...(chosen.get(suite) ?? []), reason])
+  for (let index = 0; index < args.length; index++) {
+    const name = args[index]
+    if (name === '--list') continue
+    if (name === '--file') {
+      const file = args[++index]
+      if (!file) return { error: '--file needs a test file' }
+      files.push(relative(path.resolve(file)))
+    } else if (name === 'all') for (const suite of Object.keys(SUITES)) choose(suite, 'all')
+    else if (name === 'changed') {
+      for (const file of changed()) {
+        for (const suite of calledFor(file)) {
+          // A real test of a domain not yet registered here would otherwise be skipped without a word.
+          if (!(suite in SUITES))
+            return {
+              error: `${file} calls for a suite "${suite}" that scripts/test.mjs does not have: register it there.`,
+            }
+          choose(suite, file)
+        }
+      }
+    } else if (name in SUITES) choose(name, 'named')
+    else return { error: `unknown suite: ${name}` }
+  }
+  if (!chosen.size && !files.length && !args.some((arg) => arg === 'changed')) {
+    return { error: 'usage: node scripts/test.mjs [--list] <suite|changed|all>... [--file <test file>]...' }
+  }
+  return { listOnly, chosen, files }
+}
+
+/** The step that runs one file as its suite would, and the suite it belongs to. */
+export const fileStep = (file) => {
+  for (const [suite, steps] of Object.entries(SUITES)) {
+    for (const each of steps()) {
+      if (!each.files.includes(file)) continue
+      const prefix = each.args.slice(0, each.args.length - each.files.length)
+      return { suite, step: { ...each, args: [...prefix, argument(each.tool, each.cwd, file)], files: [file] } }
+    }
+  }
+  return null
+}
+
+const main = () => {
+  const parsed = parse(process.argv.slice(2))
+  if (parsed.error) {
+    console.error(parsed.error)
+    process.exit(2)
+  }
+  const strays = unrun()
+  if (strays.length) {
+    console.error(`no suite runs these, so they would never run; name them as the suites expect:\n${strays.join('\n')}`)
+    process.exit(2)
+  }
+  // Each entry: a label, the steps it runs, why, and what keeps it from running here.
+  const plan = Object.keys(SUITES)
+    .filter((suite) => parsed.chosen.has(suite))
+    .map((suite) => ({
+      label: suite,
+      steps: SUITES[suite](),
+      why: parsed.chosen.get(suite),
+      withheld: withheld(suite),
+    }))
+  for (const file of parsed.files) {
+    const found = fileStep(file)
+    if (!found) {
+      console.error(`${file} is not a test file any suite runs`)
+      process.exit(2)
+    }
+    plan.push({ label: file, steps: [found.step], why: [`${found.suite} file`], withheld: withheld(found.suite) })
+  }
+  if (!plan.length) {
+    console.log('nothing to run: no change calls for a suite.')
+    process.exit(0)
+  }
+
+  if (parsed.listOnly) {
+    for (const { label, steps, why, withheld: reason } of plan) {
+      const shown = why.length > 3 ? [...why.slice(0, 3), `${why.length - 3} more`] : why
+      const count = steps.reduce((sum, each) => sum + each.files.length, 0)
+      console.log(`${label.padEnd(10)} ${reason ? `NOT RUN  ${reason}` : `${count} files, for ${shown.join(', ')}`}`)
+    }
+    process.exit(0)
+  }
+
+  const logs = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-test-run-'))
+  const results = []
+  let index = 0
+  for (const { label, steps, withheld: reason } of plan) {
+    if (reason) {
+      results.push({ label, line: `NOT RUN  ${reason}`, status: 'NOT RUN' })
+      continue
+    }
+    process.stdout.write(`${label} ... `)
+    const begun = Date.now()
+    const runs = steps.map((each) => execute(each, logs, index++))
+    const outcome = judge(runs)
+    const line = summary(outcome, Math.round((Date.now() - begun) / 1000))
+    console.log(line)
+    results.push({ label, line, status: outcome.status, outcome })
+  }
+
+  for (const { label, status, outcome } of results) if (status === 'FAIL') console.log(explain(label, outcome))
+  console.log('')
+  for (const { label, line } of results) console.log(`${label.padEnd(10)} ${line}`)
+  const failed = results.some((each) => each.status === 'FAIL')
+  // The logs of a failed run are kept for reading; a clean run leaves nothing.
+  if (failed) console.log(`\nlogs: ${logs}`)
+  else fs.rmSync(logs, { recursive: true, force: true })
+  process.exit(failed ? 1 : results.some((each) => each.status === 'NOT RUN') ? 3 : 0)
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()
