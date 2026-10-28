@@ -50,7 +50,7 @@ const read = (file: string) => {
     "out['descriptions'] = [row[0] for row in sqlite3.connect(path).execute('select description from gpkg_contents')]",
     "print(json.dumps(out, ensure_ascii=False))",
   ].join("\n")
-  return JSON.parse(execFileSync(base, ["-I", "-c", script, file], { encoding: "utf-8" })) as {
+  return JSON.parse(execFileSync(base, ["-I", "-B", "-c", script, file], { encoding: "utf-8" })) as {
     points: Layer
     lines: Layer
     polygons: Layer

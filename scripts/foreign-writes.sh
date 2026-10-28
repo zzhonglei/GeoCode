@@ -56,8 +56,9 @@ not_theirs() {
 snapshot() {
   for root in $ROOTS; do
     [ -e "$root" ] || continue
-    # Records the mode too: a chmod leaves mtime and size alone.
-    find "$root" -not -path '*/.git/*' -not -path "$PRUNE" -exec stat -f '%N %m %z %p' {} \; 2>/dev/null
+    # The time to the nanosecond, as a rewrite of the same size within a second changes only that; the mode too, as a
+    # chmod leaves time and size alone.
+    find "$root" -not -path '*/.git/*' -not -path "$PRUNE" -exec stat -f '%N %Fm %z %p' {} \; 2>/dev/null
   done | sort
 }
 

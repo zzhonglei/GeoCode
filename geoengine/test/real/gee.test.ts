@@ -38,7 +38,8 @@ const realBase = async () => {
   const where = Environment.layout(DATA!)
   const started = `start this GeoCode once, to install its base environment in ${DATA}`
   // Imported once first, as the warm-up does: a check, timed, of a base never warmed up would run out of time.
-  const asked = ["-I", "-c", "import platform, ee, geedim, geopandas, rasterio; print(platform.python_version())"]
+  // -B: the environment is the user's, and its folders not the tests' to write bytecode in.
+  const asked = ["-I", "-B", "-c", "import platform, ee, geedim, geopandas, rasterio; print(platform.python_version())"]
   const version = execFileSync(where.basePython, asked, { encoding: "utf-8" }).trim()
   // Guards against running another GeoCode's startup file or geocodekit than this one's.
   const { write, remove } = await Environment.compare(where, version)
@@ -252,7 +253,7 @@ test(
           assert.equal(done.outcome, "finished", done.output)
           // Guards against taking the script's word for it: the file is read anew.
           const file = path.join(engine.directory, "台北_rgb.tif")
-          const grid = JSON.parse(execFileSync(base.python, ["-I", "-c", READ_GRID, file], { encoding: "utf-8" }))
+          const grid = JSON.parse(execFileSync(base.python, ["-I", "-B", "-c", READ_GRID, file], { encoding: "utf-8" }))
           const expected = { count: 3, crs: "EPSG:32651", resolution: [100, 100], covered: true }
           assert.deepEqual({ ...grid, covered: grid.covered > 0.9 }, expected)
         } finally {

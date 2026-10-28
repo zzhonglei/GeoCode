@@ -32,6 +32,8 @@ test(
       assert.equal(added.status, 1)
       assert.match(added.stdout, /\.agents\/added/)
       assert.equal(around(() => fs.appendFileSync(path.join(watched, 'kept'), ' and two')).status, 1)
+      // The same length at once: nothing but the time to tell it by.
+      assert.equal(around(() => fs.writeFileSync(path.join(watched, 'kept'), 'ONE and TWO')).status, 1)
       assert.equal(around(() => fs.chmodSync(path.join(watched, 'kept'), 0o755)).status, 1)
       assert.equal(around(() => fs.rmSync(path.join(watched, 'added'))).status, 1)
     } finally {

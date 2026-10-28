@@ -46,7 +46,12 @@ export const sandbox = () => {
   const git = (...args) =>
     execFileSync('git', ['-c', 'user.name=check', '-c', 'user.email=check@example.invalid', ...args], {
       cwd: project,
-      env: { ...process.env, HOME: home, GIT_CONFIG_NOSYSTEM: '1' },
+      // Without the variables that would point git at another repository or the user's own configuration.
+      env: {
+        ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(GIT_|XDG_)/.test(name))),
+        HOME: home,
+        GIT_CONFIG_NOSYSTEM: '1',
+      },
     })
   git('init', '-q')
   git('add', '-A')
@@ -144,7 +149,7 @@ export const useFakeModel = (box, model, { asDefault = true } = {}) => {
  * alone, Electron's own folder in the sandbox, and the DevTools protocol on a port the system picks. Resolves once the
  * window's API answers.
  */
-export const launch = async (app, box, ms = 300000) => {
+export const launch = async (app, box, ms = 300000, spawned = () => {}) => {
   const userData = path.join(box.home, 'electron-user-data')
   const environment = {
     HOME: box.home,
@@ -160,6 +165,8 @@ export const launch = async (app, box, ms = 300000) => {
     [`--user-data-dir=${userData}`, '--remote-debugging-port=0'],
     { env: environment, stdio: ['ignore', log, log] },
   )
+  // Told at once, so that whoever started it can stop it however the start ends.
+  spawned(child)
   const portFile = path.join(userData, 'DevToolsActivePort')
   const started = Date.now()
   while (Date.now() - started < ms) {
@@ -376,17 +383,17 @@ export const check = async ({ app, box, model, keep, ms, credentials = [] }, bod
   let child
   const interrupted = (signal) => {
     if (child) for (const each of processesOf(child.pid)) spawnSync('kill', ['-KILL', String(each.pid)])
+    for (const file of credentials) fs.rmSync(file, { force: true })
     console.log(`\n${signal}: the app was stopped; sandbox kept: ${box.root}`)
     process.exit(1)
   }
   process.once('SIGINT', interrupted)
   process.once('SIGTERM', interrupted)
   try {
-    const started = await launch(app, box, ms).catch((error) => {
+    const started = await launch(app, box, ms, (spawned) => (child = spawned)).catch((error) => {
       record('app: starts and its window answers', false, error.message)
       return null
     })
-    child = started?.child
     if (started) await item('the checks run to their end', () => body({ api: started.api, record, item }))
   } finally {
     if (child) {
