@@ -20,7 +20,7 @@ QGIS 能力域让 GeoAgent 用用户安装的 QGIS 读取地理数据、查阅�
 
 支持 QGIS 官方的安装包:macOS 上的应用包,Windows 上的独立安装包与 OSGeo4W;conda、Homebrew 等来源不支持。目标是两个平台上的大多数版本,但 GeoCode 不按版本号判断能不能用:不同版本运行时会出各种意想不到的问题,只能由检查与执行说明,遇到的问题原样交给 GeoAgent,逐个版本验证、逐个解决。
 
-环境采用 QGIS 自己的答案,GeoCode 只叠加 QGIS 不会替它设置的几项:两个平台都让输出用 UTF-8、关掉 Qt 的日志。macOS 上以应用包里官方的 `python` 启动脚本运行解释器,再显式给出投影与 GDAL 的数据目录(否则 GDAL 找不到投影数据库,坐标变换静默失败),并清空从登录 shell 继承来的 `PYTHONPATH`(它常由 conda 设置,会让 QGIS 的 Python 导入别的 Python 的包)。Windows 上每次都经一套 QGIS 自己的启动脚本 `bin\python-<名字>.bat` 运行,环境全由它组装;GeoCode 不自己组装,也不留环境的快照:Qt、GDAL 与各个依赖的位置随版本而变,自己组装就要跟着每个版本追,漏一项就是 Qt 找不到或 DLL 加载失败。
+环境采用 QGIS 自己的答案。用户为自己的工具设的变量不交给它(`ENVIRONMENT.md` 第 2.3 节),GeoCode 只叠加 QGIS 不会替它设置的几项:两个平台都让输出用 UTF-8、关掉 Qt 的日志。macOS 上以应用包里官方的 `python` 启动脚本运行解释器,再显式给出投影与 GDAL 的数据目录(否则 GDAL 找不到投影数据库,坐标变换静默失败)。Windows 上每次都经一套 QGIS 自己的启动脚本 `bin\python-<名字>.bat` 运行,环境全由它组装;GeoCode 不自己组装,也不留环境的快照:Qt、GDAL 与各个依赖的位置随版本而变,自己组装就要跟着每个版本追,漏一项就是 Qt 找不到或 DLL 加载失败。
 
 脚本与请求经标准输入交给 QGIS 的 Python,不放在命令行上:Windows 的启动脚本要经命令解释器运行,它会改写命令行里的引号与 `%`、`^`、`&`、`!`,截断多行内容。两个平台用同一种传法。
 

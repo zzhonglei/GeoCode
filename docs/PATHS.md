@@ -15,7 +15,7 @@
 | 日志 | `~/Library/Logs/GeoCode/` 与数据目录的 `log/` | `%APPDATA%\GeoCode\logs\` 与数据目录的 `log\` |
 | 程序 | `/Applications/GeoCode.app` | `%LOCALAPPDATA%\Programs\geocode\` |
 
-环境里设了 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_CACHE_HOME`、`XDG_STATE_HOME` 的,配置、数据、缓存、状态目录改在它们下面的 `geocode/`。只在登录 shell 的配置里设了 `XDG_DATA_HOME`、又不从终端启动应用的,壳自己的 `desktop/`(第 3.3 节)仍在默认的数据目录下:壳在读入登录 shell 的环境之前就定下了它。设置的「环境变量」页里不要填 `XDG_*` 与 `TMPDIR`:它们只交给内核,应用的其余部分仍用原来的目录,两边会读写不同的地方。
+配置、数据、缓存、状态目录固定在主目录下,环境里设了 `XDG_*` 也不变(`ENVIRONMENT.md` 第 2.2 节)。
 
 ## 2. 配置目录
 
@@ -124,9 +124,9 @@
 
 状态目录 `~/.local/state/geocode/` 每次启动就建立。里面有 `locks/` 下的锁,安装 npm 包与克隆外部仓库时使用,OSM 的工具用其中的 `osm-nominatim` 记下上一次请求 Nominatim 的时刻(`OSM.md` 第 3 节)。
 
-临时目录 `$TMPDIR/geocode/` 每次启动就建立,是提示 agent 存放临时文件的地方,agent 可以不经询问读写。系统临时目录下另有几类以 `geocode-` 开头的短期文件,用完即删:查看与暂存 git 改动、列出未跟踪的文件、多方案运行保存快照、经应用推送 Git LFS 文件与执行检出钩子时的中间文件;macOS 上还有转换应用图标时的 `geocode-icon-*.png`。例外是 `geocode-git-trust-*`:用户的 git 配置里有 `safe.directory` 条目时,经应用拉取或推送前把这些条目抄进去,每次运行至多一个,不删。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`;运行期间,窗口的单实例锁在 `$TMPDIR` 下的 `scoped_dir*/` 里放一个套接字。GeoEngine 运行内置环境的 Python(如 GEE 的脚本)时不给 `TMPDIR`,其中的程序在 macOS 上把临时文件写进 `/tmp`。
+临时目录 `$TMPDIR/geocode/` 每次启动就建立,是提示 agent 存放临时文件的地方,agent 可以不经询问读写。系统临时目录下另有几类以 `geocode-` 开头的短期文件,用完即删:查看与暂存 git 改动、列出未跟踪的文件、多方案运行保存快照、经应用推送 Git LFS 文件与执行检出钩子时的中间文件;macOS 上还有转换应用图标时的 `geocode-icon-*.png`。例外是 `geocode-git-trust-*`:用户的 git 配置里有 `safe.directory` 条目时,经应用拉取或推送前把这些条目抄进去,每次运行至多一个,不删。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`;运行期间,窗口的单实例锁在 `$TMPDIR` 下的 `scoped_dir*/` 里放一个套接字。
 
-内核的运行时(Bun)在系统临时目录解出它要加载的原生库(`.bun-*.dylib`),并把插件的转译结果缓存在它自己的共享缓存目录里(macOS 是 `~/Library/Caches/bun`),与本机其他使用 Bun 的程序共用,按内容命名。两者删除都不影响使用。
+内核的运行时(Bun)在系统临时目录解出它要加载的原生库(`.bun-*.dylib`),并把插件的转译结果缓存在它自己的共享缓存目录里(macOS 是 `~/Library/Caches/bun`,设了 `XDG_CACHE_HOME` 时是它下面的 `bun/`),与本机其他使用 Bun 的程序共用,按内容命名。两者删除都不影响使用。
 
 ## 5. 窗口数据、日志与系统登记
 
@@ -199,9 +199,9 @@ GeoCode 写文件多是先写旁边的临时文件、再改名替换,有的另�
 
 为了让 git、npm 与云服务照常工作,GeoCode 读用户为这些通用工具准备的配置,只读不写:
 
-- 环境变量:macOS 上启动时以交互的登录 shell 读一次环境(它会执行 `.zprofile`、`.zshrc` 这类启动文件),Windows 上从注册表读用户与系统的 `PATH`。agent 执行的命令与终端因此能找到 conda、GDAL 等工具。
+- 环境变量:macOS 上启动时以交互的登录 shell 读一次环境(它会执行 `.zprofile`、`.zshrc` 这类启动文件),Windows 上从注册表读用户与系统的 `PATH`(`ENVIRONMENT.md` 第 2.1 节)。agent 执行的命令与终端因此能找到 conda、GDAL 等工具。
 - git:全局配置(身份、`core.sshCommand`、`safe.directory`);没有设 `SSH_AUTH_SOCK` 时,用 `gpgconf` 与 `~/.gnupg` 找 GPG 代理提供的 SSH 套接字;仓库没有绑定账号时,git 照常用用户自己的凭据助手与 SSH。
-- GitHub CLI 的登录(`gh auth token`)。
+- GitHub CLI 的登录(`gh auth token`);gh 运行时会在它自己的状态目录写下一个设备标识。
 - 在设置里查找可导入的 SSH 密钥时,`~/.ssh` 下的密钥,选中的复制进数据目录。
 - npm:安装服务商 SDK 与格式化工具时,`~/.npmrc`、npm 自己的全局配置与 `npm_config_*` 变量。
 - 模型服务商:内核启动时为登录选项读 AWS 的配置名(`~/.aws/config` 与 `~/.aws/credentials`);为 Google Vertex AI 的登录选项读 gcloud 配置里的项目号与区域,以及默认凭据文件 `application_default_credentials.json` 里的项目号,不联网,登录时也可以自己填;选用 Azure 并以 Azure CLI 登录时,调用 `az` 取令牌;选用 GitLab 时读 `GITLAB_TOKEN` 与项目的远程地址。配置文件里以 `{file:…}` 引用的密钥文件,用到时读取。
@@ -220,8 +220,6 @@ GeoCode 写文件多是先写旁边的临时文件、再改名替换,有的另�
 - 重建 Python 环境:退出 GeoCode 后删除数据目录里的 `python/envs/default/`(只重建工作环境,GeoAgent 装的包随之清空)或整个 `python/`(重新安装),下次启动时自动准备。
 - 重置界面:删除窗口数据目录。
 - 完全卸载:删除程序与第 1 节表里的全部位置,再删除第 5 节的系统登记(macOS 的偏好文件,并在系统设置里撤销权限与登录项;Windows 上先在设置里关掉开机启动)。
-
-设了 `XDG_*` 的,删的是它们下面的 `geocode/`;`XDG_DATA_HOME` 只设在登录 shell 里时,默认数据目录下的 `desktop/` 也要删(第 1 节)。
 
 仓库绑定了账号或托管的 SSH 密钥时,它的 `.git/config` 指向数据目录里的凭据助手与 GeoCode 程序本身(第 6 节)。删除数据目录或卸载之前先在设置里解除绑定,否则在终端里对这个仓库拉取与推送会失败。
 

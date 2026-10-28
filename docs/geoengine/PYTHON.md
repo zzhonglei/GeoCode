@@ -68,9 +68,9 @@ GeoEngine 写进 `base` 的文件(`EXTERNALLY-MANAGED` 标记、设环境变量�
 
 运行它的一方(GeoEngine、GeoAgent 的 shell 与以后别的入口)因此不必设任何变量,也就不会漏设。
 
-GeoEngine 运行这套环境的 Python 时,以隔离模式启动:Python 不读 `PYTHON` 开头的变量,也不加载用户目录里的包;环境变量只从用户的环境里取网络相关的(代理与证书)与 `HOME`,其余一个也不给,因为 conda 的 `PYTHONPATH`、`PATH` 里 QGIS 与 OSGeo4W 带的 GDAL 都会让它加载不属于自己的东西。给 `HOME` 只为指明主目录,开发时的沙箱靠它挡住真实的主目录。
+GeoEngine 运行这套环境的 Python 时,以隔离模式启动:Python 不读 `PYTHON` 开头的变量,也不加载用户目录里的包;环境变量与 GeoEngine 的其他任务一样,只取网络、账户、临时目录与系统自身的(`ENVIRONMENT.md` 第 2.3 节):conda 的 `PYTHONPATH`、`PATH` 里 QGIS 与 OSGeo4W 带的 GDAL 都会让它加载不属于自己的东西。
 
-代理也是环境的一部分,规则与内核、壳服务端相同(`DESKTOP.md`):只按 `HTTP_PROXY`、`HTTPS_PROXY` 与 `NO_PROXY` 联网,大小写皆可,两种都有时以小写的为准;本机的回环地址总是直连;不读系统设置里的代理,也不认 `ALL_PROXY`。环境里的库本来各有各的做法(有的没有变量时去读系统设置,有的连变量也不读),所以启动文件在 Python 启动时整理这些变量,并在相关的网络库被导入时调整它们的默认行为。用户给 GeoCode 设了代理,GEE、GDAL 与 GeoAgent 的脚本都跟着走,GeoAgent 不必考虑代理;脚本里显式给的代理照样优先。自动代理脚本(PAC)不支持。
+代理也是环境的一部分,规则与内核、壳服务端相同(`ENVIRONMENT.md` 第 2.5 节):只按 `HTTP_PROXY`、`HTTPS_PROXY` 与 `NO_PROXY` 联网,大小写皆可,两种都有时以小写的为准;本机的回环地址总是直连;不读系统设置里的代理,也不认 `ALL_PROXY`。环境里的库本来各有各的做法(有的没有变量时去读系统设置,有的连变量也不读),所以启动文件在 Python 启动时整理这些变量,并在相关的网络库被导入时调整它们的默认行为。用户给 GeoCode 设了代理,GEE、GDAL 与 GeoAgent 的脚本都跟着走,GeoAgent 不必考虑代理;脚本里显式给的代理照样优先。自动代理脚本(PAC)不支持。
 
 ## 7. GeoAgent 怎样使用
 

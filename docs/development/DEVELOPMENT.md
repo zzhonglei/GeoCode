@@ -64,7 +64,7 @@ OPENCHAMBER_DESKTOP_USER_DATA_DIR="$SANDBOX/electron-user-data" \
 bun run electron:dev:bundled
 ```
 
-壳与内核都从 `HOME` 推导自己的数据、配置与缓存目录,前提是环境里没有设 `XDG_*` 变量,设了的话两者都会改用它们。Electron 自己的配置目录在 macOS 上按系统账户找主目录,不看 `HOME`,所以要用 `OPENCHAMBER_DESKTOP_USER_DATA_DIR` 单独指定。系统的偏好设置同样按系统账户存放,沙箱挡不住:开发时写进 Electron 通用的 `~/Library/Preferences/com.github.Electron.plist`(打包出的应用写的那一份见 `PATHS.md` 第 5 节),里面只有文件对话框的位置这类系统记下的状态。Electron 的日志写在 `$SANDBOX/Library/Logs/` 下。
+壳与内核都从 `HOME` 推导自己的数据、配置与缓存目录,不看 `XDG_*`。Electron 自己的配置目录在 macOS 上按系统账户找主目录,不看 `HOME`,所以要用 `OPENCHAMBER_DESKTOP_USER_DATA_DIR` 单独指定。系统的偏好设置同样按系统账户存放,沙箱挡不住:开发时写进 Electron 通用的 `~/Library/Preferences/com.github.Electron.plist`(打包出的应用写的那一份见 `PATHS.md` 第 5 节),里面只有文件对话框的位置这类系统记下的状态。Electron 的日志写在 `$SANDBOX/Library/Logs/` 下。
 
 `electron:dev:bundled` 先构建界面,再用构建好的界面启动,使用第 4 节暂存的内核;没有暂存时启动日志提示「bundled OpenCode CLI missing」,内核起不来。`electron:dev` 用热更新的界面,适合改界面时快速查看,但它另起的壳服务端不在 Electron 里,本机访问控制(`DESKTOP.md` 第 4 节)在那里不生效,也接不到 GeoEngine,地理环境与地理工具都不可用;验证这些要用 `electron:dev:bundled` 或打包出的应用。窗口的加载动画等内置的 Python 环境就绪(`PYTHON.md` 第 8 节),新沙箱第一次启动要多等一会;`electron:dev` 没有 GeoEngine,不等。
 
@@ -81,7 +81,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false bun run package -- --dir -c.mac.identity=- -c.
 
 macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是它的源(Icon Composer 的文档,图层在其中的 `Assets/` 里),编译出的 `resources/icons/Assets.car` 提交在仓库里,打包只把它拷进应用,缺了它打包会失败。改了图层或 `icon.json` 之后,在 `desktop/packages/electron` 运行 `bun run generate:macos-icon` 重新生成(需要 Xcode),与源一起提交。
 
-在沙箱里运行打包出的应用,直接执行 `.app/Contents/MacOS/` 下的可执行文件,带上第 5 节的 `HOME`,Electron 的配置目录改用参数 `--user-data-dir=<沙箱里的目录>` 指定:打包出的应用不接受 `OPENCHAMBER_` 开头的环境变量(`DESKTOP.md` 第 5 节)。这个参数来自 Chromium,Electron 的文档没有列出,升级 Electron 后要确认它仍然有效。再加上 `--remote-debugging-port=<端口>`,就能以 DevTools 协议从外部检查各个窗口。
+在沙箱里运行打包出的应用,直接执行 `.app/Contents/MacOS/` 下的可执行文件,带上第 5 节的 `HOME`,Electron 的配置目录改用参数 `--user-data-dir=<沙箱里的目录>` 指定:打包出的应用不接受 `OPENCHAMBER_` 开头的环境变量(`ENVIRONMENT.md` 第 2.1 节)。这个参数来自 Chromium,Electron 的文档没有列出,升级 Electron 后要确认它仍然有效。再加上 `--remote-debugging-port=<端口>`,就能以 DevTools 协议从外部检查各个窗口。
 
 ## 7. 检查与测试
 

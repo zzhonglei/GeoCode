@@ -18,7 +18,8 @@ GeoCode 建在两个开源项目之上:
 | 文档 | 内容 |
 |---|---|
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 设计总纲:定位、整体架构与设计原则,各部分的入口 |
-| [`docs/DESKTOP.md`](docs/DESKTOP.md) | 桌面应用由什么组成:私有内核、本机访问控制、环境变量、名字与标志、许可证 |
+| [`docs/DESKTOP.md`](docs/DESKTOP.md) | 桌面应用由什么组成:私有内核、本机访问控制、名字与标志、许可证 |
+| [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) | 环境变量:从哪里取得、交给谁、哪些不认 |
 | [`docs/PATHS.md`](docs/PATHS.md) | GeoCode 在用户电脑上与项目里产生与读取的文件,以及怎样删除 |
 | [`docs/geoengine/GEOENGINE.md`](docs/geoengine/GEOENGINE.md) | 地理引擎 GeoEngine:各能力域共用的框架 |
 | [`docs/geoengine/PYTHON.md`](docs/geoengine/PYTHON.md) | 内置的 Python 环境:组成、构建与分发,在用户电脑上的准备,GeoAgent 怎样使用 |
