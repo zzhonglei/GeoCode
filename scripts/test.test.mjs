@@ -7,6 +7,9 @@ import { SUITES, calledFor, cases, fileStep, judge, parse, sandboxed, top, unrun
 test('a change calls for the suites of what it touches, and for the real suites of the domain it is in', () => {
   const desktop = ['kernel', 'ui', 'web', 'electron']
   assert.deepEqual(calledFor('docs/DESIGN.md'), [])
+  assert.deepEqual(calledFor('docs/PATHS.md'), ['scripts'])
+  assert.deepEqual(calledFor('scripts/app/paths.mjs'), ['scripts'])
+  assert.deepEqual(calledFor('scripts/app/smoke.mjs'), [])
   assert.deepEqual(calledFor('desktop/packages/ui/src/geocode/osm.ts'), desktop)
   // GeoEngine's unit tests of the domain alone, and the domain's real ones.
   assert.deepEqual(calledFor('geoengine/src/osm/index.ts'), [...desktop, 'geoengine/osm', 'osm'])

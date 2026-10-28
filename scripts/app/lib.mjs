@@ -7,6 +7,7 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
+import { pathsCheck } from './paths.mjs'
 
 export const top = path.resolve(import.meta.dirname, '..', '..')
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -380,6 +381,7 @@ export const check = async ({ app, box, model, keep, ms, credentials = [] }, bod
     }
   }
   const writes = writeCheck(box)
+  const paths = pathsCheck(box)
   let child
   const interrupted = (signal) => {
     if (child) for (const each of processesOf(child.pid)) spawnSync('kill', ['-KILL', String(each.pid)])
@@ -403,6 +405,8 @@ export const check = async ({ app, box, model, keep, ms, credentials = [] }, bod
     await model.close()
     const found = writes.after()
     record('app: writes in no other product’s folders', !found.length, found.join('\n'))
+    const unaccounted = paths.after()
+    record('app: writes only where docs/PATHS.md says', !unaccounted.length, unaccounted.join('  '))
   }
   for (const file of credentials) fs.rmSync(file, { force: true })
   const failed = items.filter((each) => !each.pass).length
