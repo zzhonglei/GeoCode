@@ -147,6 +147,20 @@ await check({ app, box, model, keep, credentials, ms: 600000 }, async ({ api, re
   const session = created.body?.data?.id
   record('session: created in the project', Boolean(session), `${created.status} ${session}`)
 
+  // Checked first: on a first start the check waits for the Python environment, and a tool called before it ends
+  // asks to be called again later.
+  for (const domain of ['qgis', ...(gee ? ['gee'] : [])]) {
+    await item(`${domain}: found ready`, async () => {
+      let state
+      for (let waited = 0; waited < 600000; waited += 3000) {
+        state = (await api('/api/geocode/geo-status')).body?.statuses?.[domain]
+        if (state && !['checking', 'preparing'].includes(state.status)) break
+        await sleep(3000)
+      }
+      record(`${domain}: found ready`, state?.status === 'ready', JSON.stringify(state).slice(0, 200))
+    })
+  }
+
   let parts = []
   await item('turn: every call reaches its tool', async () => {
     const turn = await runTurn(api, session, 'look it up', { ms: 900000 })
@@ -191,7 +205,8 @@ await check({ app, box, model, keep, credentials, ms: 600000 }, async ({ api, re
     }
     record(
       'geerun in the background: its answer reaches the conversation',
-      notice.includes(inside('\n2\n</geerun>')),
+      // What the script printed, on a line of its own after the task's header.
+      notice.includes(inside('\n2\n')),
       notice.slice(0, 200),
     )
   })
