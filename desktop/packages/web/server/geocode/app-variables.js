@@ -11,6 +11,15 @@ export const isAppVariable = (key) => {
 export const withoutAppVariables = (environment) =>
   Object.fromEntries(Object.entries(environment).filter(([key]) => !isAppVariable(key)));
 
+// The home and temporary directories. Set in Settings they would move the kernel's and GeoEngine's files, while the
+// shell, which takes nothing from Settings, keeps its own where they were.
+const SETTINGS_DIRECTORY_VARIABLES = Object.freeze(['HOME', 'USERPROFILE', 'TMPDIR', 'TMP', 'TEMP']);
+
+export const withoutDirectoryVariables = (environment) =>
+  Object.fromEntries(Object.entries(environment).filter(([key]) => (
+    !SETTINGS_DIRECTORY_VARIABLES.includes(process.platform === 'win32' ? key.toUpperCase() : key)
+  )));
+
 // The directories the main process gives the shell (`useGeoCodeDataDir`), for the shell alone: an OpenChamber the
 // user installed, run in a terminal or by the agent, would take them for its own.
 export const dropShellDirectories = (environment) => {

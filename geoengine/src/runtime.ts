@@ -22,6 +22,69 @@ const POLL_MS = 100
 
 const POSIX = process.platform !== "win32"
 
+/**
+ * What a task keeps of the engine's environment, by name in any case. Tasks run GeoCode's Python, a QGIS it found or a
+ * system program, which what the user set for their own tools (PATH, PYTHONPATH, GDAL_*, PROJ_*, conda's) would only
+ * point elsewhere: so only the network, the account and its temporary directory, and what the system itself needs.
+ */
+const KEPT = new Set([
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "REQUESTS_CA_BUNDLE",
+  "CURL_CA_BUNDLE",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "TMPDIR",
+  // Windows' own, set for every program; QGIS's launcher and Python read some of them.
+  "USERPROFILE",
+  "USERNAME",
+  "USERDOMAIN",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "PROGRAMDATA",
+  "ALLUSERSPROFILE",
+  "PUBLIC",
+  "TEMP",
+  "TMP",
+  "SYSTEMROOT",
+  "WINDIR",
+  "SYSTEMDRIVE",
+  "COMSPEC",
+  "PATHEXT",
+  "PSMODULEPATH",
+  "PROGRAMFILES",
+  "PROGRAMFILES(X86)",
+  "PROGRAMW6432",
+  "COMMONPROGRAMFILES",
+  "COMMONPROGRAMFILES(X86)",
+  "COMMONPROGRAMW6432",
+  "COMPUTERNAME",
+  "OS",
+  "PROCESSOR_ARCHITECTURE",
+  "NUMBER_OF_PROCESSORS",
+])
+
+/** The system's own directories in place of the user's PATH, for the system tools a launcher or a library calls. */
+function systemPath(engine: NodeJS.ProcessEnv, platform: NodeJS.Platform) {
+  if (platform !== "win32") return "/usr/bin:/bin:/usr/sbin:/sbin"
+  const root = Object.entries(engine).find(([name]) => name.toUpperCase() === "SYSTEMROOT")?.[1] ?? "C:\\Windows"
+  return [`${root}\\System32`, root].join(";")
+}
+
+/** The environment every task starts from, before its own variables. */
+export function base(engine: NodeJS.ProcessEnv, platform: NodeJS.Platform) {
+  const result: Record<string, string> = { PATH: systemPath(engine, platform) }
+  for (const [name, value] of Object.entries(engine))
+    if (value !== undefined && KEPT.has(name.toUpperCase())) result[name] = value
+  return result
+}
+
 export type Reason = "exit" | "abort" | "timeout" | "idle" | "output-limit"
 
 export type Delivery =
@@ -48,10 +111,8 @@ export interface Options {
   readonly delivery: Delivery
   readonly clocks: Clocks
   readonly cwd?: string
-  /** Laid over the engine's environment, unless `inherit` is false: one missing base variable can stop an interpreter. */
+  /** Laid over what a task keeps of the engine's environment (`base`). */
   readonly env?: Record<string, string>
-  /** False gives the task `env` alone, for software GeoCode ships, which needs nothing of the user's environment. */
-  readonly inherit?: boolean
   readonly input?: string
   /** A stop through this signal still returns what the run produced, settling as `abort`. */
   readonly signal?: AbortSignal
@@ -166,7 +227,7 @@ function execute(options: Options, ledger: Ledger): Execution {
   const result = new Promise<Result>((resolve, reject) => {
     const child = launch(options.command, [...options.args], {
       cwd: options.cwd,
-      env: overlay(options.inherit === false ? {} : process.env, options.env ?? {}, process.platform),
+      env: overlay(base(process.env, process.platform), options.env ?? {}, process.platform),
       stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       // Its own process group on POSIX, so one signal reaches everything the task starts.
       detached: POSIX,

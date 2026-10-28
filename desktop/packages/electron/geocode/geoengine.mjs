@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { app, utilityProcess } from 'electron';
 import { kernelConfigDir, kernelDataDir, kernelStateDir } from '@openchamber/web/server/geocode/kernel-paths.js';
-import { withoutAppVariables } from '@openchamber/web/server/geocode/app-variables.js';
+import { withoutAppVariables, withoutDirectoryVariables } from '@openchamber/web/server/geocode/app-variables.js';
 import { createEnvironmentStore } from '@openchamber/web/server/lib/environment/store.js';
 import { overlayEnvironment } from '@openchamber/web/server/lib/environment/variables.js';
 import { createSupervisor } from './geoengine-supervisor.mjs';
@@ -15,9 +15,9 @@ const TASK_GRACE_MS = 3_000;
 // environmentStore keeps (web/server/index.js); read as the engine starts, so a change applies once the app restarts.
 const settingsVariables = (log) => {
   try {
-    return createEnvironmentStore({
+    return withoutDirectoryVariables(createEnvironmentStore({
       filePath: path.join(process.env.OPENCHAMBER_DATA_DIR, 'environment.json'),
-    }).userVariables();
+    }).userVariables());
   } catch (error) {
     // As for the kernel: a file that cannot be read sets no variables, and the engine starts all the same.
     log.warn(`[geoengine] settings variables not applied: ${error.message}`);

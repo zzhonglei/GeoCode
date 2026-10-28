@@ -58,7 +58,7 @@ test("the environment is ready only once the base interpreter has warmed it up",
 })
 
 test(
-  "pixi-unpack has its temporary folder in the data directory, and nothing of the engine's environment",
+  "pixi-unpack has its temporary folder in the data directory, and none of the user's variables",
   { skip: !python3 },
   async () => {
     const directory = await temporary()

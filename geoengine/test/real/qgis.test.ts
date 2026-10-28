@@ -6,6 +6,7 @@ import path from "node:path"
 import { test } from "node:test"
 import { Macos } from "../../src/qgis/macos.ts"
 import { Python } from "../../src/qgis/python.ts"
+import { Runtime } from "../../src/runtime.ts"
 import { until, alive } from "../support/common.ts"
 import { darwin, start } from "../support/qgis.ts"
 
@@ -274,7 +275,11 @@ for (const app of apps) {
     try {
       const output = execFileSync(located.install.interpreter, ["-"], {
         input: Python.program(Python.PROBE),
-        env: { ...process.env, ...Macos.environment(located.install), PROJ_DATA: empty },
+        env: {
+          ...Runtime.base(process.env, process.platform),
+          ...Macos.environment(located.install),
+          PROJ_DATA: empty,
+        },
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "ignore"],
       })
@@ -561,7 +566,7 @@ png = gdal.GetDriverByName("MEM").Create("", 2, 2, 3, gdal.GDT_Byte)
 gdal.GetDriverByName("PNG").CreateCopy("photo.png", png)
 `
   execFileSync(located.install.interpreter, ["-c", script, directory], {
-    env: { ...process.env, ...Macos.environment(located.install) },
+    env: { ...Runtime.base(process.env, process.platform), ...Macos.environment(located.install) },
     stdio: ["ignore", "ignore", "pipe"],
   })
 }

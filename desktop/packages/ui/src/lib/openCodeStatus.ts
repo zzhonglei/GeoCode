@@ -353,7 +353,7 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
   const isDesktop = origin.startsWith('openchamber-ui://');
   lines.push('');
   lines.push('Log files:');
-  lines.push(`- OpenCode: ${opencodeHome ? joinPath(opencodeHome, '.local/share/geocode/log', isWindows) : '<home>/.local/share/geocode/log'} (or $XDG_DATA_HOME/geocode/log when set)`); // GeoCode: the bundled kernel's log
+  lines.push(`- OpenCode: ${opencodeHome ? joinPath(opencodeHome, '.local/share/geocode/log', isWindows) : '<home>/.local/share/geocode/log'}`); // GeoCode: the bundled kernel's log
   if (isDesktop) {
     const isMacDesktop = /Mac OS X|Macintosh/.test(platform);
     lines.push(`- OpenChamber desktop: ${isWindows

@@ -23,9 +23,7 @@ import {
  * Downloads on the base environment GeoCode installed in its data directory, or in the one GEOENGINE_OSM_DATA names:
  * its shapely and GDAL assemble and write what the fake services answer. Nothing goes to OSM's servers.
  */
-const data =
-  process.env.GEOENGINE_OSM_DATA ??
-  path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "geocode")
+const data = process.env.GEOENGINE_OSM_DATA ?? path.join(os.homedir(), ".local", "share", "geocode")
 const base = Environment.layout(data).basePython
 const missing = await fs.access(base).then(
   () => false,

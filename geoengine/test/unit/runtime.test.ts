@@ -51,13 +51,51 @@ test("an override replaces every spelling of a variable's name on Windows, and o
   })
 })
 
-test("a run that does not inherit is given its own variables alone", async () => {
+// Guards against what the user set for their own tools reaching QGIS or GeoCode's Python: another GDAL's data, another
+// Python's packages, a PATH that finds other programs first.
+test("a task keeps only the network, the account, the temporary directory and the system of the engine's environment", () => {
+  const engine = {
+    https_proxy: "http://proxy",
+    NO_PROXY: "corp.example",
+    SSL_CERT_FILE: "/ca.pem",
+    HOME: "/home/u",
+    TMPDIR: "/tmp/u",
+    PATH: "/opt/homebrew/bin:/usr/bin",
+    PYTHONPATH: "/elsewhere",
+    GDAL_DATA: "/gdal",
+    PROJ_DATA: "/proj",
+    CONDA_PREFIX: "/conda",
+    LANG: "zh_CN.UTF-8",
+  }
+  assert.deepEqual(Runtime.base(engine, "darwin"), {
+    PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+    https_proxy: "http://proxy",
+    NO_PROXY: "corp.example",
+    SSL_CERT_FILE: "/ca.pem",
+    HOME: "/home/u",
+    TMPDIR: "/tmp/u",
+  })
+  const windows = Runtime.base(
+    { SystemRoot: "D:\\Win", Path: "C:\\conda", UserProfile: "C:\\Users\\u", PYTHONPATH: "x" },
+    "win32",
+  )
+  assert.deepEqual(windows, {
+    PATH: "D:\\Win\\System32;D:\\Win",
+    SystemRoot: "D:\\Win",
+    UserProfile: "C:\\Users\\u",
+  })
+})
+
+test("a run is given the kept environment and its own variables", async () => {
   process.env.GEOENGINE_TEST_ENGINE_ONLY = "engine"
   try {
-    const script = `console.log(JSON.stringify([process.env.GEOENGINE_TEST_ENGINE_ONLY, process.env.GEOENGINE_TEST_GIVEN]))`
+    const script = `console.log(JSON.stringify([process.env.GEOENGINE_TEST_ENGINE_ONLY, process.env.GEOENGINE_TEST_GIVEN, process.env.HOME]))`
     const given = { GEOENGINE_TEST_GIVEN: "given" }
-    assert.deepEqual(JSON.parse((await run(node(script, { env: given }))).stdout), ["engine", "given"])
-    assert.deepEqual(JSON.parse((await run(node(script, { env: given, inherit: false }))).stdout), [null, "given"])
+    assert.deepEqual(JSON.parse((await run(node(script, { env: given }))).stdout), [
+      null,
+      "given",
+      process.env.HOME ?? null,
+    ])
   } finally {
     delete process.env.GEOENGINE_TEST_ENGINE_ONLY
   }

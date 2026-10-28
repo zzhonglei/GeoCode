@@ -4,7 +4,7 @@ import path from 'node:path';
 import { primaryWorktreeRootFromGitDir } from '../git/repository-root.js';
 import { isUserAction } from './refresh-scope.js';
 import { overlayEnvironment, parseEnvironmentOutput } from './variables.js';
-import { withoutAppVariables } from '../../geocode/app-variables.js'; // GeoCode: see forOpenCode
+import { withoutAppVariables, withoutDirectoryVariables } from '../../geocode/app-variables.js'; // GeoCode: see forOpenCode and readUserVariables
 
 /**
  * Which environment variables each process OpenChamber starts receives on top
@@ -124,7 +124,7 @@ export const createEnvironmentRuntime = ({
 
   const readUserVariables = () => {
     try {
-      return store.userVariables();
+      return withoutDirectoryVariables(store.userVariables()); // GeoCode: never the home or temporary directories
     } catch (error) {
       warnOnce(`[environment] user variables not applied: ${error.message}`);
       return {};
@@ -272,7 +272,7 @@ export const createEnvironmentRuntime = ({
     } catch {
       serviceVariables = {};
     }
-    return withoutAppVariables({ ...serviceVariables, ...readUserVariables() }); // GeoCode: the kernel takes none of the app's own variables, as from the user's shell
+    return withoutAppVariables(withoutDirectoryVariables({ ...serviceVariables, ...readUserVariables() })); // GeoCode: the kernel takes none of the app's own variables, as from the user's shell, nor the home or temporary directories
   };
 
   /** The last outcome of the project's environment command, or null before any run. */

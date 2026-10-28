@@ -25,9 +25,7 @@ const COMPOSED = 600000
 
 /** The base environment, once found to be one this GeoCode installed. */
 const realBase = async () => {
-  const data =
-    process.env.GEOENGINE_GEE_DATA ??
-    path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "geocode")
+  const data = process.env.GEOENGINE_GEE_DATA ?? path.join(os.homedir(), ".local", "share", "geocode")
   const where = Environment.layout(data)
   const started = `start GeoCode once, to install its base environment in ${data}`
   await fs.access(where.basePython).catch(() => assert.fail(started))

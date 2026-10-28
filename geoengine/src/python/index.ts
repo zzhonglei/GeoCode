@@ -283,8 +283,7 @@ export const capability = (places: Places): Engine.Capability =>
               command: path.join(places.bundle, UNPACK),
               args: [path.join(places.bundle, "python.tar"), "--output-directory", where.root, "--env-name", "base"],
               // Its unpacked packages stay in the data directory, where the next start clears what it leaves.
-              env: { TMPDIR: temporary, TMP: temporary, TEMP: temporary, ...Bundled.home() },
-              inherit: false,
+              env: { TMPDIR: temporary, TMP: temporary, TEMP: temporary },
               delivery: { mode: "collect" },
               clocks: { total: INSTALL_TIMEOUT },
             })

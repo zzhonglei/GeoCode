@@ -17,6 +17,21 @@ describe('GeoCode: environment variables', () => {
     expect(runtime.forOpenCode()).toEqual({ GDAL_DATA: '/gdal', PROJ_DATA: '/proj' });
   });
 
+  // Guards against Settings moving the kernel's files, and the user's tools', away from where the shell keeps its own.
+  it('hands no consumer the home or temporary directories from Settings', async () => {
+    const runtime = createEnvironmentRuntime({
+      store: {
+        userVariables: () => ({ GDAL_DATA: '/gdal', HOME: '/h', USERPROFILE: '/h', TMPDIR: '/t', TMP: '/t', TEMP: '/t' }),
+        projectEntry: () => null,
+      },
+      listProjects: () => [],
+      readOpenCodeServiceEnv: () => ({ HOME: '/service' }),
+      isEnterpriseMode: () => false,
+    });
+    expect(runtime.forOpenCode()).toEqual({ GDAL_DATA: '/gdal' });
+    expect(await runtime.forDirectory('/project', { refresh: false })).toEqual({ GDAL_DATA: '/gdal' });
+  });
+
   // Guards against an OpenChamber the user installed, run in a terminal, taking the shell's own directories for its own.
   it('starts a terminal without the shell directories, whatever the project variables put back', async () => {
     const routes = new Map();

@@ -26,22 +26,18 @@ afterEach(() => {
 });
 
 describe('GeoCode: kernel paths', () => {
-  it.each([
-    ['unset', {}],
-    ['set', { XDG_CONFIG_HOME: '/xdg/config', XDG_DATA_HOME: '/xdg/data', XDG_STATE_HOME: '/xdg/state' }],
-    ['empty', { XDG_CONFIG_HOME: '', XDG_DATA_HOME: '', XDG_STATE_HOME: '' }],
-  ])('match the kernel with XDG variables %s', async (_name, env) => {
-    const { shell, kernel } = await load(env);
+  // A login shell or Settings could otherwise move the kernel's files away from the shell's and GeoEngine's.
+  it('match the kernel, under the home directory whatever the XDG variables say', async () => {
+    const { shell, kernel } = await load({
+      XDG_CONFIG_HOME: '/xdg/config', XDG_DATA_HOME: '/xdg/data', XDG_CACHE_HOME: '/xdg/cache', XDG_STATE_HOME: '/xdg/state',
+    });
     expect(shell.kernelConfigDir()).toBe(kernel.config);
     expect(shell.kernelDataDir()).toBe(kernel.data);
     expect(shell.kernelStateDir()).toBe(kernel.state);
     expect(shell.kernelTmpDir()).toBe(kernel.tmp);
-  });
-
-  it('are GeoCode directories', async () => {
-    const { shell } = await load({});
-    expect(shell.kernelConfigDir()).toBe(path.join(os.homedir(), '.config', 'geocode'));
-    expect(shell.kernelDataDir()).toBe(path.join(os.homedir(), '.local', 'share', 'geocode'));
-    expect(shell.kernelStateDir()).toBe(path.join(os.homedir(), '.local', 'state', 'geocode'));
+    expect(kernel.config).toBe(path.join(os.homedir(), '.config', 'geocode'));
+    expect(kernel.data).toBe(path.join(os.homedir(), '.local', 'share', 'geocode'));
+    expect(kernel.cache).toBe(path.join(os.homedir(), '.cache', 'geocode'));
+    expect(kernel.state).toBe(path.join(os.homedir(), '.local', 'state', 'geocode'));
   });
 });
