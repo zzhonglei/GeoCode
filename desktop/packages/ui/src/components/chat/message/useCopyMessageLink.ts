@@ -14,6 +14,7 @@ import { buildMessageLink, type MessageLinkForm } from '@/lib/sessionLinks';
 // session.
 const resolveMessageLinkForm = (): MessageLinkForm | null => {
     if (isVSCodeRuntime()) return null;
+    if (isDesktopShell()) return null; // GeoCode: the app does not take over openchamber:// links, so it has none to hand out
     if (isDesktopShell() || isCapacitorApp()) return { kind: 'deep-link' };
     return { kind: 'web', origin: window.location.origin, pathname: window.location.pathname };
 };
