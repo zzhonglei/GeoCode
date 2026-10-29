@@ -678,7 +678,11 @@ def measure(target, options, bands):
             band.SetNoDataValue(facts["nodata"])
         try:
             low, high, mean, deviation = band.ComputeStatistics(False, callback=heartbeat)
-        except Exception:
+        except RuntimeError as error:
+            # GDAL raises for a band with no valid pixel too, telling it apart only by this text; any other error is a
+            # read that failed, such as a damaged block or a VRT's missing source, and must not read as an empty band.
+            if "no valid pixels" not in str(error):
+                raise
             facts["valid"] = 0
             continue
         facts["stats"] = {"min": low, "max": high, "mean": mean, "std": deviation}

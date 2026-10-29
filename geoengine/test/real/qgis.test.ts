@@ -391,6 +391,9 @@ for (const app of apps) {
       assert.ok(preview.image?.startsWith("iVBORw0KGgo"), "a PNG")
       assert.ok(preview.text.includes("rgb(0, 100, 0)"), preview.text)
       assert.ok((await read({ path: "photo.png" })).text.includes("no georeferencing"))
+      // Guards against reporting a raster GDAL cannot read, here a VRT whose source is gone, as a band without data.
+      const broken = await engine.request({ path: path.join(data, "broken.vrt") }, 120000, "qgis.read")
+      assert.ok(!broken.ok && broken.error.code === "read-failed", JSON.stringify(broken))
 
       // Guards against a read writing beside the data: a .aux.xml, a .gfs, or a changed GeoPackage. SQLite indexes the
       // -wal of the one open elsewhere in its -shm, as that program does.
@@ -561,6 +564,9 @@ blank.SetSpatialRef(wgs84)
 blank.GetRasterBand(1).SetNoDataValue(-1)
 blank.GetRasterBand(1).Fill(-1)
 blank = None
+
+with open("broken.vrt", "w") as vrt:
+    vrt.write('<VRTDataset rasterXSize="3" rasterYSize="3"><SRS>EPSG:4326</SRS><GeoTransform>114, 0.01, 0, 31, 0, -0.01</GeoTransform><VRTRasterBand dataType="Byte" band="1"><SimpleSource><SourceFilename relativeToVRT="1">gone.tif</SourceFilename><SourceBand>1</SourceBand></SimpleSource></VRTRasterBand></VRTDataset>')
 
 png = gdal.GetDriverByName("MEM").Create("", 2, 2, 3, gdal.GDT_Byte)
 gdal.GetDriverByName("PNG").CreateCopy("photo.png", png)
