@@ -4,6 +4,7 @@ import type { SessionNode } from '../types';
 import { useGlobalSessionStatusStore } from '@/sync/global-session-status';
 import { useGlobalBlockingRequestsStore } from '@/sync/global-blocking-requests';
 import { useBackgroundShellsStore } from '@/sync/background-shells';
+import { useAnyGeeRun } from '@/geocode/backgroundGeeRuns'; // GeoCode: an Earth Engine run in the background keeps a collapsed group active, as a command does
 import { useNotificationStore } from '@/sync/notification-store';
 
 // Ordered by how much the user is needed: a blocked turn outranks a running
@@ -107,6 +108,7 @@ export const useCollapsedSessionActivityState = ({
     }
     return null;
   }, [enabled, ids.active]));
+  const waitingOnGee: CollapsedActivityState = useAnyGeeRun(enabled, ids.active) ? 'active' : null; // GeoCode: see the import
   const unread = useNotificationStore(React.useCallback((state): CollapsedActivityState => {
     if (!enabled) return null;
     for (const sessionId of ids.unread) {
@@ -129,5 +131,5 @@ export const useCollapsedSessionActivityState = ({
     }
     return result;
   }, [enabled, blockingIds]));
-  return blocked ?? active ?? waitingOnShell ?? unread;
+  return blocked ?? active ?? waitingOnShell ?? waitingOnGee ?? unread; // GeoCode: see the import
 };

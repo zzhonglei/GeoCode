@@ -1,3 +1,4 @@
+import React from 'react';
 import { create } from 'zustand';
 
 import { applySessionActivityTimingMutations } from '@/sync/session-activity-timing';
@@ -42,6 +43,15 @@ export const resetGeeRuns = (): void => {
 };
 
 export const hasRunningGeeRun = (sessionId: string): boolean => useBackgroundGeeRuns.getState().sessionIds.has(sessionId);
+
+/** Whether any of the sessions has a run in the background, as a collapsed group of them asks of a command. */
+export const useAnyGeeRun = (enabled: boolean, sessionIds: ReadonlySet<string>): boolean =>
+  useBackgroundGeeRuns(
+    React.useCallback(
+      (state) => enabled && [...sessionIds].some((sessionId) => state.sessionIds.has(sessionId)),
+      [enabled, sessionIds],
+    ),
+  );
 
 /**
  * As the last background command of an idle session ending closes its turn: the last run in the background ending
