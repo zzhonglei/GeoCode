@@ -152,8 +152,11 @@ const ask = <A>(method: string, params: unknown, decode: (input: unknown) => Exi
     Effect.catch(failed),
   )
 
-/** A monotonic clock, so a computer waking from sleep does not find every run silent for as long as it slept. */
+/** A monotonic clock: it stops while macOS sleeps but runs on while Windows does, which `watch` takes out. */
 const now = () => performance.now()
+
+/** A check this much later than due was the computer asleep, as GeoEngine's runtime judges it too. */
+const SLEEP_MS = 5000
 
 /** Whole seconds, or tenths below one, as GeoEngine writes them. */
 const seconds = (ms: number) =>
@@ -266,7 +269,10 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
         })
       const watch = Effect.gen(function* () {
         while (now() - heard < limit() * 1000) {
+          const due = now() + 250
           yield* Effect.sleep("250 millis")
+          const late = now() - due
+          if (late > SLEEP_MS) heard = Math.min(now(), heard + late)
           if ((changed && now() - shown >= 250) || now() - shown >= RESHOW_MS) yield* show
         }
       })

@@ -20,6 +20,12 @@ const DEFAULT_OUTPUT_LIMIT = 4 * 1024 * 1024
 /** The precision of the clocks, not a property of the task. */
 const POLL_MS = 100
 
+/**
+ * A poll this much later than due was a sleep; a stall of the engine's own that long is forgiven as well. The kernel's
+ * qgisrun judges its own clock the same way.
+ */
+const SLEEP_MS = 5000
+
 const POSIX = process.platform !== "win32"
 
 /**
@@ -216,6 +222,8 @@ function execute(options: Options, ledger: Ledger): Execution {
   const interleaved = incremental?.source === "all"
 
   let lastActivity = startedAt
+  // Time the computer spent asleep, which neither clock counts.
+  let slept = 0
   let accumulated = 0
   let reason: Reason | undefined
   let exit: { code: number | null; signal: NodeJS.Signals | null } | undefined
@@ -334,12 +342,21 @@ function execute(options: Options, ledger: Ledger): Execution {
     child.stdin?.on("error", () => {})
     if (options.input !== undefined) child.stdin?.end(options.input)
 
-    // A monotonic clock, so a sleeping laptop does not wake to find every running task idle.
+    // The monotonic clock stops while macOS sleeps but runs on while Windows does: a poll that comes far later than
+    // due is taken for a sleep on either, so a laptop does not wake to find every running task idle.
+    let polled = startedAt
     watchdog = setInterval(() => {
+      const at = now()
+      const late = at - polled - POLL_MS
+      polled = at
+      if (late > SLEEP_MS) {
+        slept += late
+        lastActivity = Math.min(at, lastActivity + late)
+      }
       if (limit !== undefined && accumulated > limit) return stop("output-limit")
       // Idle before total: when both have elapsed, going silent is the more specific verdict.
-      if (idleMs !== undefined && now() - lastActivity >= idleMs) return stop("idle")
-      if (totalMs !== undefined && now() - startedAt >= totalMs) stop("timeout")
+      if (idleMs !== undefined && at - lastActivity >= idleMs) return stop("idle")
+      if (totalMs !== undefined && at - startedAt - slept >= totalMs) stop("timeout")
     }, POLL_MS)
 
     child.once("exit", (code, signal) => {
