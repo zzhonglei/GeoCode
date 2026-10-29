@@ -161,13 +161,18 @@ def _element_found(found, element, source):
     found.add(_elements.ref(element), source, tags=element.get("tags") or {}, center=center, box=box)
 
 
-def _overpass(query):
-    """The answer to a query the search can do without, or None: from one of two instances, each given a moment, so
-    a search waits little when Overpass is busy."""
+def _overpass(query, found):
+    """The elements Overpass gives for a query the search can do without, from one of two instances, each given a
+    moment, so a search waits little when Overpass is busy. No answer, or one with a remark, marks the search
+    incomplete: a remark is the server stopping part way, as a name matched over a large box often makes it."""
     try:
-        return _http.overpass(query, PATIENCE, TRIES)
+        answer = _http.overpass(query, PATIENCE, TRIES)
     except (_http.Unanswered, _http.TooLarge):
-        return None
+        found.failed()
+        return []
+    if answer.get("remark"):
+        found.failed()
+    return answer["elements"]
 
 
 def _wikidata(name, found):
@@ -199,10 +204,7 @@ def _wikidata(name, found):
     with found.lock:
         found.items.update(matched)
     union = "".join('nwr["wikidata"="%s"];' % item for item in matched)
-    tagged = _overpass("[out:json][timeout:%d];(%s);out tags bb;" % (SECONDS, union))
-    if tagged is None:
-        return found.failed()
-    for element in tagged["elements"]:
+    for element in _overpass("[out:json][timeout:%d];(%s);out tags bb;" % (SECONDS, union), found):
         _element_found(found, element, "wikidata")
 
 
@@ -220,10 +222,7 @@ def _named(name, bounds, found):
         '%s["name"~%s%s]%s;out tags bb %d;' % (kind, _filters.quoted(pattern), fold, _box(bounds), ASKED)
         for kind in ("rel", "way", "node")
     )
-    answer = _overpass("[out:json][timeout:%d];%s" % (SECONDS, statements))
-    if answer is None:
-        return found.failed()
-    for element in answer["elements"]:
+    for element in _overpass("[out:json][timeout:%d];%s" % (SECONDS, statements), found):
         _element_found(found, element, "overpass")
 
 
@@ -381,10 +380,8 @@ def _inside(candidate, bounds):
 def _by_category(alternative, bounds, found):
     """The named objects of a category in the context's box, for when no name matched."""
     statement = 'nwr%s["name"]%s;' % (_filters.clause(alternative), _box(bounds))
-    answer = _overpass("[out:json][timeout:%d];%sout tags bb %d;" % (SECONDS, statement, DESCRIBED))
-    if answer is None:
-        return found.failed()
-    for element in answer["elements"]:
+    query = "[out:json][timeout:%d];%sout tags bb %d;" % (SECONDS, statement, DESCRIBED)
+    for element in _overpass(query, found):
         _element_found(found, element, "category")
 
 

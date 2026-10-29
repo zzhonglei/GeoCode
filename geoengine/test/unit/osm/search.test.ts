@@ -168,6 +168,30 @@ test(
 )
 
 test(
+  "a name Overpass stopped matching partway through is said to be incomplete, not absent",
+  { skip: !python3 },
+  async () => {
+    const remark = 'runtime error: Query timed out in "query" at line 1 after 25 seconds.'
+    const services = await serve({
+      nominatim: (where, params) => (where === "search" ? { json: [] } : nominatim(where, params)),
+      photon: () => ({ json: { features: [] } }),
+      wikidata: () => ({ json: { search: [] } }),
+      overpass: (query) => (query.includes('["name"~') ? answer([], { remark }) : answer([])),
+    })
+    const engine = await start(python3!, services.services)
+    try {
+      const done = await engine.call("search", { name: "臺北大學", context: "R1" })
+      assert.ok(done.ok, JSON.stringify(done))
+      // Guards against missing the remark Overpass stops with, which would tell the model nothing has this name.
+      assert.equal((done.result as { incomplete: boolean }).incomplete, true)
+    } finally {
+      await engine.stop()
+      await services.close()
+    }
+  },
+)
+
+test(
   "every request names GeoCode and its version, and Nominatim is asked once a second at most across calls",
   { skip: !python3 },
   async () => {
