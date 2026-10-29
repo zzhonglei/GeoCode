@@ -237,6 +237,7 @@ export const McpGrid: React.FC = () => {
             <DialogTitle>{t('settings.mcp.page.deleteDialog.title', { name: deleteTarget ?? '' })}</DialogTitle>
             <DialogDescription>
               {t('settings.mcp.page.deleteDialog.descriptionPrefix')}{' '}
+              {/* GeoCode: its configuration file's name */}
               <code className="text-foreground">geocode.json</code>.
               {' '}
               {t('settings.mcp.page.deleteDialog.descriptionSuffix')}

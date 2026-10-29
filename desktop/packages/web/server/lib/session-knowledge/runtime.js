@@ -61,7 +61,7 @@ const renderMemorySection = (entries) => entries
  * agents told nothing here saved only when the user said "remember".
  */
 const MEMORY_SAVE_GUIDANCE = 'You have memory that persists across sessions, through the'
-  + ' geocode_memory tool. Save to it in the moment, without asking first, when:'
+  + ' geocode_memory tool. Save to it in the moment, without asking first, when:' // GeoCode: the tool's name in GeoCode, also in buildMemoryBlock
   + ' the user corrects how you work or states a preference; the user confirms that'
   + ' a non-obvious approach worked; or you learn a project fact that took real'
   + ' effort to find and is not in the code or docs. One fact per entry. The user'
@@ -119,7 +119,7 @@ const buildMemoryBlock = ({ global, project, enabled = false, complete = false }
     ...(enabled ? [MEMORY_SAVE_GUIDANCE] : []),
     'Stored memory from earlier sessions: only the titles are listed below.',
     'A title is an abbreviation, not the memory. Read the entry with the'
-      + ' geocode_memory tool before you act on it: titles routinely leave out'
+      + ' geocode_memory tool before you act on it: titles routinely leave out' // GeoCode: see MEMORY_SAVE_GUIDANCE
       + ' the conditions, exceptions and reasons that decide how the memory'
       + ' applies, and a title that looks self-explanatory is the most likely to'
       + ' be hiding them. Read every title that could bear on the task at hand;'
