@@ -66,11 +66,13 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     return systemDirectory()
   })()
   const globalDirectory = AbsolutePath.make(global.config)
+  /* --- GeoCode: other products' folders are not resolved, here or in the project, as nothing of theirs is read ---
   const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
   const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
+  --- /GeoCode --- */
   const configDirectories = [...(system ? [system] : []), globalDirectory]
   const globalRoots = yield* Effect.forEach(
-    [...configDirectories, globalClaudeDirectory, globalAgentsDirectory],
+    [...configDirectories], // GeoCode: see globalAgentsDirectory
     (item) => fs.resolve(item),
   )
   const current = yield* fs.resolve(location.directory)
@@ -83,7 +85,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     Effect.gen(function* () {
       // Resolve the parent too: missing children must honor symlinked global roots.
       const parent = yield* fs.resolve(directory)
-      return yield* Effect.forEach([".claude", ".agents", ".geocode", ...names.toReversed()], (name) => // GeoCode: .geocode is the project directory, here and in direct and project below
+      return yield* Effect.forEach([".geocode", ...names.toReversed()], (name) => // GeoCode: .geocode is the project directory, here and in direct and project below; see globalAgentsDirectory
         fs
           .resolve(path.join(parent, name))
           .pipe(Effect.map((resolved) => ({ item: AbsolutePath.make(path.join(directory, name)), resolved }))),
