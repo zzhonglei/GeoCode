@@ -3,7 +3,6 @@ export * as QgisRunTool from "./qgisrun.js"
 import { ToolFailure } from "@opencode/ai"
 import type { Tool } from "@opencode/schema/tool"
 import { Array as Arr, Effect, Exit, Schema } from "effect"
-import fs from "fs/promises"
 import { FileAccess } from "../file-access.js"
 import type { Location } from "../location.js"
 import type { Permission } from "../permission.js"
@@ -294,14 +293,12 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
           metadata: state({ outcome, text: ending }),
         }
       }
-      if (ran === undefined) {
-        const left = yield* Effect.promise(() => written(plan))
-        const ending = [
+      // GeoEngine removes what the stopped run made, once QGIS has exited.
+      if (ran === undefined)
+        return answer(
+          "timeout",
           `Stopped after ${seconds(now() - started)}, with no progress for the last ${limit()} s.`,
-          ...(left.length ? ["These outputs may be incomplete:", ...left.map((file) => `- ${file}`)] : []),
-        ].join("\n")
-        return answer("timeout", ending)
-      }
+        )
       if (Exit.isSuccess(ran)) {
         const decoded = decodeEnding(ran.value)
         if (Exit.isFailure(decoded)) {
@@ -349,22 +346,4 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
         ),
       ),
   }
-}
-
-/**
- * The files the plan writes that exist now. A numbered name is new, so what is there is the run's; folders, and
- * GeoPackages it adds a table to, were there before it.
- */
-async function written(plan: Plan) {
-  const added = (output: Plan["outputs"][number]) => typeof output.value === "string" && output.value.startsWith("ogr:")
-  const files = plan.outputs.filter((output) => !output.folder && !added(output)).flatMap((output) => output.files)
-  const present = await Promise.all(
-    files.map((file) =>
-      fs.stat(file).then(
-        () => true,
-        () => false,
-      ),
-    ),
-  )
-  return [...new Set(files.filter((_, index) => present[index]))]
 }

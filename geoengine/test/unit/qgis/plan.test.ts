@@ -113,7 +113,7 @@ test("files are found by the type of a parameter, never by what its value looks 
   )
 })
 
-test("an output that would overwrite takes the first free name; folders keep theirs", async () => {
+test("an output that would overwrite takes the first free name, a folder holding files too", async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-plan-"))
   try {
     for (const name of ["OUT.gpkg", "out_1.gpkg", "roads.dbf", "dem.tif"])
@@ -157,10 +157,12 @@ test("an output that would overwrite takes the first free name; folders keep the
     )
     assert.equal(adding.slots[0]!.file, at("new_1.gpkg"))
 
-    const folder = await number({ algorithm: "native:tilesxyzdirectory", parameters: { OUTPUT_DIRECTORY: "tiles" } }, [
-      directory,
-    ])
-    assert.deepEqual([folder.slots[0]!.file, folder.claimed], [directory, []])
+    // Guards against a rerun writing into the folder of the last, over its files and among them.
+    const tiles = { algorithm: "native:tilesxyzdirectory", parameters: { OUTPUT_DIRECTORY: "tiles" } }
+    const folder = await number(tiles, [directory])
+    assert.deepEqual([folder.slots[0]!.file, folder.claimed], [`${directory}_1`, [`${directory}_1`.toLowerCase()]])
+    await fs.mkdir(at("empty"))
+    assert.equal((await number(tiles, [at("empty")])).slots[0]!.file, at("empty"))
   } finally {
     await fs.rm(directory, { recursive: true, force: true })
   }

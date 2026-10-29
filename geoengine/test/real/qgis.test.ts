@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
+import { existsSync } from "node:fs"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -293,23 +294,24 @@ for (const app of apps) {
     }
   })
 
-  test(`QGIS at ${app} stops a cancelled run and its process`, async () => {
+  test(`QGIS at ${app} stops a cancelled run and its process, removing what it began to write`, async () => {
     const engine = await start(app)
     try {
       assert.equal((await engine.settled(150000)).status, "ready")
+      const output = path.join(engine.directory, "points.gpkg")
       const id = engine.send({
         algorithm: "native:randompointsinextent",
         parameters: {
           EXTENT: "0,100,0,100 [EPSG:3857]",
           POINTS_NUMBER: 50000000,
           MIN_DISTANCE: 0,
-          OUTPUT: path.join(engine.directory, "points.gpkg"),
+          OUTPUT: output,
         },
       })
       await until(
-        () => engine.sent.some((message) => message.type === "progress" && message.id === id),
+        () => engine.sent.some((message) => message.type === "progress" && message.id === id) && existsSync(output),
         60000,
-        "progress",
+        "progress and the output begun",
       )
       const task = engine.sent.findLast((message) => message.type === "task" && message.event === "start")
       engine.deliver({ type: "cancel", id })
@@ -317,6 +319,9 @@ for (const app of apps) {
       assert.ok(!response.ok && response.cancelled && response.error.code === "cancelled", JSON.stringify(response))
       assert.ok(task?.type === "task")
       await until(() => !alive(task.pid), 5000, "QGIS to end")
+      // Guards against a stopped run leaving its half-written GeoPackage, with its journals, to pass for a result.
+      const left = (await fs.readdir(engine.directory)).filter((name) => name.startsWith("points.gpkg"))
+      assert.deepEqual(left, [])
     } finally {
       await engine.stop()
     }

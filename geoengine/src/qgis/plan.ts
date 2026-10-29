@@ -168,8 +168,8 @@ export interface Numbered {
 }
 
 /**
- * Moves each output that would overwrite something, file or table, to the first free name: `_1`, `_2` and on.
- * Compared without case; a folder keeps its name.
+ * Moves each output that would overwrite something, file, table or a folder holding files, to the first free name:
+ * `_1`, `_2` and on. Compared without case.
  */
 export const number = async (
   found: readonly Slot[],
@@ -179,6 +179,14 @@ export const number = async (
   const taken = new Set(reserved)
   const slots: Slot[] = []
   for (const slot of found) {
+    if (slot.parameter.type === "folderDestination") {
+      // An algorithm writes its own names into it, over the files of an earlier run; an empty folder is used as it is.
+      let chosen = slot.file
+      for (let count = 1; await filled(chosen, taken); count++) chosen = sibling(slot.file, count)
+      taken.add(chosen.toLowerCase())
+      slots.push({ ...slot, file: chosen })
+      continue
+    }
     if (!renamable(slot)) {
       slots.push(slot)
       continue
@@ -201,9 +209,10 @@ export const number = async (
   return { slots, claimed: claims(slots) }
 }
 
-/** The names a run's outputs hold while it runs: their files, or the tables they add to a GeoPackage. */
+/** The names a run's outputs hold while it runs: their files and folders, or the tables they add to a GeoPackage. */
 export const claims = (found: readonly Slot[]) =>
   found.flatMap((slot) => {
+    if (slot.parameter.type === "folderDestination") return [slot.file.toLowerCase()]
     if (!renamable(slot)) return []
     if (!slot.before.startsWith("ogr:")) return [slot.file.toLowerCase()]
     return [tableKey(slot.file, tableOf(slot).name)]
@@ -282,21 +291,37 @@ export const plan = (
   }
 }
 
-/**
- * The output files a run may have left half written: those of its files that exist now. A numbered name is new, so
- * what is there is the run's; folders, and GeoPackages it adds a table to, were there before it.
- */
-export const written = async (found: readonly Slot[]) => {
-  const files = found.filter((slot) => renamable(slot) && !slot.before.startsWith("ogr:")).map((slot) => slot.file)
-  const present = await Promise.all(
-    files.map((file) =>
-      fsp.stat(file).then(
-        () => true,
-        () => false,
-      ),
-    ),
+/** Makes the output folders that are not there: some algorithms, as gdal:retile, fail on one, as a numbered one is. */
+export const folders = (found: readonly Slot[]) =>
+  Promise.all(
+    found
+      .filter((slot) => slot.parameter.type === "folderDestination")
+      // One that cannot be made, the algorithm reports.
+      .map((slot) => fsp.mkdir(slot.file, { recursive: true }).catch(() => {})),
   )
-  return [...new Set(files.filter((_, index) => present[index]))]
+
+/** Which of the files a run's outputs make are there already, before it runs. */
+export const present = async (found: readonly Slot[]) => {
+  const files = outputFiles(found).flatMap(made)
+  const there = await Promise.all(files.map(exists))
+  return new Set(files.filter((_, index) => there[index]))
+}
+
+/**
+ * Removes what a run that did not finish made, which may be half written: the files of its outputs that were not
+ * there before it. Returns the outputs still there, which may be incomplete.
+ */
+export const discard = async (found: readonly Slot[], before: ReadonlySet<string>) => {
+  const files = outputFiles(found)
+  // One that cannot be removed is reported as still there.
+  await Promise.all(
+    files
+      .flatMap(made)
+      .filter((file) => !before.has(file))
+      .map((file) => fsp.rm(file, { force: true }).catch(() => {})),
+  )
+  const there = await Promise.all(files.map(exists))
+  return [...new Set(files.filter((_, index) => there[index]))]
 }
 
 /** The end of a run's answer. */
@@ -487,6 +512,25 @@ function optionsOf(after: string) {
   )
 }
 
+/** The files a run's outputs write: not folders, nor GeoPackages it adds a table to, which were there before it. */
+function outputFiles(found: readonly Slot[]) {
+  return found.filter((slot) => renamable(slot) && !slot.before.startsWith("ogr:")).map((slot) => slot.file)
+}
+
+/** What writing a file makes: a Shapefile's parts, or the file with the journals SQLite keeps beside it. */
+function made(file: string) {
+  if (!file.toLowerCase().endsWith(".shp")) return [file, `${file}-wal`, `${file}-shm`, `${file}-journal`]
+  const stem = file.slice(0, -".shp".length)
+  return SHAPEFILE.map((extension) => stem + extension)
+}
+
+function exists(file: string) {
+  return fsp.stat(file).then(
+    () => true,
+    () => false,
+  )
+}
+
 /** An output written to a file of its own, which a folder is not. */
 function renamable(slot: Slot) {
   return slot.parameter.destination && slot.parameter.type !== "folderDestination"
@@ -553,6 +597,14 @@ async function occupied(file: string, taken: ReadonlySet<string>) {
   if (!base.endsWith(".shp")) return names.has(base)
   const stem = base.slice(0, -".shp".length)
   return SHAPEFILE.some((extension) => names.has(stem + extension))
+}
+
+async function filled(folder: string, taken: ReadonlySet<string>) {
+  if (taken.has(folder.toLowerCase())) return true
+  return fsp.readdir(folder).then(
+    (names) => names.length > 0,
+    () => false,
+  )
 }
 
 function sibling(file: string, count: number) {

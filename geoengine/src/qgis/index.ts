@@ -528,7 +528,10 @@ export const capability: Engine.Capability = Effect.gen(function* () {
         if (cwd !== undefined && !(yield* Effect.promise(() => isDirectory(cwd)))) {
           return yield* new Engine.Failure({ code: "invalid-params", message: `${cwd} is not a directory` })
         }
-        return yield* execute(runtime, current, params, located.algorithm, located.slots, context)
+        yield* Effect.promise(() => Plan.folders(located.slots))
+        // What is there before it runs, which a run that does not finish leaves alone.
+        const before = yield* Effect.promise(() => Plan.present(located.slots))
+        return yield* execute(runtime, current, params, located.algorithm, located.slots, before, context)
       }).pipe(
         Effect.ensuring(
           Effect.sync(() => {
@@ -817,6 +820,7 @@ function execute(
   params: typeof RunParams.Type,
   algorithm: Catalog.Algorithm,
   slots: readonly Plan.Slot[],
+  before: ReadonlySet<string>,
   context: Engine.MethodContext,
 ) {
   // The parameters QGIS's errors name, for the answer to describe.
@@ -886,13 +890,15 @@ function execute(
           if (pending.stderr) line(pending.stderr, "stderr")
           const details = { stderr, output: noise }
           if (result.reason === "abort") {
+            // A stop can land after QGIS reported success, while it closes down; what it wrote is then whole.
+            if (!outcome?.ok) yield* Effect.promise(() => Plan.discard(slots, before))
             return yield* new Engine.Failure({ code: "cancelled", message: "the run was cancelled", details })
           }
           if (outcome?.ok) {
             const outputs = (outcome.outputs ?? {}) as Record<string, unknown>
             return { ending: Plan.finished(result.durationMs, outputs) }
           }
-          const left = yield* Effect.promise(() => Plan.written(slots))
+          const left = yield* Effect.promise(() => Plan.discard(slots, before))
           if (!outcome) {
             const ending = result.signal ? `signal ${result.signal}` : `code ${result.code}`
             const message = `QGIS's Python exited with ${ending} before reporting a result`
