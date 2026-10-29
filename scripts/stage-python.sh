@@ -93,6 +93,14 @@ DEFINED=$(node -e '
 ID=${DEFINED% *}
 PYTHON=${DEFINED#* }
 
+# pixi-pack packs pixi.lock as it is, without checking it against pixi.toml, and the id above leaves pixi.toml out: a
+# change to pixi.toml not locked again would ship the old environment. A lock that matches is checked without network.
+PIXI=$(tool pixi "$HOST")
+if ! "$PIXI" lock --check --no-config --manifest-path "$ENV/pixi.toml" >/dev/null; then
+  echo "pixi.lock does not match pixi.toml: run $0 --lock, and commit pixi.lock with it" >&2
+  exit 1
+fi
+
 if [ -f "$STAGE/python.tar" ] && [ "$(node -p 'require(process.argv[1]).id' "$STAGE/python.json" 2>/dev/null)" = "$ID" ]; then
   echo "staged Python environment $ID is up to date"
   exit 0
