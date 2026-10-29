@@ -46,6 +46,14 @@ const failureMessage = (failure: GeoEngine.Failure, tool: string) => {
     const seconds = stalledFor(failure)
     return `No progress for ${seconds === undefined ? "too long" : `${Math.round(seconds / 60)} minutes`}: OpenStreetMap's public servers were too busy, or did not answer.${download ? " Nothing was written." : ""}`
   }
+  if (failure.code === "timeout") {
+    // A look's limit, TIMING.look in GeoEngine's osm/index.ts.
+    const minutes = Math.round((waitedFor(failure) ?? 0) / 60)
+    const queued = minutes
+      ? ` It waited ${minutes} minute${minutes === 1 ? "" : "s"} for a download to finish first.`
+      : ""
+    return `The look took longer than 5 minutes and was stopped.${queued}`
+  }
   if (failure.code === "too-large") {
     return `OpenStreetMap's answer was too large to take (${failure.message}).${download ? " Nothing was written." : ""}`
   }
@@ -54,11 +62,18 @@ const failureMessage = (failure: GeoEngine.Failure, tool: string) => {
 }
 
 const decodeStalled = Schema.decodeUnknownExit(Schema.Struct({ seconds: Schema.Number }))
+const decodeWaited = Schema.decodeUnknownExit(Schema.Struct({ waited: Schema.Number }))
 
 /** How long a call went without progress before it stopped. */
 const stalledFor = (failure: GeoEngine.Failure) => {
   const decoded = decodeStalled(failure.details)
   return Exit.isSuccess(decoded) ? decoded.value.seconds : undefined
+}
+
+/** How long a look that ran out of time waited behind a download, in seconds. */
+const waitedFor = (failure: GeoEngine.Failure) => {
+  const decoded = decodeWaited(failure.details)
+  return Exit.isSuccess(decoded) ? decoded.value.waited : undefined
 }
 
 /**

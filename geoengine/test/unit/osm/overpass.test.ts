@@ -444,6 +444,28 @@ test("looks wait for the one before them, and their rows are told so", { skip: !
   }
 })
 
+// Guards against a look left waiting without end, behind a long download or on a slow server.
+test("a look past its limit stops, saying how long it waited for the one before it", { skip: !python3 }, async () => {
+  const services = await serve({
+    overpass: (query) => (isProbe(query) ? answer([]) : { after: 5000, reply: counts(4) }),
+  })
+  const engine = await start(python3!, services.services, { look: 2 })
+  try {
+    const first = engine.send("probe", { area: BOX, tags: ["building"] })
+    const second = engine.send("probe", { area: BOX, tags: ["amenity"] })
+    const waited = async (id: number) => {
+      const response = await engine.response(id)
+      assert.ok(!response.ok && response.error.code === "timeout", JSON.stringify(response))
+      return (response.error.details as { waited: number }).waited
+    }
+    assert.ok((await waited(first)) < 1)
+    assert.ok((await waited(second)) >= 1.5)
+  } finally {
+    await engine.stop()
+    await services.close()
+  }
+})
+
 test("a look cancelled while it waits ends at once, the one before it going on", { skip: !python3 }, async () => {
   const services = await serve({
     overpass: (query) => (isProbe(query) ? answer([]) : { after: 3000, reply: counts(4) }),

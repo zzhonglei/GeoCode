@@ -52,8 +52,11 @@ const OUTPUT_TAIL = 16 * 1024
 /** Characters held while waiting for the end of a line; longer output without one is noise. */
 const LINE_LIMIT = 1024 * 1024
 
-/** A read reports every two seconds while it works; this long without a word means it is stuck. */
+/** A check of a run's data reports every two seconds while it works; this long without a word means it is stuck. */
 const READ_IDLE = "5 minutes"
+
+/** How long a read of data may take: past it GeoAgent is told so, rather than left waiting on a file too large. */
+const READ_LIMIT = "5 minutes"
 
 /** How long a checked run's output names stay taken if it never runs, as when the user refuses it. */
 const RESERVATION_MS = 60 * 60 * 1000
@@ -932,7 +935,7 @@ function readData(
     .run({
       ...python(install, Reader.READ, params),
       delivery: { mode: "collect", limit: READ_OUTPUT_LIMIT },
-      clocks: { idle: READ_IDLE },
+      clocks: { total: READ_LIMIT },
       signal,
     })
     .pipe(
@@ -942,8 +945,8 @@ function readData(
         if (result.reason === "abort") {
           return Effect.fail(new Engine.Failure({ code: "cancelled", message: "the read was cancelled", details }))
         }
-        if (result.reason === "idle") {
-          const message = `reading reported nothing for ${READ_IDLE}`
+        if (result.reason === "timeout") {
+          const message = `reading took longer than ${READ_LIMIT}`
           return Effect.fail(new Engine.Failure({ code: "timeout", message, details }))
         }
         if (result.reason === "output-limit") {

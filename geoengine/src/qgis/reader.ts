@@ -38,7 +38,6 @@ export const READ =
   String.raw`
 import math
 import re
-import time
 
 from osgeo import gdal, ogr, osr
 
@@ -67,18 +66,6 @@ def done(payload):
 sys.excepthook = lambda kind, error, trace: done(
     {"kind": "error", "message": str(error), "error": "".join(traceback.format_exception(kind, error, trace))}
 )
-
-beat = [time.monotonic()]
-
-
-# A line now and then, so the task's idle clock does not end a long read.
-def heartbeat(*_):
-    now = time.monotonic()
-    if now - beat[0] >= 2:
-        beat[0] = now
-        emit({"alive": True})
-    return 1
-
 
 TEXT_LIMIT = 300
 
@@ -291,7 +278,6 @@ def raw_text(layer):
         text += defn.GetFieldDefn(i).GetName().encode("utf-8", "surrogateescape") + b"\n"
     layer.ResetReading()
     for feature in layer:
-        heartbeat()
         for i in strings:
             if feature.IsFieldSetAndNotNull(i):
                 text += feature.GetFieldAsString(i).encode("utf-8", "surrogateescape") + b"\n"
@@ -543,7 +529,6 @@ def read_vector():
         layer.SetIgnoredFields(["OGR_GEOMETRY"])
     layer.ResetReading()
     for feature in layer:
-        heartbeat()
         name, kind = "all", None
         if census:
             geometry = feature.GetGeometryRef()
@@ -677,7 +662,7 @@ def measure(target, options, bands):
         if facts["nodata"] is not None and band.GetNoDataValue() != facts["nodata"]:
             band.SetNoDataValue(facts["nodata"])
         try:
-            low, high, mean, deviation = band.ComputeStatistics(False, callback=heartbeat)
+            low, high, mean, deviation = band.ComputeStatistics(False)
         except RuntimeError as error:
             # GDAL raises for a band with no valid pixel too, telling it apart only by this text; any other error is a
             # read that failed, such as a damaged block or a VRT's missing source, and must not read as an empty band.
@@ -690,7 +675,7 @@ def measure(target, options, bands):
         facts["valid"] = float(percent) / 100 if percent is not None else None
         if band.DataType not in INTEGERS or high - low > 65535:
             continue
-        histogram = band.GetHistogram(low - 0.5, high + 0.5, int(high - low) + 1, 0, 0, callback=heartbeat)
+        histogram = band.GetHistogram(low - 0.5, high + 0.5, int(high - low) + 1, 0, 0)
         present = [[int(low) + i, count] for i, count in enumerate(histogram) if count]
         if facts["valid"] is None and pixels:
             facts["valid"] = sum(count for _, count in present) / pixels
@@ -806,13 +791,13 @@ def preview(dataset, bands):
     def read(index):
         band = dataset.GetRasterBand(index)
         # A large raster without overviews is read whole to be scaled down.
-        data = band.ReadAsArray(buf_xsize=columns, buf_ysize=rows, callback=heartbeat).astype("float64")
+        data = band.ReadAsArray(buf_xsize=columns, buf_ysize=rows).astype("float64")
         valid = numpy.isfinite(data)
         if band.GetNoDataValue() is not None:
             valid &= data != band.GetNoDataValue()
         flags = band.GetMaskFlags()
         if not flags & (gdal.GMF_ALL_VALID | gdal.GMF_NODATA):
-            mask = band.GetMaskBand().ReadAsArray(buf_xsize=columns, buf_ysize=rows, callback=heartbeat)
+            mask = band.GetMaskBand().ReadAsArray(buf_xsize=columns, buf_ysize=rows)
             valid &= mask > 0
         return band, data, valid
 

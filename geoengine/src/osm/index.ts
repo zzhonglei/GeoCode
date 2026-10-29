@@ -52,6 +52,11 @@ export const TIMING = {
   pause: 30,
   /** How long a probe of an instance is waited for: a server holds a request it has no slot for 15 seconds at most. */
   probe: 20,
+  /**
+   * How long a look may take, its wait behind a download included: GeoAgent is told then, not left waiting on a long
+   * download. The kernel's osm.ts says it in minutes.
+   */
+  look: 300,
 }
 
 export type Timing = typeof TIMING
@@ -240,14 +245,25 @@ export const capability = (locks: string, services: Services = SERVICES, timing:
      * A look or a download, once the one before it has ended. Its row is told, besides what the Python tells, when it
      * waits and when it begins.
      */
-    const queued = (running: Effect.Effect<unknown, Engine.Failure>, context: Engine.MethodContext) =>
-      Effect.gen(function* () {
-        if (!(yield* Semaphore.takeIfAvailable(asking, 1))) {
-          context.progress({ osm: { type: "queued" } })
-          yield* Effect.raceFirst(Semaphore.take(asking, 1), cancelled(context.signal))
-          context.progress({ osm: { type: "started" } })
-        }
-        return yield* running.pipe(Effect.ensuring(Semaphore.release(asking, 1)))
+    const queued = (
+      running: Effect.Effect<unknown, Engine.Failure>,
+      context: Engine.MethodContext,
+      begins: () => void = () => {},
+    ) =>
+      Effect.suspend(() => {
+        // Given back by whether it was taken, not by how far the call got: a look's limit may end it in between.
+        let held = false
+        return Effect.gen(function* () {
+          held = yield* Semaphore.takeIfAvailable(asking, 1)
+          if (!held) {
+            context.progress({ osm: { type: "queued" } })
+            const take = Semaphore.take(asking, 1).pipe(Effect.tap(() => Effect.sync(() => void (held = true))))
+            yield* Effect.raceFirst(take, cancelled(context.signal))
+            context.progress({ osm: { type: "started" } })
+          }
+          begins()
+          return yield* running
+        }).pipe(Effect.ensuring(Effect.suspend(() => (held ? Semaphore.release(asking, 1) : Effect.void))))
       })
 
     const method =
@@ -257,7 +273,19 @@ export const capability = (locks: string, services: Services = SERVICES, timing:
           const params = yield* validate(action, raw)
           const running = call(action, params, context)
           // A search's queries can be done without and are brief: it does not wait behind a download.
-          return yield* action === "search" ? running : queued(running, context)
+          if (action === "search") return yield* running
+          if (action !== "probe") return yield* queued(running, context)
+          const asked = Date.now()
+          let begun: number | undefined
+          const looked = yield* queued(running, context, () => (begun = Date.now())).pipe(
+            Effect.timeoutOption(`${timing.look} seconds`),
+          )
+          if (Option.isSome(looked)) return looked.value
+          return yield* new Engine.Failure({
+            code: "timeout",
+            message: `the look took longer than ${timing.look} seconds`,
+            details: { waited: ((begun ?? Date.now()) - asked) / 1000 },
+          })
         })
 
     /** Whether a call could start now, asked before the user is asked about it; runs nothing. */

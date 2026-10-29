@@ -79,6 +79,7 @@ const failureNote = (
     };
   }
   if (failed.code === 'unanswered') return { tone: 'error', text: words.failures.unanswered };
+  if (failed.code === 'timeout') return { tone: 'error', text: words.failures.timeout };
   if (failed.code === 'refused') return { tone: 'error', text: words.failures.refused, said: failed.said };
   if (failed.code === 'invalid' || failed.code === 'invalid-params') {
     return { tone: 'error', text: words.failures.invalid, said: failed.said };
