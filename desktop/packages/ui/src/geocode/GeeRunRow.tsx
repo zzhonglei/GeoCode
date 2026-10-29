@@ -17,6 +17,7 @@ import {
   type Shown,
   type Status,
 } from './geeRun';
+import { useBackgroundGeeRuns } from './backgroundGeeRuns';
 import { isBackgroundGeeRun } from './geeRunBackground';
 import { GeeLogo } from './GeeLogo';
 import { RunRow } from './RunRow';
@@ -55,7 +56,8 @@ export const GeeRunRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part
   // History pages leave a finished call's answer out; a run in the background has its answer in the notification.
   const completion = useToolContentCompletion(part, open && part.state.status === 'completed' && !isBackgroundGeeRun(part));
   const { t } = useI18n();
-  const view = geeRunView(part, notice, locale);
+  const listed = useBackgroundGeeRuns((state) => state.sessionIds.has(part.sessionID));
+  const view = geeRunView(part, notice, listed, locale);
   const { doing, percent } = useRowStatus(view.statuses, view.running, view);
   const note =
     completion.status === 'failed' ? (

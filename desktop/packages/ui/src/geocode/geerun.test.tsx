@@ -57,8 +57,15 @@ describe("GeoCode: geerun's row", () => {
       text: `<geerun task="${INPUT.task}" state="completed" description="${description}">\nimages: 0\n\nThe script failed.\n</geerun>`,
       metadata: { source: 'geerun', callID: 'call_gee', task: INPUT.task, state: 'completed', outcome: 'failed', ended: 4000 },
     };
-    const view = geeRunView(backgrounded(), notice, 'en');
+    const view = geeRunView(backgrounded(), notice, false, 'en');
     expect(view.bad).toBe(true);
     expect(view.lines.at(-1)).toMatchObject({ text: 'The script failed.', tone: 'error' });
+  });
+
+  // Guards against a fork's copy of a call running for ever: its notification goes to the session that started the
+  // run.
+  test('a background run without its notification runs only while the list of runs has its session', () => {
+    expect(geeRunView(backgrounded(), undefined, true, 'en').running).toBe(true);
+    expect(geeRunView(backgrounded(), undefined, false, 'en')).toMatchObject({ running: false, bad: false });
   });
 });

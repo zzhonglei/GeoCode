@@ -74,13 +74,18 @@ const logLines = (log: string): Line[] => {
   }));
 };
 
-/** What a geerun call's row shows; `notice` is the notification that ended its run in the background, if any. */
-export const geeRunView = (part: ToolPart, notice: SyntheticMessage | undefined, locale: Locale) => {
+/**
+ * What a geerun call's row shows; `notice` is the notification that ended its run in the background, if any, and
+ * `listed` whether the kernel's list of background runs has one of the call's session.
+ */
+export const geeRunView = (part: ToolPart, notice: SyntheticMessage | undefined, listed: boolean, locale: Locale) => {
   const state = part.state;
   const metadata = runMetadata.safeParse('metadata' in state ? (state.metadata ?? {}) : {}).data;
   const background = isBackgroundGeeRun(part);
   const endNotice = background && notice ? noticeMetadata.safeParse(notice.metadata).data : undefined;
-  const running = state.status === 'pending' || state.status === 'running' || (background && !endNotice);
+  // As a background shell command's row: running only while the list has it, since a fork copies the call but not
+  // the notification, which goes to the session that started the run.
+  const running = state.status === 'pending' || state.status === 'running' || (background && !endNotice && listed);
   const error = state.status === 'error' ? state.error : undefined;
 
   // A run in the background ends with its notification: the answer is in its text, the times in its metadata.
@@ -94,13 +99,15 @@ export const geeRunView = (part: ToolPart, notice: SyntheticMessage | undefined,
   // A notice the app gave on starting again has no end, as nothing saw the run stop: the row shows no time rather than
   // one counting while the app was shut.
   const start = endNotice && endNotice.ended === undefined ? undefined : (endNotice?.started ?? metadata?.started);
-  const end = running
-    ? undefined
-    : endNotice
-      ? endNotice.ended
-      : 'time' in state && 'end' in state.time
-        ? state.time.end
-        : undefined;
+  // A run in the background with no notice has no known end, as upstream's background shell row shows it.
+  const end =
+    running || (background && !endNotice)
+      ? undefined
+      : endNotice
+        ? endNotice.ended
+        : 'time' in state && 'end' in state.time
+          ? state.time.end
+          : undefined;
   // A run in the background that failed outright, or that a restart stopped, has no outcome: its notice says why.
   const ending = answer === undefined ? undefined : result === undefined ? answer : endingOf(answer);
   const good = result === 'finished';
