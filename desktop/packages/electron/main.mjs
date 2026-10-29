@@ -6329,7 +6329,9 @@ app.whenReady().then(async () => {
   nativeTheme.themeSource = readThemeSource();
   registerPackagedUiProtocol();
   hardenBrowserPanelSession();
+  /* --- GeoCode: OpenChamber's release feed does not update this app; without a feed any check fails ---
   setupAutoUpdater();
+  --- /GeoCode --- */
 
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(buildMacMenu());
