@@ -39,7 +39,7 @@ import {
   type KeyState,
   type PermissionModel,
 } from './agentPermissionModel';
-import { geoActionLabel } from '@/geocode/geoTools'; // GeoCode: see the tool rows
+import { GEO_TOOL_ACTIONS, geoActionLabel } from '@/geocode/geoTools'; // GeoCode: see the tool rows and PATTERN_HINT_ACTIONS
 
 /**
  * Tool permissions for one agent.
@@ -79,6 +79,7 @@ const PATTERN_HINT_ACTIONS: ReadonlySet<string> = new Set([
   'skill',
   'subagent',
   'external_directory',
+  ...GEO_TOOL_ACTIONS.filter((action) => action !== 'geerun'), // GeoCode: geo tools ask by resource too, such as qgisrun by algorithm; geerun asks for all
 ]);
 
 const EMPTY_KEY: KeyState = { effect: null, patterns: [] };
