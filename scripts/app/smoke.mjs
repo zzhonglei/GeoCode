@@ -1,8 +1,8 @@
-// The packaged app's everyday features in a fresh sandbox: the API, the agent's file, shell, search, web and subagent
-// tools, the diff, git status, undo and redo, attachments, an MCP server, session operations and compaction; then that
-// it quits leaving nothing running and wrote in no other product's folders. The model is a local fake that makes each
-// item's tool calls and answers only with what the tools gave back, so an item whose tools fail still fails. The web
-// item fetches https://example.com.
+// The packaged app's everyday features in a fresh sandbox: the API and that it refuses a request without the window's
+// token, the agent's file, shell, search, web and subagent tools, the diff, git status, undo and redo, attachments, an
+// MCP server, session operations and compaction; then that it quits leaving nothing running and wrote in no other
+// product's folders. The model is a local fake that makes each item's tool calls and answers only with what the tools
+// gave back, so an item whose tools fail still fails. The web item fetches https://example.com.
 //
 // Usage:  node scripts/app/smoke.mjs [--app <GeoCode.app>] [--keep]
 // Exits 0 when every item passed, 1 when one failed, and 3 when it could not run here.
@@ -142,6 +142,12 @@ await check({ app, box, model, keep, reaches: ['example.com'] }, async ({ api, r
       if (status !== 200) failing.push(`${route}=${status}`)
     }
     record('api: read-only endpoints', !failing.length, failing.join(' ') || `${routes.length} answered 200`)
+  })
+  await item('api: refuses a request without the token', async () => {
+    // The shell server falls back to no authentication when it does not receive the password under the option name
+    // main.mjs passes it as.
+    const { status } = await api(`/api/config?${q}`, { headers: { Authorization: '' } })
+    record('api: refuses a request without the token', status === 401, `${status}`)
   })
 
   const created = await api('/api/session', { method: 'POST', body: JSON.stringify({ location: { directory: dir } }) })
