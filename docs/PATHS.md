@@ -147,14 +147,15 @@
 
 ## 6. 项目里
 
-项目里的配置由用户建立:手写,或在设置里把 agent、命令、技能、MCP 服务等设为项目范围时写入。除此之外,GeoCode 自己写入的只有下面标明的截图与 git 里的几处。
+项目里的配置由用户建立:手写,或在设置里把 agent、命令、技能、MCP 服务等设为项目范围时写入。除此之外,GeoCode 自己写入的只有下面标明的备份、截图与 git 里的几处。
 
 ```
 <项目>/
-├── geocode.json        项目配置,覆盖全局配置
+├── geocode.json        项目配置,覆盖全局配置;它与 .geocode/ 里的那份都可以写成 geocode.jsonc(允许注释)
 ├── AGENTS.md           写给这个项目的指示
 ├── .geocode/
 │   ├── geocode.json    项目配置的另一个位置
+│   ├── geocode.json.geocode.backup   在设置里改项目范围的配置时留下的改动前副本(第 2 节),只供手动恢复
 │   ├── agents/  commands/  skills/   项目专属的 agent、命令与技能
 │   └── screenshots/    agent 使用浏览器时保存的截图
 └── .git/
