@@ -48,6 +48,8 @@ enableMainProcessCompileCache({ packaged: app.isPackaged, userDataDir: app.getPa
 app.setAppUserModelId(APP_USER_MODEL_ID);
 // Resolve preview names in Chromium, not through the configured proxy.
 app.commandLine.appendSwitch('proxy-bypass-list', '<-loopback>;openchamber-preview.localhost');
+// GeoCode: models.dev asks Chromium to report failed requests to Cloudflare; a second disable-features switch replaces this one
+app.commandLine.appendSwitch('disable-features', 'NetworkErrorLogging');
 // Lift Chromium's per-host cap only for bundled UI. Applying this to Vite HMR
 // lets the renderer request most of the module graph at once, overwhelming the
 // dev server's transform pipeline and leaving the HTML splash visible for up
