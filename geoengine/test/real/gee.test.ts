@@ -108,6 +108,34 @@ test(
   },
 )
 
+// Guards against an earthengine-api of another version, as relocking the environment brings, no longer answering the
+// sign-in through the parts of its flow GeoCode takes over: the requests themselves stay on this computer.
+test(
+  "the real earthengine-api's sign-in passes over another request and ends when access is denied",
+  { skip: LIVE },
+  async () => {
+    const base = await realBase()
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-home-"))
+    await withVariables({ HOME: home, USERPROFILE: home }, async () => {
+      const engine = await start(PROJECT, [], undefined, base)
+      try {
+        await engine.settled(CHECKED)
+        const id = engine.send({}, "gee.signIn")
+        await until(() => engine.progress(id).length > 0, CHECKED, "the address to open")
+        const { url } = engine.progress(id)[0] as { url: string }
+        const back = new URL(url).searchParams.get("redirect_uri")
+        assert.match(back ?? "", /^http:\/\/localhost:\d+$/)
+        assert.equal((await fetch(`${back}/favicon.ico`)).status, 404)
+        await fetch(`${back}/?error=access_denied`).then((answer) => answer.text())
+        const response = await engine.response(id, CHECKED)
+        assert.equal(!response.ok && response.error.code, "denied", JSON.stringify(response))
+      } finally {
+        await engine.stop()
+      }
+    }).finally(() => fs.rm(home, { recursive: true, force: true }))
+  },
+)
+
 test("Earth Engine refuses a project ID no project can have as one that does not exist", { skip: LIVE }, async () => {
   // Neither can be anyone's: one ends in a hyphen, the other is of a domain no one may own.
   const ids = ["geocode-test-", "example.com:geocode-test"]
@@ -153,6 +181,29 @@ test(
     }
   },
 )
+
+// Guards against a composite with holes passing for a whole one: the two acquisitions of this week over Taipei leave
+// about half of it under cloud in both.
+test("a composite that leaves part of the region uncovered stops the run", { skip: LIVE }, async () => {
+  const engine = await start(PROJECT, [], undefined, await realBase())
+  try {
+    assert.equal((await engine.settled(CHECKED)).status, "ready")
+    const script = [
+      "import geocodekit.gee as gee",
+      "region = ee.Geometry.Rectangle([121.555, 25.025, 121.575, 25.043])",
+      'images = gee.images("COPERNICUS/S2_SR_HARMONIZED", region, "2024-10-01", "2024-10-08")',
+      "gee.composite(images, region)",
+      'print("composited")',
+    ].join("\n")
+    const done = result(await engine.response(engine.send({ script, cwd: engine.directory }), COMPOSED))
+    assert.equal(done.outcome, "failed", done.output)
+    // The refusal, not some other failure on the way, such as Earth Engine turning away too many requests at once.
+    assert.match(done.output, /ValueError: /)
+    assert.ok(!done.output.includes("composited"), done.output)
+  } finally {
+    await engine.stop()
+  }
+})
 
 /**
  * A proxy on this computer that passes every tunnel on, noting who asked for it: aiohttp, as geedim uses it, names
