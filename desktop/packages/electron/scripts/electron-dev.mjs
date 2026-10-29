@@ -5,6 +5,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { KERNEL_BINARY } from '@openchamber/web/server/geocode/kernel-paths.js'; // GeoCode: see resolveBundledOpenCodeCliEnv
+import { useGeoCodeDataDir } from '../geocode/data-dir.mjs'; // GeoCode: see the hot-reload server
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -231,6 +232,7 @@ async function main() {
   } else {
     hmrApiPort = String(await findAvailablePort(preferredHmrApiPort));
     hmrUiPort = String(await findAvailablePort(preferredHmrUiPort));
+    useGeoCodeDataDir(process.env); // GeoCode: the window uses this server as its shell, so its data goes where the app's does, not under ~/.config/openchamber
     devServer = spawnProcess('node', ['./scripts/dev-web-hmr.mjs'], {
       env: {
         ...process.env,
