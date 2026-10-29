@@ -71,7 +71,7 @@ GeoCode 的标志是一个带波纹的球体、一道倾斜的轨道与轨道上
 
 源码仓库里的许可证覆盖代码:根目录的 `LICENSE` 是 GeoCode 自己的 MIT 许可证;`kernel/` 与 `desktop/` 下的代码保留上游各自的版权声明与许可证(`kernel/LICENSE`、`desktop/LICENSE`),上游自己带进来的第三方代码也保留它们原有的许可证文件。
 
-安装包不另带许可证声明。安装包分发的东西的声明放在发布仓库里:两个上游、随内置 Python 环境分发的各个包(其中有以动态库形式随包分发的 LGPL 与少数 GPL 的库,GeoCode 自己的代码不链接它们),以及随 GeoEngine 分发的数据(如 OSM 的标签预设库)。About 里的链接指向发布仓库。
+安装包在资源目录的 `licenses/` 里(macOS 上是 `GeoCode.app/Contents/Resources/licenses/`)带着两个上游与终端用的代码与字体(T3 Code 的适配层、Ghostty、Symbols Nerd Font)的许可证,它们的代码编进了应用。内置 Python 环境的各个包在环境里带着各自的许可证文件。完整的声明放在发布仓库里:两个上游、随内置 Python 环境分发的各个包(其中有以动态库形式随包分发的 LGPL 与少数 GPL 的库,GeoCode 自己的代码不链接它们),以及随 GeoEngine 分发的数据(如 OSM 的标签预设库)。About 里的链接指向发布仓库。
 
 ## 8. 边界与约束
 

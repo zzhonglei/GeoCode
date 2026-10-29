@@ -114,6 +114,26 @@
       {
         "from": "resources/python",
         "to": "python"
+      },
+      {
+        "from": "../../../kernel/LICENSE",
+        "to": "licenses/OpenCode.txt"
+      },
+      {
+        "from": "../../LICENSE",
+        "to": "licenses/OpenChamber.txt"
+      },
+      {
+        "from": "../ui/src/lib/ghostty/LICENSE-T3CODE",
+        "to": "licenses/T3 Code.txt"
+      },
+      {
+        "from": "../ui/src/lib/ghostty/vendor/LICENSE",
+        "to": "licenses/Ghostty.txt"
+      },
+      {
+        "from": "../ui/src/lib/ghostty/fonts/LICENSE",
+        "to": "licenses/Symbols Nerd Font.txt"
       }
     ],
     "afterPack": "scripts/after-pack.cjs",
