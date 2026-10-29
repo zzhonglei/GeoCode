@@ -354,6 +354,8 @@ export const geoActivity = (messages: readonly ChatMessageEntry[], locale: Local
   for (const message of messages) {
     for (const part of message.parts) {
       if (part.type !== 'tool' || part.state.status !== 'completed') continue;
+      // A refused qgisrun ran nothing. Read here, not with qgisRun.ts, which imports this file.
+      if (part.tool === 'qgisrun' && part.state.metadata?.outcome === 'refused') continue;
       // Each call once, keyed as upstream's summary keys it.
       const key = `${message.info.id}:${part.callID || part.id}`;
       if (seen.has(key)) continue;
