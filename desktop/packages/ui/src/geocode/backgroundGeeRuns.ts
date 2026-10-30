@@ -10,6 +10,8 @@ export type BackgroundGeeRun = GeeRunsSnapshot['runs'][number];
 /**
  * The Earth Engine runs under way in the background, as the kernel's lists and events tell of them, and the sessions
  * they belong to: the same set while those sessions stay the same, so what follows only the sessions does not rerender.
+ * The interface treats them as it treats background shell commands: every place that consults
+ * `@/sync/background-shells` consults this too, by the same rule, but for the hooks serving extensions.
  */
 export const useBackgroundGeeRuns = create<{ runs: readonly BackgroundGeeRun[]; sessionIds: ReadonlySet<string> }>(
   () => ({ runs: [], sessionIds: new Set() }),
