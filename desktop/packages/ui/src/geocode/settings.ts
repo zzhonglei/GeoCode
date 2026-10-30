@@ -8,11 +8,11 @@ export const GEO_ENVIRONMENT_SEARCH_ITEM = {
   keywords: ['qgis', 'gis', 'geo', 'geoengine', 'environment', '地理', '環境', '环境', 'gee', 'earth engine'],
 };
 
-const CLOSED_PAGES = new Set(['remote-instances', 'tunnel', 'extensions', 'plugins', 'magic-prompts', 'snippets', 'skills.catalog', 'isolated-spaces']);
+const CLOSED_PAGES: ReadonlySet<string> = new Set(['remote-instances', 'tunnel', 'extensions', 'plugins', 'magic-prompts', 'snippets', 'skills.catalog', 'isolated-spaces'] satisfies SettingsPageMeta['slug'][]);
 
 const MOVED_PAGES = new Map<SettingsPageMeta['slug'], SettingsPageMeta['group']>([['skills.installed', 'opencode']]);
 
-const CLOSED_SEARCH_ITEMS = new Set([
+export const CLOSED_SEARCH_ITEMS = new Set([
   'sessions.desktop-ui-password',
   'sessions.desktop-lan-access',
   'sessions.opencode-binary',

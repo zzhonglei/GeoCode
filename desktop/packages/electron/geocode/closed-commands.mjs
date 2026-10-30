@@ -1,5 +1,5 @@
 // Commands for other hosts, SSH, dev-server tunnels, isolated spaces, LAN addresses and OpenChamber updates.
-const CLOSED_COMMANDS = new Set([
+export const CLOSED_COMMANDS = new Set([
   'desktop_hosts_set',
   'desktop_host_probe',
   'desktop_host_update_server',

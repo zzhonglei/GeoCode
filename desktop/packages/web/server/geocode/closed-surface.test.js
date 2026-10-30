@@ -3,7 +3,7 @@ import express from 'express';
 import fs from 'node:fs';
 import http from 'node:http';
 
-import { closedSurface } from './closed-surface.js';
+import { CLOSED_PATHS, CLOSED_PATTERNS, CLOSED_ROUTES, closedSurface } from './closed-surface.js';
 
 // Guards against a closed endpoint staying reachable through a path variant
 // that Express still routes to the upstream handler.
@@ -65,5 +65,29 @@ describe('GeoCode: closedSurface', () => {
     expect(await statusOf(route, 'POST')).toBe(404);
     expect(await statusOf(`${route.toUpperCase()}/`, 'POST')).toBe(404);
     expect(await statusOf(route, 'GET')).toBe(200);
+  });
+});
+
+// Guards against upstream renaming or moving a closed endpoint, which reopens it under its new path with nothing failing,
+// however often a comment still names the old one.
+describe('GeoCode: the closed endpoints', () => {
+  const served = (source) => [
+    ...[...source.matchAll(/\.(?:get|post|put|patch|delete|all|use)\(\s*(['"`])(\/[^'"`]*)\1/g)].map((match) => match[2]),
+    ...[...source.matchAll(/const [A-Z_]+ = '(\/[^']*)'/g)].map((match) => match[1]),
+  ];
+  const server = new URL('..', import.meta.url);
+  const shell = fs.readdirSync(server, { recursive: true })
+    .filter((file) => file.endsWith('.js') && !file.endsWith('.test.js') && !file.startsWith('geocode'))
+    .flatMap((file) => served(fs.readFileSync(new URL(file, server), 'utf8')));
+  const kernel = Object.keys(JSON.parse(fs.readFileSync(new URL('../../../../../kernel/packages/protocol/openapi.json', import.meta.url), 'utf8')).paths);
+  const routes = [...shell, ...kernel].map((route) => route.toLowerCase());
+
+  it('each name a route the shell server or the kernel serves', () => {
+    const unknown = [
+      ...CLOSED_PATHS.filter((closed) => !routes.some((route) => route === closed || route.startsWith(`${closed}/`))),
+      ...CLOSED_ROUTES.map(([, closed]) => closed).filter((closed) => !routes.includes(closed)),
+      ...CLOSED_PATTERNS.map(([, pattern]) => pattern).filter((pattern) => !routes.some((route) => pattern.test(route))),
+    ];
+    expect(unknown).toEqual([]);
   });
 });

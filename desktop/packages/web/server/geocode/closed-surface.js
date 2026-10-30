@@ -1,5 +1,5 @@
 // Answered here because an unmatched /api path would fall through to the OpenCode proxy.
-const CLOSED_PATHS = Object.freeze([
+export const CLOSED_PATHS = Object.freeze([
   '/api/client-auth',
   '/api/auth/reset',
   '/api/system/dev-shutdown',
@@ -35,14 +35,14 @@ const CLOSED_PATHS = Object.freeze([
 ]);
 
 // One method on the exact path only: other methods, and the paths below, address a skill of that name.
-const CLOSED_ROUTES = Object.freeze([
+export const CLOSED_ROUTES = Object.freeze([
   ['GET', '/api/config/skills/catalog'],
   ['POST', '/api/config/skills/scan'],
   ['POST', '/api/config/skills/install'],
 ]);
 
 // One method on paths that carry an id; the project's and the terminal's other routes stay open.
-const CLOSED_PATTERNS = Object.freeze([
+export const CLOSED_PATTERNS = Object.freeze([
   ['PUT', /^\/api\/projects\/[^/]+\/config\/shared$/],
   ['POST', /^\/api\/pty\/[^/]+\/connect-token$/],
   ['POST', /^\/api\/experimental\/persistent-pty\/[^/]+\/connect-token$/],
