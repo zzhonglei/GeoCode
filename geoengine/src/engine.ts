@@ -47,7 +47,6 @@ export const run = (transport: Transport, capabilities: readonly Capability[]) =
   Effect.gen(function* () {
     const runtime = yield* Runtime.Service
     const status = yield* Status.Service
-    const config = yield* Config.Service
     const scope = yield* Effect.scope
     const runFork = Effect.runForkWith(yield* Effect.context<Services>())
     // Forked into the engine's scope, so closing it interrupts them.
@@ -65,7 +64,7 @@ export const run = (transport: Transport, capabilities: readonly Capability[]) =
       ),
     )
 
-    const methods = new Map<string, Method>([["engine.reload", () => config.reload()]])
+    const methods = new Map<string, Method>()
     for (const capability of capabilities) {
       const defined = yield* Effect.exit(capability)
       if (Exit.isFailure(defined)) {
