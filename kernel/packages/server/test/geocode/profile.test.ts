@@ -1,6 +1,6 @@
 import fs from "node:fs/promises"
 import path from "node:path"
-import { expect } from "bun:test"
+import { expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
@@ -114,3 +114,13 @@ it.live("GeoCode: does not watch the machine-wide config directory", () =>
     expect(watched.filter((target) => target === system || target === path.dirname(system))).toEqual([])
   }),
 )
+
+// Guards against routes.ts giving Config an option the copy here lacks, which the replacement would then drop.
+test("GeoCode: gives Config every option the standard routes do", async () => {
+  const options = async (file: string) => {
+    const source = await fs.readFile(new URL(file, import.meta.url), "utf8")
+    const given = source.match(/Config\.configured\(\{([^}]*)\}\)/)?.[1] ?? ""
+    return [...given.matchAll(/(\w+):/g)].map((match) => match[1])
+  }
+  expect(await options("../../src/geocode/profile.ts")).toEqual([...(await options("../../src/routes.ts")), "system"])
+})
