@@ -16,6 +16,7 @@ DEPTH = 6
 SECONDS = _http.DOWNLOAD_SECONDS
 # Counting is light: an instance silent for longer than this is too busy to download from anyway.
 COUNT_SECONDS = 60
+# As many as the kernel's osmgetobjects accepts (kernel/packages/core/src/geocode/osmget.ts).
 IDS = 25
 # The order Overpass gives elements in, which features keep however their parts arrived.
 ORDER = {"node": 0, "way": 1, "relation": 2}

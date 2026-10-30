@@ -27,7 +27,10 @@ export const wasInterrupted = (error: string) => error.includes(INTERRUPTED) || 
 /** Whether the user declined the call when asked about it. */
 export const wasDeclined = (error: string) => error.includes(DECLINED);
 
-/** As the kernel ends its answer: whole seconds, or tenths below one. */
+/**
+ * As the kernel (kernel/packages/core/src/geocode/answer.ts) and GeoEngine (geoengine/src/qgis/plan.ts) write durations
+ * in their answers: whole seconds, or tenths below one.
+ */
 const seconds = (ms: number) =>
   ms < 1000 ? `${Math.max(1, Math.round(ms / 100)) / 10} s` : `${Math.round(ms / 1000)} s`;
 

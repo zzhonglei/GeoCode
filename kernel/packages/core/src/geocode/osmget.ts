@@ -17,6 +17,7 @@ export const objectsName = "osmgetobjects"
 export const featuresName = "osmgetfeatures"
 
 export const ObjectsInput = Schema.Struct({
+  // GeoEngine refuses more as well, by IDS in geoengine/python/geocodekit/osm/_download.py.
   ids: Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(25)).annotate({
     description:
       'OSM ids found with osmsearch, such as ["R65066", "W427818536"]: R for a relation, W for a way, N for a node. At most 25',

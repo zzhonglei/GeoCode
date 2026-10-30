@@ -2,7 +2,8 @@ export * as Library from "./library.ts"
 
 /**
  * Task and asset names: Earth Engine's own rule, with room for both in an export's description (see
- * geocodekit/gee/_run.py).
+ * geocodekit/gee/_run.py). The kernel checks a task's before asking the user (TASK_NAME in
+ * kernel/packages/core/src/geocode/geerun.ts).
  */
 export const NAME = /^[A-Za-z0-9_-]{1,30}$/
 

@@ -9,6 +9,7 @@ import { GeoEngine } from "./geoengine.js"
 
 /** The parameters the OSM tools share, as GeoAgent reads them. */
 export const Area = Schema.String.annotate({
+  // Its 8 parts are PARTS in geoengine/python/geocodekit/osm/_area.py.
   description:
     'Where to look: the id of an area found with osmsearch, such as "R65066", or several joined by commas; "bbox:south,west,north,east" in degrees; "around:latitude,longitude,meters"; "around:<id>,meters" for an object and everything within that distance of it; or "file:<path>" of a boundary file in any coordinate system, with "|layername=<name>" for one of its layers. Latitude always comes first. An area of more than 8 separate parts is counted and asked for as the box around them all, so places far apart are better looked at and downloaded one at a time.',
 })

@@ -47,7 +47,10 @@ export const Input = Schema.Struct({
   }),
 })
 
-/** Earth Engine's rule for asset names, shortened as GeoEngine's is: an export's description names task and asset. */
+/**
+ * Earth Engine's rule for asset names, shortened as GeoEngine's is: an export's description names task and asset. The
+ * same rule is NAME in geoengine/src/gee/library.ts, and NAME and LABEL in geoengine/python/geocodekit/gee/_run.py.
+ */
 const TASK_NAME = /^[A-Za-z0-9_-]{1,30}$/
 
 const Asset = Schema.Struct({
@@ -104,10 +107,6 @@ const failed = (failure: GeoEngine.Failure) =>
   Effect.logWarning("geerun failed", { code: failure.code, message: failure.message, details: failure.details }).pipe(
     Effect.andThen(Effect.fail(new ToolFailure({ message: failureMessage(failure) }))),
   )
-
-/** Whole seconds, or tenths below one. */
-const seconds = (ms: number) =>
-  ms < 1000 ? `${Math.max(1, Math.round(ms / 100)) / 10} s` : `${Math.round(ms / 1000)} s`
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`
 
@@ -199,7 +198,7 @@ const folded = (output: string) => {
 
 /** How the run ended, after what it printed. */
 const ending = (ran: typeof Ran.Type) => {
-  const after = seconds(ran.durationMs)
+  const after = GeoAnswer.seconds(ran.durationMs)
   if (ran.outcome === "finished") return `Finished in ${after}.`
   if (ran.outcome === "failed") return `The script failed after ${after}.`
   if (ran.outcome === "idle") {

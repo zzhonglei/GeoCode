@@ -2,6 +2,13 @@ export * as GeoAnswer from "./answer.js"
 
 import { ToolOutput } from "../tool-output.js"
 
+/**
+ * A run's duration: whole seconds, or tenths below one. GeoEngine writes QGIS's the same way (geoengine/src/qgis/plan.ts),
+ * and the interface shows them so (desktop/packages/ui/src/geocode/runLines.ts).
+ */
+export const seconds = (ms: number) =>
+  ms < 1000 ? `${Math.max(1, Math.round(ms / 100)) / 10} s` : `${Math.round(ms / 1000)} s`
+
 /** Said before the end of a run's output when the rest did not fit. */
 export const CUT = "(The output was too long; only its end is kept.)"
 

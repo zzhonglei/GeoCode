@@ -350,7 +350,10 @@ export const named = (algorithm: Catalog.Algorithm, error: string) =>
 export const crashed = (ms: number, left: readonly string[]) =>
   [`QGIS exited unexpectedly after ${seconds(ms)}.`, ...incomplete(left)].join("\n")
 
-/** Whole seconds, or tenths below one. */
+/**
+ * Whole seconds, or tenths below one, as the kernel writes the durations of its own answers
+ * (kernel/packages/core/src/geocode/answer.ts) and the interface shows them (desktop/packages/ui/src/geocode/runLines.ts).
+ */
 const seconds = (ms: number) =>
   ms < 1000 ? `${Math.max(1, Math.round(ms / 100)) / 10} s` : `${Math.round(ms / 1000)} s`
 

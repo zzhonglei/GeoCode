@@ -158,10 +158,6 @@ const now = () => performance.now()
 /** A check this much later than due was the computer asleep, as GeoEngine's runtime judges it too. */
 const SLEEP_MS = 5000
 
-/** Whole seconds, or tenths below one, as GeoEngine writes them. */
-const seconds = (ms: number) =>
-  ms < 1000 ? `${Math.max(1, Math.round(ms / 100)) / 10} s` : `${Math.round(ms / 1000)} s`
-
 /** The facts before the reasons, apart: the interface shows only what follows them. */
 const reasonsOf = (text: string) => text.slice(text.indexOf("\n\n") + 2)
 
@@ -303,7 +299,7 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
       if (ran === undefined)
         return answer(
           "timeout",
-          `Stopped after ${seconds(now() - started)}, with no progress for the last ${limit()} s.`,
+          `Stopped after ${GeoAnswer.seconds(now() - started)}, with no progress for the last ${limit()} s.`,
         )
       if (Exit.isSuccess(ran)) {
         const decoded = decodeEnding(ran.value)

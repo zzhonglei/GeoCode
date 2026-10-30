@@ -7,6 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import ee
 
+# Task and asset names; GeoEngine (geoengine/src/gee/library.ts) and the kernel
+# (kernel/packages/core/src/geocode/geerun.ts) hold task names to the same rule.
 NAME = re.compile(r"^[A-Za-z0-9_-]{1,30}$")
 # An export's description, the only place a running export names its destination: "task:asset:fingerprint".
 LABEL = re.compile(r"^([A-Za-z0-9_-]{1,30}):([A-Za-z0-9_-]{1,30}):([0-9a-f]{8})$")

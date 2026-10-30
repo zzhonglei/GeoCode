@@ -10,6 +10,7 @@ from geocodekit.osm._elements import Invalid
 
 # Overpass slows with each vertex of a polygon it filters by: a ring with more is queried by its convex hull, and an
 # area of more parts than this by the box around them all. Either holds the area whole, and is narrowed back after.
+# The kernel tells GeoAgent of the parts (Area in kernel/packages/core/src/geocode/osm.ts).
 RING_VERTICES = 1000
 PARTS = 8
 METERS_PER_DEGREE = 111320.0
