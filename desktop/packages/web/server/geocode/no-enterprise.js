@@ -9,6 +9,7 @@ export const noEnterprisePolicy = () => ({
   allowNetworkAccess: false,
   allowedExtensions: [],
   allowLocalExtensions: false,
+  // Nothing pinned, so env-runtime.js runs the bundled kernel.
   opencodeBinary: null,
   hideBuiltinSkillCatalogs: false,
 });

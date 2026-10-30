@@ -31,7 +31,7 @@ import { dropInheritedAppVariables } from './geocode/inherited-env.mjs'; // GeoC
 import { useGeoCodeDataDir } from './geocode/data-dir.mjs'; // GeoCode: see below
 import { LOADING_MARK, LOADING_MARK_CLOCK, LOADING_MARK_STYLE } from './geocode/loading-mark.mjs'; // GeoCode: the splash below draws it
 
-dropInheritedAppVariables(process.env); // GeoCode: must run before anything reads or writes process.env
+dropInheritedAppVariables(process.env); // GeoCode: must run before anything reads or writes process.env, which the modules imported above therefore must not do as they load
 useGeoCodeDataDir(process.env); // GeoCode: after the line above, which would drop it
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

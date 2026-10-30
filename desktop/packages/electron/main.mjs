@@ -847,7 +847,7 @@ const buildStoredHostEntry = (entry) => {
 };
 
 const readDesktopHostsConfig = () => {
-  // GeoCode: the app only connects to its own local shell, whatever the settings file holds
+  // GeoCode: the app only connects to its own local shell, whatever the settings file holds; the windows and notifications for other hosts look them up here
   return { hosts: [], defaultHostId: LOCAL_HOST_ID, initialHostChoiceCompleted: true };
   const root = readSettingsRoot();
   const hostsRaw = Array.isArray(root.desktopHosts) ? root.desktopHosts : [];
@@ -1090,7 +1090,7 @@ const injectRuntimeConfigIntoHtml = (html) => {
  * lets a dev-server login persist between sessions without touching the app's
  * own storage.
  */
-const BROWSER_PANEL_PARTITION = 'persist:geocode-browser'; // GeoCode: its own name, also in the UI's BrowserPane
+const BROWSER_PANEL_PARTITION = 'persist:geocode-browser'; // GeoCode: its own name, also in the UI's BrowserPane and geocode/QgisManualPage.tsx
 
 /**
  * Denies device and location access to pages shown in the browser panel.
@@ -3386,7 +3386,7 @@ const resolveInitialUrl = async ({ onPlainLocalBoot = null } = {}) => {
   const hmrUiUrl = `http://127.0.0.1:${hmrUiPort}`;
   const usePackagedUi = shouldUsePackagedUi();
   const skipLocalServer = await shouldSkipLocalServer();
-  startGeoEngine({ log, onFailure: () => emitToAllWindows('geocode:geoengine-failed') }); // GeoCode: after the login shell's environment is merged, in parallel with the kernel
+  startGeoEngine({ log, onFailure: () => emitToAllWindows('geocode:geoengine-failed') }); // GeoCode: after the login shell's environment is merged, in parallel with the kernel, and before spawnLocalServer sets NO_PROXY and the shell server its proxy, so GeoEngine's Python still finds the system proxy
   const startupProbePlan = resolveStartupUrlProbePlan({
     development: isDev,
     packagedUi: usePackagedUi,

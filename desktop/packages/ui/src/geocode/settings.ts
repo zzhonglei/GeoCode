@@ -10,6 +10,8 @@ export const GEO_ENVIRONMENT_SEARCH_ITEM = {
 
 const CLOSED_PAGES: ReadonlySet<string> = new Set(['remote-instances', 'tunnel', 'extensions', 'plugins', 'magic-prompts', 'snippets', 'skills.catalog', 'isolated-spaces'] satisfies SettingsPageMeta['slug'][]);
 
+// Skills is the one library page left open, so it joins the OpenCode group rather than head a group of its own. A group
+// shows only while SettingsView.tsx's NAV_GROUP_ORDER lists it.
 const MOVED_PAGES = new Map<SettingsPageMeta['slug'], SettingsPageMeta['group']>([['skills.installed', 'opencode']]);
 
 export const CLOSED_SEARCH_ITEMS = new Set([
