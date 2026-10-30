@@ -5,6 +5,7 @@ import { isSkippedTimelineMessage } from '@/components/chat/lib/timelineRoles';
 import type { ChatMessageEntry } from '@/components/chat/lib/turns/types';
 import type { Part, ToolPart } from '@/lib/opencode/model';
 
+import type { GeoTool } from './geoTools';
 import { isOsmTool } from './osmView';
 
 /** Calls of one geo tool with nothing shown between them, which the conversation shows as one row. */
@@ -42,7 +43,7 @@ export const geoRowParts = (parts: readonly Part[], rows: number, runs: Runs | u
 };
 
 /** The geo tools whose side-by-side calls the conversation shows as one row. */
-const MERGED = new Set(['qgisdoc', 'readgeodata']);
+const MERGED: ReadonlySet<string> = new Set(['qgisdoc', 'readgeodata'] satisfies GeoTool[]);
 
 export const isMergedGeoTool = (toolName: string) => MERGED.has(toolName);
 

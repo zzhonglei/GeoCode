@@ -16,10 +16,10 @@ export const GEO_TOOL_ACTIONS = [
   'osmprobe',
   'osmgetobjects',
   'osmgetfeatures',
-] as const;
+] as const satisfies readonly GeoTool[];
 
-/** The geo tools, which the conversation shows with their own icons and titles. */
-const GEO_TOOLS = [
+/** The kernel's geo tools, which the conversation shows with their own icons and titles. */
+export const GEO_TOOLS = [
   'qgisdoc',
   'readgeodata',
   'qgisrun',
@@ -30,7 +30,7 @@ const GEO_TOOLS = [
   'osmgetfeatures',
 ] as const;
 
-type GeoTool = (typeof GEO_TOOLS)[number];
+export type GeoTool = (typeof GEO_TOOLS)[number];
 
 type GeoAction = (typeof GEO_TOOL_ACTIONS)[number];
 

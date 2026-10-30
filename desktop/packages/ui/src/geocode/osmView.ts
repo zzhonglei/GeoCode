@@ -3,11 +3,12 @@ import { z } from 'zod';
 import type { Locale } from '@/lib/i18n';
 import type { Part, ToolPart } from '@/lib/opencode/model';
 
+import type { GeoTool } from './geoTools';
 import { type Kind, OSM_STEPS, osmText, type OsmStep, type OsmText } from './osmText';
 import { descriptionOf, wasDeclined, wasInterrupted } from './runLines';
 
 /** The OSM tools, each call a row of its own. */
-const OSM_TOOLS = ['osmsearch', 'osmprobe', 'osmgetobjects', 'osmgetfeatures'] as const;
+const OSM_TOOLS = ['osmsearch', 'osmprobe', 'osmgetobjects', 'osmgetfeatures'] as const satisfies readonly GeoTool[];
 
 type OsmTool = (typeof OSM_TOOLS)[number];
 

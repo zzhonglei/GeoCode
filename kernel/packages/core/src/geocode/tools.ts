@@ -21,7 +21,8 @@ import { ReadGeodataTool } from "./readgeodata.js"
 
 /**
  * GeoCode's geo tools, built in as OpenCode's own tools are: each asks the kernel's permission rules itself and then
- * has GeoEngine do the work. One plugin holds them all, so the upstream list registers it once.
+ * has GeoEngine do the work. One plugin holds them all, so the upstream list registers it once. The interface knows
+ * them by name, in desktop/packages/ui/src/geocode/geoTools.ts.
  */
 export const Plugin = {
   id: "geocode.tools",

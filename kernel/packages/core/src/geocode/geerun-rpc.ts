@@ -18,6 +18,7 @@ export const Run = Schema.Struct({
  */
 export const Snapshot = Schema.Struct({ revision: Schema.Number, runs: Schema.Array(Run) })
 
+// The interface describes the same with its own schemas, in desktop/packages/ui/src/geocode/geeRunsRpc.ts.
 export const Definition = Rpc.define({
   id: "geocode.geeruns",
   methods: {
