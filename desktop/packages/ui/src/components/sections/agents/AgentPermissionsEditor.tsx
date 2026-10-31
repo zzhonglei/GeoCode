@@ -39,7 +39,7 @@ import {
   type KeyState,
   type PermissionModel,
 } from './agentPermissionModel';
-import { GEO_TOOL_ACTIONS, geoActionLabel } from '@/geocode/geoTools'; // GeoCode: see the tool rows and PATTERN_HINT_ACTIONS
+import { permissionRowName } from '@/geocode/toolPermissions'; // GeoCode: see the tool rows
 
 /**
  * Tool permissions for one agent.
@@ -79,7 +79,6 @@ const PATTERN_HINT_ACTIONS: ReadonlySet<string> = new Set([
   'skill',
   'subagent',
   'external_directory',
-  ...GEO_TOOL_ACTIONS.filter((action) => action !== 'geerun'), // GeoCode: geo tools ask by resource too, such as qgisrun by algorithm; geerun asks for all
 ]);
 
 const EMPTY_KEY: KeyState = { effect: null, patterns: [] };
@@ -433,8 +432,8 @@ export const AgentPermissionsEditor: React.FC<AgentPermissionsEditorProps> = ({
       </div>
 
       <div>
-        {/* GeoCode: the geo tools' rows carry their names, not their keys capitalised */}
-        {toolKeys.map((key) => renderRow(key, geoActionLabel(key) ?? formatKeyLabel(key), null))}
+        {/* GeoCode: GeoCode's own rows carry their names, as upstream's carry their keys capitalised */}
+        {toolKeys.map((key) => renderRow(key, permissionRowName(key) ?? formatKeyLabel(key), null))}
       </div>
 
       {mcpKeys.length > 0 && (

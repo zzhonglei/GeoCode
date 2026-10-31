@@ -49,9 +49,10 @@ export const Plugin = {
         editor.add(OsmGetTools.makeFeatures(permission, access, location))
       })
       .pipe(Effect.orDie)
-    // Where the rules allow qgisrun or an OSM download, a call writing outside the project, among others, still asks.
+    // Where the rules allow qgisrun, an OSM download or a geo tool's read, a call outside the project, among others,
+    // still asks.
     yield* ctx.permission.hook("evaluate", (event) =>
-      !GeoGuards.TOOLS.has(event.action) || event.effect !== "allow"
+      !GeoGuards.applies(event)
         ? Effect.void
         : saved.list({ projectID: location.project.id }).pipe(
             Effect.map((rows) => {

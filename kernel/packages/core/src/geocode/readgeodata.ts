@@ -5,6 +5,7 @@ import type { Tool } from "@opencode/schema/tool"
 import { Deferred, Effect, Exit, Schema } from "effect"
 import type { FileAccess } from "../file-access.js"
 import { GeoEngine } from "./geoengine.js"
+import { GeoOutside } from "./outside.js"
 
 export const name = "readgeodata"
 
@@ -75,8 +76,9 @@ export const make = (access: FileAccess.Interface) => {
         if (known) return restore(Deferred.await(known))
         const asking = Deferred.makeUnsafe<Authorization, Refusal>()
         session.set(absolute, asking)
-        // Otherwise as read asks: outside the project, for the directory first, then by the read rules.
-        return restore(access.authorizeRead(input.path, context)).pipe(
+        // Otherwise as read asks: outside the project, for the directory first, then by the read rules; the directory
+        // even where the rules allow it.
+        return restore(GeoOutside.reads(context, access.authorizeRead(input.path, context))).pipe(
           Effect.onExit((exit) => {
             if (!Exit.isSuccess(exit)) session.delete(absolute)
             return Deferred.done(asking, exit)

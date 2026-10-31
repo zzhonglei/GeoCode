@@ -173,9 +173,18 @@ const permissionSaved = Layer.mock(PermissionSaved.Service, {
 let refused: string | undefined
 /** Holds every asking until it is done, as a user who has not answered yet does. */
 let pending: Deferred.Deferred<void> | undefined
+/** What the evaluate hook makes of each asking about a directory outside the project, where the rules allow it. */
+const directories: string[] = []
+const judge = (input: Permission.AssertInput) =>
+  Effect.gen(function* () {
+    const event = { ...input, effect: "allow" as const }
+    if (evaluate) yield* evaluate(event)
+    directories.push(event.effect)
+  })
 const permission = permissionLayer({
   assert: (input) =>
     Effect.sync(() => assertions.push(input)).pipe(
+      Effect.andThen(input.action === "external_directory" ? judge(input) : Effect.void),
       Effect.andThen(pending ? Deferred.await(pending) : Effect.void),
       Effect.andThen(
         input.action === refused
@@ -199,6 +208,7 @@ const it = testEffect(
 
 const reset = () => {
   assertions.length = 0
+  directories.length = 0
   calls.length = 0
   aborted.length = 0
   refused = undefined
@@ -291,6 +301,39 @@ describe("GeoCode: readgeodata", () => {
         ["external_directory", [path.join(path.dirname(outside), "*")]],
         ["read", [outside]],
       ])
+    }),
+  )
+
+  // Guards against a dataset outside the project being read without the user seeing it, where the rules allow it.
+  it.effect("asks about a directory outside the project where the rules allow it, unless it was always allowed", () =>
+    Effect.gen(function* () {
+      reset()
+      answer = () => result({ text: "dem.tif: raster, GTiff" })
+      const registry = yield* Tool.Service
+      const outside = path.join(path.parse(PROJECT).root, "elsewhere", "dem.tif")
+      yield* executeTool(registry, read({ path: outside }, Session.ID.make("ses_geocode_tools_outside")))
+      expect(directories).toEqual(["ask"])
+      saved = [
+        { action: "read", resource: path.join(path.dirname(outside), "*") },
+        { action: "external_directory", resource: "*" },
+      ]
+      yield* executeTool(registry, read({ path: outside }, Session.ID.make("ses_geocode_tools_outside_tool")))
+      expect(directories).toEqual(["ask", "ask"])
+      saved.push({ action: "external_directory", resource: path.join(path.dirname(outside), "*") })
+      yield* executeTool(registry, read({ path: outside }, Session.ID.make("ses_geocode_tools_outside_saved")))
+      expect(directories).toEqual(["ask", "ask", "allow"])
+      // Guards against the same asking made by any other tool, such as read, asking where the rules allow it.
+      saved = []
+      const source = { type: "tool" as const, messageID: toolIdentity.messageID, id: "call-read" }
+      const other = {
+        sessionID,
+        action: "external_directory",
+        resources: ["/other/*"],
+        source,
+        effect: "allow" as const,
+      }
+      yield* evaluate!(other)
+      expect(other.effect).toBe("allow")
     }),
   )
 

@@ -397,9 +397,6 @@ export const geoPermissionName = (permission: PermissionRequest, locale: Locale)
   return algorithm ? `${words.asks.qgisrun} ${qgisAlgorithmText(algorithm, locale).name}` : words.asks.qgisrun;
 };
 
-/** The settings label of a geo tool's permission rule; undefined for any other key. */
-export const geoActionLabel = (key: string): string | undefined => (isGeoAction(key) ? text().titles[key] : undefined);
-
 /**
  * What "always allow" names for a geo tool's own saves; undefined for any other action. Nothing for qgisrun, whose
  * card names the algorithm and the directories, never their ids and globs; the directory an OSM download writes in
