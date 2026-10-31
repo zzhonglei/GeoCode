@@ -77,11 +77,11 @@ export const algorithms = (catalog: Catalog.Catalog, group: string) => {
 
 export const search = (catalog: Catalog.Catalog, query: string) => {
   const hits = Catalog.search(catalog, query)
-  if (hits.length === 0) return `No algorithm matches "${query}". Search with English keywords.`
+  if (hits.length === 0) return `No algorithm matches "${query}".`
   const shown = hits.slice(0, SEARCH_LIMIT)
   const heading =
     hits.length > SEARCH_LIMIT
-      ? `${hits.length} algorithms match "${query}"; the first ${SEARCH_LIMIT}, best first. Add words to narrow the search:`
+      ? `${hits.length} algorithms match "${query}"; the first ${SEARCH_LIMIT}, best first:`
       : `${hits.length} ${hits.length === 1 ? "algorithm matches" : "algorithms match"} "${query}":`
   return framed(catalog, `${heading}\n${shown.map((algorithm) => line(algorithm, true)).join("\n")}`)
 }
