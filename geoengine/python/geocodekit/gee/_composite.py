@@ -49,7 +49,12 @@ def composite(images, region, dates=None, method=None, mask=True, min_coverage=0
         centre = chosen.filterBounds(region.centroid(1))
         source = ee.Image(ee.Algorithms.If(centre.size().gt(0), centre.first(), chosen.first()))
         grid = source.gd.projection()
-        made = chosen.gd.composite(method=method, mask=mask, region=region, **json.loads(counts["masking"] or "{}"))
+        # The region orders the images by their cover of it, a reduction of each image: only a mosaic, geedim's choice
+        # for a collection it cannot mask, depends on the order.
+        ordered = method == "mosaic" or (method is None and not chosen.gd.cloudSupport)
+        made = chosen.gd.composite(
+            method=method, mask=mask, region=region if ordered else None, **json.loads(counts["masking"] or "{}")
+        )
         bands = made.bandNames().removeAll(MASK_BANDS)
         # Each band on its own grid in the source image, as Sentinel-2's B11 at 20 m beside B2 at 10 m.
         gridded = bands.map(lambda band: made.select([band]).setDefaultProjection(source.select([band]).projection()))
@@ -58,7 +63,10 @@ def composite(images, region, dates=None, method=None, mask=True, min_coverage=0
 
         # unmask() keeps an image's footprint, so only the maximum, which has none, is unmasked outside every image.
         reached = chosen.map(lambda image: image.select(0).mask()).max().unmask(0).gt(0)
-        covered = made.select(0).mask().unmask(0).gt(0)
+        # Where any image has data once masked, which is where every method's composite has it: the composite's own mask
+        # would have Earth Engine make the whole composite to measure it, out of memory over a large region.
+        kept = chosen.gd.maskClouds() if mask else chosen
+        covered = kept.map(lambda image: image.select(0).mask()).max().unmask(0).gt(0)
         holes = {"none": reached.Not(), "cloud": reached.And(covered.Not())}
         # At Earth Engine's default tile size, a summer of Sentinel-2 composited by q-mosaic runs out of memory.
         measure = dict(
