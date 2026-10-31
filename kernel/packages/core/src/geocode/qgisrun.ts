@@ -40,7 +40,7 @@ export const Input = Schema.Struct({
     description: "A short 3-5 word label for this step, in the user's language, displayed to the user",
   }),
   timeout: Schema.optionalKey(Schema.Number).annotate({
-    description: `Timeout in seconds (default: ${DEFAULT_TIMEOUT}, minimum: ${MIN_TIMEOUT}). Raise it for large datasets, heavy computation, and gdal: algorithms on large data`,
+    description: `How long, in seconds, the run may go without any message from QGIS (default: ${DEFAULT_TIMEOUT}, minimum: ${MIN_TIMEOUT}). Raise it for large data, and most for gdal: algorithms, which often report nothing until they end`,
   }),
 })
 
