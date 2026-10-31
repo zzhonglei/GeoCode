@@ -66,6 +66,7 @@ describe("GeoCode: geerun's row", () => {
   // run.
   test('a background run without its notification runs only while the list of runs has its session', () => {
     expect(geeRunView(backgrounded(), undefined, true, 'en').running).toBe(true);
-    expect(geeRunView(backgrounded(), undefined, false, 'en')).toMatchObject({ running: false, bad: false });
+    // Guards against its time counting on once it no longer runs, which a row without an end does.
+    expect(geeRunView(backgrounded(), undefined, false, 'en')).toMatchObject({ running: false, bad: false, start: 1000, end: 1500 });
   });
 });

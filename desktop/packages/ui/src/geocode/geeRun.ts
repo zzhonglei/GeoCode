@@ -99,11 +99,11 @@ export const geeRunView = (part: ToolPart, notice: SyntheticMessage | undefined,
   // A notice the app gave on starting again has no end, as nothing saw the run stop: the row shows no time rather than
   // one counting while the app was shut.
   const start = endNotice && endNotice.ended === undefined ? undefined : (endNotice?.started ?? metadata?.started);
-  // A run in the background with no notice has no known end, as upstream's background shell row shows it.
-  const end =
-    running || (background && !endNotice)
-      ? undefined
-      : endNotice
+  // A run in the background that no longer runs but no notice ended, as a fork's copy, shows the call's own time, as
+  // upstream's background shell row does when it knows neither.
+  const end = running
+    ? undefined
+    : endNotice
         ? endNotice.ended
         : 'time' in state && 'end' in state.time
           ? state.time.end
