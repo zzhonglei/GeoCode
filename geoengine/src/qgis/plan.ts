@@ -291,13 +291,17 @@ export const plan = (
   }
 }
 
-/** Makes the output folders that are not there: some algorithms, as gdal:retile, fail on one, as a numbered one is. */
+/**
+ * Makes the output folders that are not there, and the folders output files go into: some algorithms, as gdal:retile,
+ * fail on a missing output folder, as a numbered one is, and QGIS makes none for a file it writes.
+ */
 export const folders = (found: readonly Slot[]) =>
   Promise.all(
     found
-      .filter((slot) => slot.parameter.type === "folderDestination")
+      .filter((slot) => slot.parameter.destination)
+      .map((slot) => (slot.parameter.type === "folderDestination" ? slot.file : path.dirname(slot.file)))
       // One that cannot be made, the algorithm reports.
-      .map((slot) => fsp.mkdir(slot.file, { recursive: true }).catch(() => {})),
+      .map((folder) => fsp.mkdir(folder, { recursive: true }).catch(() => {})),
   )
 
 /** Which of the files a run's outputs make are there already, before it runs. */
