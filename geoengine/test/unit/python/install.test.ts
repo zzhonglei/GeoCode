@@ -105,6 +105,37 @@ test(
   },
 )
 
+test("a working environment whose making was cut short is made again", { skip: !python3 }, async () => {
+  const directory = await temporary()
+  try {
+    const where = Environment.layout(path.join(directory, "data"))
+    const bundled = await bundle(directory, "one")
+    await settle(directory, bundled)
+    // As venv leaves one stopped before its last step: the interpreter there, the base's packages not yet seen.
+    const config = path.join(where.env, "pyvenv.cfg")
+    await fs.writeFile(
+      config,
+      (await fs.readFile(config, "utf-8")).replace(
+        "include-system-site-packages = true",
+        "include-system-site-packages = false",
+      ),
+    )
+
+    const { last, states } = await settle(directory, bundled)
+    assert.equal(last.status, "ready")
+    assert.deepEqual([...new Set(steps(states))], ["creating", "warming"])
+    // Guards against handing GeoAgent a working environment that imports none of the preinstalled packages.
+    const seen = execFileSync(
+      where.envPython,
+      ["-c", "import site, sys; print(any(p.startswith(sys.base_prefix) for p in site.getsitepackages()))"],
+      { encoding: "utf-8" },
+    )
+    assert.equal(seen.trim(), "True")
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
 test("a new bundle replaces the base environment and the working one made from it", { skip: !python3 }, async () => {
   const directory = await temporary()
   try {

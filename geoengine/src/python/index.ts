@@ -382,7 +382,7 @@ export const capability = (places: Places): Engine.Capability =>
       if (installing) yield* install(bundle)
       // At every start, installed now or before; a base without them is not one this GeoCode can use.
       yield* attempt("files", () => update(where, bundle.python))
-      const creating = !fs.existsSync(where.envPython)
+      const creating = !(yield* Effect.promise(() => made(where)))
       if (creating) yield* create()
       // Before ready, so nothing that waits for it meets a library loaded for the first time.
       yield* warm(installing || creating)
@@ -455,6 +455,15 @@ async function installed(where: ReturnType<typeof layout>, id: string) {
   const marker = text === undefined ? undefined : decodeMarker(text)
   if (marker === undefined || Exit.isFailure(marker)) return false
   return marker.value.id === id && fs.existsSync(where.basePython)
+}
+
+/**
+ * The working environment was made to the end: venv writes the line that lets it see the base environment's packages
+ * last, after its interpreter, so one cut short has an interpreter that imports none of them.
+ */
+async function made(where: ReturnType<typeof layout>) {
+  const config = await fsp.readFile(path.join(where.env, "pyvenv.cfg"), "utf-8").catch(() => "")
+  return /^include-system-site-packages = true\r?$/m.test(config) && fs.existsSync(where.envPython)
 }
 
 /**
