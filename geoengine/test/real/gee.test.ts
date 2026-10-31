@@ -205,6 +205,24 @@ test("a composite that leaves part of the region uncovered stops the run", { ski
   }
 })
 
+// Guards against measuring a large region's acquisitions past what Earth Engine allows one request, in memory or in
+// concurrent aggregations: a month of Sentinel-2 over Taiwan has up to 25 images an acquisition.
+test("the acquisitions over a region the size of Taiwan are measured", { skip: LIVE }, async () => {
+  const engine = await start(PROJECT, [], undefined, await realBase())
+  try {
+    assert.equal((await engine.settled(CHECKED)).status, "ready")
+    const script = [
+      "import geocodekit.gee as gee",
+      "region = ee.Geometry.Rectangle([119.9, 21.85, 122.05, 25.35])",
+      'gee.images("COPERNICUS/S2_SR_HARMONIZED", region, "2024-10-01", "2024-11-01")',
+    ].join("\n")
+    const done = result(await engine.response(engine.send({ script, cwd: engine.directory }), COMPOSED))
+    assert.equal(done.outcome, "finished", done.output)
+  } finally {
+    await engine.stop()
+  }
+})
+
 /**
  * A proxy on this computer that passes every tunnel on, noting who asked for it: aiohttp, as geedim uses it, names
  * itself, and requests does not.

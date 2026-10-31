@@ -11,6 +11,9 @@ from geocodekit.gee import _run
 MOST_ROWS = 40
 # Acquisitions measured in one request: a year of Sentinel-2 at once runs out of Earth Engine's memory.
 BATCH = 20
+# Pixels an acquisition is measured on at most, on a coarser grid past them: the shares need only be roughly right, and
+# a large region measured on the images' own grid runs past Earth Engine's limits.
+MOST_PIXELS = 1e5
 CLOUD_SCORE = "GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"
 # The collection's property holding the masking arguments it was measured with, as JSON.
 MASKING = "GEOCODE_MASKING"
@@ -53,13 +56,15 @@ def images(collection, region, start, end, **masking):
         marked = found.gd.addMaskBands(**masking).map(keyed)
         grid = marked.first().select(0).projection()
 
-        def row(key, near):
-            group = near.filter(ee.Filter.eq("acquisition", key))
+        def row(key):
+            # Its own day first: picking each acquisition out of all the images of its batch runs out of memory.
+            day = ee.Date(ee.String(key).slice(0, 10))
+            group = marked.filterDate(day, day.advance(1, "day")).filter(ee.Filter.eq("acquisition", key))
             bands = ["FILL_MASK", "CLOUDLESS_MASK"] if clouds else ["FILL_MASK"]
             masks = group.select(bands).map(lambda image: image.unmask(0)).max()
             # As geedim's regionCoverage: over the whole region, not only the part of it the images cover.
             sums = ee.Image.cat(masks, ee.Image(1).rename("REGION")).reduceRegion(
-                ee.Reducer.sum(), region, crs=grid, scale=grid.nominalScale(), bestEffort=True, maxPixels=1e6
+                ee.Reducer.sum(), region, crs=grid, scale=grid.nominalScale(), bestEffort=True, maxPixels=MOST_PIXELS
             )
             values = {"key": key, "images": group.size(), "region": sums.get("REGION"), "fill": sums.get("FILL_MASK")}
             if clouds:
@@ -79,9 +84,7 @@ def images(collection, region, start, end, **masking):
         _tool.update("Measuring %s over the region" % _run.plural(len(keys), "acquisition"), 0)
         for first in range(0, len(keys), BATCH):
             batch = keys[first : first + BATCH]
-            # The batch's own days: picking each acquisition out of a whole year's images also runs out of memory.
-            near = marked.filterDate(batch[0][:10], ee.Date(batch[-1][:10]).advance(1, "day"))
-            measured = ee.FeatureCollection(ee.List(batch).map(lambda key: row(key, near))).getInfo()
+            measured = ee.FeatureCollection(ee.List(batch).map(row)).getInfo()
             rows += [feature["properties"] for feature in measured["features"]]
             _tool.update(progress=len(rows) / len(keys))
 
