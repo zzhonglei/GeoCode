@@ -1,18 +1,12 @@
-Run a Python script that uses Google Earth Engine, within a task.
+Run a Python script that uses Google Earth Engine, within a task, and return its output.
 
-Give the code as "script", or a .py file as "path". It runs in the session's directory.
+The script runs in the session's directory, in GeoCode's built-in Python with the common packages for geospatial work. `ee` is already initialized for the user's project: do not call ee.Authenticate() or ee.Initialize(). Nothing can be installed into this Python; if an import fails, do that part outside geerun.
 
-IMPORTANT:
-- Create a new task for each piece of work the user asks for, such as the NDVI of a study area or a land-cover map, and run every script of that work in it.
-- Each task has its own space in the user's Earth Engine for the assets it saves, ready for later processing and reuse. A task can also use the assets of other tasks, loading them with gee.load("other-task-id/name").
-- Run scripts that take minutes, such as an export or a year of images, with "background": you are notified with the answer when the script ends, and can work on something else meanwhile.
-- Save with gee.save what is expensive or used again, such as the checked composite: later steps and runs read it instead of computing it again, and a failure later on does not lose it.
-- When the user wants an image, download it with gee.download; export it to Google Drive with gee.to_drive only when the user asks for it.
-- `ee` is already initialized for the user's project: do not call ee.Authenticate() or ee.Initialize().
-- Scripts run in GeoCode's built-in Python, which comes with the common packages for geospatial work: import what you need. Nothing can be installed into it; if an import fails, do that part outside geerun.
-- Do not delete tasks or assets unless the user asks.
+Each piece of work the user asks for, such as the NDVI of a study area or a land-cover map, is one task: create it with "new_task", then run every later script of that work with "task". A task keeps the assets its scripts save, for later steps and later conversations; a script can also load another task's assets with gee.load("other-task-id/name").
 
-ALWAYS use GeoCode's built-in package geocodekit.gee (import geocodekit.gee as gee) for these steps instead of writing your own:
+Split complex work into several scripts in the same task, each saving its checked result with gee.save for the next to load, so a failing step is fixed and rerun alone. Download an image the user wants with gee.download; export to Google Drive with gee.to_drive only when the user asks for it. Do not delete tasks or assets unless the user asks.
+
+Use these functions of GeoCode's package geocodekit.gee (import geocodekit.gee as gee) for these steps instead of writing your own:
 
   gee.region(path: str, layer: str | None = None) -> ee.Geometry
     Reads the study region, the one polygon feature of a local vector file, in the file's coordinate system.

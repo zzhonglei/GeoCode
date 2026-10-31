@@ -39,11 +39,11 @@ export const Input = Schema.Struct({
       'Path to a .py file to run, absolute or relative to the session\'s directory. Use this or "script", not both.',
   }),
   description: Schema.String.annotate({
-    description: "Short label for this run, 3-5 words in the user's language, shown to the user",
+    description: "A short 3-5 word label for this run, in the user's language, displayed to the user",
   }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
-      "Run the script in the background and return once it starts (useful for exports and long computations). You will be notified with its answer when it ends. DO NOT sleep or poll for it.",
+      "Run the script in the background and return once it starts, for scripts that take minutes, such as an export or a year of images. You will be notified with its answer when it ends. DO NOT sleep or poll for it.",
   }),
 })
 
