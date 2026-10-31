@@ -26,7 +26,6 @@ const PLATFORM = process.platform === "darwin" ? Macos : process.platform === "w
 export interface Guide {
   readonly FINDING: string
   readonly CONFIGURED: string
-  readonly NO_PYTHON: string
 }
 
 /** Generous: the probe only has to finish, and a first start from a cold disk is slow. */
@@ -215,15 +214,13 @@ const RECHECKED: ReadonlySet<State["status"]> = new Set([
 ])
 
 const SYMPTOMS = {
+  "python-missing": "it cannot start its Python",
   "gdal-missing": "its Python cannot load GDAL",
   "proj-broken": "it cannot transform coordinates, so its projection data is missing or broken",
   "core-missing": "its Python cannot load QGIS itself",
   "processing-failed": "its Processing framework does not start, so no algorithm can run",
   "probe-failed": "it failed while being checked",
 } as const
-
-/** Lines of the check's output GeoAgent is given when QGIS does not work. */
-const PRINTED_LINES = 20
 
 const failed = (status: Failed, diagnostics: Diagnostics): State => ({ status, diagnostics })
 
@@ -592,8 +589,8 @@ function cancelled(signal: AbortSignal) {
 }
 
 /**
- * What GeoAgent is told when QGIS is not ready: the facts, and how to set QGIS up itself when it can. The settings page
- * is the user's way and is not mentioned.
+ * What GeoAgent is told when QGIS is not ready: the facts, and how to set QGIS up itself when it can. Nothing of what the
+ * check printed: GeoAgent would try to repair QGIS. The settings page is the user's way and is not mentioned.
  */
 export function hint(state: Exclude<State, Ready>, file: string, guide: Guide | undefined = PLATFORM): string {
   if (state.status === "checking") return "QGIS is still being checked."
@@ -602,19 +599,10 @@ export function hint(state: Exclude<State, Ready>, file: string, guide: Guide | 
     return `${at} cannot be read: ${state.diagnostics.message}. No QGIS tool works until it is fixed; it is checked as soon as the file is saved.`
   }
   if (state.status === "platform-unsupported" || !guide) return "GeoCode cannot run QGIS on this operating system."
-  const configured = `Its configuration is in ${file}, ${guide.CONFIGURED}`
-  const write =
-    "Write its path to the file; QGIS is checked as soon as the file is saved. Then call qgisdoc to see whether QGIS is ready."
-  const forbidden =
-    "Do not install QGIS yourself, wrap it in a script, or run its Python: GeoCode sets up and checks QGIS from the path alone."
-  const setup = (opening: string) =>
-    [
-      opening,
-      configured,
-      `${guide.FINDING} If there is none, ask the user to install one from https://qgis.org/download/.`,
-      write,
-      forbidden,
-    ].join("\n")
+  const configured = `The QGIS to use is the "qgis" entry of ${file}: ${guide.CONFIGURED} It is checked as soon as the file is saved.`
+  const install = "Only the user can install QGIS, from https://qgis.org/download/."
+  const pathOnly = "GeoCode needs only the path; it sets up and checks QGIS itself."
+  const setup = (opening: string) => [opening, guide.FINDING, install, configured, pathOnly].join("\n")
   if (state.status === "unconfigured") return setup("QGIS is not configured.")
   const { diagnostics } = state
   const app = diagnostics.app ?? diagnostics.path
@@ -627,39 +615,20 @@ export function hint(state: Exclude<State, Ready>, file: string, guide: Guide | 
       choice.version ? `${choice.app} (${choice.version})` : choice.app,
     )
     return [
-      `The configured folder, ${diagnostics.folder ?? diagnostics.path}, holds more than one QGIS: ${choices.join(", ")}. Ask the user which to use, and write its folder.`,
+      `The configured folder, ${diagnostics.folder ?? diagnostics.path}, holds more than one QGIS: ${choices.join(", ")}. Which to use is the user's choice.`,
       configured,
-      write,
-      forbidden,
+      pathOnly,
     ].join("\n")
   }
   if (state.status === "probe-timeout") {
-    return [
-      `Checking the configured QGIS, ${app}, took longer than ${PROBE_TIMEOUT}, so the computer may be busy; it is checked again the next time a QGIS tool is called.`,
-      forbidden,
-    ].join("\n")
+    return `Checking the configured QGIS, ${app}, took longer than ${PROBE_TIMEOUT}; it is checked again the next time a QGIS tool is called.`
   }
   const named = diagnostics.version ? `${app} (${diagnostics.version})` : app
-  const last = (text: string) => text.split("\n").slice(-PRINTED_LINES).join("\n")
-  const output = diagnostics.output?.trim()
-  // Without output, a failed check has only GeoEngine's own message, which says what stopped it; the other failures'
-  // messages repeat the symptom.
-  const printed = output
-    ? [
-        diagnostics.interpreter ? `The check ran ${diagnostics.interpreter} and printed:` : "The check printed:",
-        last(output),
-      ]
-    : state.status === "probe-failed"
-      ? [`The check failed: ${last(diagnostics.message)}`]
-      : []
   return [
-    `The configured QGIS, ${named}, does not work: ${state.status === "python-missing" ? guide.NO_PYTHON : SYMPTOMS[state.status]}.`,
-    ...printed,
-    "Ask the user to reinstall QGIS from https://qgis.org/download/, or to use another QGIS on this computer; QGIS is checked again each time a QGIS tool is called. Do not try to repair QGIS.",
-    configured,
+    `The configured QGIS, ${named}, does not work: ${SYMPTOMS[state.status]}. The details are in the diagnostics of the QGIS indicator in GeoCode's title bar.`,
+    "Only the user can reinstall it, from https://qgis.org/download/; another QGIS on this computer can be configured instead. It is checked again each time a QGIS tool is called.",
     guide.FINDING,
-    write,
-    forbidden,
+    configured,
   ].join("\n")
 }
 

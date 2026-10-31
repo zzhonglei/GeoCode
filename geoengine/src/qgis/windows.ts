@@ -64,13 +64,10 @@ const PROGRAM = /^(qgis.*)-bin\.exe$/i
 
 /** How GeoAgent finds QGIS on this computer, for setting it up itself. */
 export const FINDING =
-  "Find QGIS on this computer: QGIS is usually installed in a folder such as C:\\Program Files\\QGIS 3.44.15 or C:\\OSGeo4W, on any drive; a QGIS folder has bin\\python-qgis*.bat. If there is more than one, ask the user which to use."
+  "QGIS is usually installed in a folder such as C:\\Program Files\\QGIS 3.44.15 or C:\\OSGeo4W, on any drive; a QGIS folder has bin\\python-qgis*.bat. Which of several to use is the user's choice."
 
-/** How GeoAgent writes the path into machine.json, after "Its configuration is in <file>, ". */
-export const CONFIGURED = 'as {"qgis": {"path": "<QGIS folder>"}}, with each backslash in the path written twice.'
-
-/** Why a QGIS without its launcher does not work, for GeoAgent. */
-export const NO_PYTHON = "it has no bin\\python-qgis*.bat to start its Python with"
+/** How GeoAgent writes the path into machine.json, after 'The QGIS to use is the "qgis" entry of <file>: '. */
+export const CONFIGURED = '{"qgis": {"path": "<QGIS folder>"}}, with each backslash in the path written twice.'
 
 /** Finds the QGIS a configured path points at or into, and QGIS's launcher for its Python. */
 export async function locate(configured: string, disk = DISK): Promise<Located> {

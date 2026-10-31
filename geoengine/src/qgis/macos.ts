@@ -58,13 +58,10 @@ export async function locate(configured: string): Promise<Located> {
 export const SPOTLIGHT_QUERY = "kMDItemCFBundleIdentifier == 'org.qgis.*'"
 
 /** How GeoAgent finds QGIS on this computer, for setting it up itself. */
-export const FINDING = `Find QGIS on this computer: QGIS apps are usually in /Applications or ~/Applications, and mdfind "${SPOTLIGHT_QUERY}" finds them anywhere. If there is more than one, ask the user which to use.`
+export const FINDING = `QGIS apps are usually in /Applications or ~/Applications; mdfind "${SPOTLIGHT_QUERY}" finds them anywhere. Which of several to use is the user's choice.`
 
-/** How GeoAgent writes the path into machine.json, after "Its configuration is in <file>, ". */
-export const CONFIGURED = 'as {"qgis": {"path": "<QGIS app>"}}.'
-
-/** Why a QGIS without its launcher does not work, for GeoAgent. */
-export const NO_PYTHON = "it has no Contents/MacOS/python to start its Python with"
+/** How GeoAgent writes the path into machine.json, after 'The QGIS to use is the "qgis" entry of <file>: '. */
+export const CONFIGURED = '{"qgis": {"path": "<QGIS app>"}}.'
 
 /**
  * The QGIS apps in the application folders and those Spotlight found, newest first. One under /Volumes, on a disk

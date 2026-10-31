@@ -44,7 +44,7 @@ const LINE_LIMIT = 64 * 1024
  */
 const PARTIAL = /^\..+\.\d+\.part$/
 
-const STILL_CHECKING = "Google Earth Engine is still being checked, which usually takes under a minute."
+const STILL_CHECKING = "Google Earth Engine is still being checked."
 
 /** Lines GeoAgent is given of what Google said. */
 const PRINTED_LINES = 20
