@@ -6,15 +6,11 @@ import { Deferred, Effect, Exit, Schema } from "effect"
 import type { FileAccess } from "../file-access.js"
 import { GeoEngine } from "./geoengine.js"
 import { GeoOutside } from "./outside.js"
+import DESCRIPTION from "./readgeodata.txt"
 
 export const name = "readgeodata"
 
-export const description = `Read geographic data: its layers, coordinate reference system, extent, fields and their values, sample features, and the exact statistics of raster bands. It reads anything GDAL can open, such as Shapefile, GeoPackage, GeoJSON, KML, GML, a File Geodatabase folder (.gdb), GeoTIFF, NetCDF and HDF.
-
-- A file with several layers is answered with a list of them; read one with "layer".
-- Features come a few at a time; read on with "offset" and "limit".
-- A Shapefile that does not declare its text encoding is read in the encoding detected; if its text looks garbled, set "encoding".
-- With "preview", a raster is answered with a picture of it instead of its description. Read the description first, and preview only when seeing the data helps.`
+export const description = DESCRIPTION
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))
 

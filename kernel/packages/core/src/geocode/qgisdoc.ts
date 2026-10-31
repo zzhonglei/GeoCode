@@ -5,18 +5,11 @@ import type { Tool } from "@opencode/schema/tool"
 import { Effect, Exit, Schema } from "effect"
 import type { Permission } from "../permission.js"
 import { GeoEngine } from "./geoengine.js"
+import DESCRIPTION from "./qgisdoc.txt"
 
 export const name = "qgisdoc"
 
-export const description = `Read the documentation of QGIS Processing algorithms.
-
-Actions:
-- groups: list the algorithm groups, each with how many algorithms it holds.
-- algorithms: list the algorithms in one group, each with its ID, name and a one-line summary. Requires "group".
-- help: read one algorithm's documentation: every parameter with its type, default and acceptable values, and the outputs. Requires "algorithm".
-- search: find algorithms by English keywords, best matches first (at most 10, with the total count). Requires "query". Use it when you do not know an algorithm's ID.
-
-If an algorithm's documentation leaves something unclear, read the official QGIS page linked at its end with webfetch.`
+export const description = DESCRIPTION
 
 export const Input = Schema.Struct({
   action: Schema.Literals(["groups", "algorithms", "help", "search"]).annotate({

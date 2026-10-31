@@ -9,21 +9,11 @@ import type { Permission } from "../permission.js"
 import { GeoAnswer } from "./answer.js"
 import { GeoEngine } from "./geoengine.js"
 import { GeoRunActivity } from "./run-activity.js"
+import DESCRIPTION from "./qgisrun.txt"
 
 export const name = "qgisrun"
 
-export const description = `Run a QGIS Processing algorithm.
-
-- Read the algorithm's documentation with qgisdoc (action "help") before running it. Parameter names, types and defaults differ between algorithms and between QGIS versions.
-- QGIS runs here without its interface or a project, so there are no map layouts and no open layers to refer to. Give inputs and outputs as files: results written to "memory:" or TEMPORARY_OUTPUT are lost when the run ends.
-- In a multi-step workflow, reduce the data first (clip, filter), then run the expensive steps (joins, classification).
-- For layers with many features, such as POIs or grids, use .gpkg for inputs and outputs; it is much faster. Otherwise prefer .shp or .geojson.
-- GeoJSON output MUST be in WGS 84 (EPSG:4326), as the GeoJSON standard requires; never write it in another CRS.
-
-Coordinate reference systems:
-- QGIS does not check whether the input's CRS suits the algorithm, and qgisdoc often does not say which one it needs. Before running, decide whether the data must be in a projected CRS (metres or feet) or may stay in a geographic CRS (degrees).
-- An algorithm that takes or produces distances or areas, such as buffers, lengths, densities or slopes, MUST run on projected data. On geographic data a distance is read in degrees: a 500 m buffer becomes 500 degrees.
-- Reproject first, with native:reprojectlayer for vectors or gdal:warpreproject for rasters.`
+export const description = DESCRIPTION
 
 const DEFAULT_TIMEOUT = 60
 const MIN_TIMEOUT = 10
