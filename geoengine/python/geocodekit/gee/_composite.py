@@ -116,7 +116,7 @@ def composite(images, region, dates=None, method=None, mask=True, min_coverage=0
             100 * share["covered"],
             min_coverage,
         )
-        tail = "To fill it, %s; or lower min_coverage=." % "; ".join(fixes[name] for name in left)
+        tail = "To fill it, %s; or lower min_coverage." % "; ".join(fixes[name] for name in left)
         raise ValueError("\n".join([head] + lines + [tail]))
 
 

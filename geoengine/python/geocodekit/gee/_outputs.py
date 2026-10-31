@@ -72,10 +72,10 @@ def measured(image, grid):
 
 
 def download(image, path, **grid):
-    """Downloads an ee.Image to the GeoTIFF at path, relative to the workspace: numbered ("ndvi_1.tif") when that file
-    exists, and in the workspace itself when its folder does not. The image is downloaded within its bounds, so clip it
-    first, on its own grid unless crs, crs_transform, shape or scale give another; geedim's other prepareForExport
-    arguments, such as dtype or bands, apply too. Returns the path it saved to."""
+    """Downloads an ee.Image to the GeoTIFF at path, relative to the session's directory: numbered ("ndvi_1.tif") when
+    that file exists, and in the session's directory itself when its folder does not. The image is downloaded within its
+    bounds, so clip it first, on its own grid unless crs, crs_transform, shape or scale give another; geedim's other
+    prepareForExport arguments, such as dtype or bands, apply too. Returns the path it saved to."""
     target, notes = destination(path)
     folder, name = os.path.split(target)
     with _tool.stage("Preparing %s" % name):
@@ -145,7 +145,7 @@ def to_drive(image, name, folder="GeoCode", **grid):
         # The name Earth Engine's task list shows; it takes only these characters.
         label = re.sub(r"[^A-Za-z0-9.,:;_-]", "_", name)[:100]
         task = ready.gd.toGoogleCloud(name, type="drive", folder=folder, wait=False, description=label, maxPixels=1e13)
-        print("Exporting %s to Google Drive (export ID %s); waiting for it." % (name, task.id))
+        print("Exporting %s to Google Drive; waiting for it." % name)
         started = time.monotonic()
         error = failure(task.operation_name)
     if error is not None:
@@ -184,7 +184,7 @@ def destination(path):
     if os.path.isdir(folder):
         return target, []
     moved = os.path.join(os.getcwd(), os.path.basename(target))
-    return moved, ["There is no folder %s, so the file was saved in the workspace." % _files.shown(folder)]
+    return moved, ["There is no folder %s, so the file was saved in the session's directory." % _files.shown(folder)]
 
 
 def figure(value):

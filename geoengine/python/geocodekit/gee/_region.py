@@ -60,8 +60,8 @@ def region(path, layer=None):
         vertices = shapely.get_num_coordinates(geometry)
         if vertices > MOST_VERTICES:
             raise ValueError(
-                "The polygon in %s has %d vertices; a region has at most %d, since every request that uses it carries"
-                " all of them. Simplify it in QGIS with native:simplifygeometries first."
+                "The polygon in %s has %d vertices; a region has at most %d. Simplify it in QGIS with"
+                " native:simplifygeometries first."
                 % (name, vertices, MOST_VERTICES)
             )
         geometry = shapely.force_2d(geometry)

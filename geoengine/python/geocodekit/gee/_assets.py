@@ -223,7 +223,7 @@ def save(data, name, *, title, description, **grid):
             # Refused as it was submitted, as when a source asset is missing.
             remove_empty(made)
             raise
-        print("Exporting %s (export ID %s); waiting for it." % (name, export.id))
+        print("Exporting %s; waiting for it." % name)
         return finish(export.operation_name, path, name, made, "Exporting %s to the task" % name)
 
 
