@@ -289,7 +289,7 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
       if (ran === undefined)
         return answer(
           "timeout",
-          `Stopped after ${GeoAnswer.seconds(now() - started)}, with no progress for the last ${limit()} s.`,
+          `Stopped after ${GeoAnswer.seconds(now() - started)}, with no message from QGIS for the last ${limit()} s; the output files it created were removed.`,
         )
       if (Exit.isSuccess(ran)) {
         const decoded = decodeEnding(ran.value)
