@@ -26,12 +26,14 @@ MASK_BANDS = [
 
 
 def composite(images, region, dates=None, method=None, mask=True, min_coverage=0.999):
-    """Composites the images as geedim does, masking their clouds as gee.images measured them unless mask is False and
-    ordering them by the cloud-free share of their cover of the region; "dates" keeps only those of the given days
-    ("2024-06-07") or acquisitions ("2024-06-07 Sentinel-2B R108"). Prints the share of the region the composite's
-    first band covers and, of the rest, where no image reaches and where every image is masked, and stops when it
-    covers less than min_coverage. Returns the composite of the dataset's own bands, not clipped, each band on its grid
-    in the image at the region's centre."""
+    """Composites the images as geedim does, masking their clouds as gee.images measured them unless mask is False;
+    "dates" keeps only those of the given days ("2024-06-07") or acquisitions ("2024-06-07 Sentinel-2B R108").
+    "method" is how each pixel is chosen: "q-mosaic", from the image farthest from cloud, the default for a dataset
+    whose clouds can be masked; "mosaic", from the image that covers the region best, the default otherwise; or the
+    "median", "mean", "mode" or "medoid" of the images. Prints the share of the region the composite's first band covers
+    and, of the rest, where no image reaches and where every image is masked, and stops when it covers less than
+    min_coverage. Returns the composite of the dataset's own bands, not clipped, each band on its grid in the image at
+    the region's centre."""
     with _tool.stage("Compositing the images"):
         _run.geedim()
         if isinstance(dates, str):
