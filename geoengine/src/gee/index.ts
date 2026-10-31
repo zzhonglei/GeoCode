@@ -720,7 +720,8 @@ function execute(
       return
     }
     begun[stream] = true
-    if (stream === "stdout") context.progress({ begun: true })
+    // With the answer's header, which a run in the background gives as it begins.
+    if (stream === "stdout") context.progress({ begun: true, python: { version: python.version }, space })
   }
 
   // Each stream breaks into lines of its own: a line one leaves unfinished is not finished by the other.
@@ -796,10 +797,9 @@ function execute(
             })
           }
           if (missing !== undefined) {
-            const latest = missing.length ? `; the latest tasks are ${missing.join(", ")}` : "; there are no tasks yet"
             return yield* new Engine.Failure({
               code: "task-missing",
-              message: `There is no task ${params.task.name}: it has saved nothing in GeoCode's folder, and this conversation did not start it${latest}`,
+              message: `There is no task ${params.task.name}`,
               details: { latest: missing },
             })
           }

@@ -85,6 +85,7 @@ const Ran = Schema.Struct({
 const decodeRan = Schema.decodeUnknownExit(Ran)
 const decodeSpace = Schema.decodeUnknownExit(Space)
 const decodeStarted = Schema.decodeUnknownExit(Schema.Array(Schema.String))
+const decodeMissing = Schema.decodeUnknownExit(Schema.Struct({ latest: Schema.Array(Schema.String) }))
 
 /** What GeoAgent reads when the script did not run; an environment that is not ready comes with what to do about it. */
 const failureMessage = (failure: GeoEngine.Failure) => {
@@ -92,12 +93,17 @@ const failureMessage = (failure: GeoEngine.Failure) => {
   if (failure.code === "invalid-params") return `${failure.message}, so the script did not run.`
   // Its error is for the log: GeoAgent would try to fix what only GeoCode or Google can.
   if (failure.code === "initialize-failed") return "Earth Engine could not be initialized, so the script did not run."
+  // Its error is for the log, as an initialization's is.
   if (failure.code === "space-failed")
-    return `GeoCode could not read its folder of Earth Engine assets, so the script did not run: ${failure.message}`
+    return "GeoCode could not read its folder of Earth Engine assets, so the script did not run."
   if (failure.code === "task-taken")
     return `${failure.message}, so the script did not run. Continue it with "task", or give "new_task" another ID.`
-  if (failure.code === "task-missing")
-    return `${failure.message}, so the script did not run. Start it with "new_task", or check the ID.`
+  if (failure.code === "task-missing") {
+    const found = decodeMissing(failure.details)
+    const latest = Exit.isSuccess(found) && found.value.latest.length ? found.value.latest : undefined
+    const others = latest ? `the latest tasks are ${latest.join(", ")}` : "there are no tasks yet"
+    return `${failure.message}, so the script did not run; ${others}. Start a task with "new_task", or check the ID.`
+  }
   if (failure.code === "task-busy")
     return `${failure.message}, perhaps in another conversation, so the script did not run. Run it again after that call ends.`
   return "Google Earth Engine is not available right now; restarting GeoCode may fix it."
@@ -157,6 +163,23 @@ const header = (python: string, task: { readonly name: string; readonly new: boo
     "\n",
   )
 }
+
+/**
+ * The header from what GeoEngine read before the script began: the Python alone when the task was not read, or was not
+ * read right.
+ */
+const headerOf = (
+  python: (typeof Ran.Type)["python"],
+  task: { readonly name: string; readonly new: boolean },
+  raw: unknown,
+) =>
+  Effect.gen(function* () {
+    if (raw === undefined) return pythonLine(python)
+    const space = decodeSpace(raw)
+    if (Exit.isSuccess(space)) return header(pythonLine(python), task, space.value)
+    yield* Effect.logWarning("geerun header unreadable", { cause: space.cause })
+    return pythonLine(python)
+  })
 
 /** The most of the kernel's bounds on an answer the header takes, leaving the rest to what the script printed. */
 const HEADER_LINES = 200
@@ -222,7 +245,11 @@ type Status = typeof Status.Type
  */
 const decodeProgress = Schema.decodeUnknownExit(
   Schema.Union([
-    Schema.Struct({ begun: Schema.Literal(true) }),
+    Schema.Struct({
+      begun: Schema.Literal(true),
+      python: Schema.Struct({ version: Schema.String }),
+      space: Schema.optionalKey(Schema.Unknown),
+    }),
     Schema.Struct({ waiting: Schema.Number }),
     Schema.Struct({ status: Status }),
     Schema.Struct({ output: Schema.String }),
@@ -248,7 +275,7 @@ const WAIT_SHOWN_MS = 1000
 type Recovery = Extract<Job.Recovery, { kind: "geerun" }>
 
 const backgroundAnswer = (task: string) =>
-  `Task ${task} is running in the background. You will be notified with its answer when the run ends. DO NOT sleep, poll, or run task ${task} again before then. Work on something else, or tell the user what is running and end your response.`
+  `Task ${task} is running in the background. When the run ends, you will be notified with what the script printed and how it ended, and resumed. DO NOT sleep, poll, or run task ${task} again before then; if nothing else is left to do, end your response.`
 
 const RESTARTED =
   "The run was stopped because GeoCode restarted. Assets its exports already saved, or still save, stay in the task."
@@ -315,7 +342,21 @@ export const make = (
   bus: Pick<Bus.Interface, "publish">,
   runs: GeeRunJob.Interface,
 ) => {
-  /** The answer a run gave, from the script's output and the task GeoEngine read before it. */
+  /**
+   * Once the run got past the task's checks, which its header says, the task exists in this conversation, whether or not
+   * its script worked. Read again: another call in the conversation may have started a task meanwhile.
+   */
+  const remember = Effect.fnUntraced(function* (task: { readonly name: string; readonly new: boolean }, key: string) {
+    if (!task.new) return
+    const now = decodeStarted(yield* storage.get(key))
+    const known = Exit.isSuccess(now) ? now.value : []
+    if (!known.includes(task.name)) yield* storage.set(key, [...known, task.name])
+  })
+
+  /**
+   * The answer a run gave, from the script's output and the task GeoEngine read before it; and its body, without the
+   * header, for a run in the background whose header went with the call's answer.
+   */
   const answer = Effect.fnUntraced(function* (
     result: unknown,
     task: { readonly name: string; readonly new: boolean },
@@ -328,30 +369,22 @@ export const make = (
       return yield* failed(new GeoEngine.Failure({ code: "unreadable", message: String(decoded.cause) }))
     }
     const ran = decoded.value
-    // Once the run got past the task's checks, which its header says, the task exists in this conversation, whether or
-    // not its script worked. Read again: another call in the conversation may have started a task meanwhile.
-    if (task.new && ran.space !== undefined) {
-      const now = decodeStarted(yield* storage.get(key))
-      const known = Exit.isSuccess(now) ? now.value : []
-      if (!known.includes(task.name)) yield* storage.set(key, [...known, task.name])
-    }
-    const space = ran.space === undefined ? undefined : decodeSpace(ran.space)
-    if (space && Exit.isFailure(space)) yield* Effect.logWarning("geerun header unreadable", { cause: space.cause })
-    const python = pythonLine(ran.python)
-    const opening = space && Exit.isSuccess(space) ? header(python, task, space.value) : python
-    const used = { lines: opening.split("\n").length, bytes: Buffer.byteLength(opening, "utf-8") }
+    if (ran.space !== undefined) yield* remember(task, key)
+    const head = yield* headerOf(ran.python, task, ran.space)
+    const used = { lines: head.split("\n").length, bytes: Buffer.byteLength(head, "utf-8") }
     const printed = ran.output.trimEnd()
     const whole = GeoAnswer.lastPart(printed, used)
     // Only output that does not fit loses its repeated lines, and loses them before it loses its start.
     const output = whole.cut ? GeoAnswer.lastPart(folded(printed), used) : whole
     const truncated = ran.truncated || output.cut
+    const body = [
+      ...(truncated ? [GeoAnswer.CUT] : []),
+      ...(output.text ? [output.text] : truncated ? [] : ["(The script printed nothing.)"]),
+      ending(ran),
+    ].join("\n\n")
     return {
-      content: [
-        ...(opening ? [opening] : []),
-        ...(truncated ? [GeoAnswer.CUT] : []),
-        ...(output.text ? [output.text] : truncated ? [] : ["(The script printed nothing.)"]),
-        ending(ran),
-      ].join("\n\n"),
+      content: `${head}\n\n${body}`,
+      body,
       // Set, so the kernel does not cut the answer again from its start. The tool row shows, once the run ends, how
       // long it took and what the script printed, as it did while the run went on.
       metadata: {
@@ -442,6 +475,10 @@ export const make = (
         let waiting: { readonly since: number; readonly heard: number; readonly long: boolean } | undefined
         // Once the script itself began: before, the row says it is starting.
         let scriptBegan = false
+        // What the header is made of, as GeoEngine told it when the script began.
+        let began: { readonly python: (typeof Ran.Type)["python"]; readonly space?: unknown } | undefined
+        // Once the call's answer, a run in the background's, held the header: its notification then holds only the rest.
+        let headed = false
         let shown = 0
         let changed = false
         // Once the call has returned, as a run in the background does, the kernel takes no more progress for it: the
@@ -480,8 +517,10 @@ export const make = (
             if (Exit.isFailure(decoded)) return Effect.void
             const told = decoded.value
             if (!("waiting" in told || "output" in told)) waiting = undefined
-            if ("begun" in told) scriptBegan = true
-            else if ("waiting" in told) {
+            if ("begun" in told) {
+              scriptBegan = true
+              began = told
+            } else if ("waiting" in told) {
               const now = Date.now()
               const start = waiting?.since ?? now - told.waiting * 1000
               const long = waiting?.long === true
@@ -524,7 +563,8 @@ export const make = (
           Effect.catch(failed),
           Effect.flatMap((result) => answer(result, task, key, input.description, since)),
           Effect.onExit((exit) => Deferred.done(settled, exit)),
-          Effect.map((answered) => answered.content),
+          // What a run in the background is told of with: once the script began, the call's answer had its header.
+          Effect.map((answered) => (headed ? answered.body : answered.content)),
         )
         const recovery = {
           kind: "geerun" as const,
@@ -551,6 +591,7 @@ export const make = (
         ).pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
         if (waited?.type === "begun" || waited?.type === "backgrounded") {
           returned = true
+          headed = began !== undefined
           // Settled before the job ends. A run that failed outright gave no answer: the row keeps what it last showed.
           const final = Deferred.await(settled).pipe(
             Effect.exit,
@@ -561,7 +602,11 @@ export const make = (
           )
           // Whole, or a stop just as the script begins would leave the run with no one to tell of it.
           yield* Effect.uninterruptible(runs.background(job.id, recovery, final, location))
-          return { content: backgroundAnswer(task.name), metadata: state() }
+          // The header now, as GeoEngine read it before the script began, rather than with the notification.
+          if (began === undefined) return { content: backgroundAnswer(task.name), metadata: state() }
+          if (began.space !== undefined) yield* remember(task, key)
+          const head = yield* headerOf(began.python, task, began.space)
+          return { content: `${head}\n\n${backgroundAnswer(task.name)}`, metadata: state() }
         }
         if (waited?.info.status === "cancelled") return yield* new ToolFailure({ message: "The run was cancelled." })
         return yield* Deferred.await(settled)

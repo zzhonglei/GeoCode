@@ -22,8 +22,10 @@ test(
       assert.equal(done.output, `中文 ${cwd}\n1\n`)
       assert.doesNotMatch(done.output, /Earth Engine|__GEOCODE_GEE__/)
       // Guards against the tool row's log losing or adding to what the answer has.
-      const [begun, ...printed] = engine.progress(id) as [unknown, ...{ output: string }[]]
-      assert.deepEqual(begun, { begun: true })
+      const [begun, ...printed] = engine.progress(id) as [Record<string, unknown>, ...{ output: string }[]]
+      // With the header, for a run in the background to answer with as it begins.
+      assert.deepEqual(begun, { begun: true, python: { version: "3.13.17" }, space: done.space })
+      assert.ok(done.space)
       assert.ok(printed.every((data) => Object.keys(data).join() === "output"))
       assert.equal(printed.map((data) => data.output).join(""), done.output)
     } finally {
@@ -75,7 +77,10 @@ test(
       // As earthengine-api raises a request's error, while handling the HTTP error.
       const refused = await run("ee.refuse(400, [], \"Image.select: Pattern 'B8' did not match any bands.\")\n")
       assert.doesNotMatch(refused, /During handling|HttpError/)
-      assert.match(refused, /^Traceback[^]*\nee\.ee_exception\.EEException: Image\.select: Pattern 'B8' did not match any bands\.\n$/)
+      assert.match(
+        refused,
+        /^Traceback[^]*\nee\.ee_exception\.EEException: Image\.select: Pattern 'B8' did not match any bands\.\n$/,
+      )
       // The script's own handling stays.
       const handled = await run("try:\n    1 / 0\nexcept ZeroDivisionError:\n    raise ValueError('no divisor')\n")
       assert.match(handled, /ZeroDivisionError[^]*During handling of the above exception[^]*ValueError: no divisor/)

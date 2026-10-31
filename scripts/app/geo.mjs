@@ -207,7 +207,7 @@ await check({ app, box, model, keep, credentials, reaches, ms: 600000 }, async (
     }
     record(
       'geerun in the background: its answer reaches the conversation',
-      // What the script printed, on a line of its own after the task's header.
+      // What the script printed, on a line of its own: the header went with the call's answer.
       notice.includes(inside('\n2\n')),
       notice.slice(0, 200),
     )

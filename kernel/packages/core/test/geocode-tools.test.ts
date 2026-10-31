@@ -881,6 +881,9 @@ const ran = (fields: Record<string, unknown> = {}) =>
     ...fields,
   })
 
+/** An asset of TASK's, as GeoEngine reads it. */
+const COMPOSITE = { name: "composite", type: "IMAGE", saved: "2026-10-08T06:05:00Z" }
+
 /** What GeoEngine read of TASK and GeoCode's folder before the script ran. */
 const space = (fields: Record<string, unknown> = {}) => ({
   assets: [],
@@ -1007,6 +1010,20 @@ describe("GeoCode: geerun", () => {
     }),
   )
 
+  // Guards against the latest tasks, which GeoEngine hands over apart from its message, not reaching GeoAgent.
+  it.effect("names the latest tasks when the task to continue is missing", () =>
+    Effect.gen(function* () {
+      reset()
+      const latest = ["hualien-flood-20261001", "taipei-ndvi-20261002"]
+      const error = { code: "task-missing", message: `There is no task ${TASK}`, details: { latest } }
+      answer = () => [JSON.stringify({ type: "result", ok: false, error })]
+      const missing = yield* executeTool(yield* Tool.Service, gee({ script: "x" }))
+      expect(missing.status).toBe("error")
+      const told = missing.status === "error" ? (missing.error?.message ?? "") : ""
+      for (const name of [TASK, ...latest]) expect(told).toContain(name)
+    }),
+  )
+
   it.effect("runs nothing when the user refuses", () =>
     Effect.gen(function* () {
       reset()
@@ -1081,7 +1098,7 @@ describe("GeoCode: geerun", () => {
           ? ran()
           : new ReadableStream({
               start: (controller) => {
-                controller.enqueue(new TextEncoder().encode(`${progress({ begun: true })}\n`))
+                controller.enqueue(new TextEncoder().encode(`${progress({ begun: true, python: PYTHON })}\n`))
                 end = () => {
                   controller.enqueue(new TextEncoder().encode(`${ran().join("\n")}\n`))
                   controller.close()
@@ -1098,6 +1115,35 @@ describe("GeoCode: geerun", () => {
     }),
   )
 
+  // Guards against a new task that has saved nothing being unknown to its conversation until the run ends: a restart
+  // before then would leave it impossible to continue.
+  it.live("in the background, keeps a new task in its conversation as soon as the script begins", () =>
+    Effect.gen(function* () {
+      reset()
+      const encoder = new TextEncoder()
+      let end = () => {}
+      answer = (body) =>
+        body.method !== "gee.run"
+          ? ran()
+          : new ReadableStream({
+              start: (controller) => {
+                controller.enqueue(encoder.encode(`${progress({ begun: true, python: PYTHON, space: space() })}\n`))
+                end = () => {
+                  controller.enqueue(encoder.encode(`${ran({ space: space() }).join("\n")}\n`))
+                  controller.close()
+                }
+              },
+            })
+      const name = "hualien-flood-20261008"
+      const started = gee({ description: "新任务", new_task: name, script: "x", background: true }, true)
+      expect((yield* executeTool(yield* Tool.Service, started)).status).toBe("completed")
+      expect(stored.get(`geerun/tasks/${sessionID}`)).toEqual([name])
+      noticed = yield* Deferred.make<void>()
+      end()
+      yield* Deferred.await(noticed)
+    }),
+  )
+
   it.live("in the background, returns once the script begins and tells the conversation the answer when it ends", () =>
     Effect.gen(function* () {
       reset()
@@ -1108,10 +1154,15 @@ describe("GeoCode: geerun", () => {
           ? ran()
           : new ReadableStream({
               start: (controller) => {
-                controller.enqueue(encoder.encode(`${progress({ begun: true })}\n`))
+                controller.enqueue(
+                  encoder.encode(
+                    `${progress({ begun: true, python: PYTHON, space: space({ assets: [COMPOSITE] }) })}\n`,
+                  ),
+                )
                 end = () => {
                   controller.enqueue(encoder.encode(`${progress({ output: "images: 73\n" })}\n`))
-                  controller.enqueue(encoder.encode(`${ran().join("\n")}\n`))
+                  // As GeoEngine ends a run: with the task's header too.
+                  controller.enqueue(encoder.encode(`${ran({ space: space({ assets: [COMPOSITE] }) }).join("\n")}\n`))
                   controller.close()
                 }
               },
@@ -1128,6 +1179,9 @@ describe("GeoCode: geerun", () => {
         status: "completed",
         metadata: { status: "running", started: expect.any(Number) },
       })
+      // The header as the script begins, rather than with the notification.
+      const receipt = running.content?.[0]
+      expect(receipt?.type === "text" ? receipt.text : "").toContain("composite")
       // Kept until the notification is in the conversation, so that a restart can still give it.
       expect(kv.size).toBe(1)
       noticed = yield* Deferred.make<void>()
@@ -1150,7 +1204,7 @@ describe("GeoCode: geerun", () => {
           // The interface takes the answer out of this envelope, by an opening tag it rebuilds from the same fields.
           text: expect.stringMatching(
             new RegExp(
-              `^<geerun task="${TASK}" state="completed" description="统计影像">\\n[\\s\\S]*images: 73[\\s\\S]*\\n</geerun>$`,
+              `^<geerun task="${TASK}" state="completed" description="统计影像">\\n(?![\\s\\S]*composite)[\\s\\S]*images: 73[\\s\\S]*\\n</geerun>$`,
             ),
           ),
           metadata: {
@@ -1186,7 +1240,7 @@ describe("GeoCode: geerun", () => {
           ? ran()
           : new ReadableStream({
               start: (controller) => {
-                controller.enqueue(encoder.encode(`${progress({ begun: true })}\n`))
+                controller.enqueue(encoder.encode(`${progress({ begun: true, python: PYTHON })}\n`))
                 end = () => {
                   const error = { code: "cancelled", message: "the run was cancelled" }
                   controller.enqueue(encoder.encode(`${JSON.stringify({ type: "result", ok: false, error })}\n`))
@@ -1215,7 +1269,7 @@ describe("GeoCode: geerun", () => {
           ? ran()
           : new ReadableStream({
               start: (controller) => {
-                controller.enqueue(encoder.encode(`${progress({ begun: true })}\n`))
+                controller.enqueue(encoder.encode(`${progress({ begun: true, python: PYTHON })}\n`))
                 end = () => {
                   controller.enqueue(encoder.encode(`${ran().join("\n")}\n`))
                   controller.close()
@@ -1242,7 +1296,7 @@ describe("GeoCode: geerun", () => {
           ? ran()
           : new ReadableStream({
               start: (controller) => {
-                controller.enqueue(encoder.encode(`${progress({ begun: true })}\n`))
+                controller.enqueue(encoder.encode(`${progress({ begun: true, python: PYTHON })}\n`))
                 end = () => {
                   controller.enqueue(encoder.encode(`${ran().join("\n")}\n`))
                   controller.close()
@@ -1276,7 +1330,8 @@ describe("GeoCode: geerun", () => {
         body.method !== "gee.run"
           ? ran()
           : new ReadableStream({
-              start: (controller) => controller.enqueue(encoder.encode(`${progress({ begun: true })}\n`)),
+              start: (controller) =>
+                controller.enqueue(encoder.encode(`${progress({ begun: true, python: PYTHON })}\n`)),
             })
       yield* executeTool(yield* Tool.Service, gee({ script: "x", description: "统计影像", background: true }))
       const [run] = Schema.decodeUnknownSync(GeeRunRpc.Snapshot)(yield* runsRpc!.list()).runs

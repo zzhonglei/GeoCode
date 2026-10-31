@@ -458,5 +458,12 @@ export const start = async (gee?: unknown, flags: readonly Flag[] = [], later?: 
 
 export const result = (response: Response) => {
   assert.ok(response.ok, JSON.stringify(response))
-  return response.result as { outcome: string; output: string; truncated: boolean; durationMs: number; exit?: string }
+  return response.result as {
+    outcome: string
+    output: string
+    truncated: boolean
+    durationMs: number
+    exit?: string
+    space?: unknown
+  }
 }
