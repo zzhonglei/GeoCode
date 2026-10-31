@@ -812,7 +812,6 @@ function execute(
             output: begun.stdout || begun.stderr ? output : noise,
             truncated,
             durationMs: result.durationMs,
-            // Its version alone: given the interpreter's path, GeoAgent could take the base environment for its work.
             python: { version: python.version },
             ...(space === undefined ? {} : { space }),
             ...(outcome === "crashed" ? { exit } : {}),
