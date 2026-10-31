@@ -26,10 +26,12 @@ export const Input = Schema.Struct({
     description: "How many features to show (default 3, at most 50)",
   }),
   encoding: Schema.optionalKey(Schema.String).annotate({
-    description: 'The text encoding of a Shapefile, such as "GBK", "Big5" or "CP1252", when the one detected is wrong',
+    description:
+      'The text encoding of a Shapefile, such as "CP1252", "GBK" or "Big5", when its text reads garbled in the encoding detected',
   }),
   preview: Schema.optionalKey(Schema.Boolean).annotate({
-    description: "Answer with a picture of a raster instead of its description",
+    description:
+      "Answer with a picture of a raster instead of its description. Read the description first; preview only when seeing the data helps",
   }),
   bands: Schema.optionalKey(Schema.Array(Count)).annotate({
     description: "For a preview: one band number to show in grey, or three to show as red, green and blue",
