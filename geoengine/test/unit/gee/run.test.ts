@@ -52,6 +52,40 @@ test("a failing script ends with its traceback, from its own lines", { skip: !py
 })
 
 test(
+  "a failing script's traceback leaves out the libraries' frames, and the errors raised and handled inside them",
+  { skip: !python3 },
+  async () => {
+    const engine = await start("majestic")
+    try {
+      assert.equal((await engine.settled()).status, "ready")
+      const run = async (script: string) => {
+        const done = result(await engine.response(engine.send({ script, cwd: engine.directory })))
+        assert.equal(done.outcome, "failed")
+        return done.output
+      }
+      // geocodekit's and the standard library's frames.
+      const misused = await run("import json\nimport geocodekit.gee as gee\njson.loads('{')\n")
+      assert.match(misused, /^Traceback \(most recent call last\):\n {2}File "<script>", line 3, in <module>\n/)
+      assert.match(misused, /JSONDecodeError/)
+      assert.doesNotMatch(misused, /json[/\\]decoder\.py|\.py", line/)
+      const loaded = await run("import geocodekit.gee as gee\ngee.load(3)\n")
+      assert.match(loaded, /File "<script>", line 2, in <module>\n {4}gee\.load\(3\)\n/)
+      assert.match(loaded, /TypeError: gee\.load takes an asset's name as a string/)
+      assert.doesNotMatch(loaded, /_assets\.py/)
+      // As earthengine-api raises a request's error, while handling the HTTP error.
+      const refused = await run("ee.refuse(400, [], \"Image.select: Pattern 'B8' did not match any bands.\")\n")
+      assert.doesNotMatch(refused, /During handling|HttpError/)
+      assert.match(refused, /^Traceback[^]*\nee\.ee_exception\.EEException: Image\.select: Pattern 'B8' did not match any bands\.\n$/)
+      // The script's own handling stays.
+      const handled = await run("try:\n    1 / 0\nexcept ZeroDivisionError:\n    raise ValueError('no divisor')\n")
+      assert.match(handled, /ZeroDivisionError[^]*During handling of the above exception[^]*ValueError: no divisor/)
+    } finally {
+      await engine.stop()
+    }
+  },
+)
+
+test(
   "a file in the session's folder named like a module the run needs does not replace it, and the script runs as __main__",
   { skip: !python3 },
   async () => {

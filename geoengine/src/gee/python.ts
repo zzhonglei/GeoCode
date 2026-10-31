@@ -15,6 +15,9 @@ export const BEAT_SECONDS = 1
  */
 export const LONGEST_REQUEST_SECONDS = 10 * 60
 
+/** Characters kept of a failed script's whole traceback, the end: its report stays one line GeoEngine reads whole. */
+const TRACEBACK_CHARS = 16 * 1024
+
 /**
  * What the Python reads from standard input, given as `-`: on the command line the program would pass through whatever
  * starts that Python, and Windows's command interpreter rewrites it there. The request, as JSON text in a string, comes
@@ -217,6 +220,33 @@ import types
 request = json.loads(REQUEST)
 # Reentrant: a finalizer or signal handler may print while a write holds it.
 lock = threading.RLock()
+# Where Python and the packages are, before the script adds to the path: a frame there is a library's.
+LIBRARIES = {os.path.normcase(os.path.realpath(entry)) for entry in [sys.prefix, sys.base_prefix] + sys.path if entry}
+
+
+def own(filename):
+    """Whether a frame is of the script's own code: the script, or a module of the user's it imports."""
+    if filename.startswith("<"):
+        # This program's own, and Python's frozen modules, are not.
+        return filename == "<script>"
+    where = os.path.normcase(os.path.realpath(filename))
+    return not any(where == root or where.startswith(root + os.sep) for root in LIBRARIES)
+
+
+def shown(error):
+    """An error as GeoAgent is given it: only the frames of the script's own code, and of the errors it came from only
+    those that went through that code. The frames inside the libraries mean nothing to the script's author, and
+    earthengine-api raises a request's error while handling the HTTP error, all inside it."""
+
+    def pruned(part, last):
+        if part is None:
+            return None
+        part.stack = traceback.StackSummary.from_list([frame for frame in part.stack if own(frame.filename)])
+        part.__cause__ = pruned(part.__cause__, False)
+        part.__context__ = pruned(part.__context__, False)
+        return part if last or part.stack else None
+
+    return "".join(pruned(traceback.TracebackException.from_exception(error), True).format())
 
 
 class Lines:
@@ -365,11 +395,12 @@ try:
 except SystemExit as stop:
     emit({"type": "end", "ok": stop.code is None or stop.code == 0})
     raise
-except BaseException:
-    kind, value, trace = sys.exc_info()
-    # From the script's own frame: this one means nothing to its author.
-    traceback.print_exception(kind, value, trace.tb_next)
+except BaseException as error:
+    sys.stderr.write(shown(error))
     sys.stderr.flush()
+    # The whole of it, from the script's own frame, for GeoCode's log: a fault of GeoCode's package shows only there.
+    whole = "".join(traceback.format_exception(type(error), error, error.__traceback__.tb_next))
+    emit({"type": "traceback", "text": whole[-${TRACEBACK_CHARS}:]}, stderr)
     emit({"type": "end", "ok": False})
     sys.exit(1)
 

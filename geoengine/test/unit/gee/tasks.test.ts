@@ -264,8 +264,9 @@ test("a failed save leaves no folder it made, and reports the failure", { skip: 
       const done = result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
       await lower(engine.directory, flag)
       assert.equal(done.outcome, "failed")
-      // GeoCode's own lines, quoted from the package's files.
-      assert.match(done.output, /File "[^"]*geocodekit\/gee\/_assets\.py", line \d+, in save\n {4}\S/)
+      // The script's call, and the failure, without the package's own frames.
+      assert.match(done.output, /File "<script>", line 5, in <module>\n {4}gee\.save\(/)
+      assert.doesNotMatch(done.output, /geocodekit/)
       assert.deepEqual((await stored(engine.directory)).assets, [])
     }
   } finally {

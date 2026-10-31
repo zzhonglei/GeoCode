@@ -118,6 +118,8 @@ const Event = Schema.Union([
     progress: Schema.optionalKey(Schema.Number),
   }),
   Schema.Struct({ type: Schema.Literal("end"), ok: Schema.Boolean }),
+  /** A failed script's whole traceback, for the log: GeoAgent is given only its frames of the script's own code. */
+  Schema.Struct({ type: Schema.Literal("traceback"), text: Schema.String }),
   /** A download's unfinished file, which only the download's end moves into place. */
   Schema.Struct({ type: Schema.Literal("partial"), path: Schema.String }),
 ])
@@ -645,6 +647,7 @@ function execute(
   let spaceError: string | undefined
   let taken: { readonly assets: readonly string[]; readonly more: number } | undefined
   let missing: readonly string[] | undefined
+  let traceback: string | undefined
   const partials = new Set<string>()
   const pending = { stdout: "", stderr: "" }
   // What the script printed since the tool row was last sent some.
@@ -708,6 +711,10 @@ function execute(
       ended = { ok: event.ok }
       return
     }
+    if (event.type === "traceback") {
+      traceback = event.text
+      return
+    }
     if (event.type === "partial") {
       if (PARTIAL.test(path.basename(event.path))) partials.add(event.path)
       return
@@ -751,6 +758,7 @@ function execute(
           if (pending.stdout) line(pending.stdout, "stdout", false)
           if (pending.stderr) line(pending.stderr, "stderr", false)
           send()
+          if (traceback !== undefined) yield* Effect.logInfo("A geerun script failed", traceback)
           // The process has ended, or was killed and waited for, so a download it left unfinished can go; one still
           // held, as by a virus scanner on Windows, stays.
           yield* Effect.promise(() =>
