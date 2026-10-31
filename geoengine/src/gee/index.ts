@@ -44,9 +44,9 @@ const LINE_LIMIT = 64 * 1024
  */
 const PARTIAL = /^\..+\.\d+\.part$/
 
-const STILL_CHECKING = "Google Earth Engine is still being checked. Call geerun again in a minute."
+const STILL_CHECKING = "Google Earth Engine is still being checked, which usually takes under a minute."
 
-/** Lines of an error GeoAgent is given. */
+/** Lines GeoAgent is given of what Google said. */
 const PRINTED_LINES = 20
 
 /** The Google Cloud project's ID, the whole of the block. */
@@ -571,8 +571,8 @@ function refusalOf(status: number | undefined, reasons: readonly string[]): Refu
 }
 
 /**
- * What GeoAgent is told when Google Earth Engine is not ready: the facts, and, where there is a sure remedy, what it can
- * do itself and what only the user can.
+ * What GeoAgent is told when Google Earth Engine is not ready: the facts, and, where there is a sure remedy, what is
+ * missing and where it goes. Nothing of how GeoCode works inside: GeoAgent would try to fix what it cannot.
  */
 export function hint(state: Exclude<State, Ready>, file: string): string {
   if (state.status === "checking") return STILL_CHECKING
@@ -580,70 +580,49 @@ export function hint(state: Exclude<State, Ready>, file: string): string {
     const at = state.diagnostics.file ?? file
     return `${at} cannot be read: ${state.diagnostics.message}. No geo tool works until it is fixed; it is checked as soon as the file is saved.`
   }
-  const configured = `The configuration is the "gee" entry of ${file}, the Google Cloud project ID: "gee": "<project ID>". It is checked as soon as the file is saved; then call geerun again.`
-  const again = "It is checked again the next time geerun is called."
-  const projectId =
-    "Ask the user for the ID of their Google Cloud project registered for Earth Engine, which the Code Editor (https://code.earthengine.google.com) shows at its top; never guess it."
+  const configured = `The ID goes in the "gee" entry of ${file}: "gee": "<project ID>". It is checked as soon as the file is saved.`
+  const again = "it is checked again the next time geerun is called."
+  const settings = "in GeoCode's settings, under Geo environment, Google Earth Engine"
   const diagnostics = state.diagnostics
-  const last = (text: string) => text.trim().split("\n").slice(-PRINTED_LINES).join("\n")
-  const said = diagnostics.said === undefined ? [] : [`Google said: ${last(diagnostics.said)}`]
-  const signIn = (retry: boolean) =>
-    `Ask the user to sign in${retry ? " again" : ""} with their Google account in GeoCode's settings, under Geo environment, Google Earth Engine.`
   if (state.status === "signed-out") {
-    return [
-      "Google Earth Engine is not signed in: there are no Earth Engine credentials on this computer.",
-      signIn(false),
-      again,
-    ].join("\n")
+    return `Google Earth Engine is not signed in. Only the user can sign in, with their Google account ${settings}; ${again}`
   }
   if (state.status === "project-missing") {
-    return ["Google Earth Engine is signed in, but no Google Cloud project is configured.", projectId, configured].join(
-      "\n",
-    )
+    return [
+      "Google Earth Engine is signed in, but no Google Cloud project is set. It needs the ID of a Google Cloud project registered for Earth Engine, which only the user knows; the Code Editor (https://code.earthengine.google.com) shows it at its top.",
+      configured,
+    ].join("\n")
   }
   const project = diagnostics.project ?? ""
-  // Only the fact: what the network needs is for GeoAgent and the user to work out.
   if (state.status === "unreachable" || state.status === "check-timeout") {
     return diagnostics.status === undefined
       ? "Cannot connect to Google: there is no network connection, or Google cannot be reached."
-      : `Google Earth Engine is failing or busy right now (HTTP ${diagnostics.status}).`
+      : "Google Earth Engine is failing or busy right now."
   }
   if (state.status === "rejected") {
     const refusal = diagnostics.refusal ?? "other"
     if (refusal === "credentials-invalid") {
-      return [
-        "Google refused the Earth Engine credentials on this computer: they have expired or been revoked.",
-        ...said,
-        signIn(true),
-        again,
-      ].join("\n")
+      return `Google Earth Engine's sign-in on this computer has expired or been revoked. Only the user can sign in again, ${settings}; ${again}`
     }
-    const opening = {
-      "project-not-found": `There is no Google Cloud project with the configured ID, ${project}.`,
-      "no-permission": `The signed-in Google account may not use the configured project, ${project}.`,
-      "api-disabled": `The Earth Engine API is not enabled in the configured project, ${project}.`,
-      other: `Earth Engine refused the configured project, ${project}.`,
+    if (refusal === "api-disabled") {
+      return `The Earth Engine API is not enabled in the project ${project}. It is enabled at https://console.cloud.google.com/apis/library/earthengine.googleapis.com?project=${project}, and takes a few minutes to apply; ${again}`
+    }
+    // Google's own words only where GeoCode cannot tell what was refused.
+    const said = diagnostics.said === undefined ? "" : ` Google said: ${last(diagnostics.said)}`
+    const refused = {
+      "project-not-found": `There is no Google Cloud project with the ID ${project}. The right ID, which only the user knows, is shown at the top of the Code Editor (https://code.earthengine.google.com).`,
+      "no-permission": `The signed-in Google account may not use the project ${project}: the ID may be wrong, or the project may belong to another account. Only the user can sign in with another account, ${settings}.`,
+      other: `Earth Engine refused the project ${project}.${said} A project not yet registered for Earth Engine is registered at https://code.earthengine.google.com/register.`,
     }[refusal]
-    const remedy = {
-      "project-not-found":
-        "Ask the user for the right ID, which the Code Editor (https://code.earthengine.google.com) shows at its top; never guess it.",
-      "no-permission":
-        "Ask the user whether the ID is right and whether the project belongs to the account they signed in with; they may need to sign in with another account, or use a project of their own.",
-      "api-disabled": `Ask the user to enable it at https://console.cloud.google.com/apis/library/earthengine.googleapis.com?project=${project}; it takes a few minutes to apply.`,
-      other:
-        "If the project is not registered for Earth Engine, the user can register it at https://code.earthengine.google.com/register. Otherwise, act on what Google said.",
-    }[refusal]
-    // An ID the user corrects is checked as soon as the file is saved; whatever else they fix, on the next call.
-    return [opening, ...said, remedy, configured, again].join("\n")
+    return [refused, configured].join("\n")
   }
-  // Without a report, GeoEngine's own message says only that there was none; what the Python printed says why.
-  const printed = diagnostics.output ? [last(diagnostics.output)] : []
-  return [
-    `Checking Google Earth Engine failed: ${last(diagnostics.message)}`,
-    ...printed,
-    "Show the user the error.",
-    again,
-  ].join("\n")
+  // What went wrong is for the user to read: an error of GeoCode's own would only lead GeoAgent astray.
+  return "Checking Google Earth Engine failed unexpectedly; the details are in the diagnostics of the Google Earth Engine indicator in GeoCode's title bar. It is checked again the next time geerun is called."
+}
+
+/** The end of a text Google wrote, within the lines GeoAgent is given. */
+function last(text: string) {
+  return text.trim().split("\n").slice(-PRINTED_LINES).join("\n")
 }
 
 function execute(

@@ -90,8 +90,8 @@ const decodeStarted = Schema.decodeUnknownExit(Schema.Array(Schema.String))
 const failureMessage = (failure: GeoEngine.Failure) => {
   if (failure.code === "not-ready") return failure.message
   if (failure.code === "invalid-params") return `${failure.message}, so the script did not run.`
-  if (failure.code === "initialize-failed")
-    return `Earth Engine could not be initialized, so the script did not run: ${failure.message}`
+  // Its error is for the log: GeoAgent would try to fix what only GeoCode or Google can.
+  if (failure.code === "initialize-failed") return "Earth Engine could not be initialized, so the script did not run."
   if (failure.code === "space-failed")
     return `GeoCode could not read its folder of Earth Engine assets, so the script did not run: ${failure.message}`
   if (failure.code === "task-taken")
