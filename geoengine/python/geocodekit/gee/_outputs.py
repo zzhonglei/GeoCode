@@ -90,9 +90,9 @@ def download(image, path, **grid):
                 # geedim looks every image up among the public datasets for its bands' descriptions: an asset of a
                 # task is not one, which only leaves the descriptions out.
                 warnings.filterwarnings("ignore", "Couldn't find STAC entry", RuntimeWarning)
-                # In tiles of 2 MB rather than geedim's 4, so the share done moves in finer steps; no smaller, or
-                # geedim no longer cuts a float64 image in whole blocks of the GeoTIFF it writes.
-                ready.toGeoTIFF(partial, overwrite=True, max_tile_size=2)
+                # In tiles of 8 MB rather than geedim's 4, so fewer requests, each with its own overhead; no larger,
+                # or a mid-sized image has too few tiles to fill the requests geedim makes at once.
+                ready.toGeoTIFF(partial, overwrite=True, max_tile_size=8)
             # Looked at only every second, so a download of one tile would show none of it done.
             _tool.update(progress=1)
         saved = _files.numbered(target)
