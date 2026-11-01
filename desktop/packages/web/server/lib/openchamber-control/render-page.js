@@ -38,7 +38,7 @@ const SHOWN_NOTE = "Shown to the user in the chat above your reply. Don't announ
  */
 export const createRenderPageAction = ({ isEnabled }) => async (input) => {
   if (!await isEnabled()) {
-    throw new OpenChamberControlError('The render tool is turned off in OpenChamber settings', 403);
+    throw new OpenChamberControlError('The render tool is turned off in GeoCode settings', 403); // GeoCode: product name
   }
   const html = isString(input.html) ? input.html : '';
   if (!html.trim()) {
