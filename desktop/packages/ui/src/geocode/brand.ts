@@ -17,6 +17,12 @@ export const toGeoCodeReport = (lines: readonly string[]): string[] =>
   lines.map((line) => /^\s/.test(line) ? line : line.replace(/^[^:]*/, (label) =>
     label.replace(/OpenChamber/g, 'GeoCode').replace(/^(- )?OpenCode/, '$1Kernel').replace(/OpenCode/g, 'kernel')));
 
+// The diagnostic timeline as a status report says it: GeoCode's own version where the timeline gives the shell's, then
+// the labels renamed the same way.
+export const toGeoCodeDiagnosticLog = (text: string, version: string | null | undefined): string =>
+  toGeoCodeReport(text.split('\n').map((line) => line.replace(/^OpenChamber: (.*) \((desktop|web)\)$/,
+    (_, shell: string, runtime: string) => `GeoCode version: ${version ?? '(unknown)'} (shell ${shell}, ${runtime})`))).join('\n');
+
 // OpenCode's own services keep their names.
 const UPSTREAM = /(\b[Aa]n )?(?:OpenChamber|OpenCode(?! (?:Zen|Go|Console|Web Search)\b))/g;
 
@@ -28,10 +34,6 @@ const MESSAGES = {
   en: {
     'settings.view.nav.group.opencode': 'Kernel',
     'commandPalette.item.restartOpenCode': 'Restart kernel',
-    'commandPalette.item.showOpenCodeStatus': 'Show kernel status',
-    'openCodeStatusDialog.title': 'Kernel Status',
-    'openCodeStatusDialog.description': 'Inspect the current kernel status and diagnostics.',
-    'chat.sessionError.showStatus': 'Show kernel status',
     'chat.toast.opencodeRestartInterrupted.description': 'The kernel restarted while a response was still running. Send a message to continue.',
     'chat.emptyState.opencodeUnreachable': 'The kernel is not reachable',
     'aboutDialog.openCodeVersionLabel': 'Kernel version {version}',
@@ -60,15 +62,11 @@ const MESSAGES = {
     'chat.chatInput.waitingForOpenCode': 'Waiting for the kernel…',
     'chat.chatInput.waitingForOpenCodeHint': 'The message goes out as soon as the kernel starts',
     'settings.openchamber.sessionWork.info': 'A block in the sidebar, under Chats, for the sessions you\'re working in. A session goes there when you send a message in it, stays in its project as well, and leaves when you mark it done: hover it and use the check, or use the session menu.',
-    'settings.openchamber.visual.field.openTrackerLinksOnBoardInfo': 'Links to GitHub issues and pull requests open on the Issues and PRs board when their project is open here. Cmd+click or Ctrl+click opens the link itself.',
+    'settings.openchamber.visual.field.openTrackerLinksOnBoardInfo': 'Links to GitHub issues and pull requests open in the Tracker beside the chat when their project is open here. Cmd+click or Ctrl+click opens the link itself.',
   },
   'zh-CN': {
     'settings.view.nav.group.opencode': '内核',
     'commandPalette.item.restartOpenCode': '重启内核',
-    'commandPalette.item.showOpenCodeStatus': '显示内核状态',
-    'openCodeStatusDialog.title': '内核状态',
-    'openCodeStatusDialog.description': '查看当前内核状态与诊断信息。',
-    'chat.sessionError.showStatus': '显示内核状态',
     'chat.toast.opencodeRestartInterrupted.description': '内核在回复仍在生成时重启了。发送一条消息以继续。',
     'chat.emptyState.opencodeUnreachable': '无法连接内核',
     'aboutDialog.openCodeVersionLabel': '内核版本 {version}',
@@ -97,15 +95,11 @@ const MESSAGES = {
     'chat.chatInput.waitingForOpenCode': '正在等待内核…',
     'chat.chatInput.waitingForOpenCodeHint': '内核启动后会立即发送消息',
     'settings.openchamber.sessionWork.info': '侧边栏中位于聊天下方的一个区块，用于放置你正在处理的会话。你在会话中发送消息后，它就会进入这里，同时仍留在所属项目中；标记为完成后才会离开：悬停在会话上点对勾，或使用会话菜单。',
-    'settings.openchamber.visual.field.openTrackerLinksOnBoardInfo': 'GitHub 的 Issue 和拉取请求的链接，在其项目已在此打开时会在“Issue 和 PR”看板中打开。Cmd+点击或 Ctrl+点击会打开链接本身。',
+    'settings.openchamber.visual.field.openTrackerLinksOnBoardInfo': 'GitHub 的 Issue 和拉取请求的链接，在其项目已在此打开时会在聊天旁的“跟踪”中打开。Cmd+点击或 Ctrl+点击会打开链接本身。',
   },
   'zh-TW': {
     'settings.view.nav.group.opencode': '核心',
     'commandPalette.item.restartOpenCode': '重新啟動核心',
-    'commandPalette.item.showOpenCodeStatus': '顯示核心狀態',
-    'openCodeStatusDialog.title': '核心狀態',
-    'openCodeStatusDialog.description': '查看目前核心狀態與診斷資訊。',
-    'chat.sessionError.showStatus': '顯示核心狀態',
     'chat.toast.opencodeRestartInterrupted.description': '核心在回覆仍在產生時重新啟動。傳送訊息以繼續。',
     'chat.emptyState.opencodeUnreachable': '無法連線核心',
     'aboutDialog.openCodeVersionLabel': '核心版本 {version}',
@@ -134,7 +128,7 @@ const MESSAGES = {
     'chat.chatInput.waitingForOpenCode': '正在等待核心…',
     'chat.chatInput.waitingForOpenCodeHint': '核心啟動後會立即傳送訊息',
     'settings.openchamber.sessionWork.info': '側邊欄中位於聊天下方的一個區塊，用來放置你正在處理的工作階段。你在工作階段中傳送訊息後，它就會進入這裡，同時仍留在所屬專案中；標記為完成後才會離開：將游標移到工作階段上點勾號，或使用工作階段選單。',
-    'settings.openchamber.visual.field.openTrackerLinksOnBoardInfo': 'GitHub 的 Issue 與拉取請求的連結，在其專案已在此開啟時會在「Issue 與 PR」看板中開啟。Cmd+點擊或 Ctrl+點擊會開啟連結本身。',
+    'settings.openchamber.visual.field.openTrackerLinksOnBoardInfo': 'GitHub 的 Issue 與拉取請求的連結，在其專案已在此開啟時會在聊天旁的「追蹤」中開啟。Cmd+點擊或 Ctrl+點擊會開啟連結本身。',
   },
 } satisfies Partial<Record<Locale, Messages>>;
 

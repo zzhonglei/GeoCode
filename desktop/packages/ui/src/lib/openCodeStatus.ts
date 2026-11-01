@@ -6,7 +6,7 @@ import { opencodeClient } from './opencode/client';
 import { runtimeFetch } from './runtime-fetch';
 import { getRecentSendFailures } from '@/sync/send-failure-log';
 import { getRecentSessionErrors } from '@/sync/session-error-log';
-import { toGeoCodeReport } from '@/geocode/brand'; // GeoCode: see buildOpenCodeStatusReport
+import { toGeoCodeDiagnosticLog, toGeoCodeReport } from '@/geocode/brand'; // GeoCode: see buildOpenCodeStatusReport and showOpenCodeStatus
 import { getDesktopAppVersion } from './desktopNative';
 import { buildDiagnosticLog } from './diagnostics/export';
 
@@ -487,7 +487,7 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
 };
 
 export const showOpenCodeStatus = async (): Promise<void> => {
-  const text = await buildDiagnosticLog();
+  const text = toGeoCodeDiagnosticLog(await buildDiagnosticLog(), await getDesktopAppVersion()); // GeoCode: its name, its version and its kernel
   const ui = useUIStore.getState();
   ui.setOpenCodeStatusText(text);
   ui.setOpenCodeStatusDialogOpen(true);

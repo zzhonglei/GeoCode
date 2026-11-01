@@ -36,7 +36,7 @@ export const OpenCodeStatusDialog: React.FC = () => {
     const url = URL.createObjectURL(new Blob([openCodeStatusText], { type: 'text/plain;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `openchamber-diagnostics-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+    link.download = `geocode-diagnostics-${new Date().toISOString().replace(/[:.]/g, '-')}.log`; // GeoCode: its own name in the user's files
     document.body.appendChild(link);
     link.click();
     link.remove();
