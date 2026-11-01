@@ -84,6 +84,13 @@ packages/util
 !packages/stats
 !packages/storybook
 !packages/web
+# Also on app's side: gui-plugins, which took over from gui-extensions, and
+# patchmark, which session-ui uses; stories holds their UI stories.
+!packages/gui-plugins
+!packages/stories
+!packages/patchmark
+# The opencode-pty source; the CLI build embeds the prebuilt binary from npm.
+!packages/process-daemon
 # Official plugins, each installed on its own; the CLI neither bundles nor
 # loads them.
 !packages/plugins
@@ -112,6 +119,8 @@ packages/util
 !sdks
 !services
 !specs
+# Salesforce metadata for the Console's sign-up records.
+!salesforce
 !sst.config.ts
 !screenshot-uk.png
 !STATS.md
