@@ -133,12 +133,15 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     claude: [],
     agents: [],
     /*
-    claude: [
-      ...new Set([
-        ...(globalEnabled ? [globalClaudeDirectory] : []),
-        ...visible.filter((item) => path.basename(item) === ".claude").toReversed(),
-      ]),
-    ],
+    claude:
+      options?.claude === false
+        ? []
+        : [
+            ...new Set([
+              ...(globalEnabled ? [globalClaudeDirectory] : []),
+              ...visible.filter((item) => path.basename(item) === ".claude").toReversed(),
+            ]),
+          ],
     agents: [
       ...new Set([
         ...(globalEnabled ? [globalAgentsDirectory] : []),

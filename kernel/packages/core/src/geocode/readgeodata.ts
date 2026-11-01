@@ -1,6 +1,6 @@
 export * as ReadGeodataTool from "./readgeodata.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import type { Tool } from "@opencode/schema/tool"
 import { Deferred, Effect, Exit, Schema } from "effect"
 import type { FileAccess } from "../file-access.js"

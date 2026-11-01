@@ -60,7 +60,7 @@ describe('GeoCode: closedSurface', () => {
   it('refuses creating a persistent terminal, not listing them', async () => {
     const api = JSON.parse(fs.readFileSync(new URL('../../../../../kernel/packages/protocol/openapi.json', import.meta.url), 'utf8'));
     const [route] = Object.entries(api.paths)
-      .filter(([, operations]) => operations.post?.operationId === 'server.experimental.persistentPty.create')
+      .filter(([, operations]) => operations.post?.operationId === 'experimental.persistentPty.create')
       .map(([template]) => template.replace('{sessionID}', 'ses_1'));
     expect(await statusOf(route, 'POST')).toBe(404);
     expect(await statusOf(`${route.toUpperCase()}/`, 'POST')).toBe(404);

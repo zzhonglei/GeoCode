@@ -1,6 +1,6 @@
 export * as OsmGetTools from "./osmget.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import type { Tool } from "@opencode/schema/tool"
 import { Effect, Schema } from "effect"
 import type { FileAccess } from "../file-access.js"

@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Deferred, Effect, Exit, Fiber, Layer, Schema, Scope } from "effect"
 import { Bus } from "@opencode/core/bus"
+import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { FileAccess } from "@opencode/core/file-access"
 import { GeeRunTool } from "@opencode/core/geocode/geerun"
@@ -11,7 +12,7 @@ import { GeeRunRpc } from "@opencode/core/geocode/geerun-rpc"
 import { GeoRunActivity } from "@opencode/core/geocode/run-activity"
 import { GeoTools } from "@opencode/core/geocode/tools"
 import { Job } from "@opencode/core/job"
-import { KV } from "@opencode/core/kv"
+import { JobTable } from "@opencode/core/job/sql"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -109,6 +110,7 @@ const geoToolsNode = makeLocationNode({
         list: () => Effect.die("unused permission.list"),
         get: () => Effect.die("unused permission.get"),
         reply: () => Effect.die("unused permission.reply"),
+        assert: () => Effect.die("unused permission.assert"),
       },
       storage: {
         get: (key) => Effect.sync(() => stored.get(key)),
@@ -135,20 +137,8 @@ const geoToolsNode = makeLocationNode({
     Bus.node,
   ],
 })
-/** What the kernel's key-value store holds: a background run's notification, until it is in the conversation. */
-const kv = new Map<string, KV.Value>()
-const kvStore = Layer.succeed(
-  KV.Service,
-  KV.Service.of({
-    get: (key) => Effect.sync(() => kv.get(key)),
-    set: (key, value) => Effect.sync(() => void kv.set(key, value)),
-    remove: (key) => Effect.sync(() => void kv.delete(key)),
-    scan: ({ prefix }) =>
-      Effect.sync(() => ({
-        entries: [...kv].filter(([key]) => key.startsWith(prefix)).map(([key, value]) => ({ key, value })),
-      })),
-  }),
-)
+/** What the kernel's job table holds: a background run's notification, until it is in the conversation. */
+const jobRows = () => Database.Service.pipe(Effect.flatMap((database) => database.db.select().from(JobTable).all()))
 /** The notifications put into conversations. */
 const notices: Array<Parameters<Session.Interface["synthetic"]>[0]> = []
 let noticed: Deferred.Deferred<void> | undefined
@@ -196,14 +186,16 @@ const permission = permissionLayer({
     ),
 })
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Tool.node, geoToolsNode, Job.node, GeeRunJob.node, Session.node]), [
-    Permission.node.replace(permission),
-    PermissionSaved.node.replace(permissionSaved),
-    KV.node.replace(kvStore),
-    Session.node.replace(sessions),
-    Bus.node.replace(bus),
-    Location.node.replace(Layer.succeed(Location.Service, Location.Service.of(location({ directory: PROJECT })))),
-  ]),
+  AppNodeBuilder.build(
+    LayerNode.group([Tool.node, geoToolsNode, Job.node, GeeRunJob.node, Session.node, Database.node]),
+    [
+      Permission.node.replace(permission),
+      PermissionSaved.node.replace(permissionSaved),
+      Session.node.replace(sessions),
+      Bus.node.replace(bus),
+      Location.node.replace(Layer.succeed(Location.Service, Location.Service.of(location({ directory: PROJECT })))),
+    ],
+  ),
 )
 
 const reset = () => {
@@ -215,7 +207,6 @@ const reset = () => {
   pending = undefined
   saved = []
   stored.clear()
-  kv.clear()
   notices.length = 0
   published.length = 0
   noticed = undefined
@@ -1183,7 +1174,7 @@ describe("GeoCode: geerun", () => {
       const receipt = running.content?.[0]
       expect(receipt?.type === "text" ? receipt.text : "").toContain("composite")
       // Kept until the notification is in the conversation, so that a restart can still give it.
-      expect(kv.size).toBe(1)
+      expect(yield* jobRows()).toHaveLength(1)
       noticed = yield* Deferred.make<void>()
       end()
       yield* Deferred.await(noticed)
@@ -1218,8 +1209,8 @@ describe("GeoCode: geerun", () => {
           },
         },
       ])
-      for (let turn = 0; turn < 100 && kv.size > 0; turn++) yield* Effect.sleep("10 millis")
-      expect(kv.size).toBe(0)
+      for (let turn = 0; turn < 100 && (yield* jobRows()).length > 0; turn++) yield* Effect.sleep("10 millis")
+      expect(yield* jobRows()).toHaveLength(0)
       // Guards against a running row told of again after the notice ended it.
       const told = published.length
       yield* Effect.sleep("300 millis")
@@ -1249,12 +1240,14 @@ describe("GeoCode: geerun", () => {
               },
             })
       yield* executeTool(registry, gee({ script: "x", background: true }))
-      const [marker] = [...kv.values()] as Array<{ id: string; notificationID: string }>
+      const [marker] = yield* jobRows()
       end()
       expect((yield* (yield* Job.Service).wait({ id: marker!.id })).info?.status).toBe("cancelled")
       yield* Effect.sleep("50 millis")
       expect(notices).toHaveLength(1)
-      expect(kv.get(`job.background/${marker!.notificationID}`)).toMatchObject({ status: "running" })
+      expect((yield* jobRows()).find((row) => row.notification_id === marker!.notification_id)).toMatchObject({
+        status: "running",
+      })
     }),
   )
 
@@ -1350,8 +1343,8 @@ describe("GeoCode: geerun", () => {
       ])
       // As a background command's: the stop's notice wakes the conversation.
       expect(notices[0]?.resume).not.toBe(false)
-      for (let turn = 0; turn < 100 && kv.size > 0; turn++) yield* Effect.sleep("10 millis")
-      expect(kv.size).toBe(0)
+      for (let turn = 0; turn < 100 && (yield* jobRows()).length > 0; turn++) yield* Effect.sleep("10 millis")
+      expect(yield* jobRows()).toHaveLength(0)
     }),
   )
 
@@ -1359,25 +1352,32 @@ describe("GeoCode: geerun", () => {
     Effect.gen(function* () {
       reset()
       const notificationID = SessionMessage.ID.create()
-      kv.set(`job.background/${notificationID}`, {
-        id: "job_geerun",
-        notificationID,
-        recovery: { kind: "geerun", sessionID, task: TASK, description: "统计影像", callID: "call-geerun" },
-        status: "running",
-      })
-      // Started as the app starts the kernel again, which runs no restart recovery of its own; a marker it cannot read
-      // would be passed over without a word.
+      const database = yield* Database.Service
+      yield* database.db
+        .insert(JobTable)
+        .values({
+          notification_id: notificationID,
+          id: "job_geerun",
+          session_id: sessionID,
+          kind: "geerun",
+          title: "统计影像",
+          status: "running",
+          recovery: { kind: "geerun", sessionID, task: TASK, description: "统计影像", callID: "call-geerun" },
+        })
+        .run()
+      // Started as the app starts the kernel again, over the same database, and runs no restart recovery of its own; a
+      // row it cannot read would be passed over without a word.
       noticed = yield* Deferred.make<void>()
       yield* GeeRunJob.Service.pipe(
         Effect.andThen(Deferred.await(noticed)),
         Effect.andThen(
           Effect.gen(function* () {
-            for (let turn = 0; turn < 100 && kv.size > 0; turn++) yield* Effect.yieldNow
+            for (let turn = 0; turn < 100 && (yield* jobRows()).length > 0; turn++) yield* Effect.yieldNow
           }),
         ),
         Effect.provide(
           AppNodeBuilder.build(LayerNode.group([GeeRunJob.node]), [
-            KV.node.replace(kvStore),
+            Database.node.replace(Layer.succeed(Database.Service, database)),
             Session.node.replace(sessions),
             Bus.node.replace(bus),
           ]),
@@ -1398,7 +1398,7 @@ describe("GeoCode: geerun", () => {
           resume: false,
         },
       ])
-      expect(kv.size).toBe(0)
+      expect(yield* jobRows()).toHaveLength(0)
     }),
   )
 })

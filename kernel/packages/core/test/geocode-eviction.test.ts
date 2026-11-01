@@ -6,6 +6,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
 import { LocationActivity } from "@opencode/core/location-activity"
@@ -32,7 +33,9 @@ const locations = Layer.effect(
     const map = yield* LayerMap.make(
       (ref: Location.Ref) =>
         // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-        Layer.merge(
+        Layer.mergeAll(
+          // The sweep reads each location's config for its idle time.
+          Config.testLayer(),
           Layer.succeed(
             Location.Service,
             Location.Service.of({
@@ -123,8 +126,9 @@ describe("GeoCode: a geographic run and idle eviction", () => {
       for (let step = 0; step < 70; step++) yield* TestClock.adjust("1 minute")
       expect(stopped.current).toBe(false)
       expect(Array.from(yield* execution.active)).toEqual([sessionID])
+      expect(yield* RcMap.has(locations.rcMap, ref)).toBe(true)
 
-      yield* execution.interrupt(sessionID, { awaitSettlement: true })
+      yield* execution.interrupt(sessionID).pipe(Effect.andThen(execution.awaitIdle(sessionID)))
       for (let step = 0; step < 65; step++) yield* TestClock.adjust("1 minute")
       expect(yield* RcMap.has(locations.rcMap, ref)).toBe(false)
     }),

@@ -1,6 +1,6 @@
 export * as QgisDocTool from "./qgisdoc.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import type { Tool } from "@opencode/schema/tool"
 import { Effect, Exit, Schema } from "effect"
 import type { Permission } from "../permission.js"

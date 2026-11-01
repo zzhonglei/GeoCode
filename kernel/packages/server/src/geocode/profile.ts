@@ -61,6 +61,7 @@ const noRemoteConfig = Layer.succeed(
 const noMachineConfig = (options: ServerOptions) =>
   Config.configured({
     project: options.config?.project,
+    claude: options.config?.claude,
     file: options.config?.file,
     content: options.config?.content,
     system: false,

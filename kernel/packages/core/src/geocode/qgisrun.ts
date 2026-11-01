@@ -1,6 +1,6 @@
 export * as QgisRunTool from "./qgisrun.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import type { Tool } from "@opencode/schema/tool"
 import { Array as Arr, Effect, Exit, Schema } from "effect"
 import { FileAccess } from "../file-access.js"

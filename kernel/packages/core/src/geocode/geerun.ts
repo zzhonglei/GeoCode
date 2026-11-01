@@ -1,6 +1,6 @@
 export * as GeeRunTool from "./geerun.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Identifier } from "@opencode/schema/identifier"
 import type { Tool } from "@opencode/schema/tool"
