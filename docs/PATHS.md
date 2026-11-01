@@ -165,6 +165,7 @@
     ├── worktrees/      git 为工作树记录的信息,建立工作树时由 git 写入;合并分支时的临时工作树也在这里登记,合并结束后删除
     └── refs/
         ├── heads/geocode/   在应用里新建工作树而没有指定分支名时建立的分支(agent 建立的工作树不建分支)
+        ├── heads/<分支>-backup-<提交>   为拉取请求建立工作树时,同名的旧本地分支已与请求分叉,移动它之前留下的备份
         └── geocode/runs/    多方案运行里选定一个后,其余方案的工作树删除前留下的快照
 ```
 
@@ -174,7 +175,7 @@ GeoCode 在 `.git/config` 里写入的:
 - 在设置里给项目套用 git 身份时的用户名、邮箱与签名设置。
 - 仓库绑定了账号时的两条 `credential.helper`(先一条空的,让用户自己的凭据助手在这个仓库里不起作用,再一条指向 GeoCode 的凭据助手)、`credential.useHttpPath` 与标记它的 `geocode.credentialusehttppath`;绑定了托管的 SSH 密钥时,经 GeoCode 运行的 `core.sshCommand`。
 - 从贡献者的拉取请求建立工作树时,那个贡献者仓库的 `remote.<名字>.*`。
-- 经应用推送并设置上游时的 `branch.<分支>.remote` 与 `branch.<分支>.merge`。
+- 经应用推送并设置上游时,以及 agent 把会话挪进远程已有分支的工作树时的 `branch.<分支>.remote` 与 `branch.<分支>.merge`。
 
 agent 把会话挪进新的工作树时,未提交的改动经一条 `GeoCode: session … moved to worktree …` 的 stash 带过去,带过去之后删掉;迁移失败、改动又放不回原处时这条 stash 留着,报给 agent 的错误里写着它。在 Git 面板里暂存改动而没写说明时,stash 的说明是 `GeoCode stash <时间>`。
 
