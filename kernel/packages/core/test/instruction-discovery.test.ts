@@ -797,4 +797,43 @@ describe("GeoCode", () => {
       }),
     ),
   )
+
+  // Guards against config's instructions putting other files, or what a URL serves, into the prompt.
+  it.live("GeoCode: reads no instruction files or URLs from config", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const agents = path.join(tmp.path, "AGENTS.md")
+        const listed = path.join(tmp.path, "rules.md")
+        const remote = "https://example.test/instructions.md"
+        const requests: string[] = []
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.writeFile(agents, "agents")
+            await fs.writeFile(listed, "listed")
+          })
+          const discovery = yield* start()
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(`Instructions from: ${agents}\nagents`)
+          expect(requests).toEqual([])
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: path.join(tmp.path, "global"),
+              instructions: [listed, "*.md", remote],
+              http: respond((url) => {
+                requests.push(url)
+                return new Response("remote")
+              }),
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+              ),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
 })

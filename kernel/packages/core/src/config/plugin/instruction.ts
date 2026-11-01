@@ -157,10 +157,15 @@ export const Plugin = define({
       // never makes the whole instruction set unavailable.
       const reconfigure = Effect.fn("ConfigInstructionPlugin.reconfigure")(
         function* () {
+          // --- GeoCode: no instruction files, globs or URLs from config; only the AGENTS.md files discovery finds ---
+          const sources: string[] = []
+          /*
           const entries = yield* config.entries()
           const sources = Array.from(
             new Set(entries.flatMap((entry) => (entry.type === "document" ? (entry.info.instructions ?? []) : []))),
           )
+          */
+          // --- /GeoCode ---
           const fetched = yield* Effect.forEach(
             sources.filter(isUrl),
             (url) =>
