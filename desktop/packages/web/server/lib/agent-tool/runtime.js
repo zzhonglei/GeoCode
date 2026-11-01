@@ -1,5 +1,8 @@
+/* --- GeoCode: unused once the screenshot folder comes from the kernel paths ---
 import os from 'node:os';
+--- /GeoCode --- */
 import path from 'node:path';
+import { kernelTmpDir } from '../../geocode/kernel-paths.js'; // GeoCode: see OPENCODE_TEMP_DIRECTORY
 
 import { asNonEmptyString, isBoolean } from '../shared/guards.js';
 import {
@@ -185,7 +188,7 @@ const RENDER_PARAMETER_PROPERTIES = {
 // The worktree move follows as an introduction, not a rule: whether a busy
 // checkout calls for a worktree depends on how the user works, and users ask
 // for a pull request or for work kept apart rather than for a worktree.
-const WORKTREE_MOVE_INTRO = "session.moveToWorktree moves this session into its own worktree, branching from the default branch, so its work stays apart from whatever else happens in this checkout. It can help when the checkout looks busy: the branch carries someone's pull request or uncommitted changes, another session works here, or the branch changed between your messages. Whether that fits depends on how the user works. When it looks like it would help, you can ask the user. Move when they agree, or when what they asked for already calls for work kept apart from this checkout, such as a pull request of its own while the checkout holds other work. Use it rather than git worktree add: the session moves along, so the user finds it under that worktree in OpenChamber. Unlike worktree_create, it makes a new branch from the default branch instead of a detached copy of where you are, and can carry the files you changed. Uncommitted changes stay where they are unless you name the files you changed in carry. "
+const WORKTREE_MOVE_INTRO = "session.moveToWorktree moves this session into its own worktree, branching from the default branch, so its work stays apart from whatever else happens in this checkout. It can help when the checkout looks busy: the branch carries someone's pull request or uncommitted changes, another session works here, or the branch changed between your messages. Whether that fits depends on how the user works. When it looks like it would help, you can ask the user. Move when they agree, or when what they asked for already calls for work kept apart from this checkout, such as a pull request of its own while the checkout holds other work. Use it rather than git worktree add: the session moves along, so the user finds it under that worktree in GeoCode. Unlike worktree_create, it makes a new branch from the default branch instead of a detached copy of where you are, and can carry the files you changed. Uncommitted changes stay where they are unless you name the files you changed in carry. " // GeoCode: product name
 
 const CONTROL_TOOL_DESCRIPTION = "When the user gives you an issue or a change under review (a pull or merge request) to work on, fix, investigate or review, when you open one for this work, and when the work resolves one, link it to this session with session.link as soon as you know it, so the user sees it with the session. Not one merely mentioned in passing. No need to mention in your reply that you linked it. "
   + WORKTREE_MOVE_INTRO
@@ -202,7 +205,7 @@ const NOTIFY_TOOL_DESCRIPTION = "Send the user a notification through GeoCode, s
 // Where the agent saves a screenshot for a page, so it stays out of the
 // project. The image grant route (../markdown-image-grants/routes.js) reads a
 // page's images from anywhere on the machine.
-const OPENCODE_TEMP_DIRECTORY = path.join(os.tmpdir(), 'opencode');
+const OPENCODE_TEMP_DIRECTORY = kernelTmpDir(); // GeoCode: the kernel's own temporary folder (PATHS.md)
 
 // The variables are the ones packages/ui/src/components/chat/message/parts/htmlRender.ts
 // injects; change both together.
