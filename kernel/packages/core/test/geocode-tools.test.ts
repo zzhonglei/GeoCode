@@ -9,7 +9,6 @@ import { FileAccess } from "@opencode/core/file-access"
 import { GeeRunTool } from "@opencode/core/geocode/geerun"
 import { GeeRunJob } from "@opencode/core/geocode/geerun-job"
 import { GeeRunRpc } from "@opencode/core/geocode/geerun-rpc"
-import { GeoRunActivity } from "@opencode/core/geocode/run-activity"
 import { GeoTools } from "@opencode/core/geocode/tools"
 import { Job } from "@opencode/core/job"
 import { JobTable } from "@opencode/core/job/sql"
@@ -811,37 +810,6 @@ describe("GeoCode: qgisrun", () => {
       }),
     20000,
   )
-
-  // Guards against the kernel evicting the location of a long run, which sends no session event, and stopping the run.
-  it.live("keeps its location from looking idle while it runs", () =>
-    Effect.gen(function* () {
-      reset()
-      const begun = yield* Deferred.make<void>()
-      let end = () => {}
-      engine({
-        run: () =>
-          new ReadableStream({
-            start: (controller) => {
-              controller.enqueue(new TextEncoder().encode(`${progress({ begun: true })}\n`))
-              end = () => {
-                controller.enqueue(new TextEncoder().encode(`${result({ ending: "Finished in 1 s." }).join("\n")}\n`))
-                controller.close()
-              }
-              Effect.runSync(Deferred.succeed(begun, undefined))
-            },
-          }),
-      })
-      const running = yield* executeTool(
-        yield* Tool.Service,
-        runs({ algorithm: "native:buffer", parameters: {} }),
-      ).pipe(Effect.forkScoped)
-      yield* Deferred.await(begun)
-      expect(GeoRunActivity.isActive(Location.Ref.make({ directory: PROJECT }))).toBe(true)
-      end()
-      yield* Fiber.join(running)
-      expect(GeoRunActivity.isActive(Location.Ref.make({ directory: PROJECT }))).toBe(false)
-    }),
-  )
 })
 
 const TASK = "taipei-ndvi-20261008"
@@ -1075,34 +1043,6 @@ describe("GeoCode: geerun", () => {
       answer = () => ran({ output: ["waiting", "waiting", "waiting"].join("\n") })
       const short = (yield* executeTool(registry, gee({ script: "x" }))).content?.[0]
       expect(short?.type === "text" ? short.text : "").toContain("waiting\nwaiting\nwaiting")
-    }),
-  )
-
-  // Guards against the kernel evicting the location of a long run, which sends no session event, and stopping the run.
-  it.live("keeps its location from looking idle while it runs", () =>
-    Effect.gen(function* () {
-      reset()
-      const begun = yield* Deferred.make<void>()
-      let end = () => {}
-      answer = (body) =>
-        body.method !== "gee.run"
-          ? ran()
-          : new ReadableStream({
-              start: (controller) => {
-                controller.enqueue(new TextEncoder().encode(`${progress({ begun: true, python: PYTHON })}\n`))
-                end = () => {
-                  controller.enqueue(new TextEncoder().encode(`${ran().join("\n")}\n`))
-                  controller.close()
-                }
-                Effect.runSync(Deferred.succeed(begun, undefined))
-              },
-            })
-      const running = yield* executeTool(yield* Tool.Service, gee({ script: "x" })).pipe(Effect.forkScoped)
-      yield* Deferred.await(begun)
-      expect(GeoRunActivity.isActive(Location.Ref.make({ directory: PROJECT }))).toBe(true)
-      end()
-      yield* Fiber.join(running)
-      expect(GeoRunActivity.isActive(Location.Ref.make({ directory: PROJECT }))).toBe(false)
     }),
   )
 

@@ -8,7 +8,6 @@ import type { Location } from "../location.js"
 import type { Permission } from "../permission.js"
 import { GeoAnswer } from "./answer.js"
 import { GeoEngine } from "./geoengine.js"
-import { GeoRunActivity } from "./run-activity.js"
 import DESCRIPTION from "./qgisrun.txt"
 
 export const name = "qgisrun"
@@ -211,8 +210,6 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
   /** Runs the plan, ending it after `timeout` seconds without a word from QGIS. */
   const run = (plan: Plan, input: typeof Input.Type, context: Tool.Context) =>
     Effect.gen(function* () {
-      // Allowed and about to run: the location is not idle until the run ends.
-      yield* GeoRunActivity.hold(location)
       const timeout = Math.max(MIN_TIMEOUT, input.timeout ?? DEFAULT_TIMEOUT)
       const messages: Message[] = []
       let percent: number | undefined

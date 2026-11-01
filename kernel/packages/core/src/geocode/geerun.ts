@@ -16,7 +16,6 @@ import { ToolOutput } from "../tool-output.js"
 import { GeoAnswer } from "./answer.js"
 import { GeoEngine } from "./geoengine.js"
 import type { GeeRunJob } from "./geerun-job.js"
-import { GeoRunActivity } from "./run-activity.js"
 import DESCRIPTION from "./geerun.txt"
 
 export const name = "geerun"
@@ -459,8 +458,6 @@ export const make = (
           task,
           ...(file === undefined ? { script: input.script } : { file }),
         }
-        // Allowed and about to run: the location is not idle until the call ends or moves to the background.
-        yield* GeoRunActivity.hold(location)
         // As the shell tool runs a command: a job of the kernel's, waited for unless it is or is moved to the background.
         const begun = yield* Deferred.make<void>()
         const settled = yield* Deferred.make<Effect.Success<ReturnType<typeof answer>>, ToolFailure>()

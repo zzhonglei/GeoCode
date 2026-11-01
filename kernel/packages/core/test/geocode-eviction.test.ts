@@ -10,7 +10,6 @@ import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
 import { LocationActivity } from "@opencode/core/location-activity"
-import { GeoRunActivity } from "@opencode/core/geocode/run-activity"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
@@ -24,8 +23,7 @@ import { testEffect } from "./lib/effect"
 
 const stopped = { current: false }
 
-// The runner stands in for a foreground geerun that sends no session event: it holds its location as the tool does and
-// never finishes on its own.
+// The runner stands in for a geographic run in the foreground: it sends no session event and never finishes on its own.
 const locations = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
@@ -48,9 +46,7 @@ const locations = Layer.effect(
             SessionRunner.Service,
             SessionRunner.Service.of({
               drain: () =>
-                GeoRunActivity.hold(ref).pipe(
-                  Effect.andThen(Effect.never),
-                  Effect.scoped,
+                Effect.never.pipe(
                   Effect.onInterrupt(() => Effect.sync(() => (stopped.current = true))),
                   Effect.as(SessionRunner.DrainResult.Complete()),
                 ),
@@ -91,7 +87,8 @@ const it = testEffect(
 )
 
 describe("GeoCode: a geographic run and idle eviction", () => {
-  // Guards against the kernel evicting the location of a run that sends no session event for long, and stopping it.
+  // Guards against the kernel evicting the location of a run that sends no session event for long: the kernel keeps a
+  // location that a running execution occupies, which the geo tools rely on in place of a hold of their own.
   it.effect("keeps the location of a run in the foreground for as long as it runs, and evicts it as usual after", () =>
     Effect.gen(function* () {
       stopped.current = false

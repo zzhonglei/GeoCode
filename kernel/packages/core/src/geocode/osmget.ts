@@ -10,7 +10,6 @@ import { GeoEngine } from "./geoengine.js"
 import { GeoOsm } from "./osm.js"
 import OBJECTS from "./osmgetobjects.txt"
 import FEATURES from "./osmgetfeatures.txt"
-import { GeoRunActivity } from "./run-activity.js"
 
 export const objectsName = "osmgetobjects"
 
@@ -81,8 +80,6 @@ const run = <E>(
       agent: context.agent,
       source: { type: "tool", messageID: context.messageID, id: context.id },
     })
-    // Allowed and about to run: the location is not idle until the download ends.
-    yield* GeoRunActivity.hold(location)
     const watched = GeoOsm.watch(context, download.label)
     const failed = GeoOsm.failed(download.tool, context, watched.ended)
     yield* context.progress(watched.state())
