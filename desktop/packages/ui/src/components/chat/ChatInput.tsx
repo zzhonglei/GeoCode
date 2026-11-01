@@ -1640,6 +1640,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
             );
             const argument = commandPlan.command.argument.trim();
             handoffDraft(targetIdentity, isBtwActive ? argument : argument || null);
+            // Files pasted with the question go with it; their `[image-1.png]` citations moved above.
+            useInputStore.getState().moveAttachedFiles(chatDraftIdentity, targetIdentity);
             if (argument && targetIdentity) immediateBtwSubmitRef.current = { identity: targetIdentity, text: argument };
             if (btwSessionId) {
                 useBtwStore.getState().setPanelState(currentSessionId, { collapsed: false });
@@ -1738,14 +1740,15 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         const spaceRefusal = spaceTarget ? spaceModelRefusal(spaceTarget, providerIdToSend) : null;
         if (spaceRefusal) {
             const provider = useConfigStore.getState().providers.find((entry) => entry.id === spaceRefusal.providerId)?.name ?? spaceRefusal.providerId;
-            toast.error(spaceRefusal.reason === 'domain_blocked'
-                ? t('spaces.draft.modelDomainBlocked', { domain: spaceRefusal.domain })
+            // No grant gives a space OpenCode's models, so that dialog opens on no provider.
+            toast.error(spaceRefusal.reason === 'opencode'
+                ? t('spaces.draft.modelOpenCode')
                 : spaceRefusal.reason === 'needs_again'
                     ? t('spaces.draft.modelNeedsKeyAgain', { provider })
                     : t('spaces.draft.modelNotGranted', { provider }), {
                 action: {
                     label: t('spaces.group.access.give'),
-                    onClick: () => useSpacesStore.getState().openAccessDialog(spaceRefusal.spaceId, spaceRefusal.providerId, spaceRefusal.reason === 'domain_blocked' ? spaceRefusal.domain : undefined),
+                    onClick: () => useSpacesStore.getState().openAccessDialog(spaceRefusal.spaceId, spaceRefusal.reason === 'opencode' ? null : spaceRefusal.providerId),
                 },
             });
             return;
@@ -2036,6 +2039,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
                     await sessionActions.waitForConnectionOrThrow();
                     const visibleText = await renderMagicPrompt(command.visiblePrompt, variables.visible);
                     const instructionsText = await renderMagicPrompt(command.instructionsPrompt, variables.instructions);
+                    // Before the sent row commits, as for a plain send below.
+                    scrollToBottom?.();
                     await sendMessage(
                         visibleText,
                         providerIdToSend,
@@ -2048,7 +2053,6 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
                         inputMode,
                         sendMessageOptions,
                     );
-                    scrollToBottom?.();
                 } catch (error) {
                     restoreConsumedInput();
                     toast.error(getSubmitErrorMessage(error, t(command.errorToastKey)));

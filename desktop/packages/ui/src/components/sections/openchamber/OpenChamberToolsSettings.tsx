@@ -91,6 +91,8 @@ export const OpenChamberToolsSettings: React.FC = () => {
   const setAgentKnowledgeToolEnabled = useUIStore((state) => state.setAgentKnowledgeToolEnabled);
   const agentNotifyToolEnabled = useUIStore((state) => state.agentNotifyToolEnabled);
   const setAgentNotifyToolEnabled = useUIStore((state) => state.setAgentNotifyToolEnabled);
+  const agentRenderToolEnabled = useUIStore((state) => state.agentRenderToolEnabled);
+  const setAgentRenderToolEnabled = useUIStore((state) => state.setAgentRenderToolEnabled);
   const agentToolsCodeMode = useUIStore((state) => state.agentToolsCodeMode);
   const setAgentToolsCodeMode = useUIStore((state) => state.setAgentToolsCodeMode);
   const agentWorktreeMoveWithoutAsking = useUIStore((state) => state.agentWorktreeMoveWithoutAsking);
@@ -117,6 +119,11 @@ export const OpenChamberToolsSettings: React.FC = () => {
     setAgentNotifyToolEnabled(enabled);
     void updateDesktopSettings({ agentNotifyToolEnabled: enabled });
   }, [setAgentNotifyToolEnabled]);
+
+  const handleAgentRenderToolChange = React.useCallback((enabled: boolean) => {
+    setAgentRenderToolEnabled(enabled);
+    void updateDesktopSettings({ agentRenderToolEnabled: enabled });
+  }, [setAgentRenderToolEnabled]);
 
   const handleAgentKnowledgeToolChange = React.useCallback((enabled: boolean) => {
     setAgentKnowledgeToolEnabled(enabled);
@@ -259,6 +266,17 @@ export const OpenChamberToolsSettings: React.FC = () => {
           summary={t('settings.openchamber.tools.field.agentNotifyToolSummary')}
           info={t('settings.openchamber.tools.field.agentNotifyToolInfo')}
           ariaLabel={t('settings.openchamber.tools.field.agentNotifyToolAria')}
+        />
+
+        <ToolRow
+          icon="bar-chart-box"
+          settingsItem="sessions.agent-render-tool"
+          checked={agentRenderToolEnabled}
+          onChange={handleAgentRenderToolChange}
+          title={t('settings.openchamber.tools.field.agentRenderTool')}
+          summary={t('settings.openchamber.tools.field.agentRenderToolSummary')}
+          info={t('settings.openchamber.tools.field.agentRenderToolInfo')}
+          ariaLabel={t('settings.openchamber.tools.field.agentRenderToolAria')}
         />
 
         <ToolRow

@@ -93,6 +93,9 @@ export const getToolIcon = (toolName: string, presentation?: GuestToolRule | nul
     if (tool === 'geocode_notify') {
         return <Icon name="notification-3" className={iconClass} />;
     }
+    if (tool === 'geocode_render') { // GeoCode: see geocode_web
+        return <Icon name="bar-chart-box" className={iconClass} />;
+    }
     if (tool === 'geocode_knowledge') {
         return <Icon name="sticky-note" className={iconClass} />;
     }

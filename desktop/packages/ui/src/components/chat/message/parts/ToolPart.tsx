@@ -1099,6 +1099,7 @@ const ToolExpandedContent: React.FC<ToolExpandedContentProps> = React.memo(({
         || part.tool === 'geocode_memory'
         || part.tool === 'geocode_knowledge'
         || part.tool === 'geocode_notify'
+        || part.tool === 'geocode_render'
         || isPatchTool(part.tool)
         || isEditTool(part.tool)
         || isExecuteTool(part.tool);

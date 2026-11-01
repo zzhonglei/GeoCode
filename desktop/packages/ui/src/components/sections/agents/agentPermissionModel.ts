@@ -45,7 +45,7 @@ export const BUILTIN_ACTIONS = [
 ] as const;
 
 /** OpenChamber's own agent tools, shown so their rules are discoverable. */
-export const OPENCHAMBER_ACTIONS = ['geocode', 'geocode_web', 'geocode_memory', 'geocode_knowledge', 'geocode_notify'] as const; // GeoCode: the names its agent tools are registered under
+export const OPENCHAMBER_ACTIONS = ['geocode', 'geocode_web', 'geocode_memory', 'geocode_knowledge', 'geocode_notify', 'geocode_render'] as const; // GeoCode: the names its agent tools are registered under
 
 /**
  * v1 permission keys OpenCode 2 no longer checks. Rules on them are inert, so
@@ -69,7 +69,7 @@ const isLegacyAction = (action: string): boolean => LEGACY_ACTIONS.has(action);
 
 /**
  * The ordered base policy every agent starts with, copied from OpenCode's
- * `Agent.Info.default` (`packages/schema/src/agent.ts`, checked at v2.0.28).
+ * `Agent.Info.default` (`packages/schema/src/agent.ts`, checked at v2.0.29).
  * Global config rules come after it and the agent's own rules last.
  */
 const OPENCODE_DEFAULT_RULES: readonly PermissionRule[] = [

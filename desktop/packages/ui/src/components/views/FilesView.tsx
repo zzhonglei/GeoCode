@@ -5126,7 +5126,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
                     <SimpleMarkdownRenderer
                       content={fileContent}
                       className="typography-markdown-body"
-                      stripFrontmatter
+                      frontmatter="properties"
                       enableFileReferences={false}
                       allowRawHtml
                     />
@@ -5228,6 +5228,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
 
   const hasTree = Boolean(root && childrenByDir[root]);
   const rootLoadError = root ? loadErrorsByDir[root] : null;
+  const isSearchActive = debouncedSearchQuery.trim().length > 0;
 
   const treePanel = treeEnabled ? (
     <section className={cn(
@@ -5334,6 +5335,8 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
               <Icon name="loader-4" className="size-4 animate-spin" />
               {t('filesView.tree.search.searching')}
             </li>
+          ) : isSearchActive && searchResults.length === 0 ? (
+            <li className="px-2 py-1 typography-meta text-muted-foreground">{t('mobile.files.search.empty')}</li>
           ) : searchResults.length > 0 ? (
             searchResults.map((node) => {
               const isActive = selectedFile?.path === node.path;
@@ -5438,7 +5441,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
                   <SimpleMarkdownRenderer
                     content={fileContent}
                     className="typography-markdown-body"
-                    stripFrontmatter
+                    frontmatter="properties"
                     enableFileReferences={false}
                     allowRawHtml
                   />
