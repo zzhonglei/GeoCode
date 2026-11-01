@@ -230,7 +230,9 @@ export async function collectLocalFileDiagnostics({ electronLogPath, home = os.h
   const sources = [
     ...(electronLogPath ? [{ name: 'desktop', folder: path.dirname(electronLogPath), matches: (name) => /^main(?:\.\d+)?\.log$/.test(name) }] : []),
     ...(Number.isInteger(webPort) && webPort > 0 ? [{ name: 'web', folder: path.join(dataDir, 'logs'), matches: (name) => name === `openchamber-${webPort}.log` }] : []),
+    /* --- GeoCode: OpenChamber's own command line writes this log, GeoCode never does; it is another app's data ---
     ...(process.platform === 'darwin' ? [{ name: 'startup', folder: path.join(home, 'Library', 'Logs', 'OpenChamber'), matches: (name) => /^startup(?:\.err)?\.log$/.test(name) }] : []),
+    --- /GeoCode --- */
     { name: 'update', folder: dataDir, matches: (name) => name === 'update-install.log' },
   ];
   const { events: journalEvents, coverage: journalCoverage } = journal.snapshot();

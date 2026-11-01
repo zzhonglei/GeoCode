@@ -9,6 +9,7 @@ import { discoverLoopFiles } from '../lib/scheduled-tasks/loops.js';
 import { getClaudeCliAuthStatus } from '../lib/opencode/claude-cli-auth.js';
 import { createProjectConfigRuntime } from '../lib/projects/project-config.js';
 import { getProfiles } from '../lib/git/identity-storage.js';
+import { collectLocalFileDiagnostics } from '../lib/diagnostics/local-files.js';
 
 // Guards against the shell taking data, tasks, logins or commands from OpenChamber, other agent tools
 // or a file checked into a project.
@@ -77,5 +78,18 @@ describe('GeoCode: foreign reads', () => {
     expect(setup.shared).toMatchObject({ status: 'missing' });
     expect(JSON.stringify(setup)).not.toContain('echo');
     expect(await runtime.resolveSharedPlansDir(projectID)).toBe(null);
+  });
+
+  it('reads no OpenChamber startup log into the diagnostic timeline', async () => {
+    const logs = path.join(home, 'Library', 'Logs', 'OpenChamber');
+    fs.mkdirSync(logs, { recursive: true });
+    fs.writeFileSync(path.join(logs, 'startup.log'), '2026-10-17T12:00:00.000Z [electron] startup failed: theirs\n');
+    const { events, coverage } = await collectLocalFileDiagnostics({
+      home,
+      env: { OPENCHAMBER_DATA_DIR: path.join(root, 'diagnostics') },
+      journal: { snapshot: () => ({ events: [], coverage: [] }) },
+    });
+    expect(coverage.map((entry) => entry.source)).not.toContain('startup');
+    expect(JSON.stringify(events)).not.toContain('theirs');
   });
 });
