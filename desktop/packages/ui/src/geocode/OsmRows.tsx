@@ -433,9 +433,6 @@ const OsmProbeRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, ani
   );
 };
 
-/** How long a download's row waits between checks of how long it has been waiting on a server. */
-const WAIT_TICK_MS = 1000;
-
 /**
  * A download's row, as qgisrun's: the OSM logo and GeoAgent's label; while it runs, its step and the time so far,
  * opening to every step; once done, how many features it wrote, opening to its file or to why there is none.
@@ -443,7 +440,7 @@ const WAIT_TICK_MS = 1000;
 const OsmDownloadRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, animate }) => {
   const locale = useI18nStore((state) => state.locale);
   const running = part.state.status === 'pending' || part.state.status === 'running';
-  const now = useDurationTickerNow(running, WAIT_TICK_MS);
+  const now = useDurationTickerNow(running);
   const view = osmDownloadView(part, locale, now);
   const panel = view.steps ? (
     <Steps steps={view.steps} />

@@ -8,6 +8,7 @@ import { getRecentSendFailures } from '@/sync/send-failure-log';
 import { getRecentSessionErrors } from '@/sync/session-error-log';
 import { toGeoCodeReport } from '@/geocode/brand'; // GeoCode: see buildOpenCodeStatusReport
 import { getDesktopAppVersion } from './desktopNative';
+import { buildDiagnosticLog } from './diagnostics/export';
 
 declare const __APP_VERSION__: string | undefined;
 
@@ -486,7 +487,7 @@ export const buildOpenCodeStatusReport = async (): Promise<string> => {
 };
 
 export const showOpenCodeStatus = async (): Promise<void> => {
-  const text = await buildOpenCodeStatusReport();
+  const text = await buildDiagnosticLog();
   const ui = useUIStore.getState();
   ui.setOpenCodeStatusText(text);
   ui.setOpenCodeStatusDialogOpen(true);

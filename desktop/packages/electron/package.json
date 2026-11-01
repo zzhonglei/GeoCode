@@ -1,6 +1,6 @@
 {
   "name": "@openchamber/electron",
-  "version": "2.3.3",
+  "version": "2.4.0",
   "private": true,
   "description": "Electron desktop runtime for OpenChamber",
   "author": "OpenChamber",
@@ -8,7 +8,7 @@
   "type": "module",
   "main": "./dist-bundle/entry.mjs",
   "opencodeCli": {
-    "version": "2.0.29"
+    "version": "2.0.32"
   },
   "dependencies": {
     "@openchamber/web": "workspace:*",
@@ -41,6 +41,7 @@
     "prepare:opencode-cli": "sh ../../../scripts/stage-kernel.sh",
     "prepare:geoengine": "sh ../../../scripts/stage-geoengine.sh",
     "prepare:python": "sh ../../../scripts/stage-python.sh",
+    "prepare:ripgrep": "node ./scripts/prepare-ripgrep.mjs",
     "verify:opencode-cli": "node ./scripts/verify-opencode-cli.mjs --staged",
     "verify:opencode-cli:packaged": "node ./scripts/verify-opencode-cli.mjs --packaged",
     "verify:linux-appimage": "node ./scripts/verify-linux-appimage.mjs",
@@ -53,7 +54,7 @@
     "test:linux-desktop": "node --test ./linux-autostart.test.mjs ./linux-desktop-entry.test.mjs && node ./scripts/smoke-linux-app-discovery.mjs && node ./scripts/smoke-path-open-utils.mjs",
     "updater:e2e:fixture": "node ./scripts/updater-e2e-fixture.mjs",
     "verify:update-manifest": "node ./scripts/verify-update-manifest.mjs",
-    "package": "bun run build:web-assets && bun run prepare:opencode-cli && bun run prepare:geoengine && bun run prepare:python && bun run bundle:main && bun run rebuild:native && node ./scripts/package.mjs",
+    "package": "bun run build:web-assets && bun run prepare:opencode-cli && bun run prepare:ripgrep && bun run prepare:geoengine && bun run prepare:python && bun run bundle:main && bun run rebuild:native && node ./scripts/package.mjs",
     "finalize:latest-yml": "node ./scripts/finalize-latest-yml.mjs",
     "type-check": "node --check ./entry.mjs && node --check ./early-startup.mjs && node --check ./main.mjs && node --check ./preload.mjs",
     "lint": "node -e \"process.exit(0)\""
@@ -88,7 +89,8 @@
       "!node_modules/@openchamber/web/*.{html,tgz}",
       "!node_modules/@openchamber/web/{tsconfig.json,tsconfig.tsbuildinfo}",
       "!node_modules/@openchamber/web/server/**/*.test.js",
-      "!node_modules/node-pty/prebuilds/!(${platform}-${arch}){,/**}"
+      "!node_modules/node-pty/prebuilds/!(${platform}-${arch}){,/**}",
+      "!**/node_modules/@vscode/ripgrep-*{,/**}"
     ],
     "extraResources": [
       {
@@ -110,6 +112,10 @@
       {
         "from": "resources/opencode-cli",
         "to": "opencode-cli"
+      },
+      {
+        "from": "resources/ripgrep",
+        "to": "ripgrep"
       },
       {
         "from": "resources/python",

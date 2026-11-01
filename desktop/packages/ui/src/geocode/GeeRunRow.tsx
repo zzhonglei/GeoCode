@@ -34,7 +34,7 @@ const useRowStatus = (
   const now = Date.now();
   shown.current = shown.current ? nextShown(shown.current, statuses, now) : firstShown(statuses, now);
   // Renders again only while the row has to move on by itself; new statuses render it anyway.
-  useDurationTickerNow(running && movesOn(shown.current), 100);
+  useDurationTickerNow(running && movesOn(shown.current));
   return running ? rowStatus(shown.current, now, run) : { doing: undefined, percent: undefined };
 };
 
