@@ -143,6 +143,9 @@ const HURRIED_MS = 200;
 /** How far behind the run the statuses waiting their turn may put the row, as long as each stays HURRIED_MS. */
 const BEHIND_MS = 2000;
 
+/** How long the status shown stays at least while this many wait their turn: the shorter the more wait. */
+const stayOf = (waiting: number) => (waiting ? Math.max(HURRIED_MS, Math.min(STATUS_MS, BEHIND_MS / waiting)) : STATUS_MS);
+
 type Entry = { readonly text: string; readonly progress?: number };
 
 /** The statuses the row shows in turn: the one shown, since when, and those waiting their turn. */
@@ -185,8 +188,7 @@ export const nextShown = (shown: Shown, statuses: readonly Status[], now: number
     else if (!queue.length && current?.text === told.text) current = entry;
     else queue.push(entry);
   }
-  const stay = queue.length ? Math.max(HURRIED_MS, Math.min(STATUS_MS, BEHIND_MS / queue.length)) : STATUS_MS;
-  const due = !current || now - shown.since >= stay;
+  const due = !current || now - shown.since >= stayOf(queue.length);
   if (due && queue.length) return { seq, current: queue.shift(), since: now, queue, idleSince };
   if (due && current && idleSince !== undefined && now - idleSince >= IDLE_MS) {
     return { seq, current: undefined, since: now, queue, idleSince };
@@ -216,6 +218,14 @@ export const rowStatus = (
   return { doing: current?.text ?? (waiting ? WAITING : undefined), percent: percent > 0 ? percent : undefined };
 };
 
-/** Whether the row has still to move on by itself: a status waits its turn, or the one shown has to go. */
-export const movesOn = (shown: Shown) =>
-  shown.queue.length > 0 || (shown.idleSince !== undefined && shown.current !== undefined);
+/**
+ * When the row next changes by itself, as nextShown and rowStatus decide it, or nothing when no change waits: the status
+ * shown moves on once it has stayed its time while others wait their turn; with no function doing anything, it gives way
+ * to the wait for Earth Engine once it has stayed its time, and goes once that has lasted.
+ */
+export const movesOnAt = (shown: Shown, now: number): number | undefined => {
+  if (shown.queue.length) return shown.since + stayOf(shown.queue.length);
+  if (shown.idleSince === undefined || shown.current === undefined) return undefined;
+  const settles = shown.since + STATUS_MS;
+  return settles > now ? settles : Math.max(settles, shown.idleSince + IDLE_MS);
+};

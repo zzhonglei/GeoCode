@@ -66,9 +66,9 @@ const useCounted = (target: number | undefined, doing: string | undefined) => {
 
 const Elapsed: React.FC<{ start: number; end: number | undefined }> = ({ start, end }) => {
   const now = useDurationTickerNow(end === undefined);
-  // As the shell's row counts.
-  const elapsed = Math.max(0, (end ?? now) - start) / 1000;
-  return <>{`${(elapsed < 0.05 && end !== undefined ? 0.1 : elapsed).toFixed(1)}s`}</>;
+  // As the shell's row counts: whole seconds while it runs, on the app's shared clock, and tenths once done.
+  if (end === undefined) return <>{`${Math.floor(Math.max(0, now - start) / 1000)}s`}</>;
+  return <>{`${Math.max(0.1, (end - start) / 1000).toFixed(1)}s`}</>;
 };
 
 /**

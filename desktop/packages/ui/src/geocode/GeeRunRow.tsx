@@ -2,7 +2,6 @@ import React from 'react';
 
 import { useToolContentCompletion } from '@/components/chat/message/parts/useToolContentCompletion';
 import { Button } from '@/components/ui/button';
-import { useDurationTickerNow } from '@/hooks/useDurationTicker';
 import { useI18n, useI18nStore } from '@/lib/i18n';
 import type { ToolPart } from '@/lib/opencode/model';
 import { useDirectorySync } from '@/sync/sync-context';
@@ -11,7 +10,7 @@ import {
   firstShown,
   geeRunNotice,
   geeRunView,
-  movesOn,
+  movesOnAt,
   nextShown,
   rowStatus,
   type Shown,
@@ -33,8 +32,16 @@ const useRowStatus = (
   // Moved on as the row renders: moving on twice at the same moment changes nothing.
   const now = Date.now();
   shown.current = shown.current ? nextShown(shown.current, statuses, now) : firstShown(statuses, now);
-  // Renders again only while the row has to move on by itself; new statuses render it anyway.
-  useDurationTickerNow(running && movesOn(shown.current));
+  // Renders again when the row next has to move on by itself, not on the app's shared clock, which ticks once a second
+  // when nothing spins: a status would stay up to a second past its time. New statuses render the row anyway. Each
+  // render of its own sets the time again, so one that comes a moment early waits for the rest.
+  const [moves, moveOn] = React.useReducer((renders: number) => renders + 1, 0);
+  const due = running ? movesOnAt(shown.current, now) : undefined;
+  React.useEffect(() => {
+    if (due === undefined) return;
+    const timer = setTimeout(moveOn, Math.max(0, due - Date.now()));
+    return () => clearTimeout(timer);
+  }, [due, moves]);
   return running ? rowStatus(shown.current, now, run) : { doing: undefined, percent: undefined };
 };
 

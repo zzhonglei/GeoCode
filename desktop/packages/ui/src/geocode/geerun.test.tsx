@@ -4,7 +4,7 @@ import type { Metadata, SyntheticMessage, ToolPart, ToolState } from '@/lib/open
 import { applyDirectoryEvent } from '@/sync/event-reducer';
 import { INITIAL_STATE } from '@/sync/types';
 
-import { geeRunView } from './geeRun';
+import { firstShown, geeRunView, movesOnAt, nextShown, type Status } from './geeRun';
 
 const call = (state: ToolState): ToolPart => ({
   id: 'call_gee',
@@ -68,5 +68,30 @@ describe("GeoCode: geerun's row", () => {
     expect(geeRunView(backgrounded(), undefined, true, 'en').running).toBe(true);
     // Guards against its time counting on once it no longer runs, which a row without an end does.
     expect(geeRunView(backgrounded(), undefined, false, 'en')).toMatchObject({ running: false, bad: false, start: 1000, end: 1500 });
+  });
+});
+
+// Guards against a status staying on geerun's row past its time: the row renders again only when movesOnAt says.
+describe("GeoCode: when geerun's row moves on by itself", () => {
+  const told = (seq: number, text: string | null): Status => ({ seq, text });
+
+  test('a status others wait behind moves on once it has stayed its time, the sooner the more wait', () => {
+    const first = firstShown([told(1, 'Reading the image')], 1000);
+    const two = nextShown(first, [told(1, 'Reading the image'), told(2, 'Clipping'), told(3, 'Exporting')], 1100);
+    expect(movesOnAt(two, 1100)).toBe(1800);
+    const many = nextShown(first, Array.from({ length: 21 }, (_, seq) => told(seq + 1, `step ${seq}`)), 1100);
+    expect(movesOnAt(many, 1100)).toBe(1200);
+  });
+
+  test('with nothing doing anything, the status gives way to the wait once it has stayed its time, and goes after', () => {
+    const first = firstShown([told(1, 'Reading the image')], 1000);
+    const idle = nextShown(first, [told(1, 'Reading the image'), told(2, null)], 1200);
+    expect(movesOnAt(idle, 1300)).toBe(1800);
+    expect(movesOnAt(idle, 1900)).toBe(2700);
+    expect(movesOnAt(nextShown(idle, [], 2700), 2700)).toBeUndefined();
+  });
+
+  test('a status still being done waits for nothing', () => {
+    expect(movesOnAt(firstShown([told(1, 'Reading the image')], 1000), 5000)).toBeUndefined();
   });
 });
