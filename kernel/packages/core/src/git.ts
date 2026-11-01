@@ -266,7 +266,7 @@ const layer = Layer.effect(
         path.join(gitDir, "config.worktree"),
         path.join(commonDir, "packed-refs"),
         path.join(commonDir, "reftable", "tables.list"),
-        path.join(commonDir, "opencode"),
+        path.join(commonDir, "geocode"), // GeoCode: the project ID file, as Project reads it
         ...(ref ? [path.join(commonDir, ref), path.join(gitDir, ref)] : []),
         process.env.GIT_CONFIG_GLOBAL || path.join(home, ".gitconfig"),
         path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "git", "config"),
