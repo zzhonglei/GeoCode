@@ -25,6 +25,7 @@ import { guestPackageIconSrc, resolveGuestIconName } from '@/lib/guests/icon';
 import { getRuntimeUrlResolver } from '@/lib/runtime-url';
 import { useUIStore } from '@/stores/useUIStore';
 import { useEnterpriseMode } from '@/stores/useEnterprisePolicyStore';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the integrations catalog button
 
 type Props = {
   hideDirectoryControls: boolean;
@@ -378,6 +379,8 @@ export function SidebarHeader(props: Props): React.ReactNode {
                 <Icon name="archive" className={headerActionIconClass} />
               </SidebarPageButton>
 
+              {/* --- GeoCode: users do not install integrations from a catalog --- */}
+              <Closed>
               {enterpriseMode ? null : (
                 <SidebarPageButton
                   label={t('integrationsCatalog.sidebar.open')}
@@ -388,6 +391,8 @@ export function SidebarHeader(props: Props): React.ReactNode {
                   <Icon name="store-2" className={headerActionIconClass} />
                 </SidebarPageButton>
               )}
+              </Closed>
+              {/* --- /GeoCode --- */}
             </div>
             {guestPagesInline ? guestPages.map((guest) => {
               const pressed = openGuestPageId === guest.id;

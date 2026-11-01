@@ -36,6 +36,7 @@ import { setChatCovered } from './rightSlot';
 
 import { ChatView } from '@/components/views/ChatView';
 import { DiagnosticDialogAvailableContext } from '@/lib/diagnostics/dialog-availability';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the integrations catalog
 
 const loadSettingsWindow = () => import('@/components/views/SettingsWindow').then(m => m.SettingsWindow);
 
@@ -223,7 +224,11 @@ export const MainLayout: React.FC = () => {
                                             <ErrorBoundary><OnDemand needed={isRunOverviewOpen} load={loadRunOverview} onFailure={closeMainSurfaces} /></ErrorBoundary>
                                             <ErrorBoundary><OnDemand needed={isScheduledTasksPageOpen} load={loadScheduledTasksDialog} onFailure={closeMainSurfaces} /></ErrorBoundary>
                                             <ErrorBoundary><OnDemand needed={isArchivePageOpen} load={loadArchiveView} onFailure={closeMainSurfaces} /></ErrorBoundary>
+                                            {/* --- GeoCode: users do not install integrations from a catalog --- */}
+                                            <Closed>
                                             <ErrorBoundary><OnDemand needed={isIntegrationsCatalogOpen} load={loadIntegrationsCatalogView} onFailure={closeMainSurfaces} /></ErrorBoundary>
+                                            </Closed>
+                                            {/* --- /GeoCode --- */}
                                             {isUsageStatsPageOpen && (
                                                 <div className="absolute inset-0 z-10 bg-background">
                                                     <ErrorBoundary><OnDemand needed load={loadUsageStatsView} onFailure={closeMainSurfaces} /></ErrorBoundary>

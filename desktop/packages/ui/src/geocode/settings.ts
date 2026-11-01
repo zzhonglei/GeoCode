@@ -31,6 +31,7 @@ export const CLOSED_SEARCH_ITEMS = new Set([
   'integrations.third-party.opencode-claude',
   'integrations.extensions',
   'integrations.extensions.excalidraw',
+  'integrations.extensions.resource-monitor',
   'general.isolated-spaces',
   'general.isolated-spaces-idle-stop',
   'general.isolated-spaces-machine',
