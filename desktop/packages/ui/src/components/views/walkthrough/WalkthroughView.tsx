@@ -60,6 +60,7 @@ import { revisionSuffix } from '@/lib/diff/pullRequestDiff';
 import { ContextPanelHeaderToolbar } from '@/components/layout/contextPanelHeaderSlot';
 import { useInContextPanelHeader } from '@/components/layout/contextPanelHeaderSlotContext';
 import { Closed } from '@/geocode/Closed'; // GeoCode: see the guide button
+import { diffCommentOriginFromTarget } from '@/lib/diffCommentOrigin';
 
 interface WalkthroughViewProps {
   directory: string;
@@ -269,6 +270,7 @@ export const WalkthroughView = ({ directory: rootDirectory, visible = true }: Wa
     [branchSource, isCommitScope, isPrScope, readContext, readsChangeRequests, requestedTarget, scope, selectedCommitHash, selectedPr]
   );
   const source = target.source;
+  const commentOrigin = useMemo(() => diffCommentOriginFromTarget(target), [target]);
   // A scope the person picked before its subject exists: the base of a branch
   // comparison, or which commit to read. Nothing loads until they say.
   const choosingBranchBase = pendingSourceSelection?.directory === directory
@@ -699,6 +701,7 @@ export const WalkthroughView = ({ directory: rootDirectory, visible = true }: Wa
                 onScrollHandled={review.clearScrollRequest}
                 renderSideBySide={renderSideBySide}
                 wrapLines={wrapLines}
+                commentOrigin={commentOrigin}
                 summary={showToc ? undefined : view.walkthrough.focus}
                 uncoveredOpenRequest={findInWalkthrough.uncoveredOpenRequest}
                 registerFindViewerRef={findInWalkthrough.registerViewer}

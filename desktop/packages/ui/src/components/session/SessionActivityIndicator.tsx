@@ -11,13 +11,14 @@ import { geeBackgroundText } from '@/geocode/geoTools'; // GeoCode: see above
 
 /**
  * What a session row or aggregate is showing: its own turn running
- * (busy/retry), a pause kept open by a background subagent or a background
- * command, or a finished turn the user has not seen.
+ * (busy/retry), a pause kept open by a workflow run, a background subagent or
+ * a background command, or a finished turn the user has not seen.
  */
-type SessionActivityIndicatorState = 'running' | 'subagent' | 'shell' | 'unread' | 'gee'; // GeoCode: see the import
+type SessionActivityIndicatorState = 'running' | 'workflow' | 'subagent' | 'shell' | 'unread' | 'gee'; // GeoCode: see the import
 
 const PRESENTATION = {
   running: { icon: 'circle', colorClass: 'text-status-info', labelKey: 'sessions.sidebar.session.status.active' },
+  workflow: { icon: 'flow-chart', colorClass: 'text-status-info', labelKey: 'sessions.sidebar.session.status.workflowRunning' },
   subagent: { icon: 'robot', colorClass: 'text-status-info', labelKey: 'sessions.sidebar.session.status.backgroundSubagent' },
   shell: { icon: 'terminal', colorClass: 'text-status-info', labelKey: 'sessions.sidebar.session.status.backgroundCommand' },
   unread: { icon: 'checkbox-circle', colorClass: 'text-status-success', labelKey: 'sessions.sidebar.session.status.unread' },

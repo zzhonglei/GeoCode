@@ -15,6 +15,7 @@
 
 import type { OpenCodeEvent } from "@opencode/client"
 import { geeRunsSnapshot, type GeeRunsSnapshot } from "@/geocode/geeRunsRpc" // GeoCode: see translateWireEvent
+import type { WorkflowRun } from "@/lib/workflows/model"
 import {
   compact,
   partIds,
@@ -184,6 +185,9 @@ export type SyncEvent =
   | { type: "openchamber.page-settled"; properties: { sessionID: string; pageID: string } }
   /** The server started or stopped waiting to write a session's recap and suggestion. */
   | { type: "openchamber.session-assist"; properties: { sessionID: string; directory: string | null; pending: boolean } }
+  /** A workflow run changed: proposed, approved, an agent moved on, or it ended. */
+  | { type: "openchamber.workflow-run"; properties: { run: WorkflowRun } }
+  | { type: "openchamber.workflow-run-removed"; properties: { runId: string; parentSessionId: string } }
 
 /** Agent-completion / restart notices the OpenChamber server publishes for non-web runtimes. */
 export type OpenchamberNotification = {

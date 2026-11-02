@@ -15,6 +15,7 @@ import {
 import { countSyncPerformance } from './performance-diagnostics';
 import { hasRunningShell, useBackgroundShellsStore } from './background-shells';
 import { hasRunningGeeRun, settleEndedGeeRuns, useBackgroundGeeRuns } from '@/geocode/backgroundGeeRuns'; // GeoCode: an Earth Engine run in the background keeps its session's turn open, as a command does
+import { useWorkflowActivityStore } from './workflow-activity';
 
 // Shared live busy/retry index for every directory. Global events update it
 // incrementally and authoritative directory snapshots reconcile it, so each
@@ -131,20 +132,36 @@ const hasBackgroundWork = (sessionId: string, activeSessionIds: ReadonlySet<stri
 
 /**
  * What keeps the session's turn open, or null when nothing does: the session
- * runs itself, or it idles while a subagent below it runs, or while a command
- * it started in the background runs. The session's own run wins; a pause with
- * both kinds of background work reports the subagent.
+ * runs itself, or it idles while a workflow run it proposed runs, or while a
+ * subagent below it runs, or while a command it started in the background
+ * runs. The session's own run wins; a workflow comes next, because its agents
+ * are subagents too and the run says what they are doing; then a subagent.
+ * The workflow state is the run's own (the OpenChamber server's runs, kept by
+ * its events, see `workflow-activity.ts`), so it holds between phases when no
+ * agent happens to be busy.
  */
-type SessionTurnActivity = 'running' | 'subagent' | 'shell' | 'gee'; // GeoCode: see the import; a command wins over it
+type SessionTurnActivity = 'running' | 'workflow' | 'subagent' | 'shell' | 'gee'; // GeoCode: see the import; a command wins over it
+
+/** The order above: the session's own run, a workflow, a subagent, a command. */
+export const resolveSessionTurnActivity = (
+  status: 'running' | 'subagent' | null,
+  workflowRunning: boolean,
+  waitingOnShell: boolean,
+): SessionTurnActivity | null => {
+  if (status === 'running') return status;
+  if (workflowRunning) return 'workflow';
+  return status ?? (waitingOnShell ? 'shell' : null);
+};
 
 export const useSessionTurnActivity = (sessionId: string): SessionTurnActivity | null => {
-  const status = useGlobalSessionStatusStore((state): SessionTurnActivity | null => {
+  const status = useGlobalSessionStatusStore((state): 'running' | 'subagent' | null => {
     if (state.activeSessionIds.has(sessionId)) return 'running';
     return hasActiveSubagent(sessionId, state.activeSessionIds) ? 'subagent' : null;
   });
+  const workflowRunning = useWorkflowActivityStore((state) => state.runningSessionIds.has(sessionId));
   const waitingOnShell = useBackgroundShellsStore((state) => state.sessionIds.has(sessionId));
   const waitingOnGee = useBackgroundGeeRuns((state) => state.sessionIds.has(sessionId)); // GeoCode: see the import
-  return status ?? (waitingOnShell ? 'shell' : waitingOnGee ? 'gee' : null); // GeoCode: see the import
+  return resolveSessionTurnActivity(status, workflowRunning, waitingOnShell) ?? (waitingOnGee ? 'gee' : null); // GeoCode: see the import
 };
 
 // The last background command of an idle session ending closes its turn,

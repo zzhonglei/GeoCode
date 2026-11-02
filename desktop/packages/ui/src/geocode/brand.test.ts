@@ -31,13 +31,16 @@ const CLOSED = [
   'updateDialog.',
 ];
 
+// Named when the kernel is assembled, together with the commands it carries: the badge of the kernel's built-in commands.
+const LATER = ['chat.autocomplete.scope.opencode'];
+
 const dictionaries: [Locale, I18nDictionary][] = [['en', en], ['zh-CN', zhCN], ['zh-TW', zhTW]];
 
 describe('GeoCode: names in the interface', () => {
   for (const [locale, dictionary] of dictionaries) {
     test(`names neither upstream in ${locale} outside closed screens`, () => {
       const named = Object.entries(toGeoCodeDictionary(locale, dictionary))
-        .filter(([key, text]) => UPSTREAM.test(text.replace(SERVICES, '')) && !CLOSED.some((prefix) => key.startsWith(prefix)))
+        .filter(([key, text]) => UPSTREAM.test(text.replace(SERVICES, '')) && !CLOSED.some((prefix) => key.startsWith(prefix)) && !LATER.includes(key))
         .map(([key]) => key);
       expect(named).toEqual([]);
     });

@@ -78,6 +78,7 @@ const MESSAGES = {
     'settings.skills.page.use.info': 'Off adds a rule to the kernel\'s config and leaves the skill\'s files as they are.',
     'settings.skills.page.use.unknown': 'Couldn\'t read the kernel\'s config, so it\'s not known whether this skill is off. Reopen the page to try again.',
     'settings.sourceControl.token.info': 'GeoCode keeps the token on this computer and never shows it again.',
+    'chat.autocomplete.scope.openchamber': 'GeoCode', // the badge of its own commands, which upstream writes in lower case
   },
   'zh-CN': {
     'settings.view.nav.group.opencode': '内核',
@@ -123,6 +124,7 @@ const MESSAGES = {
     'settings.skills.page.use.info': '关闭会在内核配置中添加一条规则，技能文件保持不变。',
     'settings.skills.page.use.unknown': '无法读取内核配置，因此不知道此技能是否已关闭。重新打开页面即可重试。',
     'settings.sourceControl.token.info': 'GeoCode 将令牌保存在本机，之后不会再显示。',
+    'chat.autocomplete.scope.openchamber': 'GeoCode',
   },
   'zh-TW': {
     'settings.view.nav.group.opencode': '核心',
@@ -168,6 +170,7 @@ const MESSAGES = {
     'settings.skills.page.use.info': '關閉會在核心設定中新增一條規則，技能檔案保持不變。',
     'settings.skills.page.use.unknown': '無法讀取核心設定，因此不知道此技能是否已關閉。重新開啟頁面即可重試。',
     'settings.sourceControl.token.info': 'GeoCode 會將權杖保存在本機，之後不會再顯示。',
+    'chat.autocomplete.scope.openchamber': 'GeoCode',
   },
 } satisfies Partial<Record<Locale, Messages>>;
 
