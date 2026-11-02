@@ -4,6 +4,8 @@ import os from 'os';
 import path from 'path';
 import { parse as parseJsonc } from 'jsonc-parser';
 import { z } from 'zod';
+import { KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC, KERNEL_PROJECT_DIR } from '../../geocode/kernel-paths.js'; // GeoCode: see configItems
+import { OPENCODE_CONFIG_DIR } from '../opencode/shared.js'; // GeoCode: see defaultGlobalConfigDirectories
 
 // What OpenCode runs from a folder's own configuration as soon as it opens
 // that folder, found the way OpenCode 2.x discovers it
@@ -20,6 +22,8 @@ import { z } from 'zod';
 // is skipped, as OpenCode skips it.
 
 /** OpenCode's global configuration directories, as `config/discovery.ts` finds them. */
+const defaultGlobalConfigDirectories = () => [OPENCODE_CONFIG_DIR]; // GeoCode: the kernel's, as the shell resolves it; the kernel reads no machine-wide directory (server/src/geocode/profile.ts), and no XDG variable moves it
+/* --- GeoCode: see the line above ---
 const defaultGlobalConfigDirectories = () => {
   const configHome = process.env.XDG_CONFIG_HOME?.trim() || path.join(os.homedir(), '.config');
   const system = process.platform === 'darwin'
@@ -29,8 +33,9 @@ const defaultGlobalConfigDirectories = () => {
       : '/etc/opencode';
   return [path.join(configHome, 'opencode'), process.env.OPENCODE_CONFIG_DIR?.trim(), system].filter(Boolean);
 };
+--- /GeoCode --- */
 
-const CONFIG_FILES = ['opencode.json', 'opencode.jsonc'];
+const CONFIG_FILES = [KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC]; // GeoCode: the kernel's file names
 const PLUGIN_DIRECTORIES = ['plugin', 'plugins'];
 const PLUGIN_SOURCE = /\.(ts|js)$/;
 
@@ -143,8 +148,10 @@ const namedOf = (schema) => z.record(z.string(), z.unknown()).catch({}).transfor
 ));
 
 const documentSchema = z.object({
+  /* --- GeoCode: the kernel loads plugins from the app's managed config alone (server/src/geocode/profile.ts) ---
   plugin: listOf(pluginSpecSchema).optional(),
   plugins: listOf(pluginSpecSchema).optional(),
+  --- /GeoCode --- */
   mcp: namedOf(commandSchema).optional(),
   lsp: namedOf(commandSchema).optional(),
   formatter: namedOf(commandSchema).optional(),
@@ -233,11 +240,16 @@ const isDirectoryAt = async (fsPromises, target) => Boolean((await statOrNull(fs
 const configItems = async (fsPromises, directory, homeDirectory, globalDirectories) => {
   if (globalDirectories.has(directory)) return [];
   const items = [];
+  for (const level of [directory]) { // GeoCode: the folder itself; the kernel reads no level above it
+  /* --- GeoCode: see the line above ---
   for (const level of levelsToScan(directory, homeDirectory)) {
+  --- /GeoCode --- */
     if (globalDirectories.has(level)) continue;
-    const opencodeDirectory = path.join(level, '.opencode');
+    const opencodeDirectory = path.join(level, KERNEL_PROJECT_DIR); // GeoCode: the kernel's project directory
     if (await isDirectoryAt(fsPromises, opencodeDirectory)) {
+      /* --- GeoCode: no plugin folders, see documentSchema ---
       items.push(...await pluginDirectoryItems(fsPromises, opencodeDirectory, directory));
+      --- /GeoCode --- */
       for (const name of CONFIG_FILES) {
         const file = path.join(opencodeDirectory, name);
         items.push(...await documentItems(fsPromises, file, toSlashes(path.relative(directory, file))));

@@ -276,7 +276,7 @@ export const createOpenChamberControlService = (dependencies) => {
     // OpenCode configuration runs code waits until the user trusts it in the app.
     if (directory && isOpenCodeDirectoryTrusted && !(await isOpenCodeDirectoryTrusted(directory))) {
       throw new OpenChamberControlError(
-        `OpenCode is paused for ${directory}: its configuration runs plugins or commands the user has not trusted. Ask the user to open the folder in OpenChamber and trust it.`,
+        `The kernel is paused for ${directory}: its configuration runs plugins or commands the user has not trusted. Ask the user to open the folder in GeoCode and trust it.`, // GeoCode: the kernel, and its own name
         403,
       );
     }
