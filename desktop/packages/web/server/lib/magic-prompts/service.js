@@ -83,6 +83,10 @@ export const createMagicPromptService = ({ path, runtime, projectRuntime, listPr
     return { id: project.id, path: project.path };
   };
 
+  // --- GeoCode: no overrides, so the server's features (the walkthrough) render the built-in prompts; neither the
+  // global file nor a repository's .openchamber/project.json reaches a prompt, as the endpoint is closed ---
+  const overridesForDirectory = async (_directory) => ({});
+  /*
   // A failed read of either file is an error, never fewer overrides.
   const overridesForDirectory = async (directory) => {
     const owner = await ownerOfDirectory(directory);
@@ -98,6 +102,8 @@ export const createMagicPromptService = ({ path, runtime, projectRuntime, listPr
     }
     return mergeEffectiveOverrides(globalState.overrides, projectState?.overrides ?? {});
   };
+  */
+  // --- /GeoCode ---
 
   const globalScopeOf = async () => {
     try {
