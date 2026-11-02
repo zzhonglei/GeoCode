@@ -76,7 +76,7 @@
 ├── settings.json              这台电脑上的状态:窗口位置等
 ├── preferences.json           个人偏好:界面、默认模型等
 ├── chats/                     不属于任何项目的对话各自的工作目录,agent 在这类对话里生成的文件都在这里
-├── run/instances/<进程号>/    这次运行的应用交给内核的配置 geocode.managed.json,与让 agent 使用应用功能(浏览器、通知等)的插件 agent-tool/,每次启动重新生成;在设置里打开用量超限时换账号或换模型后,还有替内核做这件事的插件 limit-failover/;已退出的进程留下的目录在启动时删掉
+├── run/instances/<进程号>/    这次运行的应用交给内核的配置 geocode.managed.json,与让 agent 使用应用功能(浏览器、通知等)的插件 agent-tool/,每次启动重新生成;给新会话起标题的插件 session-title/geocode-session-title/ 也在这里;在设置里打开用量超限时换账号或换模型后,还有替内核做这件事的插件 limit-failover/;已退出的进程留下的目录在启动时删掉
 ├── managed-kernel/            正在运行的内核进程的登记,用来清理异常退出后留下的进程
 ├── remote-clients.json        窗口的访问令牌的记录(只存摘要)
 ├── git-credential-endpoint.json, bin/git-credential-geocode  git 凭据助手与它调用的接口地址和密钥
@@ -90,6 +90,8 @@
 ├── sessions-archive.json      会话的归档状态
 ├── sessions-directories.json  会话分组
 ├── sessions-unread.json       从哪一刻起标出未读的会话,此前结束的回合算已读;第一次启动时写一次
+├── session-drafts.json, session-drafts/<草稿>/  没发出的消息草稿与它附带的文件(按路径附加的只记路径),每台连上的设备都看得到
+├── opencode-trust.json        信任过的项目配置,按仓库记下指纹(DESKTOP.md 第 3 节);检查初次运行时记下项目列表里已有的项目
 ├── session-warming.json       保持服务商提示缓存的会话与时长,在设置里打开后才有
 ├── message-queue.json         排队等待发送的消息
 ├── dispatch-results.json      等待交回发起会话的子会话结果
@@ -168,6 +170,7 @@
     └── refs/
         ├── heads/geocode/   在应用里新建工作树而没有指定分支名时建立的分支(agent 建立的工作树不建分支)
         ├── heads/<分支>-backup-<提交>   为拉取请求建立工作树时,同名的旧本地分支已与请求分叉,移动它之前留下的备份
+        ├── geocode/archive/ 归档的工作树:删掉文件夹之前的全部状态(包括未提交的改动),在归档页恢复时取回;删除归档时删掉,可选一并删掉它的分支
         └── geocode/runs/    多方案运行里选定一个后,其余方案的工作树删除前留下的快照
 ```
 
@@ -179,6 +182,8 @@ GeoCode 在 `.git/config` 里写入的:
 - 从贡献者的拉取请求建立工作树时,那个贡献者仓库的 `remote.<名字>.*`。
 - 经应用推送并设置上游时,以及 agent 把会话挪进远程已有分支的工作树时的 `branch.<分支>.remote` 与 `branch.<分支>.merge`。
 - 在应用里建立工作树、从一个分支开出新分支时,记下它从哪个分支开出的 `branch.<新分支>.gh-merge-base`(GitHub CLI 的约定,`gh pr create` 也拿它作拉取请求的默认目标);叠放的拉取请求与改动对比靠它找到上一层分支。
+- 工作树的任务名:用户在侧栏改名或 agent 给任务起名时写进 `branch.<分支>.description`(git 自己的键);agent 起的名字另记在 `branch.<分支>.geocodeAgentTitle`,用来分辨用户改过没有。
+- 新建工作树时自动生成的分支名,记在 `branch.<分支>.geocodeGeneratedName`(为议题建立时,要保留的前缀记在 `geocodeGeneratedPrefix`)。这样的分支还没推送时,agent 给任务起名会用 `git branch -m` 把它改成按任务取的名字;改名后记录不再对应,分支不会再被改。
 
 agent 把会话挪进新的工作树时,未提交的改动经一条 `GeoCode: session … moved to worktree …` 的 stash 带过去,带过去之后删掉;迁移失败、改动又放不回原处时这条 stash 留着,报给 agent 的错误里写着它。在 Git 面板里暂存改动而没写说明时,stash 的说明是 `GeoCode stash <时间>`。
 
@@ -209,7 +214,7 @@ GeoCode 写文件多是先写旁边的临时文件、再改名替换,有的另�
 
 - 环境变量:macOS 上启动时以交互的登录 shell 读一次环境(它会执行 `.zprofile`、`.zshrc` 这类启动文件),Windows 上从注册表读用户与系统的 `PATH`(`ENVIRONMENT.md` 第 2.1 节)。agent 执行的命令与终端因此能找到 conda、GDAL 等工具。
 - git:全局配置(身份、`core.sshCommand`、`safe.directory`);没有设 `SSH_AUTH_SOCK` 时,用 `gpgconf` 与 `~/.gnupg` 找 GPG 代理提供的 SSH 套接字;仓库没有绑定账号时,git 照常用用户自己的凭据助手与 SSH。
-- GitHub CLI 的登录(`gh auth token`);gh 运行时会在它自己的状态目录写下一个设备标识。列出 GitHub 企业版的服务器时,读 gh 记下的登录主机(`GH_CONFIG_DIR` 或 `~/.config/gh` 下的 `hosts.yml`)与 `GH_HOST`。
+- GitHub CLI 的登录(`gh auth token`);gh 运行时会在它自己的状态目录写下一个设备标识。列出 GitHub 企业版的服务器时,读 gh 记下的登录主机(`GH_CONFIG_DIR` 或 `~/.config/gh` 下的 `hosts.yml`)与 `GH_HOST`。gh 交出的令牌在它的 `hosts.yml` 没变时重用至多 5 分钟,为此按 gh 自己的顺序找这个文件:`GH_CONFIG_DIR`、`XDG_CONFIG_HOME/gh`、Windows 上的 `%APPDATA%\GitHub CLI`、`~/.config/gh`,只看文件信息(修改时间等),不读内容。
 - 在设置里查找可导入的 SSH 密钥时,`~/.ssh` 下的密钥,选中的复制进数据目录。
 - npm:安装服务商 SDK 与格式化工具时,`~/.npmrc`、npm 自己的全局配置与 `npm_config_*` 变量。
 - 模型服务商:内核启动时为登录选项读 AWS 的配置名(`~/.aws/config` 与 `~/.aws/credentials`);为 Google Vertex AI 的登录选项读 gcloud 配置里的项目号与区域,以及默认凭据文件 `application_default_credentials.json` 里的项目号,不联网,登录时也可以自己填;选用 Azure 并以 Azure CLI 登录时,调用 `az` 取令牌;连接 Claude Agent 时,运行用户自己装的 `claude`,用它自己的登录;选用 GitLab 时读 `GITLAB_TOKEN` 与项目的远程地址。配置文件里以 `{file:…}` 引用的密钥文件,用到时读取。
