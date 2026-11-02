@@ -44,6 +44,7 @@ import { z } from "zod"
 import { readContextPart } from "@/lib/messages/contextParts"
 
 import { readShellCancellation, readShellCompletion } from "./background-shell"
+import { isGeeRunNotice } from "@/geocode/geeRun" // GeoCode: see readSessionNotice
 import { readDispatchedSessionResult } from "./dispatched-session"
 import type { Message, Metadata, Part, ToolPart } from "./model"
 import { isSubagentCancellationNote, readSubagentRun } from "./subagent-run"
@@ -81,6 +82,7 @@ export function readSessionNotice(message: Message): SessionNotice | undefined {
   if (readContextPart({ type: "text", metadata: message.metadata })) return undefined
   if (readSubagentRun(message) || readDispatchedSessionResult(message)) return undefined
   if (readShellCompletion(message) || readShellCancellation(message) || isSubagentCancellationNote(message)) return undefined
+  if (isGeeRunNotice(message)) return undefined // GeoCode: geerun's row says how its run in the background ended
   if (HIDDEN_DESCRIPTIONS.has(description) || instructionsLoadedSchema.safeParse(metadata).success) return undefined
   const text = message.text
   if (restartSchema.safeParse(metadata).success) return { kind: "restart", text }

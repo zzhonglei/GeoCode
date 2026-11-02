@@ -51,13 +51,18 @@ const noticeAnswer = (notice: SyntheticMessage, { task, state }: z.infer<typeof 
     -'\n</geerun>'.length,
   );
 
+/**
+ * Whether a message is the notification that ends a run in the background. The conversation shows it on the call's
+ * row, so upstream's timeline does not show it again as a notice (readSessionNotice in lib/opencode/session-notices.ts).
+ */
+export const isGeeRunNotice = (message: Message): boolean =>
+  message.role === 'synthetic' && noticeMetadata.safeParse(message.metadata).success;
+
 /** The notification that ended a call's run in the background, among a conversation's messages. */
 export const geeRunNotice = (messages: readonly Message[], callID: string) =>
   messages.find(
     (message): message is SyntheticMessage =>
-      message.role === 'synthetic' &&
-      message.metadata?.callID === callID &&
-      noticeMetadata.safeParse(message.metadata).success,
+      message.role === 'synthetic' && message.metadata?.callID === callID && isGeeRunNotice(message),
   );
 
 /** The answer's last paragraph, which says how the run ended. */

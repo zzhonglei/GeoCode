@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import type { Metadata, SyntheticMessage, ToolPart, ToolState } from '@/lib/opencode/model';
+import { readSessionNotice } from '@/lib/opencode/session-notices';
 import { applyDirectoryEvent } from '@/sync/event-reducer';
 import { INITIAL_STATE } from '@/sync/types';
 
@@ -28,6 +29,17 @@ const backgrounded = (metadata: Metadata = {}) =>
     time: { start: 900, end: 1500 },
   });
 
+/** The notification the kernel puts into the conversation once a run in the background has ended. */
+const noticeOf = (description: string): SyntheticMessage => ({
+  id: 'msg_notice',
+  sessionID: 'ses_1',
+  role: 'synthetic',
+  time: { created: 5000 },
+  description,
+  text: `<geerun task="${INPUT.task}" state="completed" description="${description}">\nimages: 0\n\nThe script failed.\n</geerun>`,
+  metadata: { source: 'geerun', callID: 'call_gee', task: INPUT.task, state: 'completed', outcome: 'failed', ended: 4000 },
+});
+
 describe("GeoCode: geerun's row", () => {
   // Guards against the kernel's progress for a run in the background being dropped, or reopening other calls.
   test("the conversation takes a background run's progress onto its answered call, and no other call's", () => {
@@ -47,19 +59,16 @@ describe("GeoCode: geerun's row", () => {
 
   // Guards against a description of several lines hiding how a run in the background ended.
   test('a background run ends as its notification says, whatever lines its description holds', () => {
-    const description = '下载台北真彩色影像\n并导出 RGB';
-    const notice: SyntheticMessage = {
-      id: 'msg_notice',
-      sessionID: 'ses_1',
-      role: 'synthetic',
-      time: { created: 5000 },
-      description,
-      text: `<geerun task="${INPUT.task}" state="completed" description="${description}">\nimages: 0\n\nThe script failed.\n</geerun>`,
-      metadata: { source: 'geerun', callID: 'call_gee', task: INPUT.task, state: 'completed', outcome: 'failed', ended: 4000 },
-    };
-    const view = geeRunView(backgrounded(), notice, false, 'en');
+    const view = geeRunView(backgrounded(), noticeOf('下载台北真彩色影像\n并导出 RGB'), false, 'en');
     expect(view.bad).toBe(true);
     expect(view.lines.at(-1)).toMatchObject({ text: 'The script failed.', tone: 'error' });
+  });
+
+  // Guards against the notification showing a second time beside the row, as upstream shows a plugin's notice.
+  test("a background run's notification is no notice of its own in the conversation", () => {
+    const notice = noticeOf(INPUT.description);
+    expect(readSessionNotice(notice)).toBeUndefined();
+    expect(readSessionNotice({ ...notice, metadata: { source: 'plugin' } })).toMatchObject({ kind: 'plugin' });
   });
 
   // Guards against a fork's copy of a call running for ever: its notification goes to the session that started the
