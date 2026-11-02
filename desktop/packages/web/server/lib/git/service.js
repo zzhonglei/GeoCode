@@ -5036,7 +5036,7 @@ export async function setWorktreeTaskTitle(directory, input = {}) {
  */
 const applyBranchTaskTitle = async (directory, branch, by, title) => {
   const descriptionKey = `branch.${branch}.description`;
-  const agentTitleKey = `branch.${branch}.openchamberAgentTitle`;
+  const agentTitleKey = `branch.${branch}.geocodeAgentTitle`; // GeoCode: its own key in the user's repository
   const current = toTaskTitle(await readGitConfigValue(directory, descriptionKey));
   if (by === 'agent') {
     const agentTitle = toTaskTitle(await readGitConfigValue(directory, agentTitleKey));
@@ -5075,9 +5075,9 @@ export async function markGeneratedBranchName(directory, branch, prefix = null) 
   if (!branchName || !directoryPath) return;
   const keep = String(prefix || '').trim();
   try {
-    await writeGitConfigValue(directoryPath, `branch.${branchName}.openchamberGeneratedName`, branchName);
+    await writeGitConfigValue(directoryPath, `branch.${branchName}.geocodeGeneratedName`, branchName); // GeoCode: its own keys in the user's repository, also below
     if (keep && keep.length < branchName.length && branchName.startsWith(keep)) {
-      await writeGitConfigValue(directoryPath, `branch.${branchName}.openchamberGeneratedPrefix`, keep);
+      await writeGitConfigValue(directoryPath, `branch.${branchName}.geocodeGeneratedPrefix`, keep);
     }
   } catch (error) {
     console.warn('Failed to mark a generated branch name:', error instanceof Error ? error.message : String(error));
@@ -5101,7 +5101,7 @@ export async function readRenameableGeneratedBranch(directory, checkedOutBranch 
     branch = head.success ? String(head.stdout || '').trim() : '';
   }
   if (!branch) return null;
-  if ((await readGitConfigValue(directoryPath, `branch.${branch}.openchamberGeneratedName`)).trim() !== branch) return null;
+  if ((await readGitConfigValue(directoryPath, `branch.${branch}.geocodeGeneratedName`)).trim() !== branch) return null; // GeoCode: see markGeneratedBranchName
   if ((await readGitConfigValue(directoryPath, `branch.${branch}.remote`)).trim()) return null;
   const remote = await runGitCommand(directoryPath, ['for-each-ref', '--format=%(refname)', `refs/remotes/*/${branch}`]);
   if (!remote.success || String(remote.stdout || '').trim()) return null;
@@ -5121,7 +5121,7 @@ export async function renameGeneratedWorktreeBranch(directory, newName) {
   const directoryPath = normalizeDirectoryPath(directory);
   const current = directoryPath ? await readRenameableGeneratedBranch(directoryPath) : null;
   if (!current) return null;
-  const prefix = (await readGitConfigValue(directoryPath, `branch.${current}.openchamberGeneratedPrefix`)).trim();
+  const prefix = (await readGitConfigValue(directoryPath, `branch.${current}.geocodeGeneratedPrefix`)).trim(); // GeoCode: see markGeneratedBranchName
   const requested = String(newName || '').trim();
   const name = prefix && requested && !requested.startsWith(prefix)
     ? `${prefix}${requested.split('/').pop() || requested}`
@@ -6597,8 +6597,8 @@ export async function snapshotWorktree(directory, input = {}) {
 // carries what restoring needs. Nothing else records an archive, so every
 // client of the repository sees the same list, and a ref keeps the snapshot
 // safe from gc until the archive is deleted.
-const WORKTREE_ARCHIVE_REF_PREFIX = 'refs/openchamber/archive/';
-const WORKTREE_ARCHIVE_SUBJECT = 'OpenChamber worktree archive';
+const WORKTREE_ARCHIVE_REF_PREFIX = 'refs/geocode/archive/'; // GeoCode: its own ref and name in the user's repository, as the run snapshots
+const WORKTREE_ARCHIVE_SUBJECT = 'GeoCode worktree archive';
 const WORKTREE_ARCHIVE_ID_PATTERN = /^[A-Za-z0-9_-]{1,80}$/;
 
 const worktreeArchiveIdSchema = z.string().trim().regex(WORKTREE_ARCHIVE_ID_PATTERN);
