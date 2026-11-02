@@ -1,4 +1,4 @@
-const PLUGIN_ID = 'openchamber-session-title';
+const PLUGIN_ID = 'geocode-session-title'; // GeoCode: its own name, also the package name below, as the agent tool's
 
 // Same title style as the regeneration prompt in
 // packages/ui/src/lib/sessionTitle.ts; change both together. This one names a
