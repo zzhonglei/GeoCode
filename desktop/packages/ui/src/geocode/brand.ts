@@ -63,6 +63,9 @@ const MESSAGES = {
     'chat.chatInput.waitingForOpenCodeHint': 'The message goes out as soon as the kernel starts',
     'settings.openchamber.sessionWork.info': 'A block in the sidebar, under Chats, for the sessions you\'re working in. A session goes there when you send a message in it, stays in its project as well, and leaves when you mark it done: hover it and use the check, or use the session menu.',
     'settings.openchamber.visual.field.openTrackerLinksOnBoardInfo': 'Links to GitHub issues and pull requests open in the Tracker beside the chat when their project is open here. Cmd+click or Ctrl+click opens the link itself.',
+    'session.newWorktree.toast.startFolderMissing': 'This worktree has no "{folder}" folder, so the kernel started at the worktree root.',
+    'session.newWorktree.toast.startFolderUnverified': 'Couldn\'t check the "{folder}" folder, so the kernel started at the worktree root.',
+    'session.newWorktree.toast.startFolderUnknown': 'Couldn\'t tell which folder of the repository this project opens, so the kernel started at the worktree root.',
   },
   'zh-CN': {
     'settings.view.nav.group.opencode': '内核',
@@ -96,6 +99,9 @@ const MESSAGES = {
     'chat.chatInput.waitingForOpenCodeHint': '内核启动后会立即发送消息',
     'settings.openchamber.sessionWork.info': '侧边栏中位于聊天下方的一个区块，用于放置你正在处理的会话。你在会话中发送消息后，它就会进入这里，同时仍留在所属项目中；标记为完成后才会离开：悬停在会话上点对勾，或使用会话菜单。',
     'settings.openchamber.visual.field.openTrackerLinksOnBoardInfo': 'GitHub 的 Issue 和拉取请求的链接，在其项目已在此打开时会在聊天旁的“跟踪”中打开。Cmd+点击或 Ctrl+点击会打开链接本身。',
+    'session.newWorktree.toast.startFolderMissing': '此 worktree 中没有“{folder}”文件夹，因此内核在 worktree 根目录启动。',
+    'session.newWorktree.toast.startFolderUnverified': '无法检查“{folder}”文件夹，因此内核在 worktree 根目录启动。',
+    'session.newWorktree.toast.startFolderUnknown': '无法确定此项目打开的是仓库中的哪个文件夹，因此内核在 worktree 根目录启动。',
   },
   'zh-TW': {
     'settings.view.nav.group.opencode': '核心',
@@ -129,6 +135,9 @@ const MESSAGES = {
     'chat.chatInput.waitingForOpenCodeHint': '核心啟動後會立即傳送訊息',
     'settings.openchamber.sessionWork.info': '側邊欄中位於聊天下方的一個區塊，用來放置你正在處理的工作階段。你在工作階段中傳送訊息後，它就會進入這裡，同時仍留在所屬專案中；標記為完成後才會離開：將游標移到工作階段上點勾號，或使用工作階段選單。',
     'settings.openchamber.visual.field.openTrackerLinksOnBoardInfo': 'GitHub 的 Issue 與拉取請求的連結，在其專案已在此開啟時會在聊天旁的「追蹤」中開啟。Cmd+點擊或 Ctrl+點擊會開啟連結本身。',
+    'session.newWorktree.toast.startFolderMissing': '此 worktree 中沒有「{folder}」資料夾，因此核心在 worktree 根目錄啟動。',
+    'session.newWorktree.toast.startFolderUnverified': '無法檢查「{folder}」資料夾，因此核心在 worktree 根目錄啟動。',
+    'session.newWorktree.toast.startFolderUnknown': '無法確定此專案開啟的是儲存庫中的哪個資料夾，因此核心在 worktree 根目錄啟動。',
   },
 } satisfies Partial<Record<Locale, Messages>>;
 
