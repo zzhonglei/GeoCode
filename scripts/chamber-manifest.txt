@@ -66,12 +66,16 @@ LICENSE
 !docs
 !packages/docs
 
-# --- Deployment of upstream's server mode, and configs for developer tools we
-# do not run (shadcn, knip, nvm). Nothing installs, builds or runs them. ---
+# --- Deployment of upstream's server mode (Docker, Caddy, a Nix flake and NixOS
+# module), and configs for developer tools we do not run (shadcn, knip, nvm).
+# Nothing installs, builds or runs them. ---
 !.dockerignore
 !Dockerfile
 !docker-compose.yml
 !Caddyfile
+!flake.nix
+!flake.lock
+!nix
 !components.json
 !knip.json
 !.nvmrc
