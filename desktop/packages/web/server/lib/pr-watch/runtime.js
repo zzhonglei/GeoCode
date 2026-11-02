@@ -35,7 +35,7 @@ const RETRY_MAX_DELAY_MS = 60_000;
 // A wake that keeps failing is given up, so a broken session does not retry forever.
 const MAX_DELIVERY_FAILURES = 8;
 const FETCH_TIMEOUT_MS = 15_000;
-export const PR_WATCH_SOURCE = 'openchamber-pr-watch';
+export const PR_WATCH_SOURCE = 'geocode-pr-watch'; // GeoCode: its own name, kept with the message in the kernel's session
 
 /** What the agent is told, in the order it reads best. */
 const EVENT_TEXT = {
@@ -199,7 +199,7 @@ const buildWakeMessage = (watch) => {
     ? 'There is nothing more to wait for.'
     : 'You are no longer watching it. Read what changed and act on it; call pr.watch again when you need to wait for it once more.';
   return {
-    text: `<openchamber-pull-request url="${escapeAttribute(watch.url)}" number="${number}">\nPull request #${number}: ${changes.join('; ')}.\n${next}\n</openchamber-pull-request>`,
+    text: `<geocode-pull-request url="${escapeAttribute(watch.url)}" number="${number}">\nPull request #${number}: ${changes.join('; ')}.\n${next}\n</geocode-pull-request>`, // GeoCode: product name
     description: `Pull request #${number}: ${changes.join(', ')}`,
     metadata: { source: PR_WATCH_SOURCE, url: watch.url, events: watch.wake.events },
   };
@@ -559,7 +559,7 @@ export function createPrWatchRuntime({
         issues: [],
       });
       if (result?.status === 'disconnected') {
-        throw httpError(`OpenChamber has no ${item.provider === 'gitlab' ? 'GitLab' : 'GitHub'} account connected for ${threadInstance(item)}, so it cannot follow this pull request`, 400);
+        throw httpError(`GeoCode has no ${item.provider === 'gitlab' ? 'GitLab' : 'GitHub'} account connected for ${threadInstance(item)}, so it cannot follow this pull request`, 400); // GeoCode: product name
       }
       if (result?.status === 'ok') {
         const summary = (result.pulls ?? []).find((pull) => pull?.number === item.number);

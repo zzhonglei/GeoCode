@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -8,7 +8,9 @@ import { createAgentToolRuntime } from '../lib/agent-tool/runtime.js';
 import * as actions from '../lib/openchamber-control/actions.js';
 import { createImageGenerationAction } from '../lib/openchamber-control/generate-image.js';
 import { createWorkNamer } from '../lib/openchamber-sessions/work-naming.js';
+import { createPrWatchRuntime, parsePullRequestUrl } from '../lib/pr-watch/runtime.js';
 import { buildKnowledgeEntries } from '../lib/session-knowledge/runtime.js';
+import { trackedItemKey } from '../lib/tracked-items/items.js';
 
 const UPSTREAM = /openchamber|opencode/i;
 // Workflows ship off, as upstream ships them, and keep upstream's names until they are turned on.
@@ -23,6 +25,54 @@ const namer = (placeholder) => createWorkNamer({
   updateMetadata: async () => undefined,
   createError: (message) => new Error(message),
 });
+
+const PULL_URL = 'https://github.com/acme/app/pull/7';
+const pull = { owner: 'acme', repo: 'app', number: 7, state: 'open', title: 'Fix it', headSha: 'a1', mergeableState: 'clean', checks: { state: 'pending' }, activity: 2 };
+const dataDirs = [];
+let move = () => {};
+
+afterEach(() => {
+  for (const directory of dataDirs.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
+});
+
+// A pull request watch over a kernel that admits every wake, and a GitHub that answers `read`.
+const prWatch = async (read) => {
+  const admitted = [];
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-pr-watch-'));
+  dataDirs.push(dataDir);
+  const runtime = createPrWatchRuntime({
+    buildOpenCodeUrl: (fetchPath) => `http://kernel.test${fetchPath}`,
+    getOpenCodeAuthHeaders: () => ({}),
+    broadcastUiEvent: () => {},
+    dataDir,
+    readCleanupOnMerge: async () => false,
+    isSessionArchived: async () => false,
+    fetchImpl: async (url, init = {}) => {
+      const { pathname } = new URL(url);
+      if (pathname === '/api/session/active') return Response.json({ data: {} });
+      if (pathname === '/api/session') return Response.json({ data: [], cursor: {} });
+      const body = JSON.parse(init.body);
+      admitted.push(body);
+      return Response.json({ data: { id: body.id } });
+    },
+    quietMs: 0,
+    retryDelayMs: () => 5,
+    subagentRecheckMs: 5,
+  });
+  runtime.start({ subscribeEvent: () => () => {}, subscribeStatus: () => () => {} });
+  let listener = () => {};
+  runtime.attach({
+    trackedItems: { setServerInterest() {}, subscribe(next) { listener = next; return () => {}; } },
+    readers: { sourceControl: async () => read },
+  });
+  if (read.status === 'ok') await runtime.watch({ sessionID: 'ses_agent', directory: '/repo', url: PULL_URL });
+  move = (state) => listener([{ key: trackedItemKey(parsePullRequestUrl(PULL_URL)), state, requestedAt: Date.now() + 1 }]);
+  return { runtime, admitted };
+};
+const stop = async (runtime) => {
+  runtime.stop();
+  await runtime.flush();
+};
 
 // Guards against what the server tells a model naming OpenChamber or OpenCode, or a tool by upstream's name.
 describe('GeoCode: what the server tells a model', () => {
@@ -77,6 +127,26 @@ describe('GeoCode: what the server tells a model', () => {
     expect(errors.every(Boolean)).toBe(true);
     expect(errors.filter((message) => UPSTREAM.test(message))).toEqual([]);
     expect(errors.filter((message) => message.includes('Settings > General > GeoCode Tools'))).toHaveLength(3);
+  });
+
+  it('names neither upstream when it wakes an agent waiting on a pull request', async () => {
+    const { runtime, admitted } = await prWatch({ status: 'ok', pulls: [pull] });
+    move({ ...pull, checks: { state: 'success' } });
+    for (let tries = 0; admitted.length === 0 && tries < 400; tries += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(admitted).toHaveLength(1);
+    // The message and its metadata stay in the kernel's session.
+    const [{ text, description, metadata }] = admitted;
+    expect(text).toContain('Pull request #7');
+    expect(JSON.stringify({ text, description, metadata })).not.toMatch(UPSTREAM);
+    await stop(runtime);
+  });
+
+  it('names neither upstream when it cannot follow a pull request', async () => {
+    const { runtime } = await prWatch({ status: 'disconnected' });
+    const refused = await runtime.watch({ sessionID: 'ses_agent', directory: '/repo', url: PULL_URL }).then(() => null, (error) => error.message);
+    expect(refused).toContain('GitHub account');
+    expect(refused).not.toMatch(UPSTREAM);
+    await stop(runtime);
   });
 
   it('names neither upstream when it names a task', async () => {
