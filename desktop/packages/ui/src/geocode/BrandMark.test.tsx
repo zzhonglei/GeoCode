@@ -6,6 +6,9 @@ import type React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { AppStartupOverlay } from '@/components/ui/AppStartupOverlay';
+import { OpenChamberLogo } from '@/components/ui/OpenChamberLogo';
+import { OPEN_CHAMBER_LOGO_ART } from '@/components/ui/openChamberLogoArt';
+import { BrandMark } from './BrandMark';
 import { I18nProvider } from '@/lib/i18n';
 
 // The loading mark is written out in three files that nothing links, so a change to one has to reach the others.
@@ -56,5 +59,26 @@ describe('GeoCode: the loading mark', () => {
     const [pageMark = ''] = marks(page);
     expect(size(render(<AppStartupOverlay ready={false} />))).toEqual(size(pageMark));
     expect(size(pageMark)?.length).toBe(2);
+  });
+});
+
+// Guards against upstream's logo reaching a screen: the component draws GeoCode's mark, and the splashes keep
+// upstream's in a template, which the browser never renders.
+describe("GeoCode: upstream's logo", () => {
+  test('is not drawn by the logo component', () => {
+    // React numbers the ids of each render on its own.
+    const withoutIds = (html: string) => html.replace(/-R[0-9a-z]+/gi, '-id');
+    const html = render(<OpenChamberLogo width={48} height={48} variant="splash" />);
+    expect(withoutIds(html)).toBe(withoutIds(render(<BrandMark className="" width={48} height={48} isAnimated />)));
+    expect(html.includes(OPEN_CHAMBER_LOGO_ART.roof)).toBe(false);
+  });
+
+  test('stays inside a template on both splashes', () => {
+    for (const file of ['web/index.html', 'electron/early-startup.mjs']) {
+      const text = read(file);
+      const starts = [...text.matchAll(/brand:flat-logo:start/g)].map((match) => match.index ?? 0);
+      const outside = starts.filter((at) => text.lastIndexOf('<template>', at) <= text.lastIndexOf('</template>', at));
+      expect([file, starts.length > 0, outside]).toEqual([file, true, []]);
+    }
   });
 });
