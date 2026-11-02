@@ -3,7 +3,9 @@ import { create } from 'zustand';
 
 import { isSkippedTimelineMessage } from '@/components/chat/lib/timelineRoles';
 import type { ChatMessageEntry } from '@/components/chat/lib/turns/types';
+import { isInvisibleText } from '@/lib/invisibleText';
 import type { Part, ToolPart } from '@/lib/opencode/model';
+import { readSessionNotice } from '@/lib/opencode/session-notices';
 
 import type { GeoTool } from './geoTools';
 import { isOsmTool } from './osmView';
@@ -59,8 +61,9 @@ export const hasGeoRow = (toolName: string) =>
 /** Whether a part shows in the conversation, and so parts the calls on either side of it. */
 const shows = (part: Part, showReasoningTraces: boolean) => {
   if (part.type === 'tool') return true;
-  if (part.type === 'text') return part.text.trim().length > 0;
-  if (part.type === 'reasoning') return showReasoningTraces && part.text.trim().length > 0;
+  // As upstream draws them: a text of whitespace or zero-width characters alone draws nothing.
+  if (part.type === 'text') return !isInvisibleText(part.text);
+  if (part.type === 'reasoning') return showReasoningTraces && !isInvisibleText(part.text);
   return false;
 };
 
@@ -75,7 +78,12 @@ const same = (left: GeoToolRun, right: GeoToolRun) =>
  * of another tool ends one. A run that has not changed keeps its object, so its row does not render again for every
  * token streamed elsewhere.
  */
-const geoToolRuns = (messages: readonly ChatMessageEntry[], showReasoningTraces: boolean, working: boolean, previous: Runs) => {
+export const geoToolRuns = (
+  messages: readonly ChatMessageEntry[],
+  showReasoningTraces: boolean,
+  working: boolean,
+  previous: Runs,
+) => {
   const runs = new Map<string, GeoToolRun>();
   let current: ToolPart[] = [];
   const close = (open: boolean) => {
@@ -89,7 +97,10 @@ const geoToolRuns = (messages: readonly ChatMessageEntry[], showReasoningTraces:
     current = [];
   };
   for (const message of messages) {
-    if (message.info.role !== 'assistant' && !isSkippedTimelineMessage(message.info)) close(false);
+    // A notice the timeline draws between replies (a plugin's, a restart, a move) is shown like any other message.
+    if (message.info.role !== 'assistant' && (!isSkippedTimelineMessage(message.info) || readSessionNotice(message.info))) {
+      close(false);
+    }
     for (const part of message.parts) {
       if (isMergedGeoPart(part)) {
         if (current[0] && current[0].tool !== part.tool) close(false);
