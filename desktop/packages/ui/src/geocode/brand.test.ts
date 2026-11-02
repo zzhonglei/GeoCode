@@ -52,6 +52,14 @@ describe('GeoCode: names in the interface', () => {
         .map(([key]) => key);
       expect(named).toEqual([]);
     });
+
+    // The app has no isolated spaces, so the tab setting names only what it does have.
+    test(`names no space in the setting for tabs of their own in ${locale}`, () => {
+      const named = Object.entries(toGeoCodeDictionary(locale, dictionary))
+        .filter(([key, text]) => key.startsWith('settings.openchamber.visual.field.sessionTabsPerWorkspace') && /space|空间|空間/i.test(text))
+        .map(([key]) => key);
+      expect(named).toEqual([]);
+    });
   }
 
   test('reaches the dictionary the interface reads', () => {

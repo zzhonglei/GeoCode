@@ -85,6 +85,9 @@ const MESSAGES = {
     'openCodeStatusDialog.heapSnapshot.action': 'Save kernel memory snapshot',
     'openCodeStatusDialog.heapSnapshot.writing': "Writing the snapshot. The kernel pauses until it's done.",
     'openCodeStatusDialog.heapSnapshot.failed': "The kernel couldn't write the snapshot.",
+    'settings.openchamber.visual.field.sessionTabsPerWorkspace': 'Separate tabs for each project and worktree', // the app has no isolated spaces, also the two below
+    'settings.openchamber.visual.field.sessionTabsPerWorkspaceAria': 'Toggle separate tabs for each project and worktree',
+    'settings.openchamber.visual.field.sessionTabsPerWorkspaceInfo': 'Each project and worktree keeps its own tabs, and the header shows the tabs of the one you are in. The first time you open a worktree, the sessions you started there open as tabs.',
   },
   'zh-CN': {
     'settings.view.nav.group.opencode': '内核',
@@ -137,6 +140,9 @@ const MESSAGES = {
     'openCodeStatusDialog.heapSnapshot.action': '保存内核内存快照',
     'openCodeStatusDialog.heapSnapshot.writing': '正在写入快照。完成前内核会暂停。',
     'openCodeStatusDialog.heapSnapshot.failed': '内核无法写入快照。',
+    'settings.openchamber.visual.field.sessionTabsPerWorkspace': '为每个项目和 worktree 使用单独的标签页',
+    'settings.openchamber.visual.field.sessionTabsPerWorkspaceAria': '切换每个项目和 worktree 的单独标签页',
+    'settings.openchamber.visual.field.sessionTabsPerWorkspaceInfo': '每个项目和 worktree 都保留自己的标签页，顶部显示你当前所在位置的标签页。第一次打开某个 worktree 时，你在那里开始的会话会以标签页打开。',
   },
   'zh-TW': {
     'settings.view.nav.group.opencode': '核心',
@@ -189,6 +195,9 @@ const MESSAGES = {
     'openCodeStatusDialog.heapSnapshot.action': '儲存核心記憶體快照',
     'openCodeStatusDialog.heapSnapshot.writing': '正在寫入快照。完成前核心會暫停。',
     'openCodeStatusDialog.heapSnapshot.failed': '核心無法寫入快照。',
+    'settings.openchamber.visual.field.sessionTabsPerWorkspace': '每個專案和 worktree 使用各自的分頁',
+    'settings.openchamber.visual.field.sessionTabsPerWorkspaceAria': '切換每個專案和 worktree 各自的分頁',
+    'settings.openchamber.visual.field.sessionTabsPerWorkspaceInfo': '每個專案和 worktree 都保有自己的分頁，頂部會顯示你目前所在位置的分頁。第一次開啟某個 worktree 時，你在那裡開始的工作階段會以分頁開啟。',
   },
 } satisfies Partial<Record<Locale, Messages>>;
 
