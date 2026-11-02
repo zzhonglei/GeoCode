@@ -96,6 +96,8 @@
 ├── message-queue.json         排队等待发送的消息
 ├── dispatch-results.json      等待交回发起会话的子会话结果
 ├── tracked-items.json         会话关联的议题与拉取请求的状态
+├── pr-watch.json              agent 在等的拉取请求,等到有变化就交回它的会话;应用重启后接着等
+├── auto-review.json           自动审查的进度与结果,连同交给两个会话的提示词;关掉窗口也接着审,至多留 100 次,先删最早结束的
 ├── message-search.sqlite(及 -wal、-shm)  消息搜索的索引,在设置里打开后才建立
 ├── discovered-apps.json       本机可用来打开文件的应用列表
 ├── voice-keys.json            语音朗读与转写服务的密钥
@@ -131,7 +133,7 @@
 
 状态目录 `~/.local/state/geocode/` 每次启动就建立。里面有 `locks/` 下的锁,安装 npm 包与克隆外部仓库时使用,OSM 的工具用其中的 `osm-nominatim` 记下上一次请求 Nominatim 的时刻(`OSM.md` 第 3 节)。
 
-临时目录 `$TMPDIR/geocode/` 每次启动就建立,是提示 agent 存放临时文件的地方,agent 可以不经询问读写;在设置里打开「将粘贴的图像保存为文件」后,粘贴的图片存在其中的 `attachments/<随机名>/`。系统临时目录下另有几类以 `geocode-` 开头的短期文件,用完即删:查看与暂存 git 改动、列出未跟踪的文件、多方案运行保存快照、经应用推送 Git LFS 文件与执行检出钩子时的中间文件;macOS 上还有转换应用图标时的 `geocode-icon-*.png`。例外是 `geocode-git-trust-*`:用户的 git 配置里有 `safe.directory` 条目时,经应用拉取或推送前把这些条目抄进去,每次运行至多一个,不删。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`;运行期间,窗口的单实例锁在 `$TMPDIR` 下的 `scoped_dir*/` 里放一个套接字。
+临时目录 `$TMPDIR/geocode/` 每次启动就建立,是提示 agent 存放临时文件的地方,agent 可以不经询问读写;在设置里打开「将粘贴的图像保存为文件」后,粘贴的图片存在其中的 `attachments/<随机名>/`;agent 用图像工具生成图片而没有指定位置时,图片存在其中的 `generated-images/`。系统临时目录下另有几类以 `geocode-` 开头的短期文件,用完即删:查看与暂存 git 改动、列出未跟踪的文件、多方案运行保存快照、经应用推送 Git LFS 文件与执行检出钩子时的中间文件;macOS 上还有转换应用图标时的 `geocode-icon-*.png`。例外是 `geocode-git-trust-*`:用户的 git 配置里有 `safe.directory` 条目时,经应用拉取或推送前把这些条目抄进去,每次运行至多一个,不删。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`;运行期间,窗口的单实例锁在 `$TMPDIR` 下的 `scoped_dir*/` 里放一个套接字。
 
 内核的运行时(Bun)在系统临时目录解出它要加载的原生库与原生模块(`.bun-*.dylib`、`.bun-*.node`),并把插件的转译结果缓存在它自己的共享缓存目录里(macOS 是 `~/Library/Caches/bun`,设了 `XDG_CACHE_HOME` 时是它下面的 `bun/`),与本机其他使用 Bun 的程序共用,按内容命名。两者删除都不影响使用。
 
@@ -184,6 +186,7 @@ GeoCode 在 `.git/config` 里写入的:
 - 在应用里建立工作树、从一个分支开出新分支时,记下它从哪个分支开出的 `branch.<新分支>.gh-merge-base`(GitHub CLI 的约定,`gh pr create` 也拿它作拉取请求的默认目标);叠放的拉取请求与改动对比靠它找到上一层分支。
 - 工作树的任务名:用户在侧栏改名或 agent 给任务起名时写进 `branch.<分支>.description`(git 自己的键);agent 起的名字另记在 `branch.<分支>.geocodeAgentTitle`,用来分辨用户改过没有。
 - 新建工作树时自动生成的分支名,记在 `branch.<分支>.geocodeGeneratedName`(为议题建立时,要保留的前缀记在 `geocodeGeneratedPrefix`)。这样的分支还没推送时,agent 给任务起名会用 `git branch -m` 把它改成按任务取的名字;改名后记录不再对应,分支不会再被改。
+- 在侧栏置顶的工作树,置顶的时刻记在 `branch.<分支>.geocodePinned`,取消置顶时删去。
 
 agent 把会话挪进新的工作树时,未提交的改动经一条 `GeoCode: session … moved to worktree …` 的 stash 带过去,带过去之后删掉;迁移失败、改动又放不回原处时这条 stash 留着,报给 agent 的错误里写着它。在 Git 面板里暂存改动而没写说明时,stash 的说明是 `GeoCode stash <时间>`。
 
@@ -222,6 +225,7 @@ GeoCode 写文件多是先写旁边的临时文件、再改名替换,有的另�
 - GEE:检查与运行读 Earth Engine 自己的凭据 `~/.config/earthengine/credentials`,不读 Google Cloud 的默认凭据。
 - 内置 Python 环境里的 requests 与 aiohttp 联网时照惯例读 `~/.netrc`,有对应主机的账号就带上(`PYTHON.md` 第 6 节)。
 - 打开文件的应用:macOS 上用 Spotlight 列出本机可用来打开文件的应用,并读它们的图标。
+- 系统信任的证书:应用自己联网(连 GitHub 企业版等)时,除了自带的证书,也信任系统证书库(macOS 的钥匙串、Windows 的证书库)里的证书,公司证书签发的服务器因此能连上。内核、git 与 GeoEngine 是各自的进程,不受影响。
 
 例外是在设置里登录 GEE 时,由 earthengine-api 写入它的凭据文件。
 
