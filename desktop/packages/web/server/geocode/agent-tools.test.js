@@ -10,7 +10,7 @@ import { resolveAgentToolAction } from '../lib/openchamber-control/actions.js';
 
 // Guards against the tool names drifting apart: the plugin registers them, the control service resolves
 // actions by them, and the interface matches them by name to render calls and list permission rules.
-const TOOLS = ['geocode', 'geocode_web', 'geocode_memory', 'geocode_knowledge', 'geocode_notify', 'geocode_render'];
+const TOOLS = ['geocode', 'geocode_schedule', 'geocode_web', 'geocode_memory', 'geocode_knowledge', 'geocode_notify', 'geocode_render'];
 const packages = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const instanceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-agent-tools-'));
 
@@ -18,7 +18,7 @@ afterAll(() => fs.rmSync(instanceDir, { recursive: true, force: true }));
 
 const pluginSource = async () => {
   const runtime = createAgentToolRuntime({ crypto, fsPromises: fs.promises, path, instanceDir, getActivePort: () => 1 });
-  const directory = await runtime.materializePlugin({ includeControl: true, includeWeb: true, includeMemory: true, includeKnowledge: true, includeNotify: true, includeRender: true });
+  const directory = await runtime.materializePlugin({ includeControl: true, includeSchedule: true, includeWeb: true, includeMemory: true, includeKnowledge: true, includeNotify: true, includeRender: true });
   return fs.readFileSync(path.join(directory, 'index.js'), 'utf8');
 };
 
@@ -31,6 +31,7 @@ describe('GeoCode: agent tools', () => {
   it('resolves a bare action through the name of the tool that asked', () => {
     // `delete` belongs to both the schedule and the memory actions, so only the tool's name settles it.
     expect(resolveAgentToolAction('delete', 'geocode_memory')).toEqual({ action: 'memory.delete' });
+    expect(resolveAgentToolAction('delete', 'geocode_schedule')).toEqual({ action: 'schedule.delete' });
     expect(resolveAgentToolAction('delete', 'openchamber_memory').action).toBeUndefined();
   });
 
@@ -45,7 +46,7 @@ describe('GeoCode: agent tools', () => {
       const source = fs.readFileSync(path.join(packages, file), 'utf8');
       for (const tool of TOOLS) expect(source, `${file} names ${tool}`).toMatch(new RegExp(`(?:['"]${tool}['"]|\\b${tool}:)`));
       // Upstream's comments still name the tools as upstream does; a name in the code is what would break.
-      expect(source, file).not.toMatch(/['"]openchamber_(?:web|memory|knowledge|notify|render)['"]|\bopenchamber_(?:web|memory|knowledge|notify|render):/);
+      expect(source, file).not.toMatch(/['"]openchamber_(?:schedule|web|memory|knowledge|notify|render)['"]|\bopenchamber_(?:schedule|web|memory|knowledge|notify|render):/);
     }
   });
 });
