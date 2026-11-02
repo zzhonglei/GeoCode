@@ -7,7 +7,9 @@ import { sameDirectory } from "@opencode/util/path"
 import path, { dirname, join } from "path"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
+/* --- GeoCode: used only by the read of config's instructions, closed in reconfigure ---
 import { Config } from "../../config.js"
+--- /GeoCode --- */
 import { Watcher } from "../../filesystem/watcher.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Instructions } from "../../instructions/index.js"
@@ -24,7 +26,9 @@ export const Plugin = define({
     // Activate even when both discovery scopes are disabled: configured `instructions`
     // entries are explicit requests, not discovery.
     yield* Effect.gen(function* () {
+      /* --- GeoCode: see the Config import ---
       const config = yield* Config.Service
+      --- /GeoCode --- */
       const fs = yield* FSUtil.Service
       const global = yield* Global.Service
       const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
