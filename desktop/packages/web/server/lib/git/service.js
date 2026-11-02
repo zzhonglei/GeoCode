@@ -5024,9 +5024,9 @@ const readBranchTitles = async (repositoryDirectory) => {
 // deleting the branch drops it.
 // ---------------------------------------------------------------------------
 
-const BRANCH_PIN_KEY_PATTERN = '^branch\\..*\\.openchamberpinned$';
+const BRANCH_PIN_KEY_PATTERN = '^branch\\..*\\.geocodepinned$'; // GeoCode: its own key, also the two below
 // git lowercases the variable name in what it prints.
-const BRANCH_PIN_KEY_SUFFIX = '.openchamberpinned';
+const BRANCH_PIN_KEY_SUFFIX = '.geocodepinned';
 
 /** Every pinned branch with the time it was pinned, in one read; a failed read pins nothing. */
 const readBranchPins = async (repositoryDirectory) => {
@@ -5063,7 +5063,7 @@ export async function setWorktreePinned(directory, pinned, now = Date.now()) {
       throw error;
     });
   const branch = String(head.stdout || '').trim();
-  const key = `branch.${branch}.openchamberPinned`;
+  const key = `branch.${branch}.geocodePinned`;
   const current = Number(await readGitConfigValue(directoryPath, key));
   const isPinned = Number.isFinite(current) && current > 0;
   if (isPinned !== pinned) {

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { archiveWorktree, markGeneratedBranchName, setWorktreeTaskTitle, snapshotWorktree } from '../lib/git/service.js';
+import { archiveWorktree, getWorktrees, markGeneratedBranchName, setWorktreePinned, setWorktreeTaskTitle, snapshotWorktree } from '../lib/git/service.js';
 
 // Guards against a merge bringing OpenChamber's name back to what the app leaves in a user's repository.
 const roots = [];
@@ -56,5 +56,16 @@ describe('GeoCode: git names', () => {
       'branch.issue-180-agile-chipmunk.geocodegeneratedname',
       'branch.issue-180-agile-chipmunk.geocodegeneratedprefix',
     ]);
+  });
+
+  it("pins a worktree under GeoCode's key, and reads the pin back", async () => {
+    const repo = repository();
+    const worktree = `${repo}-rivers`;
+    roots.push(worktree);
+    git(repo, ['worktree', 'add', '-q', '-b', 'agile-otter', worktree]);
+    await setWorktreePinned(worktree, true, 1_700_000_000_000);
+    expect(git(repo, ['config', '--local', '--get-regexp', '^branch\\.']).trim()).toBe('branch.agile-otter.geocodepinned 1700000000000');
+    const listed = await getWorktrees(repo);
+    expect(listed.find((entry) => entry.branch === 'agile-otter')?.pinnedAt).toBe(1_700_000_000_000);
   });
 });
