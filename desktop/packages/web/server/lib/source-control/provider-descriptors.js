@@ -1,10 +1,10 @@
 import { githubDescriptor } from '../github/descriptor.js';
 /* --- GeoCode: see BUILT_IN_DESCRIPTORS ---
 import { gitlabDescriptor } from '../gitlab/descriptor.js';
---- /GeoCode --- */
 import { giteaDescriptor } from '../gitea/descriptor.js';
 import { gerritDescriptor } from '../gerrit/descriptor.js';
 import { forgejoDescriptor } from '../forgejo/descriptor.js';
+--- /GeoCode --- */
 import {
   EXTENSION_PROVIDER_PREFIX, isExtensionProviderId, isProviderId, isReservedProviderId,
 } from './provider-id.js';
@@ -18,7 +18,7 @@ import {
  */
 // Appended in order of arrival, so the web adapter's fallback for an older
 // server (GitHub and GitLab) stays the list's leading entries.
-const BUILT_IN_DESCRIPTORS = Object.freeze([githubDescriptor, giteaDescriptor, gerritDescriptor, forgejoDescriptor]); // GeoCode: the app offers no GitLab integration, and every surface lists the providers from here
+const BUILT_IN_DESCRIPTORS = Object.freeze([githubDescriptor]); // GeoCode: GitHub alone, the host geographers keep their code on; every surface lists the providers from here
 
 /**
  * The hosts the built-ins serve by default (github.com, gitlab.com,
