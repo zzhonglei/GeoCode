@@ -11,7 +11,6 @@ import { overlayEnvironment } from '../environment/variables.js';
 import { recordStartupPerformance } from './startup-performance.js';
 import { topUpV1Migration } from './v1-migration-topup.js';
 import { serverDiagnosticJournal } from '../diagnostics/server-journal.js';
-import { readStdioReadyUrl } from '../../geocode/stdio-kernel.js'; // GeoCode: see createManagedOpenCodeServerProcess
 import { dropShellDirectories } from '../../geocode/app-variables.js'; // GeoCode: see startOpenCodeOnce
 
 const parsePositiveInt = (value, fallback) => {
@@ -511,14 +510,6 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
         stdout += chunk.toString();
         const lines = stdout.split('\n');
         for (const line of lines) {
-          // --- GeoCode: `serve --stdio` reports readiness as a JSON line ---
-          const stdioUrl = readStdioReadyUrl(line);
-          if (stdioUrl) {
-            attachRuntimeStderrCapture();
-            finish(resolve, stdioUrl);
-            return;
-          }
-          // --- /GeoCode ---
           // OpenCode 2.x prints `server listening on http://host:port` with no
           // "opencode" prefix, and `{"url":"http://host:port"}` under --stdio.
           const match = line.match(/server listening on\s+(https?:\/\/\S+)/)
