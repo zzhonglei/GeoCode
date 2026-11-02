@@ -1017,6 +1017,7 @@ export {
   resolvePromptFilePath,
   writePromptFile,
   walkSkillMdFiles,
+  pathExists,
   addSkillFromMdFile,
   resolveSkillSearchDirectories,
   listSkillSupportingFiles,

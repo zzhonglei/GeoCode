@@ -18,7 +18,7 @@ const listed = (revision: number, running: boolean) => ({ revision, runs: runnin
 const timed = () => useSessionActivityTimingStore.getState().startedAt.has('ses_1');
 const busy = () =>
   applyGlobalSessionStatusEvents('/repo', [
-    { type: 'session.status', properties: { sessionID: 'ses_1', status: { type: 'busy' } } },
+    { type: 'session.status', properties: { sessionID: 'ses_1', status: { type: 'busy' }, turnStart: { at: 1000, source: 'live' } } },
   ]);
 const idle = () => {
   applyGlobalSessionStatusEvents('/repo', [{ type: 'session.idle', properties: { sessionID: 'ses_1' } }]);

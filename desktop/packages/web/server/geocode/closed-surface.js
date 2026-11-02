@@ -19,7 +19,6 @@ export const CLOSED_PATHS = Object.freeze([
   '/manifest.webmanifest',
   '/api/linear',
   '/linear/oauth',
-  '/api/source-control/gitlab',
   '/api/guests',
   '/api/routing',
   '/api/config/plugins',

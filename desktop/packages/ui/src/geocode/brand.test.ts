@@ -25,6 +25,7 @@ const CLOSED = [
   'settings.projects.actionEditor.savedIn.',
   'settings.projects.actions.confirmDelete.',
   'settings.skills.catalog.',
+  'settings.extensions.browse.',
   'settings.skills.sidebar.badge.opencode',
   'onboarding.localSetup.',
   'updateDialog.',

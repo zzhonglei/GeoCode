@@ -22,6 +22,7 @@ import {
   getAncestors,
   findWorktreeRoot,
   isPlainObject,
+  pathExists,
 } from './shared.js';
 import { discoverKernelSkills, isKernelSkillPath, isSkillFolderName } from '../../geocode/kernel-skills.js'; // GeoCode: see discoverSkills, updateSkill and deleteSkill
 
@@ -42,10 +43,10 @@ function getProjectSkillDir(workingDirectory, skillName) {
   return pluralPath;
 }
 
-function getProjectSkillPath(workingDirectory, skillName) {
-  const pluralPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skills', skillName, 'SKILL.md');
-  const legacyPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skill', skillName, 'SKILL.md');
-  if (fs.existsSync(legacyPath) && !fs.existsSync(pluralPath)) return legacyPath;
+async function getProjectSkillPath(workingDirectory, skillName) {
+  const pluralPath = path.join(workingDirectory, '.opencode', 'skills', skillName, 'SKILL.md');
+  const legacyPath = path.join(workingDirectory, '.opencode', 'skill', skillName, 'SKILL.md');
+  if (await pathExists(legacyPath) && !(await pathExists(pluralPath))) return legacyPath;
   return pluralPath;
 }
 
@@ -56,10 +57,10 @@ function getUserSkillDir(skillName) {
   return pluralPath;
 }
 
-function getUserSkillPath(skillName) {
+async function getUserSkillPath(skillName) {
   const pluralPath = path.join(SKILL_DIR, skillName, 'SKILL.md');
   const legacyPath = path.join(OPENCODE_CONFIG_DIR, 'skill', skillName, 'SKILL.md');
-  if (fs.existsSync(legacyPath) && !fs.existsSync(pluralPath)) return legacyPath;
+  if (await pathExists(legacyPath) && !(await pathExists(pluralPath))) return legacyPath;
   return pluralPath;
 }
 
@@ -106,7 +107,7 @@ async function getSkillScope(skillName, workingDirectory) {
   }
 
   if (workingDirectory) {
-    const projectPath = getProjectSkillPath(workingDirectory, skillName);
+    const projectPath = await getProjectSkillPath(workingDirectory, skillName);
     if (fs.existsSync(projectPath)) {
       return { scope: SKILL_SCOPE.PROJECT, path: projectPath, source: 'opencode' };
     }
@@ -117,7 +118,7 @@ async function getSkillScope(skillName, workingDirectory) {
     }
   }
   
-  const userPath = getUserSkillPath(skillName);
+  const userPath = await getUserSkillPath(skillName);
   if (fs.existsSync(userPath)) {
     return { scope: SKILL_SCOPE.USER, path: userPath, source: 'opencode' };
   }
@@ -145,19 +146,19 @@ async function getSkillWritePath(skillName, workingDirectory, requestedScope) {
   if (scope === SKILL_SCOPE.PROJECT && workingDirectory) {
     return { 
       scope: SKILL_SCOPE.PROJECT, 
-      path: getProjectSkillPath(workingDirectory, skillName),
+      path: await getProjectSkillPath(workingDirectory, skillName),
       source: 'opencode'
     };
   }
   
   return { 
     scope: SKILL_SCOPE.USER, 
-    path: getUserSkillPath(skillName),
+    path: await getUserSkillPath(skillName),
     source: 'opencode'
   };
 }
 
-async function discoverSkills(workingDirectory) {
+async function discoverSkills(workingDirectory, { parsedFiles = new Map() } = {}) {
   return discoverKernelSkills(workingDirectory); // GeoCode: only the skill directories the kernel reads
   const skills = new Map();
 
@@ -167,7 +168,6 @@ async function discoverSkills(workingDirectory) {
   // read once; the second pass still re-adds them in the same order, so the
   // project scope wins as before.
   const walkedRoots = new Map();
-  const parsedFiles = new Map();
   const walkRoot = (root) => {
     const key = path.resolve(root);
     if (!walkedRoots.has(key)) walkedRoots.set(key, walkSkillMdFiles(root));
@@ -330,38 +330,38 @@ function applyModelInvocation(frontmatter, disabled) {
 // `includeSupportingFiles: false` leaves `md.supportingFiles` out instead of
 // walking the skill folder: the skills list has no use for it, and a folder
 // with a bundled `.venv` or `node_modules` costs seconds to walk.
-async function getSkillSources(skillName, workingDirectory, discoveredSkill = null, { includeSupportingFiles = true } = {}) {
-  const isReadableFile = (filePath) => {
+async function getSkillSources(skillName, workingDirectory, discoveredSkill = null, { includeSupportingFiles = true, parsedFiles = new Map() } = {}) {
+  const isReadableFile = async (filePath) => {
     if (!filePath) return false;
     try {
-      return fs.statSync(filePath).isFile();
+      return (await fs.promises.stat(filePath)).isFile();
     } catch {
       return false;
     }
   };
 
-  const projectPath = workingDirectory ? getProjectSkillPath(workingDirectory, skillName) : null;
-  const projectExists = projectPath && fs.existsSync(projectPath);
+  const projectPath = workingDirectory ? await getProjectSkillPath(workingDirectory, skillName) : null;
+  const projectExists = projectPath && await pathExists(projectPath);
   const projectDir = projectExists ? path.dirname(projectPath) : null;
   
   const claudePath = workingDirectory ? getClaudeSkillPath(workingDirectory, skillName) : null;
-  const claudeExists = claudePath && fs.existsSync(claudePath);
+  const claudeExists = claudePath && await pathExists(claudePath);
   const claudeDir = claudeExists ? path.dirname(claudePath) : null;
   const userClaudePath = getUserClaudeSkillPath(skillName);
-  const userClaudeExists = fs.existsSync(userClaudePath);
+  const userClaudeExists = await pathExists(userClaudePath);
   const userClaudeDir = userClaudeExists ? path.dirname(userClaudePath) : null;
   
-  const userPath = getUserSkillPath(skillName);
-  const userExists = fs.existsSync(userPath);
+  const userPath = await getUserSkillPath(skillName);
+  const userExists = await pathExists(userPath);
   const userDir = userExists ? path.dirname(userPath) : null;
 
   const userAgentsPath = getUserAgentsSkillPath(skillName);
-  const userAgentsExists = fs.existsSync(userAgentsPath);
+  const userAgentsExists = await pathExists(userAgentsPath);
   const userAgentsDir = userAgentsExists ? path.dirname(userAgentsPath) : null;
 
   const matchedDiscovered = discoveredSkill && discoveredSkill.name === skillName
     ? discoveredSkill
-    : (await discoverSkills(workingDirectory)).find((skill) => skill.name === skillName);
+    : (await discoverSkills(workingDirectory, { parsedFiles })).find((skill) => skill.name === skillName);
   const discoveredDescription =
     matchedDiscovered && typeof matchedDiscovered.description === 'string'
       ? matchedDiscovered.description
@@ -388,7 +388,7 @@ async function getSkillSources(skillName, workingDirectory, discoveredSkill = nu
     mdPath = discoveredPath;
     mdScope = matchedDiscovered.scope || null;
     mdSource = matchedDiscovered.source || null;
-    mdDir = isReadableFile(discoveredPath) ? path.dirname(discoveredPath) : null;
+    mdDir = await isReadableFile(discoveredPath) ? path.dirname(discoveredPath) : null;
   } else if (projectExists) {
     mdPath = projectPath;
     mdScope = SKILL_SCOPE.PROJECT;
@@ -416,7 +416,7 @@ async function getSkillSources(skillName, workingDirectory, discoveredSkill = nu
     mdDir = userAgentsDir;
   }
   
-  const mdExists = isBuiltInDiscovered || isReadableFile(mdPath);
+  const mdExists = isBuiltInDiscovered || await isReadableFile(mdPath);
   if (!mdExists) {
     mdPath = null;
     mdDir = null;
@@ -465,7 +465,7 @@ async function getSkillSources(skillName, workingDirectory, discoveredSkill = nu
   };
 
   if (mdExists && mdDir) {
-    const { frontmatter, body } = await parseMdFileAsync(mdPath);
+    const { frontmatter, body } = parsedFiles.get(mdPath) ?? await parseMdFileAsync(mdPath);
     sources.md.fields = Object.keys(frontmatter);
     sources.md.description = frontmatter.description || '';
     sources.md.name = frontmatter.name || skillName;
@@ -534,7 +534,7 @@ async function createSkillNow(skillName, config, workingDirectory, scope) {
       targetPath = getProjectAgentsSkillPath(workingDirectory, skillName);
     } else {
       targetDir = getProjectSkillDir(workingDirectory, skillName);
-      targetPath = getProjectSkillPath(workingDirectory, skillName);
+      targetPath = await getProjectSkillPath(workingDirectory, skillName);
     }
     targetScope = SKILL_SCOPE.PROJECT;
   } else {
@@ -543,7 +543,7 @@ async function createSkillNow(skillName, config, workingDirectory, scope) {
       targetPath = getUserAgentsSkillPath(skillName);
     } else {
       targetDir = getUserSkillDir(skillName);
-      targetPath = getUserSkillPath(skillName);
+      targetPath = await getUserSkillPath(skillName);
     }
     targetScope = SKILL_SCOPE.USER;
   }

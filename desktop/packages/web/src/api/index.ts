@@ -14,9 +14,7 @@ import { createWebSettingsAPI } from './settings';
 import { createWebPermissionsAPI } from './permissions';
 import { createWebNotificationsAPI } from './notifications';
 import { createWebPushAPI } from './push';
-/* --- GeoCode: see createWebAPIs ---
-import { createWebLinearAPI } from './linear';
---- /GeoCode --- */
+import { createWebTrackerAPI } from './trackers';
 import { createWebClientAuthAPI } from './clientAuth';
 import { createWebSourceControlAPI } from './source-control';
 
@@ -50,9 +48,7 @@ export const createWebAPIs = (options: WebAPIsOptions = {}): RuntimeAPIs => {
   permissions: createWebPermissionsAPI(),
   notifications: createWebNotificationsAPI(),
   sourceControl: createWebSourceControlAPI(),
-  /* --- GeoCode: the app offers no Linear integration ---
-  linear: createWebLinearAPI(),
-  --- /GeoCode --- */
+  trackers: createWebTrackerAPI(),
   push: createWebPushAPI(),
   clientAuth: createWebClientAuthAPI(),
   };
