@@ -102,3 +102,33 @@ describe('GeoCode: skill directories', () => {
     expect(fs.existsSync(path.join(session, '.claude', 'skills', 'dup', 'SKILL.md'))).toBe(true);
   });
 });
+
+describe('GeoCode: MCP servers', () => {
+  const server = (name) => `${JSON.stringify({ mcp: { [name]: { type: 'local', command: ['true'] } } })}\n`;
+  let project;
+  let mcp;
+
+  beforeAll(async () => {
+    const parent = path.join(root, 'mcp');
+    project = path.join(parent, 'project');
+    fs.mkdirSync(path.join(project, '.geocode'), { recursive: true });
+    fs.mkdirSync(path.join(project, '.opencode'), { recursive: true });
+    fs.writeFileSync(path.join(project, 'geocode.json'), server('plain'));
+    fs.writeFileSync(path.join(project, '.geocode', 'geocode.json'), server('own'));
+    fs.writeFileSync(path.join(parent, 'geocode.json'), server('above'));
+    fs.writeFileSync(path.join(project, 'opencode.json'), server('opencode-file'));
+    fs.writeFileSync(path.join(project, '.opencode', 'opencode.json'), server('opencode-dir'));
+    mcp = await import('../lib/opencode/mcp.js');
+  });
+
+  it('lists only those of the project directory\'s own config, as the kernel reads them', () => {
+    expect(mcp.listMcpConfigs(project).map((entry) => [entry.name, entry.scope]).sort()).toEqual([['own', 'project'], ['plain', 'project']]);
+  });
+
+  it('changes no other product\'s config file', () => {
+    const theirs = path.join(project, 'opencode.json');
+    const before = fs.readFileSync(theirs, 'utf8');
+    expect(() => mcp.deleteMcpConfig('opencode-file', project)).toThrow();
+    expect(fs.readFileSync(theirs, 'utf8')).toBe(before);
+  });
+});

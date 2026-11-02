@@ -230,17 +230,18 @@ function getFolderConfigPaths(workingDirectory) {
   if (!workingDirectory) return [];
   const globalDirectory = realPathOrResolved(OPENCODE_CONFIG_DIR);
   if (realPathOrResolved(workingDirectory) === globalDirectory) return [];
-  const globalFiles = ['opencode.json', 'opencode.jsonc']
+  const globalFiles = [KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC] // GeoCode: the kernel's file names, here and below
     .map((name) => realPathOrResolved(path.join(OPENCODE_CONFIG_DIR, name)));
   const isGlobal = (filePath) => globalFiles.includes(realPathOrResolved(filePath));
   const folders = getAncestors(workingDirectory).reverse();
-  const configFilesIn = (folder) => ['opencode.json', 'opencode.jsonc']
+  folders.splice(0, folders.length - 1); // GeoCode: the kernel reads the project directory's own config, not its ancestors' (core/src/config/discovery.ts)
+  const configFilesIn = (folder) => [KERNEL_CONFIG_JSON, KERNEL_CONFIG_JSONC] // GeoCode: see globalFiles
     .map((name) => path.join(folder, name))
     .filter((filePath) => isFile(filePath) && !isGlobal(filePath));
   return [
     ...folders.flatMap(configFilesIn),
     ...folders
-      .map((folder) => path.join(folder, '.opencode'))
+      .map((folder) => path.join(folder, KERNEL_PROJECT_DIR)) // GeoCode: see globalFiles
       .filter((folder) => realPathOrResolved(folder) !== globalDirectory)
       .flatMap(configFilesIn),
   ];
