@@ -13,6 +13,7 @@ import { Icon } from "@/components/icon/Icon";
 import { PROJECT_NOTE_BODY_MAX_LENGTH } from '@/lib/projectContextApi';
 import { useProjectContextStore } from '@/stores/useProjectContextStore';
 import { useSnippetsStore } from '@/stores/useSnippetsStore';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see Save as snippet below
 import { summarizeSelectionForNotes } from '@/lib/smallModel';
 import { resolveProjectForSessionDirectory } from '@/lib/projectResolution';
 import { useSpaceProjectDirectory } from '@/lib/spaces/spaces-store';
@@ -931,6 +932,8 @@ const TextSelectionMenuImpl: React.FC<TextSelectionMenuProps> = ({ containerRef,
               </button>
             ) : null}
 
+            {/* --- GeoCode: the app has no snippets, so a selection offers no Save as snippet --- */}
+            <Closed>
             <button
               onClick={handleSaveAsSnippet}
               className={cn(
@@ -946,6 +949,8 @@ const TextSelectionMenuImpl: React.FC<TextSelectionMenuProps> = ({ containerRef,
               <Icon name="hashtag" className="h-5 w-5 flex-shrink-0" />
               <span className="min-w-0 whitespace-normal">{t('snippets.quickCreate.action')}</span>
             </button>
+            </Closed>
+            {/* --- /GeoCode --- */}
           </div>
         </div>
       </div>,
@@ -1039,6 +1044,8 @@ const TextSelectionMenuImpl: React.FC<TextSelectionMenuProps> = ({ containerRef,
             </>
           ) : null}
 
+          {/* --- GeoCode: the app has no snippets, so a selection offers no Save as snippet --- */}
+          <Closed>
           <div className="mx-0.5 h-5 w-px shrink-0 bg-[var(--interactive-border)]" />
           <button
             onClick={handleSaveAsSnippet}
@@ -1054,6 +1061,8 @@ const TextSelectionMenuImpl: React.FC<TextSelectionMenuProps> = ({ containerRef,
           >
             <Icon name="hashtag" className="h-4 w-4" />
           </button>
+          </Closed>
+          {/* --- /GeoCode --- */}
 
           {canReadAloud ? (
             <>

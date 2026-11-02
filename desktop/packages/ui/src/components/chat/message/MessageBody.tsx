@@ -2472,7 +2472,9 @@ const MessageBody = React.memo(({ isUser, ...props }: MessageBodyProps) => {
                 hasTextContent={props.hasTextContent}
                 onCopyMessage={props.onCopyMessage}
                 copiedMessage={props.copiedMessage}
+                /* --- GeoCode: the app has no snippets, so a message offers no Save as snippet ---
                 onSaveAsSnippet={props.onSaveAsSnippet}
+                --- /GeoCode --- */
                 onShowPopup={props.onShowPopup}
                 agentMention={props.agentMention}
                 onRevert={props.onRevert}
