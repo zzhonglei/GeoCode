@@ -47,8 +47,6 @@
 package.json
 bun.lock
 tsconfig.json
-vite.config.ts
-vite-theme-plugin.ts
 postcss.config.js
 oxlint.config.ts
 oxlint.anti-slop.config.ts

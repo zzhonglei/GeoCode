@@ -247,6 +247,13 @@ const TOOL_METADATA: Record<string, ToolMetadata> = {
       inputFields: []
     },
 
+    geocode_image: { // GeoCode: the image tool's name in GeoCode
+      displayName: 'GeoCode Image',
+      category: 'system',
+      outputLanguage: 'json',
+      inputFields: []
+    },
+
     plan_enter: {
       displayName: 'Plan Mode',
       category: 'ai',

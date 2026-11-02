@@ -216,6 +216,7 @@ const OPENCHAMBER_PHRASES = new Map(Object.entries<ToolActionPhrases>({ // GeoCo
     },
     geocode_notify: { fallback: 'sending a notification' },
     geocode_render: { fallback: 'drawing a page' },
+    geocode_image: { fallback: 'generating an image' },
 }));
 
 /**
