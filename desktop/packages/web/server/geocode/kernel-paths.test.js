@@ -44,6 +44,14 @@ describe('GeoCode: kernel paths', () => {
     expect(kernel.state).toBe(path.join(os.homedir(), '.local', 'state', 'geocode'));
   });
 
+  // The kernel tells agents they may read and write its temporary folder, and an installed OpenCode keeps its own.
+  it('keep generated images in the kernel\'s temporary folder', async () => {
+    const { kernel } = await load({});
+    const { GENERATED_IMAGE_DIRECTORY } = await import('../lib/openchamber-control/generate-image.js');
+    expect(GENERATED_IMAGE_DIRECTORY).toBe(path.join(kernel.tmp, 'generated-images'));
+    expect(GENERATED_IMAGE_DIRECTORY).toBe(path.join(os.tmpdir(), 'geocode', 'generated-images'));
+  });
+
   it('name the config files, the project directory and the project id file as the kernel does', async () => {
     const shell = await import('./kernel-paths.js');
     const { names } = await import('../../../../../kernel/packages/core/src/config/discovery.ts');

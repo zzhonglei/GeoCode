@@ -225,7 +225,7 @@ const IMAGE_PARAMETER_PROPERTIES = {
   aspect: { type: 'string', description: 'width:height, such as 16:9. Default: the model\'s' },
   resolution: { type: 'string', description: 'Size tier such as 1K, 2K or 4K. Default: the model\'s' },
   count: { type: 'integer', description: 'How many images, 1 to 4. Default 1' },
-  path: { type: 'string', description: "Where to save, absolute or relative to the project; more images get -2, -3 before the extension. Default: OpenCode's temporary folder" },
+  path: { type: 'string', description: "Where to save, absolute or relative to the project; more images get -2, -3 before the extension. Default: the kernel's temporary folder" }, // GeoCode: product name
 };
 
 // Where the agent saves a screenshot for a page, so it stays out of the
@@ -329,9 +329,9 @@ const RENDER_TOOL_DESCRIPTION = "Draw a finished HTML page inline in the chat, a
   + "The page is part of your reply and sits on the chat's background: leave html, body and the outermost element without a background, add no outer card, border or banner title, and set boxes apart by tone. Style with the theme variables listed under html. "
   + "Read html before writing a page and awaitAnswer before asking on one.";
 
-const IMAGE_TOOL_DESCRIPTION = "Generate or edit images with the image model the user chose in OpenChamber's settings; your own model stays. "
+const IMAGE_TOOL_DESCRIPTION = "Generate or edit images with the image model the user chose in GeoCode's settings; your own model stays. " // GeoCode: product name, also two lines below
   + "The call returns the saved file paths, and the chat shows the images to the user, so do not repeat them in your reply. Read a file to look at it. "
-  + "Without path the files go to OpenCode's temporary folder: move one into the project when it belongs there. Every call costs the user money: make what was asked, not extra variations.";
+  + "Without path the files go to the kernel's temporary folder: move one into the project when it belongs there. Every call costs the user money: make what was asked, not extra variations.";
 
 const WORKFLOW_TOOL_DESCRIPTION = 'Workflows: a script that fans a large task out to many agents, which OpenChamber runs in the background while you stay free. '
   + 'For work with many similar independent pieces (a review per file, an audit across many routes, a migration of many files, research cross-checked across sources) or a check that must run on every piece. A single feature or a few steps is not one: do it yourself or with a subagent. '

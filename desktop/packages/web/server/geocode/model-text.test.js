@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
+import { createAgentToolRuntime } from '../lib/agent-tool/runtime.js';
 import * as actions from '../lib/openchamber-control/actions.js';
+import { createImageGenerationAction } from '../lib/openchamber-control/generate-image.js';
 import { createWorkNamer } from '../lib/openchamber-sessions/work-naming.js';
 import { buildKnowledgeEntries } from '../lib/session-knowledge/runtime.js';
 
@@ -39,6 +45,38 @@ describe('GeoCode: what the server tells a model', () => {
       .filter((definition) => UPSTREAM.test(JSON.stringify(definition)))
       .map((definition) => definition.action);
     expect(named).toEqual([]);
+  });
+
+  it('names neither upstream in what the image tool says it is', async () => {
+    const instanceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-model-text-'));
+    try {
+      const runtime = createAgentToolRuntime({ crypto, fsPromises: fs.promises, path, instanceDir, getActivePort: () => 1 });
+      const directory = await runtime.materializePlugin({ includeControl: false, includeWeb: false, includeMemory: false, includeImage: true });
+      // The plugin's own code keeps upstream's variable names; what the model reads is the tool's description and parameters.
+      const told = fs.readFileSync(path.join(directory, 'index.js'), 'utf8').split('\n').filter((line) => /^\s*(?:description: "|parameters: \{)/.test(line));
+      expect(told.length).toBe(2);
+      expect(told.join('\n')).not.toMatch(UPSTREAM);
+    } finally {
+      fs.rmSync(instanceDir, { recursive: true, force: true });
+    }
+  });
+
+  it('names neither upstream when the image tool cannot draw', async () => {
+    const failing = (settings, tag) => createImageGenerationAction({
+      getClient: async () => ({ generate: { image: async () => { throw Object.assign(new Error(tag), { _tag: tag }); } } }),
+      readSettings: async () => settings,
+      fsPromises: fs.promises,
+    })({ prompt: 'a river map' }, { directory: os.tmpdir() });
+    const chosen = { agentImageToolEnabled: true, agentImageModel: 'openrouter/openai/gpt-image-2' };
+    const errors = await Promise.all([
+      failing({ agentImageToolEnabled: false }),
+      failing({ agentImageToolEnabled: true }),
+      failing(chosen, 'ModelNotFoundError'),
+      failing(chosen, 'UnsupportedModelError'),
+    ].map((call) => call.then(() => null, (error) => error.message)));
+    expect(errors.every(Boolean)).toBe(true);
+    expect(errors.filter((message) => UPSTREAM.test(message))).toEqual([]);
+    expect(errors.filter((message) => message.includes('Settings > General > GeoCode Tools'))).toHaveLength(3);
   });
 
   it('names neither upstream when it names a task', async () => {

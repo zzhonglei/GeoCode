@@ -15,16 +15,19 @@
  */
 
 import { constants as fsConstants } from 'node:fs';
+/* --- GeoCode: unused once the folder comes from the kernel paths ---
 import os from 'node:os';
+--- /GeoCode --- */
 import path from 'node:path';
 
 import { z } from 'zod';
 
 import { asNonEmptyString } from '../shared/guards.js';
 import { OpenChamberControlError } from './error.js';
+import { kernelTmpDir } from '../../geocode/kernel-paths.js'; // GeoCode: see GENERATED_IMAGE_DIRECTORY
 
 /** OpenCode's temporary folder (`paths.tmp` of `/api/info`), the default home of a generated file. */
-export const GENERATED_IMAGE_DIRECTORY = path.join(os.tmpdir(), 'opencode', 'generated-images');
+export const GENERATED_IMAGE_DIRECTORY = path.join(kernelTmpDir(), 'generated-images'); // GeoCode: the kernel's own temporary folder (PATHS.md)
 
 const MAX_PROMPT_LENGTH = 8_000;
 const MAX_SOURCE_IMAGES = 8;
@@ -109,10 +112,10 @@ const toControlError = (error, model) => {
   const tag = error?._tag;
   const message = asNonEmptyString(error?.message) || 'Image generation failed';
   if (tag === 'ModelNotFoundError') {
-    return new OpenChamberControlError(`The image model ${model} is no longer available. Ask the user to choose another in Settings > General > OpenChamber Tools`, 409);
+    return new OpenChamberControlError(`The image model ${model} is no longer available. Ask the user to choose another in Settings > General > GeoCode Tools`, 409); // GeoCode: product name
   }
   if (tag === 'UnsupportedModelError') {
-    return new OpenChamberControlError(`${model} cannot generate images. Ask the user to choose an image model in Settings > General > OpenChamber Tools`, 409);
+    return new OpenChamberControlError(`${model} cannot generate images. Ask the user to choose an image model in Settings > General > GeoCode Tools`, 409); // GeoCode: product name
   }
   if (tag === 'ProviderRequestError') return new OpenChamberControlError(`The provider refused: ${message}`, 502);
   if (tag === 'InvalidRequestError') return new OpenChamberControlError(message, 400);
@@ -139,11 +142,11 @@ export const createImageGenerationAction = ({ getClient, readSettings, fsPromise
   async (input, { directory, signal } = {}) => {
     const settings = await readSettings().catch(() => null);
     if (settings?.agentImageToolEnabled !== true) {
-      throw new OpenChamberControlError('The image tool is turned off in OpenChamber settings', 403);
+      throw new OpenChamberControlError('The image tool is turned off in GeoCode settings', 403); // GeoCode: product name
     }
     const model = parseModel(settings?.agentImageModel);
     if (!model) {
-      throw new OpenChamberControlError('No image model is chosen. Ask the user to pick one in Settings > General > OpenChamber Tools > Image model', 409);
+      throw new OpenChamberControlError('No image model is chosen. Ask the user to pick one in Settings > General > GeoCode Tools > Image model', 409); // GeoCode: product name
     }
     const modelName = `${model.providerID}/${model.id}`;
 
