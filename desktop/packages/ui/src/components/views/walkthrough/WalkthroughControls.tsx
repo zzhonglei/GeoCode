@@ -18,6 +18,7 @@ import type { WalkthroughView } from '@/lib/walkthrough/model';
 import { cn } from '@/lib/utils';
 import type { WalkthroughReview } from './useWalkthroughReview';
 import { MENU_GROUP_LABEL_CLASS, WALKTHROUGH_ACTION_CLASS, openWalkthroughGuide } from './walkthroughAction';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the guide button
 
 // Pickers inside the phone's options sheet open above it: the sheet sits at
 // z-60 and a menu's default layer would open underneath.
@@ -372,6 +373,8 @@ export const WalkthroughOptions = ({
           {t('contextPanel.mode.diff')}
         </Button>
       )}
+      {/* --- GeoCode: the guide is on OpenChamber's documentation site, as in WalkthroughView --- */}
+      <Closed>
       <Button
         type="button"
         variant="ghost"
@@ -385,6 +388,8 @@ export const WalkthroughOptions = ({
         <Icon name="question" className="size-4" />
         {t('walkthrough.help.guide')}
       </Button>
+      </Closed>
+      {/* --- /GeoCode --- */}
     </div>
   );
 };
