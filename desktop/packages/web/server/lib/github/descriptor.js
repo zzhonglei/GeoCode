@@ -124,7 +124,7 @@ export const githubDescriptor = Object.freeze({
     }),
     cliTransport: true,
     token: Object.freeze({
-      scopes: Object.freeze(['repo', 'read:org', 'workflow', 'read:user', 'user:email']),
+      scopes: Object.freeze(['repo', 'read:org', 'read:user', 'user:email']), // GeoCode: no workflow-file edits, as auth.js's sign-in
       createPath: '/settings/tokens',
     }),
     urls: Object.freeze({

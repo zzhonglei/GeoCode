@@ -10,6 +10,7 @@ process.env.OPENCHAMBER_DATA_DIR = dataDir;
 delete process.env.OPENCHAMBER_GITHUB_CLIENT_ID;
 delete process.env.OPENCHAMBER_GITHUB_SCOPES;
 const { getGitHubClientId, getGitHubScopes } = await import('../lib/github/auth.js');
+const { githubDescriptor } = await import('../lib/github/descriptor.js');
 
 afterAll(() => fs.rmSync(dataDir, { recursive: true, force: true }));
 
@@ -20,5 +21,9 @@ describe('GeoCode: GitHub sign-in', () => {
 
   it('does not ask to edit workflow files', () => {
     expect(getGitHubScopes().split(' ')).not.toContain('workflow');
+  });
+
+  it('does not list workflow-file edits among the scopes a personal access token needs', () => {
+    expect(githubDescriptor.presentation.token.scopes).not.toContain('workflow');
   });
 });
