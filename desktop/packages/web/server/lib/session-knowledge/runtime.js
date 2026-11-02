@@ -58,7 +58,7 @@ const describeCheckout = ({ directory, branch, placeholder = false }) => {
  * without it, so the two cannot drift apart; a separate `git branch -m` step
  * was the one weaker models dropped.
  */
-const placeholderBranchGuidance = (branch) => `Its name \`${branch}\` is a placeholder OpenChamber generated, not one the user chose,`
+const placeholderBranchGuidance = (branch) => `Its name \`${branch}\` is a placeholder GeoCode generated, not one the user chose,` // GeoCode: its own name
   + ' and it is not pushed yet. Name the task with work.name, passing branch too: work.name renames the branch to it.'
   + " Follow the naming the repository's other branches use (`git branch -a`); with none, `<type>/<short-kebab-case>`"
   + ' with the conventional commit types, such as `fix/login-timeout`. No tool or app prefix.'

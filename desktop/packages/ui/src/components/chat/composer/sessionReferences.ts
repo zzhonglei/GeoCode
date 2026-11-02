@@ -26,7 +26,7 @@ export const sessionReference = (session: Pick<Session, 'id' | 'title'>): Sessio
     kind: 'session',
     sessionId: session.id,
     title: session.title,
-    contextText: `The user referenced another OpenChamber session, "${session.title}" (${session.id}). `
+    contextText: `The user referenced another GeoCode session, "${session.title}" (${session.id}). ` // GeoCode: its own name, also below
         + `Its messages can be read with the geocode tool (session.messages, sessionId ${session.id}).`, // GeoCode: the tool's name in GeoCode
 });
 
@@ -39,7 +39,7 @@ export const messageText = (parts: readonly Part[]): string => parts
 const authorOf = (role: Message['role']): string => {
     if (role === 'user') return 'the user of that session';
     if (role === 'assistant') return 'the agent of that session';
-    return 'OpenChamber';
+    return 'GeoCode';
 };
 
 export const sessionMessageReference = (
@@ -58,7 +58,7 @@ export const sessionMessageReference = (
         // Who attached it and who wrote it are said apart: the user attaches
         // messages they wrote themselves too, and an agent's words must not
         // read as the user's request.
-        contextText: `The user attached a message from another OpenChamber session, "${session.title}" `
+        contextText: `The user attached a message from another GeoCode session, "${session.title}" `
             + `(${session.id}, message ${message.info.id}). It was written by ${authorOf(message.info.role)}. The message:\n\n${text}`,
     };
 };

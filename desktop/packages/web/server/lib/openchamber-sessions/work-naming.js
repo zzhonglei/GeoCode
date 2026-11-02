@@ -110,7 +110,7 @@ export const createWorkNamer = ({
 
   // Said whenever the agent passed a branch that was not renamed, so it does
   // not take the call for a rename.
-  const BRANCH_KEPT = { branchRenamed: false, branchNote: 'Only a placeholder branch OpenChamber generated is renamed here; this one stays as it is.' };
+  const BRANCH_KEPT = { branchRenamed: false, branchNote: 'Only a placeholder branch GeoCode generated is renamed here; this one stays as it is.' }; // GeoCode: its own name, also below
 
   /** Renames a placeholder branch after the task; requires `branch` while it is one. */
   const nameBranch = async (worktree, rawBranch) => {
@@ -119,7 +119,7 @@ export const createWorkNamer = ({
     if (!placeholder) return branch ? BRANCH_KEPT : {};
     if (!branch) {
       throw createError(
-        `This worktree's branch \`${placeholder}\` is a placeholder OpenChamber generated, and it is not pushed.`
+        `This worktree's branch \`${placeholder}\` is a placeholder GeoCode generated, and it is not pushed.`
           + ' Call work.name again with both title and branch: the branch named after the task, following the naming'
           + " the repository's other branches use (`git branch -a`); with none, `<type>/<short-kebab-case>` with the"
           + ' conventional commit types, such as `fix/login-timeout`. No tool or app prefix. Nothing was named yet.',

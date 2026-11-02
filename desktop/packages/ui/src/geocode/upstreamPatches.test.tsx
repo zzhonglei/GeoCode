@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { sessionMessageReference, sessionReference } from '@/components/chat/composer/sessionReferences';
 import { MarkdownLink } from '@/components/chat/markdown/MarkdownLink';
 import { MarkdownPresentationContext, type MarkdownPresentation } from '@/components/chat/markdown/MarkdownPresentationContext';
 import { createMarkdownCodePlugin } from '@/components/chat/markdown/streamdownCode';
@@ -27,6 +28,20 @@ describe('GeoCode: magic prompts', () => {
     const prompts = await loadMagicPrompts('/repo');
     expect(prompts.render('git.commit.generate.visible')).toBe(getDefaultMagicPromptTemplate('git.commit.generate.visible'));
     expect(requests).toEqual([]);
+  });
+});
+
+// Guards against a mention of another session telling the model of OpenChamber, or of a tool by upstream's name.
+describe('GeoCode: a session mention', () => {
+  test('names GeoCode and its tool', () => {
+    const session = { id: 'ses_1', title: 'Roads' };
+    const message: Parameters<typeof sessionMessageReference>[1] = {
+      info: { id: 'msg_1', role: 'system' },
+      parts: [{ id: 'prt_1', sessionID: 'ses_1', messageID: 'msg_1', type: 'text', text: 'Done.' }],
+    };
+    const texts = [sessionReference(session).contextText, sessionMessageReference(session, message)?.contextText ?? ''];
+    expect(/openchamber|opencode/i.test(texts.join('\n'))).toBe(false);
+    expect(texts.join('\n')).toContain('the geocode tool');
   });
 });
 
