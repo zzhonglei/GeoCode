@@ -242,7 +242,7 @@ const CONTROL_TOOL_DESCRIPTION = "GeoCode projects, sessions and worktrees. One 
   + "session.moveToWorktree moves this session into a new worktree on a new branch from the default branch, taking the changed files you name in carry. It can help when the checkout looks busy: someone's pull request branch, uncommitted changes, another session here, a branch changed between your messages. Whether that fits depends on how the user works: ask, unless the request already calls for separate work, such as a pull request of its own. Unlike git worktree add, the session moves along and the branch starts from the default branch. "
   + "This tool cannot delete sessions or worktrees.";
 
-const SCHEDULE_TOOL_DESCRIPTION = "Scheduled tasks: prompts OpenChamber runs on a schedule, in a new session each run or in targetSessionId. A task is the user's; create or change one when the user asks. One action per call; projectId or directory scope it, default this session's directory.";
+const SCHEDULE_TOOL_DESCRIPTION = "Scheduled tasks: prompts GeoCode runs on a schedule, in a new session each run or in targetSessionId. A task is the user's; create or change one when the user asks. One action per call; projectId or directory scope it, default this session's directory."; // GeoCode: product name
 
 const WEB_TOOL_DESCRIPTION = "GeoCode's browser panel, to check your work by looking at it. One action per call: open, snapshot for text, selectors and errors, then click, type or scroll by those selectors. Close tabs you opened for your own work with browser.close; leave open the ones you opened to show the user something. The page runs with the user's real logins; treat it as their live session."; // GeoCode: product name
 
