@@ -42,6 +42,8 @@ import { getContextPreviewMaxHeight } from './contextPreviewHeight';
 import { withAttachmentChips } from '../../message/parts/attachmentCitationChips';
 import { useInputStore } from '@/sync/input-store';
 import { GlassPopupMotion } from './GlassPopupMotion';
+import { fileWithDiffCommentOrigin } from '@/lib/diffCommentOrigin';
+import { isWholeFileComment } from '@/components/comments/wholeFileComment';
 
 interface ComposerContextChipsProps {
     draftTarget: InlineCommentDraftTarget | null;
@@ -78,7 +80,7 @@ const basename = (path: string): string => {
 const PREVIEW_CLOSE_DELAY_MS = 500;
 
 const ENTRY_ACTION_CLASS = 'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-interactive-hover hover:text-foreground';
-const ENTRY_LABEL_CLASS = 'text-[10px] font-medium uppercase tracking-wide text-muted-foreground opacity-60';
+const ENTRY_LABEL_CLASS = 'text-[0.625rem] font-medium uppercase tracking-wide text-muted-foreground opacity-60';
 
 const DraftPreviewEntry: React.FC<{
     draft: InlineCommentDraft;
@@ -332,10 +334,13 @@ function ComposerContextChipsView({ draftTarget, colors, previewHost }: Composer
                         ? t('chat.message.context.codeCommentLine', { file: basename(draft.fileLabel), line: draft.startLine })
                         : t('chat.message.context.codeComment', { file: basename(draft.fileLabel), start: draft.startLine, end: draft.endLine }))
                     : t('chat.message.context.fileQuote', { file: basename(draft.fileLabel) });
-            default:
+            default: {
+                const file = fileWithDiffCommentOrigin(basename(draft.fileLabel), draft.origin);
+                if (isWholeFileComment(draft)) return t('chat.message.context.codeCommentFile', { file });
                 return draft.startLine === draft.endLine
-                    ? t('chat.message.context.codeCommentLine', { file: basename(draft.fileLabel), line: draft.startLine })
-                    : t('chat.message.context.codeComment', { file: basename(draft.fileLabel), start: draft.startLine, end: draft.endLine });
+                    ? t('chat.message.context.codeCommentLine', { file, line: draft.startLine })
+                    : t('chat.message.context.codeComment', { file, start: draft.startLine, end: draft.endLine });
+            }
         }
     }, [t, termOf]);
 
