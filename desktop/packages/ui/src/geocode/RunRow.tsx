@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { dispatchRowExpand } from '@/components/chat/lib/scroll/timelineScrollIntent';
 import { MinDurationShineText } from '@/components/chat/message/parts/MinDurationShineText';
 import { ToolRevealOnMount } from '@/components/chat/message/parts/ToolRevealOnMount';
 import { Icon } from '@/components/icon/Icon';
@@ -129,7 +130,12 @@ export const RunRow: React.FC<{
   const counted = useCounted(percent, doing);
   const open = useRunRowOpen(id);
   const toggleOpen = useRunRowToggle();
-  const toggle = () => toggleOpen(id);
+  // Opening tells the timeline first, as upstream's tool rows do, so it lets go of the end and the row opens below
+  // its header rather than pulling the header out of view.
+  const toggle = (row: HTMLElement) => {
+    if (!open) dispatchRowExpand(row);
+    toggleOpen(id);
+  };
 
   return (
     <ToolRevealOnMount animate={animate} wipe>
@@ -139,11 +145,11 @@ export const RunRow: React.FC<{
           role="button"
           tabIndex={0}
           aria-expanded={open}
-          onClick={toggle}
+          onClick={(event) => toggle(event.currentTarget)}
           onKeyDown={(event) => {
             if (event.key !== 'Enter' && event.key !== ' ') return;
             event.preventDefault();
-            toggle();
+            toggle(event.currentTarget);
           }}
         >
           <div className="relative h-5 w-3.5 flex-shrink-0">

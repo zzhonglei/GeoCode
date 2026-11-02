@@ -1,6 +1,7 @@
 import React from 'react';
 import { create } from 'zustand';
 
+import { dispatchRowExpand } from '@/components/chat/lib/scroll/timelineScrollIntent';
 import { MinDurationShineText } from '@/components/chat/message/parts/MinDurationShineText';
 import { ToolRevealOnMount } from '@/components/chat/message/parts/ToolRevealOnMount';
 import { Icon } from '@/components/icon/Icon';
@@ -149,7 +150,11 @@ export const GeoToolRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ par
   const files = [...new Set(parts.map(subjectOf).filter((file): file is string => Boolean(file)))];
   // Files, not entries: the layers of one file are listed apart.
   const count = new Set(parts.map((call) => geoDataPath(call.state.input)).filter(Boolean)).size;
-  const toggle = () => toggleRun(key);
+  // As RunRow's.
+  const toggle = (row: HTMLElement) => {
+    if (!open) dispatchRowExpand(row);
+    toggleRun(key);
+  };
   return (
     <ToolRevealOnMount animate={reveal} wipe>
       <div className="w-full min-w-0">
@@ -158,11 +163,11 @@ export const GeoToolRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ par
           role="button"
           tabIndex={0}
           aria-expanded={open}
-          onClick={toggle}
+          onClick={(event) => toggle(event.currentTarget)}
           onKeyDown={(event) => {
             if (event.key !== 'Enter' && event.key !== ' ') return;
             event.preventDefault();
-            toggle();
+            toggle(event.currentTarget);
           }}
         >
           <div className="relative h-5 w-3.5 flex-shrink-0">

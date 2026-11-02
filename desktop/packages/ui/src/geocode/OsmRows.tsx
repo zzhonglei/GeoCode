@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { dispatchRowExpand } from '@/components/chat/lib/scroll/timelineScrollIntent';
 import { MinDurationShineText } from '@/components/chat/message/parts/MinDurationShineText';
 import { ToolRevealOnMount } from '@/components/chat/message/parts/ToolRevealOnMount';
 import { Icon } from '@/components/icon/Icon';
@@ -302,7 +303,11 @@ const OsmCallRow: React.FC<{
   const open = useRunRowOpen(part.id);
   const toggleOpen = useRunRowToggle();
   const opens = !running;
-  const toggle = () => toggleOpen(part.id);
+  // As RunRow's.
+  const toggle = (row: HTMLElement) => {
+    if (!open) dispatchRowExpand(row);
+    toggleOpen(part.id);
+  };
   return (
     <ToolRevealOnMount animate={animate} wipe>
       <div className="w-full min-w-0">
@@ -314,11 +319,11 @@ const OsmCallRow: React.FC<{
           role={opens ? 'button' : undefined}
           tabIndex={opens ? 0 : undefined}
           aria-expanded={opens ? open : undefined}
-          onClick={opens ? toggle : undefined}
+          onClick={opens ? (event) => toggle(event.currentTarget) : undefined}
           onKeyDown={(event) => {
             if (!opens || (event.key !== 'Enter' && event.key !== ' ')) return;
             event.preventDefault();
-            toggle();
+            toggle(event.currentTarget);
           }}
         >
           <div className="relative h-5 w-3.5 flex-shrink-0">
