@@ -178,6 +178,7 @@ GeoCode 在 `.git/config` 里写入的:
 - 仓库绑定了账号时的两条 `credential.helper`(先一条空的,让用户自己的凭据助手在这个仓库里不起作用,再一条指向 GeoCode 的凭据助手)、`credential.useHttpPath` 与标记它的 `geocode.credentialusehttppath`;绑定了托管的 SSH 密钥时,经 GeoCode 运行的 `core.sshCommand`。
 - 从贡献者的拉取请求建立工作树时,那个贡献者仓库的 `remote.<名字>.*`。
 - 经应用推送并设置上游时,以及 agent 把会话挪进远程已有分支的工作树时的 `branch.<分支>.remote` 与 `branch.<分支>.merge`。
+- 在应用里建立工作树、从一个分支开出新分支时,记下它从哪个分支开出的 `branch.<新分支>.gh-merge-base`(GitHub CLI 的约定,`gh pr create` 也拿它作拉取请求的默认目标);叠放的拉取请求与改动对比靠它找到上一层分支。
 
 agent 把会话挪进新的工作树时,未提交的改动经一条 `GeoCode: session … moved to worktree …` 的 stash 带过去,带过去之后删掉;迁移失败、改动又放不回原处时这条 stash 留着,报给 agent 的错误里写着它。在 Git 面板里暂存改动而没写说明时,stash 的说明是 `GeoCode stash <时间>`。
 
