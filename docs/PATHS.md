@@ -76,7 +76,7 @@
 ├── settings.json              这台电脑上的状态:窗口位置等
 ├── preferences.json           个人偏好:界面、默认模型等
 ├── chats/                     不属于任何项目的对话各自的工作目录,agent 在这类对话里生成的文件都在这里
-├── run/instances/<进程号>/    这次运行的应用交给内核的配置 geocode.managed.json,与让 agent 使用应用功能(浏览器、通知等)的插件 agent-tool/,每次启动重新生成;给新会话起标题的插件 session-title/geocode-session-title/ 也在这里;在设置里打开用量超限时换账号或换模型后,还有替内核做这件事的插件 limit-failover/;已退出的进程留下的目录在启动时删掉
+├── run/instances/             每次运行一个以进程号命名的目录,放这次运行的应用交给内核的配置 geocode.managed.json,与让 agent 使用应用功能(浏览器、通知等)的插件 agent-tool/,每次启动重新生成;给新会话起标题的插件 session-title/geocode-session-title/ 也在这里;在设置里打开用量超限时换账号或换模型后,还有替内核做这件事的插件 limit-failover/;已退出的进程留下的目录在启动时删掉
 ├── managed-kernel/            正在运行的内核进程的登记,用来清理异常退出后留下的进程
 ├── remote-clients.json        窗口的访问令牌的记录(只存摘要)
 ├── git-credential-endpoint.json, bin/git-credential-geocode  git 凭据助手与它调用的接口地址和密钥
@@ -90,7 +90,7 @@
 ├── sessions-archive.json      会话的归档状态
 ├── sessions-directories.json  会话分组
 ├── sessions-unread.json       从哪一刻起标出未读的会话,此前结束的回合算已读;第一次启动时写一次
-├── session-drafts.json, session-drafts/<草稿>/  没发出的消息草稿与它附带的文件(按路径附加的只记路径),每台连上的设备都看得到
+├── session-drafts.json, session-drafts/  没发出的消息草稿;草稿附带的文件放在 session-drafts/ 下每份草稿一个的目录里(按路径附加的只记路径),每台连上的设备都看得到
 ├── opencode-trust.json        信任过的项目配置,按仓库记下指纹(DESKTOP.md 第 3 节);检查初次运行时记下项目列表里已有的项目
 ├── session-warming.json       保持服务商提示缓存的会话与时长,在设置里打开后才有
 ├── message-queue.json         排队等待发送的消息
@@ -171,10 +171,11 @@
     ├── worktrees/      git 为工作树记录的信息,建立工作树时由 git 写入;合并分支时的临时工作树也在这里登记,合并结束后删除
     └── refs/
         ├── heads/geocode/   在应用里新建工作树而没有指定分支名时建立的分支(agent 建立的工作树不建分支)
-        ├── heads/<分支>-backup-<提交>   为拉取请求建立工作树时,同名的旧本地分支已与请求分叉,移动它之前留下的备份
         ├── geocode/archive/ 归档的工作树:删掉文件夹之前的全部状态(包括未提交的改动),在归档页恢复时取回;删除归档时删掉,可选一并删掉它的分支
         └── geocode/runs/    多方案运行里选定一个后,其余方案的工作树删除前留下的快照
 ```
+
+为拉取请求建立工作树时,同名的旧本地分支若已与请求分叉,移动它之前在 `refs/heads/` 下留一个备份分支 `<分支>-backup-<提交>`。
 
 GeoCode 在 `.git/config` 里写入的:
 
