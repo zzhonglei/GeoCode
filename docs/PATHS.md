@@ -76,7 +76,7 @@
 ├── settings.json              这台电脑上的状态:窗口位置等
 ├── preferences.json           个人偏好:界面、默认模型等
 ├── chats/                     不属于任何项目的对话各自的工作目录,agent 在这类对话里生成的文件都在这里
-├── run/instances/<进程号>/    这次运行的应用交给内核的配置 geocode.managed.json,与让 agent 使用应用功能(浏览器、通知等)的插件 agent-tool/,每次启动重新生成;已退出的进程留下的目录在启动时删掉
+├── run/instances/<进程号>/    这次运行的应用交给内核的配置 geocode.managed.json,与让 agent 使用应用功能(浏览器、通知等)的插件 agent-tool/,每次启动重新生成;在设置里打开用量超限时换账号或换模型后,还有替内核做这件事的插件 limit-failover/;已退出的进程留下的目录在启动时删掉
 ├── managed-kernel/            正在运行的内核进程的登记,用来清理异常退出后留下的进程
 ├── remote-clients.json        窗口的访问令牌的记录(只存摘要)
 ├── git-credential-endpoint.json, bin/git-credential-geocode  git 凭据助手与它调用的接口地址和密钥
@@ -89,6 +89,7 @@
 ├── walkthroughs/              生成的改动导览
 ├── sessions-archive.json      会话的归档状态
 ├── sessions-directories.json  会话分组
+├── sessions-unread.json       从哪一刻起标出未读的会话,此前结束的回合算已读;第一次启动时写一次
 ├── session-warming.json       保持服务商提示缓存的会话与时长,在设置里打开后才有
 ├── message-queue.json         排队等待发送的消息
 ├── dispatch-results.json      等待交回发起会话的子会话结果
@@ -98,6 +99,7 @@
 ├── voice-keys.json            语音朗读与转写服务的密钥
 ├── quota/                     查询用量所用的密钥
 ├── github-auth.json           GitHub 登录
+├── source-control-auth.json   GitHub 企业版服务器的令牌
 ├── git-identities.json        保存的 git 身份
 ├── source-control-bindings.json   每个仓库绑定的身份
 ├── source-control-mutations.json, source-control-audit.json  对拉取请求与议题所做操作的进度与记录
@@ -206,7 +208,7 @@ GeoCode 写文件多是先写旁边的临时文件、再改名替换,有的另�
 
 - 环境变量:macOS 上启动时以交互的登录 shell 读一次环境(它会执行 `.zprofile`、`.zshrc` 这类启动文件),Windows 上从注册表读用户与系统的 `PATH`(`ENVIRONMENT.md` 第 2.1 节)。agent 执行的命令与终端因此能找到 conda、GDAL 等工具。
 - git:全局配置(身份、`core.sshCommand`、`safe.directory`);没有设 `SSH_AUTH_SOCK` 时,用 `gpgconf` 与 `~/.gnupg` 找 GPG 代理提供的 SSH 套接字;仓库没有绑定账号时,git 照常用用户自己的凭据助手与 SSH。
-- GitHub CLI 的登录(`gh auth token`);gh 运行时会在它自己的状态目录写下一个设备标识。
+- GitHub CLI 的登录(`gh auth token`);gh 运行时会在它自己的状态目录写下一个设备标识。列出 GitHub 企业版的服务器时,读 gh 记下的登录主机(`GH_CONFIG_DIR` 或 `~/.config/gh` 下的 `hosts.yml`)与 `GH_HOST`。
 - 在设置里查找可导入的 SSH 密钥时,`~/.ssh` 下的密钥,选中的复制进数据目录。
 - npm:安装服务商 SDK 与格式化工具时,`~/.npmrc`、npm 自己的全局配置与 `npm_config_*` 变量。
 - 模型服务商:内核启动时为登录选项读 AWS 的配置名(`~/.aws/config` 与 `~/.aws/credentials`);为 Google Vertex AI 的登录选项读 gcloud 配置里的项目号与区域,以及默认凭据文件 `application_default_credentials.json` 里的项目号,不联网,登录时也可以自己填;选用 Azure 并以 Azure CLI 登录时,调用 `az` 取令牌;连接 Claude Agent 时,运行用户自己装的 `claude`,用它自己的登录;选用 GitLab 时读 `GITLAB_TOKEN` 与项目的远程地址。配置文件里以 `{file:…}` 引用的密钥文件,用到时读取。
