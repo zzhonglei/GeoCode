@@ -6,6 +6,7 @@ import { useUIStore } from '@/stores/useUIStore';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { useMobileAutocompleteMaxHeight } from './useMobileAutocompleteMaxHeight';
 import { AutocompleteRowTooltip } from './composer/ui/AutocompleteRowTooltip';
+import { useAutocompleteDetails } from './composer/ui/useAutocompleteDetails';
 import { rankSkillAutocompleteItems } from './skillAutocompleteItems';
 import { Closed } from '@/geocode/Closed'; // GeoCode: see the source badge
 
@@ -41,6 +42,8 @@ export const SkillAutocomplete = React.forwardRef<SkillAutocompleteHandle, Skill
   const keyboardNavigationRef = React.useRef(false);
   const [filteredSkills, setFilteredSkills] = React.useState<SkillInfo[]>([]);
   const itemRefs = React.useRef<(HTMLDivElement | null)[]>([]);
+  const { listRef, detailsVisible, onListScroll, onItemMouseMove, onKeyboardNavigate } =
+    useAutocompleteDetails(selectedIndex, itemRefs);
   // Skills of the directory the composer sends to (session directory, or the
   // Chats root for a chat draft), not of the project the app was on last.
   const effectiveDirectory = useEffectiveDirectory();
@@ -59,12 +62,6 @@ export const SkillAutocomplete = React.forwardRef<SkillAutocompleteHandle, Skill
 
   React.useEffect(() => {
     selectedIndexRef.current = selectedIndex;
-  }, [selectedIndex]);
-
-  React.useEffect(() => {
-    itemRefs.current[selectedIndex]?.scrollIntoView({
-      block: 'nearest',
-    });
   }, [selectedIndex]);
 
   React.useEffect(() => {
@@ -97,12 +94,14 @@ export const SkillAutocomplete = React.forwardRef<SkillAutocompleteHandle, Skill
 
       if (key === 'ArrowDown') {
         keyboardNavigationRef.current = true;
+        onKeyboardNavigate();
         setSelectedIndex((prev) => (prev + 1) % filteredSkills.length);
         return;
       }
 
       if (key === 'ArrowUp') {
         keyboardNavigationRef.current = true;
+        onKeyboardNavigate();
         setSelectedIndex((prev) => (prev - 1 + filteredSkills.length) % filteredSkills.length);
         return;
       }
@@ -115,13 +114,13 @@ export const SkillAutocomplete = React.forwardRef<SkillAutocompleteHandle, Skill
         }
       }
     },
-  }), [filteredSkills, onSkillSelect, onClose]);
+  }), [filteredSkills, onSkillSelect, onClose, onKeyboardNavigate]);
 
   const renderSkill = (skill: SkillInfo, index: number) => {
     const isProject = skill.scope === 'project';
     const source = skill.source || 'opencode';
     return (
-      <AutocompleteRowTooltip description={skill.description} active={!isMobile && index === selectedIndex}>
+      <AutocompleteRowTooltip description={skill.description} active={!isMobile && index === selectedIndex && detailsVisible}>
       <div
         key={`${skill.name}-${skill.scope}`}
         ref={(el) => {
@@ -135,6 +134,7 @@ export const SkillAutocomplete = React.forwardRef<SkillAutocompleteHandle, Skill
         onClick={() => onSkillSelect(skill.name)}
         onMouseMove={() => {
           keyboardNavigationRef.current = false;
+          onItemMouseMove();
           setSelectedIndex(index);
         }}
       >
@@ -169,7 +169,7 @@ export const SkillAutocomplete = React.forwardRef<SkillAutocompleteHandle, Skill
       className="absolute z-[100] min-w-0 w-full max-w-[450px] max-h-60 oc-glass-popover oc-glass-floating rounded-xl bottom-full mb-2 inset-s-0 flex flex-col"
       style={mobileMaxHeight !== undefined ? { ...style, maxHeight: mobileMaxHeight } : style}
     >
-      <ScrollableOverlay preventOverscroll outerClassName="flex-1 min-h-0" className="px-0 pb-2">
+      <ScrollableOverlay ref={listRef} onScroll={onListScroll} preventOverscroll outerClassName="flex-1 min-h-0" className="px-0 pb-2">
         {filteredSkills.length ? (
           <div>
             {filteredSkills.map((skill, index) => renderSkill(skill, index))}

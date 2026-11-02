@@ -12,12 +12,12 @@ import { resolveAgentToolAction } from '../lib/openchamber-control/actions.js';
 // actions by them, and the interface matches them by name to render calls and list permission rules.
 const TOOLS = ['geocode', 'geocode_web', 'geocode_memory', 'geocode_knowledge', 'geocode_notify', 'geocode_render'];
 const packages = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-agent-tools-'));
+const instanceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-agent-tools-'));
 
-afterAll(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+afterAll(() => fs.rmSync(instanceDir, { recursive: true, force: true }));
 
 const pluginSource = async () => {
-  const runtime = createAgentToolRuntime({ crypto, fsPromises: fs.promises, path, dataDir, getActivePort: () => 1 });
+  const runtime = createAgentToolRuntime({ crypto, fsPromises: fs.promises, path, instanceDir, getActivePort: () => 1 });
   const directory = await runtime.materializePlugin({ includeControl: true, includeWeb: true, includeMemory: true, includeKnowledge: true, includeNotify: true, includeRender: true });
   return fs.readFileSync(path.join(directory, 'index.js'), 'utf8');
 };

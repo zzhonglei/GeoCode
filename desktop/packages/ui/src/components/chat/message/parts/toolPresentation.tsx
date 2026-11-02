@@ -90,6 +90,9 @@ export const getToolIcon = (toolName: string, presentation?: GuestToolRule | nul
     if (tool === 'geocode_web') {
         return <Icon name="global" className={iconClass} />;
     }
+    if (tool === 'geocode_schedule') {
+        return <Icon name="calendar-schedule" className={iconClass} />;
+    }
     if (tool === 'geocode_notify') {
         return <Icon name="notification-3" className={iconClass} />;
     }

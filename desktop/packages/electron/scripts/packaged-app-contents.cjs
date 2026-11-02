@@ -19,6 +19,8 @@ const APP_FILES = [
   'dist-bundle/early-startup.mjs',
   'preload.mjs',
   'resources/geoengine/geoengine.mjs', // GeoCode: GeoEngine, which the main process starts from the archive
+  // The browser panel session's preload, loaded from the app path.
+  'browser-panel-preload.cjs',
   'package.json',
 ];
 

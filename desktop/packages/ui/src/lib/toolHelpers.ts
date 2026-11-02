@@ -205,6 +205,13 @@ const TOOL_METADATA: Record<string, ToolMetadata> = {
       inputFields: []
     },
 
+    geocode_schedule: {
+      displayName: 'GeoCode Schedule',
+      category: 'system',
+      outputLanguage: 'json',
+      inputFields: []
+    },
+
     geocode_web: {
       displayName: 'GeoCode Web',
       category: 'system',
