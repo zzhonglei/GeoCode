@@ -20,6 +20,7 @@ export const CLOSED_PATHS = Object.freeze([
   '/api/linear',
   '/linear/oauth',
   '/api/guests',
+  '/api/guest-files',
   '/api/routing',
   '/api/config/plugins',
   '/api/plugin/check',

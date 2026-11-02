@@ -14,7 +14,7 @@ describe('GeoCode: closedSurface', () => {
   beforeAll(async () => {
     const app = express();
     app.use(closedSurface);
-    for (const route of ['/api/openchamber/update-check', '/api/push/subscribe', '/connect', '/api/client-auth/clients', '/api/push/visibility', '/api/plugin', '/api/plugin/check', '/api/magic-prompts/:id', '/api/config/snippets/expand', '/api/openchamber/spaces/switch', '/api/spaces/:id/session', '/api/config/skills/catalog/source', '/api/config/skills/:name', '/api/config/skills/:name/files/*filePath', '/api/projects/:projectId/config', '/api/projects/:projectId/config/shared', '/api/experimental/session/:sessionId/terminal']) {
+    for (const route of ['/api/openchamber/update-check', '/api/push/subscribe', '/connect', '/api/client-auth/clients', '/api/push/visibility', '/api/plugin', '/api/plugin/check', '/api/magic-prompts/:id', '/api/config/snippets/expand', '/api/openchamber/spaces/switch', '/api/spaces/:id/session', '/api/config/skills/catalog/source', '/api/config/skills/:name', '/api/config/skills/:name/files/*filePath', '/api/projects/:projectId/config', '/api/projects/:projectId/config/shared', '/api/experimental/session/:sessionId/terminal', '/api/guest-files/:grant/*filePath']) {
       app.all(route, (_req, res) => res.status(200).send('upstream'));
     }
     server = http.createServer(app);
@@ -29,7 +29,7 @@ describe('GeoCode: closedSurface', () => {
   const statusOf = async (path, method = 'GET') => (await fetch(`${baseUrl}${path}`, { method })).status;
 
   it('refuses closed endpoints in any case and with a trailing slash', async () => {
-    for (const path of ['/api/openchamber/update-check', '/API/OpenChamber/Update-Check', '/api/push/subscribe/', '/CONNECT', '/API/Client-Auth/Clients', '/API/Plugin/Check', '/API/Magic-Prompts/git.commit.generate.visible', '/API/Config/Snippets/Expand', '/API/OpenChamber/Spaces/Switch', '/API/Spaces/space-1/session', '/API/Config/Skills/Catalog/Source/']) {
+    for (const path of ['/api/openchamber/update-check', '/API/OpenChamber/Update-Check', '/api/push/subscribe/', '/CONNECT', '/API/Client-Auth/Clients', '/API/Plugin/Check', '/API/Magic-Prompts/git.commit.generate.visible', '/API/Config/Snippets/Expand', '/API/OpenChamber/Spaces/Switch', '/API/Spaces/space-1/session', '/API/Config/Skills/Catalog/Source/', '/API/Guest-Files/grant_1/index.html']) {
       expect(await statusOf(path)).toBe(404);
     }
   });
