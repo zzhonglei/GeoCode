@@ -42,6 +42,7 @@ describe('GeoCode: agent tools', () => {
       'ui/src/components/chat/message/parts/toolPresentation.tsx',
       'ui/src/lib/toolHelpers.ts',
       'ui/src/lib/opencode/tools.ts',
+      'ui/src/hooks/useAssistantStatus.ts',
     ]) {
       const source = fs.readFileSync(path.join(packages, file), 'utf8');
       for (const tool of TOOLS) expect(source, `${file} names ${tool}`).toMatch(new RegExp(`(?:['"]${tool}['"]|\\b${tool}:)`));
