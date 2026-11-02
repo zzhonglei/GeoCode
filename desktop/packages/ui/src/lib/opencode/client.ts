@@ -2131,7 +2131,7 @@ class OpencodeService {
     const client = this.clientFor(directory)
     const info = await call("server.info", () => client.server.info())
     const folderName = Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) => byte.toString(16).padStart(2, "0")).join("")
-    const folder = `${info.paths.tmp.replace(/[\\/]+$/, "")}/openchamber/${folderName}`
+    const folder = `${info.paths.tmp.replace(/[\\/]+$/, "")}/attachments/${folderName}` // GeoCode: no OpenChamber name in the kernel's temporary folder (PATHS.md)
     const results: Array<{ filename: string; path: string } | { filename: string; error: Error }> = []
     for (const { filename, bytes } of files) {
       try {
