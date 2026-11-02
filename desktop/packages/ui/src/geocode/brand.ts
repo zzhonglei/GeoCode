@@ -82,6 +82,10 @@ const MESSAGES = {
     'projects.opencodeTrust.title': 'Let the kernel run code from this folder?',
     'projects.opencodeTrust.plugins': 'Configuration files', // the kernel runs no plugin of a project, so only an unreadable file is listed here
     'projects.opencodeTrust.description': 'The kernel runs the commands in the configuration of {path} as soon as it opens the folder. Trust them once, and GeoCode asks again only when they change.',
+    'openCodeStatusDialog.heapSnapshot.action': 'Save kernel memory snapshot',
+    'openCodeStatusDialog.heapSnapshot.writing': "Writing the snapshot. The kernel pauses until it's done.",
+    'openCodeStatusDialog.heapSnapshot.unsupported': 'Needs a newer kernel.', // upstream names OpenCode's version, which is not GeoCode's
+    'openCodeStatusDialog.heapSnapshot.failed': "The kernel couldn't write the snapshot.",
   },
   'zh-CN': {
     'settings.view.nav.group.opencode': '内核',
@@ -131,6 +135,10 @@ const MESSAGES = {
     'projects.opencodeTrust.title': '允许内核运行此文件夹中的代码？',
     'projects.opencodeTrust.plugins': '配置文件',
     'projects.opencodeTrust.description': '内核一打开文件夹，就会运行 {path} 配置中的命令。信任一次后，只有当它们变更时 GeoCode 才会再次询问。',
+    'openCodeStatusDialog.heapSnapshot.action': '保存内核内存快照',
+    'openCodeStatusDialog.heapSnapshot.writing': '正在写入快照。完成前内核会暂停。',
+    'openCodeStatusDialog.heapSnapshot.unsupported': '需要更新版本的内核。',
+    'openCodeStatusDialog.heapSnapshot.failed': '内核无法写入快照。',
   },
   'zh-TW': {
     'settings.view.nav.group.opencode': '核心',
@@ -180,6 +188,10 @@ const MESSAGES = {
     'projects.opencodeTrust.title': '允許核心執行此資料夾中的程式碼？',
     'projects.opencodeTrust.plugins': '設定檔',
     'projects.opencodeTrust.description': '核心一開啟資料夾，就會執行 {path} 設定中的命令。信任一次後，只有在它們變更時 GeoCode 才會再次詢問。',
+    'openCodeStatusDialog.heapSnapshot.action': '儲存核心記憶體快照',
+    'openCodeStatusDialog.heapSnapshot.writing': '正在寫入快照。完成前核心會暫停。',
+    'openCodeStatusDialog.heapSnapshot.unsupported': '需要更新版本的核心。',
+    'openCodeStatusDialog.heapSnapshot.failed': '核心無法寫入快照。',
   },
 } satisfies Partial<Record<Locale, Messages>>;
 

@@ -44,6 +44,14 @@ describe('GeoCode: names in the interface', () => {
         .map(([key]) => key);
       expect(named).toEqual([]);
     });
+
+    // Upstream's OpenCode there is the kernel, and its version is the kernel's, not GeoCode's.
+    test(`calls the kernel the kernel in the memory snapshot in ${locale}`, () => {
+      const named = Object.entries(toGeoCodeDictionary(locale, dictionary))
+        .filter(([key, text]) => key.startsWith('openCodeStatusDialog.heapSnapshot.') && text.includes('GeoCode'))
+        .map(([key]) => key);
+      expect(named).toEqual([]);
+    });
   }
 
   test('reaches the dictionary the interface reads', () => {
