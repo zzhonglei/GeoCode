@@ -5,7 +5,7 @@ import { classifyLimitFailure, parseLimitReport, parseModelSetting } from './pol
 
 const settleSchema = z.object({ ticket: z.string().min(1), applied: z.boolean() });
 
-const PLUGIN_ID = 'openchamber-limit-failover';
+const PLUGIN_ID = 'geocode-limit-failover'; // GeoCode: its own name, also the package name below, as the agent tool's
 const ROUTE = '/api/openchamber/limit-failover';
 
 /**

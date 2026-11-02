@@ -1178,7 +1178,7 @@ export const registerOpenCodeProxy = (app, deps) => {
       if (status === null) return;
       console.error(`[proxy] OpenCode proxy error: ${formatProxyFailure(req, 'forwardMessageListRequest', error, status === 504)}`);
       if (!res.headersSent) {
-        res.status(status).json({ error: status === 504 ? 'OpenCode upstream timed out' : 'OpenCode service unavailable' });
+        res.status(status).json({ error: status === 504 ? 'The kernel timed out' : 'The kernel is unavailable' });
         return;
       }
       next(error);

@@ -20,8 +20,11 @@ export const toGeoCodeReport = (lines: readonly string[]): string[] =>
 // The diagnostic timeline as a status report says it: GeoCode's own version where the timeline gives the shell's, then
 // the labels renamed the same way.
 export const toGeoCodeDiagnosticLog = (text: string, version: string | null | undefined): string =>
-  toGeoCodeReport(text.split('\n').map((line) => line.replace(/^OpenChamber: (.*) \((desktop|web)\)$/,
-    (_, shell: string, runtime: string) => `GeoCode version: ${version ?? '(unknown)'} (shell ${shell}, ${runtime})`))).join('\n');
+  toGeoCodeReport(text.split('\n').map((line) => line
+    .replace(/^OpenChamber: (.*) \((desktop|web)\)$/,
+      (_, shell: string, runtime: string) => `GeoCode version: ${version ?? '(unknown)'} (shell ${shell}, ${runtime})`)
+    // The load line's value is the export's own wording, not a path or an error.
+    .replace(/^(OpenCode load: )(.*)$/, (_, label: string, value: string) => label + value.replace(/OpenCode/g, 'the kernel')))).join('\n');
 
 // OpenCode's own services keep their names.
 const UPSTREAM = /(\b[Aa]n )?(?:OpenChamber|OpenCode(?! (?:Zen|Go|Console|Web Search)\b))/g;

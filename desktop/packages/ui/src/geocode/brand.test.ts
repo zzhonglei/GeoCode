@@ -57,6 +57,8 @@ describe('GeoCode: the diagnostic timeline', () => {
       'OpenCode: 2.2.5, binary source=bundled, wrapper=none',
       'Last OpenCode start error: none',
       '- OpenCode log files and output: not read',
+      'OpenCode load: 2 loaded directories, 5 child processes using 310 MB, OpenCode itself 420 MB',
+      'OpenCode load: 1 loaded directory, processes not counted (Windows, or OpenCode not on this machine)',
     ].join('\n');
     expect(toGeoCodeDiagnosticLog(timeline, '1.0.0').split('\n')).toEqual([
       'GeoCode diagnostic timeline',
@@ -64,11 +66,16 @@ describe('GeoCode: the diagnostic timeline', () => {
       'Kernel: 2.2.5, binary source=bundled, wrapper=none',
       'Last kernel start error: none',
       '- Kernel log files and output: not read',
+      'Kernel load: 2 loaded directories, 5 child processes using 310 MB, the kernel itself 420 MB',
+      'Kernel load: 1 loaded directory, processes not counted (Windows, or the kernel not on this machine)',
     ]);
   });
 
   test('is written in the form toGeoCodeDiagnosticLog reads', () => {
     const source = fs.readFileSync(new URL('../lib/diagnostics/export.ts', import.meta.url), 'utf8');
     expect(source).toContain("`OpenChamber: ${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'unknown'} (${canUseElectronDesktopIPC() ? 'desktop' : 'web'})`");
+    expect(source).toContain('\\nOpenCode load: ${load}\\n');
+    expect(source).toContain("'processes not counted (Windows, or OpenCode not on this machine)'");
+    expect(source).toContain('OpenCode itself ${load.processes.openCodeMb} MB`');
   });
 });
