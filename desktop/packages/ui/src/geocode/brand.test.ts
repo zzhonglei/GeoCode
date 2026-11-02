@@ -67,6 +67,27 @@ describe('GeoCode: names in the interface', () => {
   });
 });
 
+// Guards against a joke naming upstream: the lines are not in the dictionaries, so toGeoCodeDictionary never sees them.
+describe('GeoCode: the jokes', () => {
+  const folder = new URL('../lib/easter-eggs/copy/', import.meta.url);
+  const files = fs.readdirSync(folder).filter((file) => file.endsWith('.ts') && file !== 'types.ts');
+
+  test('come in every language upstream writes them in', () => {
+    expect(files).toContain('zh-CN.ts');
+    expect(files).toContain('zh-TW.ts');
+    expect(files.length).toBeGreaterThan(2);
+  });
+
+  test('name neither upstream', async () => {
+    const named = [];
+    for (const file of files) {
+      const { copy } = await import(new URL(file, folder).href);
+      if (UPSTREAM.test(JSON.stringify(copy))) named.push(file);
+    }
+    expect(named).toEqual([]);
+  });
+});
+
 // Guards against the diagnostic timeline showing upstream's name and the shell's version as the app's.
 describe('GeoCode: the diagnostic timeline', () => {
   test("names GeoCode with its own version, then the shell's, and calls OpenCode the kernel", () => {
