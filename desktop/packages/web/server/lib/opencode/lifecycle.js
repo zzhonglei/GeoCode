@@ -387,8 +387,10 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
   const createManagedOpenCodeServerProcess = async ({ resolvedBinary, hostname, port, timeout, cwd, env: processEnv, shellEnvKeysCount = 0, attempt }) => {
     let binary = (resolvedBinary || process.env.OPENCODE_BINARY || 'opencode').trim() || 'opencode';
     const sourceBinary = binary;
-    // GeoCode: a private kernel that exits once this process closes its stdin
-    let args = ['serve', '--stdio', '--hostname', hostname, '--port', String(port)];
+    // Windows teardown stops OpenCode by closing its stdin lease, which only
+    // `serve --stdio` holds (see managed-process-stop.js).
+    const stdinLease = true; // GeoCode: on every platform, a private kernel that exits once this process closes its stdin
+    let args = ['serve', ...(stdinLease ? ['--stdio'] : []), '--hostname', hostname, '--port', String(port)];
     let launchWrapperType = null;
 
     if (process.platform === 'win32' && state.useWslForOpencode) {
@@ -429,8 +431,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
       env: processEnv,
       detached: process.platform !== 'win32',
       windowsHide: true,
-      // GeoCode: stdin stays open for the kernel's lifetime; see the args above
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: [stdinLease ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     });
     // Closing the lease after OpenCode already exited must not throw EPIPE.
     child.stdin?.on('error', () => {});
