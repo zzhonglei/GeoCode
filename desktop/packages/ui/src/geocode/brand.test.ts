@@ -99,6 +99,11 @@ describe('GeoCode: the diagnostic timeline', () => {
       '- OpenCode log files and output: not read',
       'OpenCode load: 2 loaded directories, 5 child processes using 310 MB, OpenCode itself 420 MB',
       'OpenCode load: 1 loaded directory, processes not counted (Windows, or OpenCode not on this machine)',
+      'Current health: HTTP 200, OpenCode running=true, ready=true, secure=true, port=4096, WSL=false',
+      '- Server journal: bounded history of OpenCode lifecycle transitions and failed HTTP responses',
+      '2026-11-03T10:21:49.971Z [OpenCode API] health probe method=GET route=/api/health function=probeOpenCode http=200',
+      '2026-11-03T10:21:49.971Z [OpenCode process] managed launch',
+      '2026-11-03T10:21:49.971Z [OpenCode] started',
     ].join('\n');
     expect(toGeoCodeDiagnosticLog(timeline, '1.0.0').split('\n')).toEqual([
       'GeoCode diagnostic timeline',
@@ -108,6 +113,11 @@ describe('GeoCode: the diagnostic timeline', () => {
       '- Kernel log files and output: not read',
       'Kernel load: 2 loaded directories, 5 child processes using 310 MB, the kernel itself 420 MB',
       'Kernel load: 1 loaded directory, processes not counted (Windows, or the kernel not on this machine)',
+      'Current health: HTTP 200, kernel running=true, ready=true, secure=true, port=4096, WSL=false',
+      '- Server journal: bounded history of kernel lifecycle transitions and failed HTTP responses',
+      '2026-11-03T10:21:49.971Z [Kernel API] health probe method=GET route=/api/health function=probeOpenCode http=200',
+      '2026-11-03T10:21:49.971Z [Kernel process] managed launch',
+      '2026-11-03T10:21:49.971Z [Kernel] started',
     ]);
   });
 
@@ -117,5 +127,12 @@ describe('GeoCode: the diagnostic timeline', () => {
     expect(source).toContain('\\nOpenCode load: ${load}\\n');
     expect(source).toContain("'processes not counted (Windows, or OpenCode not on this machine)'");
     expect(source).toContain('OpenCode itself ${load.processes.openCodeMb} MB`');
+    expect(source).toContain('`HTTP ${health.http}, OpenCode running=${health.running}');
+    expect(source).toContain("'Server journal: bounded history of OpenCode lifecycle transitions");
+    expect(source).toContain("source: 'OpenCode API'");
+    const capture = fs.readFileSync(new URL('../lib/diagnostics/capture.ts', import.meta.url), 'utf8');
+    expect(capture).toContain("source: 'OpenCode process'");
+    const timeline = fs.readFileSync(new URL('../lib/diagnostics/timeline.ts', import.meta.url), 'utf8');
+    expect(timeline).toContain('`${new Date(at).toISOString()} [${source}] ${action}');
   });
 });

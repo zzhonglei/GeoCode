@@ -23,8 +23,12 @@ export const toGeoCodeDiagnosticLog = (text: string, version: string | null | un
   toGeoCodeReport(text.split('\n').map((line) => line
     .replace(/^OpenChamber: (.*) \((desktop|web)\)$/,
       (_, shell: string, runtime: string) => `GeoCode version: ${version ?? '(unknown)'} (shell ${shell}, ${runtime})`)
-    // The load line's value is the export's own wording, not a path or an error.
-    .replace(/^(OpenCode load: )(.*)$/, (_, label: string, value: string) => label + value.replace(/OpenCode/g, 'the kernel')))).join('\n');
+    // The load line's value is the export's own wording, not a path or an error; so are the two below.
+    .replace(/^(OpenCode load: )(.*)$/, (_, label: string, value: string) => label + value.replace(/OpenCode/g, 'the kernel'))
+    .replace(/^(Current health: .*)OpenCode running=/, '$1kernel running=')
+    .replace(/^(- Server journal: bounded history of )OpenCode /, '$1kernel ')
+    // An event's source, in brackets after its time; the rest of the line can hold an error's text.
+    .replace(/^(\S+ \[)OpenCode\b/, '$1Kernel'))).join('\n');
 
 // OpenCode's own services keep their names.
 const UPSTREAM = /(\b[Aa]n )?(?:OpenChamber|OpenCode(?! (?:Zen|Go|Console|Web Search)\b))/g;
