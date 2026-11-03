@@ -3,6 +3,7 @@ import { normalizeProjectPath } from "@/lib/projectResolution"
 import { findWorktreeHoldingDirectory } from "@/lib/worktrees/worktreePaths"
 import type { WorktreeMetadata } from "@/types/worktree"
 import { directoriesWithRunningShells } from "./background-shells"
+import { hasGeeRunIn } from "@/geocode/backgroundGeeRuns" // GeoCode: see directoryUse
 import { useGlobalSessionStatusStore } from "./global-session-status"
 import { hasPendingSessionAssist } from "./pending-session-assists"
 import type { State } from "./types"
@@ -155,6 +156,7 @@ export function directoryUse(
   const shellRuns = directoriesWithRunningShells().some((shellDirectory) => (
     (normalizeProjectPath(shellDirectory) ?? shellDirectory) === scope
   ))
+  if (hasGeeRunIn((runDirectory) => (normalizeProjectPath(runDirectory) ?? runDirectory) === scope)) return "busy" // GeoCode: an Earth Engine run in the background holds its directory, as a command does
   return shellRuns ? "busy" : "free"
 }
 

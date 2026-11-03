@@ -13,6 +13,7 @@ import {
 } from '@/sync/global-session-status';
 import { useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
 import { resetSessionActivityTiming, useSessionActivityTimingStore } from '@/sync/session-activity-timing';
+import { directoryUse } from '@/sync/location-release';
 import { createEventRoutingIndex, handleEvent } from '@/sync/sync-context';
 
 import { applyGeeRuns, hasRunningGeeRun, resetGeeRuns } from './backgroundGeeRuns';
@@ -96,5 +97,15 @@ describe('GeoCode: Earth Engine runs in the background', () => {
     } finally {
       opencodeClient.getActiveSessionStatuses = statuses;
     }
+  });
+
+  // Guards against the interface asking the kernel to drop the location of a directory a run goes on in, as it keeps
+  // a background command's.
+  test('keeps the location of the directory the run goes on in', () => {
+    const state = { session_status: {}, permission: {}, form: {} };
+    expect(directoryUse(worktree, state)).toBe('free');
+    applyGeeRuns(listed(1, true));
+    expect(directoryUse(worktree, state)).toBe('busy');
+    expect(directoryUse('/repo/worktrees/rivers', state)).toBe('free');
   });
 });

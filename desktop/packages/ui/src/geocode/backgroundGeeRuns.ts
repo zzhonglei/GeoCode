@@ -46,6 +46,10 @@ export const resetGeeRuns = (): void => {
 
 export const hasRunningGeeRun = (sessionId: string): boolean => useBackgroundGeeRuns.getState().sessionIds.has(sessionId);
 
+/** Whether a run goes on in a directory `held` names, as a background command holds the directory it runs in. */
+export const hasGeeRunIn = (held: (directory: string) => boolean): boolean =>
+  useBackgroundGeeRuns.getState().runs.some((run) => held(run.directory));
+
 /** Whether any of the sessions has a run in the background, as a collapsed group of them asks of a command. */
 export const useAnyGeeRun = (enabled: boolean, sessionIds: ReadonlySet<string>): boolean =>
   useBackgroundGeeRuns(
