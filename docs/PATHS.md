@@ -133,7 +133,7 @@
 
 状态目录 `~/.local/state/geocode/` 每次启动就建立。里面有 `locks/` 下的锁,安装 npm 包与克隆外部仓库时使用,OSM 的工具用其中的 `osm-nominatim` 记下上一次请求 Nominatim 的时刻(`OSM.md` 第 3 节)。
 
-临时目录 `$TMPDIR/geocode/` 每次启动就建立,是提示 agent 存放临时文件的地方,agent 可以不经询问读写;在设置里打开「将粘贴的图像保存为文件」后,粘贴的图片存在其中的 `attachments/<随机名>/`;agent 用图像工具生成图片而没有指定位置时,图片存在其中的 `generated-images/`。系统临时目录下另有几类以 `geocode-` 开头的短期文件,用完即删:查看与暂存 git 改动、列出未跟踪的文件、多方案运行保存快照、经应用推送 Git LFS 文件与执行检出钩子时的中间文件;macOS 上还有转换应用图标时的 `geocode-icon-*.png`。例外是 `geocode-git-trust-*`:用户的 git 配置里有 `safe.directory` 条目时,经应用拉取或推送前把这些条目抄进去,每次运行至多一个,不删。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`;运行期间,窗口的单实例锁在 `$TMPDIR` 下的 `scoped_dir*/` 里放一个套接字。
+临时目录 `$TMPDIR/geocode/` 每次启动就建立,是提示 agent 存放临时文件的地方,agent 可以不经询问读写;在设置里打开「将粘贴的图像保存为文件」后,粘贴的图片存在其中的 `attachments/<随机名>/`;agent 生成图片而没有指定位置时,壳的图像工具把图片存在其中的 `generated-images/`,内核的实验性生图工具(`experimental_image_generate`)存在 `images/<会话 ID>/`。系统临时目录下另有几类以 `geocode-` 开头的短期文件,用完即删:查看与暂存 git 改动、列出未跟踪的文件、多方案运行保存快照、经应用推送 Git LFS 文件与执行检出钩子时的中间文件;macOS 上还有转换应用图标时的 `geocode-icon-*.png`。例外是 `geocode-git-trust-*`:用户的 git 配置里有 `safe.directory` 条目时,经应用拉取或推送前把这些条目抄进去,每次运行至多一个,不删。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`;运行期间,窗口的单实例锁在 `$TMPDIR` 下的 `scoped_dir*/` 里放一个套接字。
 
 内核的运行时(Bun)在系统临时目录解出它要加载的原生库与原生模块(`.bun-*.dylib`、`.bun-*.node`),并把插件的转译结果缓存在它自己的共享缓存目录里(macOS 是 `~/Library/Caches/bun`,设了 `XDG_CACHE_HOME` 时是它下面的 `bun/`),与本机其他使用 Bun 的程序共用,按内容命名。两者删除都不影响使用。
 
