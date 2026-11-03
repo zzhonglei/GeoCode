@@ -85,7 +85,8 @@ describe('GeoCode: what the server tells a model', () => {
       rendering: true,
       checkout: { directory: '/repo/worktrees/roads', branch: 'agile-chipmunk', placeholder: true },
     });
-    expect(Object.values(entries).join('\n')).not.toMatch(UPSTREAM);
+    // The keys too: the kernel writes each entry's key into the prompt with its text.
+    expect(Object.entries(entries).flat().join('\n')).not.toMatch(UPSTREAM);
   });
 
   it("names neither upstream in the agent tools' actions", () => {

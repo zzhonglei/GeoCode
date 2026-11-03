@@ -22,10 +22,10 @@ const PINS_METADATA_KEY = 'project_context_pins';
  * index and nothing else. OpenCode orders entries by key.
  */
 export const KNOWLEDGE_ENTRY_KEYS = {
-  checkout: 'openchamber.checkout',
-  pinned: 'openchamber.pinned',
-  memory: 'openchamber.memory',
-  guidance: 'openchamber.guidance',
+  checkout: 'geocode.checkout', // GeoCode: its own name, which the kernel writes into the prompt with the entry
+  pinned: 'geocode.pinned', // GeoCode: see checkout
+  memory: 'geocode.memory', // GeoCode: see checkout
+  guidance: 'geocode.guidance', // GeoCode: see checkout
 };
 
 /** Budget for each entry; anything past it is cut, loudly. */
