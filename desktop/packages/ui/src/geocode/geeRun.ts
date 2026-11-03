@@ -11,7 +11,7 @@ import { descriptionOf, failureLines, type Line, linesOf } from './runLines';
 const status = z.object({ seq: z.number(), text: z.string().nullable(), progress: z.number().optional() });
 export type Status = z.infer<typeof status>;
 
-const outcome = z.enum(['finished', 'failed', 'crashed', 'idle']).optional().catch(undefined);
+const outcome = z.enum(['finished', 'failed', 'crashed', 'idle', 'stopped']).optional().catch(undefined);
 
 /** The kernel's account of a run, in the call's metadata: kept as it was when the run fails or the user stops it. */
 const runMetadata = z.object({

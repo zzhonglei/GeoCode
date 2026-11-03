@@ -88,13 +88,18 @@ const make = Effect.gen(function* () {
         const byUser = stopped.delete(id)
         // Cancelled other than by the user, the app is quitting: the run's marker stays, for the restart to tell of it.
         if (!info || info.status === "running" || (info.status === "cancelled" && !byUser)) return
+        const last = yield* final
+        // A stop has an outcome of its own, so the row takes the stop from the notification's end, not what it printed.
+        const stop = info.status === "cancelled"
         yield* sessions.synthetic({
           ...(info.notificationID ? { id: info.notificationID } : {}),
           ...GeeRunTool.notification(
             recovery,
             info.status,
-            info.status === "cancelled" ? GeeRunTool.STOPPED : GeeRunTool.said({ ...info, status: info.status }),
-            { ...(yield* final), ended: info.completed_at },
+            stop
+              ? GeeRunTool.saidStopped(typeof last.log === "string" ? last.log : "")
+              : GeeRunTool.said({ ...info, status: info.status }),
+            { ...last, ended: info.completed_at, ...(stop ? { outcome: "stopped" } : {}) },
           ),
         })
         if (info.notificationID) yield* jobs.completeBackground(info.notificationID)

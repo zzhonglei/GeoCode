@@ -282,6 +282,25 @@ const RESTARTED =
 /** What a background run's notification says when the user stopped the run from the interface. */
 export const STOPPED = "The user stopped the run. Assets its exports already saved, or still save, stay in the task."
 
+/**
+ * A stopped run's notification: what the script printed until the stop, kept as a finished run's answer keeps it, then
+ * the stop. A background command's stop gives nothing; a run's tool row shows the user what it printed, so the
+ * conversation is told the same.
+ */
+export const saidStopped = (log: string) => {
+  const printed = log.trimEnd()
+  const none = { lines: 0, bytes: 0 }
+  const whole = GeoAnswer.lastPart(printed, none)
+  const output = whole.cut ? GeoAnswer.lastPart(folded(printed), none) : whole
+  // The log keeps only the end of what the script printed: a full one has lost its start.
+  const truncated = output.cut || log.length >= LOG_CHARS
+  return [
+    ...(truncated ? [GeoAnswer.CUT] : []),
+    ...(output.text ? [output.text] : truncated ? [] : ["(The script printed nothing.)"]),
+    STOPPED,
+  ].join("\n\n")
+}
+
 /** What a background run's notification says: the answer it ended with, as a shell's says what the command printed. */
 export const said = (
   result: Pick<Job.Background, "output" | "error"> & { readonly status: Exclude<Job.Status, "running"> },

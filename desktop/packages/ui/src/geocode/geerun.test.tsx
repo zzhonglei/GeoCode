@@ -64,6 +64,20 @@ describe("GeoCode: geerun's row", () => {
     expect(view.lines.at(-1)).toMatchObject({ text: 'The script failed.', tone: 'error' });
   });
 
+  // Guards against what the script printed showing twice once the user stopped the run: the row has it from the run,
+  // and the notification gives it to the conversation too.
+  test('a run the user stopped shows what it printed once, then the stop', () => {
+    const stop = 'The user stopped the run. Assets its exports already saved, or still save, stay in the task.';
+    const notice: SyntheticMessage = {
+      ...noticeOf(INPUT.description),
+      text: `<geerun task="${INPUT.task}" state="cancelled" description="${INPUT.description}">\n2019: NDVI 0.41\n\n${stop}\n</geerun>`,
+      metadata: { source: 'geerun', callID: 'call_gee', task: INPUT.task, state: 'cancelled', outcome: 'stopped', ended: 4000, log: '2019: NDVI 0.41\n' },
+    };
+    const view = geeRunView(backgrounded(), notice, false, 'en');
+    expect(view.lines.map((line) => line.text)).toEqual(['2019: NDVI 0.41', stop]);
+    expect(view.bad).toBe(true);
+  });
+
   // Guards against the notification showing a second time beside the row, as upstream shows a plugin's notice.
   test("a background run's notification is no notice of its own in the conversation", () => {
     const notice = noticeOf(INPUT.description);

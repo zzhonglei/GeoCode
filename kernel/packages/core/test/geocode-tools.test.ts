@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect } from "bun:test"
+import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Deferred, Effect, Exit, Fiber, Layer, Schema, Scope } from "effect"
@@ -6,6 +6,7 @@ import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { FileAccess } from "@opencode/core/file-access"
+import { GeoAnswer } from "@opencode/core/geocode/answer"
 import { GeeRunTool } from "@opencode/core/geocode/geerun"
 import { GeeRunJob } from "@opencode/core/geocode/geerun-job"
 import { GeeRunRpc } from "@opencode/core/geocode/geerun-rpc"
@@ -1267,26 +1268,45 @@ describe("GeoCode: geerun", () => {
     Effect.gen(function* () {
       reset()
       const encoder = new TextEncoder()
+      const printed = "2019: NDVI 0.41"
       answer = (body) =>
         body.method !== "gee.run"
           ? ran()
           : new ReadableStream({
               start: (controller) =>
-                controller.enqueue(encoder.encode(`${progress({ begun: true, python: PYTHON })}\n`)),
+                controller.enqueue(
+                  encoder.encode(
+                    `${progress({ begun: true, python: PYTHON })}\n${progress({ output: `${printed}\n` })}\n`,
+                  ),
+                ),
             })
       yield* executeTool(yield* Tool.Service, gee({ script: "x", description: "统计影像", background: true }))
       const [run] = Schema.decodeUnknownSync(GeeRunRpc.Snapshot)(yield* runsRpc!.list()).runs
+      // Stopped once the row shows what the script printed, as the user would see it.
+      const shown = () =>
+        published.some(
+          (event) => event.type === "session.tool.progress" && JSON.stringify(event.data).includes(printed),
+        )
+      for (let turn = 0; turn < 300 && !shown(); turn++) yield* Effect.sleep("10 millis")
+      expect(shown()).toBe(true)
       noticed = yield* Deferred.make<void>()
       yield* runsRpc!.stop({ id: run!.id })
       yield* Deferred.await(noticed)
       for (let turn = 0; turn < 100 && !aborted.includes("gee.run"); turn++) yield* Effect.sleep("10 millis")
       expect(aborted).toContain("gee.run")
+      // Guards against the conversation told only of the stop while the row shows the user what the script printed.
       expect(notices).toMatchObject([
         {
           sessionID,
           description: "统计影像",
-          text: `<geerun task="${TASK}" state="cancelled" description="统计影像">\n${GeeRunTool.STOPPED}\n</geerun>`,
-          metadata: { source: "geerun", state: "cancelled", callID: "call-geerun", ended: expect.any(Number) },
+          text: `<geerun task="${TASK}" state="cancelled" description="统计影像">\n${printed}\n\n${GeeRunTool.STOPPED}\n</geerun>`,
+          metadata: {
+            source: "geerun",
+            state: "cancelled",
+            outcome: "stopped",
+            callID: "call-geerun",
+            ended: expect.any(Number),
+          },
         },
       ])
       // As a background command's: the stop's notice wakes the conversation.
@@ -1295,6 +1315,15 @@ describe("GeoCode: geerun", () => {
       expect(yield* jobRows()).toHaveLength(0)
     }),
   )
+
+  // Guards against a stop that printed nothing reading as if the output were lost, and against a log that kept only its
+  // end passing for the whole of what the script printed.
+  test("tells of a stopped run's output as a finished run's answer does", () => {
+    expect(GeeRunTool.saidStopped("")).toBe(`(The script printed nothing.)\n\n${GeeRunTool.STOPPED}`)
+    const full = "x".repeat(32 * 1024 - 5) + "\nend\n"
+    expect(GeeRunTool.saidStopped(full).startsWith(`${GeoAnswer.CUT}\n\n`)).toBe(true)
+    expect(GeeRunTool.saidStopped(full).endsWith(`end\n\n${GeeRunTool.STOPPED}`)).toBe(true)
+  })
 
   it.effect("after a restart, tells the conversation that a background run was stopped", () =>
     Effect.gen(function* () {
