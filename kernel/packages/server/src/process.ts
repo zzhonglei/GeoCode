@@ -195,7 +195,7 @@ function dispatch(
       if (!(yield* authorizedRequest(request, auth))) return unauthorizedResponse(request)
       return yield* infoResponse(status, version, urls, tmp)
     }
-    // GeoCode: every request needs the password, pairing links and terminal tickets included
+    // GeoCode: every request needs the password, pairing links and tickets (a terminal's, an MCP client's) included
     if (!(yield* authorizedRequest(request, auth))) return unauthorizedResponse(request)
     if (
       !isPairingConnectURL(url) &&
