@@ -25,6 +25,7 @@ import { sanitizeStarterRefs } from '@/lib/draftStarters';
 import { getFilesViewShowGitignored, setFilesViewShowGitignored } from '@/lib/filesViewShowGitignored';
 import { UI_FONT_WEIGHT_OPTIONS, isMonoFontOption, isUiFontOption, type MonoFontOption, type UiFontOption } from '@/lib/fontOptions';
 import { LOCALES } from '@/lib/i18n/runtime';
+import { toGeoCodeLocale } from '@/geocode/languages'; // GeoCode: see the locale field
 import { useI18nStore } from '@/lib/i18n/store';
 import { isInputHistoryLimit, isInputHistoryScope, type InputHistoryScope } from '@/lib/inputHistoryScope';
 import { LIVE_BROWSER_TABS_MAX, LIVE_BROWSER_TABS_MIN } from '@/lib/browser/liveTabs';
@@ -227,7 +228,7 @@ export const SETTINGS_REGISTRY = {
     parse: parseOneOf(LOCALES),
     ui: {
       read: () => useI18nStore.getState().locale,
-      write: (value) => useI18nStore.getState().setLocale(value),
+      write: (value) => useI18nStore.getState().setLocale(toGeoCodeLocale(value)), // GeoCode: a saved language the app does not offer falls back to English, as in runtime.ts's readStoredLocale
       autoSave: false,
     },
   }),
