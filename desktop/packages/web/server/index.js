@@ -390,7 +390,7 @@ const SETTINGS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'settings.json');
 const PUSH_SUBSCRIPTIONS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'push-subscriptions.json');
 const APNS_TOKENS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'apns-tokens.json');
 const openCodeTrust = createOpenCodeTrust({
-  storePath: path.join(OPENCHAMBER_DATA_DIR, 'opencode-trust.json'),
+  storePath: path.join(OPENCHAMBER_DATA_DIR, 'geocode-trust.json'), // GeoCode: a name of its own, as the data directory's files the user sees
   // Declared further down; first read on the first check, after startup.
   listKnownDirectories: async () => {
     const settings = await readSettingsFromDiskMigrated();

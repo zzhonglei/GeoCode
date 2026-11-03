@@ -91,7 +91,7 @@
 ├── sessions-directories.json  会话分组
 ├── sessions-unread.json       从哪一刻起标出未读的会话,此前结束的回合算已读;第一次启动时写一次
 ├── session-drafts.json, session-drafts/  没发出的消息草稿;草稿附带的文件放在 session-drafts/ 下每份草稿一个的目录里(按路径附加的只记路径),每台连上的设备都看得到
-├── opencode-trust.json        信任过的项目配置,按仓库记下指纹(DESKTOP.md 第 3 节);检查初次运行时记下项目列表里已有的项目
+├── geocode-trust.json         信任过的项目配置,按仓库记下指纹(DESKTOP.md 第 3 节);检查初次运行时记下项目列表里已有的项目
 ├── session-warming.json       保持服务商提示缓存的会话与时长,在设置里打开后才有
 ├── message-queue.json         排队等待发送的消息
 ├── dispatch-results.json      等待交回发起会话的子会话结果
