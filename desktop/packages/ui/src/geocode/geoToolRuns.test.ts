@@ -3,7 +3,8 @@ import { describe, expect, test } from 'bun:test';
 import type { ChatMessageEntry } from '@/components/chat/lib/turns/types';
 import type { Part, SyntheticMessage } from '@/lib/opencode/model';
 
-import { geoToolRuns } from './geoToolRuns';
+import { GEO_TOOLS } from './geoTools';
+import { geoToolRuns, hasGeoRow } from './geoToolRuns';
 
 const read = (id: string): Part => ({
   id,
@@ -50,5 +51,12 @@ describe('GeoCode: which geo calls the conversation shows as one row', () => {
 
   test("a notice the timeline draws between two replies parts their calls", () => {
     expect(rowsOf([reply('msg_a', [read('a')]), notice, reply('msg_b', [read('b')])])).toEqual(['a', 'b']);
+  });
+});
+
+// Guards against a geo tool the kernel adds drawn as a generic tool row: the rows' list is written apart from GEO_TOOLS.
+describe('GeoCode: the geo tools in the conversation', () => {
+  test('each has rows of its own', () => {
+    expect(GEO_TOOLS.filter((tool) => !hasGeoRow(tool))).toEqual([]);
   });
 });
