@@ -96,6 +96,20 @@ describe('GeoCode: skill directories', () => {
     expect(fs.existsSync(path.join(session, '.agents', 'skills', 'made-project'))).toBe(false);
   });
 
+  // Guards against the project's path falling back to upstream's `.opencode`.
+  it('creates a project skill from the default source in the kernel directory', async () => {
+    await skills.createSkill('made-default', { description: 'made' }, session, 'project');
+    expect(fs.existsSync(path.join(session, '.geocode', 'skills', 'made-default', 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(session, '.opencode', 'skills', 'made-default'))).toBe(false);
+  });
+
+  it('edits no skill that only another product has', async () => {
+    const foreign = path.join(session, '.opencode', 'skills', 'opencode-only', 'SKILL.md');
+    const before = fs.readFileSync(foreign, 'utf8');
+    await skills.updateSkill('opencode-only', { description: 'changed' }, session).catch(() => undefined);
+    expect(fs.readFileSync(foreign, 'utf8')).toBe(before);
+  });
+
   // Guards against deleting a folder outside them through a skill whose name is a path.
   it('deletes nothing outside them for a name that is a path', () => {
     expect(() => skills.deleteSkill('../../.claude/skills/dup', session)).toThrow();

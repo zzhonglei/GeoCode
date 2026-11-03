@@ -29,7 +29,7 @@ import { discoverKernelSkills, isKernelSkillPath, isSkillFolderName } from '../.
 const BUILT_IN_SKILL_LOCATION = '<built-in>';
 
 function ensureProjectSkillDir(workingDirectory) {
-  const projectSkillDir = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skills');
+  const projectSkillDir = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skills'); // GeoCode: the kernel's project directory, not upstream's .opencode
   if (!fs.existsSync(projectSkillDir)) {
     fs.mkdirSync(projectSkillDir, { recursive: true });
   }
@@ -37,15 +37,15 @@ function ensureProjectSkillDir(workingDirectory) {
 }
 
 function getProjectSkillDir(workingDirectory, skillName) {
-  const pluralPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skills', skillName);
-  const legacyPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skill', skillName);
+  const pluralPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skills', skillName); // GeoCode: the kernel's project directory, not upstream's .opencode
+  const legacyPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skill', skillName); // GeoCode: the kernel's project directory, not upstream's .opencode
   if (fs.existsSync(legacyPath) && !fs.existsSync(pluralPath)) return legacyPath;
   return pluralPath;
 }
 
 async function getProjectSkillPath(workingDirectory, skillName) {
-  const pluralPath = path.join(workingDirectory, '.opencode', 'skills', skillName, 'SKILL.md');
-  const legacyPath = path.join(workingDirectory, '.opencode', 'skill', skillName, 'SKILL.md');
+  const pluralPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skills', skillName, 'SKILL.md'); // GeoCode: the kernel's project directory, as getProjectSkillDir
+  const legacyPath = path.join(workingDirectory, KERNEL_PROJECT_DIR, 'skill', skillName, 'SKILL.md'); // GeoCode: see above
   if (await pathExists(legacyPath) && !(await pathExists(pluralPath))) return legacyPath;
   return pluralPath;
 }
@@ -774,8 +774,8 @@ function getManagedSkillRoots(workingDirectory) {
 
   pushRoot(SKILL_DIR);
   pushRoot(path.join(OPENCODE_CONFIG_DIR, 'skill'));
-  pushRoot(path.join(os.homedir(), KERNEL_PROJECT_DIR, 'skills'));
-  pushRoot(path.join(os.homedir(), KERNEL_PROJECT_DIR, 'skill'));
+  pushRoot(path.join(os.homedir(), KERNEL_PROJECT_DIR, 'skills')); // GeoCode: the kernel's project directory, not upstream's .opencode
+  pushRoot(path.join(os.homedir(), KERNEL_PROJECT_DIR, 'skill')); // GeoCode: the kernel's project directory, not upstream's .opencode
   pushRoot(path.join(os.homedir(), '.claude', 'skills'));
   pushRoot(path.join(os.homedir(), '.agents', 'skills'));
 
@@ -790,8 +790,8 @@ function getManagedSkillRoots(workingDirectory) {
   if (workingDirectory) {
     const worktreeRoot = findWorktreeRoot(workingDirectory) || path.resolve(workingDirectory);
     for (const ancestor of getAncestors(workingDirectory, worktreeRoot)) {
-      pushRoot(path.join(ancestor, KERNEL_PROJECT_DIR, 'skills'));
-      pushRoot(path.join(ancestor, KERNEL_PROJECT_DIR, 'skill'));
+      pushRoot(path.join(ancestor, KERNEL_PROJECT_DIR, 'skills')); // GeoCode: the kernel's project directory, not upstream's .opencode
+      pushRoot(path.join(ancestor, KERNEL_PROJECT_DIR, 'skill')); // GeoCode: the kernel's project directory, not upstream's .opencode
       pushRoot(path.join(ancestor, '.claude', 'skills'));
       pushRoot(path.join(ancestor, '.agents', 'skills'));
     }
