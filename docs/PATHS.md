@@ -143,7 +143,7 @@
 
 - `v8-compile-cache/` 是主进程代码的编译缓存,每次启动后重写,别的 Electron 版本留下的部分自动清掉,删除只让下一次启动慢一点。
 - `electron-log-preload.js` 是日志库给窗口用的脚本,每次启动写一次。
-- `IndexedDB/openchamber-ui_app_0` 是界面存在浏览器里的数据,名字来自界面内部的协议,属于 GeoCode,不是用户装的 OpenChamber 的。
+- `IndexedDB/openchamber-ui_app_0.indexeddb.leveldb/` 是界面存在浏览器里的数据,名字来自界面内部的协议,属于 GeoCode,不是用户装的 OpenChamber 的。
 - `SingletonLock`、`SingletonCookie`、`SingletonSocket`(Windows 上是 `lockfile`)保证只运行一个 GeoCode,只在运行期间存在。
 
 应用日志 `main.log` 记录窗口与进程的运行,超过 5 MB 时换成 `main.old.log`,日志目录里 7 天前的文件自动删除;会话与工具执行记在数据目录的 `log/geocode.log`。排查问题时两份一起看。
