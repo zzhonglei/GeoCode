@@ -5,6 +5,7 @@ import { getRuntimeKey } from '@/lib/runtime-switch';
 import { resolveGlobalSessionDirectory, useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
 import { applyGlobalSessionStatusEvents, hasActiveSubagent, useGlobalSessionStatusStore } from './global-session-status';
 import { hasRunningShell } from './background-shells';
+import { hasRunningGeeRun } from '@/geocode/backgroundGeeRuns'; // GeoCode: an Earth Engine run in the background keeps its session's turn open, as a command does
 import { readHostBlockingRequestsSnapshot } from './global-blocking-requests';
 import { applyHostTurnStarts, needsHostTurnStarts } from './session-activity-timing';
 
@@ -83,7 +84,7 @@ export const buildHostTurnStarts = (
 
 /** Idle here, with a running subagent or background command keeping its turn open. */
 const isHeldHere = (sessionId: string, activeSessionIds: ReadonlySet<string>): boolean => (
-  !activeSessionIds.has(sessionId) && (hasActiveSubagent(sessionId, activeSessionIds) || hasRunningShell(sessionId))
+  !activeSessionIds.has(sessionId) && (hasActiveSubagent(sessionId, activeSessionIds) || hasRunningShell(sessionId) || hasRunningGeeRun(sessionId)) // GeoCode: see the import
 );
 
 let inFlight: Promise<void> | null = null;
