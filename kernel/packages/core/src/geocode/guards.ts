@@ -26,7 +26,9 @@ export const applies = (event: Evaluation) =>
 
 /**
  * A guarded call asks where the rules allow its tool, unless "always allow" was given for each of its guards; so does
- * a geo tool's read outside the project, unless its directory was. A saved "*" allows the tool, not these.
+ * a geo tool's read outside the project, unless its directory was. A saved "*" allows the tool, not these. An
+ * unattended caller (Permission.Unattended) settles such an ask by the rules alone, which allow the tool: these asks
+ * hold there only because the geo tools stay out of Code Mode, the one way such a caller reaches a tool.
  */
 export const evaluate = (
   event: Evaluation,

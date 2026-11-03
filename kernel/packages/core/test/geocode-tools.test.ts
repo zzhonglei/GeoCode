@@ -858,6 +858,8 @@ describe("GeoCode: geerun", () => {
       reset()
       answer = () => ran()
       const registry = yield* Tool.Service
+      // Guards against geerun joining Code Mode, through which a scheduled task's check could run it unasked.
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toContain("geerun")
       const done = yield* executeTool(registry, gee({ script: "print(1)" }))
       expect(done).toMatchObject({
         status: "completed",
