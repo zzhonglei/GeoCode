@@ -2856,6 +2856,7 @@ const createBrowserWindow = ({ label, restoreGeometry, url, runtimeConfig = {}, 
       if (route) emitToWindow(browserWindow, 'openchamber:open-session', route);
       return { action: 'deny' };
     }
+    if (url.startsWith(`${DEEP_LINK_PROTOCOL}:`)) return { action: 'deny' }; // GeoCode: the app does not take over openchamber:// links, so the system would hand one to an OpenChamber installed beside it
     void shell.openExternal(url).catch(() => {});
     return { action: 'deny' };
   });
@@ -2863,6 +2864,7 @@ const createBrowserWindow = ({ label, restoreGeometry, url, runtimeConfig = {}, 
   browserWindow.webContents.on('will-navigate', (event, url) => {
     if (isAllowedNavigationUrl(url)) return;
     event.preventDefault();
+    if (url.startsWith(`${DEEP_LINK_PROTOCOL}:`)) return; // GeoCode: see setWindowOpenHandler above
     void shell.openExternal(url).catch(() => {});
   });
 
@@ -3373,6 +3375,7 @@ const createMiniChatWindow = async ({ mode, sessionId = '', directory = '', proj
   });
 
   browserWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith(`${DEEP_LINK_PROTOCOL}:`)) return { action: 'deny' }; // GeoCode: as the main window's setWindowOpenHandler
     void shell.openExternal(url).catch(() => {});
     return { action: 'deny' };
   });
@@ -3384,6 +3387,7 @@ const createMiniChatWindow = async ({ mode, sessionId = '', directory = '', proj
     } catch {
     }
     event.preventDefault();
+    if (url.startsWith(`${DEEP_LINK_PROTOCOL}:`)) return; // GeoCode: as the main window's setWindowOpenHandler
     void shell.openExternal(url).catch(() => {});
   });
   browserWindow.webContents.on('dom-ready', () => {
