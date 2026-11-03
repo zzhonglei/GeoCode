@@ -8,6 +8,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
+import { Job } from "@opencode/core/job"
 import { Location } from "@opencode/core/location"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
@@ -77,6 +78,7 @@ const it = testEffect(
       LocationServiceMap.node,
       SessionExecution.node,
       LocationActivity.node,
+      Job.node,
     ]),
     [
       LocationServiceMap.node.replace(
@@ -126,6 +128,57 @@ describe("GeoCode: a geographic run and idle eviction", () => {
       expect(yield* RcMap.has(locations.rcMap, ref)).toBe(true)
 
       yield* execution.interrupt(sessionID).pipe(Effect.andThen(execution.awaitIdle(sessionID)))
+      for (let step = 0; step < 65; step++) yield* TestClock.adjust("1 minute")
+      expect(yield* RcMap.has(locations.rcMap, ref)).toBe(false)
+    }),
+  )
+
+  // Guards against the kernel evicting the location of an Earth Engine run in the background, whose Session is idle:
+  // the kernel keeps the location of every running background job's Session, and geerun's runs are among those jobs.
+  it.effect("keeps the location of an Earth Engine run in the background for as long as it runs", () =>
+    Effect.gen(function* () {
+      stopped.current = false
+      const db = (yield* Database.Service).db
+      const execution = yield* SessionExecution.Service
+      const locations = yield* LocationServiceMap.Service
+      const jobs = yield* Job.Service
+      const sessionID = Session.ID.make("ses_background")
+      const ref = LocationServiceMap.canonical({ directory: AbsolutePath.make("/project") })
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: ref.directory, sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "background",
+          directory: ref.directory,
+          title: "Background",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      // The call starts in the foreground and answers once the run goes on in the background, as geerun does.
+      yield* execution.resume(sessionID).pipe(Effect.exit, Effect.forkScoped)
+      yield* TestClock.adjust("1 minute")
+      const job = yield* jobs.start({
+        id: "job_geerun",
+        type: "geerun",
+        recovery: { kind: "geerun", sessionID, task: "ndvi", description: "Mean NDVI", callID: "call_geerun" },
+        run: Effect.never,
+      })
+      yield* jobs.background(job.id)
+      yield* execution.interrupt(sessionID).pipe(Effect.andThen(execution.awaitIdle(sessionID)))
+      yield* Effect.addFinalizer(() => jobs.cancel(job.id).pipe(Effect.ignore))
+
+      for (let step = 0; step < 70; step++) yield* TestClock.adjust("1 minute")
+      expect(Array.from(yield* execution.active)).toEqual([])
+      expect(yield* RcMap.has(locations.rcMap, ref)).toBe(true)
+
+      yield* jobs.cancel(job.id).pipe(Effect.ignore)
       for (let step = 0; step < 65; step++) yield* TestClock.adjust("1 minute")
       expect(yield* RcMap.has(locations.rcMap, ref)).toBe(false)
     }),
