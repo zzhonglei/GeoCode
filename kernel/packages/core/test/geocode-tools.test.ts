@@ -1242,7 +1242,13 @@ describe("GeoCode: geerun", () => {
       yield* executeTool(yield* Tool.Service, gee({ script: "x", description: "统计影像", background: true }))
       const listed = Schema.decodeUnknownSync(GeeRunRpc.Snapshot)(yield* runsRpc!.list())
       expect(listed.runs).toEqual([
-        { id: expect.any(String), sessionID, description: "统计影像", startedAt: expect.any(Number) },
+        {
+          id: expect.any(String),
+          sessionID,
+          description: "统计影像",
+          startedAt: expect.any(Number),
+          directory: PROJECT,
+        },
       ])
       expect(told()).toEqual(listed)
       noticed = yield* Deferred.make<void>()

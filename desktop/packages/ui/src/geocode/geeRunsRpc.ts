@@ -3,7 +3,9 @@ import { z } from 'zod';
 /** As the kernel lists Earth Engine runs in the background (`kernel/packages/core/src/geocode/geerun-rpc.ts`). */
 export const geeRunsSnapshot = z.object({
   revision: z.number(),
-  runs: z.array(z.object({ id: z.string(), sessionID: z.string(), description: z.string(), startedAt: z.number() })),
+  runs: z.array(
+    z.object({ id: z.string(), sessionID: z.string(), description: z.string(), startedAt: z.number(), directory: z.string() }),
+  ),
 });
 
 export type GeeRunsSnapshot = z.infer<typeof geeRunsSnapshot>;

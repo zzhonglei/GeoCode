@@ -10,6 +10,8 @@ export const Run = Schema.Struct({
   sessionID: Schema.String,
   description: Schema.String,
   startedAt: Schema.Number,
+  /** Where its call was made, as a command records where it runs, whatever becomes of its session. */
+  directory: Schema.String,
 })
 
 /**

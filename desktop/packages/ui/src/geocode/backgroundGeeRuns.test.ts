@@ -17,7 +17,8 @@ import { createEventRoutingIndex, handleEvent } from '@/sync/sync-context';
 
 import { applyGeeRuns, hasRunningGeeRun, resetGeeRuns } from './backgroundGeeRuns';
 
-const run = { id: 'job_1', sessionID: 'ses_1', description: '计算台北 2025 年 NDVI', startedAt: 1000 };
+const worktree = '/repo/worktrees/roads';
+const run = { id: 'job_1', sessionID: 'ses_1', description: '计算台北 2025 年 NDVI', startedAt: 1000, directory: worktree };
 const listed = (revision: number, running: boolean) => ({ revision, runs: running ? [run] : [] });
 const timed = () => useSessionActivityTimingStore.getState().startedAt.has('ses_1');
 const busy = () =>
@@ -70,7 +71,6 @@ describe('GeoCode: Earth Engine runs in the background', () => {
 
   // Guards against archiving a worktree, and with it the run's folder and session, while the run goes on there.
   test('keeps the worktree of a session whose run goes on in the background in use', async () => {
-    const worktree = '/repo/worktrees/roads';
     // SAFETY: readWorktreeUse reads a session's id and directory alone.
     useGlobalSessionsStore.setState({ activeSessions: [{ id: 'ses_1', directory: worktree } as Session] });
     const statuses = opencodeClient.getActiveSessionStatuses;
@@ -81,6 +81,20 @@ describe('GeoCode: Earth Engine runs in the background', () => {
     } finally {
       opencodeClient.getActiveSessionStatuses = statuses;
       useGlobalSessionsStore.setState({ activeSessions: [] });
+    }
+  });
+
+  // Guards against a run found through the active sessions alone: archiving its session takes the session out of
+  // them while the run goes on, and a background command's worktree is kept by where it runs.
+  test('keeps the worktree in use by where the run goes on, after its session is archived', async () => {
+    const statuses = opencodeClient.getActiveSessionStatuses;
+    opencodeClient.getActiveSessionStatuses = async () => ({});
+    try {
+      applyGeeRuns(listed(1, true));
+      expect(await readWorktreeUse(worktree)).toBe('busy');
+      expect(await readWorktreeUse('/repo/worktrees/rivers')).toBe('free');
+    } finally {
+      opencodeClient.getActiveSessionStatuses = statuses;
     }
   });
 });

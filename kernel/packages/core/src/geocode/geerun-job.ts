@@ -77,6 +77,7 @@ const make = Effect.gen(function* () {
           sessionID: recovery.sessionID,
           description: recovery.description,
           startedAt: moved.started_at,
+          directory: call.directory,
         })
         yield* changed(location)
       }
