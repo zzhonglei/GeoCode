@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 
+import { readWorktreeUse } from '@/components/overview/overviewActions';
+import { opencodeClient } from '@/lib/opencode/client';
 import { routeWireEvent } from '@/lib/opencode/events';
+import type { Session } from '@/lib/opencode/model';
 import { getRuntimeKey } from '@/lib/runtime-switch';
 import { ChildStoreManager } from '@/sync/child-store';
 import {
@@ -8,6 +11,7 @@ import {
   applyGlobalSessionStatusSnapshot,
   replaceGlobalSessionStatusById,
 } from '@/sync/global-session-status';
+import { useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
 import { resetSessionActivityTiming, useSessionActivityTimingStore } from '@/sync/session-activity-timing';
 import { createEventRoutingIndex, handleEvent } from '@/sync/sync-context';
 
@@ -62,5 +66,21 @@ describe('GeoCode: Earth Engine runs in the background', () => {
     expect(timed()).toBe(true);
     applyGeeRuns(listed(2, false));
     expect(timed()).toBe(false);
+  });
+
+  // Guards against archiving a worktree, and with it the run's folder and session, while the run goes on there.
+  test('keeps the worktree of a session whose run goes on in the background in use', async () => {
+    const worktree = '/repo/worktrees/roads';
+    // SAFETY: readWorktreeUse reads a session's id and directory alone.
+    useGlobalSessionsStore.setState({ activeSessions: [{ id: 'ses_1', directory: worktree } as Session] });
+    const statuses = opencodeClient.getActiveSessionStatuses;
+    opencodeClient.getActiveSessionStatuses = async () => ({});
+    try {
+      applyGeeRuns(listed(1, true));
+      expect(await readWorktreeUse(worktree)).toBe('busy');
+    } finally {
+      opencodeClient.getActiveSessionStatuses = statuses;
+      useGlobalSessionsStore.setState({ activeSessions: [] });
+    }
   });
 });

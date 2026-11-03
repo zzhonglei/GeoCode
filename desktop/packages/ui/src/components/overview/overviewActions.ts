@@ -9,6 +9,7 @@ import { removeProjectWorktree } from '@/lib/worktrees/worktreeManager';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { resolveGlobalSessionDirectory, useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
 import { useBackgroundShellsStore } from '@/sync/background-shells';
+import { hasRunningGeeRun } from '@/geocode/backgroundGeeRuns'; // GeoCode: see readWorktreeUse
 import { archiveSessions, setSessionWorkState } from '@/sync/session-actions';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import type { WorktreeMetadata } from '@/types/worktree';
@@ -87,6 +88,7 @@ export async function readWorktreeUse(path: string): Promise<WorktreeUse> {
   if ([...shells.byId.values()].some((shell) => isInside(shell.directory, root)) || sessions.some((session) => shells.sessionIds.has(session.id))) {
     return 'busy';
   }
+  if (sessions.some((session) => hasRunningGeeRun(session.id))) return 'busy'; // GeoCode: an Earth Engine run in the background keeps its worktree busy, as a background command does
   // One read of the host's map covers every directory; a session missing from it is idle.
   const statuses = await opencodeClient.getActiveSessionStatuses(root);
   if (!statuses) return 'unknown';
