@@ -544,7 +544,7 @@ export function createPrWatchRuntime({
     if (!sessionID) throw httpError('pr.watch must be called from a session', 400);
     if (!directory) throw httpError('The session\'s directory is unknown', 400);
     const item = parsePullRequestUrl(url);
-    if (!item) throw httpError('url must be the address of a GitHub pull request or a GitLab merge request', 400);
+    if (!item) throw httpError('url must be the address of a GitHub pull request', 400); // GeoCode: GitHub alone; GitLab is closed, so a tracked item cannot name it
     if (!trackedItems || !readers) throw httpError('Pull request status is not available on this server yet', 503);
     await load();
 

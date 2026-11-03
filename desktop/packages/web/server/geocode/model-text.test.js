@@ -150,6 +150,17 @@ describe('GeoCode: what the server tells a model', () => {
     await stop(runtime);
   });
 
+  // GitLab is closed: a model told it can wait on a merge request would be refused for want of an account it cannot add.
+  it('names no git host but GitHub when an agent waits on a pull request', async () => {
+    const watch = actions.OPENCHAMBER_CONTROL_ACTION_DEFINITIONS.find((definition) => definition.action === 'pr.watch');
+    expect(watch.description).toContain('GitHub pull request');
+    expect(watch.description).not.toMatch(/gitlab|merge request/i);
+    const { runtime } = await prWatch({ status: 'disconnected' });
+    const refused = await runtime.watch({ sessionID: 'ses_agent', directory: '/repo', url: 'https://gitlab.com/group/app/-/merge_requests/12' }).then(() => null, (error) => error.message);
+    expect(refused).toBe('url must be the address of a GitHub pull request');
+    await stop(runtime);
+  });
+
   it('names neither upstream when it names a task', async () => {
     await expect(namer('agile-chipmunk').name({ sessionId: 'ses_1', title: 'Roads' })).rejects.toThrow(/GeoCode generated/);
     await expect(namer('agile-chipmunk').name({ sessionId: 'ses_1', title: 'Roads' })).rejects.not.toThrow(UPSTREAM);
