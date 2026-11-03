@@ -69,7 +69,7 @@ const useStopRuns = () => {
   return { stoppingIds, stop };
 };
 
-/** A run's row, as a command's, with what GeoAgent said the run is for. */
+/** A run's row, drawn as BackgroundShellsStrip draws a command's, with what GeoAgent said the run is for. */
 const RunRow: React.FC<{
   run: BackgroundGeeRun;
   fromSubagent: boolean;
@@ -79,7 +79,7 @@ const RunRow: React.FC<{
   const { t, locale } = useI18n();
   const text = geeBackgroundText(locale);
   return (
-    <div className="flex h-10 items-center gap-2 ps-3 pe-1.5">
+    <div className="flex oc-composer-row items-center gap-2 ps-3 pe-1.5">
       <GeeLogo className="size-3.5 shrink-0" />
       <Tooltip delayDuration={500}>
         <TooltipTrigger asChild>
@@ -142,7 +142,7 @@ export const BackgroundGeeStrip: React.FC<{ sessionId: string | null }> = React.
         row(runs[0])
       ) : (
         <>
-          <div className="flex h-10 items-center gap-2 ps-3 pe-1.5">
+          <div className="flex oc-composer-row items-center gap-2 ps-3 pe-1.5">
             <Button
               type="button"
               variant="ghost"
