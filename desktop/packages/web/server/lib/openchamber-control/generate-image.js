@@ -27,7 +27,7 @@ import { OpenChamberControlError } from './error.js';
 import { kernelTmpDir } from '../../geocode/kernel-paths.js'; // GeoCode: see GENERATED_IMAGE_DIRECTORY
 
 /** OpenCode's temporary folder (`paths.tmp` of `/api/info`), the default home of a generated file. */
-export const GENERATED_IMAGE_DIRECTORY = path.join(kernelTmpDir(), 'generated-images'); // GeoCode: the kernel's own temporary folder (PATHS.md)
+export const GENERATED_IMAGE_DIRECTORY = path.join(kernelTmpDir(), 'generated-images'); // GeoCode: the kernel's own temporary folder, not the opencode one the user's own OpenCode shares
 
 const MAX_PROMPT_LENGTH = 8_000;
 const MAX_SOURCE_IMAGES = 8;

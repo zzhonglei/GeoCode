@@ -5063,7 +5063,7 @@ export async function setWorktreePinned(directory, pinned, now = Date.now()) {
       throw error;
     });
   const branch = String(head.stdout || '').trim();
-  const key = `branch.${branch}.geocodePinned`;
+  const key = `branch.${branch}.geocodePinned`; // GeoCode: see BRANCH_PIN_KEY_PATTERN
   const current = Number(await readGitConfigValue(directoryPath, key));
   const isPinned = Number.isFinite(current) && current > 0;
   if (isPinned !== pinned) {

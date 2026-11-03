@@ -231,7 +231,7 @@ const IMAGE_PARAMETER_PROPERTIES = {
 // Where the agent saves a screenshot for a page, so it stays out of the
 // project. The image grant route (../markdown-image-grants/routes.js) reads a
 // page's images from anywhere on the machine.
-const OPENCODE_TEMP_DIRECTORY = kernelTmpDir(); // GeoCode: the kernel's own temporary folder (PATHS.md)
+const OPENCODE_TEMP_DIRECTORY = kernelTmpDir(); // GeoCode: the kernel's own temporary folder, not the opencode one the user's own OpenCode shares
 
 // How to write a page lives on `html` and how to ask on one on `awaitAnswer`.
 // Claude Code cuts a tool description at 2048 characters on older CLIs and
