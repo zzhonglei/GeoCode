@@ -4,8 +4,9 @@ import { HttpServer } from "effect/http"
 import { it } from "../../../core/test/lib/effect"
 import { ServerProcess } from "../../src/process"
 
-// Guards against a pairing link or a terminal ticket letting a request into the kernel without its password.
-it.live("GeoCode: pairing links and terminal tickets need the password", () =>
+// Guards against a pairing link or a ticket (a terminal's, an MCP client's) letting a request into the kernel
+// without its password.
+it.live("GeoCode: pairing links and tickets need the password", () =>
   Effect.gen(function* () {
     const server = yield* ServerProcess.start<never, never>({
       hostname: "127.0.0.1",
@@ -26,7 +27,12 @@ it.live("GeoCode: pairing links and terminal tickets need the password", () =>
     const pairing = (yield* Effect.promise(() => issued.json())) as { code: string }
 
     // Upstream refuses the made-up ticket with 403 too, so only a 401 shows the password was asked for.
-    for (const pathname of [`/auth/connect/${pairing.code}`, "/api/pty/pty_1/connect?ticket=t"]) {
+    for (const pathname of [
+      `/auth/connect/${pairing.code}`,
+      "/api/pty/pty_1/connect?ticket=t",
+      "/api/experimental/persistent-pty/pty_1/connect?ticket=t",
+      "/api/experimental/client-mcp?name=m&ticket=t",
+    ]) {
       expect((yield* request(pathname)).status).toBe(401)
     }
   }),
