@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { KERNEL_PROCESS } from '../../geocode/kernel-paths.js'; // GeoCode: see summarizeOpenCodeTree
 
 // How much OpenCode is holding right now, for the diagnostic export: the
 // directories it has loaded and the processes it started. Every loaded
@@ -34,7 +35,7 @@ export function parseProcessTable(text) {
  */
 export function summarizeOpenCodeTree(table, rootPid) {
   const root = table.get(rootPid);
-  if (!root || !/opencode/i.test(root.command)) return null;
+  if (!root || !(/opencode/i.test(root.command) || root.command.endsWith(KERNEL_PROCESS))) return null; // GeoCode: the kernel by its own name, not by the opencode-cli folder its path happens to hold
   const childrenOf = new Map();
   for (const [pid, entry] of table) {
     const siblings = childrenOf.get(entry.ppid) ?? [];

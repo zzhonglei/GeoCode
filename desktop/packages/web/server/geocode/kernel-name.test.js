@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { parseProcessTable, summarizeOpenCodeTree } from '../lib/diagnostics/opencode-load.js';
 import { createOpenCodeEnvRuntime } from '../lib/opencode/env-runtime.js';
 import { createManagedProcessRegistry } from '../lib/opencode/managed-process-registry.js';
 import { KERNEL_BINARY, KERNEL_PROCESS } from './kernel-paths.js';
@@ -91,5 +92,12 @@ describe('GeoCode: the kernel runs under its own name', () => {
     };
     expect(await reapWith('opencode.exe')).toEqual({ reaped: 0, killed: [] });
     expect(await reapWith(`${KERNEL_PROCESS}.exe`)).toEqual({ reaped: 1, killed: [String(process.pid)] });
+  });
+
+  // Guards against the kernel's processes counted only through the opencode-cli folder in its path: without that folder,
+  // a check left on upstream's name never finds the kernel, and the export says its processes were not counted.
+  it("is counted by its own name in the diagnostic export's load", () => {
+    const table = parseProcessTable([`500 1 409600 ${KERNEL_PROCESS}`, '501 500 102400 node'].join('\n'));
+    expect(summarizeOpenCodeTree(table, 500)).toEqual({ openCodeMb: 400, childProcesses: 1, childMb: 100 });
   });
 });
