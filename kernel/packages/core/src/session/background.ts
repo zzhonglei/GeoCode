@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import type { Job } from "../job.js"
 import type { SessionSchema } from "./schema.js"
 import type { SessionStore } from "./store.js"
+import { GeeRunBackground } from "../geocode/geerun-background.js" // GeoCode: geerun runs, told of as shells
 
 /**
  * Background jobs still running for a Session or any of its descendants. A child's own
@@ -15,12 +16,11 @@ export const outstanding = Effect.fnUntraced(function* (
   store: Pick<SessionStore.Interface, "get">,
   sessionID: SessionSchema.ID,
 ) {
-  // GeoCode: geerun's runs are not among the kinds plugins are told of, so /goal does not wait on them; a run's notice still wakes the Session
-  const running = (yield* jobs.runningBackground).filter((recovery): recovery is Exclude<Job.Recovery, { kind: "geerun" }> => recovery.kind !== "geerun")
-  const owned = yield* Effect.filter(running, (recovery) => // GeoCode: see running
+  const owned = yield* Effect.filter(yield* jobs.runningBackground, (recovery) =>
     descends(store, recovery.kind === "subagent" ? recovery.parentSessionID : recovery.sessionID, sessionID),
   )
   return owned.map((recovery) => {
+    if (recovery.kind === "geerun") return GeeRunBackground.asShell(recovery) // GeoCode: see the import
     if (recovery.kind === "shell")
       return {
         kind: "shell" as const,
