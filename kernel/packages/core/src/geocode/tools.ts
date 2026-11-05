@@ -19,6 +19,30 @@ import { QgisDocTool } from "./qgisdoc.js"
 import { QgisRunTool } from "./qgisrun.js"
 import { ReadGeodataTool } from "./readgeodata.js"
 
+/** The namespace OpenCodeTools gives the tools that manage the app itself, in Code Mode. */
+const namespace = "opencode"
+
+/**
+ * Runs after OpenCodeTools, whose namespace it describes as GeoCode's. The namespace keeps its name, which the tools'
+ * IDs carry and code elsewhere names them by.
+ */
+export const Namespace = {
+  id: "geocode.tools.namespace",
+  effect: Effect.fn("GeoTools.Namespace")(function* (ctx: Context) {
+    yield* ctx.tool
+      .transform((editor) => {
+        // Registering it would make the namespace where OpenCode's tools are not in it.
+        if (!editor.list().some((tool) => tool.options?.namespace === namespace)) return
+        editor.namespace({
+          name: namespace,
+          description:
+            "Tools for managing GeoCode itself, such as working with sessions and worktrees, searching the available models, and reading MCP resources.",
+        })
+      })
+      .pipe(Effect.orDie)
+  }),
+}
+
 /**
  * GeoCode's geo tools, built in as OpenCode's own tools are: each asks the kernel's permission rules itself and then
  * has GeoEngine do the work. One plugin holds them all, so the upstream list registers it once. The interface knows

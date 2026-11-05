@@ -92,7 +92,7 @@ import { WebFetchTool } from "../tool/plugin/webfetch.js"
 import { WebSearchTool } from "../tool/plugin/websearch.js"
 import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
-import { GeoTools } from "../geocode/tools.js" // GeoCode: the geo tools, built in as the tools above are
+import { GeoTools } from "../geocode/tools.js" // GeoCode: the geo tools, built in as the tools above are, and the app's own tools described as GeoCode's
 import { GeeRunJob } from "../geocode/geerun-job.js" // GeoCode: what tells of a geerun run in the background, as SubagentJob tells of a subagent
 import { PermissionSaved } from "../permission/saved.js" // GeoCode: qgisrun's asking reads what "always allow" saved
 import { GeoAgents } from "../geocode/agents.js" // GeoCode: GeoAgent in build's place, its prompt, build kept closed, and explore for geographic data
@@ -263,6 +263,7 @@ const pre = [
   GrepTool.Plugin,
   ImageGenerateTool.Plugin,
   OpenCodeTools.Plugin,
+  GeoTools.Namespace, // GeoCode: after the namespace it describes
   McpResourceTools.Plugin,
   QuestionTool.Plugin,
   ReadTool.Plugin,
