@@ -5,10 +5,13 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Effect } from "effect"
 import { Agent } from "../agent.js"
 import { SessionSystemPrompt } from "../session/system-prompt.js"
+import EXPLORE from "./explore.txt"
 import PROMPT from "./system.txt"
 
 /** GeoAgent, the default agent, which takes the place of OpenCode's build agent. */
 export const id = Agent.ID.make("geoagent")
+
+const explore = Agent.ID.make("explore")
 
 /**
  * Runs before OpenCode's agent plugins, so GeoAgent is the first agent registered. With build closed, that makes it
@@ -27,6 +30,25 @@ export const Plugin = define({
         item.permissions.push({ action: "question", resource: "*", effect: "allow" })
       }),
     )
+  }),
+})
+
+/**
+ * Runs after AgentPlugin, whose explore subagent searches codebases. This one has it search geographic data in local
+ * folders too, with readgeodata, which explore has since it asks as read.
+ */
+export const Explore = define({
+  id: "geocode.agent.explore",
+  effect: Effect.fn("GeoAgents.Explore")(function* (ctx) {
+    yield* ctx.agent.transform((editor) => {
+      // An update would make the agent where explore is not there.
+      if (!editor.get(explore)) return
+      editor.update(explore, (item) => {
+        item.description =
+          'Fast agent specialized for exploring codebases and geographic data. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx", "**/*.shp"), search code for keywords (eg. "API endpoints"), answer questions about the codebase (eg. "how do API endpoints work?"), or find geographic data in local folders and what it holds (eg. "which layers cover the study area?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.'
+        item.system = EXPLORE.trimEnd()
+      })
+    })
   }),
 })
 
