@@ -11,6 +11,7 @@ GeoCode is a desktop AI application for geographic work: `kernel/` is its kernel
 ## Always
 
 - Never commit, push, or release unless explicitly asked.
+- Make and commit every change as `.artifacts/WORKFLOW.md` says, when it exists.
 - Before deleting anything, look at it and confirm with the maintainer.
 - Ask before changing anything outside the repository.
 - Run tests only through `node scripts/test.mjs` (see `docs/development/TESTING.md`); never run a package's test command directly: it does not swap the home, and some write the user's real one.
