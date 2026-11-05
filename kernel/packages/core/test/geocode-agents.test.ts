@@ -1,24 +1,30 @@
 import { describe, expect } from "bun:test"
+import { Message } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
-import { Duration, Effect, Layer, LayerMap, Schema } from "effect"
+import { Duration, Effect, Exit, Layer, LayerMap, Schema } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Config } from "@opencode/core/config"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { GeoAgents } from "@opencode/core/geocode/agents"
+import { GeoPlan } from "@opencode/core/geocode/plan"
 import { Instance } from "@opencode/core/instance"
 import { Instructions } from "@opencode/core/instructions/index"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionContext } from "@opencode/core/session/context"
+import { SessionMessage } from "@opencode/core/session/message"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
 import { Tool } from "@opencode/core/tool"
+import { Provider } from "@opencode/core/provider"
 import { Document, Info } from "@opencode/schema/config"
+import { Model } from "@opencode/schema/model"
 import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "../src/bus"
@@ -154,6 +160,68 @@ describe("GeoCode: the default prompt", () => {
           expect(system[0]).toBe(SessionSystemPrompt.render(PROMPT, Object.keys(prepared.event.tools)))
           expect(system.some((text) => text.includes(instructions))).toBe(true)
         }
+      }),
+    ),
+  )
+})
+
+describe("GeoCode: Plan mode", () => {
+  // Guards against Plan mode writing data with a geo tool, and against the refusal reaching other agents or the geo
+  // tools that only look; Plan is the agent OpenCode registers under this ID.
+  it.live("refuses the geo tools that write data, and only them", () =>
+    inKernel(
+      {},
+      Effect.gen(function* () {
+        const plan = Agent.ID.make("plan")
+        expect(yield* (yield* Agent.Service).get(plan)).toBeDefined()
+        const hooks = yield* PluginHooks.Service
+        const before = (tool: string, agent: Agent.ID) =>
+          hooks
+            .trigger("tool", "execute.before", {
+              tool,
+              sessionID: Session.ID.make("ses_geocode_plan"),
+              agent,
+              messageID: SessionMessage.ID.make("msg_geocode_plan"),
+              id: Tool.CallID.make("call_geocode_plan"),
+              input: {},
+            })
+            .pipe(Effect.exit)
+
+        for (const tool of ["qgisrun", "osmgetobjects", "osmgetfeatures"]) {
+          expect(Exit.isFailure(yield* before(tool, plan))).toBe(true)
+          expect(Exit.isSuccess(yield* before(tool, GeoAgents.id))).toBe(true)
+        }
+        for (const tool of ["geerun", "readgeodata", "osmprobe"])
+          expect(Exit.isSuccess(yield* before(tool, plan))).toBe(true)
+      }),
+    ),
+  )
+
+  // Guards against a merge of OpenCode leaving Plan mode on its own reminder, which the patch in plugin/plan.ts replaces.
+  it.live("starts with GeoCode's reminder", () =>
+    inKernel(
+      {},
+      Effect.gen(function* () {
+        const session = yield* (yield* Session.Service).create({
+          location: Location.Ref.make({ directory: (yield* Location.Service).directory }),
+        })
+        const event = {
+          sessionID: session.id,
+          agent: Agent.ID.make("plan"),
+          model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("gpt-5") }),
+          system: [],
+          messages: [Message.user("Plan the land cover analysis.")],
+          tools: {},
+          options: {},
+        }
+        yield* (yield* PluginHooks.Service).trigger("session", "context", event)
+
+        const reminder = event.messages
+          .flatMap((message) => message.content)
+          .flatMap((part) => (part.type === "text" && part.text.startsWith("<system-reminder>") ? [part.text] : []))
+        expect(reminder).toHaveLength(1)
+        // The Plan directory is the third line; the rest must be GeoCode's text around it.
+        expect(reminder[0]).toBe(GeoPlan.enter(reminder[0]?.split("\n")[2] ?? ""))
       }),
     ),
   )

@@ -1,0 +1,8 @@
+<system-reminder>
+You are in Plan mode. Discuss the plan with the user directly in the conversation. Do not create or update plan files unless the user explicitly asks you to; when they do, write them only in:
+${directory}
+
+Look at the data as you need to, but change nothing: do not modify other files, download, write or export data, or ask a subagent to do so.
+
+You remain in Plan mode until the user switches agents. If the user asks you to carry out the plan, do not do so. Tell them to switch to GeoAgent.
+</system-reminder>

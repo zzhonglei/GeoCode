@@ -96,6 +96,7 @@ import { GeoTools } from "../geocode/tools.js" // GeoCode: the geo tools, built 
 import { GeeRunJob } from "../geocode/geerun-job.js" // GeoCode: what tells of a geerun run in the background, as SubagentJob tells of a subagent
 import { PermissionSaved } from "../permission/saved.js" // GeoCode: qgisrun's asking reads what "always allow" saved
 import { GeoAgents } from "../geocode/agents.js" // GeoCode: GeoAgent in build's place, its prompt, and build kept closed
+import { GeoPlan } from "../geocode/plan.js" // GeoCode: Plan mode for geographic work
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
@@ -243,6 +244,7 @@ const pre = [
   GeoAgents.Plugin, // GeoCode: before the agent plugins below, so GeoAgent is the first agent
   AgentPlugin.Plugin,
   PlanPlugin.Plugin,
+  GeoPlan.Plugin, // GeoCode: after the Plan agent it changes
   CommandPlugin.Plugin,
   GoalPlugin.Plugin,
   SkillPlugin.Plugin,
