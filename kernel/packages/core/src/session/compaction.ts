@@ -39,6 +39,7 @@ import { toLLMMessages } from "./runner/to-llm-message.js"
 import { SessionRecentText } from "./recent-text.js"
 import { contentFilterError, toSessionError } from "./to-session-error.js"
 import { SessionUsage } from "./usage.js"
+import { GeoCompaction } from "../geocode/compaction.js" // GeoCode: the summary's template and rules for geographic work
 
 export type Settings = {
   auto: boolean
@@ -164,6 +165,7 @@ const PRECOMPUTED_TAIL_SHARE = 0.25
 /** Failed background summaries after which no new one starts until the next compaction. */
 const PRECOMPUTE_MAX_FAILURES = 2
 
+/* --- GeoCode: the template and rules are GeoCode's, see the import ---
 const SUMMARY_TEMPLATE = `You MUST use this format for your response (you may omit sections that aren't applicable). Do not include the <template> tags in your response.
 <template>
 ## Objective
@@ -204,6 +206,9 @@ const SUMMARY_RULES = `Rules:
 - Carry forward only user questions or requests that remain unanswered or require further action. Do not repeat ones that newer history has answered or resolved. Preserve exact wording when carrying one forward.
 - Preserve consequential workflow state, including whether changes are uncommitted, committed, pushed, under review, or merged.
 - Do not mention the summary process or that context was compacted.`
+--- /GeoCode --- */
+const SUMMARY_TEMPLATE = GeoCompaction.template // GeoCode: see the import
+const SUMMARY_RULES = GeoCompaction.rules // GeoCode: see the import
 
 export const buildPrompt = (update: boolean, legacy = false) => {
   const shared = [
