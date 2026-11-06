@@ -222,14 +222,14 @@ GeoCode 写文件多是先写旁边的临时文件、再改名替换,有的另�
 - GitHub CLI 的登录(`gh auth token`);gh 运行时会在它自己的状态目录写下一个设备标识。列出 GitHub 企业版的服务器时,读 gh 记下的登录主机(`GH_CONFIG_DIR` 或 `~/.config/gh` 下的 `hosts.yml`)与 `GH_HOST`。gh 交出的令牌在它的 `hosts.yml` 没变时重用至多 5 分钟,为此按 gh 自己的顺序找这个文件:`GH_CONFIG_DIR`、`XDG_CONFIG_HOME/gh`、Windows 上的 `%APPDATA%\GitHub CLI`、`~/.config/gh`,只看文件信息(修改时间等),不读内容。
 - 在设置里查找可导入的 SSH 密钥时,`~/.ssh` 下的密钥,选中的复制进数据目录。
 - npm:安装服务商 SDK 与格式化工具时,`~/.npmrc`、npm 自己的全局配置与 `npm_config_*` 变量。
-- 模型服务商:内核启动时为登录选项读 AWS 的配置名(`~/.aws/config` 与 `~/.aws/credentials`);为 Google Vertex AI 的登录选项读 gcloud 配置里的项目号与区域,以及默认凭据文件 `application_default_credentials.json` 里的项目号,不联网,登录时也可以自己填;选用 Azure 并以 Azure CLI 登录时,调用 `az` 取令牌;连接 Claude Agent 时,运行用户自己装的 `claude`,用它自己的登录;选用 GitLab 时读 `GITLAB_TOKEN` 与项目的远程地址。配置文件里以 `{file:…}` 引用的密钥文件,用到时读取。
+- 模型服务商:内核启动时为登录选项读 AWS 的配置名(`~/.aws/config` 与 `~/.aws/credentials`);为 Google Vertex AI 的登录选项读 gcloud 配置里的项目号与区域,以及默认凭据文件 `application_default_credentials.json` 里的项目号,不联网,登录时也可以自己填;选用 Azure 并以 Azure CLI 登录时,调用 `az` 取令牌;选用 GitLab 时读 `GITLAB_TOKEN` 与项目的远程地址。配置文件里以 `{file:…}` 引用的密钥文件,用到时读取。
 - QGIS:查找安装时,macOS 上看 `/Applications` 与 `~/Applications`、用 Spotlight 按应用标识搜索并读各应用的 `Info.plist`,Windows 上看各个固定磁盘根目录下的 `OSGeo4W*`、`QGIS*` 与 `Program Files` 下的 QGIS。
 - GEE:检查与运行读 Earth Engine 自己的凭据 `~/.config/earthengine/credentials`,不读 Google Cloud 的默认凭据。
 - 内置 Python 环境里的 requests 与 aiohttp 联网时照惯例读 `~/.netrc`,有对应主机的账号就带上(`PYTHON.md` 第 6 节)。
 - 打开文件的应用:macOS 上用 Spotlight 列出本机可用来打开文件的应用,并读它们的图标。
 - 系统信任的证书:应用自己联网(连 GitHub 企业版等)时,除了自带的证书,也信任系统证书库(macOS 的钥匙串、Windows 的证书库)里的证书,公司证书签发的服务器因此能连上。内核、git 与 GeoEngine 是各自的进程,不受影响。
 
-例外有两处:在设置里登录 GEE 时,由 earthengine-api 写入它的凭据文件;选用 Claude Agent 时,Claude Code 照它自己的做法,把每个会话的记录存在它的 `~/.claude/projects/` 下,内核靠这份记录在下一轮接着同一个会话。这些记录在 Claude Code 的 `/resume` 里看得到,删掉 GeoCode 里的会话不会删它们。
+例外是在设置里登录 GEE 时,由 earthengine-api 写入它的凭据文件。
 
 ## 9. 删除与重置
 

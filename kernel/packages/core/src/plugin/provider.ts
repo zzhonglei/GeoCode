@@ -2,7 +2,9 @@ import { AmazonBedrockPlugin } from "./provider/amazon-bedrock.js"
 import { AzurePlugin } from "./provider/azure.js"
 import { CerebrasPlugin } from "./provider/cerebras.js"
 import { ChatGPTPlugin } from "./provider/chatgpt.js"
+/* --- GeoCode: Claude Agent is closed, see the list below ---
 import { ClaudeAgentPlugin } from "./provider/claude-agent/index.js"
+--- /GeoCode --- */
 import { CloudflareAIGatewayPlugin } from "./provider/cloudflare-ai-gateway.js"
 import { CloudflareWorkersAIPlugin } from "./provider/cloudflare-workers-ai.js"
 import { DatabricksPlugin } from "./provider/databricks.js"
@@ -60,5 +62,7 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   VLLMPlugin,
   XAIPlugin,
   ZenmuxPlugin,
+  /* --- GeoCode: closed; it offers the user's Claude subscription, which Anthropic does not permit third-party products to do ---
   ClaudeAgentPlugin,
+  --- /GeoCode --- */
 ]

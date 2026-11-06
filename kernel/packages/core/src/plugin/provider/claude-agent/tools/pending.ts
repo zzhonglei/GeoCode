@@ -39,7 +39,7 @@ export function make(): Interface {
     async call(name: string) {
       const id = next
       next = undefined
-      if (!id) throw new Error("Claude invoked a GeoCode tool without its PreToolUse ID") // GeoCode: product name
+      if (!id) throw new Error("Claude invoked an OpenCode tool without its PreToolUse ID")
       const call = expect(id, name)
       const result = await call.result.promise
       if (result.replacement) replacements.set(id, result.replacement)

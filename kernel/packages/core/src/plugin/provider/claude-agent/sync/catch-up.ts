@@ -11,8 +11,7 @@ export function content(prompt: LanguageModelV3Prompt, start = 0): ConvertToClau
   if (end > 0) {
     blocks.push({
       type: "text",
-      // GeoCode: product name
-      text: "<conversation-checkpoint>\nThe following is conversation history from GeoCode that you have not seen. Treat it as prior conversation, not a new request. Continue with the user messages after this checkpoint.",
+      text: "<conversation-checkpoint>\nThe following is conversation history from OpenCode that you have not seen. Treat it as prior conversation, not a new request. Continue with the user messages after this checkpoint.",
     })
     blocks.push(...ConvertToClaudeMessage.content(missed.slice(0, end)))
     blocks.push({ type: "text", text: "</conversation-checkpoint>" })

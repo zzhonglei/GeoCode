@@ -4,8 +4,6 @@ import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Effect } from "effect"
 import { Agent } from "../agent.js"
-import { ClaudeSystemPrompt } from "../plugin/provider/claude-agent/language-model/system-prompt.js"
-import { ClaudeProvider } from "../plugin/provider/claude-agent/provider.js"
 import { SessionSystemPrompt } from "../session/system-prompt.js"
 import EXPLORE from "./explore.txt"
 import PROMPT from "./system.txt"
@@ -56,9 +54,7 @@ export const Explore = define({
 
 /**
  * Runs after OptimizePlugin, whose hooks put OpenCode's prompt or a model's own variant of it where an agent has no
- * prompt of its own. This one puts GeoCode's there instead, for every model. Claude Agent drops that part for Claude
- * Code's own prompt and adds the agent's prompt as its role, which its hooks, also before this, leave empty for an
- * agent without one; so there GeoCode's prompt goes in as the role.
+ * prompt of its own. This one puts GeoCode's there instead, for every model.
  */
 export const Prompt = define({
   id: "geocode.agent.prompt",
@@ -66,11 +62,9 @@ export const Prompt = define({
     const hook = (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
         if ((yield* ctx.agent.get({ agentID: event.agent })).data.system) return
-        const prompt = SessionSystemPrompt.render(PROMPT, Object.keys(event.tools))
-        if (event.model.providerID === ClaudeProvider.ID) event.options[ClaudeSystemPrompt.AGENT_OPTION] = prompt
         const system = event.system[0]
         if (!system) return
-        event.system[0] = { ...system, text: prompt }
+        event.system[0] = { ...system, text: SessionSystemPrompt.render(PROMPT, Object.keys(event.tools)) }
       }).pipe(Effect.catch(() => Effect.void))
     yield* ctx.session.hook("context", hook)
     yield* ctx.session.hook("compaction", hook)
