@@ -6,7 +6,9 @@ import { Bus } from "../bus.js"
 import { Location } from "../location.js"
 import { Mcp } from "../mcp/index.js"
 import PROMPT_INITIALIZE from "./command/initialize.txt"
+/* --- GeoCode: only /review used it ---
 import PROMPT_REVIEW from "./command/review.txt"
+--- /GeoCode --- */
 
 export const Plugin = define({
   id: "opencode.command",
@@ -39,6 +41,7 @@ export const Plugin = define({
             })
             .pipe(Effect.asVoid),
       })
+      /* --- GeoCode: no /review, which reviews code changes ---
       editor.add({
         name: "review",
         description: "review changes [commit|branch|pr], defaults to uncommitted",
@@ -52,6 +55,7 @@ export const Plugin = define({
             })
             .pipe(Effect.asVoid),
       })
+      --- /GeoCode --- */
       for (const prompt of loaded.prompts) {
         editor.add({
           name: mcpCommandName(prompt.server, prompt.name),
