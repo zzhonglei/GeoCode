@@ -12,6 +12,7 @@ import { FileDiff } from "@opencode/schema/file-diff"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { VcsPatch } from "./vcs/patch.js"
 import { gitExecutable } from "./util/git-executable.js"
+import { GeoSnapshot } from "./geocode/snapshot.js" // GeoCode: a snapshot keeps or leaves out a dataset whole
 
 export class Repository extends Schema.Class<Repository>("Git.Repository")({
   worktree: AbsolutePath,
@@ -592,6 +593,7 @@ const layer = Layer.effect(
           )).filter((item): item is RelativePath => item !== undefined)
         : []
       const skip = new Set(skipped)
+      for (const file of GeoSnapshot.companions(skipped, input.changes.untracked)) skip.add(file) // GeoCode: see GeoSnapshot
       const added = candidates.filter((item) => !excluded.has(item) && !skip.has(item))
       // Untracked paths are not in the index, so only tracked paths that are now ignored need removing.
       const removed = input.changes.tracked.filter((item) => excluded.has(item))
@@ -822,6 +824,7 @@ const layer = Layer.effect(
                 )).filter((file): file is RelativePath => file !== undefined)
               : [],
           )
+          for (const file of GeoSnapshot.companions(stillOversized, untracked)) stillOversized.add(file) // GeoCode: see GeoSnapshot
           // Paths the source ignores are listed as untracked on every scan; they leave the index unchanged.
           const excluded =
             scanned && last?.fingerprint === scanned && changes.every((change) => !change.tracked.length)
