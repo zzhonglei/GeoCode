@@ -97,6 +97,7 @@ import { GeeRunJob } from "../geocode/geerun-job.js" // GeoCode: what tells of a
 import { PermissionSaved } from "../permission/saved.js" // GeoCode: qgisrun's asking reads what "always allow" saved
 import { GeoAgents } from "../geocode/agents.js" // GeoCode: GeoAgent in build's place, its prompt, build kept closed, and explore for geographic data
 import { GeoPlan } from "../geocode/plan.js" // GeoCode: Plan mode for geographic work
+import { GeoSkills } from "../geocode/skills.js" // GeoCode: no built-in report skill, which reports to OpenCode
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
@@ -249,6 +250,7 @@ const pre = [
   CommandPlugin.Plugin,
   GoalPlugin.Plugin,
   SkillPlugin.Plugin,
+  GeoSkills.Plugin, // GeoCode: after the built-in skills it removes one of
   VcsHgPlugin.Plugin,
   ModelsDevPlugin,
   ...ProviderPlugins,
