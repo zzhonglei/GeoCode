@@ -146,7 +146,7 @@ function makeRoutes<AuthError, AuthServices>(
     Mcp.node.replace(
       Mcp.configured({
         clientInfo: {
-          name: "opencode",
+          name: "geocode", // GeoCode: the name MCP servers see
           version: options.app?.version ?? "unknown",
         },
       }),

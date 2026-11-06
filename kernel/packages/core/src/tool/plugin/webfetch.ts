@@ -58,7 +58,7 @@ const headers = (format: Format, userAgent: string) => ({
 })
 
 const openCodeUserAgent =
-  "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OpenCode-User/1.0; +https://opencode.ai"
+  "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GeoCode-User/1.0; +https://github.com/zzhonglei/GeoCode-Release" // GeoCode: product name and link
 
 const isCloudflareChallenge = (error: unknown) => {
   if (!HttpClientError.isHttpClientError(error) || error.reason._tag !== "StatusCodeError") return false
@@ -166,7 +166,8 @@ export const Plugin = {
                   })
                 const response = yield* execute(http, check, input.url, input.format).pipe(
                   Effect.catchIf(isCloudflareChallenge, () =>
-                    execute(http, check, input.url, input.format, "opencode"),
+                    // GeoCode: product name
+                    execute(http, check, input.url, input.format, "geocode"),
                   ),
                 )
                 const contentType = response.headers["content-type"] || ""

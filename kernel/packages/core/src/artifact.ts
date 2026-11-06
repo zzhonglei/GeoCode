@@ -218,7 +218,7 @@ const layer = Layer.effect(
       name: "Local",
       capabilities: ["static"],
       prompt:
-        "Artifacts are served as HTML by this OpenCode server. Only people who can reach this server can open them.",
+        "Artifacts are served as HTML by this GeoCode kernel. Only people who can reach this server can open them.", // GeoCode: product name
       create: (input) =>
         replaceDirectoryFiles(itemDir(input.id), input.files).pipe(
           Effect.as({ url: `/api/experimental/artifacts/${encodeURIComponent(input.id)}/view/` }),
