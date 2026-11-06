@@ -229,7 +229,7 @@ GeoCode 写文件多是先写旁边的临时文件、再改名替换,有的另�
 - 打开文件的应用:macOS 上用 Spotlight 列出本机可用来打开文件的应用,并读它们的图标。
 - 系统信任的证书:应用自己联网(连 GitHub 企业版等)时,除了自带的证书,也信任系统证书库(macOS 的钥匙串、Windows 的证书库)里的证书,公司证书签发的服务器因此能连上。内核、git 与 GeoEngine 是各自的进程,不受影响。
 
-例外是在设置里登录 GEE 时,由 earthengine-api 写入它的凭据文件。
+例外有两处:在设置里登录 GEE 时,由 earthengine-api 写入它的凭据文件;选用 Claude Agent 时,Claude Code 照它自己的做法,把每个会话的记录存在它的 `~/.claude/projects/` 下,内核靠这份记录在下一轮接着同一个会话。这些记录在 Claude Code 的 `/resume` 里看得到,删掉 GeoCode 里的会话不会删它们。
 
 ## 9. 删除与重置
 

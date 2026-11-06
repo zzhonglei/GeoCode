@@ -13,6 +13,8 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { ClaudeSystemPrompt } from "@opencode/core/plugin/provider/claude-agent/language-model/system-prompt"
+import { ClaudeProvider } from "@opencode/core/plugin/provider/claude-agent/provider"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -160,6 +162,33 @@ describe("GeoCode: the default prompt", () => {
           expect(system[0]).toBe(SessionSystemPrompt.render(PROMPT, Object.keys(prepared.event.tools)))
           expect(system.some((text) => text.includes(instructions))).toBe(true)
         }
+      }),
+    ),
+  )
+
+  // Guards against Claude Agent, which drops the base prompt for Claude Code's own and adds the agent's prompt as its
+  // role, reaching Claude Code without GeoCode's prompt: its hooks leave the role empty for an agent without a prompt.
+  it.live("is GeoCode's role under Claude Agent", () =>
+    inKernel(
+      {},
+      Effect.gen(function* () {
+        const session = yield* (yield* Session.Service).create({
+          location: Location.Ref.make({ directory: (yield* Location.Service).directory }),
+        })
+        const event = {
+          sessionID: session.id,
+          agent: GeoAgents.id,
+          model: Model.Ref.make({ providerID: ClaudeProvider.ID, id: Model.ID.make("claude-sonnet-4") }),
+          system: [],
+          messages: [Message.user("Map the land cover of Taipei.")],
+          tools: {},
+          options: {} as Record<string, unknown>,
+        }
+        yield* (yield* PluginHooks.Service).trigger("session", "context", event)
+
+        // Set only by Claude Agent's own hook, so it ran, and before GeoCode's, which would otherwise be overwritten.
+        expect(event.options[ClaudeSystemPrompt.INSTRUCTIONS_OPTION]).toBe("")
+        expect(event.options[ClaudeSystemPrompt.AGENT_OPTION]).toBe(SessionSystemPrompt.render(PROMPT, []))
       }),
     ),
   )

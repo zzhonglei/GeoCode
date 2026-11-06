@@ -26,7 +26,7 @@ export async function make(
   server.setRequestHandler("tools/list", async () => ({ tools: definitions }))
   server.setRequestHandler("tools/call", async (request) => {
     const name = ToolNames.PREFIX + request.params.name
-    if (!ToolNames.original(name, tools)) throw new Error(`Claude Code called an unregistered OpenCode tool: ${name}`)
+    if (!ToolNames.original(name, tools)) throw new Error(`Claude Code called an unregistered GeoCode tool: ${name}`) // GeoCode: product name
     return pending.call(name)
   })
   // Claude Agent SDK bundles its own MCP SDK types; its public instance type also names the higher-level McpServer.
