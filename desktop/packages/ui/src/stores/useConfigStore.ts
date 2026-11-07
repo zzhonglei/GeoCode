@@ -446,7 +446,7 @@ const resolveDefaultAgentModelSelection = ({
         }
     }
     if (!resolvedAgent) {
-        resolvedAgent = primaryAgents.find((agent) => agent.name === "build") || primaryAgents[0] || agents[0];
+        resolvedAgent = primaryAgents.find((agent) => agent.name === "geoagent") || primaryAgents[0] || agents[0]; // GeoCode: GeoAgent takes build's place
     }
     // --- Model cascade ---
     let providerId: string | undefined;

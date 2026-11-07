@@ -71,7 +71,7 @@ export function createAgentColorResolver(theme: Theme, agents: readonly (Pick<Ag
   const assigned = new Map<string, AgentColor>();
   const used = new Set<number>();
   for (const agent of ordered) {
-    if (agent.name === 'build' || assigned.has(agent.name)) continue;
+    if (agent.name === 'geoagent' || assigned.has(agent.name)) continue; // GeoCode: GeoAgent takes build's place
     if (used.size === palette.length) used.clear();
     const available = palette.map((_, index) => index).filter((index) => !used.has(index));
     // Prefer colored syntax accents to the neutral code foreground while possible.
@@ -89,7 +89,7 @@ export function createAgentColorResolver(theme: Theme, agents: readonly (Pick<Ag
   return (name: string | undefined): AgentColor => {
     const own = name ? configured.get(name) : undefined;
     if (own) return own;
-    if (!name || name === 'build') return BUILD_COLOR;
+    if (!name || name === 'geoagent') return BUILD_COLOR; // GeoCode: GeoAgent takes build's place
     return assigned.get(name) ?? { color: palette[hashName(name) % palette.length].color };
   };
 }

@@ -132,7 +132,7 @@ const applyDefaultAgentAndModelSelection = (sessionId: string, configState = use
 
     if (!agentName) {
       agentName =
-        visibleAgents.find((agent) => agent.name === 'build')?.name ||
+        visibleAgents.find((agent) => agent.name === 'geoagent')?.name || // GeoCode: GeoAgent takes build's place
         visibleAgents[0]?.name;
     }
 

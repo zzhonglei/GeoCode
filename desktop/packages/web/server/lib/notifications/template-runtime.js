@@ -296,6 +296,7 @@ export const createNotificationTemplateRuntime = (deps) => {
         ? info.agent.trim()
         : (typeof info.mode === 'string' ? info.mode.trim() : '');
       if (!mode) return 'Agent';
+      if (mode === 'geoagent') return 'GeoAgent'; // GeoCode: its display name; capitalizing the id gave build's, but gives "Geoagent"
       return mode.split(/[-_\s]+/).filter(Boolean)
         .map((token) => token.charAt(0).toUpperCase() + token.slice(1)).join(' ');
     })();

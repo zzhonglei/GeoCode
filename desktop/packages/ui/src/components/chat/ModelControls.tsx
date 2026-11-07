@@ -482,7 +482,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
     // are still arriving, show the chosen (or default) agent as another
     // catalog knows it instead of "Select agent".
     const knownAgent = useConfigStore((state) => (
-        state.agents.length > 0 ? undefined : selectKnownAgent(state, uiAgentName || settingsDefaultAgent || 'build')
+        state.agents.length > 0 ? undefined : selectKnownAgent(state, uiAgentName || settingsDefaultAgent || 'geoagent') // GeoCode: GeoAgent takes build's place
     ));
 
     const toggleFavoriteModel = useUIStore((state) => state.toggleFavoriteModel);
@@ -647,7 +647,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
             const found = selectableDesktopAgents.find(a => a.name === settingsDefaultAgent);
             if (found) return found.name;
         }
-        const buildAgent = selectableDesktopAgents.find(a => a.name === 'build');
+        const buildAgent = selectableDesktopAgents.find(a => a.name === 'geoagent'); // GeoCode: GeoAgent takes build's place
         if (buildAgent) return buildAgent.name;
         return selectableDesktopAgents[0]?.name;
     }, [settingsDefaultAgent, selectableDesktopAgents]);
@@ -1272,7 +1272,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                 return;
             }
 
-            const fallbackAgent = agents.find(agent => agent.name === 'build') || primaryAgents[0] || agents[0];
+            const fallbackAgent = agents.find(agent => agent.name === 'geoagent') || primaryAgents[0] || agents[0]; // GeoCode: GeoAgent takes build's place
             if (!fallbackAgent) {
                 return;
             }
@@ -1630,7 +1630,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
 
     const getAgentDisplayName = () => {
         if (!uiAgentName) {
-            const buildAgent = primaryAgents.find(agent => agent.name === 'build');
+            const buildAgent = primaryAgents.find(agent => agent.name === 'geoagent'); // GeoCode: GeoAgent takes build's place
             const defaultAgent = buildAgent || primaryAgents[0];
             const shownAgent = defaultAgent ?? knownAgent;
             return shownAgent ? agentLabel(shownAgent) : t('chat.modelControls.selectAgent');

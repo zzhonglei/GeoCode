@@ -48,7 +48,7 @@ export const getAgentDisplayName = (agents: Agent[], agentName?: string) => {
     }
 
     const primaryAgents = agents.filter((agent) => isPrimaryMode(agent.mode));
-    const buildAgent = primaryAgents.find((agent) => agent.name === 'build');
+    const buildAgent = primaryAgents.find((agent) => agent.name === 'geoagent'); // GeoCode: GeoAgent takes build's place
     const fallbackAgent = buildAgent || primaryAgents[0] || agents[0];
     return fallbackAgent ? capitalizeLabel(fallbackAgent.name) : 'Select agent';
 };

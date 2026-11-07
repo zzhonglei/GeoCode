@@ -92,7 +92,7 @@ const SCHEDULE_PARAMETER_NAMES = [...SCHEDULE_ONLY_PARAMETER_NAMES, 'projectId',
  */
 const SCHEDULE_PARAMETER_OVERRIDES = {
   model: { type: 'string', description: 'provider/model; required unless targetSessionId is set, which keeps that session\'s model' },
-  agent: { type: 'string', description: 'Only when the user asks. Default: build' },
+  agent: { type: 'string', description: 'Only when the user asks. Default: geoagent' }, // GeoCode: GeoAgent takes build's place
 };
 
 /**
@@ -127,7 +127,7 @@ const ALL_PARAMETER_PROPERTIES = {
   title: { type: 'string' },
   prompt: { type: 'string' },
   model: { type: 'string', description: "provider/model. session.create with an agent and no model runs that agent's bound model; with neither, it picks from models.list favorites or recents, or omits it; send and fork omit it to keep the session's model" },
-  agent: { type: 'string', description: 'Only when the user asks. Default: build for a new session, unchanged for an existing one' },
+  agent: { type: 'string', description: 'Only when the user asks. Default: geoagent for a new session, unchanged for an existing one' }, // GeoCode: GeoAgent takes build's place
   variant: { type: 'string', description: 'Only when the user asks' },
   worktree: { type: 'string', description: 'Folder name of a new worktree, named after the task (fix-login-timeout). Required for session.moveToWorktree; on session.create only when the user asks, and uncommitted changes stay behind' },
   branch: { type: 'string', description: 'session.create: default the worktree name. work.name: the new name of a placeholder branch' },

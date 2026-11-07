@@ -201,7 +201,7 @@ const resolveDefaultSelection = ({ agents, models, settings, projectDefaults, op
     }
   }
   if (!resolvedAgent) {
-    resolvedAgent = primaryAgents.find((agent) => agent?.id === 'build') || primaryAgents[0] || agents[0] || null;
+    resolvedAgent = primaryAgents.find((agent) => agent?.id === 'geoagent') || primaryAgents[0] || agents[0] || null; // GeoCode: GeoAgent takes build's place
   }
 
   let model = null;
