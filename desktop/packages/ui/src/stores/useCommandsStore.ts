@@ -43,7 +43,7 @@ export interface Command extends CommandConfig {
 }
 
 // Built-in commands provided by OpenCode (not defined in user config directories)
-const BUILTIN_COMMAND_NAMES = new Set(['init', 'review']);
+const BUILTIN_COMMAND_NAMES = new Set(['init']); // GeoCode: the kernel has no built-in /review; a user's own is theirs to delete
 
 /** What `GET /api/config/commands/:name/config` answers. */
 interface CommandEntityEnvelope {

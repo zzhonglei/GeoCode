@@ -68,6 +68,7 @@ export const MAGIC_PROMPT_COMMANDS: readonly MagicPromptCommand[] = [
         requires: 'session',
         buildVariables: summaryVariables,
     },
+    /* --- GeoCode: no /workspace-review, a stored prompt for reviewing code changes; the review flow still uses its instructions ---
     {
         name: 'workspace-review',
         visiblePrompt: 'session.review.visible',
@@ -75,6 +76,7 @@ export const MAGIC_PROMPT_COMMANDS: readonly MagicPromptCommand[] = [
         errorToastKey: 'chat.chatInput.toast.reviewFailed',
         requires: 'session-or-draft',
     },
+    --- /GeoCode --- */
     {
         name: 'plan-feature',
         visiblePrompt: 'session.plan.visible',
@@ -98,6 +100,7 @@ export const MAGIC_PROMPT_COMMANDS: readonly MagicPromptCommand[] = [
         requires: 'session-or-draft',
         buildVariables: ideaVariables,
     },
+    /* --- GeoCode: no /catch-up, /debug, /weigh or /explore: stored prompts for working on code, which a user asks for in their own words; a command of the user's own by one of these names then runs ---
     {
         name: 'catch-up',
         visiblePrompt: 'session.catchup.visible',
@@ -126,6 +129,7 @@ export const MAGIC_PROMPT_COMMANDS: readonly MagicPromptCommand[] = [
         errorToastKey: 'chat.chatInput.toast.exploreFailed',
         requires: 'session-or-draft',
     },
+    --- /GeoCode --- */
 ];
 
 const COMMANDS_BY_NAME = new Map(MAGIC_PROMPT_COMMANDS.map((command) => [command.name, command]));

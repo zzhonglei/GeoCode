@@ -121,7 +121,7 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
       description: cmd.description,
       agent: cmd.agent ?? undefined,
       model: cmd.model ?? undefined,
-      isBuiltIn: cmd.name === 'init' || cmd.name === 'review',
+      isBuiltIn: cmd.name === 'init', // GeoCode: the kernel has no built-in /review; a user's own is theirs
       scope: cmd.scope,
     }));
 
@@ -151,10 +151,12 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
         ? [{ id: 'openchamber:summary', name: 'summary', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.summaryDescription'), isOpenChamber: true }]
         : []
       ),
+      /* --- GeoCode: no /workspace-review, a stored prompt for reviewing code changes (see slashCommands) ---
       ...(canStartSessionCommand
         ? [{ id: 'openchamber:workspace-review', name: 'workspace-review', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.workspaceReviewDescription'), isOpenChamber: true }]
         : []
       ),
+      --- /GeoCode --- */
       ...(canUseReviewHandoffFlow
         ? [{ id: 'openchamber:handoff-review', name: 'handoff-review', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.handoffReviewDescription'), isOpenChamber: true }]
         : []
@@ -171,6 +173,7 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
         ? [{ id: 'openchamber:schedule-task', name: 'schedule-task', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.scheduleTaskDescription'), isOpenChamber: true }]
         : []
       ),
+      /* --- GeoCode: no /catch-up, /debug, /weigh or /explore, stored prompts for working on code (see slashCommands) ---
       ...(canStartSessionCommand
         ? [{ id: 'openchamber:catch-up', name: 'catch-up', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.catchUpDescription'), isOpenChamber: true }]
         : []
@@ -187,6 +190,7 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
         ? [{ id: 'openchamber:explore', name: 'explore', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.exploreDescription'), isOpenChamber: true }]
         : []
       ),
+      --- /GeoCode --- */
     ];
     const extensionCommands: CommandInfo[] = guestCommands.map((entry) => ({
       id: `extension:${entry.guestId}:${entry.command.name}`,

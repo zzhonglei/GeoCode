@@ -885,6 +885,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         const names = new Set<string>([
             'init', 'review', 'undo', 'redo', 'timeline', 'compact', 'fork', 'btw', 'summary', 'workspace-review', 'plan-feature', 'craft-goal', 'schedule-task', 'catch-up', 'debug', 'weigh', 'explore',
         ]);
+        // GeoCode: no /review in the kernel, and no /workspace-review, /catch-up, /debug, /weigh or /explore (see slashCommands); a user's own command by one of these names is added back below
+        for (const name of ['review', 'workspace-review', 'catch-up', 'debug', 'weigh', 'explore']) names.delete(name);
         if (!isMobile && !isVSCodeRuntime()) names.add('handoff-review');
         for (const command of availableCommands) names.add(command.name.toLowerCase());
         return names;

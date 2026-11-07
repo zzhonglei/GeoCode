@@ -23,14 +23,18 @@ type BuiltInStarter = {
 };
 
 export const BUILTIN_STARTERS: readonly BuiltInStarter[] = [
+    /* --- GeoCode: their commands are closed (see slashCommands) ---
     { name: 'explore', icon: 'compass-3', labelKey: 'chat.draftPresets.explore.label', command: '/explore' },
     { name: 'catch-up', icon: 'history', labelKey: 'chat.draftPresets.catchup.label', command: '/catch-up' },
     { name: 'weigh', icon: 'scales-3', labelKey: 'chat.draftPresets.weigh.label', command: '/weigh' },
+    --- /GeoCode --- */
     { name: 'plan-feature', icon: 'survey', labelKey: 'chat.draftPresets.plan.label', command: '/plan-feature' },
     { name: 'craft-goal', icon: 'target', labelKey: 'chat.draftPresets.craftGoal.label', command: '/craft-goal' },
     { name: 'schedule-task', icon: 'calendar-schedule', labelKey: 'chat.draftPresets.scheduleTask.label', command: '/schedule-task' },
+    /* --- GeoCode: their commands are closed (see slashCommands) ---
     { name: 'debug', icon: 'bug', labelKey: 'chat.draftPresets.debug.label', command: '/debug' },
     { name: 'review', icon: 'search-eye', labelKey: 'chat.draftPresets.review.label', command: '/workspace-review' },
+    --- /GeoCode --- */
 ];
 
 const BUILTIN_BY_NAME = new Map<string, BuiltInStarter>(BUILTIN_STARTERS.map((s) => [s.name, s]));
