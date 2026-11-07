@@ -530,7 +530,7 @@ const OPENCODE_NAMESPACE_TOOLS = new Set([
   "list_mcp_resources",
   "read_mcp_resource",
 ])
-const OPENCODE_NAMESPACE_PREFIX = "opencode_"
+const OPENCODE_NAMESPACE_PREFIX = "geocode_" // GeoCode: the kernel moves these tools into GeoCode's namespace
 
 /** The bare name (`session_rename`) of a tool in the `opencode` namespace, else `undefined`. */
 export function opencodeNamespaceTool(toolName: ToolName): string | undefined {

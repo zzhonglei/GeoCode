@@ -265,12 +265,12 @@ const pre = [
   GrepTool.Plugin,
   ImageGenerateTool.Plugin,
   OpenCodeTools.Plugin,
-  GeoTools.Namespace, // GeoCode: after the namespace it describes
   McpResourceTools.Plugin,
   QuestionTool.Plugin,
   ReadTool.Plugin,
   ArtifactTools.Plugin,
   ScheduleTools.Plugin,
+  GeoTools.Namespace, // GeoCode: after the plugins whose tools it moves into GeoCode's namespace
   ShellTool.Plugin,
   SkillTool.Plugin,
   SubagentTool.Plugin,

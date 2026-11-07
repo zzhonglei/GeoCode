@@ -35,7 +35,7 @@ export const Plugin = {
               const servers =
                 input.server === undefined ? (yield* mcp.servers()).map((server) => server.name) : [input.server]
               yield* permission.assert({
-                action: "opencode_list_mcp_resources",
+                action: "geocode_list_mcp_resources", // GeoCode: the tool's ID in GeoCode's namespace (GeoTools.Namespace)
                 resources: servers,
                 save: servers,
                 metadata: {},
@@ -64,7 +64,7 @@ export const Plugin = {
           execute: (input, context) =>
             Effect.gen(function* () {
               yield* permission.assert({
-                action: "opencode_read_mcp_resource",
+                action: "geocode_read_mcp_resource", // GeoCode: the tool's ID in GeoCode's namespace (GeoTools.Namespace)
                 resources: [`${input.server}:${input.uri}`],
                 save: [`${input.server}:*`],
                 metadata: { server: input.server, uri: input.uri },

@@ -3,6 +3,7 @@ import { Message } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Duration, Effect, Exit, Layer, LayerMap, Schema } from "effect"
 import { Agent } from "@opencode/core/agent"
+import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
 import { Config } from "@opencode/core/config"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { GeoAgents } from "@opencode/core/geocode/agents"
@@ -235,6 +236,51 @@ describe("GeoCode: Claude Agent", () => {
       {},
       Effect.gen(function* () {
         expect(yield* (yield* Provider.Service).get(Provider.ID.make("claude-agent"))).toBeUndefined()
+      }),
+    ),
+  )
+})
+
+describe("GeoCode: the tools that manage the app", () => {
+  // Guards against the model and the user meeting OpenCode's name on the tools that manage the app, in the Code Mode
+  // catalog (`tools.opencode.session_rename`) or as direct tools (`opencode_session_rename`), as when a merge of
+  // OpenCode adds a tool to its namespace or a plugin that adds them lands after the one that moves them.
+  it.live("are in GeoCode's namespace, none in OpenCode's", () =>
+    inKernel(
+      // Every plugin that adds them on, schedules and artifacts among them.
+      { experimental: { schedules: true, artifacts: true } },
+      Effect.gen(function* () {
+        const tools = yield* Tool.Service
+        const geoagent = yield* (yield* Agent.Service).get(GeoAgents.id)
+        if (!geoagent) throw new Error("expected GeoAgent")
+        const catalog = (yield* tools.snapshot(geoagent.permissions)).codeModeCatalog
+        if (!catalog) throw new Error("expected Code Mode")
+        const ids = (yield* tools.list()).map((tool) => tool.id)
+
+        expect(ids.filter((id) => id.startsWith("opencode_"))).toEqual([])
+        expect(ids).toContain("geocode_session_rename")
+        expect(ids).toContain("geocode_list_mcp_resources")
+        expect(ids).toContain("geocode_schedule_create")
+        expect(ids).toContain("geocode_artifact_create")
+        const namespaces = CodeModeCatalog.summarize(catalog).namespaces.map((namespace) => namespace.name)
+        expect(namespaces).toContain("geocode")
+        expect(namespaces).not.toContain("opencode")
+        // The `tools` a script sees, where an empty `opencode` would keep a wrong call from the right suggestion.
+        const script = yield* tools.check({
+          code: "return Object.keys(tools)",
+          tools: [],
+          bindings: {},
+          permissions: geoagent.permissions,
+          limits: { timeoutMs: 10_000, maxToolCalls: 1, maxOutputBytes: 10_000 },
+          context: {
+            sessionID: Session.ID.make("ses_geocode_tools"),
+            agent: geoagent.id,
+            messageID: SessionMessage.ID.make("msg_geocode_tools"),
+            progress: () => Effect.void,
+          },
+        })
+        expect(script.ok && script.value).toContain("geocode")
+        expect(script.ok && script.value).not.toContain("opencode")
       }),
     ),
   )

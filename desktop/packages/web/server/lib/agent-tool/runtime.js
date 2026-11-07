@@ -638,7 +638,7 @@ ${answers ? ANSWER_WAIT_SETUP : ''}
  * `session_move` stays: the control tool cannot move a session into a directory
  * that already exists.
  */
-const OPENCODE_TOOLS_REPLACED_BY_CONTROL = ['opencode_worktree_create', 'opencode_models'];
+const OPENCODE_TOOLS_REPLACED_BY_CONTROL = ['geocode_worktree_create', 'geocode_models']; // GeoCode: their IDs in GeoCode's namespace, where the kernel moves them
 
 const createPluginSource = ({ includeControl, includeSchedule, includeWeb, includeMemory, includeKnowledge, includeNotify, includeRender, includeImage, includeWorkflow, codeMode }) => {
   const entries = [];

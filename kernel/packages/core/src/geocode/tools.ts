@@ -19,20 +19,30 @@ import { QgisDocTool } from "./qgisdoc.js"
 import { QgisRunTool } from "./qgisrun.js"
 import { ReadGeodataTool } from "./readgeodata.js"
 
-/** The namespace OpenCodeTools gives the tools that manage the app itself, in Code Mode. */
-const namespace = "opencode"
+/** The namespace OpenCode gives the tools that manage the app itself, such as `session_rename`. */
+const upstream = "opencode"
+/** Their namespace in GeoCode: the model calls them as `tools.geocode.session_rename` in Code Mode. */
+const namespace = "geocode"
 
 /**
- * Runs after OpenCodeTools, whose namespace it describes as GeoCode's. The namespace keeps its name, which the tools'
- * IDs carry and code elsewhere names them by.
+ * Moves OpenCode's tools that manage the app itself into the `geocode` namespace, so the model and the user see them
+ * under GeoCode's name. Runs after every plugin that adds them (OpenCodeTools, McpResourceTools, ArtifactTools,
+ * ScheduleTools). The tool editor cannot change a namespace in place, so each is removed and added again as it was;
+ * OpenCodeTools registers its description under `geocode` (patched), since an `opencode` namespace without tools would
+ * still be in Code Mode's `tools`. An MCP server named `opencode` would have its tools moved too, as a server named
+ * `geocode` shares the namespace.
  */
 export const Namespace = {
   id: "geocode.tools.namespace",
   effect: Effect.fn("GeoTools.Namespace")(function* (ctx: Context) {
     yield* ctx.tool
       .transform((editor) => {
-        // Registering it would make the namespace where OpenCode's tools are not in it.
-        if (!editor.list().some((tool) => tool.options?.namespace === namespace)) return
+        const tools = editor.list().filter((tool) => tool.options?.namespace === upstream)
+        if (tools.length === 0) return
+        for (const { id, ...tool } of tools) {
+          editor.remove(id)
+          editor.add({ ...tool, options: { ...tool.options, namespace } })
+        }
         editor.namespace({
           name: namespace,
           description:

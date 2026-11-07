@@ -38,6 +38,8 @@ const FORBIDDEN_CODE_TOOLS = new Set([
   "opencode.worktree_create",
   "opencode.worktree_remove",
 ])
+// GeoCode: the same tools by their paths in GeoCode's namespace, where GeoTools.Namespace moves them
+for (const path of [...FORBIDDEN_CODE_TOOLS]) FORBIDDEN_CODE_TOOLS.add(path.replace(/^opencode\./, "geocode."))
 
 const decodeCodeObjectResult = Schema.decodeUnknownResult(
   Schema.Struct({

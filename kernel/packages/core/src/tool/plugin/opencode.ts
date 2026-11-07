@@ -100,7 +100,7 @@ export const Plugin = {
       Effect.sync(() => {
         event.system.push(
           SystemPart.make(
-            "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.",
+            "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.geocode.session_move` and make the worktree the session's working directory.", // GeoCode: the tool's path in GeoCode's namespace (GeoTools.Namespace)
           ),
         )
       })
@@ -110,7 +110,7 @@ export const Plugin = {
     yield* ctx.tool
       .transform((draft) => {
         draft.namespace({
-          name: "opencode",
+          name: "geocode", // GeoCode: the namespace GeoTools.Namespace moves these tools into and describes; a stale one would stay in Code Mode's tools
           description:
             "Tools for managing OpenCode itself, such as working with sessions and worktrees, searching the available models, and reading MCP resources.",
         })
