@@ -83,6 +83,7 @@ const MESSAGES = {
     'settings.skills.page.use.unknown': 'Couldn\'t read the kernel\'s config, so it\'s not known whether this skill is off. Reopen the page to try again.',
     'settings.sourceControl.token.info': 'GeoCode keeps the token on this computer and never shows it again.',
     'chat.autocomplete.scope.openchamber': 'GeoCode', // the badge of its own commands, which upstream writes in lower case
+    'chat.autocomplete.scope.opencode': 'GeoCode', // and of the kernel's built-in ones, such as /init
     'projects.opencodeTrust.title': 'Let the kernel run code from this folder?',
     'projects.opencodeTrust.plugins': 'Configuration files', // the kernel runs no plugin of a project, so only an unreadable file is listed here
     'projects.opencodeTrust.description': 'The kernel runs the commands in the configuration of {path} as soon as it opens the folder. Trust them once, and GeoCode asks again only when they change.',
@@ -138,6 +139,7 @@ const MESSAGES = {
     'settings.skills.page.use.unknown': '无法读取内核配置，因此不知道此技能是否已关闭。重新打开页面即可重试。',
     'settings.sourceControl.token.info': 'GeoCode 将令牌保存在本机，之后不会再显示。',
     'chat.autocomplete.scope.openchamber': 'GeoCode',
+    'chat.autocomplete.scope.opencode': 'GeoCode',
     'projects.opencodeTrust.title': '允许内核运行此文件夹中的代码？',
     'projects.opencodeTrust.plugins': '配置文件',
     'projects.opencodeTrust.description': '内核一打开文件夹，就会运行 {path} 配置中的命令。信任一次后，只有当它们变更时 GeoCode 才会再次询问。',
@@ -193,6 +195,7 @@ const MESSAGES = {
     'settings.skills.page.use.unknown': '無法讀取核心設定，因此不知道此技能是否已關閉。重新開啟頁面即可重試。',
     'settings.sourceControl.token.info': 'GeoCode 會將權杖保存在本機，之後不會再顯示。',
     'chat.autocomplete.scope.openchamber': 'GeoCode',
+    'chat.autocomplete.scope.opencode': 'GeoCode',
     'projects.opencodeTrust.title': '允許核心執行此資料夾中的程式碼？',
     'projects.opencodeTrust.plugins': '設定檔',
     'projects.opencodeTrust.description': '核心一開啟資料夾，就會執行 {path} 設定中的命令。信任一次後，只有在它們變更時 GeoCode 才會再次詢問。',
