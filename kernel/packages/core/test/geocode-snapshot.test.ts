@@ -92,6 +92,31 @@ describe("GeoCode: snapshots of datasets", () => {
     }),
   )
 
+  // Guards against a snapshot keeping the main file of a dataset whose large file is one of its others, as a point
+  // shapefile's attribute table often is.
+  it.live("leave a dataset out whole when another of its files is the large one", () =>
+    Effect.gen(function* () {
+      const { write, capture, entries } = yield* setup
+      yield* write({
+        "roads.dbf": large,
+        "roads.shp": small,
+        "roads.shx": small,
+        "roads.prj": small,
+        "roads.shp.xml": small,
+        "roads.geojson": small,
+        "dem.tif.ovr": large,
+        "dem.tif": small,
+        "dem.tfw": small,
+        "sites.gpkg-wal": large,
+        "sites.gpkg": small,
+        "sites.gpkg-shm": small,
+        "notes.txt": small,
+      })
+
+      expect(yield* entries(yield* capture())).toEqual(["a.txt", "notes.txt", "roads.geojson"])
+    }),
+  )
+
   // Guards against reverting a session touching a dataset it rewrote or wrote, which would leave it broken.
   it.live("keep a reverted session off the datasets they leave out", () =>
     Effect.gen(function* () {

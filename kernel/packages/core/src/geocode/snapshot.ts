@@ -32,6 +32,9 @@ const SIDECARS = new Set([
   "rrd",
 ])
 
+/** Extensions of the files those sidecars go with: a large sidecar leaves its dataset's main file out too. */
+const MAIN = new Set(["shp", "tif", "tiff", "img", "jpg", "jpeg", "png", "gif", "bmp", "jp2"])
+
 /** SQLite's files beside a database, as GeoPackage, while it is open. */
 const SQLITE = ["-wal", "-shm", "-journal"]
 
@@ -51,13 +54,29 @@ const geodatabase = (file: string) => {
  * The untracked files that belong to the same dataset as an untracked file a snapshot leaves out for its size, so a
  * snapshot keeps or leaves out a dataset whole: files named as the large one with more after it (`dem.tif.aux.xml`,
  * `dem.tif.ovr`, `roads.shp.xml`, a GeoPackage's `-wal`), its sidecars by extension (`roads.shx`, `roads.dbf`,
- * `dem.tfw`), and the File Geodatabase (`.gdb` folder) it is in. Restoring part of a dataset would break it: a
- * reverted session would bring back an old `.dbf` beside a new `.shp`, or delete the small files of a new one and
- * leave its `.shp`. Other files of the same name, such as `roads.geojson` made from `roads.shp`, stay in.
+ * `dem.tfw`), and the File Geodatabase (`.gdb` folder) it is in; and the same the other way, when the large file is
+ * not the dataset's main one (a point shapefile's `.dbf`, `dem.tif.ovr`, a GeoPackage's `-wal`). Restoring part of a
+ * dataset would break it: a reverted session would bring back an old `.dbf` beside a new `.shp`, or delete the small
+ * files of a new one and leave its `.shp`. Other files of the same name, such as `roads.geojson` made from
+ * `roads.shp`, stay in.
  */
 export const companions = (oversized: Iterable<RelativePath>, candidates: readonly RelativePath[]) => {
-  const left = new Set<string>(oversized)
-  if (!left.size) return []
+  const large = new Set<string>(oversized)
+  if (!large.size) return []
+  const sidecarStems = new Set(
+    [...large].flatMap((file) => {
+      const named = extension(file)
+      return named && SIDECARS.has(named.extension.toLowerCase()) ? [named.stem] : []
+    }),
+  )
+  const main = (file: string) => {
+    if (SQLITE.some((suffix) => large.has(file + suffix))) return true
+    if ([...large].some((other) => other.startsWith(file + "."))) return true
+    const named = extension(file)
+    return named !== undefined && MAIN.has(named.extension.toLowerCase()) && sidecarStems.has(named.stem)
+  }
+  // The main files join the large ones, so their own sidecars follow below as well.
+  const left = new Set<string>([...large, ...candidates.filter(main)])
   const stems = new Set<string>()
   const geodatabases = new Set<string>()
   for (const file of left) {
@@ -79,5 +98,5 @@ export const companions = (oversized: Iterable<RelativePath>, candidates: readon
       if (left.has(directory + base.slice(0, dot))) return true
     return false
   }
-  return candidates.filter((file) => !left.has(file) && belongs(file))
+  return candidates.filter((file) => !large.has(file) && (left.has(file) || belongs(file)))
 }
