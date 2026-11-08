@@ -20,7 +20,7 @@ Electron 主进程
 ```
 
 - 桌面应用(`desktop/`,`DESKTOP.md`):主进程管理窗口与各个进程;壳服务端为界面提供文件、终端、设置等接口,启动内核并把它的接口代理给界面,也守着本机的访问控制。
-- 内核(`kernel/`):agent 引擎,负责会话、模型接入与登录、权限裁决与工具调度。GeoAgent 与地理工具都在这里;地理工具接到任务,交给 GeoEngine 去做。
+- 内核(`kernel/`,`KERNEL.md`):agent 引擎,负责会话、模型接入与登录、权限裁决与工具调度。GeoAgent 与地理工具都在这里;地理工具接到任务,交给 GeoEngine 去做。
 - 地理引擎 GeoEngine(`geoengine/`,`GEOENGINE.md`):管理用户电脑上的地理执行环境,执行地理任务。它的各能力域互不依赖:QGIS(`QGIS.md`)、Google Earth Engine(`GEE.md`)与 OpenStreetMap(`OSM.md`);后两者运行在 GeoCode 自带的 Python 环境里(`PYTHON.md`),用 GeoCode 自己的 Python 包 `geocodekit`(`GEOCODEKIT.md`)。
 - 文件与存储:各部分在用户电脑上与项目里产生与读取的文件,见 `PATHS.md`;环境变量从哪里取得、交给谁,见 `ENVIRONMENT.md`。
 

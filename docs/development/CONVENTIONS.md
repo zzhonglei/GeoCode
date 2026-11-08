@@ -90,7 +90,7 @@ shell 脚本用 POSIX sh(`#!/bin/sh`),要能在 macOS 自带的 sh 上运行。
 | `docs/development/` 下的开发文档 | 开发 GeoCode 的人 | 本文档,怎样构建与运行,以及怎样测试 |
 | `AGENTS.md` | AI 助手 | 在本仓库工作的指令 |
 
-设计说明按层级组织:`docs/` 下是总体设计 `DESIGN.md`、应用外壳 `DESKTOP.md`、环境变量 `ENVIRONMENT.md` 与文件和存储 `PATHS.md`;`docs/geoengine/` 下是地理引擎的框架 `GEOENGINE.md` 与它的各部分(内置 Python 环境、Python 包与各能力域)。新的能力域加在 `docs/geoengine/` 里。
+设计说明按层级组织:`docs/` 下是总体设计 `DESIGN.md`、应用外壳 `DESKTOP.md`、agent 内核 `KERNEL.md`、环境变量 `ENVIRONMENT.md` 与文件和存储 `PATHS.md`;`docs/geoengine/` 下是地理引擎的框架 `GEOENGINE.md` 与它的各部分(内置 Python 环境、Python 包与各能力域)。新的能力域加在 `docs/geoengine/` 里。
 
 ### 5.2 设计说明写什么
 
