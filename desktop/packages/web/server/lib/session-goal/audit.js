@@ -13,7 +13,7 @@
  */
 import { z } from 'zod';
 
-const CONTEXT = 'A user gave an AI coding agent the goal in `objective`. `answer` is the agent\'s latest message, which ends with a report of what is done and what remains.';
+const CONTEXT = 'A user gave an AI agent the goal in `objective`. `answer` is the agent\'s latest message, which ends with a report of what is done and what remains.'; // GeoCode: not only coding
 
 const QUESTIONS = {
   all_done: {
@@ -75,7 +75,7 @@ export const readJevAnswers = (answers) => {
 
 /** The same questions for the small model, as one prompt asking for JSON booleans. */
 export const buildSmallModelAuditPrompt = ({ objective, answer }) => [
-  'You check the progress of an AI coding agent. Answer three yes/no questions and return exactly one JSON object and nothing else — no prose, no markdown, no code fences: {"all_done": boolean, "remaining": boolean, "needs_user": boolean}.',
+  'You check the progress of an AI agent. Answer three yes/no questions and return exactly one JSON object and nothing else — no prose, no markdown, no code fences: {"all_done": boolean, "remaining": boolean, "needs_user": boolean}.', // GeoCode: not only coding
   CONTEXT,
   ...Object.entries(QUESTIONS).map(([id, { question, criteria }]) => `${id}: ${question}\n  true: ${criteria.true}\n  false: ${criteria.false}`),
   `<objective>\n${objective}\n</objective>`,

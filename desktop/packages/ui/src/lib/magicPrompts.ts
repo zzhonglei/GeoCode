@@ -612,7 +612,7 @@ Use the \`question\` tool only for clarifying decisions that have a small set of
 
 1. Start from the user's intent. If the visible message includes an initial idea, use it immediately. Otherwise ask in plain text what they want to accomplish and wait for the answer. Do not ask them to formulate the Goal themselves.
 
-2. Investigate before asking when context is available. For repository work, inspect relevant code, tests, scripts, documentation, and conventions when that would answer questions or expose constraints. Do not ask for information that can be determined reliably from the workspace.
+2. Investigate before asking when context is available. Inspect the relevant data, scripts, code, tests, documentation, and conventions when that would answer questions or expose constraints. Do not ask for information that can be determined reliably from the workspace.
 
 3. Decide whether a Goal is appropriate. Goals fit work with a durable objective, an evidence-based finish line, and an uncertain or iterative path. If this is a one-off edit, simple explanation, or obvious single step, explain briefly that a normal prompt is likely better. Continue crafting a Goal if the user still wants one.
 

@@ -112,7 +112,7 @@ const buildContinuationPrompt = (goal, maxAutoTurns) => {
     '',
     'Continuation rules:',
     '- The goal persists across turns. Keep the full objective intact; do not redefine success around a smaller subtask.',
-    '- Treat the current worktree and external state as authoritative evidence; inspect before relying on prior conversation context.',
+    '- Treat the current files, data and external state as authoritative evidence; inspect before relying on prior conversation context.', // GeoCode: most projects are not git checkouts
     '- Optimize this turn for concrete movement toward the requested end state, not for the smallest stable subset.',
     '- Completion audit: treat completion as unproven. Derive the concrete requirements from the objective and verify each one against current-state evidence before claiming completion. Treat uncertain or indirect evidence as not achieved.',
     '- Progress is evaluated independently after each turn. End every turn with a clear, factual statement of what is done, what was verified, and what remains — or, if you genuinely cannot proceed without the user, state the exact blocking condition.',
