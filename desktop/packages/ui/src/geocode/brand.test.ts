@@ -6,7 +6,7 @@ import { dict as zhCN } from '@/lib/i18n/messages/zh-CN';
 import { dict as zhTW } from '@/lib/i18n/messages/zh-TW';
 import type { Locale } from '@/lib/i18n/runtime';
 import { useI18nStore, type I18nDictionary } from '@/lib/i18n/store';
-import { toGeoCodeDiagnosticLog, toGeoCodeDictionary } from './brand';
+import { restartAppLabel, toGeoCodeDiagnosticLog, toGeoCodeDictionary } from './brand';
 
 // Guards against a merge bringing text that names OpenChamber or OpenCode to a screen the user can reach.
 const UPSTREAM = /openchamber|opencode/i;
@@ -131,5 +131,17 @@ describe('GeoCode: the diagnostic timeline', () => {
     expect(capture).toContain("source: 'OpenCode process'");
     const timeline = fs.readFileSync(new URL('../lib/diagnostics/timeline.ts', import.meta.url), 'utf8');
     expect(timeline).toContain('`${new Date(at).toISOString()} [${source}] ${action}');
+  });
+});
+
+describe('GeoCode: the environment page', () => {
+  // The geo engine reads the variables only as the app starts, so restarting the kernel alone would not reach it.
+  test('restarts the whole app, and its button and note say so in each language', () => {
+    for (const [locale, dict] of [['en', en], ['zh-CN', zhCN], ['zh-TW', zhTW]] as const) {
+      expect(restartAppLabel(locale)).toContain('GeoCode');
+      expect(toGeoCodeDictionary(locale, dict)['settings.environment.user.restartNote']).toContain('GeoCode');
+    }
+    const page = fs.readFileSync(new URL('../components/sections/openchamber/EnvironmentVariablesSettings.tsx', import.meta.url), 'utf8');
+    expect(page).toContain('if (await restartDesktopApp()) return;');
   });
 });

@@ -5,9 +5,13 @@ import { SettingsSection, SETTINGS_HELPER_CLASS } from '@/components/sections/sh
 import { EnvironmentVariablesEditor } from '@/components/sections/shared/EnvironmentVariablesEditor';
 import { fetchUserEnvironment, updateUserEnvironment, type EnvironmentVariablesPatch } from '@/lib/environmentApi';
 import { reportSettingsSaveState } from '@/lib/persistence';
+/* --- GeoCode: see handleRestart ---
 import { restartOpenCodeWithFeedback } from '@/lib/restartOpenCode';
+--- /GeoCode --- */
 import { useEnterpriseMode } from '@/stores/useEnterprisePolicyStore';
 import { useI18n } from '@/lib/i18n';
+import { restartDesktopApp } from '@/lib/desktop'; // GeoCode: see handleRestart
+import { restartAppLabel } from '@/geocode/brand'; // GeoCode: see handleRestart
 
 type LoadState =
   | { state: 'loading' }
@@ -20,7 +24,7 @@ type LoadState =
  * reaches it after a restart; Git and the terminal get it on their next run.
  */
 export const EnvironmentVariablesSettings: React.FC = () => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n(); // GeoCode: see the restart button
   const enterpriseMode = useEnterpriseMode();
   const [load, setLoad] = React.useState<LoadState>({ state: 'loading' });
   const [changed, setChanged] = React.useState(false);
@@ -55,6 +59,15 @@ export const EnvironmentVariablesSettings: React.FC = () => {
     }
   }, [t]);
 
+  // --- GeoCode: the whole app restarts, since the geo engine reads the variables only as it starts. As the app's other
+  // restart buttons do, the button stays at "Restarting…" until the app exits, and after a failure it stays to retry ---
+  const handleRestart = React.useCallback(async () => {
+    setRestarting(true);
+    if (await restartDesktopApp()) return;
+    setRestarting(false);
+    toast.error(t('settings.openchamber.desktopNetwork.error.savedRestartFailed'));
+  }, [t]);
+  /*
   const handleRestart = React.useCallback(async () => {
     setRestarting(true);
     try {
@@ -64,6 +77,8 @@ export const EnvironmentVariablesSettings: React.FC = () => {
       setRestarting(false);
     }
   }, [t]);
+  */
+  // --- /GeoCode ---
 
   return (
     <SettingsSection
@@ -97,8 +112,8 @@ export const EnvironmentVariablesSettings: React.FC = () => {
               className="shrink-0 !font-normal"
             >
               {restarting
-                ? t('settings.openchamber.opencodeCli.actions.restartingOpenCode')
-                : t('settings.openchamber.opencodeCli.actions.restart')}
+                ? t('settings.openchamber.visual.actions.restarting') // GeoCode: the whole app restarts
+                : restartAppLabel(locale) /* GeoCode: the whole app restarts */}
             </Button>
           </div>
         ) : null}

@@ -58,8 +58,8 @@ const MESSAGES = {
     'sessionAuth.error.networkTitle': 'The local service is not responding',
     'sessionAuth.error.networkDescription': 'GeoCode could not verify this window with its local service. Retry, or restart GeoCode.',
     'sourceBoard.empty.noSource': 'This project has no GitHub remote.',
-    'settings.environment.user.info': 'Added to the environment of the kernel, Git, the terminal and project actions. Values stay on this computer and are never shown again. A project can add its own in Projects.',
-    'settings.environment.user.restartNote': 'The kernel picks up the change after a restart.',
+    'settings.environment.user.info': 'Added to the environment of what GeoCode runs: commands and scripts, Git, the terminal and project actions. Values stay on this computer and are never shown again. A project can add its own in Projects.',
+    'settings.environment.user.restartNote': 'Takes effect after GeoCode restarts.',
     'settings.projects.environment.info': 'Added to Git, the terminal and project actions in this project and its worktrees, on top of the variables in General. The kernel serves all projects at once, so it doesn\'t get these.',
     'settings.openchamber.opencodeCli.actions.restart': 'Restart kernel',
     'settings.openchamber.opencodeCli.actions.restartingOpenCode': 'Restarting kernel…',
@@ -114,8 +114,8 @@ const MESSAGES = {
     'sessionAuth.error.networkTitle': '本地服务没有响应',
     'sessionAuth.error.networkDescription': 'GeoCode 无法向本地服务验证此窗口。请重试，或重启 GeoCode。',
     'sourceBoard.empty.noSource': '这个项目没有 GitHub 远程仓库。',
-    'settings.environment.user.info': '会添加到内核、Git、终端和项目操作的环境中。值保存在本机，之后不会再显示。项目可以在“项目”中添加自己的变量。',
-    'settings.environment.user.restartNote': '内核重启后才会应用此更改。',
+    'settings.environment.user.info': '会添加到 GeoCode 运行的命令与脚本、Git、终端和项目操作的环境中。值保存在本机，之后不会再显示。项目可以在“项目”中添加自己的变量。',
+    'settings.environment.user.restartNote': '重启 GeoCode 后生效。',
     'settings.projects.environment.info': '在“通用”中的变量之外，再添加到此项目及其 worktree 的 Git、终端和项目操作中。内核同时服务所有项目，因此不会收到这些变量。',
     'settings.openchamber.opencodeCli.actions.restart': '重启内核',
     'settings.openchamber.opencodeCli.actions.restartingOpenCode': '正在重启内核…',
@@ -170,8 +170,8 @@ const MESSAGES = {
     'sessionAuth.error.networkTitle': '本機服務沒有回應',
     'sessionAuth.error.networkDescription': 'GeoCode 無法向本機服務驗證此視窗。請重試，或重新啟動 GeoCode。',
     'sourceBoard.empty.noSource': '這個專案沒有 GitHub 遠端儲存庫。',
-    'settings.environment.user.info': '會加入核心、Git、終端機和專案動作的環境中。值保存在本機，之後不會再顯示。專案可以在「專案」中加入自己的變數。',
-    'settings.environment.user.restartNote': '核心重新啟動後才會套用此變更。',
+    'settings.environment.user.info': '會加入 GeoCode 執行的命令與腳本、Git、終端機和專案動作的環境中。值保存在本機，之後不會再顯示。專案可以在「專案」中加入自己的變數。',
+    'settings.environment.user.restartNote': '重新啟動 GeoCode 後生效。',
     'settings.projects.environment.info': '在「一般」中的變數之外，再加入此專案及其 worktree 的 Git、終端機和專案動作中。核心同時服務所有專案，因此不會收到這些變數。',
     'settings.openchamber.opencodeCli.actions.restart': '重新啟動核心',
     'settings.openchamber.opencodeCli.actions.restartingOpenCode': '正在重新啟動核心…',
@@ -207,6 +207,13 @@ const MESSAGES = {
     'settings.openchamber.visual.field.sessionTabsPerWorkspaceInfo': '每個專案和 worktree 都保有自己的分頁，頂部會顯示你目前所在位置的分頁。第一次開啟某個 worktree 時，你在那裡開始的工作階段會以分頁開啟。',
   },
 } satisfies Partial<Record<Locale, Messages>>;
+
+// The environment page restarts the whole app, since the geo engine reads the variables only as it starts; the
+// kernel's own restart keeps its labels.
+const RESTART_APP = { en: 'Restart GeoCode', 'zh-CN': '重启 GeoCode', 'zh-TW': '重新啟動 GeoCode' };
+
+export const restartAppLabel = (locale: Locale): string =>
+  locale === 'zh-CN' || locale === 'zh-TW' ? RESTART_APP[locale] : RESTART_APP.en;
 
 const messagesFor = (locale: Locale): Messages =>
   locale === 'en' || locale === 'zh-CN' || locale === 'zh-TW' ? MESSAGES[locale] : {};
