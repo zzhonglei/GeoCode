@@ -247,6 +247,8 @@ export const ProjectActionEditorDialog: React.FC<{
                     className="w-full font-mono text-xs"
                   />
                   <p className={cn(SETTINGS_HELPER_CLASS, !openUrl && 'opacity-60')}>{t('settings.projects.actions.field.overrideUrlVariables')}</p>
+                  {/* --- GeoCode: no SSH instances, so there is no SSH forward to open --- */}
+                  <Closed>
                   {isDesktopShellApp ? (
                     <Select
                       value={draft.desktopOpenSshForward && desktopForwardOptions.some((entry) => entry.id === draft.desktopOpenSshForward) ? draft.desktopOpenSshForward : NO_SSH_FORWARD}
@@ -268,6 +270,8 @@ export const ProjectActionEditorDialog: React.FC<{
                       </SelectContent>
                     </Select>
                   ) : null}
+                  </Closed>
+                  {/* --- /GeoCode --- */}
                 </div>
               </div>
           </div>
