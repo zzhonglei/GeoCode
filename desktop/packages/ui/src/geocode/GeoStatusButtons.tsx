@@ -3,6 +3,7 @@ import { Popover } from '@base-ui/react/popover';
 
 import { dropdownMenuPopupClass } from '@/components/ui/dropdown-menu.styles';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useWaitingBlink } from '@/hooks/useDurationTicker';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/useUIStore';
@@ -31,6 +32,7 @@ const GeoIndicator: React.FC<{
 }> = ({ name, spoken = name, logo: Logo, status, label, details, manage, className }) => {
   const [open, setOpen] = React.useState(false);
   const light = lightOf(status);
+  const blink = useWaitingBlink(light === 'checking');
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -40,7 +42,7 @@ const GeoIndicator: React.FC<{
             render={<button type="button" aria-label={`${spoken}: ${label}`} className={cn('relative', className)} />}
           >
             <Logo className={cn('h-[18px] w-[18px]', (light === 'idle' || light === 'failed') && 'opacity-60')} />
-            <span className={cn('absolute inset-e-1 top-1 size-2 rounded-full border border-[var(--background)]', DOT_CLASS[light])} aria-hidden />
+            <span className={cn('absolute inset-e-1 top-1 size-2 rounded-full border border-[var(--background)]', DOT_CLASS[light], blink)} aria-hidden />
           </Popover.Trigger>
         </TooltipTrigger>
         <TooltipContent side="bottom">{`${name} · ${label}`}</TooltipContent>
@@ -49,7 +51,7 @@ const GeoIndicator: React.FC<{
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="app-region-no-drag z-50">
           <Popover.Popup aria-label={spoken} className={cn(dropdownMenuPopupClass, 'flex w-[23rem] max-w-[calc(100vw-2rem)] flex-col gap-1.5 p-3')}>
             <div className="flex items-center gap-2">
-              <span className={cn('size-2 shrink-0 rounded-full', DOT_CLASS[light])} aria-hidden />
+              <span className={cn('size-2 shrink-0 rounded-full', DOT_CLASS[light], blink)} aria-hidden />
               <span className="typography-ui-label font-medium text-foreground">{name}</span>
               <span className="typography-ui-label min-w-0 flex-1 truncate text-muted-foreground">{label}</span>
               {manage ? (

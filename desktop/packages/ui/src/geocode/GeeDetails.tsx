@@ -7,6 +7,7 @@ import { SETTINGS_HELPER_CLASS, SETTINGS_SECTION_TITLE_CLASS, SettingsSection } 
 import { toast } from '@/components/ui';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useWaitingBlink } from '@/hooks/useDurationTicker';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { openExternalUrl } from '@/lib/url';
 import { cn } from '@/lib/utils';
@@ -29,7 +30,8 @@ const MARK_CLASS = {
   done: 'border-[var(--status-success)] bg-[var(--status-success)] text-white',
   problem: 'border-[var(--status-error)] bg-[var(--status-error)] text-white',
   todo: 'border-[var(--interactive-border-hover)] text-muted-foreground',
-  busy: 'border-[var(--status-warning)] text-[var(--status-warning)] animate-pulse',
+  // Blinks, through useWaitingBlink in StepTitle.
+  busy: 'border-[var(--status-warning)] text-[var(--status-warning)]',
 } satisfies Record<Shown, string>;
 
 export const GeeDetails: React.FC<{
@@ -111,19 +113,22 @@ export const GeeDetails: React.FC<{
 };
 
 /** A section's heading with the step's number, which turns into its mark once the step is done or at fault. */
-const StepTitle: React.FC<{ number: number; title: string; mark: Shown; text: GeeText }> = ({ number, title, mark, text }) => (
-  <h2 className={cn(SETTINGS_SECTION_TITLE_CLASS, 'flex items-center gap-2')}>
-    <span
-      aria-hidden
-      title={text.marks[mark]}
-      className={cn('flex size-[18px] shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold', MARK_CLASS[mark])}
-    >
-      {mark === 'done' ? <Icon name="check" className="size-3" /> : mark === 'problem' ? '!' : number}
-    </span>
-    {title}
-    <span className="sr-only">{`, ${text.marks[mark]}`}</span>
-  </h2>
-);
+const StepTitle: React.FC<{ number: number; title: string; mark: Shown; text: GeeText }> = ({ number, title, mark, text }) => {
+  const blink = useWaitingBlink(mark === 'busy');
+  return (
+    <h2 className={cn(SETTINGS_SECTION_TITLE_CLASS, 'flex items-center gap-2')}>
+      <span
+        aria-hidden
+        title={text.marks[mark]}
+        className={cn('flex size-[18px] shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold', MARK_CLASS[mark], blink)}
+      >
+        {mark === 'done' ? <Icon name="check" className="size-3" /> : mark === 'problem' ? '!' : number}
+      </span>
+      {title}
+      <span className="sr-only">{`, ${text.marks[mark]}`}</span>
+    </h2>
+  );
+};
 
 /** Why a sign-in did not finish, in the interface's language where GeoEngine's code names a common reason. */
 const signInFailure = (signIn: Extract<SignIn, { phase: 'failed' }>, text: GeeText) =>

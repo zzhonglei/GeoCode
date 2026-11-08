@@ -193,7 +193,8 @@ export type Light = 'ready' | 'checking' | 'idle' | 'failed';
 
 export const DOT_CLASS = {
   ready: 'bg-[var(--status-success)]',
-  checking: 'bg-[var(--status-warning)] animate-pulse',
+  // Blinks while checking, through useWaitingBlink where it is shown.
+  checking: 'bg-[var(--status-warning)]',
   idle: 'bg-muted-foreground/40',
   failed: 'bg-[var(--status-error)]',
 } satisfies Record<Light, string>;
