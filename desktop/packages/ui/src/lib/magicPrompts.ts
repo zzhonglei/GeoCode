@@ -279,9 +279,9 @@ Your job right now is to produce a thorough implementation plan for this todo, n
 Work back and forth with me. Do not dump a wall of questions. Do not jump to the full plan.
 
 Discovery — questions in batches of 3:
-1. First, inspect the repo — relevant files, module docs, existing patterns, nearby code, constraints, dependencies — enough to form informed questions, not enough to guess the plan.
-2. Ask me at most 3 questions per turn. Each batch should be focused on one topic at a time (e.g., scope, architecture, data model, UX, edge cases). Pick the topic that most blocks the plan right now.
-3. Wait for my answers. Use them to refine your understanding, re-read code if needed, and prepare the next batch.
+1. First, inspect the project — the relevant data, scripts, code, docs, earlier results, constraints, dependencies — enough to form informed questions, not enough to guess the plan.
+2. Ask me at most 3 questions per turn. Each batch should be focused on one topic at a time (e.g., scope, data sources, method, outputs, edge cases). Pick the topic that most blocks the plan right now.
+3. Wait for my answers. Use them to refine your understanding, re-read the project if needed, and prepare the next batch.
 4. Questions that became irrelevant after my earlier answers — drop them, don't ask.
 5. Repeat until you have no more substantive questions.
 
@@ -289,7 +289,7 @@ Alignment:
 6. Share a short outline: affected areas, proposed approach, main risks. Wait for my confirmation or corrections. Iterate on the outline until I confirm.
 
 Final plan:
-7. Once aligned, deliver the concrete implementation plan grounded in the repo context. Make remaining assumptions and missing context explicit.`,
+7. Once aligned, deliver the concrete implementation plan grounded in the project. Make remaining assumptions and missing context explicit.`,
   },
   {
     id: 'plan.improve.visible',
@@ -314,14 +314,14 @@ Final plan:
 Plan title: {{plan_title}}
 This plan is stored in the file: {{plan_path}}
 Read that file first and treat its current contents as the source of truth for the plan.
-Your job right now is to improve this plan so it is better grounded in the actual repo state. Do not implement yet. Optimize for a well-considered improved plan, not a fast one.
+Your job right now is to improve this plan so it is better grounded in the actual state of the project. Do not implement yet. Optimize for a well-considered improved plan, not a fast one.
 
 Work back and forth with me. Do not dump a wall of questions. Do not jump to the full improved plan.
 
 Discovery — questions in batches of 3:
-1. First, inspect the repo and map it against the plan — relevant files, module docs, existing patterns, nearby code, constraints, dependencies. Identify gaps, plan assumptions that don't match the repo, missing context, and risks.
-2. Ask me at most 3 questions per turn. Each batch should be focused on one topic at a time (e.g., scope deltas, architecture assumptions, data model, UX, edge cases, tradeoffs between approaches). Pick the topic that most blocks a confident improvement right now.
-3. Wait for my answers. Use them to refine your understanding, re-read code if needed, and prepare the next batch.
+1. First, inspect the project and map it against the plan — the relevant data, scripts, code, docs, earlier results, constraints, dependencies. Identify gaps, plan assumptions that don't match the project, missing context, and risks.
+2. Ask me at most 3 questions per turn. Each batch should be focused on one topic at a time (e.g., scope deltas, data sources, method assumptions, outputs, edge cases, tradeoffs between approaches). Pick the topic that most blocks a confident improvement right now.
+3. Wait for my answers. Use them to refine your understanding, re-read the project if needed, and prepare the next batch.
 4. Questions that became irrelevant after my earlier answers — drop them, don't ask.
 5. Repeat until you have no more substantive questions.
 
@@ -355,9 +355,9 @@ Plan title: {{plan_title}}
 This plan is stored in the file: {{plan_path}}
 Read that file first and treat its current contents as the source of truth for the plan. The plan is already agreed; implement it end-to-end without deviating from it.
 
-Before and during implementation, build a deep understanding of the project — relevant files, module docs, existing patterns, nearby code, conventions — so your choices fit the repo's style.
+Before and during implementation, build a deep understanding of the project — the relevant data, scripts, code, docs, conventions — so your choices fit how the project is done.
 
-Do the implementation work continuously. When a plan step is ambiguous, do not stop to ask — make the best judgment call consistent with the plan's intent and the repo's conventions, and briefly note the decision inline so it is visible on review. Prefer forward progress over interrupting me.
+Do the implementation work continuously. When a plan step is ambiguous, do not stop to ask — make the best judgment call consistent with the plan's intent and the project's conventions, and briefly note the decision in your reply so I see it. Prefer forward progress over interrupting me.
 
 Do not expand scope beyond the plan. If during implementation you find the plan itself is wrong or genuinely blocks completion (not merely ambiguous), stop, state exactly what is broken and why, and propose a plan adjustment to save back into this same file ({{plan_path}}) before continuing.`,
   },
@@ -558,28 +558,28 @@ Review the current diff again. For each earlier finding, say whether it is fixed
     title: 'Feature Planning Visible Prompt',
     group: 'Session',
     description: 'Visible user message sent by the /plan-feature command.',
-    template: 'I want to start planning a feature.',
+    template: 'I want to start planning a piece of work.',
   },
   {
     id: 'session.plan.instructions',
     title: 'Feature Planning Instructions',
     group: 'Session',
     description: 'Hidden instructions attached to the /plan-feature command. Runs a guided, batched-question dialogue that researches the code before producing an implementation plan.',
-    template: `The user wants to plan a feature through a guided, back-and-forth conversation. They will describe an idea — often briefly and informally. Your job is to turn that idea into a concrete, validated implementation plan, without guessing.
+    template: `The user wants to plan a piece of work through a guided, back-and-forth conversation. They will describe an idea — often briefly and informally. Your job is to turn that idea into a concrete, validated implementation plan, without guessing.
 
 Run this as a dialogue, not a one-shot answer.
 
 Use the \`question\` tool only for clarifying decisions that have a small set of concrete answer options you already know from the conversation or your investigation — choices like option A/B/C, scope boundaries, or edge-case behavior. Ask open-ended questions, including what the user wants in the first place, in plain assistant text. Never invent speculative options just to fit the question tool.
 
-1. Understand before asking. Once the user describes the idea, first investigate the codebase yourself — read the relevant files, existing patterns, data flow, and constraints. Ground every question in what the code actually shows, not in assumptions.
+1. Understand before asking. Once the user describes the idea, first investigate the project yourself — read the relevant data, scripts, code, docs and constraints. Ground every question in what the project actually shows, not in assumptions.
 
 2. Ask in small batches. Ask at most 3 clarifying questions at a time — a number a person can comfortably answer in one reply. Prefer concrete, decision-oriented questions (option A/B/C, edge cases, scope boundaries) over vague open-ended ones. Number them.
 
-3. Keep going until it is resolved. After each batch of answers, integrate them, do any further code investigation the answers require, then ask the next batch. Continue until there are no unresolved decisions or implementation details left. Do not stop early or start summarizing prematurely.
+3. Keep going until it is resolved. After each batch of answers, integrate them, do any further investigation the answers require, then ask the next batch. Continue until there are no unresolved decisions or implementation details left. Do not stop early or start summarizing prematurely.
 
-4. Surface what the user has not considered. Proactively raise edge cases, pitfalls, affected modules, migration/backward-compatibility concerns, and trade-offs the user likely did not think about. Fold these into your questions so the user decides — never silently decide for them.
+4. Surface what the user has not considered. Proactively raise edge cases, pitfalls, affected data, scripts and outputs, compatibility concerns, and trade-offs the user likely did not think about. Fold these into your questions so the user decides — never silently decide for them.
 
-5. Do not write code or begin implementing during this phase. Planning is for understanding and deciding only.
+5. Do not write code, process data or begin implementing during this phase. Planning is for understanding and deciding only.
 
 6. When everything is settled, produce the final implementation plan: a clear, ordered breakdown of the work, the files and areas affected, the decisions that were made (and why), known risks, and any remaining assumptions flagged explicitly. The plan must reflect the user's actual answers — never fill gaps with guesses. If the \`geocode_knowledge\` tool is available, save the plan there and show it to the user, so they can read it, comment on it and send it to a session from the plan itself.
 
