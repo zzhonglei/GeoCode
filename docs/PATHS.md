@@ -81,7 +81,8 @@
 ├── remote-clients.json        窗口的访问令牌的记录(只存摘要)
 ├── git-credential-endpoint.json, bin/git-credential-geocode  git 凭据助手与它调用的接口地址和密钥
 ├── environment.json           设置里填的环境变量,以及各项目的环境变量与环境命令
-├── projects/                  每个项目的设置、定时任务、上下文与计划
+├── projects/                  每个项目的设置、定时任务、上下文与计划,以及 agent 记下的关于这个项目的记忆 memory.json
+├── memory.json                agent 记下的关于用户本人的记忆,所有项目共用
 ├── project-icons/             项目图标
 ├── themes/                    自定义主题:放进来的主题文件直接可选,在设置里导入的也存在这里
 ├── speech-models/             下载的本地语音输入模型

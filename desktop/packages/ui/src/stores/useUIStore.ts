@@ -1675,7 +1675,7 @@ export const useUIStore = create<UIStore>()(
         messageSearchEnabled: false,
         messageSearchReasoningEnabled: false,
         browserProvider: 'builtin',
-        agentMemoryToolEnabled: false,
+        agentMemoryToolEnabled: true, // GeoCode: on by default
         agentKnowledgeToolEnabled: true,
         agentNotifyToolEnabled: false,
         agentImageToolEnabled: false,

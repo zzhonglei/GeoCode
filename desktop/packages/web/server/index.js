@@ -734,7 +734,7 @@ const isAgentMemoryEnabled = async () => {
     return false;
   }
   const settings = await readSettingsFromDiskMigrated().catch(() => null);
-  return settings?.agentMemoryToolEnabled === true;
+  return settings?.agentMemoryToolEnabled !== false; // GeoCode: on by default
 };
 
 // HMR-persistent state via globalThis
