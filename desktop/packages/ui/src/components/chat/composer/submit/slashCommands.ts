@@ -44,6 +44,7 @@ export interface MagicPromptCommand {
  * woven into the visible message as a phrase and into the instructions as a
  * directive, so both read naturally when it is absent.
  */
+/* --- GeoCode: only /summary used it (see below) ---
 const summaryVariables = (topic: string) => ({
     visible: { topic_line: topic ? ` focused on: ${topic}` : '' },
     instructions: {
@@ -52,6 +53,7 @@ const summaryVariables = (topic: string) => ({
             : '',
     },
 });
+--- /GeoCode --- */
 
 /** `/craft-goal <idea>` and `/schedule-task <idea>` seed the prompt with the idea. */
 const ideaVariables = (idea: string) => ({
@@ -59,6 +61,7 @@ const ideaVariables = (idea: string) => ({
 });
 
 export const MAGIC_PROMPT_COMMANDS: readonly MagicPromptCommand[] = [
+    /* --- GeoCode: no /summary: /compact covers handing a long session over, and a user asks for a summary in their own words; a command of the user's own by this name then runs ---
     {
         name: 'summary',
         visiblePrompt: 'session.summary.visible',
@@ -68,6 +71,7 @@ export const MAGIC_PROMPT_COMMANDS: readonly MagicPromptCommand[] = [
         requires: 'session',
         buildVariables: summaryVariables,
     },
+    --- /GeoCode --- */
     /* --- GeoCode: no /workspace-review, a stored prompt for reviewing code changes; the review flow still uses its instructions ---
     {
         name: 'workspace-review',

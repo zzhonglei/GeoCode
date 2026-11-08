@@ -147,10 +147,12 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
         ? [{ id: 'openchamber:fork', name: 'fork', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.forkDescription'), isOpenChamber: true }]
         : []
       ),
+      /* --- GeoCode: no /summary (see slashCommands) ---
       ...(hasSession
         ? [{ id: 'openchamber:summary', name: 'summary', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.summaryDescription'), isOpenChamber: true }]
         : []
       ),
+      --- /GeoCode --- */
       /* --- GeoCode: no /workspace-review, a stored prompt for reviewing code changes (see slashCommands) ---
       ...(canStartSessionCommand
         ? [{ id: 'openchamber:workspace-review', name: 'workspace-review', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.workspaceReviewDescription'), isOpenChamber: true }]
