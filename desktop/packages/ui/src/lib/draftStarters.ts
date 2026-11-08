@@ -30,8 +30,8 @@ export const BUILTIN_STARTERS: readonly BuiltInStarter[] = [
     --- /GeoCode --- */
     { name: 'plan-feature', icon: 'survey', labelKey: 'chat.draftPresets.plan.label', command: '/plan-feature' },
     { name: 'craft-goal', icon: 'target', labelKey: 'chat.draftPresets.craftGoal.label', command: '/craft-goal' },
-    { name: 'schedule-task', icon: 'calendar-schedule', labelKey: 'chat.draftPresets.scheduleTask.label', command: '/schedule-task' },
     /* --- GeoCode: their commands are closed (see slashCommands) ---
+    { name: 'schedule-task', icon: 'calendar-schedule', labelKey: 'chat.draftPresets.scheduleTask.label', command: '/schedule-task' },
     { name: 'debug', icon: 'bug', labelKey: 'chat.draftPresets.debug.label', command: '/debug' },
     { name: 'review', icon: 'search-eye', labelKey: 'chat.draftPresets.review.label', command: '/workspace-review' },
     --- /GeoCode --- */

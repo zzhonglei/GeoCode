@@ -169,10 +169,12 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
         ? [{ id: 'openchamber:craft-goal', name: 'craft-goal', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.craftGoalDescription'), isOpenChamber: true }]
         : []
       ),
+      /* --- GeoCode: no /schedule-task (see slashCommands) ---
       ...(canStartSessionCommand
         ? [{ id: 'openchamber:schedule-task', name: 'schedule-task', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.scheduleTaskDescription'), isOpenChamber: true }]
         : []
       ),
+      --- /GeoCode --- */
       /* --- GeoCode: no /catch-up, /debug, /weigh or /explore, stored prompts for working on code (see slashCommands) ---
       ...(canStartSessionCommand
         ? [{ id: 'openchamber:catch-up', name: 'catch-up', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.catchUpDescription'), isOpenChamber: true }]

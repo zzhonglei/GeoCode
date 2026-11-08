@@ -92,6 +92,7 @@ export const MAGIC_PROMPT_COMMANDS: readonly MagicPromptCommand[] = [
         requires: 'session-or-draft',
         buildVariables: ideaVariables,
     },
+    /* --- GeoCode: no /schedule-task: the user asks for a scheduled task in their own words, and the schedule tool's description carries its rule for the task's prompt; a command of the user's own by this name then runs ---
     {
         name: 'schedule-task',
         visiblePrompt: 'session.scheduleTask.visible',
@@ -100,6 +101,7 @@ export const MAGIC_PROMPT_COMMANDS: readonly MagicPromptCommand[] = [
         requires: 'session-or-draft',
         buildVariables: ideaVariables,
     },
+    --- /GeoCode --- */
     /* --- GeoCode: no /catch-up, /debug, /weigh or /explore: stored prompts for working on code, which a user asks for in their own words; a command of the user's own by one of these names then runs ---
     {
         name: 'catch-up',
