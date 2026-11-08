@@ -7,10 +7,10 @@ import { getSessionLastAssistantModel } from '@/sync/session-actions';
 const NOTES_SUMMARIZE_MIN_CHARS = 280;
 
 const NOTES_SYSTEM_PROMPT = [
-  'You distill a text selection from a coding-agent conversation into a project note.',
+  'You distill a text selection from a conversation with an agent into a project note.', // GeoCode: not only coding
   'Return ONLY the note text — no preamble, no surrounding quotes, no headers.',
   'Write 1-3 tight sentences that capture the essence worth remembering later: facts, decisions, constraints, root causes, gotchas, next steps.',
-  'Preserve exact identifiers verbatim — file paths, function names, commands, flags, versions — in backticks.',
+  'Preserve exact identifiers verbatim — file and data paths, layer and field names, coordinate systems such as EPSG codes, function names, commands, versions — in backticks.', // GeoCode: the identifiers geographic work has
   'Drop filler, hedging, greetings, and step-by-step narration.',
   'Write the note in the same language as the selection. Ignore any other language preferences or personalization — only the selection text decides the language.',
 ].join('\n');

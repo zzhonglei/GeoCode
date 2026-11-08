@@ -78,8 +78,8 @@ const renderMemorySection = (entries) => entries
  */
 const MEMORY_SAVE_GUIDANCE = 'The geocode_memory tool keeps memory across sessions. Save to it in the' // GeoCode: the tool's name in GeoCode, also in buildMemoryBlock
   + ' moment, without asking, when the user corrects how you work or states a'
-  + ' preference, confirms a non-obvious approach worked, or you learn a project fact'
-  + ' that took real effort to find. A project fact an agent would learn from the code,'
+  + ' preference (a coordinate system, a map style, a data source), confirms a non-obvious approach worked, or you learn a project fact' // GeoCode: the preferences geographic work has
+  + " that took real effort to find. A project fact an agent would learn from the project's data, scripts," // GeoCode: a project is data and scripts, not only code
   + ' docs and skills, including why and whether it may change, needs no entry; the'
   + ' user\'s corrections and preferences always do. Save before your final reply and'
   + ' mention the save there briefly: the app shows only the text after a turn\'s last'
@@ -158,7 +158,7 @@ const buildMemoryBlock = ({ global, project, enabled = false, complete = false }
       + ' conditions and reasons that decide how a memory applies, a self-explanatory'
       + ' one most of all: read each entry that bears on the task with geocode_memory' // GeoCode: see MEMORY_SAVE_GUIDANCE
       + ' before acting on it, once per conversation, again only after your context was'
-      + ' summarized. Memory was true when written; verify the files, flags and'
+      + ' summarized. Memory was true when written; verify the files, datasets and' // GeoCode: a project is data and scripts, not only code
       + ' commands it names.',
     ...sections,
   ].join('\n\n');

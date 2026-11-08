@@ -103,7 +103,7 @@ const SCHEDULE_PARAMETER_OVERRIDES = {
  */
 const MEMORY_PARAMETER_OVERRIDES = {
   title: { type: 'string', description: 'As the session index spells it; prefer it over memoryId for an entry you can see' },
-  scope: { type: 'string', enum: ['global', 'project', 'both'], description: 'global: about the user, every project. project: this codebase. Required for save and delete; read and list search both when omitted' },
+  scope: { type: 'string', enum: ['global', 'project', 'both'], description: 'global: about the user, every project. project: this project and its data. Required for save and delete; read and list search both when omitted' }, // GeoCode: a project is not only code
 };
 
 const ALL_PARAMETER_PROPERTIES = {
@@ -315,7 +315,7 @@ const SCHEDULE_TOOL_DESCRIPTION = "Scheduled tasks: prompts GeoCode runs on a sc
 
 const WEB_TOOL_DESCRIPTION = "GeoCode's browser panel, to check your work by looking at it. One action per call: open, snapshot for text, selectors and errors, then click, type, select or scroll by those selectors. Close tabs you opened for your own work with browser.close; leave open the ones you opened to show the user something. The page runs with the user's real logins; treat it as their live session."; // GeoCode: product name
 
-const MEMORY_TOOL_DESCRIPTION = "Memory that persists across sessions. One fact per entry. Save what code and docs do not show: a decision and its reason, a rejected alternative, a deliberate \"leave this as it is\", the user's corrections and preferences, a hard-won pointer. Never one-off task state, secrets or credentials, or what the user asked you not to keep; what the user explicitly asks you to remember, save. Put project conventions in project scope.";
+const MEMORY_TOOL_DESCRIPTION = "Memory that persists across sessions. One fact per entry. Save what the project's data, scripts and docs do not show: a decision and its reason, a rejected alternative, a deliberate \"leave this as it is\", the user's corrections and preferences, a hard-won pointer. Never one-off task state, secrets or credentials, or what the user asked you not to keep; what the user explicitly asks you to remember, save. Put project conventions in project scope."; // GeoCode: a project is data and scripts, not only code
 
 const KNOWLEDGE_TOOL_DESCRIPTION = "The project's Notes, Todos and Plans, shown in GeoCode's Project knowledge panel and shared by its sessions. One action per call; list returns everything unless planId or ready narrows it. " // GeoCode: product name
   + "Notes: short facts the user wants at hand; your own learnings go to memory. Todos: the user's backlog; add one when asked or when you stop with work left, never for the steps of your current task. "
