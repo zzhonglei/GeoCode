@@ -26,7 +26,7 @@
 ```
 ~/.config/geocode/
 ├── geocode.json        全局配置:模型与服务商、权限、MCP 服务、网页搜索等。也可以写成 geocode.jsonc(允许注释)
-├── machine.json        本机地理执行环境的配置:QGIS 的位置与 GEE 的 Cloud 项目,GeoEngine 写入,也可以手改(见 GEOENGINE.md 第 3.3 节)
+├── machine.json        本机地理执行环境的配置:QGIS 的位置与 GEE 的 Cloud 项目,GeoEngine 写入,也可以手改(见 GEOENGINE.md 第 2.5 节)
 ├── AGENTS.md           写给所有项目的指示,每次对话都会带上
 ├── agents/             自定义 agent,每个一份 .md
 ├── commands/           自定义命令,每个一份 .md
@@ -61,10 +61,10 @@
 
 ```
 ~/.local/share/geocode/python/
-├── base/                 环境本体,第一次启动时从应用里安装;GeoEngine 往里写自己的启动文件、Python 包 geocodekit 与「不要用 pip 改这里」的标记(见 PYTHON.md 第 3 节)
+├── base/                 环境本体,第一次启动时从应用里安装;GeoEngine 往里写自己的启动文件、Python 包 geocodekit 与「不要用 pip 改这里」的标记(见 PYTHON.md 第 2.2 节)
 ├── envs/default/         工作环境,GeoAgent 装的包在这里
 ├── base.json             装好的环境的标识,与应用自带的不同时重新安装
-└── proj/                 PROJ 下载的坐标转换网格的缓存(见 PYTHON.md 第 6 节)
+└── proj/                 PROJ 下载的坐标转换网格的缓存(见 PYTHON.md 第 2.5 节)
 ```
 
 每次启动只检查环境,第一次安装、应用自带的环境变了或工作环境缺失时才写。安装期间解开的包与装好的环境同时在,占用约 2.3 GB。Python 第一次导入模块时在各包旁边写 `__pycache__/`。
@@ -92,7 +92,7 @@
 ├── sessions-directories.json  会话分组
 ├── sessions-unread.json       从哪一刻起标出未读的会话,此前结束的回合算已读;第一次启动时写一次
 ├── session-drafts.json, session-drafts/  没发出的消息草稿;草稿附带的文件放在 session-drafts/ 下每份草稿一个的目录里(按路径附加的只记路径),每台连上的设备都看得到
-├── geocode-trust.json         信任过的项目配置,按仓库记下指纹(DESKTOP.md 第 3 节);检查初次运行时记下项目列表里已有的项目
+├── geocode-trust.json         信任过的项目配置,按仓库记下指纹(DESKTOP.md 第 2.2 节);检查初次运行时记下项目列表里已有的项目
 ├── session-warming.json       保持服务商提示缓存的会话与时长,在设置里打开后才有
 ├── message-queue.json         排队等待发送的消息
 ├── dispatch-results.json      等待交回发起会话的子会话结果
@@ -132,7 +132,7 @@
 
 使用 GitLab 服务商时,这里还有两份 GitLab 模型信息的缓存;GitLab 的 SDK 在内核没有交给它密钥时,还读写数据目录里的 `auth.json`。
 
-状态目录 `~/.local/state/geocode/` 每次启动就建立。里面有 `locks/` 下的锁,安装 npm 包与克隆外部仓库时使用,OSM 的工具用其中的 `osm-nominatim` 记下上一次请求 Nominatim 的时刻(`OSM.md` 第 3 节)。
+状态目录 `~/.local/state/geocode/` 每次启动就建立。里面有 `locks/` 下的锁,安装 npm 包与克隆外部仓库时使用,OSM 的工具用其中的 `osm-nominatim` 记下上一次请求 Nominatim 的时刻(`OSM.md` 第 2.2 节)。
 
 临时目录 `$TMPDIR/geocode/` 每次启动就建立,是提示 agent 存放临时文件的地方,agent 可以不经询问读写;在设置里打开「将粘贴的图像保存为文件」后,粘贴的图片存在其中的 `attachments/<随机名>/`;agent 生成图片而没有指定位置时,壳的图像工具把图片存在其中的 `generated-images/`,内核的实验性生图工具(`experimental_image_generate`)存在 `images/<会话 ID>/`。系统临时目录下另有几类以 `geocode-` 开头的短期文件,用完即删:查看与暂存 git 改动、列出未跟踪的文件、多方案运行保存快照、经应用推送 Git LFS 文件与执行检出钩子时的中间文件;macOS 上还有转换应用图标时的 `geocode-icon-*.png`。例外是 `geocode-git-trust-*`:用户的 git 配置里有 `safe.directory` 条目时,经应用拉取或推送前把这些条目抄进去,每次运行至多一个,不删。macOS 上用系统语音朗读时,另有读完即删的 `say-*.m4a`;运行期间,窗口的单实例锁在 `$TMPDIR` 下的 `scoped_dir*/` 里放一个套接字。
 
@@ -226,7 +226,7 @@ GeoCode 写文件多是先写旁边的临时文件、再改名替换,有的另�
 - 模型服务商:内核启动时为登录选项读 AWS 的配置名(`~/.aws/config` 与 `~/.aws/credentials`);为 Google Vertex AI 的登录选项读 gcloud 配置里的项目号与区域,以及默认凭据文件 `application_default_credentials.json` 里的项目号,不联网,登录时也可以自己填;选用 Azure 并以 Azure CLI 登录时,调用 `az` 取令牌;选用 GitLab 时读 `GITLAB_TOKEN` 与项目的远程地址。配置文件里以 `{file:…}` 引用的密钥文件,用到时读取。
 - QGIS:查找安装时,macOS 上看 `/Applications` 与 `~/Applications`、用 Spotlight 按应用标识搜索并读各应用的 `Info.plist`,Windows 上看各个固定磁盘根目录下的 `OSGeo4W*`、`QGIS*` 与 `Program Files` 下的 QGIS。
 - GEE:检查与运行读 Earth Engine 自己的凭据 `~/.config/earthengine/credentials`,不读 Google Cloud 的默认凭据。
-- 内置 Python 环境里的 requests 与 aiohttp 联网时照惯例读 `~/.netrc`,有对应主机的账号就带上(`PYTHON.md` 第 6 节)。
+- 内置 Python 环境里的 requests 与 aiohttp 联网时照惯例读 `~/.netrc`,有对应主机的账号就带上。
 - 打开文件的应用:macOS 上用 Spotlight 列出本机可用来打开文件的应用,并读它们的图标。
 - 系统信任的证书:应用自己联网(连 GitHub 企业版等)时,除了自带的证书,也信任系统证书库(macOS 的钥匙串、Windows 的证书库)里的证书,公司证书签发的服务器因此能连上。内核、git 与 GeoEngine 是各自的进程,不受影响。
 

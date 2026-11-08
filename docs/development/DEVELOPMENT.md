@@ -46,9 +46,9 @@ geoengine/   地理引擎 GeoEngine,以及 Python 包 geocodekit(geoengine/pytho
 ./scripts/stage-kernel.sh
 ```
 
-它只构建本机平台的内核,产物放到 `desktop/packages/electron/resources/opencode-cli/geocode-kernel`(Windows 上为 `geocode-kernel.exe`,名字见 `DESKTOP.md` 第 6 节)。脚本把 `kernel/package.json` 的 `version` 注入内核并核对它报出的版本;不经这个脚本构建的内核带的是预览版本号,过不了启动内核前的版本检查。改动 `kernel/` 之后要重新运行它,应用才会用上新的内核。
+它只构建本机平台的内核,产物放到 `desktop/packages/electron/resources/opencode-cli/geocode-kernel`(Windows 上为 `geocode-kernel.exe`,名字见 `DESKTOP.md` 第 2.5 节)。脚本把 `kernel/package.json` 的 `version` 注入内核并核对它报出的版本;不经这个脚本构建的内核带的是预览版本号,过不了启动内核前的版本检查。改动 `kernel/` 之后要重新运行它,应用才会用上新的内核。
 
-GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/packages/electron/resources/geoengine/geoengine.mjs`,打包时收进 `app.asar`。Python 包 `geocodekit`(`geoengine/python/`)在这一步原样编进 `geoengine.mjs`,由 GeoEngine 装进内置环境(`GEOCODEKIT.md` 第 6 节),所以改了其中的文件同样要重新构建。开发模式的启动脚本与打包流程都会运行它,平时不用手动执行;`geoengine/` 没装依赖时它报错退出。
+GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/packages/electron/resources/geoengine/geoengine.mjs`,打包时收进 `app.asar`。Python 包 `geocodekit`(`geoengine/python/`)在这一步原样编进 `geoengine.mjs`,由 GeoEngine 装进内置环境(`GEOCODEKIT.md` 第 2.5 节),所以改了其中的文件同样要重新构建。开发模式的启动脚本与打包流程都会运行它,平时不用手动执行;`geoengine/` 没装依赖时它报错退出。
 
 OSM 工具读的预设库 `geocodekit/osm/_data.json` 由 `geoengine/` 里的 `bun ./script/osm-data.ts` 按脚本里锁定的版本下载、裁剪后写出;改了版本之后运行它,与写出的文件一起提交。
 
@@ -77,7 +77,7 @@ bun run electron:dev:bundled
 
 壳与内核都从 `HOME` 推导自己的数据、配置与缓存目录,不看 `XDG_*`。Electron 自己的配置目录在 macOS 上按系统账户找主目录,不看 `HOME`,所以要用 `OPENCHAMBER_DESKTOP_USER_DATA_DIR` 单独指定。系统的偏好设置同样按系统账户存放,沙箱挡不住,开发时写进 Electron 通用的 `~/Library/Preferences/com.github.Electron.plist`。Electron 的日志写在 `$SANDBOX/Library/Logs/` 下。
 
-`electron:dev:bundled` 先构建界面,再用构建好的界面启动,使用第 4 节暂存的内核;没有暂存时启动日志提示「bundled OpenCode CLI missing」,内核起不来:提示里说退回 `PATH`,但壳只认随包的内核。`electron:dev` 用热更新的界面,适合改界面时快速查看,但它另起的壳服务端不在 Electron 里,本机访问控制(`DESKTOP.md` 第 4 节)在那里不生效,也接不到 GeoEngine,地理环境与地理工具都不可用;验证这些要用 `electron:dev:bundled` 或打包出的应用。窗口的加载动画等内置的 Python 环境就绪(`PYTHON.md` 第 8 节),新沙箱第一次启动要多等一会;`electron:dev` 没有 GeoEngine,不等。
+`electron:dev:bundled` 先构建界面,再用构建好的界面启动,使用第 4 节暂存的内核;没有暂存时启动日志提示「bundled OpenCode CLI missing」,内核起不来:提示里说退回 `PATH`,但壳只认随包的内核。`electron:dev` 用热更新的界面,适合改界面时快速查看,但它另起的壳服务端不在 Electron 里,本机访问控制(`DESKTOP.md` 第 2.3 节)在那里不生效,也接不到 GeoEngine,地理环境与地理工具都不可用;验证这些要用 `electron:dev:bundled` 或打包出的应用。窗口的加载动画等内置的 Python 环境就绪(`PYTHON.md` 第 2.6 节),新沙箱第一次启动要多等一会;`electron:dev` 没有 GeoEngine,不等。
 
 沙箱里没有登录信息,要对话就在沙箱里连接一个模型服务,或在沙箱的全局配置里配一个本机的 OpenAI 兼容接口。opencode.ai 的免费模型不对 GeoCode 开放。测完删掉沙箱目录即可。
 
