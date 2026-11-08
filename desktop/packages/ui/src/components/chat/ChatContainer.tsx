@@ -122,6 +122,7 @@ import { getRuntimeKey } from '@/lib/runtime-switch';
 import { isMobileSurfaceRuntime } from '@/lib/runtimeSurface';
 import { createFirstVisibleSessionPerformanceTracker } from '@/sync/session-load-performance';
 import { isChatDirectoryPath } from '@/lib/chatDirectories';
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the starters
 
 const EMPTY_MESSAGES: Array<{ info: Message; parts: Part[] }> = [];
 const IDLE_SESSION_STATUS = { type: 'idle' as const };
@@ -786,10 +787,14 @@ const DraftWelcome: React.FC<{ exiting?: boolean }> = ({ exiting = false }) => {
             <h1 className="text-balance text-3xl font-normal tracking-tight text-foreground">
                 {renderDraftTitle(draftHeading, projectLabel)}
             </h1>
+            {/* --- GeoCode: no starters under the composer --- */}
+            <Closed>
             <DraftPresetChips
                 onSubmit={(starter) => useInputStore.getState().requestPresetSubmit(starter.submitText, starter.ref.type)}
                 className="oc-draft-starters mt-8 max-w-md"
             />
+            </Closed>
+            {/* --- /GeoCode --- */}
         </div>
     );
 };

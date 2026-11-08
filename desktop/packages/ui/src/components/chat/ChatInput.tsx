@@ -265,6 +265,7 @@ import { SessionDoneHintRow } from '@/components/chat/SessionDoneHintRow';
 import { SessionReviewHintRow } from '@/components/chat/SessionReviewHintRow';
 import { BackgroundShellsStrip } from '@/components/chat/BackgroundShellsStrip';
 import { BackgroundGeeStrip } from '@/geocode/BackgroundGeeStrip'; // GeoCode: see the rows over the composer
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the starters
 import { ComposerStatusStrip } from '@/components/chat/ComposerStatusStrip';
 import { useWorktreeBootstrapPending } from '@/hooks/useWorktreeBootstrapPending';
 import { useShownAfter } from '@/hooks/useShownAfter';
@@ -4981,12 +4982,16 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
                     />
                 ) : null}
             </div>
+            {/* --- GeoCode: no starters under the composer --- */}
+            <Closed>
             {showDesktopDraftPresentation ? (
                 <DraftPresetChips
                     onSubmit={handlePresetChipSubmit}
                     className={cn('chat-input-column mt-4', draftPresentationClassName)}
                 />
             ) : null}
+            </Closed>
+            {/* --- /GeoCode --- */}
             {/* One floating panel at a time: an open BTW, then a permission,
                 then the form, then a collapsed BTW strip. */}
             <PermissionDock

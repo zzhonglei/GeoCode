@@ -31,6 +31,7 @@ export const CLOSED_SEARCH_ITEMS = new Set([
   'general.isolated-spaces-idle-stop',
   'general.isolated-spaces-machine',
   'sessions.browser-provider',
+  'chat.draft-starters-visible',
   'chat.session-goal-checker',
   'chat.session-review-offer',
   'projects.worktree.setup.replace',

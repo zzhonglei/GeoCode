@@ -34,7 +34,7 @@ import { useUIStore, type LargeTextPasteBehavior } from '@/stores/useUIStore';
 import { MessageSearchSettings } from './MessageSearchSettings';
 import { SessionGoalCheckerField, SessionGoalMaxTurnsField } from './SessionGoalCheckerField';
 import { useChatSettingsTabStore, type ChatSettingsTab } from './chatSettingsTabs';
-import { Closed } from '@/geocode/Closed'; // GeoCode: see the review offer and goal checker rows
+import { Closed } from '@/geocode/Closed'; // GeoCode: see the starters, review offer and goal checker rows
 
 type ChipOption<T extends string> = { id: T; labelKey: I18nKey };
 
@@ -546,6 +546,8 @@ const AssistanceTab: React.FC = () => {
         divider={false}
         contentClassName={SETTINGS_OPTION_STACK_CLASS}
       >
+        {/* --- GeoCode: no starters under the composer --- */}
+        <Closed>
         <SettingsCheckboxRow
           checked={draftStartersVisible}
           onChange={(enabled) => {
@@ -556,6 +558,8 @@ const AssistanceTab: React.FC = () => {
           ariaLabel={t('settings.openchamber.visual.field.draftStartersVisibleAria')}
           settingsItem="chat.draft-starters-visible"
         />
+        </Closed>
+        {/* --- /GeoCode --- */}
         <SettingsCheckboxRow
           checked={sessionRecapEnabled}
           onChange={setSessionRecapEnabled}
