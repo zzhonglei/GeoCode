@@ -156,7 +156,9 @@ const LOCAL_ACTION_COMMANDS = new Set([
     'undo',
     'redo',
     'timeline',
+    /* --- GeoCode: no /handoff-review: a review starts from the Review button of the changes panel, where the diff it reviews is; a command of the user's own by this name then runs ---
     'handoff-review',
+    --- /GeoCode --- */
     'compact',
     'fork',
 ]);

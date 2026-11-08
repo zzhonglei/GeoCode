@@ -887,7 +887,9 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         ]);
         // GeoCode: no /review in the kernel, and no /summary, /workspace-review, /schedule-task, /catch-up, /debug, /weigh or /explore (see slashCommands); a user's own command by one of these names is added back below
         for (const name of ['review', 'summary', 'workspace-review', 'schedule-task', 'catch-up', 'debug', 'weigh', 'explore']) names.delete(name);
+        /* --- GeoCode: no /handoff-review (see slashCommands) ---
         if (!isMobile && !isVSCodeRuntime()) names.add('handoff-review');
+        --- /GeoCode --- */
         for (const command of availableCommands) names.add(command.name.toLowerCase());
         return names;
     }, [availableCommands, isMobile]);

@@ -159,10 +159,12 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
         : []
       ),
       --- /GeoCode --- */
+      /* --- GeoCode: no /handoff-review (see slashCommands) ---
       ...(canUseReviewHandoffFlow
         ? [{ id: 'openchamber:handoff-review', name: 'handoff-review', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.handoffReviewDescription'), isOpenChamber: true }]
         : []
       ),
+      --- /GeoCode --- */
       ...(canStartSessionCommand
         ? [{ id: 'openchamber:plan-feature', name: 'plan-feature', source: 'openchamber' as const, description: t('chat.commandAutocomplete.command.featurePlanDescription'), isOpenChamber: true }]
         : []
