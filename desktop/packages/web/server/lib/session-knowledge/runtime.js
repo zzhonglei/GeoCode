@@ -101,7 +101,7 @@ export const SESSION_LINK_GUIDANCE = "Link to this session with the geocode tool
  * a task under this name, so it is set early and changed only with the task.
  */
 export const WORK_NAME_GUIDANCE = "Name the task with the geocode tool's work.name as soon as it is clear what" // GeoCode: the tool's name in GeoCode
-  + " the task is: at most 4 words naming the task itself, such as \"Login timeout fix\" or \"Sidebar task rows\","
+  + " the task is: at most 4 words naming the task itself, such as \"Taipei land use\" or \"Login timeout fix\"," // GeoCode: a geographic example beside a code one, as in the title prompt
   + " never a step of it. Rename it only when the work becomes a different task; finishing a step, fixing"
   + " something on the way or a follow-up within the same task is no reason. A name the user gave stays.";
 
