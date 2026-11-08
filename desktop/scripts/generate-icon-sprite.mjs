@@ -22,12 +22,6 @@ const outPath = resolve(repoRoot, "packages/ui/src/components/icon/sprite.ts")
 const customIconData = new Map([
   // The OpenChamber glyph from scripts/brand, scaled from its 32 grid to 24.
   ["openchamber", `<g transform="scale(0.75)">${glyphInner()}</g>`],
-  // --- GeoCode: its own mark in one colour, for the rows of its agent tools ---
-  [
-    "geocode",
-    `<g transform="translate(0.57 0.15) scale(0.233)"><g transform="translate(5.03 9.71) scale(0.8139)"><circle cx="50" cy="50" r="32" fill="none" stroke="currentColor" stroke-width="8.0"/><ellipse cx="50" cy="50" rx="51.84" ry="14.08" transform="rotate(-22 50 50)" fill="none" stroke="currentColor" stroke-width="8.0"/><path d="M 82.00 49.49 A 51.84 14.08 -22 0 1 26.63 71.86" fill="none" stroke="currentColor" stroke-width="8.0" stroke-linecap="round"/><g transform="translate(95.36 28.00) scale(1.000)" opacity="1.000"><path fill="currentColor" d="M 0 -15 Q 3.30 -3.30 15 0 Q 3.30 3.30 0 15 Q -3.30 3.30 -15 0 Q -3.30 -3.30 0 -15 Z"/></g></g></g>`,
-  ],
-  // --- /GeoCode ---
   // Command Code — corner squares + center square (official logo geometry).
   [
     "command-code",

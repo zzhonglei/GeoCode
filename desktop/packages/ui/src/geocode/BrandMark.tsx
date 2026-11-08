@@ -18,9 +18,11 @@ interface BrandMarkProps {
   width?: number;
   height?: number;
   isAnimated?: boolean;
+  /** Beside a label that already names it, as an icon is: hidden from screen readers. */
+  decorative?: boolean;
 }
 
-export const BrandMark: React.FC<BrandMarkProps> = ({ className = '', width = 70, height = 70, isAnimated = false }) => {
+export const BrandMark: React.FC<BrandMarkProps> = ({ className = '', width = 70, height = 70, isAnimated = false, decorative = false }) => {
   const { t } = useI18n();
   const themeContext = useOptionalThemeSystem();
   const instanceId = React.useId().replace(/[^a-zA-Z0-9]/g, '');
@@ -52,8 +54,7 @@ export const BrandMark: React.FC<BrandMarkProps> = ({ className = '', width = 70
       width={width}
       height={height}
       viewBox="0 0 100 100"
-      role="img"
-      aria-label={t('openChamberLogo.aria.logo')}
+      {...(decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': t('openChamberLogo.aria.logo') })}
       dangerouslySetInnerHTML={{ __html: markup }}
     />
   );
