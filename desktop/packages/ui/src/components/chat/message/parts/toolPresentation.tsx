@@ -1,6 +1,6 @@
 import React from 'react';
 import { Icon } from "@/components/icon/Icon";
-import { BrandMark } from '@/geocode/BrandMark'; // GeoCode: the mark of its own tool
+import { GeoCodeLogo } from '@/geocode/GeoCodeLogo'; // GeoCode: the mark of its own tool
 import { GuestIcon } from '@/components/layout/GuestRailIcon';
 import { resolveGuestToolIcon } from '@/lib/guests/icon';
 import type { GuestToolRule } from '@/lib/guests/tool-presentation';
@@ -80,7 +80,7 @@ export const getToolIcon = (toolName: string, presentation?: GuestToolRule | nul
         return <Icon name="ai-agent" className={iconClass} />;
     }
     if (tool === 'geocode') { // GeoCode: its agent tools, under their own names, also the four below
-        return <BrandMark className={iconClass} decorative />; // GeoCode: its own mark, in colour
+        return <GeoCodeLogo className={iconClass} />; // GeoCode: its own mark, in colour
     }
     if (tool === 'linear' || tool.startsWith('linear_')) {
         return <Icon name="linear" className={iconClass} />;
