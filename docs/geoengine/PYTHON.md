@@ -15,7 +15,7 @@ GeoCode 自带一套装好常用地理包的 Python 环境:用户装好 GeoCode 
 环境的全部包,包括 Python 本身,都来自 conda-forge,只用这一个频道。conda-forge 是社区维护的软件源,也是地理 Python 生态的标准来源:GDAL 在这里是完整的一套,PyPI 上没有现成的安装包。不用 Anaconda 公司的 defaults 频道:它与镜像它的仓库要商业授权。用户的电脑上不装 conda,也看不到它。
 
 - 解释器是 Python 3.13,小版本固定,只跟补丁版本:补丁版本不改变包的安装位置与二进制接口,换小版本会让所有带编译代码的包与已建的虚拟环境失效,所以按一次重大升级单独处理。
-- 预装的包只收 GeoAgent 在地理任务里经常要用的;同一个包有只含核心的版本时取它。清单在 `geoengine/environment/pixi.toml`。用得少的包由 GeoAgent 按需装进工作环境。
+- 预装的包只收 GeoAgent 在地理任务里经常要用的,收进来的核心包取完整的版本,不为省空间删减功能:GDAL 带上 conda-forge 单独打包的全部驱动(只有一个只出 macOS 版的除外),GeoPandas 带上分级设色与交互地图。删减出来的缺口,GeoAgent 遇到时很难自己补上。清单在 `geoengine/environment/pixi.toml`。用得少的包由 GeoAgent 按需装进工作环境。
 - 两个平台共用一份锁定清单,每个包的版本都带校验和:同一段脚本在两个平台上的行为才一致,出了问题也能复现。间接依赖由各平台自己解析,不强求完全一致。
 - 环境里只有一份 GDAL,rasterio、pyogrio 与 GDAL 官方的 Python 接口都用它。PyPI 上的 rasterio、pyogrio 各带一份 GDAL,用 pip 往工作环境里重装它们,就盖过了环境里的那一份。
 - 环境不带中文字体:系统自带的字体随操作系统授权,只能调用,不能随 GeoCode 分发。出图要中文时,由 GeoAgent 选用系统里的中文字体。
