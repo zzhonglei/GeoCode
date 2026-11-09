@@ -365,10 +365,10 @@ export function createAutoReviewRuntime({
     const response = await fetchImpl(search ? `${base}?${search}` : base, init);
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      throw httpError(`OpenCode ${method} ${fetchPath} failed with ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`, response.status);
+      throw httpError(`Kernel ${method} ${fetchPath} failed with ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`, response.status); // GeoCode: the review row and notification show it
     }
     // A 2xx app shell is a failed request, not an accepted prompt.
-    assertOpenCodeApiResponse(response, `OpenCode ${method} ${fetchPath}`);
+    assertOpenCodeApiResponse(response, `Kernel ${method} ${fetchPath}`); // GeoCode: as above
     return unwrapOpenCodeResponse(await response.json().catch(() => null));
   };
 

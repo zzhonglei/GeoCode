@@ -1023,7 +1023,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
 
   const waitForOpenCodeReady = async (timeoutMs = 20000, intervalMs = 400) => {
     if (!state.openCodePort) {
-      throw new Error('OpenCode port is not available');
+      throw new Error('Kernel port is not available'); // GeoCode: the name the user sees
     }
 
     const deadline = Date.now() + timeoutMs;
@@ -1077,7 +1077,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
 
   const waitForAgentPresence = async (agentName, timeoutMs = 15000, intervalMs = 300) => {
     if (!state.openCodePort) {
-      throw new Error('OpenCode port is not available');
+      throw new Error('Kernel port is not available'); // GeoCode: the name the user sees
     }
 
     const deadline = Date.now() + timeoutMs;

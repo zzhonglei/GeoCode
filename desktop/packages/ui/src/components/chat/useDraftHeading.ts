@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 
+/* --- GeoCode: one plain heading, not upstream's rotating lines (see useDraftHeading) ---
 import { useEasterEggCopy } from '@/lib/easter-eggs/easterEggCopy';
+--- /GeoCode --- */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- GeoCode: draftTitleLine is used only in the closed part of useDraftHeading
 import { draftMomentAt, draftTitleLine, type DraftMoment } from '@/lib/easter-eggs/lines';
 import { useI18n } from '@/lib/i18n';
 import { useSessionUIStore } from '@/sync/session-ui-store';
@@ -11,7 +14,9 @@ import { useSessionUIStore } from '@/sync/session-ui-store';
 // opens a new draft id without leaving the screen). Leaving for a session and
 // coming back takes the next line. The seed keeps the first visit after
 // launch from always opening on the same one.
+/* --- GeoCode: unused while the rotating lines are closed (see useDraftHeading) ---
 const SEED = Math.floor(Math.random() * 1000);
+--- /GeoCode --- */
 
 // A store, not a module variable: the compiled hook memoizes on what it reads.
 const useDraftVisit = create<{ visit: number; moment: DraftMoment }>(() => ({
@@ -27,13 +32,18 @@ useSessionUIStore.subscribe((state, previous) => {
 /** The new-session heading: a rotating line when the draft has a project, the plain question otherwise. */
 export function useDraftHeading(projectLabel: string | null): string {
   const { t } = useI18n();
+  /* --- GeoCode: one plain heading, not upstream's rotating lines, which joke about writing code ---
   const copy = useEasterEggCopy();
   const visit = useDraftVisit((state) => state.visit);
   const moment = useDraftVisit((state) => state.moment);
+  --- /GeoCode --- */
   if (!projectLabel) return t('chat.emptyState.draftTitle');
+  return t('chat.emptyState.draftTitleWithProject', { project: projectLabel }); // GeoCode: see above
+  /* --- GeoCode: see above ---
   const line = copy ? draftTitleLine(copy, moment, SEED + visit) : null;
   return line
     // A function replacement: a project named `$&` must stay literal.
     ? line.replace('{project}', () => projectLabel)
     : t('chat.emptyState.draftTitleWithProject', { project: projectLabel });
+  --- /GeoCode --- */
 }

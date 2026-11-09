@@ -249,9 +249,11 @@ const SHORTCUT_GROUPS = {
     {
       id: 'toggle_services_menu',
       defaultBinding: 'mod+k i',
-      customizable: true,
+      customizable: false, // GeoCode: the menu it opens is closed, so neither settings nor their search offer it
+      /* --- GeoCode: one not offered has no label ---
       settingsLabelKey:
         'settings.openchamber.keyboardShortcuts.action.toggle_services_menu.label',
+      --- /GeoCode --- */
     },
   ],
   navigation: [

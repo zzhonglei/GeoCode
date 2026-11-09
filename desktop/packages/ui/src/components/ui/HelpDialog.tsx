@@ -200,12 +200,14 @@ export const HelpDialog: React.FC = () => {
           icon: "palette",
           keys: '',
         },
+        /* --- GeoCode: the menu it opens is closed ---
         {
           id: 'toggle_services_menu',
           descriptionKey: 'helpDialog.item.toggleServicesMenu',
           icon: "stack",
           keys: '',
         },
+        --- /GeoCode --- */
         {
           id: 'toggle_source_board',
           descriptionKey: 'helpDialog.item.toggleSourceBoard',

@@ -75,7 +75,7 @@ export async function waitForOpenCodeStartup(timeoutMs = OPENCODE_STARTUP_SEND_W
   changeWaitingSends(1)
   try {
     await untilFirstConnection(timeoutMs, {
-      timeout: "OpenCode did not start in time. The message was not sent.",
+      timeout: "The kernel did not start in time. The message was not sent.", // GeoCode: the name the user sees
       runtimeChanged: "Message was not sent because the runtime changed.",
     })
   } finally {

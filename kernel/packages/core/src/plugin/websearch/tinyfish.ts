@@ -114,7 +114,7 @@ const initialize = (http: HttpClient.HttpClient, headers: Record<string, string>
         params: {
           protocolVersion: "2025-06-18",
           capabilities: {},
-          clientInfo: { name: "opencode", version: "1.0" },
+          clientInfo: { name: "geocode", version: "1.0" }, // GeoCode: the name MCP servers see
         },
       }),
     )

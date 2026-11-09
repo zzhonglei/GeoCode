@@ -36,7 +36,8 @@ const UPSTREAM = /(\b[Aa]n )?(?:OpenChamber|OpenCode(?! (?:Zen|Go|Console|Web Se
 export const toGeoCodeText = (text: string): string =>
   text.replace(UPSTREAM, (_, article?: string) => `${article ? article.replace('n ', ' ') : ''}GeoCode`);
 
-// Where upstream means the kernel as a part, describes a server and a client that are one app here, or offers what the app does not have.
+// Where upstream means the kernel as a part, describes a server and a client that are one app here, offers what the app does not have,
+// or speaks of building features; and what it left untranslated.
 const MESSAGES = {
   en: {
     'settings.view.nav.group.opencode': 'Kernel',
@@ -93,6 +94,8 @@ const MESSAGES = {
     'settings.openchamber.visual.field.sessionTabsPerWorkspace': 'Separate tabs for each project and worktree', // the app has no isolated spaces, also the two below
     'settings.openchamber.visual.field.sessionTabsPerWorkspaceAria': 'Toggle separate tabs for each project and worktree',
     'settings.openchamber.visual.field.sessionTabsPerWorkspaceInfo': 'Each project and worktree keeps its own tabs, and the header shows the tabs of the one you are in. The first time you open a worktree, the sessions you started there open as tabs.',
+    'settings.openchamber.desktopNetwork.field.keepAwakeDescription': 'Prevents system sleep while GeoCode runs, so long geo tasks are not paused. The screen can still turn off.',
+    'chat.commandAutocomplete.command.featurePlanDescription': 'Start a guided, back-and-forth planning session before the work begins.',
   },
   'zh-CN': {
     'settings.view.nav.group.opencode': '内核',
@@ -149,6 +152,8 @@ const MESSAGES = {
     'settings.openchamber.visual.field.sessionTabsPerWorkspace': '为每个项目和 worktree 使用单独的标签页',
     'settings.openchamber.visual.field.sessionTabsPerWorkspaceAria': '切换每个项目和 worktree 的单独标签页',
     'settings.openchamber.visual.field.sessionTabsPerWorkspaceInfo': '每个项目和 worktree 都保留自己的标签页，顶部显示你当前所在位置的标签页。第一次打开某个 worktree 时，你在那里开始的会话会以标签页打开。',
+    'settings.openchamber.desktopNetwork.field.keepAwakeDescription': 'GeoCode 运行时阻止系统睡眠，长时间的地理任务不会因此暂停。屏幕仍可关闭。',
+    'chat.commandAutocomplete.command.featurePlanDescription': '在动手之前，开始一次引导式的来回规划会话。',
   },
   'zh-TW': {
     'settings.view.nav.group.opencode': '核心',
@@ -205,6 +210,21 @@ const MESSAGES = {
     'settings.openchamber.visual.field.sessionTabsPerWorkspace': '每個專案和 worktree 使用各自的分頁',
     'settings.openchamber.visual.field.sessionTabsPerWorkspaceAria': '切換每個專案和 worktree 各自的分頁',
     'settings.openchamber.visual.field.sessionTabsPerWorkspaceInfo': '每個專案和 worktree 都保有自己的分頁，頂部會顯示你目前所在位置的分頁。第一次開啟某個 worktree 時，你在那裡開始的工作階段會以分頁開啟。',
+    'settings.openchamber.desktopNetwork.field.keepAwakeDescription': 'GeoCode 執行時阻止系統睡眠，長時間的地理任務不會因此暫停。螢幕仍可關閉。',
+    'chat.commandAutocomplete.command.featurePlanDescription': '在動手之前，開始一次引導式的來回規劃工作階段。',
+    // Left in English upstream.
+    'diffView.actions.review': '審查',
+    'diffView.actions.reviewAria': '審查變更',
+    'diffView.reviewDialog.title': '審查變更',
+    'diffView.reviewDialog.description': '為目前的變更開啟獨立的審查工作階段。',
+    'diffView.reviewDialog.generateHandoff': '產生交接摘要',
+    'diffView.reviewDialog.info': '此流程最好在實作這些變更的工作階段中發起。',
+    'diffView.reviewDialog.actions.cancel': '取消',
+    'diffView.reviewDialog.actions.start': '開始審查',
+    'diffView.reviewDialog.actions.starting': '正在啟動...',
+    'diffView.reviewDialog.toast.noSessionDirectory': '工作階段目錄無法使用',
+    'diffView.reviewDialog.toast.startFailed': '無法啟動審查流程',
+    'sessions.scheduledTasks.editor.agent.label': '代理',
   },
 } satisfies Partial<Record<Locale, Messages>>;
 

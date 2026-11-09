@@ -84,7 +84,7 @@ export const createOpenCodeNetworkRuntime = (deps) => {
 
   const buildOpenCodeUrl = (path, prefixOverride) => {
     if (!state.openCodePort) {
-      throw new Error('OpenCode port is not available');
+      throw new Error('Kernel port is not available'); // GeoCode: the name the user sees
     }
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const prefix = normalizeApiPrefix(prefixOverride !== undefined ? prefixOverride : '');
