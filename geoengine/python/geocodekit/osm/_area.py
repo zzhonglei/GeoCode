@@ -13,7 +13,8 @@ from geocodekit.osm._elements import Invalid
 # The kernel tells GeoAgent of the parts (Area in kernel/packages/core/src/geocode/osm.ts).
 RING_VERTICES = 1000
 PARTS = 8
-METERS_PER_DEGREE = 111320.0
+# Below what a degree of latitude spans anywhere, so the box around a circle always holds it.
+METERS_PER_DEGREE = 110000.0
 SECONDS = 120
 
 FORMS = (

@@ -431,13 +431,11 @@ def search(request):
 def _ranked(name, found, alternative, bounds):
     refs = list(found.found)
     nominatim, complete = _described(refs)
-    if not complete:
+    described = [_describe(ref, found.found[ref], found.tags.get(ref), nominatim, found.items) for ref in refs]
+    # A candidate no service described, as one Photon found and Nominatim's lookup lacks, is left out of the answer.
+    if not complete or None in described:
         found.failed()
-    candidates = [
-        candidate
-        for candidate in (_describe(ref, found.found[ref], found.tags.get(ref), nominatim, found.items) for ref in refs)
-        if candidate is not None and _inside(candidate, bounds)
-    ]
+    candidates = [candidate for candidate in described if candidate is not None and _inside(candidate, bounds)]
     if alternative is not None:
         candidates = [candidate for candidate in candidates if _filters.meets(alternative, candidate["tags"])]
     wanted = _plain(name)

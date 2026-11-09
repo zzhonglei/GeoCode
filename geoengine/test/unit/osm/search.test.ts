@@ -168,6 +168,30 @@ test(
 )
 
 test(
+  "a search that leaves out a candidate no service described is said to be incomplete",
+  { skip: !python3 },
+  async () => {
+    const undescribed = (): Reply => ({
+      json: {
+        features: [{ properties: { osm_type: "R", osm_id: 1 } }, { properties: { osm_type: "W", osm_id: 9 } }],
+      },
+    })
+    const services = await serve({ nominatim, photon: undescribed, wikidata, overpass })
+    const engine = await start(python3!, services.services)
+    try {
+      const done = await engine.call("search", { name: "國立臺北大學" })
+      assert.ok(done.ok, JSON.stringify(done))
+      assert.ok(ids(done.result).includes("R1"))
+      // Guards against an answer without the dropped candidate passing for a complete one.
+      assert.equal((done.result as { incomplete: boolean }).incomplete, true)
+    } finally {
+      await engine.stop()
+      await services.close()
+    }
+  },
+)
+
+test(
   "a name Overpass stopped matching partway through is said to be incomplete, not absent",
   { skip: !python3 },
   async () => {
