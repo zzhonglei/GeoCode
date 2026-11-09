@@ -229,7 +229,7 @@ test(
       const agents = new Set(services.asked.map((request) => request.agent))
       assert.deepEqual(
         [...agents],
-        [`GeoCode/${Geocodekit.PACKAGE.version} (+https://github.com/zzhonglei/GeoCode-Release)`],
+        [`GeoCode/${Geocodekit.PACKAGE.version} (+https://github.com/zzhonglei/GeoCode)`],
       )
       const times = services.asked.filter((request) => request.service === "nominatim").map((request) => request.at)
       assert.equal(times.length, 4)

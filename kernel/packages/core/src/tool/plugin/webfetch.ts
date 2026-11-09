@@ -58,7 +58,7 @@ const headers = (format: Format, userAgent: string) => ({
 })
 
 const openCodeUserAgent =
-  "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GeoCode-User/1.0; +https://github.com/zzhonglei/GeoCode-Release" // GeoCode: product name and link
+  "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GeoCode-User/1.0; +https://github.com/zzhonglei/GeoCode" // GeoCode: product name and link
 
 const isCloudflareChallenge = (error: unknown) => {
   if (!HttpClientError.isHttpClientError(error) || error.reason._tag !== "StatusCodeError") return false

@@ -36,7 +36,7 @@ const SERVICES = {
 export type Services = typeof SERVICES
 
 /** As the services' policies ask: the application, its version and where to find it, and nothing of the user. */
-const AGENT = `GeoCode/${Geocodekit.PACKAGE.version} (+https://github.com/zzhonglei/GeoCode-Release)`
+const AGENT = `GeoCode/${Geocodekit.PACKAGE.version} (+https://github.com/zzhonglei/GeoCode)`
 
 /**
  * How long a call may print nothing: the Python reports while a request waits, so only its own work counts, such as

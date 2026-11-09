@@ -5,7 +5,7 @@ import { Icon } from '@/components/icon/Icon';
 import { OpenChamberLogo } from '@/components/ui/OpenChamberLogo';
 import { getDesktopAppVersion } from '@/lib/desktopNative';
 import { useI18n } from '@/lib/i18n';
-import { GEOCODE_RELEASES_URL } from './brand';
+import { GEOCODE_REPOSITORY_URL } from './brand';
 
 interface AboutDialogProps {
   open: boolean;
@@ -41,7 +41,7 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({ open, onOpenChange }) 
           </div>
 
           <a
-            href={GEOCODE_RELEASES_URL}
+            href={GEOCODE_REPOSITORY_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 typography-meta text-muted-foreground hover:text-foreground transition-colors"

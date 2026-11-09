@@ -4,7 +4,7 @@ import type { I18nDictionary } from '@/lib/i18n/store';
 
 type Messages = Partial<Record<I18nKey, string>>;
 
-export const GEOCODE_RELEASES_URL = 'https://github.com/zzhonglei/GeoCode-Release';
+export const GEOCODE_REPOSITORY_URL = 'https://github.com/zzhonglei/GeoCode';
 export const GEOCODE_ISSUES_URL = 'https://github.com/zzhonglei/GeoCode/issues/new';
 
 // Links into the sites of OpenCode and OpenChamber are not offered.
