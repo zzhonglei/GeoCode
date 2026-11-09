@@ -72,13 +72,18 @@ case $PLATFORM in
   *) echo "no Python environment for $PLATFORM" >&2 && exit 1 ;;
 esac
 
-# What the environment is: the addresses of the platform's packages in pixi.lock, which name each build, the tools and
-# this script, which prepares them.
+# How the packages are installed on the user's computer, beyond pixi-unpack's version, here and by GeoEngine (install
+# and prune in geoengine/src/python/index.ts): raise it with a change that installs them otherwise, and only then, as a
+# new id reinstalls every user's environment.
+INSTALL=1
+
+# What the environment is: the addresses of the platform's packages in pixi.lock, which name each build, the version of
+# pixi-unpack, which installs them, and INSTALL.
 # Unchanged, it stays the same through a rebuild, so an installed copy of it is not installed again. Printed with the
 # Python version its packages hold.
 DEFINED=$(node -e '
   const fs = require("fs"), crypto = require("crypto")
-  const [lock, platform, tools, script] = process.argv.slice(1)
+  const [lock, platform, unpack, install] = process.argv.slice(1)
   // Without carriage returns, which a Windows checkout may add, so the id is the same there.
   const read = (file) => fs.readFileSync(file, "utf-8").replace(/\r/g, "")
   const section = read(lock).match(new RegExp(`^      ${platform}:\\n((?:      - .*\\n)+)`, "m"))
@@ -87,9 +92,9 @@ DEFINED=$(node -e '
   const python = packages.map((line) => line.match(/\/python-(\d+\.\d+\.\d+)-[^/]*\.conda$/)).find(Boolean)
   if (!python) throw new Error(`pixi.lock has no Python for ${platform}`)
   const hash = crypto.createHash("sha256").update(platform + "\n" + packages.join("\n"))
-  hash.update(read(tools)).update(read(script))
+  hash.update("\npixi-unpack " + unpack + "\ninstall " + install)
   process.stdout.write(hash.digest("hex") + " " + python[1])
-' "$ENV/pixi.lock" "$CONDA" "$ENV/tools.json" "$0")
+' "$ENV/pixi.lock" "$CONDA" "$(field pixi-unpack version)" "$INSTALL")
 ID=${DEFINED% *}
 PYTHON=${DEFINED#* }
 
@@ -120,7 +125,8 @@ if [ "$PLATFORM" = "$HOST" ]; then
   TMPDIR="$CHECK/temporary" TMP="$CHECK/temporary" TEMP="$CHECK/temporary" \
     "$UNPACK" "$CACHE/python-$PLATFORM.tar" --output-directory "$CHECK" --env-name base
   if [ "$PLATFORM" = win32-x64 ]; then BIN="$CHECK/base/python.exe"; else BIN="$CHECK/base/bin/python3"; fi
-  reported=$("$BIN" -I -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])')
+  # Without a line end: Windows's Python ends one with a carriage return, which the substitution keeps.
+  reported=$("$BIN" -I -c 'import sys; sys.stdout.write("%d.%d.%d" % sys.version_info[:3])')
   if [ "$reported" != "$PYTHON" ]; then
     echo "the installed Python reports $reported, expected $PYTHON" >&2
     exit 1

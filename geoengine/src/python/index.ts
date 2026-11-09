@@ -437,7 +437,11 @@ function remove(target: string) {
   )
 }
 
-/** Takes away what only building and debugging use. */
+/**
+ * Takes away what only building and debugging use. Part of how the environment is installed, as UNUSED and
+ * pixi-unpack's arguments are: a change to them reaches an installed environment only by raising INSTALL in
+ * scripts/stage-python.sh.
+ */
 async function prune(base: string) {
   for (const headers of [path.join(base, "include"), path.join(base, "Library", "include")]) {
     await fsp.rm(headers, { recursive: true, force: true })
