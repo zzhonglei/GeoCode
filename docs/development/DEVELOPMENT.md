@@ -60,7 +60,7 @@ OSM 工具读的预设库 `geocodekit/osm/_data.json` 由 `geoengine/` 里的 `b
 - 每个预装的包都能导入;经 pyogrio 读写 GeoPackage、经 rasterio 读写 GeoTIFF,两者与 `osgeo` 用的是同一份 GDAL;GDAL 的驱动插件都能加载;`gdalwarp`、`ogr2ogr` 能运行;一次真实的坐标变换成功(投影数据库缺失时它才失败)。
 - Python 的 `urllib`、requests 与 GDAL 读网上的文件都能经 HTTPS 连上(证书的位置错了才失败)。
 - 设了代理变量时,urllib、requests、aiohttp 与 GDAL 的请求都经过它(本机一个只记录、不转发的代理就能查,不联网);没设时系统设置里的代理不被读到。
-- 装到带空格与中文的路径后照样通过。
+- 装到带空格的路径后照样通过。
 
 ## 5. 在沙箱里启动应用
 
