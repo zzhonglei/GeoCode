@@ -12,7 +12,7 @@ GeoCode 自带一套装好常用地理包的 Python 环境:用户装好 GeoCode 
 
 ### 2.1 组成
 
-环境的全部包,包括 Python 本身,都来自 conda-forge,只用这一个频道。conda-forge 是社区维护的软件源,也是地理 Python 生态的标准来源:GDAL 在这里是完整的一套,PyPI 上没有现成的安装包。不用 Anaconda 公司的 defaults 频道:它与镜像它的仓库要商业授权。用户的电脑上不装 conda,也看不到它。
+环境的包,包括 Python 本身,都来自 conda-forge,只用这一个频道;唯一的例外是制图工具 frykit,conda-forge 上没有,从 PyPI 取。它是纯 Python 的,依赖都来自 conda-forge,不带自己的底层库,也就不会与环境里的 GDAL、PROJ 冲突;它附带的中国行政区划数据(`frykit[data]`)取自地图服务的接口,不随环境分发。conda-forge 是社区维护的软件源,也是地理 Python 生态的标准来源:GDAL 在这里是完整的一套,PyPI 上没有现成的安装包。不用 Anaconda 公司的 defaults 频道:它与镜像它的仓库要商业授权。用户的电脑上不装 conda,也看不到它。
 
 - 解释器是 Python 3.13,小版本固定,只跟补丁版本:补丁版本不改变包的安装位置与二进制接口,换小版本会让所有带编译代码的包与已建的虚拟环境失效,所以按一次重大升级单独处理。
 - 预装的包只收 GeoAgent 在地理任务里经常要用的,收进来的核心包取完整的版本,不为省空间删减功能:GDAL 带上 conda-forge 单独打包的全部驱动(只有一个只出 macOS 版的除外),GeoPandas 带上分级设色与交互地图。删减出来的缺口,GeoAgent 遇到时很难自己补上。清单在 `geoengine/environment/pixi.toml`。用得少的包由 GeoAgent 按需装进工作环境。
@@ -75,7 +75,7 @@ GeoCode 没有自动更新,用户卸载旧版、安装新版;卸载只删应用�
 - 准备环境不联网。环境自己的机制在运行时只有需要网格的坐标转换联网;GEE、OSM 与 GeoAgent 的脚本按各自的需要联网。
 - 环境的安装只写在 GeoCode 的数据目录里,临时文件也在其中;pip、matplotlib 这类软件运行时照它们的默认位置写缓存与配置,不归 GeoCode 管。
 - 隔离有它的限度:在 shell 里运行这个 Python,要以 `-I` 启动才挡得住用户设的 `PYTHONPATH` 与个人目录里装的包;直接运行 GDAL 的命令行工具不经过 Python,用户的 GDAL 变量与配置文件照样影响它。
-- 两个平台用同一份锁定清单,只用 conda-forge 一个频道。
+- 两个平台用同一份锁定清单,只用 conda-forge 一个频道,frykit 是唯一从 PyPI 取的包;再加 PyPI 的包,要同样是纯 Python、依赖都在 conda-forge 上的。
 
 ## 4. 与其他部分的关系
 

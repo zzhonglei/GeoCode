@@ -93,7 +93,9 @@ DEFINED=$(node -e '
   if (!python) throw new Error(`pixi.lock has no Python for ${platform}`)
   const hash = crypto.createHash("sha256").update(platform + "\n" + packages.join("\n"))
   hash.update("\npixi-unpack " + unpack + "\ninstall " + install)
-  process.stdout.write(hash.digest("hex") + " " + python[1] + " " + packages.length)
+  // Counted as pixi-unpack unpacks them into its cache and conda-meta, which a package from PyPI is not.
+  const conda = packages.filter((line) => line.startsWith("- conda:")).length
+  process.stdout.write(hash.digest("hex") + " " + python[1] + " " + conda)
 ' "$ENV/pixi.lock" "$CONDA" "$(field pixi-unpack version)" "$INSTALL")
 ID=${DEFINED%% *}
 PACKAGES=${DEFINED##* }

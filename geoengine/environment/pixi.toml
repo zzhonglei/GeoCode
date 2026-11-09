@@ -56,7 +56,16 @@ libblas = { version = "*", build = "*openblas" }
 matplotlib-base = "*"
 # Maps in a projection, with graticules and coastlines.
 cartopy = "*"
+# Perceptually uniform, colour-blind friendly scientific colormaps, and ready-made palettes such as ColorBrewer's.
+cmcrameri = "*"
+palettable = "*"
 openpyxl = "*"
 requests = "*"
 # Searching STAC catalogs of imagery, such as Planetary Computer and Earth Search.
 pystac-client = "*"
+
+# The one package from PyPI, as conda-forge has none: frykit's graticule ticks, scale bars, north arrows, frames and
+# insets for cartopy maps. A pure Python wheel whose dependencies all come from conda-forge above, so it brings no
+# native library of its own. Without its [data] extra, whose Chinese boundaries come from map services' APIs.
+[pypi-dependencies]
+frykit = "*"
