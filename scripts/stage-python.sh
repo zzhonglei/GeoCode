@@ -80,7 +80,7 @@ INSTALL=1
 # What the environment is: the addresses of the platform's packages in pixi.lock, which name each build, the version of
 # pixi-unpack, which installs them, and INSTALL.
 # Unchanged, it stays the same through a rebuild, so an installed copy of it is not installed again. Printed with the
-# Python version its packages hold.
+# Python version its packages hold and how many they are, which the loading screen counts up to as they install.
 DEFINED=$(node -e '
   const fs = require("fs"), crypto = require("crypto")
   const [lock, platform, unpack, install] = process.argv.slice(1)
@@ -93,10 +93,13 @@ DEFINED=$(node -e '
   if (!python) throw new Error(`pixi.lock has no Python for ${platform}`)
   const hash = crypto.createHash("sha256").update(platform + "\n" + packages.join("\n"))
   hash.update("\npixi-unpack " + unpack + "\ninstall " + install)
-  process.stdout.write(hash.digest("hex") + " " + python[1])
+  process.stdout.write(hash.digest("hex") + " " + python[1] + " " + packages.length)
 ' "$ENV/pixi.lock" "$CONDA" "$(field pixi-unpack version)" "$INSTALL")
-ID=${DEFINED% *}
+ID=${DEFINED%% *}
+PACKAGES=${DEFINED##* }
 PYTHON=${DEFINED#* }
+PYTHON=${PYTHON% *}
+JSON=$(printf '{ "id": "%s", "python": "%s", "platform": "%s", "packages": %s }' "$ID" "$PYTHON" "$PLATFORM" "$PACKAGES")
 
 # pixi-pack packs pixi.lock as it is, without checking it against pixi.toml, and the id above leaves pixi.toml out: a
 # change to pixi.toml not locked again would ship the old environment. A lock that matches is checked without network.
@@ -106,7 +109,8 @@ if ! "$PIXI" lock --check --no-config --manifest-path "$ENV/pixi.toml" >/dev/nul
   exit 1
 fi
 
-if [ -f "$STAGE/python.tar" ] && [ "$(node -p 'require(process.argv[1]).id' "$STAGE/python.json" 2>/dev/null)" = "$ID" ]; then
+# All of python.json, so a stage from before it held a field GeoEngine reads is written again.
+if [ -f "$STAGE/python.tar" ] && [ "$(cat "$STAGE/python.json" 2>/dev/null)" = "$JSON" ]; then
   echo "staged Python environment $ID is up to date"
   exit 0
 fi
@@ -139,5 +143,5 @@ mkdir -p "$STAGE"
 rm -f "$STAGE"/*
 mv "$CACHE/python-$PLATFORM.tar" "$STAGE/python.tar"
 cp "$UNPACK" "$STAGE/"
-printf '{ "id": "%s", "python": "%s", "platform": "%s" }\n' "$ID" "$PYTHON" "$PLATFORM" > "$STAGE/python.json"
+printf '%s\n' "$JSON" > "$STAGE/python.json"
 echo "staged Python environment $ID for $PLATFORM at $STAGE"

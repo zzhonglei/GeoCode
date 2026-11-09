@@ -25,6 +25,16 @@ const CREATE_TIMEOUT = "2 minutes"
 
 const WARM_TIMEOUT = "10 minutes"
 
+/**
+ * Imports warmed at once, each in a process of its own. They wait mostly on macOS's first check of each library, which
+ * runs alongside: on an M-series Mac, six at once took about 17 s where one after another took over 100 s, and the
+ * six heaviest together peak at about half a gigabyte.
+ */
+const WARM_CONCURRENCY = 6
+
+/** How often the loading screen's count of installed packages is brought up to date. */
+const PROGRESS_INTERVAL = 250
+
 /** Characters kept of what a failed command printed, the latest. */
 const OUTPUT_TAIL = 16 * 1024
 
@@ -38,31 +48,23 @@ const ACTIVATION = "activate."
 const UNUSED = new Set([".a", ".lib", ".pdb"])
 
 /**
- * Imported before the environment is ready, each with the name the loading screen shows;
- * importing osgeo loads GDAL's driver plugins. matplotlib is left out: importing it writes in the user's home.
+ * Imported before the environment is ready, the slowest first so the last to start are short; importing osgeo loads
+ * GDAL's driver plugins. matplotlib is left out: importing it writes in the user's home.
  */
 const WARM = [
-  ["numpy", "NumPy"],
-  ["pandas", "pandas"],
-  ["scipy.linalg", "SciPy"],
-  ["shapely", "Shapely"],
-  ["pyproj", "pyproj"],
-  ["pyogrio", "pyogrio"],
-  ["rasterio", "rasterio"],
-  ["netCDF4", "netCDF4"],
-  ["osgeo.gdal", "GDAL"],
-  ["ee", "Earth Engine"],
-  ["geedim", "geedim"],
-  ["geopandas", "GeoPandas"],
+  "geedim",
+  "pyogrio",
+  "geopandas",
+  "pandas",
+  "ee",
+  "rasterio",
+  "scipy.linalg",
+  "netCDF4",
+  "pyproj",
+  "osgeo.gdal",
+  "shapely",
+  "numpy",
 ] as const
-
-/** Prints the number of each module it is given before importing it. */
-const WARMING = [
-  "import importlib, sys",
-  "for number, name in enumerate(sys.argv[1:], 1):",
-  "    print(number)",
-  "    importlib.import_module(name)",
-].join("\n")
 
 /** Written into the base environment's site-packages as STARTUP_MODULE, which a .pth file beside it imports. */
 const STARTUP = `"""Sets GeoCode's Python environment's own variables as Python starts, and has it take its proxy
@@ -194,8 +196,8 @@ export interface Places {
   readonly data: string
 }
 
-/** What scripts/stage-python.sh writes beside the packages. */
-const Bundle = Schema.Struct({ id: Schema.String, python: Schema.String })
+/** What scripts/stage-python.sh writes beside the packages; `packages` counts them. */
+const Bundle = Schema.Struct({ id: Schema.String, python: Schema.String, packages: Schema.Number })
 
 const Marker = Schema.Struct({ id: Schema.String })
 
@@ -213,15 +215,11 @@ export interface Diagnostics {
 
 export type State =
   | { readonly status: "checking" }
-  | { readonly status: "preparing"; readonly step: "installing" | "creating" }
-  /** After installing or creating only: another start warms up too quickly to show. `number` counts from 1. */
-  | {
-      readonly status: "preparing"
-      readonly step: "warming"
-      readonly name: string
-      readonly number: number
-      readonly total: number
-    }
+  /** `done` of the bundle's `total` packages, each counted half once unpacked and half once installed. */
+  | { readonly status: "preparing"; readonly step: "installing"; readonly done: number; readonly total: number }
+  | { readonly status: "preparing"; readonly step: "creating" }
+  /** After installing or creating only: another start warms up too quickly to show. `done` of `total` imports. */
+  | { readonly status: "preparing"; readonly step: "warming"; readonly done: number; readonly total: number }
   /** `python` is the working environment's interpreter, for GeoAgent; `base` the base environment's. */
   | { readonly status: "ready"; readonly version: string; readonly python: string; readonly base: string }
   | { readonly status: "failed"; readonly diagnostics: Diagnostics }
@@ -267,7 +265,8 @@ export const capability = (places: Places): Engine.Capability =>
     // In place: conda's packages note where they are installed, so the base environment cannot be moved there later.
     const install = (bundle: typeof Bundle.Type) =>
       Effect.gen(function* () {
-        yield* writer.commit(token, { status: "preparing", step: "installing" })
+        const total = bundle.packages
+        yield* writer.commit(token, { status: "preparing", step: "installing", done: 0, total })
         // The marker first: a start that finds none installs again, whatever this one leaves.
         yield* attempt("install", async () => {
           await fsp.rm(where.marker, { force: true })
@@ -278,6 +277,7 @@ export const capability = (places: Places): Engine.Capability =>
         })
         const temporary = yield* attempt("install", () => fsp.mkdtemp(path.join(where.root, UNPACKING)))
         yield* Effect.gen(function* () {
+          yield* watchInstalling(temporary, total)
           const result = yield* runtime
             .run({
               command: path.join(places.bundle, UNPACK),
@@ -297,8 +297,27 @@ export const capability = (places: Places): Engine.Capability =>
             await prune(where.base)
             await fsp.writeFile(where.marker, JSON.stringify({ id: bundle.id }) + "\n")
           })
-        }).pipe(Effect.ensuring(remove(temporary)))
+        }).pipe(Effect.scoped, Effect.ensuring(remove(temporary)))
       })
+
+    // Polled while pixi-unpack runs, which prints no progress a program can read: what it has unpacked into its
+    // temporary folder, which it empties as it ends, so only ever more, and what it has installed into the base.
+    const watchInstalling = (temporary: string, total: number) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          let unpacked = 0
+          let done = 0
+          return setInterval(() => {
+            const { extracted, installed } = installing(temporary, where.base)
+            unpacked = Math.max(unpacked, Math.min(extracted, total))
+            const next = Math.floor((unpacked + Math.min(installed, total)) / 2)
+            if (next <= done) return
+            done = next
+            runSync(writer.commit(token, { status: "preparing", step: "installing", done, total }))
+          }, PROGRESS_INTERVAL)
+        }),
+        (timer) => Effect.sync(() => clearInterval(timer)),
+      )
 
     const create = () =>
       Effect.gen(function* () {
@@ -315,49 +334,39 @@ export const capability = (places: Places): Engine.Capability =>
     const runSync = Effect.runSyncWith(yield* Effect.context<never>())
 
     // Through base, which nothing GeoAgent installs can change; only a speed-up, so a failure is only logged.
-    const warm = (shown: boolean) => {
-      // Off once the run has settled: output delivered after it would commit past ready.
-      let reporting = shown
-      let pending = ""
-      const onChunk = (chunk: string) => {
-        if (!reporting) return
-        const lines = (pending + chunk).split(/\r?\n/)
-        pending = lines.pop() ?? ""
-        for (const line of lines) {
-          const number = Number(line)
-          const name = WARM[number - 1]?.[1]
-          if (name === undefined) continue
-          // Committed at once: a commit left for later could land after ready and take it back.
-          runSync(writer.commit(token, { status: "preparing", step: "warming", name, number, total: WARM.length }))
-        }
-      }
-      return runtime
-        .run({
-          ...Bundled.python(where.basePython, ["-c", WARMING, ...WARM.map(([module]) => module)]),
-          delivery: { mode: "incremental", onChunk },
-          clocks: { total: WARM_TIMEOUT },
-        })
-        .pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              reporting = false
-            }),
-          ),
-          Effect.flatMap((result) =>
-            result.reason === "exit" && result.code === 0
-              ? Effect.void
-              : Effect.logWarning("GeoEngine could not warm up the Python environment", {
-                  reason: result.reason,
-                  code: result.code,
-                  signal: result.signal,
-                  stderr: result.stderr.slice(-OUTPUT_TAIL),
+    const warm = (shown: boolean) =>
+      Effect.gen(function* () {
+        let done = 0
+        const report = () =>
+          shown ? writer.commit(token, { status: "preparing", step: "warming", done, total: WARM.length }) : Effect.void
+        yield* report()
+        yield* Effect.forEach(
+          WARM,
+          (module) =>
+            python(where.basePython, ["-c", `import ${module}`], WARM_TIMEOUT).pipe(
+              Effect.flatMap((result) =>
+                result.reason === "exit" && result.code === 0
+                  ? Effect.void
+                  : Effect.logWarning(`GeoEngine could not warm up ${module} in the Python environment`, {
+                      reason: result.reason,
+                      code: result.code,
+                      signal: result.signal,
+                      stderr: result.stderr.slice(-OUTPUT_TAIL),
+                    }),
+              ),
+              Effect.catch((error) =>
+                Effect.logWarning(`GeoEngine could not warm up ${module} in the Python environment`, error.message),
+              ),
+              Effect.andThen(
+                Effect.suspend(() => {
+                  done += 1
+                  return report()
                 }),
-          ),
-          Effect.catch((error) =>
-            Effect.logWarning("GeoEngine could not warm up the Python environment", error.message),
-          ),
+              ),
+            ),
+          { concurrency: WARM_CONCURRENCY, discard: true },
         )
-    }
+      })
 
     const prepare = Effect.gen(function* () {
       const text = yield* attempt("bundle", () => fsp.readFile(path.join(places.bundle, "python.json"), "utf-8"))
@@ -428,6 +437,27 @@ function expect(step: Step, what: string, result: Runtime.Result, output: string
         : `${what} exited with code ${result.code}`
   const tail = output.slice(-OUTPUT_TAIL)
   return Effect.fail(new Failed({ step, message: ended, ...(tail ? { output: tail } : {}) }))
+}
+
+/**
+ * How far pixi-unpack has got: the packages it has unpacked into the cache of its temporary folder, each a folder
+ * beside a .lock file, and those it has installed into the base, each recorded in conda-meta. As pixi-unpack 0.7 lays
+ * them out; another layout only leaves the count behind.
+ */
+function installing(temporary: string, base: string) {
+  const names = (folder: string) => {
+    try {
+      return fs.readdirSync(folder)
+    } catch {
+      return []
+    }
+  }
+  let extracted = 0
+  for (const inner of names(temporary)) {
+    extracted += names(path.join(temporary, inner, "cache")).filter((name) => !name.endsWith(".lock")).length
+  }
+  const installed = names(path.join(base, "conda-meta")).filter((name) => name.endsWith(".json")).length
+  return { extracted, installed }
 }
 
 /** A leftover is only space taken: one that cannot go now is tried again at the next start. */

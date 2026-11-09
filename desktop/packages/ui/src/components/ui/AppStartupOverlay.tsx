@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { useI18n } from '@/lib/i18n';
 import { OpenChamberLogo } from './OpenChamberLogo';
+import { STARTUP_NOTE_LIFT } from '@/geocode/PythonPreparing'; // GeoCode: see the rising logo
 
 // A start that is still on the logo after this long says so, instead of
 // looking frozen while the app keeps retrying underneath.
@@ -38,6 +39,14 @@ export const AppStartupOverlay: React.FC<{ ready: boolean; animated?: boolean; n
       }}
       style={{ pointerEvents: ready ? 'none' : 'auto' }}
     >
+      {/* --- GeoCode: with a note the logo and the note rise together, so the two stay centered as one --- */}
+      <motion.div
+        className="absolute inset-0 flex items-center justify-center"
+        initial={{ y: 0 }}
+        animate={{ y: note ? -STARTUP_NOTE_LIFT : 0 }}
+        transition={{ duration: reducedMotion ? 0 : 0.4, ease: 'easeOut' }}
+      >
+      {/* --- /GeoCode --- */}
       <OpenChamberLogo width={120} height={120} isAnimated={animated} variant="splash" />
       {/* Absolutely positioned below the (still perfectly centered) logo so
           the text never pushes it up. 50% + half the 120px logo + a gap. */}
@@ -48,6 +57,7 @@ export const AppStartupOverlay: React.FC<{ ready: boolean; animated?: boolean; n
         </div>
       ) : null}
       {/* --- /GeoCode --- */}
+      </motion.div>{/* GeoCode: see the rising logo */}
       {slow && !note ? ( // GeoCode: the note takes its place
         <p role="status" className="absolute inset-x-0 top-[calc(50%+84px)] px-6 text-center typography-small text-muted-foreground">
           {t('startup.overlay.slow')}

@@ -5,7 +5,7 @@ import path from "node:path"
 import { test } from "node:test"
 import { Environment } from "../../../src/python/index.ts"
 import { python3 } from "../../support/common.ts"
-import { bundle, calls, exists, settle, steps, temporary } from "../../support/python.ts"
+import { PACKAGES, bundle, calls, exists, settle, steps, temporary } from "../../support/python.ts"
 
 /** In order: a folder's listing is not in one on every file system. */
 const listed = async (folder: string) => (await fs.readdir(folder)).sort()
@@ -21,9 +21,14 @@ test(
 
       assert.deepEqual(last, { status: "ready", version: "3.13.16", python: where.envPython, base: where.basePython })
       assert.deepEqual([...new Set(steps(states))], ["installing", "creating", "warming"])
-      // Guards against the loading screen naming another package than the one being imported, the first.
-      const warming = states.find((state) => state.status === "preparing" && state.step === "warming")
-      assert.deepEqual(warming && { name: warming.name, number: warming.number }, { name: "NumPy", number: 1 })
+      // Guards against the loading screen's warm-up count skipping an import, running past its total or standing still.
+      const warming = states.flatMap((state) =>
+        state.status === "preparing" && state.step === "warming" ? [[state.done, state.total]] : [],
+      )
+      assert.deepEqual(
+        warming,
+        Array.from({ length: 13 }, (_, done) => [done, 12]),
+      )
       assert.ok(await exists(path.join(where.base, "from-one")))
       assert.equal(JSON.parse(await fs.readFile(where.marker, "utf-8")).id, "one")
       // Without pixi-unpack's activation script and temporary folder.
@@ -51,10 +56,52 @@ test("the environment is ready only once the base interpreter has warmed it up",
     // Guards against calling the environment ready before the warm-up is over, or warming it up through the working
     // environment.
     assert.ok(await exists(path.join(directory, "warmed")))
+    // Guards against importing one package after another, which waits out macOS's first check of each library in turn,
+    // or all at once, which takes the memory of every import together.
+    const overlap = (await fs.readFile(path.join(directory, "overlap"), "utf-8"))
+      .split("\n")
+      .filter(Boolean)
+      .map(Number)
+    assert.equal(overlap.length, 12)
+    assert.ok(Math.max(...overlap) > 1 && Math.max(...overlap) <= 6, JSON.stringify(overlap))
   } finally {
     await fs.rm(directory, { recursive: true, force: true })
   }
 })
+
+test(
+  "the loading screen counts the packages as pixi-unpack unpacks and installs them",
+  { skip: !python3 },
+  async () => {
+    const directory = await temporary()
+    try {
+      const { states } = await settle(directory, await bundle(directory, "one", { gradual: true }))
+      const counts = states.flatMap((state) =>
+        state.status === "preparing" && state.step === "installing" ? [[state.done, state.total]] : [],
+      )
+      // Guards against a count that stands still through the install, goes back when pixi-unpack empties its temporary
+      // folder, or runs past the bundle's packages.
+      assert.ok(
+        counts.every(([, total]) => total === PACKAGES),
+        JSON.stringify(counts),
+      )
+      const done = counts.map(([count]) => count)
+      assert.deepEqual(
+        done,
+        [...done].sort((a, b) => a - b),
+        JSON.stringify(counts),
+      )
+      assert.equal(done[0], 0)
+      assert.ok(
+        done.some((count) => count > 0 && count < PACKAGES),
+        JSON.stringify(counts),
+      )
+      assert.ok(done.at(-1)! >= PACKAGES - 1, JSON.stringify(counts))
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  },
+)
 
 test(
   "pixi-unpack has its temporary folder in the data directory, and none of the user's variables",

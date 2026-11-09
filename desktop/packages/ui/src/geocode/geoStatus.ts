@@ -38,11 +38,11 @@ export const withGeoStatusSnapshot = (current: GeoStatuses, snapshot: GeoStatusS
   return next;
 };
 
-// State in geoengine/src/python/index.ts; of preparing, only the warm-up's package is read here.
+// State in geoengine/src/python/index.ts; of preparing, the step and how far it has got are read here.
 const pythonSchema = z.union([
   z.object({ status: z.literal('checking') }),
-  z.object({ status: z.literal('preparing'), step: z.literal('warming'), name: z.string(), number: z.number(), total: z.number() }),
-  z.object({ status: z.literal('preparing') }),
+  z.object({ status: z.literal('preparing'), step: z.enum(['installing', 'warming']), done: z.number(), total: z.number() }),
+  z.object({ status: z.literal('preparing'), step: z.literal('creating') }),
   z.object({ status: z.literal('ready') }),
   z.object({
     status: z.literal('failed'),
@@ -50,8 +50,10 @@ const pythonSchema = z.union([
   }),
 ]);
 
-/** The package the warm-up is importing, `number` counting from 1. */
-type PythonLoading = { name: string; number: number; total: number };
+/** The step of preparing the environment, and how far it is: packages installed, or imports warmed up. */
+export type PythonProgress =
+  | { step: 'installing' | 'warming'; done: number; total: number }
+  | { step: 'creating' };
 
 /**
  * Whether a window may open: it waits for GeoCode's Python environment, unless this server has no GeoEngine. While the
@@ -59,7 +61,7 @@ type PythonLoading = { name: string; number: number; total: number };
  */
 export type PythonGate =
   | { state: 'waiting' }
-  | { state: 'preparing'; loading?: PythonLoading }
+  | { state: 'preparing'; progress: PythonProgress }
   | { state: 'open' }
   | { state: 'failed'; error: string };
 
@@ -74,15 +76,28 @@ export const pythonGateOf = (statuses: GeoStatuses, engine: boolean | undefined)
   if (parsed.data.status === 'ready') return { state: 'open' };
   if (parsed.data.status === 'checking') return { state: 'waiting' };
   if (parsed.data.status === 'preparing') {
-    if (!('step' in parsed.data)) return { state: 'preparing' };
-    const { name, number, total } = parsed.data;
-    return { state: 'preparing', loading: { name, number, total } };
+    const { step } = parsed.data;
+    if (step === 'creating') return { state: 'preparing', progress: { step } };
+    return { state: 'preparing', progress: { step, done: parsed.data.done, total: parsed.data.total } };
   }
   const failed = parsed.data.diagnostics;
   return { state: 'failed', error: [`${failed.step}: ${failed.message}`, failed.output].filter(Boolean).join('\n\n') };
 };
 
 export type PreparingGate = Extract<PythonGate, { state: 'preparing' }>;
+
+/**
+ * Where each step starts and ends on the loading screen's bar, by how long each took on a first start on an M-series
+ * Mac: about 15 s installing, 4 s making the working environment and 17 s warming up.
+ */
+const SPANS = { installing: [0, 0.4], creating: [0.4, 0.5], warming: [0.5, 1] } as const;
+
+/** How much of the preparation is done, from 0 to 1: each step fills its span as far as it has got. */
+export const pythonFractionOf = (progress: PythonProgress): number => {
+  const [from, to] = SPANS[progress.step];
+  const share = progress.step === 'creating' || progress.total <= 0 ? 0 : Math.min(Math.max(progress.done / progress.total, 0), 1);
+  return from + (to - from) * share;
+};
 
 /**
  * Whether the loading screen may go, once the rest of the start is done, and what it says. `shown` is what it said

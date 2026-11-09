@@ -9,6 +9,9 @@ import { start } from "./engine.ts"
 /** The Python version a bundle says its environment has. */
 export const VERSION = "3.13.16"
 
+/** How many packages a bundle says it holds. */
+export const PACKAGES = 4
+
 /** The base environment's site-packages, as a bundle stages it. */
 export const sitePackages = (where: ReturnType<typeof Environment.layout>) =>
   path.join(where.stdlib(VERSION), "site-packages")
@@ -32,11 +35,17 @@ const executable = async (file: string, text: string) => {
  * A bundle as scripts/stage-python.sh stages one. Its pixi-unpack unpacks the packed environment through its temporary
  * folder and leaves an activation script beside it, as the real one does; the environment's python3 runs the real one.
  * Both first note their arguments and environment in `calls.log`. With `slowWarm`, the python3 waits a second before
- * running the warm-up and then leaves a file `warmed` beside the log; the working environment's python is the real one,
- * so a warm-up through it leaves none. The environment holds a file named for the bundle's id, to tell which bundle the
- * base came from, and files of the kinds installing takes away.
+ * each import of the warm-up, adds to `overlap` how many imports were running then, and leaves a file `warmed`; the
+ * working environment's python is the real one, so a warm-up through it leaves none. With `gradual`, pixi-unpack goes
+ * through the bundle's PACKAGES slowly as the real one lays them out, first unpacking each into its temporary folder's
+ * cache, then recording each in the base's conda-meta. The environment holds a file named for the bundle's id, to tell
+ * which bundle the base came from, and files of the kinds installing takes away.
  */
-export const bundle = async (directory: string, id: string, options: { fails?: boolean; slowWarm?: boolean } = {}) => {
+export const bundle = async (
+  directory: string,
+  id: string,
+  options: { fails?: boolean; slowWarm?: boolean; gradual?: boolean } = {},
+) => {
   const folder = path.join(directory, `bundle-${id}`)
   const tree = path.join(folder, "tree", "python")
   const log = path.join(directory, "calls.log")
@@ -50,8 +59,10 @@ export const bundle = async (directory: string, id: string, options: { fails?: b
       `{ echo "PYTHON $*"; env; echo END; } >> '${log}'`,
       ...(options.slowWarm
         ? [
-            `case "$*" in *importlib*)`,
-            `  sleep 1; '${python3}' "$@"; code=$?`,
+            `case "$*" in *"-c import "*)`,
+            `  mkdir '${path.join(directory, "running")}'.$$; sleep 1`,
+            `  ls -d '${path.join(directory, "running")}'.* | wc -l >> '${path.join(directory, "overlap")}'`,
+            `  '${python3}' "$@"; code=$?; rmdir '${path.join(directory, "running")}'.$$`,
             `  touch '${path.join(directory, "warmed")}'; exit $code ;;`,
             "esac",
           ]
@@ -74,10 +85,22 @@ export const bundle = async (directory: string, id: string, options: { fails?: b
       options.fails ? `echo "the packages could not be installed" >&2; exit 3` : "",
       "pack=$1; shift",
       "while [ $# -gt 0 ]; do case $1 in --output-directory) out=$2 ;; --env-name) name=$2 ;; esac; shift; done",
+      ...(options.gradual
+        ? [
+            'cache="$TMPDIR/.tmpfake/cache"; mkdir -p "$cache"',
+            `for n in $(seq ${PACKAGES}); do mkdir "$cache/p$n"; touch "$cache/p$n.lock"; sleep 0.4; done`,
+          ]
+        : []),
       'tar -xf "$pack" -C "$TMPDIR" && mv "$TMPDIR/python" "$out/$name" && echo "# activate" > "$out/activate.sh"',
+      ...(options.gradual
+        ? [
+            'rm -rf "$TMPDIR/.tmpfake"; mkdir -p "$out/$name/conda-meta"',
+            `for n in $(seq ${PACKAGES}); do touch "$out/$name/conda-meta/p$n.json"; sleep 0.4; done`,
+          ]
+        : []),
     ].join("\n") + "\n",
   )
-  await fs.writeFile(path.join(folder, "python.json"), JSON.stringify({ id, python: VERSION }))
+  await fs.writeFile(path.join(folder, "python.json"), JSON.stringify({ id, python: VERSION, packages: PACKAGES }))
   return folder
 }
 
