@@ -47,6 +47,8 @@ type Texts = {
   running: Record<MergedTool, string>;
   done: Record<MergedTool, string>;
   files: (count: number) => string;
+  /** Beside a row's title, how many of its calls failed. */
+  failed: (count: number) => string;
   /** qgisrun's row while it runs, naming the algorithm. */
   runs: (algorithm: string) => string;
   /** The lines the geo tools' own permission cards share. */
@@ -124,6 +126,7 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
     running: { qgisdoc: 'Reading QGIS Documentation', readgeodata: 'Reading Geospatial Data' },
     done: { qgisdoc: 'QGIS Documentation Read', readgeodata: 'Geospatial Data Read' },
     files: (count) => (count === 1 ? '1 file' : `${count} files`),
+    failed: (count) => `${count} failed`,
     runs: (algorithm) => `Running ${algorithm}`,
     card: {
       colon: ': ',
@@ -173,6 +176,7 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
     running: { qgisdoc: '正在阅读 QGIS 文档', readgeodata: '正在读取地理数据' },
     done: { qgisdoc: '已阅读 QGIS 文档', readgeodata: '已读取地理数据' },
     files: (count) => `${count} 个文件`,
+    failed: (count) => `${count} 个失败`,
     runs: (algorithm) => `正在执行${algorithm}`,
     card: {
       colon: '：',
@@ -222,6 +226,7 @@ const TEXT: { en: Texts } & Partial<Record<Locale, Texts>> = {
     running: { qgisdoc: '正在閱讀 QGIS 文件', readgeodata: '正在讀取地理資料' },
     done: { qgisdoc: '已閱讀 QGIS 文件', readgeodata: '已讀取地理資料' },
     files: (count) => `${count} 個檔案`,
+    failed: (count) => `${count} 個失敗`,
     runs: (algorithm) => `正在執行${algorithm}`,
     card: {
       colon: '：',
@@ -377,6 +382,8 @@ export const geoActivity = (messages: readonly ChatMessageEntry[], locale: Local
 
 /** How many files a row of readgeodata calls read. */
 export const geoFileCount = (count: number, locale: Locale) => textIn(locale).files(count);
+
+export const geoFailedCount = (count: number, locale: Locale) => textIn(locale).failed(count);
 
 /** The permission card's summary for a geo tool's own action; undefined for any other action. */
 export const geoPermissionTitle = (action: string): string | undefined => (isGeoAction(action) ? text().asks[action] : undefined);

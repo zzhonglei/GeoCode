@@ -6,18 +6,19 @@ import { MinDurationShineText } from '@/components/chat/message/parts/MinDuratio
 import { ToolRevealOnMount } from '@/components/chat/message/parts/ToolRevealOnMount';
 import { Icon } from '@/components/icon/Icon';
 import { Text } from '@/components/ui/text';
-import { useI18nStore } from '@/lib/i18n';
+import { useI18nStore, type Locale } from '@/lib/i18n';
 import type { ToolPart } from '@/lib/opencode/model';
 import { cn } from '@/lib/utils';
 
 import { EarthIcon } from './EarthIcon';
 import { GeeRunRow } from './GeeRunRow';
-import { geoDataPath, geoFileCount, geoRunTitle, geoToolDescription } from './geoTools';
+import { geoDataPath, geoFailedCount, geoFileCount, geoRunTitle, geoToolDescription } from './geoTools';
 import { isGeoRunRow, useGeoToolRunStore } from './geoToolRuns';
 import { OsmRow } from './OsmRows';
 import { isOsmTool } from './osmView';
 import { QgisLogo } from './QgisLogo';
 import { QgisRunRow } from './QgisRunRow';
+import { failureLines } from './runLines';
 
 /** How long what the row reads stays before the next call replaces it, so it can be read. */
 const HOLD_MS = 400;
@@ -28,6 +29,30 @@ const ROW_TEXT_CLASS = '!text-[length:var(--text-meta)] !leading-5 sm:!leading-6
 const working = (part: ToolPart) => part.state.status === 'pending' || part.state.status === 'running';
 
 const subjectOf = (part: ToolPart) => geoToolDescription(part.tool, part.state.input);
+
+/** Why a call failed, as the other geo rows say it; undefined for one that did not. */
+const failureOf = (part: ToolPart) =>
+  part.state.status === 'error'
+    ? failureLines(part.state.error, undefined, undefined)
+        .map((line) => line.text)
+        .join('\n')
+    : undefined;
+
+/** How many of a row's calls failed, in the colour of an error, with why on hover. */
+const Failed: React.FC<{ failures: readonly string[]; locale: Locale }> = ({
+  failures,
+  locale,
+}) =>
+  failures.length > 0 ? (
+    <Text
+      variant="static"
+      className={cn('typography-meta flex-shrink-0 whitespace-nowrap', ROW_TEXT_CLASS)}
+      style={{ color: 'var(--status-error)' }}
+      title={failures.join('\n\n')}
+    >
+      {geoFailedCount(failures.length, locale)}
+    </Text>
+  ) : null;
 
 // By run, outside the row: a call joining the run moves the row to it, and neither may start over.
 const held = new Map<string, { shown: string | undefined; since: number }>();
@@ -115,6 +140,7 @@ export const GeoToolRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ par
   const key = run?.first ?? part.id;
   const active = Boolean(run?.open) || parts.some(working);
   const latest = parts.map(subjectOf).filter(Boolean).at(-1);
+  const failures = parts.map(failureOf).filter((failure): failure is string => failure !== undefined);
   const drawn = isGeoRunRow(part, run);
   const subject = useHeld(key, active ? latest : undefined, drawn);
   // By the run's key, so the row stays open as it moves to a call joining the run.
@@ -142,14 +168,20 @@ export const GeoToolRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ par
               {subject}
             </Text>
           ) : null}
+          <Failed failures={failures} locale={locale} />
         </div>
       </ToolRevealOnMount>
     );
   }
 
-  const files = [...new Set(parts.map(subjectOf).filter((file): file is string => Boolean(file)))];
+  const read = parts.filter((call) => call.state.status !== 'error');
+  const files = [...new Set(read.map(subjectOf).filter((file): file is string => Boolean(file)))];
   // Files, not entries: the layers of one file are listed apart.
-  const count = new Set(parts.map((call) => geoDataPath(call.state.input)).filter(Boolean)).size;
+  const count = new Set(read.map((call) => geoDataPath(call.state.input)).filter(Boolean)).size;
+  const failed = parts.flatMap((call) => {
+    const failure = failureOf(call);
+    return failure === undefined ? [] : [{ id: call.id, file: subjectOf(call), failure }];
+  });
   // As RunRow's.
   const toggle = (row: HTMLElement) => {
     if (!open) dispatchRowExpand(row);
@@ -198,6 +230,7 @@ export const GeoToolRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ par
               {geoFileCount(count, locale)}
             </Text>
           ) : null}
+          <Failed failures={failures} locale={locale} />
         </div>
         {open ? (
           <div className="pb-1 ps-6 pe-2 min-w-0">
@@ -209,6 +242,25 @@ export const GeoToolRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ par
                 title={file}
               >
                 {file}
+              </div>
+            ))}
+            {failed.map((call) => (
+              <div key={call.id} className="min-w-0">
+                {call.file ? (
+                  <div
+                    className={cn('typography-meta truncate whitespace-nowrap', ROW_TEXT_CLASS)}
+                    style={{ color: 'var(--tools-description)' }}
+                    title={call.file}
+                  >
+                    {call.file}
+                  </div>
+                ) : null}
+                <div
+                  className={cn('typography-meta whitespace-pre-wrap break-words', ROW_TEXT_CLASS)}
+                  style={{ color: 'var(--status-error)' }}
+                >
+                  {call.failure}
+                </div>
               </div>
             ))}
           </div>
