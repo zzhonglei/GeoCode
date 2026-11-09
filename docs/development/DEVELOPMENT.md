@@ -124,7 +124,7 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 
 - 路径:拼接与解析用 `path`,不手写 `/`;判断一个路径在不在另一个之下,`path.resolve` 之后用 `path.relative`,不比较字符串前缀。Windows 的路径不分大小写,盘符的大小写也不固定。文件网址与路径互转用 `fileURLToPath`、`pathToFileURL`,`new URL(...).pathname` 在 Windows 上得到 `/C:/…`。
 - 路径长度:超过 260 个字符的路径有的程序打不开,`snapshot`、`worktree` 与 `npm` 下容易超;套接字的路径也有约 100 字节的上限。
-- 启动程序:`.bat` 与 `.cmd` 不经 shell 就启动不了(Node 拒绝),经 `cmd.exe` 时命令行里的 `"`、`%`、`^` 与空格会被改写,所以脚本与请求经标准输入交给子进程(`docs/geoengine/QGIS.md` 第 2.1 节)。cross-spawn 经 `cmd.exe` 启动时,程序不存在不一定报 `ENOENT`。
+- 启动程序:`.bat` 与 `.cmd` 不经 shell 就启动不了(Node 拒绝),经 `cmd.exe` 时命令行里的 `"`、`%`、`^` 与空格会被改写,所以脚本与请求经标准输入交给子进程(`QGIS.md` 第 2.1 节)。cross-spawn 经 `cmd.exe` 启动时,程序不存在不一定报 `ENOENT`。
 - 结束程序:没有 POSIX 信号,`kill()` 直接终止,不带走子进程;结束整棵进程树用 `taskkill /T`。崩溃表现为很大的退出码(如 3221225477),`signal` 是空的,判断崩溃不能只看信号。
 - 文件:打开着的文件删不掉也改不了名(`EBUSY`、`EPERM`),杀毒软件与索引服务正扫着它时也一样;删除与改名要处理失败,目标被占着时改名覆盖它也会失败。可执行权限没有意义;建符号链接要管理员或开发者模式。
 - 环境变量:名字不分大小写,系统给的可能是 `Path`。`process.env` 本身不分,复制成普通对象后就分了,再设 `PATH` 会多出一份,子进程取哪一份不确定(`geoengine/src/runtime.ts` 的 `overlay`)。主目录在 `USERPROFILE`,没有 `HOME`,用 `os.homedir()`。
