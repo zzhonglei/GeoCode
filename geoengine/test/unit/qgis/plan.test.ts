@@ -168,6 +168,40 @@ test("an output that would overwrite takes the first free name, a folder holding
   }
 })
 
+// Guards against a failed run leaving half-written folders behind, against taking with them what was there before it,
+// and against a GeoPackage it added a table to, which may hold another run's too, being removed or left unsaid.
+test("a run that does not finish loses the folders it made, nothing that was there, and tells of its GeoPackages", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "geoengine-plan-"))
+  try {
+    const at = (...names: string[]) => path.join(directory, ...names)
+    const slots = (request: Plan.Request, files: string[]) =>
+      Plan.substitute(request.parameters, located(request).slots, files).slots
+    const tiles = (folder: string) =>
+      slots({ algorithm: "native:tilesxyzdirectory", parameters: { OUTPUT_DIRECTORY: folder } }, [at(folder)])
+    const table = (file: string) =>
+      slots({ algorithm: "native:buffer", parameters: { OUTPUT: `ogr:dbname='${file}' table="t"` } }, [at(file)])
+    await fs.mkdir(at("kept"))
+    await fs.writeFile(at("kept", "mine.txt"), "")
+    await fs.writeFile(at("old.gpkg"), "")
+    const found = [...tiles("new"), ...tiles("kept"), ...table("old.gpkg"), ...table("fresh.gpkg")]
+
+    const before = await Plan.present(found)
+    // What the run writes before it fails.
+    await fs.mkdir(at("new", "0"), { recursive: true })
+    await fs.writeFile(at("new", "0", "0.png"), "")
+    await fs.writeFile(at("kept", "1.png"), "")
+    await fs.writeFile(at("fresh.gpkg"), "")
+    await fs.writeFile(at("fresh.gpkg-wal"), "")
+
+    const left = await Plan.discard(found, before)
+    assert.deepEqual((await fs.readdir(directory)).sort(), ["fresh.gpkg", "fresh.gpkg-wal", "kept", "old.gpkg"])
+    assert.deepEqual(await fs.readdir(at("kept")), ["mine.txt"])
+    assert.deepEqual(left, [`${at("old.gpkg")} (table t)`, `${at("fresh.gpkg")} (table t)`])
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
 test("a table added to a GeoPackage that has it takes the first free table name", async () => {
   const request = {
     algorithm: "native:buffer",

@@ -528,9 +528,9 @@ export const capability: Engine.Capability = Effect.gen(function* () {
         if (cwd !== undefined && !(yield* Effect.promise(() => isDirectory(cwd)))) {
           return yield* new Engine.Failure({ code: "invalid-params", message: `${cwd} is not a directory` })
         }
-        yield* Effect.promise(() => Plan.folders(located.slots))
-        // What is there before it runs, which a run that does not finish leaves alone.
+        // What is there before it runs, which a run that does not finish leaves alone; asked before folders are made.
         const before = yield* Effect.promise(() => Plan.present(located.slots))
+        yield* Effect.promise(() => Plan.folders(located.slots))
         return yield* execute(runtime, current, params, located.algorithm, located.slots, before, context)
       }).pipe(
         Effect.ensuring(

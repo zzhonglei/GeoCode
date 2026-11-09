@@ -6,6 +6,7 @@ import { Array as Arr, Effect, Exit, Schema } from "effect"
 import { FileAccess } from "../file-access.js"
 import type { Location } from "../location.js"
 import type { Permission } from "../permission.js"
+import { ToolOutput } from "../tool-output.js"
 import { GeoAnswer } from "./answer.js"
 import { GeoEngine } from "./geoengine.js"
 import DESCRIPTION from "./qgisrun.txt"
@@ -22,6 +23,9 @@ const START_TIMEOUT = 120
 
 /** The messages the interface is given, the latest; the answer keeps the latest that fit. */
 const SHOWN_MESSAGES = 500
+
+/** The messages kept while a run goes on, the latest: as many as the answer has lines, of which each takes one at least. */
+const KEPT_MESSAGES = Math.max(SHOWN_MESSAGES, ToolOutput.MAX_LINES)
 
 /**
  * How often, at least, the interface is told while the run goes on: progress reaches only the windows open as it is
@@ -246,6 +250,8 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
           if ("begun" in decoded.value) begun = true
           else if ("percent" in decoded.value) percent = decoded.value.percent
           else messages.push({ level: decoded.value.level, text: decoded.value.text })
+          // Cut back with room to spare, not on every message past the bound, which would copy them all each time.
+          if (messages.length > 2 * KEPT_MESSAGES) messages.splice(0, messages.length - KEPT_MESSAGES)
           if (now() - shown >= 250) return show
           changed = true
           return Effect.void
@@ -282,12 +288,19 @@ export const make = (permission: Permission.Interface, access: FileAccess.Interf
           metadata: state({ outcome, text: ending }),
         }
       }
-      // GeoEngine removes what the stopped run made, once QGIS has exited.
-      if (ran === undefined)
+      // GeoEngine removes what the stopped run made, once QGIS has exited, but for the GeoPackages it added a table to.
+      if (ran === undefined) {
+        const tables = plan.outputs.flatMap((output) =>
+          typeof output.value === "string" && output.value.startsWith("ogr:") ? [`- ${output.value}`] : [],
+        )
         return answer(
           "timeout",
-          `Stopped after ${GeoAnswer.seconds(now() - started)}, with no message from QGIS for the last ${limit()} s; the output files it created were removed.`,
+          [
+            `Stopped after ${GeoAnswer.seconds(now() - started)}, with no message from QGIS for the last ${limit()} s; the output files and folders it created were removed.`,
+            ...(tables.length ? ["These outputs may be incomplete:", ...tables] : []),
+          ].join("\n"),
         )
+      }
       if (Exit.isSuccess(ran)) {
         const decoded = decodeEnding(ran.value)
         if (Exit.isFailure(decoded)) {

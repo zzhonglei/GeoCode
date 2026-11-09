@@ -304,28 +304,43 @@ export const folders = (found: readonly Slot[]) =>
       .map((folder) => fsp.mkdir(folder, { recursive: true }).catch(() => {})),
   )
 
-/** Which of the files a run's outputs make are there already, before it runs. */
+/** Which of the files and output folders a run's outputs write, and what those folders hold, are there already. */
 export const present = async (found: readonly Slot[]) => {
-  const files = outputFiles(found).flatMap(made)
-  const there = await Promise.all(files.map(exists))
-  return new Set(files.filter((_, index) => there[index]))
+  const paths = [...outputFiles(found).flatMap(made), ...outputFolders(found)]
+  const there = await Promise.all(paths.map(exists))
+  const held = await Promise.all(outputFolders(found).map(entries))
+  return new Set([...paths.filter((_, index) => there[index]), ...held.flat()])
 }
 
 /**
- * Removes what a run that did not finish made, which may be half written: the files of its outputs that were not
- * there before it. Returns the outputs still there, which may be incomplete.
+ * Removes what a run that did not finish made, which may be half written: its output files, output folders and what it
+ * put in an output folder that was there, each that was not there before it. Returns the outputs still there, which
+ * may be incomplete, among them every GeoPackage it added a table to: a table cannot be taken out of one, and one the
+ * run made may hold the table another run added meanwhile.
  */
 export const discard = async (found: readonly Slot[], before: ReadonlySet<string>) => {
   const files = outputFiles(found)
+  const folders = outputFolders(found)
+  const tables = databases(found)
   // One that cannot be removed is reported as still there.
-  await Promise.all(
-    files
+  await Promise.all([
+    ...files
       .flatMap(made)
       .filter((file) => !before.has(file))
-      .map((file) => fsp.rm(file, { force: true }).catch(() => {})),
-  )
-  const there = await Promise.all(files.map(exists))
-  return [...new Set(files.filter((_, index) => there[index]))]
+      .map(remove),
+    ...folders.map(async (folder) =>
+      before.has(folder)
+        ? Promise.all((await entries(folder)).filter((entry) => !before.has(entry)).map(remove))
+        : remove(folder),
+    ),
+  ])
+  const left = await Promise.all([
+    ...files.map(async (file) => ((await exists(file)) ? [file] : [])),
+    // A folder there before is reported for what the run left in it; one it made, for anything in it.
+    ...folders.map(async (folder) => ((await entries(folder)).some((entry) => !before.has(entry)) ? [folder] : [])),
+    ...tables.map(async (slot) => ((await exists(slot.file)) ? [`${slot.file} (table ${tableOf(slot).name})`] : [])),
+  ])
+  return [...new Set(left.flat())]
 }
 
 /** The end of a run's answer. */
@@ -519,9 +534,30 @@ function optionsOf(after: string) {
   )
 }
 
-/** The files a run's outputs write: not folders, nor GeoPackages it adds a table to, which were there before it. */
+/** The files a run's outputs write: not folders, nor GeoPackages it adds a table to. */
 function outputFiles(found: readonly Slot[]) {
   return found.filter((slot) => renamable(slot) && !slot.before.startsWith("ogr:")).map((slot) => slot.file)
+}
+
+function outputFolders(found: readonly Slot[]) {
+  return found.filter((slot) => slot.parameter.type === "folderDestination").map((slot) => slot.file)
+}
+
+/** The outputs that add a table to a GeoPackage, through an `ogr:` connection. */
+function databases(found: readonly Slot[]) {
+  return found.filter((slot) => renamable(slot) && slot.before.startsWith("ogr:"))
+}
+
+function remove(target: string) {
+  return fsp.rm(target, { recursive: true, force: true }).catch(() => {})
+}
+
+/** What a folder holds, as paths; none when it is not there. */
+function entries(folder: string) {
+  return fsp.readdir(folder).then(
+    (names) => names.map((name) => path.join(folder, name)),
+    () => [] as string[],
+  )
 }
 
 /** What writing a file makes: a Shapefile's parts, or the file with the journals SQLite keeps beside it. */
