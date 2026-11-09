@@ -103,6 +103,7 @@ import {
 import { useSync } from '@/sync/use-sync';
 import { useI18n } from '@/lib/i18n';
 import { useDraftHeading } from './useDraftHeading';
+import { DraftWordmark, DRAFT_SUBTITLE_CLASS } from '@/geocode/DraftWordmark'; // GeoCode: see the draft heading
 import { isVSCodeRuntime } from '@/lib/desktop';
 import { eventMatchesShortcut, getEffectiveShortcutCombo } from '@/lib/shortcuts';
 import { ChatSearchBar } from './search/ChatSearchBar';
@@ -784,7 +785,8 @@ const DraftWelcome: React.FC<{ exiting?: boolean }> = ({ exiting = false }) => {
             'oc-draft-center flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center transition-opacity duration-[120ms] ease-out motion-reduce:transition-none',
             exiting && 'pointer-events-none opacity-0',
         )}>
-            <h1 className="text-balance text-3xl font-normal tracking-tight text-foreground">
+            <DraftWordmark />{/* GeoCode: its wordmark heading the new session */}
+            <h1 className={DRAFT_SUBTITLE_CLASS}>{/* GeoCode: a subtitle under the wordmark */}
                 {renderDraftTitle(draftHeading, projectLabel)}
             </h1>
             {/* --- GeoCode: no starters under the composer --- */}

@@ -152,6 +152,7 @@ import { hasOpenDropdown } from '@/hooks/keyboard-shortcut-dom';
 import { useAuthSessionStore } from '@/lib/runtime-auth-expiry';
 import { useI18n } from '@/lib/i18n';
 import { useDraftHeading } from './useDraftHeading';
+import { DraftWordmark, DRAFT_SUBTITLE_CLASS } from '@/geocode/DraftWordmark'; // GeoCode: see the draft heading
 import { sessionEvents } from '@/lib/sessionEvents';
 import { fetchResponseStyleInstruction } from '@/lib/responseStyle';
 import { wrapSystemReminder } from '@/lib/systemReminder';
@@ -4610,7 +4611,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         >
             {showDesktopDraftPresentation ? (
                 <div className={cn('chat-input-column mb-7 text-center', draftPresentationClassName)}>
-                    <h1 className="text-balance text-2xl font-normal tracking-tight text-foreground md:text-3xl">
+                    <DraftWordmark />{/* GeoCode: its wordmark heading the new session */}
+                    <h1 className={DRAFT_SUBTITLE_CLASS}>{/* GeoCode: a subtitle under the wordmark */}
                         {renderDraftTitle(draftHeading, draftProjectLabel)}
                     </h1>
                 </div>
