@@ -28,6 +28,8 @@ libgdal-tiledb = "*"
 libgdal-xls = "*"
 
 earthengine-api = "*"
+# 1.83 or later: older ones warn at every import of ee, and Google Cloud's Python packages require it from April 2027.
+grpcio = ">=1.83"
 geedim = ">=2.0"
 # Whole, with mapclassify's classification schemes for plot() and folium's interactive maps for explore().
 geopandas = ">=1.0"
@@ -35,14 +37,26 @@ shapely = "*"
 pyproj = "*"
 pyogrio = "*"
 rasterio = "*"
+# Zonal statistics of a raster over vector features.
+rasterstats = "*"
 rioxarray = "*"
 xarray = "*"
 netcdf4 = "*"
 numpy = "*"
 pandas = "*"
+# GeoParquet and Arrow, on the Arrow library GDAL's Parquet driver already brings.
+pyarrow = "*"
 scipy = "*"
+statsmodels = "*"
+# Spatial weights and spatial autocorrelation, from PySAL.
+libpysal = "*"
+esda = "*"
 # OpenBLAS rather than Intel's much larger MKL, Windows's otherwise.
 libblas = { version = "*", build = "*openblas" }
 matplotlib-base = "*"
+# Maps in a projection, with graticules and coastlines.
+cartopy = "*"
 openpyxl = "*"
 requests = "*"
+# Searching STAC catalogs of imagery, such as Planetary Computer and Earth Search.
+pystac-client = "*"
