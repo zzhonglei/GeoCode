@@ -145,12 +145,14 @@ const EVERY = ['kernel', 'ui', 'web', 'electron']
  * folder, `geoengine` all of them.
  */
 export const calledFor = (file) => {
-  // The parts of the app's checks that have tests of their own; the paths check reads PATHS.md, as its test does.
-  if (file === 'docs/PATHS.md' || /^scripts\/app\/(paths|network)\./.test(file)) return ['scripts']
+  // The app's paths check reads PATHS.md, as its test does.
+  if (file === 'docs/PATHS.md') return ['scripts']
   // Markdown under src/ or test/ can be source or a fixture, as the kernel's skills are.
   if (file.endsWith('.md') && !/(^|\/)(src|test)\//.test(file)) return []
   if (/^scripts\/test(\.test)?\.mjs$/.test(file)) return Object.keys(SUITES)
-  if (/^scripts\/foreign-writes\./.test(file)) return ['scripts']
+  // A script's test is the .test.mjs beside it, which a change to either runs.
+  const tested = file.endsWith('.test.mjs') || fs.existsSync(at(file.replace(/\.[^./]+$/, '.test.mjs')))
+  if (file.startsWith('scripts/') && tested) return ['scripts']
   // The checks of the packaged app are tried by running them on it.
   if (file.startsWith('scripts/app/')) return []
   // The app's version is the one geocodekit is installed at.
