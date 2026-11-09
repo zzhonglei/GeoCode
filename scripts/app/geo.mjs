@@ -149,9 +149,10 @@ await check({ app, box, model, keep, credentials, reaches, ms: 600000 }, async (
   const session = created.body?.data?.id
   record('session: created in the project', Boolean(session), `${created.status} ${session}`)
 
-  // Checked first: on a first start the check waits for the Python environment, and a tool called before it ends
-  // asks to be called again later.
-  for (const domain of ['qgis', ...(gee ? ['gee'] : [])]) {
+  // Checked first, the Python environment before the rest: a first start installs it, and a tool called before it is
+  // ready asks to be called again later. QGIS does not wait for it, and an app quit while it installs leaves its
+  // temporary files.
+  for (const domain of ['python', 'qgis', ...(gee ? ['gee'] : [])]) {
     await item(`${domain}: found ready`, async () => {
       let state
       for (let waited = 0; waited < 600000; waited += 3000) {
