@@ -86,16 +86,14 @@ export const pythonGateOf = (statuses: GeoStatuses, engine: boolean | undefined)
 
 export type PreparingGate = Extract<PythonGate, { state: 'preparing' }>;
 
-/**
- * Where each step starts and ends on the loading screen's bar, by how long each took on a first start on an M-series
- * Mac: about 15 s installing, 4 s making the working environment and 17 s warming up.
- */
+/** Where each step starts and ends on the loading screen's bar, in proportion to how long each takes on a first start. */
 const SPANS = { installing: [0, 0.4], creating: [0.4, 0.5], warming: [0.5, 1] } as const;
 
 /** How much of the preparation is done, from 0 to 1: each step fills its span as far as it has got. */
 export const pythonFractionOf = (progress: PythonProgress): number => {
   const [from, to] = SPANS[progress.step];
-  const share = progress.step === 'creating' || progress.total <= 0 ? 0 : Math.min(Math.max(progress.done / progress.total, 0), 1);
+  // GeoEngine never reports a count past its total.
+  const share = progress.step === 'creating' ? 0 : progress.done / progress.total;
   return from + (to - from) * share;
 };
 

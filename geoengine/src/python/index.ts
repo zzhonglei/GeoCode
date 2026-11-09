@@ -26,9 +26,8 @@ const CREATE_TIMEOUT = "2 minutes"
 const WARM_TIMEOUT = "10 minutes"
 
 /**
- * Imports warmed at once, each in a process of its own. They wait mostly on macOS's first check of each library, which
- * runs alongside: on an M-series Mac, six at once took about 17 s where one after another took over 100 s, and the
- * six heaviest together peak at about half a gigabyte.
+ * Imports warmed at once, each in a process of its own: they wait mostly on macOS's first check of each library, which
+ * runs alongside. Not all of WARM at once, which would hold the memory of every import together.
  */
 const WARM_CONCURRENCY = 6
 
@@ -213,6 +212,7 @@ export interface Diagnostics {
   readonly output?: string
 }
 
+/** As desktop/packages/ui/src/geocode/geoStatus.ts reads it for the loading screen. */
 export type State =
   | { readonly status: "checking" }
   /** `done` of the bundle's `total` packages, each counted half once unpacked and half once installed. */
@@ -440,22 +440,23 @@ function expect(step: Step, what: string, result: Runtime.Result, output: string
 }
 
 /**
- * How far pixi-unpack has got: the packages it has unpacked into the cache of its temporary folder, each a folder
- * beside a .lock file, and those it has installed into the base, each recorded in conda-meta. As pixi-unpack 0.7 lays
- * them out; another layout only leaves the count behind.
+ * How far pixi-unpack has got: the conda packages it has unpacked into the cache of its temporary folder, each a folder
+ * beside a .lock file, and those it has installed into the base, each recorded in conda-meta; scripts/stage-python.sh
+ * counts the same conda packages for the total. As pixi-unpack 0.7 lays them out; another layout only leaves the count
+ * behind.
  */
 function installing(temporary: string, base: string) {
   const names = (folder: string) => {
+    // pixi-unpack removes these folders as it goes, so one can be gone between two reads.
     try {
       return fs.readdirSync(folder)
     } catch {
       return []
     }
   }
-  let extracted = 0
-  for (const inner of names(temporary)) {
-    extracted += names(path.join(temporary, inner, "cache")).filter((name) => !name.endsWith(".lock")).length
-  }
+  const extracted = names(temporary)
+    .flatMap((inner) => names(path.join(temporary, inner, "cache")))
+    .filter((name) => !name.endsWith(".lock")).length
   const installed = names(path.join(base, "conda-meta")).filter((name) => name.endsWith(".json")).length
   return { extracted, installed }
 }

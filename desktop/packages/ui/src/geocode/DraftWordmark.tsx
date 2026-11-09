@@ -5,8 +5,7 @@ import wordmark from './geocode-wordmark.svg?url';
 /**
  * GeoCode's wordmark heading the new session, with the question under it as its subtitle: one group, the wordmark
  * first, set apart from the composer below. Pixel art drawn on a 512 × 112 grid, shown at three quarters of it, about
- * two thirds of the composer's width: at half it looked slight beside the composer, at the full size it reads as a
- * banner. Left out on a window too short to hold it. One drawing serves both themes.
+ * two thirds of the composer's width. Left out on a window too short to hold it. One drawing serves both themes.
  */
 export const DraftWordmark: React.FC = () => (
   <img

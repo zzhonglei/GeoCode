@@ -4,6 +4,8 @@ import type { I18nDictionary } from '@/lib/i18n/store';
 
 type Messages = Partial<Record<I18nKey, string>>;
 
+// Also in electron/package.json's build.extraMetadata.homepage, electron/main.mjs's GITHUB_BUG_REPORT_URL,
+// geoengine/src/osm/index.ts's AGENT and the kernel's core/src/tool/plugin/webfetch.ts user agent.
 export const GEOCODE_REPOSITORY_URL = 'https://github.com/zzhonglei/GeoCode';
 export const GEOCODE_ISSUES_URL = 'https://github.com/zzhonglei/GeoCode/issues/new';
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 
 import { useI18n, type Locale } from '@/lib/i18n';
 import { pythonFractionOf, type PreparingGate, type PythonProgress } from './geoStatus';
@@ -36,9 +37,24 @@ const stepText = (text: PreparingText, progress: PythonProgress) =>
 
 /**
  * How far the loading screen's logo rises while a note shows under it: half of what the note adds below the logo, its
- * gap and its three lines, so the two are centered together.
+ * offset below the logo in AppStartupOverlay and its three lines, so the two are centered together.
  */
-export const STARTUP_NOTE_LIFT = 52;
+const NOTE_LIFT = 52;
+
+/** Holds the loading screen's logo and note, centered, and raises both together while there is a note. */
+export const StartupNoteLift: React.FC<{ lifted: boolean; children: React.ReactNode }> = ({ lifted, children }) => {
+  const reducedMotion = useReducedMotion();
+  return (
+    <motion.div
+      className="absolute inset-0 flex items-center justify-center"
+      initial={{ y: 0 }}
+      animate={{ y: lifted ? -NOTE_LIFT : 0 }}
+      transition={{ duration: reducedMotion ? 0 : 0.4, ease: 'easeOut' }}
+    >
+      {children}
+    </motion.div>
+  );
+};
 
 /** What the loading screen shows while GeoCode's Python environment is prepared: one bar through every step. */
 export const PythonPreparing: React.FC<{ gate: PreparingGate }> = ({ gate }) => {

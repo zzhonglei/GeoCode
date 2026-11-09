@@ -227,10 +227,7 @@ test(
       for (const id of calls) assert.ok((await engine.response(id)).ok)
       // Guards against a library's default agent, which the services refuse, or one telling users apart.
       const agents = new Set(services.asked.map((request) => request.agent))
-      assert.deepEqual(
-        [...agents],
-        [`GeoCode/${Geocodekit.PACKAGE.version} (+https://github.com/zzhonglei/GeoCode)`],
-      )
+      assert.deepEqual([...agents], [`GeoCode/${Geocodekit.PACKAGE.version} (+https://github.com/zzhonglei/GeoCode)`])
       const times = services.asked.filter((request) => request.service === "nominatim").map((request) => request.at)
       assert.equal(times.length, 4)
       for (let index = 1; index < times.length; index++)

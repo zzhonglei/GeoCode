@@ -268,7 +268,7 @@ const LOCAL_DESKTOP_CLIENT_DEDUPE_KEY = 'desktop-local';
 // connecting to someone else's server).
 const REMOTE_DESKTOP_CLIENT_KIND = 'desktop';
 const ENV_OVERRIDE_HOST_ID = '__env';
-const GITHUB_BUG_REPORT_URL = 'https://github.com/zzhonglei/GeoCode/issues/new'; // GeoCode: issues go to its own repository
+const GITHUB_BUG_REPORT_URL = 'https://github.com/zzhonglei/GeoCode/issues/new'; // GeoCode: issues go to its own repository, as in ui's geocode/brand.ts
 /* --- GeoCode: no links to OpenChamber's community ---
 const GITHUB_FEATURE_REQUEST_URL = 'https://github.com/openchamber/openchamber/issues/new?template=feature_request.yml';
 const DISCORD_INVITE_URL = 'https://discord.gg/ZYRSdnwwKA';

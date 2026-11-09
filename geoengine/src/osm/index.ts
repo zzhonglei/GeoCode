@@ -35,7 +35,10 @@ const SERVICES = {
 
 export type Services = typeof SERVICES
 
-/** As the services' policies ask: the application, its version and where to find it, and nothing of the user. */
+/**
+ * As the services' policies ask: the application, its version and where to find it, and nothing of the user. The
+ * repository's address is also in desktop/packages/ui/src/geocode/brand.ts, which names the other places.
+ */
 const AGENT = `GeoCode/${Geocodekit.PACKAGE.version} (+https://github.com/zzhonglei/GeoCode)`
 
 /**
