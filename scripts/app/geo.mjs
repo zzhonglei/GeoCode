@@ -10,7 +10,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { check, fakeModel, options, runTurn, sandbox, sleep, textOf, toolsOf, useFakeModel } from './lib.mjs'
+import { check, fakeModel, options, runTurn, sandbox, settled, sleep, textOf, toolsOf, useFakeModel } from './lib.mjs'
 
 const { app, keep, qgis: given, gee } = options({ qgis: { type: 'string' }, gee: { type: 'string' } })
 const qgis =
@@ -154,12 +154,7 @@ await check({ app, box, model, keep, credentials, reaches, ms: 600000 }, async (
   // temporary files.
   for (const domain of ['python', 'qgis', ...(gee ? ['gee'] : [])]) {
     await item(`${domain}: found ready`, async () => {
-      let state
-      for (let waited = 0; waited < 600000; waited += 3000) {
-        state = (await api('/api/geocode/geo-status')).body?.statuses?.[domain]
-        if (state && !['checking', 'preparing'].includes(state.status)) break
-        await sleep(3000)
-      }
+      const state = await settled(api, domain)
       record(`${domain}: found ready`, state?.status === 'ready', JSON.stringify(state).slice(0, 200))
     })
   }

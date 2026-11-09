@@ -1,14 +1,15 @@
-// The packaged app's everyday features in a fresh sandbox: the API and that it refuses a request without the window's
-// token, the agent's file, shell, search, web and subagent tools, the diff, git status, undo and redo, attachments, an
-// MCP server, session operations and compaction; then that it quits leaving nothing running and wrote in no other
-// product's folders. The model is a local fake that makes each item's tool calls and answers only with what the tools
-// gave back, so an item whose tools fail still fails. The web item fetches https://example.com.
+// The packaged app's everyday features in a fresh sandbox, once its Python environment is ready: the API and that it
+// refuses a request without the window's token, the agent's file, shell, search, web and subagent tools, the diff, git
+// status, undo and redo, attachments, an MCP server, session operations and compaction; then that it quits leaving
+// nothing running and wrote in no other product's folders. The model is a local fake that makes each item's tool calls
+// and answers only with what the tools gave back, so an item whose tools fail still fails. The web item fetches
+// https://example.com.
 //
 // Usage:  node scripts/app/smoke.mjs [--app <GeoCode.app>] [--keep]
 // Exits 0 when every item passed, 1 when one failed, and 3 when it could not run here.
 import fs from 'node:fs'
 import path from 'node:path'
-import { check, fakeModel, options, runTurn, sandbox, sleep, textOf, textsOf, toolsOf, useFakeModel } from './lib.mjs'
+import { check, fakeModel, options, runTurn, sandbox, settled, sleep, textOf, textsOf, toolsOf, useFakeModel } from './lib.mjs'
 
 const { app, keep } = options()
 const MCP_SERVER = path.join(import.meta.dirname, 'mcp-server.mjs')
@@ -120,6 +121,13 @@ const summary = (turn) =>
   turn.error ?? `${turn.seconds}s tools=[${tools(turn).join(',')}] reply=${JSON.stringify(textsOf(turn).slice(0, 120))}`
 
 await check({ app, box, model, keep, reaches: ['example.com'] }, async ({ api, record, item }) => {
+  // First: a first start installs the Python environment, and an app quit before it is done leaves its temporary
+  // files, which the paths check reports.
+  await item('python: found ready', async () => {
+    const state = await settled(api, 'python')
+    record('python: found ready', state?.status === 'ready', JSON.stringify(state).slice(0, 200))
+  })
+
   await item('api: read-only endpoints', async () => {
     const routes = [
       '/api/info',

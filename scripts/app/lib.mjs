@@ -13,6 +13,18 @@ import { pathsCheck } from './paths.mjs'
 export const top = path.resolve(import.meta.dirname, '..', '..')
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// A GeoEngine domain's status once it has settled, or the last one seen after ten minutes. A first start installs the
+// Python environment, and the other domains wait for it.
+export const settled = async (api, domain) => {
+  let state
+  for (let waited = 0; waited < 600000; waited += 3000) {
+    state = (await api('/api/geocode/geo-status')).body?.statuses?.[domain]
+    if (state && !['checking', 'preparing'].includes(state.status)) break
+    await sleep(3000)
+  }
+  return state
+}
+
 /** The options every check takes, with its own; `--app` defaults to the one `bun run package -- --dir` builds. */
 export const options = (own = {}) => {
   const { values } = parseArgs({ options: { app: { type: 'string' }, keep: { type: 'boolean' }, ...own } })
