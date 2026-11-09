@@ -137,3 +137,7 @@ node scripts/app/geo.mjs --qgis <QGIS.app> --gee <项目 ID>   # 另加 GEE,用�
 - `node --test` 没有默认超时,要带 `--test-timeout`;假对象要像真的一样回应,否则测的是超时那条路。
 - `Bun.serve` 的 `idleTimeout` 默认 10 秒,模拟长时间没有输出的应答要设为 0。
 - Effect 的测试里,`yieldNow` 不等真实的 I/O;`it.effect` 用测试时钟,`sleep` 不会醒。等真实的进展用 `it.live` 加按条件的轮询。
+
+### 平台分支
+
+按平台走不同逻辑的代码,把平台当作参数传进来(如 `geoengine/src/runtime.ts` 的 `overlay`),不在函数里读 `process.platform`,测试在 macOS 上就能走 Windows 那条分支。处理 Windows 路径的代码用 `path.win32`(如 `geoengine/src/qgis/windows.ts`),不用跟着本机走的 `path`;要目录树时照 Windows 的布局搭假的(第 6 节的 QGIS)。在 macOS 上测不了的,如真实的 `cmd.exe`、进程树与文件占用,测试里不假装测过,汇报里列为没有验证。
