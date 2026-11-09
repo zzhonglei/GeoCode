@@ -18,6 +18,10 @@ from geocodekit.gee import _run
 # which also tells GeoEngine the run is alive.
 LOOK_SECONDS = 1
 REPORT_SECONDS = 5
+# How long a share done that does not move is still reported: past it the download is stuck, as on a request that never
+# answers, and the run's idle limit ends it. As long as one request is reported for (LONGEST_REQUEST_SECONDS in
+# geoengine/src/gee/python.ts).
+STALLED_SECONDS = 10 * 60
 # How often an export is asked about: its share done moves on the tool row about as often.
 POLL_SECONDS = 3
 GEOTIFF = (".tif", ".tiff")
@@ -212,11 +216,16 @@ def reporting():
 
     def report():
         told, at = 0, time.monotonic()
+        moved = at
         while not stopped.wait(LOOK_SECONDS):
             share = bars[-1].n / bars[-1].total if bars else 0
-            if share != told or time.monotonic() - at >= REPORT_SECONDS:
+            now = time.monotonic()
+            if share != told:
+                moved = now
+            # Done, it builds the file's overviews here, which take long for a large one.
+            if share != told or (now - at >= REPORT_SECONDS and (share >= 1 or now - moved < STALLED_SECONDS)):
                 _tool.update(progress=share)
-                told, at = share, time.monotonic()
+                told, at = share, now
 
     stopped = threading.Event()
     reporter = threading.Thread(target=report)

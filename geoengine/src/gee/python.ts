@@ -11,7 +11,8 @@ export const BEAT_SECONDS = 1
 
 /**
  * The longest one request is reported for, in seconds: Earth Engine ends an interactive computation after about five
- * minutes, so a request still waiting long after that is stuck, and the run's idle limit is left to end it.
+ * minutes, so a request still waiting long after that is stuck, and the run's idle limit is left to end it. A download
+ * whose share done stands still is reported as long (STALLED_SECONDS in geocodekit/gee/_outputs.py).
  */
 export const LONGEST_REQUEST_SECONDS = 10 * 60
 

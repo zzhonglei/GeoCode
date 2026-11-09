@@ -36,13 +36,20 @@ def sources(serialized):
     other content, though the computation names it by the same path. Public datasets are left out: new scenes update
     them almost daily, which would make a finished composite look changed."""
     found = set()
+    tree = json.loads(serialized)
+    values = tree.get("values") or {}
+
+    def constant(argument):
+        # A string the computation uses more than once is one of its values, which each use refers to.
+        while isinstance(argument, dict) and "valueReference" in argument:
+            argument = values.get(argument["valueReference"])
+        return argument.get("constantValue") if isinstance(argument, dict) else None
 
     def walk(value):
         if isinstance(value, dict):
             called = value.get("functionInvocationValue")
             if isinstance(called, dict) and called.get("functionName") in LOADS:
-                argument = (called.get("arguments") or {}).get(LOADS[called["functionName"]]) or {}
-                path = argument.get("constantValue")
+                path = constant((called.get("arguments") or {}).get(LOADS[called["functionName"]]))
                 if isinstance(path, str) and path.startswith(_run.root + "/"):
                     found.add(path)
             for item in value.values():
@@ -51,7 +58,7 @@ def sources(serialized):
             for item in value:
                 walk(item)
 
-    walk(json.loads(serialized))
+    walk(tree)
     updated = {}
     for path in sorted(found):
         try:

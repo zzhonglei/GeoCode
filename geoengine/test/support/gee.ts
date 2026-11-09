@@ -280,10 +280,14 @@ def cancelOperation(name):
 
 
 def toJSON(element):
-    """A computation as Earth Engine serializes one: an asset's path stands for reading that asset."""
+    """A computation as Earth Engine serializes one: an asset's path stands for reading that asset. A path also set as
+    one of its properties is a value of its own that the load refers to, as Earth Engine keeps a string used twice."""
     if element.graph.startswith("projects/"):
-        load = {"functionName": "Image.load", "arguments": {"id": {"constantValue": element.graph}}}
-        return json.dumps({"result": "0", "values": {"0": {"functionInvocationValue": load}}})
+        path = {"constantValue": element.graph}
+        shared = element.graph in element.properties.values()
+        load = {"functionName": "Image.load", "arguments": {"id": {"valueReference": "1"} if shared else path}}
+        values = {"0": {"functionInvocationValue": load}, **({"1": path} if shared else {})}
+        return json.dumps({"result": "0", "values": values})
     return json.dumps({"result": "0", "values": {"0": {"constantValue": element.graph}}})
 `,
   "ee/batch.py": `from ee import data

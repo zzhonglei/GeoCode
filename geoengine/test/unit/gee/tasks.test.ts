@@ -253,6 +253,33 @@ test(
   },
 )
 
+// Guards against missing the asset a computation reads when it also uses the asset's path elsewhere, which Earth Engine
+// then serializes as a reference rather than in the load.
+test(
+  "a save that reads one of GeoCode's assets by a shared path is done again once that asset is replaced",
+  { skip: !python3 },
+  async () => {
+    const engine = await start("majestic")
+    try {
+      assert.equal((await engine.settled()).status, "ready")
+      await holding(engine.directory, [])
+      const save = (data: string, name: string) => `gee.save(${data}, "${name}", title="t", description="d", scale=10)`
+      const script = saving(
+        save('ee.Image("composite")', "composite"),
+        'tagged = lambda: gee.load("composite").set({"source": gee.load("composite").graph})',
+        save("tagged()", "tagged"),
+        save("tagged()", "tagged"),
+        save('ee.Image("composite, cloudless")', "composite"),
+        save("tagged()", "tagged"),
+      )
+      result(await engine.response(engine.send({ script, cwd: engine.directory, task: TASK })))
+      assert.deepEqual(exported(await stored(engine.directory)), ["composite", "tagged", "composite", "tagged"])
+    } finally {
+      await engine.stop()
+    }
+  },
+)
+
 test("a failed save leaves no folder it made, and reports the failure", { skip: !python3 }, async () => {
   const engine = await start("majestic")
   try {
