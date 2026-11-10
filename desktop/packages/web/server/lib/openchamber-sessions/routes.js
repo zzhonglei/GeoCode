@@ -245,7 +245,7 @@ const resolveDefaultSelection = ({ agents, models, settings, projectDefaults, co
   // setting saved before the upgrade still resolves.
   const configuredAgent = projectDefaultAgent || settingsDefaultAgent || opencodeDefaultAgent;
   if (requireDefaultAgent && configuredAgent && !findAgentBySetting(agents, configuredAgent)) {
-    throw new OpenChamberControlError(`Configured agent '${configuredAgent}' is not available in this directory. Update the default agent in project/global settings or OpenCode config, or pass an explicit agent.`, 503);
+    throw new OpenChamberControlError(`Configured agent '${configuredAgent}' is not available in this directory. Update the default agent in project/global settings or the kernel's config, or pass an explicit agent.`, 503); // GeoCode: the agent reads it
   }
   if (projectDefaultAgent) resolvedAgent = findAgentBySetting(agents, projectDefaultAgent);
   if (!resolvedAgent && settingsDefaultAgent) resolvedAgent = findAgentBySetting(agents, settingsDefaultAgent);

@@ -759,7 +759,7 @@ class OpencodeService {
 
   async setResponseStyleInstruction(directory: string, sessionID: string, instruction: string | null): Promise<void> {
     const entry = this.getScopedSdkClient(directory).experimental.session.instructions.entry
-    const key = "openchamber.response-style"
+    const key = "geocode.response-style" // GeoCode: as the server names this entry (session-knowledge/runtime.js)
     const value = instruction?.trim()
     if (value) await entry.put({ sessionID, key, value })
     else await entry.remove({ sessionID, key })

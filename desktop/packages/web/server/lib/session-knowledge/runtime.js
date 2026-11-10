@@ -27,7 +27,7 @@ export const KNOWLEDGE_ENTRY_KEYS = {
   pinned: 'geocode.pinned', // GeoCode: see checkout
   memory: 'geocode.memory', // GeoCode: see checkout
   guidance: 'geocode.guidance', // GeoCode: see checkout
-  responseStyle: 'openchamber.response-style',
+  responseStyle: 'geocode.response-style', // GeoCode: see checkout; the interface writes the same key (lib/opencode/client.ts)
 };
 
 /** Budget for each entry; anything past it is cut, loudly. */

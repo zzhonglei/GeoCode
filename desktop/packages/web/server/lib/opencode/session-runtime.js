@@ -11,7 +11,7 @@ const RESTART_RESUME_RETRY_MS = 15 * 1000;
 const RESTART_RESUME_ATTEMPTS = 3;
 const RESTART_RESUME_TIMEOUT_MS = 15 * 1000;
 const RESTART_RESUME_TEXT =
-  'OpenChamber restarted OpenCode while a response was still running. Continue from where you left off without repeating completed work.';
+  'GeoCode restarted the kernel while a response was still running. Continue from where you left off without repeating completed work.'; // GeoCode: the model reads it
 
 const extractSessionStatusUpdate = (payload) => {
   if (!payload || payload.type !== 'session.status') {

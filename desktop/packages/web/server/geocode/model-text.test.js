@@ -84,6 +84,7 @@ describe('GeoCode: what the server tells a model', () => {
       linking: true,
       rendering: true,
       checkout: { directory: '/repo/worktrees/roads', branch: 'agile-chipmunk', placeholder: true },
+      responseStyleInstruction: 'Keep replies short.',
     });
     // The keys too: the kernel writes each entry's key into the prompt with its text.
     expect(Object.entries(entries).flat().join('\n')).not.toMatch(UPSTREAM);
