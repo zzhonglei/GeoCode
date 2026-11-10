@@ -12,10 +12,13 @@ const NAMES = new Map([
   ['geerun', 'GEE Run'],
   ['osm*', 'OSM'],
   ['geocode', 'GeoCode'],
+  ['geocode_schedule', 'GeoCode Schedule'],
   ['geocode_web', 'GeoCode Web'],
   ['geocode_memory', 'GeoCode Memory'],
   ['geocode_knowledge', 'GeoCode Knowledge'],
   ['geocode_notify', 'GeoCode Notify'],
+  ['geocode_render', 'GeoCode Render'],
+  ['geocode_image', 'GeoCode Image'],
 ]);
 
 /** The name a tool permission row shows for one of GeoCode's own keys; undefined for upstream's. */

@@ -33,7 +33,7 @@ export const readStartupDiagnostics = async (signal: AbortSignal): Promise<Start
   }
 };
 
-// Set by the local service once every attempt of the initial launch has failed (web/server/index.js).
+// Set by the local service once the initial launch has failed, until the kernel comes up (web/server/index.js).
 const startFailedSchema = z.object({ geocodeKernelStartFailed: z.boolean().optional() });
 
 const fetchKernelStartFailed = async (signal: AbortSignal): Promise<boolean> => {
@@ -45,7 +45,9 @@ const START_FAILURE_POLL_MS = 3000;
 
 /**
  * Whether the local service reports that the kernel failed to start. Upstream shows its recovery screen only after
- * about two minutes of retries; the service knows as soon as the attempts of the initial launch are over.
+ * about two minutes of retries; the service knows as soon as the initial launch has failed. The service keeps retrying
+ * and the interface's own start with it, which takes the page away; a kernel that comes up after the interface has
+ * stopped retrying, about three minutes in, waits for Retry, as upstream's screen does.
  */
 export const useKernelStartFailed = (watching: boolean): boolean => {
   const [failed, setFailed] = React.useState(false);

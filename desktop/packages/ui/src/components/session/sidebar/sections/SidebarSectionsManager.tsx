@@ -373,7 +373,7 @@ const SectionEditor: React.FC<{ draft: CustomSidebarSection }> = ({ draft }) => 
   const byProjects = draft.grouping === 'project';
   const optionsOf = (category: ConditionCategory): readonly ConditionOption[] => {
     switch (category) {
-      case 'states': return SIDEBAR_SECTION_STATES.map((value) => ({ value, label: t(STATE_KEY[value]) }));
+      case 'states': return SIDEBAR_SECTION_STATES.filter((value) => value !== 'looks-done').map((value) => ({ value, label: t(STATE_KEY[value]) })); // GeoCode: only Jev, which is closed, suggests a session looks done
       case 'work': return SIDEBAR_SECTION_WORK_STATES.map((value) => ({ value, label: t(WORK_KEY[value]) }));
       case 'pins': return [{ value: DEFAULT_PIN_LIST, label: t('sessions.sidebar.activity.pinnedTitle') }, ...pinLists.map((list) => ({ value: list.id, label: list.name }))];
       case 'kinds': return SIDEBAR_SECTION_KINDS.filter((value) => value !== 'space').map((value) => ({ value, label: t(KIND_KEY[value]) })); // GeoCode: isolated spaces and trackers are closed, so nothing would match them

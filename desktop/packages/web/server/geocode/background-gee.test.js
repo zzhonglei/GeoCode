@@ -35,4 +35,13 @@ describe('GeoCode: background Earth Engine runs', () => {
     const running = await probe.fetchRunningShells(rivers);
     expect(running?.map((entry) => entry.sessionID)).toEqual(['ses_shell', 'ses_gee']);
   });
+
+  // Guards against a goal that stops waiting on a long export, as on a server left running, and continues every round
+  // until its limit while the run goes on.
+  it('read as started now, so a goal waits for a long run to end', async () => {
+    const probe = createSessionActivityProbe({ buildOpenCodeUrl: (route) => `http://kernel${route}`, getOpenCodeAuthHeaders: () => ({}), fetchImpl: kernel });
+    const asked = Date.now();
+    const gee = (await probe.fetchRunningShells(rivers))?.find((entry) => entry.sessionID === 'ses_gee');
+    expect(gee?.startedAt).toBeGreaterThanOrEqual(asked);
+  });
 });

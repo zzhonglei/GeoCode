@@ -774,6 +774,7 @@ let lastOpenCodeHealthFailure = null;
 let lastManagedOpenCodeProcess = null;
 let lastOpenCodeRestartDiagnostics = null;
 let isOpenCodeReady = false;
+let geocodeKernelStartFailed = false; // GeoCode: see bootstrapOpenCodeAtStartup, the lifecycle's isOpenCodeReady and getHealthSnapshot
 let openCodeNotReadySince = 0;
 let isExternalOpenCode = false;
 let exitOnShutdown = true;
@@ -1728,7 +1729,7 @@ Object.defineProperties(openCodeLifecycleState, {
   lastOpenCodeHealthFailure: { get: () => lastOpenCodeHealthFailure, set: (value) => { lastOpenCodeHealthFailure = value; } },
   lastManagedOpenCodeProcess: { get: () => lastManagedOpenCodeProcess, set: (value) => { lastManagedOpenCodeProcess = value; } },
   lastOpenCodeRestartDiagnostics: { get: () => lastOpenCodeRestartDiagnostics, set: (value) => { lastOpenCodeRestartDiagnostics = value; } },
-  isOpenCodeReady: { get: () => isOpenCodeReady, set: (value) => { isOpenCodeReady = value; } },
+  isOpenCodeReady: { get: () => isOpenCodeReady, set: (value) => { isOpenCodeReady = value; if (value) geocodeKernelStartFailed = false; } }, // GeoCode: a kernel up by any path (a retry, the health monitor's restart) ends the failed launch
   openCodeNotReadySince: { get: () => openCodeNotReadySince, set: (value) => { openCodeNotReadySince = value; } },
   isExternalOpenCode: { get: () => isExternalOpenCode, set: (value) => { isExternalOpenCode = value; } },
   isShuttingDown: { get: () => isShuttingDown, set: (value) => { isShuttingDown = value; } },
@@ -2226,7 +2227,6 @@ const ensureGlobalWatcherStarted = async () => {
 
   return globalWatcherStartPromise;
 };
-let geocodeKernelStartFailed = false; // GeoCode: see bootstrapOpenCodeAtStartup and getHealthSnapshot
 const bootstrapOpenCodeAtStartup = async (...args) => {
   await openCodeLifecycleRuntime.bootstrapOpenCodeAtStartup(...args);
   geocodeKernelStartFailed = !isOpenCodeReady; // GeoCode: bootstrap catches its failures, so readiness after an attempt is the only sign it failed; a retry that starts the kernel clears it
@@ -2683,7 +2683,7 @@ async function main(options = {}) {
         openCodeApiPrefix: '',
         openCodeApiPrefixDetected: true,
         isOpenCodeReady,
-        geocodeKernelStartFailed: geocodeKernelStartFailed && !isOpenCodeReady, // GeoCode: the initial launch failed, and the kernel has not come up since
+        geocodeKernelStartFailed, // GeoCode: the initial launch failed, and the kernel has not come up since
         lastOpenCodeError,
         lastOpenCodeLaunchDiagnostics,
         lastOpenCodeHealthFailure,

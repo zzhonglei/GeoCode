@@ -25,4 +25,6 @@ test('GeoCode: the status row says what a geo tool does, in each of the app\'s l
       }
     }
   }
+  const zh = await loaded('zh-CN');
+  expect(formatAgentStatus((key, params) => formatMessage(zh, key, params), 'zh-CN', geoStatus('qgisrun', 3))).toBe('正在运行 3 个 QGIS 算法');
 });
