@@ -3,7 +3,7 @@ import { create } from 'zustand';
 
 import { isSkippedTimelineMessage } from '@/components/chat/lib/timelineRoles';
 import type { TimelineEntry } from '@/components/chat/lib/turns/timelineEntries';
-import type { ChatMessageEntry } from '@/components/chat/lib/turns/types';
+import type { ChatMessageEntry, TurnRecord } from '@/components/chat/lib/turns/types';
 import { isInvisibleText } from '@/lib/invisibleText';
 import type { Part, ToolPart } from '@/lib/opencode/model';
 import { readSessionNotice } from '@/lib/opencode/session-notices';
@@ -156,6 +156,19 @@ export const usePublishGeoToolRuns = (
   }, [runs]);
   return runs;
 };
+
+/**
+ * The runs of a turn's geo calls, for its fold to count the rows they draw. The store has them only a render after the
+ * rows, and would count a call joining a run as a row of its own for that render.
+ */
+export const useTurnGeoToolRuns = (
+  turn: Pick<TurnRecord, 'userMessage' | 'assistantMessages'>,
+  showReasoningTraces: boolean,
+) =>
+  React.useMemo(
+    () => geoToolRuns([turn.userMessage, ...turn.assistantMessages], showReasoningTraces, false, new Map()),
+    [turn.userMessage, turn.assistantMessages, showReasoningTraces],
+  );
 
 const NO_MESSAGES: readonly ChatMessageEntry[] = [];
 

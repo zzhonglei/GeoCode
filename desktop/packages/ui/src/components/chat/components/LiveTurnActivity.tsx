@@ -3,7 +3,7 @@ import { Icon } from '@/components/icon/Icon';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/lib/i18n';
 import { useUIStore } from '@/stores/useUIStore';
-import { geoDrawnRows, geoRowParts, geoToolRuns } from '@/geocode/geoToolRuns'; // GeoCode: see the trim
+import { geoDrawnRows, geoRowParts, useTurnGeoToolRuns } from '@/geocode/geoToolRuns'; // GeoCode: see the trim
 import { geoActivity } from '@/geocode/geoTools'; // GeoCode: see details
 import {
     ActivityRowSkipContext,
@@ -42,7 +42,7 @@ export function TurnFold({ turn, hasLaterAssistant, expanded, finalMessageId, on
     // Folded, a working turn shows only its latest rows (the header counts
     // the earlier ones) and a settled one shows none.
     const showReasoningTraces = useUIStore((state) => state.showReasoningTraces);
-    const geoRuns = React.useMemo(() => geoToolRuns([turn.userMessage, ...turn.assistantMessages], showReasoningTraces, false, new Map()), [turn.userMessage, turn.assistantMessages, showReasoningTraces]); // GeoCode: the runs of geo calls, each drawing one row, as GeoToolRunsSource finds them; the store has them a render later, which would count a call joining a run as a row of its own and glide the rows for nothing
+    const geoRuns = useTurnGeoToolRuns(turn, showReasoningTraces); // GeoCode: the runs of geo calls, each drawing one row
     const trim = React.useMemo(() => (expanded
         ? null
         : planActivityTrim(

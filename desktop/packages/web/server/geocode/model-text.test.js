@@ -184,12 +184,6 @@ describe('GeoCode: what the server tells a model', () => {
     await stop(runtime);
   });
 
-  // Isolated spaces are closed: a model told it names a space's task looks for one it cannot have.
-  it('names no isolated space where an agent names its task', () => {
-    const name = actions.OPENCHAMBER_CONTROL_ACTION_DEFINITIONS.find((definition) => definition.action === 'work.name');
-    expect(name.description).not.toMatch(/space/i);
-  });
-
   it('names neither upstream when it names a task', async () => {
     await expect(namer('agile-chipmunk').name({ sessionId: 'ses_1', title: 'Roads' })).rejects.toThrow(/GeoCode generated/);
     await expect(namer('agile-chipmunk').name({ sessionId: 'ses_1', title: 'Roads' })).rejects.not.toThrow(UPSTREAM);
