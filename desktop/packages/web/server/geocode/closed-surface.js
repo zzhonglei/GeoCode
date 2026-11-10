@@ -31,6 +31,10 @@ export const CLOSED_PATHS = Object.freeze([
   '/api/spaces',
   '/api/config/skills/catalog/source',
   '/api/pair',
+  '/api/openchamber/workflows',
+  '/api/openchamber/secret',
+  '/api/notifications/channels',
+  '/api/openchamber/space-task-title',
   '/api/experimental/persistent-pty/handoff',
 ]);
 

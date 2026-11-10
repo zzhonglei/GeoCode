@@ -8,7 +8,7 @@ export const GEO_ENVIRONMENT_SEARCH_ITEM = {
   keywords: ['qgis', 'gis', 'geo', 'geoengine', 'environment', '地理', '環境', '环境', 'gee', 'earth engine'],
 };
 
-const CLOSED_PAGES: ReadonlySet<string> = new Set(['remote-instances', 'tunnel', 'extensions', 'plugins', 'magic-prompts', 'snippets', 'skills.catalog', 'isolated-spaces'] satisfies SettingsPageMeta['slug'][]);
+const CLOSED_PAGES: ReadonlySet<string> = new Set(['remote-instances', 'tunnel', 'extensions', 'plugins', 'magic-prompts', 'snippets', 'skills.catalog', 'isolated-spaces', 'about'] satisfies SettingsPageMeta['slug'][]);
 
 // Skills is the one library page left open, so it joins the OpenCode group rather than head a group of its own. A group
 // shows only while SettingsView.tsx's NAV_GROUP_ORDER lists it.
@@ -22,9 +22,12 @@ export const CLOSED_SEARCH_ITEMS = new Set([
   'sessions.opencode-update-notifications',
   'appearance.usage-reports',
   'integrations.guests',
+  'integrations.browse',
   'integrations.extensions',
   'integrations.extensions.excalidraw',
   'integrations.extensions.resource-monitor',
+  'sessions.agent-secret-tool',
+  'sessions.agent-workflow-tool',
   'general.isolated-spaces',
   'general.isolated-spaces-idle-stop',
   'general.isolated-spaces-machine',

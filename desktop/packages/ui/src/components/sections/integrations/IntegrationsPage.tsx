@@ -54,6 +54,7 @@ export const IntegrationsPage: React.FC = () => {
       description={t('settings.page.integrations.description')}
       showSaveStatus
       headerEnd={canBrowseCatalog ? (
+        <Closed>{/* GeoCode: see the extension catalog section */}
         <Button
           type="button"
           variant="outline"
@@ -66,6 +67,7 @@ export const IntegrationsPage: React.FC = () => {
           <Icon name="store-2" className="size-4" />
           {t('settings.integrations.browse.label')}
         </Button>
+        </Closed>
       ) : null}
     >
       {hasBuiltIn ? (

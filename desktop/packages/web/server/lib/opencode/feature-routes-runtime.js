@@ -797,7 +797,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
         if (failed) throw failed.reason;
       },
       onGuestsChanged: () => announceChange('openchamber:guests-changed'),
-      watchFolderInstalls: true,
+      watchFolderInstalls: false, // GeoCode: extensions are closed, so no installed folder is watched
       surfaceViewerHeaders, trackers,
     }));
     // The providers extensions served before the restart, before any request reads the list.

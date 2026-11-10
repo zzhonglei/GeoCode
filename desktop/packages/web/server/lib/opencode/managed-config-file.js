@@ -101,8 +101,8 @@ export const createManagedConfigRuntime = ({
     const includeNotify = settings?.agentNotifyToolEnabled === true;
     const includeRender = settings?.agentRenderToolEnabled !== false;
     const includeImage = settings?.agentImageToolEnabled === true;
-    const includeSecret = settings?.agentSecretToolEnabled !== false;
-    const includeWorkflow = settings?.agentWorkflowToolEnabled === true;
+    const includeSecret = false; // GeoCode: the secret and workflow tools are closed, whatever settings.json says
+    const includeWorkflow = false;
     const codeMode = settings?.agentToolsCodeMode === true;
 
     const directories = [];

@@ -14,6 +14,8 @@ export const CLOSED_COMMANDS = new Set([
   'desktop_get_lan_address',
   'desktop_check_for_updates',
   'desktop_download_and_install_update',
+  'desktop_get_update_channel',
+  'desktop_set_update_channel',
   'desktop_ssh_instances_get',
   'desktop_ssh_instances_set',
   'desktop_ssh_import_hosts',

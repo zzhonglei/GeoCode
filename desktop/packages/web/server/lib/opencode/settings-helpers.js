@@ -1359,7 +1359,7 @@ export const createSettingsHelpers = (dependencies) => {
       // Agent memory needs the OpenChamber server, like routing below.
       agentMemoryFeatureAvailable: true,
       // The same for agent workflows.
-      agentWorkflowFeatureAvailable: true,
+      agentWorkflowFeatureAvailable: false, // GeoCode: workflows are closed, so the UI offers neither the tool's switch nor the panel
       // The overview page ships dark until `OPENCHAMBER_OVERVIEW_ENABLED` is set.
       overviewFeatureAvailable: isOverviewFeatureAvailable(),
       // Jev routing needs the OpenChamber server, so it is present here and

@@ -376,8 +376,8 @@ const SectionEditor: React.FC<{ draft: CustomSidebarSection }> = ({ draft }) => 
       case 'states': return SIDEBAR_SECTION_STATES.map((value) => ({ value, label: t(STATE_KEY[value]) }));
       case 'work': return SIDEBAR_SECTION_WORK_STATES.map((value) => ({ value, label: t(WORK_KEY[value]) }));
       case 'pins': return [{ value: DEFAULT_PIN_LIST, label: t('sessions.sidebar.activity.pinnedTitle') }, ...pinLists.map((list) => ({ value: list.id, label: list.name }))];
-      case 'kinds': return SIDEBAR_SECTION_KINDS.map((value) => ({ value, label: t(KIND_KEY[value]) }));
-      case 'links': return SIDEBAR_SECTION_LINKS.map((value) => ({ value, label: t(LINK_KEY[value]) }));
+      case 'kinds': return SIDEBAR_SECTION_KINDS.filter((value) => value !== 'space').map((value) => ({ value, label: t(KIND_KEY[value]) })); // GeoCode: isolated spaces and trackers are closed, so nothing would match them
+      case 'links': return SIDEBAR_SECTION_LINKS.filter((value) => value !== 'tracker').map((value) => ({ value, label: t(LINK_KEY[value]) }));
       case 'projectIds': return projects.map((project) => ({ value: project.id, label: project.label?.trim() || formatDirectoryName(project.path, null) || project.path }));
       case 'activity': return SIDEBAR_SECTION_ACTIVITY.filter((value) => value !== 'any').map((value) => ({ value, label: t(ACTIVITY_KEY[value]) }));
       case 'text': return [];

@@ -1174,6 +1174,7 @@ const sessionKnowledgeRuntime = createSessionKnowledgeRuntime({
     return settings?.agentRenderToolEnabled !== false;
   },
   isSecretRequestAvailable: async () => {
+    return false; // GeoCode: the secret tool is closed, so no session is told about it
     if (isExternalOpenCode || ENV_SKIP_OPENCODE_START) return false;
     const settings = await readSettingsFromDiskMigrated().catch(() => null);
     return settings?.agentSecretToolEnabled !== false;
@@ -1367,6 +1368,7 @@ const mergeFollowRuntime = createMergeFollowRuntime({
 // Agent workflows: scripts that fan a task out to many agents, run here while
 // the agent that asked stays free. Off until the user turns the tool on.
 const isWorkflowToolEnabled = async () => {
+  return false; // GeoCode: workflows are closed
   const settings = await readSettingsFromDiskMigrated().catch(() => null);
   return settings?.agentWorkflowToolEnabled === true;
 };

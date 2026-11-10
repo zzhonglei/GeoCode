@@ -377,6 +377,8 @@ export const OpenChamberToolsSettings: React.FC = () => {
           </div>
         </div>
 
+        {/* --- GeoCode: the secret tool is closed --- */}
+        <Closed>
         <ToolRow
           icon="shield-keyhole"
           settingsItem="sessions.agent-secret-tool"
@@ -387,6 +389,8 @@ export const OpenChamberToolsSettings: React.FC = () => {
           info={t('settings.openchamber.tools.field.agentSecretToolInfo')}
           ariaLabel={t('settings.openchamber.tools.field.agentSecretToolAria')}
         />
+        </Closed>
+        {/* --- /GeoCode --- */}
 
         <ToolRow
           icon="sticky-note"
