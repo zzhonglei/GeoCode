@@ -34,12 +34,13 @@ const executable = async (file: string, text: string) => {
 /**
  * A bundle as scripts/stage-python.sh stages one. Its pixi-unpack unpacks the packed environment through its temporary
  * folder and leaves an activation script beside it, as the real one does; the environment's python3 runs the real one.
- * Both first note their arguments and environment in `calls.log`. With `slowWarm`, the python3 waits a second before
- * each import of the warm-up, adds to `overlap` how many imports were running then, and leaves a file `warmed`; the
- * working environment's python is the real one, so a warm-up through it leaves none. With `gradual`, pixi-unpack goes
- * through the bundle's PACKAGES slowly as the real one lays them out, first unpacking each into its temporary folder's
- * cache, then recording each in the base's conda-meta. The environment holds a file named for the bundle's id, to tell
- * which bundle the base came from, and files of the kinds installing takes away.
+ * Both first note their arguments and environment, each call in a file of its own in `calls`, as the warm-up runs
+ * several at once. With `slowWarm`, the python3 waits a second before each import of the warm-up, adds to `overlap` how
+ * many imports were running then, and leaves a file `warmed`; the working environment's python is the real one, so a
+ * warm-up through it leaves none. With `gradual`, pixi-unpack goes through the bundle's PACKAGES slowly as the real one
+ * lays them out, first unpacking each into its temporary folder's cache, then recording each in the base's conda-meta.
+ * The environment holds a file named for the bundle's id, to tell which bundle the base came from, and files of the
+ * kinds installing takes away.
  */
 export const bundle = async (
   directory: string,
@@ -48,7 +49,8 @@ export const bundle = async (
 ) => {
   const folder = path.join(directory, `bundle-${id}`)
   const tree = path.join(folder, "tree", "python")
-  const log = path.join(directory, "calls.log")
+  const notes = path.join(directory, "calls")
+  await fs.mkdir(notes, { recursive: true })
   for (const sub of ["bin", "include", path.join("lib", "python3.13", "site-packages")]) {
     await fs.mkdir(path.join(tree, sub), { recursive: true })
   }
@@ -56,7 +58,7 @@ export const bundle = async (
     path.join(tree, "bin", "python3"),
     [
       "#!/bin/sh",
-      `{ echo "PYTHON $*"; env; echo END; } >> '${log}'`,
+      `{ echo "PYTHON $*"; env; echo END; } > "$(mktemp '${notes}/call.XXXXXX')"`,
       ...(options.slowWarm
         ? [
             `case "$*" in *"-c import "*)`,
@@ -81,7 +83,7 @@ export const bundle = async (
     path.join(folder, "pixi-unpack"),
     [
       "#!/bin/sh",
-      `{ echo "UNPACK $*"; env; echo END; } >> '${log}'`,
+      `{ echo "UNPACK $*"; env; echo END; } > "$(mktemp '${notes}/call.XXXXXX')"`,
       options.fails ? `echo "the packages could not be installed" >&2; exit 3` : "",
       "pack=$1; shift",
       "while [ $# -gt 0 ]; do case $1 in --output-directory) out=$2 ;; --env-name) name=$2 ;; esac; shift; done",
@@ -105,16 +107,18 @@ export const bundle = async (
 }
 
 /** What the bundle's programs noted, each with what ran it ("PYTHON" or "UNPACK"), its arguments and environment. */
-export const calls = async (directory: string) =>
-  (await fs.readFile(path.join(directory, "calls.log"), "utf-8"))
-    .split("END\n")
-    .filter(Boolean)
+export const calls = async (directory: string) => {
+  const folder = path.join(directory, "calls")
+  const files = await fs.readdir(folder)
+  return (await Promise.all(files.map((file) => fs.readFile(path.join(folder, file), "utf-8"))))
+    .map((call) => call.replace(/END\n$/, ""))
     .map((call) => {
       const [first = "", ...lines] = call.split("\n").filter(Boolean)
       const [program = "", ...args] = first.split(" ")
       const env = new Map(lines.map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]))
       return { program, args, env }
     })
+}
 
 /** Starts the engine, waits for the environment to settle, and stops the engine. */
 export const settle = async (directory: string, bundled: string) => {
