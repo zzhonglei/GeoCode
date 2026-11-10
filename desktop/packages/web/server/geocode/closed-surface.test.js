@@ -17,6 +17,8 @@ describe('GeoCode: closedSurface', () => {
     for (const route of ['/api/openchamber/update-check', '/api/push/subscribe', '/connect', '/api/client-auth/clients', '/api/push/visibility', '/api/plugin', '/api/plugin/check', '/api/magic-prompts/:id', '/api/config/snippets/expand', '/api/openchamber/spaces/switch', '/api/spaces/:id/session', '/api/config/skills/catalog/source', '/api/config/skills/:name', '/api/config/skills/:name/files/*filePath', '/api/projects/:projectId/config', '/api/projects/:projectId/config/shared', '/api/experimental/session/:sessionId/terminal', '/api/guest-files/:grant/*filePath']) {
       app.all(route, (_req, res) => res.status(200).send('upstream'));
     }
+    // What Express does not serve goes on to the kernel.
+    app.use((_req, res) => res.status(200).send('kernel'));
     server = http.createServer(app);
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -37,6 +39,14 @@ describe('GeoCode: closedSurface', () => {
   it('leaves the endpoints the app still uses to upstream', async () => {
     expect(await statusOf('/api/push/visibility')).toBe(200);
     expect(await statusOf('/api/plugin')).toBe(200);
+  });
+
+  // Guards against a closed kernel route reached through a form only the kernel's router reads as that route.
+  it('refuses closed kernel routes cut at a semicolon, percent-encoded or with doubled slashes', async () => {
+    for (const [path, method] of [['/api/pair;x', 'GET'], ['/api//pair', 'GET'], ['/api/plugin/update;x', 'POST'], ['/api/pty/pty_1/connect%2Dtoken', 'POST'], ['/api/experimental/session//ses_1/terminal', 'POST'], ['/api/experimental/session/ses_1/terminal;x', 'POST']]) {
+      expect(await statusOf(path, method)).toBe(404);
+    }
+    expect(await statusOf('/api/plugin;x')).toBe(200);
   });
 
   it('refuses the skill catalog read and the scan and install posts, not a skill of those names', async () => {

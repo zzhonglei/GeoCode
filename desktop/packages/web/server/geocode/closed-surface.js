@@ -54,9 +54,19 @@ export const CLOSED_PATTERNS = Object.freeze([
   ['POST', /^\/api\/experimental\/session\/[^/]+\/terminal$/],
 ]);
 
-// Express matches routes case-insensitively, and runs GET routes for HEAD, so the comparison must too.
+const decoded = (path) => {
+  try {
+    return decodeURI(path);
+  } catch {
+    return path; // the kernel cannot route it either
+  }
+};
+
+// Express matches routes case-insensitively, and runs GET routes for HEAD, so the comparison must too. A path Express
+// does not serve goes on to the kernel, whose router cuts it at `;`, decodes it and folds repeated slashes, so a variant
+// such as `/api/pair;x` or `/api//pair` would reach a closed kernel route unless compared as the kernel reads it.
 const isClosed = (req) => {
-  const path = req.path.toLowerCase();
+  const path = decoded(req.path.split(';', 1)[0]).replace(/\/{2,}/g, '/').toLowerCase();
   if (CLOSED_PATHS.some((closed) => path === closed || path.startsWith(`${closed}/`))) return true;
   const method = req.method === 'HEAD' ? 'GET' : req.method;
   const route = path.replace(/\/+$/, '');
