@@ -14,6 +14,7 @@ import { stripAppImageArgv0Leak, stripAppImageLauncherEnv, resolvePosixPtyLaunch
 import { shutdownTerminalProcesses } from './shutdown.js';
 import { isOpaqueOriginRequest, isPasswordlessSocketOriginAllowed } from '../security/request-security.js';
 import { dropShellDirectories } from '../../geocode/app-variables.js'; // GeoCode: see spawnPty
+import { withWindowsShells } from '../../geocode/terminal-shells.js'; // GeoCode: see shellResolver
 
 const MAX_SESSIONS = 20;
 const MAX_HISTORY_BYTES = 512 * 1024;
@@ -212,6 +213,7 @@ export function createTerminalRuntime({
   let shutdownPromise = null;
   let wsServer = new WebSocketServer({ noServer: true, maxPayload: TERMINAL_WS_MAX_PAYLOAD_BYTES });
   const shellResolver = createTerminalShellResolver({ fs, path, searchPathFor, isExecutable, buildAugmentedPath });
+  Object.assign(shellResolver, withWindowsShells({ ...shellResolver })); // GeoCode: only cmd and PowerShell on Windows
 
   const getPtyProvider = async () => {
     if (!ptyProviderPromise) {
