@@ -30,8 +30,18 @@ test(
         assert.ok((await engine.request({ action: "search", query: "buffer" }, 10000, "qgis.doc")).ok)
         assert.equal(await count(), 1)
 
+        // Counted from before the request: a quick check can begin and settle before the request is answered.
+        const before = engine.states().length
         assert.ok((await engine.request({ path: other }, 10000, "qgis.configure")).ok)
-        await until(() => engine.states().at(-1)?.status === "checking", 5000, "the new check")
+        await until(
+          () =>
+            engine
+              .states()
+              .slice(before)
+              .some((state) => state.status === "checking"),
+          5000,
+          "the new check",
+        )
         assert.equal((await engine.settled()).status, "ready")
         assert.ok((await engine.request({ action: "groups" }, 10000, "qgis.doc")).ok)
         // Guards against documenting another installation from the first one's list.
