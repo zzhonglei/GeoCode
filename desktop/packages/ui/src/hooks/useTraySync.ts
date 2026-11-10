@@ -5,6 +5,7 @@ import { getRuntimeApiBaseUrl } from '@/lib/runtime-switch';
 import { desktopHostsGet, getDesktopHostApiUrl, locationMatchesHost, redactSensitiveUrl } from '@/lib/desktopHosts';
 import { getSyncChildStores } from '@/sync/sync-refs';
 import { useBackgroundShellsStore } from '@/sync/background-shells';
+import { useBackgroundGeeRuns } from '@/geocode/backgroundGeeRuns'; // GeoCode: an Earth Engine run in the background keeps its session's turn open, as a command does
 import { collectOpenTurnSessionIds, useGlobalSessionStatusStore } from '@/sync/global-session-status';
 import { usePrWatchStore } from '@/sync/pr-watch';
 import { useWorkflowActivityStore } from '@/sync/workflow-activity';
@@ -379,6 +380,7 @@ const buildSnapshot = (instanceName: string, includeTray: boolean): TraySnapshot
   const openTurnIds = collectOpenTurnSessionIds(useGlobalSessionStatusStore.getState().activeSessionIds, [
     useWorkflowActivityStore.getState().runningSessionIds,
     useBackgroundShellsStore.getState().sessionIds,
+    useBackgroundGeeRuns.getState().sessionIds, // GeoCode: see the import
     usePrWatchStore.getState().bySession.keys(),
   ]);
   const hasUnreadTurn = (session: Session): boolean => isSessionUnread(session) && !openTurnIds.has(session.id);
@@ -511,6 +513,7 @@ export const useTraySync = (): void => {
     // Background work ending turns a waiting session unread with no change to its record.
     const unsubscribeWorkflows = useWorkflowActivityStore.subscribe(() => scheduleFlush());
     const unsubscribeShells = useBackgroundShellsStore.subscribe(() => scheduleFlush());
+    const unsubscribeGeeRuns = useBackgroundGeeRuns.subscribe(() => scheduleFlush()); // GeoCode: see the import
     const unsubscribePrWatches = usePrWatchStore.subscribe(() => scheduleFlush());
     const unsubscribeUI = useUIStore.subscribe((state, previous) => {
       if (state.dockBadgeEnabled !== previous.dockBadgeEnabled
@@ -538,6 +541,7 @@ export const useTraySync = (): void => {
       unsubscribeGlobalStatus();
       unsubscribeWorkflows();
       unsubscribeShells();
+      unsubscribeGeeRuns(); // GeoCode: see the import
       unsubscribePrWatches();
       unsubscribeUI();
       unsubscribeProjects();

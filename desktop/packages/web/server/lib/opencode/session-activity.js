@@ -12,6 +12,7 @@
  */
 
 import { unwrapOpenCodeResponse } from './response-envelope.js';
+import { withRunningGeeRuns } from '../../geocode/background-gee.js'; // GeoCode: see withRunningGeeRuns
 import { z } from 'zod';
 
 const CHILDREN_PAGE_SIZE = 50;
@@ -151,5 +152,5 @@ export const createSessionActivityProbe = ({ buildOpenCodeUrl, getOpenCodeAuthHe
     });
   };
 
-  return { fetchActiveSessionStatuses, fetchChildSessionIds, hasWorkingChildren, hasWorkingDescendants, fetchRunningShells };
+  return { fetchActiveSessionStatuses, fetchChildSessionIds, hasWorkingChildren, hasWorkingDescendants, fetchRunningShells: withRunningGeeRuns(fetchRunningShells, { buildOpenCodeUrl, getOpenCodeAuthHeaders, fetchImpl }) }; // GeoCode: see withRunningGeeRuns
 };

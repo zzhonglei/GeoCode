@@ -197,7 +197,8 @@ export const useFirstSessionWithOpenTurn = (sessionIds: readonly string[]): stri
   const inWorkflow = useWorkflowActivityStore((state) => sessionIds.find((id) => state.runningSessionIds.has(id)) ?? null);
   const onShell = useBackgroundShellsStore((state) => sessionIds.find((id) => state.sessionIds.has(id)) ?? null);
   const onPullRequest = usePrWatchStore((state) => sessionIds.find((id) => state.bySession.has(id)) ?? null);
-  return inTurn ?? inWorkflow ?? onShell ?? onPullRequest;
+  const onGee = useBackgroundGeeRuns((state) => sessionIds.find((id) => state.sessionIds.has(id)) ?? null); // GeoCode: see the import
+  return inTurn ?? inWorkflow ?? onShell ?? onGee ?? onPullRequest; // GeoCode: in useSessionTurnActivity's order
 };
 
 /**
