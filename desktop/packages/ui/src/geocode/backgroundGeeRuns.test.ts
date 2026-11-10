@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 
-import { readWorktreeUse } from '@/components/overview/overviewActions';
+import { readWorktreeUse } from '@/lib/worktrees/worktreeUse';
 import { opencodeClient } from '@/lib/opencode/client';
 import { routeWireEvent } from '@/lib/opencode/events';
 import type { Session } from '@/lib/opencode/model';

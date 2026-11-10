@@ -13,6 +13,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { dropdownTriggerVariants } from '@/components/ui/dropdown-trigger';
 import { dropdownMenuPopupClass } from '@/components/ui/dropdown-menu.styles';
+import { ReviewSubmitButton } from '@/components/review/ReviewSubmitButton';
+import { ChangeRequestReviewContext, useComparisonReview } from '@/components/review/useChangeRequestReview';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { isRightToLeft, useI18n } from '@/lib/i18n';
 import { changeRequestCopy } from '@/lib/source-control/changeRequestCopy';
@@ -270,6 +272,7 @@ export const WalkthroughView = ({ directory: rootDirectory, visible = true }: Wa
   );
   const source = target.source;
   const commentOrigin = useMemo(() => diffCommentOriginFromTarget(target), [target]);
+  const { review: changeRequestReview, provider: reviewProvider } = useComparisonReview(prComparison, directory, visible && isPrScope);
   // A scope the person picked before its subject exists: the base of a branch
   // comparison, or which commit to read. Nothing loads until they say.
   const choosingBranchBase = pendingSourceSelection?.directory === directory
@@ -367,6 +370,7 @@ export const WalkthroughView = ({ directory: rootDirectory, visible = true }: Wa
   }
 
   return (
+    <ChangeRequestReviewContext.Provider value={changeRequestReview}>
     <div ref={rootRef} data-find-surface="" className="flex h-full min-h-0 flex-col">
       <ContextPanelHeaderToolbar>
       <header
@@ -568,6 +572,9 @@ export const WalkthroughView = ({ directory: rootDirectory, visible = true }: Wa
             </>
           )}
 
+          {changeRequestReview && reviewProvider ? (
+            <ReviewSubmitButton review={changeRequestReview} provider={reviewProvider} labelClassName="walkthrough-header__label" />
+          ) : null}
           {!prDiffUnavailable && (headerOffersGeneration || review.isGenerating) && (
             <WalkthroughGenerateButton
               review={review}
@@ -713,5 +720,6 @@ export const WalkthroughView = ({ directory: rootDirectory, visible = true }: Wa
         )}
       </div>
     </div>
+    </ChangeRequestReviewContext.Provider>
   );
 };

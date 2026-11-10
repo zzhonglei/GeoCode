@@ -18,7 +18,8 @@ import {
 
 type OverviewIssueState = OverviewSessionFacts['issues'][number];
 import { useWorktreeChangeRequests } from './useWorktreeChangeRequests';
-import { readOverviewWorktreeGit, sessionsInWorktree, type OverviewWorktreeGit, type OverviewWorktreeTarget } from './overviewActions';
+import { sessionsInWorktree } from '@/lib/worktrees/worktreeUse';
+import { readOverviewWorktreeGit, type OverviewWorktreeGit, type OverviewWorktreeTarget } from './overviewActions';
 import { normalizePath } from '@/lib/pathNormalization';
 import { resolveProjectForSessionDirectory } from '@/lib/projectResolution';
 import { spaceProjectDirectoryIn, useSpacesStore } from '@/lib/spaces/spaces-store';
@@ -45,6 +46,7 @@ import type { IssueLiveSummary, ProjectEntry, RepositoryReferenceFilter, Tracker
 import { useRepositoryAcrossReferenceList } from '@/components/references/referenceSources';
 import { useBackgroundShellsStore } from '@/sync/background-shells';
 import { useBackgroundGeeRuns } from '@/geocode/backgroundGeeRuns'; // GeoCode: an Earth Engine run in the background is activity, as a background command is
+import { usePrWatchStore } from '@/sync/pr-watch';
 import { useGlobalBlockingRequestsStore } from '@/sync/global-blocking-requests';
 import { useGlobalSessionStatusStore } from '@/sync/global-session-status';
 import { useSessionUIStore } from '@/sync/session-ui-store';
@@ -241,6 +243,7 @@ export function useOverviewData(): OverviewData {
   const activeSessionIds = useGlobalSessionStatusStore((state) => state.activeSessionIds);
   const shellSessionIds = useBackgroundShellsStore((state) => state.sessionIds);
   const geeSessionIds = useBackgroundGeeRuns((state) => state.sessionIds); // GeoCode: see the import
+  const prWatches = usePrWatchStore((state) => state.bySession);
   const blockingBySession = useGlobalBlockingRequestsStore((state) => state.bySession);
   const worktreesByProject = useSessionUIStore((state) => state.availableWorktreesByProject);
   const currentSessionId = useSessionUIStore((state) => state.currentSessionId);
@@ -310,8 +313,12 @@ export function useOverviewData(): OverviewData {
       const root = rootOf(id, entityById);
       if (!map.has(root)) map.set(root, 'shell');
     }
+    for (const id of prWatches.keys()) {
+      const root = rootOf(id, entityById);
+      if (!map.has(root)) map.set(root, 'pullRequest');
+    }
     return map;
-  }, [activeSessionIds, entityById, shellSessionIds, geeSessionIds]); // GeoCode: see the import
+  }, [activeSessionIds, entityById, prWatches, shellSessionIds, geeSessionIds]); // GeoCode: see the import
 
   const blockingByRoot = React.useMemo(() => {
     const map = new Map<string, OverviewBlocking>();
