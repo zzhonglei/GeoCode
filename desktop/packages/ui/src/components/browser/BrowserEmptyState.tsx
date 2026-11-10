@@ -22,6 +22,7 @@ import { useSpaceMarkLabel } from '@/lib/spaces/space-mark';
 import { useSpaceDirectoryStopped } from '@/lib/spaces/spaces-store';
 import { hideDevServerPort, showHiddenDevServerPorts, useHiddenDevServerPorts } from '@/lib/browser/hiddenDevServers';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
+import { DEV_SERVERS_LISTED } from '@/geocode/devServers'; // GeoCode: see the poll
 
 /**
  * What the panel shows before anything is loaded.
@@ -81,6 +82,7 @@ export const BrowserEmptyState: React.FC<{
       return;
     }
     if (!visible) return;
+    if (!DEV_SERVERS_LISTED) return; // GeoCode: its route is closed, so it is not asked
     let active = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const controller = new AbortController();

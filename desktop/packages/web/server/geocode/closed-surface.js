@@ -35,6 +35,7 @@ export const CLOSED_PATHS = Object.freeze([
   '/api/openchamber/secret',
   '/api/openchamber/space-task-title',
   '/api/experimental/persistent-pty/handoff',
+  '/api/dev-servers',
 ]);
 
 // One method on the exact path only: other methods, and the paths below, address a skill of that name.
