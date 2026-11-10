@@ -98,6 +98,7 @@
 ├── dispatch-results.json      等待交回发起会话的子会话结果
 ├── tracked-items.json         会话关联的议题与拉取请求的状态
 ├── pr-watch.json              agent 在等的拉取请求,等到有变化就交回它的会话;应用重启后接着等
+├── github-merge-follow.json   排进 GitHub 合并队列或打开了自动合并的拉取请求,合并、关闭或失败时通知;关掉窗口也接着向 GitHub 查
 ├── auto-review.json           自动审查的进度与结果,连同交给两个会话的提示词;关掉窗口也接着审,至多留 100 次,先删最早结束的
 ├── message-search.sqlite(及 -wal、-shm)  消息搜索的索引,在设置里打开后才建立
 ├── discovered-apps.json       本机可用来打开文件的应用列表
@@ -220,7 +221,7 @@ GeoCode 写文件多是先写旁边的临时文件、再改名替换,有的另�
 
 - 环境变量:macOS 上启动时以交互的登录 shell 读一次环境(它会执行 `.zprofile`、`.zshrc` 这类启动文件),Windows 上从注册表读用户与系统的 `PATH`(`ENVIRONMENT.md` 第 2.1 节)。agent 执行的命令与终端因此能找到 conda、GDAL 等工具。
 - git:全局配置(身份、`core.sshCommand`、`safe.directory`);没有设 `SSH_AUTH_SOCK` 时,用 `gpgconf` 与 `~/.gnupg` 找 GPG 代理提供的 SSH 套接字;仓库没有绑定账号时,git 照常用用户自己的凭据助手与 SSH。
-- GitHub CLI 的登录(`gh auth token`);gh 运行时会在它自己的状态目录写下一个设备标识。列出 GitHub 企业版的服务器时,读 gh 记下的登录主机(`GH_CONFIG_DIR` 或 `~/.config/gh` 下的 `hosts.yml`)与 `GH_HOST`。gh 交出的令牌在它的 `hosts.yml` 没变时重用至多 5 分钟,为此按 gh 自己的顺序找这个文件:`GH_CONFIG_DIR`、`XDG_CONFIG_HOME/gh`、Windows 上的 `%APPDATA%\GitHub CLI`、`~/.config/gh`,只看文件信息(修改时间等),不读内容。
+- GitHub CLI 的登录(`gh auth token`);gh 运行时会在它自己的状态目录写下一个设备标识。gh 的 `hosts.yml` 按 gh 自己的顺序找:`GH_CONFIG_DIR`、`XDG_CONFIG_HOME/gh`、Windows 上的 `%APPDATA%\GitHub CLI`、`~/.config/gh`。列出 GitHub 企业版的服务器时,读其中记下的登录主机与 `GH_HOST`;gh 交出的令牌在这个文件没变时重用至多 5 分钟,为此只看它的文件信息(修改时间等)。
 - 在设置里查找可导入的 SSH 密钥时,`~/.ssh` 下的密钥,选中的复制进数据目录。
 - npm:安装服务商 SDK 与格式化工具时,`~/.npmrc`、npm 自己的全局配置与 `npm_config_*` 变量。
 - 模型服务商:内核启动时为登录选项读 AWS 的配置名(`~/.aws/config` 与 `~/.aws/credentials`);为 Google Vertex AI 的登录选项读 gcloud 配置里的项目号与区域,以及默认凭据文件 `application_default_credentials.json` 里的项目号,不联网,登录时也可以自己填;选用 Azure 并以 Azure CLI 登录时,调用 `az` 取令牌;选用 GitLab 时读 `GITLAB_TOKEN` 与项目的远程地址。配置文件里以 `{file:…}` 引用的密钥文件,用到时读取。
