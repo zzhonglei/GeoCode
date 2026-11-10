@@ -15,7 +15,8 @@ const ACCEPTED = [
 
 const top = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
 const desktop = path.join(top, 'desktop')
-const oxlint = path.join(desktop, 'node_modules/.bin/oxlint')
+// The package's own entry, run by Node: on Windows node_modules/.bin holds only launchers with an extension.
+const oxlint = path.join(desktop, 'node_modules/oxlint/bin/oxlint')
 const refuse = (message) => {
   console.error(`refuse: ${message}`)
   process.exit(2)
@@ -35,7 +36,7 @@ for (let i = 0; i < own.length; i += 200) {
   let out
   try {
     const args = ['-c', 'oxlint.anti-slop.config.ts', '-f', 'json', '--no-error-on-unmatched-pattern', ...own.slice(i, i + 200)]
-    out = execFileSync(oxlint, args, { cwd: desktop, encoding: 'utf8', maxBuffer: 1 << 28 })
+    out = execFileSync(process.execPath, [oxlint, ...args], { cwd: desktop, encoding: 'utf8', maxBuffer: 1 << 28 })
   } catch (error) {
     if (error.status !== 1) throw error
     out = error.stdout
