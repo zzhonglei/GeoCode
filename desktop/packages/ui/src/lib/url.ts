@@ -81,7 +81,10 @@ export const getExternalFaviconUrl = (url: string): string | null => {
     return null;
   }
 
+  /* --- GeoCode: no third-party icon service is told the hosts the agent fetches and the messages link to ---
   return `https://icons.duckduckgo.com/ip3/${parsed.hostname.toLowerCase()}.ico`;
+  --- /GeoCode --- */
+  return null; // GeoCode: see above
 };
 
 const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1']);
