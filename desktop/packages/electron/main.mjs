@@ -1490,6 +1490,7 @@ import { pathLooksUserConfigured, mergePathValues } from '@openchamber/web/serve
 import { provideLoginShellEnvSnapshot } from '@openchamber/web/server/lib/opencode/login-shell-env.js';
 import { dropInheritedAppVariables } from './geocode/inherited-env.mjs'; // GeoCode: see inheritUserShellEnv
 import { assertDesktopCommandOpen } from './geocode/closed-commands.mjs'; // GeoCode: see handleInvoke
+import { isMadeJumpListLink, jumpListSessionLinks } from './geocode/jump-list.mjs'; // GeoCode: see handleDeepLinks
 import { localClientToken, localServerPassword, mintLocalClientToken } from './geocode/local-access.mjs'; // GeoCode: see spawnLocalServer and readDesktopLocalClientToken
 import { geoEngineFailure, geoEngineRequest, geoEngineStatuses, onGeoEngineStatus, startGeoEngine, stopGeoEngine } from './geocode/geoengine.mjs'; // GeoCode: see resolveInitialUrl, shutdownBackgroundServices, handleInvoke, startWebUiServer and the startup failure
 
@@ -2220,7 +2221,7 @@ const isMainWindowReadyForDeepLink = () =>
   && !state.mainWindow.webContents.isLoading();
 
 const handleDeepLinks = (urls) => {
-  return; // GeoCode: openchamber:// links are ignored, whether from argv, a second instance or open-url
+  if (!urls.every(isMadeJumpListLink)) return; // GeoCode: openchamber:// links are ignored, whether from argv, a second instance or open-url; the jump list's, made from its own argument, pass
   for (const raw of urls) {
     const parsed = parseDeepLink(raw);
     if (!parsed) continue;
@@ -6290,6 +6291,7 @@ const handleSecondInstance = (argv) => {
     ? argv.filter((arg) => typeof arg === 'string' && arg.startsWith(`${DEEP_LINK_PROTOCOL}://`))
     : [];
   if (urls.length > 0) handleDeepLinks(urls);
+  handleDeepLinks(jumpListSessionLinks(argv)); // GeoCode: see handleDeepLinks
   if (BrowserWindow.getAllWindows().length > 0) {
     focusForegroundWindow();
   } else {
@@ -6435,6 +6437,7 @@ app.whenReady().then(async () => {
 
   const initial = extractInitialDeepLinks();
   if (initial.length > 0) handleDeepLinks(initial);
+  handleDeepLinks(jumpListSessionLinks(process.argv)); // GeoCode: see handleDeepLinks
 
   await mainWindowShown;
   const { initialUrl, localOrigin, bootOutcome, apiBaseUrl, clientToken, requestHeaders } = await resolveInitialUrl({

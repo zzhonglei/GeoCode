@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { menuLabel } from './menu-locales.mjs';
+import { jumpListSessionArg } from './geocode/jump-list.mjs'; // GeoCode: see buildUnreadJumpList
 
 const jumpListSessionIdSchema = z.string().regex(/^ses_[A-Za-z0-9_]{1,120}$/);
 
@@ -28,7 +29,7 @@ export const buildUnreadJumpList = (snapshot, { execPath, locale = 'en', removed
   const removedArgs = new Set(removedItems.map((item) => item.args));
   const items = rows.map((session) => task(
     (session.title.trim() || menuLabel(locale, 'dock.untitledSession')).slice(0, 100),
-    `"openchamber://session/${session.id}?source=jump-list"`,
+    jumpListSessionArg(session.id), // GeoCode: the app takes no openchamber:// link
   )).filter((item) => !removedArgs.has(item.args));
   return [
     ...(items.length > 0 ? [{
