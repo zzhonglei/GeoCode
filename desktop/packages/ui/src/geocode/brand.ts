@@ -103,6 +103,11 @@ const MESSAGES = {
     'settings.openchamber.visual.field.sessionTabsPerWorkspaceInfo': 'Each project and worktree keeps its own tabs, and the header shows the tabs of the one you are in. The first time you open a worktree, the sessions you started there open as tabs.',
     'settings.openchamber.desktopNetwork.field.keepAwakeDescription': 'Prevents system sleep while GeoCode runs, so long geo tasks are not paused. The screen can still turn off.',
     'chat.commandAutocomplete.command.featurePlanDescription': 'Start a guided, back-and-forth planning session before the work begins.',
+    // The files view offers no download, so these four, in each language, point to its right-click menu instead.
+    'filesView.artifact.binary.description': 'GeoCode does not decode this kind of file. Choose "Open in default app" in its right-click menu.',
+    'filesView.artifact.binary.descriptionWithType': 'GeoCode does not decode {extension} files. Choose "Open in default app" in its right-click menu.',
+    'filesView.artifact.media.unplayable': 'This file cannot be played here. Choose "Open in default app" in its right-click menu.',
+    'filesView.artifact.pdf.loadFailed': 'This PDF cannot be shown here. Choose "Open in default app" in its right-click menu.',
   },
   'zh-CN': {
     'settings.view.nav.group.opencode': '内核',
@@ -164,6 +169,10 @@ const MESSAGES = {
     'settings.openchamber.visual.field.sessionTabsPerWorkspaceInfo': '每个项目和 worktree 都保留自己的标签页，顶部显示你当前所在位置的标签页。第一次打开某个 worktree 时，你在那里开始的会话会以标签页打开。',
     'settings.openchamber.desktopNetwork.field.keepAwakeDescription': 'GeoCode 运行时阻止系统睡眠，长时间的地理任务不会因此暂停。屏幕仍可关闭。',
     'chat.commandAutocomplete.command.featurePlanDescription': '在动手之前，开始一次引导式的来回规划会话。',
+    'filesView.artifact.binary.description': 'GeoCode 不解码此类文件。请在它的右键菜单里选「用默认应用打开」。',
+    'filesView.artifact.binary.descriptionWithType': 'GeoCode 不解码 {extension} 文件。请在它的右键菜单里选「用默认应用打开」。',
+    'filesView.artifact.media.unplayable': '此文件无法在此播放。请在它的右键菜单里选「用默认应用打开」。',
+    'filesView.artifact.pdf.loadFailed': '此 PDF 无法在这里显示。请在它的右键菜单里选「用默认应用打开」。',
   },
   'zh-TW': {
     'settings.view.nav.group.opencode': '核心',
@@ -225,6 +234,10 @@ const MESSAGES = {
     'settings.openchamber.visual.field.sessionTabsPerWorkspaceInfo': '每個專案和 worktree 都保有自己的分頁，頂部會顯示你目前所在位置的分頁。第一次開啟某個 worktree 時，你在那裡開始的工作階段會以分頁開啟。',
     'settings.openchamber.desktopNetwork.field.keepAwakeDescription': 'GeoCode 執行時阻止系統睡眠，長時間的地理任務不會因此暫停。螢幕仍可關閉。',
     'chat.commandAutocomplete.command.featurePlanDescription': '在動手之前，開始一次引導式的來回規劃工作階段。',
+    'filesView.artifact.binary.description': 'GeoCode 不解碼此類檔案。請在它的右鍵選單中選「以預設應用程式開啟」。',
+    'filesView.artifact.binary.descriptionWithType': 'GeoCode 不解碼 {extension} 檔案。請在它的右鍵選單中選「以預設應用程式開啟」。',
+    'filesView.artifact.media.unplayable': '此檔案無法在此播放。請在它的右鍵選單中選「以預設應用程式開啟」。',
+    'filesView.artifact.pdf.loadFailed': '此 PDF 無法在這裡顯示。請在它的右鍵選單中選「以預設應用程式開啟」。',
     // Left in English upstream.
     'diffView.actions.review': '審查',
     'diffView.actions.reviewAria': '審查變更',

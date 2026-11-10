@@ -16,7 +16,9 @@ import {
 } from '@openchamber/ui/lib/api/files-errors';
 import { runtimeFetch } from '@openchamber/ui/lib/runtime-fetch';
 import { spaceIdOfDirectory, spaceRootDirectory } from '@openchamber/ui/lib/spaces/space-route';
+/* --- GeoCode: used only by downloadFile, closed below ---
 import { shareFileFromNativeApp } from '@openchamber/ui/lib/nativeFileShare';
+--- /GeoCode --- */
 
 const normalizePath = (path: string): string => path.replace(/\\/g, '/');
 
@@ -420,6 +422,7 @@ export const createWebFilesAPI = ({ getDirectory, searchFiles = defaultSearchFil
     return { success: Boolean((result as { success?: boolean }).success) };
   },
 
+  /* --- GeoCode: a project's files are already on this computer; saving a copy read the whole file into the window and left out the dataset's other files, such as a Shapefile's .dbf and .prj. Without it the file menus, the files view's toolbar and its previews offer no save ---
   async downloadFile(path: string, options): Promise<void> {
     const target = normalizePath(path);
     const params = new URLSearchParams({ path: target, download: 'true' });
@@ -456,4 +459,5 @@ export const createWebFilesAPI = ({ getDirectory, searchFiles = defaultSearchFil
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 100);
   },
+  --- /GeoCode --- */
 });
