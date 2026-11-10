@@ -79,6 +79,7 @@ import { WorktreeRequiresGitRepositoryError } from '@/lib/worktrees/worktreeCrea
 import { buildTurnImageExportSource, cloneMessageImageExportSource, fitMessageImageExportLayout, resolveMessageImageExportPixelRatio, resolveMessageImageExportWidth } from './imageExport';
 import { GeoRow } from '@/geocode/GeoToolRow'; // GeoCode: see the tool parts
 import { hasGeoRow } from '@/geocode/geoToolRuns'; // GeoCode: see the tool parts
+import { AgentName } from '@/geocode/AgentName'; // GeoCode: see the footer
 import { hasTextSelectionInside } from '@/lib/textSelection';
 
 
@@ -2324,7 +2325,7 @@ const AssistantMessageBody = React.memo(({
                             {footerAgentName ? (
                                 <span data-fact-priority="1" className="message-footer__fact">
                                     <span className="opacity-60" aria-hidden>·</span>
-                                    {footerAgentName}
+                                    <AgentName id={footerAgentName} />{/* GeoCode: the agent's display name, not its id */}
                                 </span>
                             ) : null}
                             {turnDurationText ? (
