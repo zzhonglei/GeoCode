@@ -7,11 +7,13 @@ const rivers = path.resolve('/projects/rivers');
 const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
 // A kernel with one command and two Earth Engine runs in the background, one of them in another folder.
-const kernel = async (url) => {
+const kernel = async (url, init) => {
   if (String(url).includes('/api/shell')) {
     return json([{ status: 'running', command: 'make', time: { started: 1 }, metadata: { sessionID: 'ses_shell' } }]);
   }
   if (String(url).includes('/api/rpc/geocode.geeruns/list')) {
+    // A request naming no folder makes the kernel start the user's home as a location.
+    if (decodeURIComponent(init.headers['x-opencode-directory'] ?? '') !== rivers) return new Response('', { status: 400 });
     return json({
       output: {
         revision: 3,

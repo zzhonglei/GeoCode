@@ -10,6 +10,7 @@ import { createImageGenerationAction } from '../lib/openchamber-control/generate
 import { createWorkNamer } from '../lib/openchamber-sessions/work-naming.js';
 import { createPrWatchRuntime, parsePullRequestUrl } from '../lib/pr-watch/runtime.js';
 import { buildKnowledgeEntries } from '../lib/session-knowledge/runtime.js';
+import { CHATS_SCOPE_PUBLIC_ID } from '../lib/scheduled-tasks/chats-scope.js';
 import { trackedItemKey } from '../lib/tracked-items/items.js';
 
 const UPSTREAM = /openchamber|opencode/i;
@@ -108,6 +109,27 @@ describe('GeoCode: what the server tells a model', () => {
       const told = fs.readFileSync(path.join(directory, 'index.js'), 'utf8').split('\n').filter((line) => /^\s*(?:description: "|parameters: \{)/.test(line));
       expect(told.length).toBe(2);
       expect(told.join('\n')).not.toMatch(UPSTREAM);
+    } finally {
+      fs.rmSync(instanceDir, { recursive: true, force: true });
+    }
+  });
+
+  it('names Chats as GeoCode does where a session can go, and takes that name back', async () => {
+    const instanceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'geocode-model-text-'));
+    try {
+      const asked = [];
+      const runtime = createAgentToolRuntime({
+        crypto, fsPromises: fs.promises, path, instanceDir, getActivePort: () => 1,
+        executeAction: async (action, input) => {
+          asked.push(input);
+          return action === 'projects.list' ? { projects: [{ id: CHATS_SCOPE_PUBLIC_ID, label: 'Chats' }] } : { created: input.projectId };
+        },
+      });
+      const listed = await runtime.execute({ tool: 'geocode', input: { action: 'projects.list' } });
+      expect(JSON.stringify(listed)).not.toMatch(UPSTREAM);
+      expect(listed.data.projects[0].id).toBe('geocode:chats');
+      await runtime.execute({ tool: 'geocode', input: { action: 'session.create', projectId: 'geocode:chats' } });
+      expect(asked.at(-1).projectId).toBe(CHATS_SCOPE_PUBLIC_ID);
     } finally {
       fs.rmSync(instanceDir, { recursive: true, force: true });
     }

@@ -22,7 +22,14 @@ export const withRunningGeeRuns = (fetchRunningShells, { buildOpenCodeUrl, getOp
     if (!shells) return null;
     const response = await fetchImpl(buildOpenCodeUrl('/api/rpc/geocode.geeruns/list', ''), {
       method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...getOpenCodeAuthHeaders() },
+      // The folder's location, as for the commands: a request naming none makes the kernel start its own working
+      // directory, the user's home, with its MCP servers. Any location lists every run.
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'x-opencode-directory': encodeURIComponent(directory),
+        ...getOpenCodeAuthHeaders(),
+      },
       body: JSON.stringify({ input: {} }),
       // The probe's own: its time limit and its caller's abort, as for the commands.
       signal: requestSignal(),
