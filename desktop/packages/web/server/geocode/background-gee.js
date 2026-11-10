@@ -3,7 +3,8 @@ import { z } from 'zod';
 
 import { unwrapOpenCodeResponse } from '../lib/opencode/response-envelope.js';
 
-// As the kernel lists Earth Engine runs in the background (kernel/packages/core/src/geocode/geerun-rpc.ts).
+// As the kernel lists Earth Engine runs in the background (kernel/packages/core/src/geocode/geerun-rpc.ts); the interface
+// reads the same in desktop/packages/ui/src/geocode/geeRunsRpc.ts.
 const runsSchema = z.object({
   output: z.object({
     runs: z.array(z.object({ sessionID: z.string(), description: z.string(), startedAt: z.number(), directory: z.string() })),
@@ -15,7 +16,7 @@ const runsSchema = z.object({
  * entry: an agent waits on such a run as on a command, and the kernel's shell list does not hold it. Null when either
  * list could not be read, as for the commands alone.
  */
-export const withRunningGeeRuns = (fetchRunningShells, { buildOpenCodeUrl, getOpenCodeAuthHeaders, fetchImpl = fetch }) =>
+export const withRunningGeeRuns = (fetchRunningShells, { buildOpenCodeUrl, getOpenCodeAuthHeaders, fetchImpl = fetch, requestSignal }) =>
   async (directory) => {
     const shells = await fetchRunningShells(directory);
     if (!shells) return null;
@@ -23,6 +24,8 @@ export const withRunningGeeRuns = (fetchRunningShells, { buildOpenCodeUrl, getOp
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...getOpenCodeAuthHeaders() },
       body: JSON.stringify({ input: {} }),
+      // The probe's own: its time limit and its caller's abort, as for the commands.
+      signal: requestSignal(),
     }).catch(() => null);
     if (!response?.ok) return null;
     const parsed = runsSchema.safeParse(unwrapOpenCodeResponse(await response.json().catch(() => null)));

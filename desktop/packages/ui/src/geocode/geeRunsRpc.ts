@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
-/** As the kernel lists Earth Engine runs in the background (`kernel/packages/core/src/geocode/geerun-rpc.ts`). */
+/**
+ * As the kernel lists Earth Engine runs in the background (`kernel/packages/core/src/geocode/geerun-rpc.ts`); the shell
+ * server reads the list too (`desktop/packages/web/server/geocode/background-gee.js`).
+ */
 export const geeRunsSnapshot = z.object({
   revision: z.number(),
   runs: z.array(

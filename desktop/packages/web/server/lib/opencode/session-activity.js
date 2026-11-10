@@ -152,5 +152,5 @@ export const createSessionActivityProbe = ({ buildOpenCodeUrl, getOpenCodeAuthHe
     });
   };
 
-  return { fetchActiveSessionStatuses, fetchChildSessionIds, hasWorkingChildren, hasWorkingDescendants, fetchRunningShells: withRunningGeeRuns(fetchRunningShells, { buildOpenCodeUrl, getOpenCodeAuthHeaders, fetchImpl }) }; // GeoCode: see withRunningGeeRuns
+  return { fetchActiveSessionStatuses, fetchChildSessionIds, hasWorkingChildren, hasWorkingDescendants, fetchRunningShells: withRunningGeeRuns(fetchRunningShells, { buildOpenCodeUrl, getOpenCodeAuthHeaders, fetchImpl, requestSignal }) }; // GeoCode: see withRunningGeeRuns
 };
