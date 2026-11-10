@@ -22,8 +22,6 @@ export const CLOSED_SEARCH_ITEMS = new Set([
   'sessions.opencode-update-notifications',
   'appearance.usage-reports',
   'integrations.guests',
-  'integrations.third-party',
-  'integrations.third-party.opencode-claude',
   'integrations.extensions',
   'integrations.extensions.excalidraw',
   'integrations.extensions.resource-monitor',

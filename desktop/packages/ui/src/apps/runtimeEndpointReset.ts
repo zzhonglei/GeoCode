@@ -43,6 +43,7 @@ import { resetStreamingState } from '@/sync/streaming';
 import { replaceGlobalSessionStatusById } from '@/sync/global-session-status';
 import { resetGlobalBlockingRequests } from '@/sync/global-blocking-requests';
 import { resetPendingSessionAssists } from '@/sync/pending-session-assists';
+import { resetRecoverableQuestions } from '@/sync/recoverable-questions';
 import { resetBackgroundShells } from '@/sync/background-shells';
 import { resetGeeRuns } from '@/geocode/backgroundGeeRuns'; // GeoCode: see resetAppForRuntimeEndpointChange
 import { useMultiRunStore } from '@/stores/useMultiRunStore';
@@ -99,6 +100,7 @@ export const resetAppForRuntimeEndpointChange = (detail: RuntimeEndpointChangedD
   replaceGlobalSessionStatusById(new Map());
   resetGlobalBlockingRequests();
   resetPendingSessionAssists();
+  resetRecoverableQuestions();
   resetBackgroundShells();
   resetGeeRuns(); // GeoCode: the previous runtime's Earth Engine runs in the background, as its commands
   resetSessionOrdering();

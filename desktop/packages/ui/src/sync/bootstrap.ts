@@ -14,6 +14,7 @@ import {
   readDirectoryPermissionSnapshot,
   type DirectoryRecoverySource,
 } from "./directory-recovery-snapshots"
+import { noteQuestionFormSnapshot } from "./recoverable-questions"
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
@@ -151,7 +152,7 @@ async function initializeDirectory(input: DirectoryBootstrapInput): Promise<Boot
       const form = await readDirectoryFormSnapshot(store, () => (
         opencodeClient.listPendingForms({ directories: [directory] })
       ))
-      commit({ form })
+      if (commit({ form })) noteQuestionFormSnapshot(directory, Object.values(form).flat())
     }),
     read(async () => {
       const permission = await readDirectoryPermissionSnapshot(store, () => (

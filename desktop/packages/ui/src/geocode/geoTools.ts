@@ -434,18 +434,3 @@ export const geoTrayLabel = (action: string, resources: readonly string[]): stri
   return resource ? `${title}: ${resource}` : title;
 };
 
-// In English like the status's other phrases. Reads, lookups and downloads are not counted: parallel reads may page
-// through one file, upstream counts no searches either, and a download is one whatever it holds.
-const STATUS = {
-  readgeodata: () => 'reading geospatial data',
-  qgisdoc: () => 'reading QGIS docs',
-  qgisrun: (count) => (count === 1 ? 'running a QGIS algorithm' : `running ${count} QGIS algorithms`),
-  geerun: (count) => (count === 1 ? 'running an Earth Engine script' : `running ${count} Earth Engine scripts`),
-  osmsearch: () => 'searching OpenStreetMap',
-  osmprobe: () => 'checking OpenStreetMap tags',
-  osmgetobjects: () => 'downloading from OpenStreetMap',
-  osmgetfeatures: () => 'downloading from OpenStreetMap',
-} satisfies Record<GeoTool, (count: number) => string>;
-
-/** What the status over the composer says while `count` calls of a geo tool run. */
-export const geoStatusPhrase = (tool: GeoTool, count: number) => STATUS[tool](count);

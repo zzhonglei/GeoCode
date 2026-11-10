@@ -114,7 +114,7 @@ describe('GeoCode: what the server tells a model', () => {
 
   it('names neither upstream when the image tool cannot draw', async () => {
     const failing = (settings, tag) => createImageGenerationAction({
-      getClient: async () => ({ generate: { image: async () => { throw Object.assign(new Error(tag), { _tag: tag }); } } }),
+      getClient: async () => ({ experimental: { generate: { image: async () => { throw Object.assign(new Error(tag), { _tag: tag }); } } } }),
       readSettings: async () => settings,
       fsPromises: fs.promises,
     })({ prompt: 'a river map' }, { directory: os.tmpdir() });

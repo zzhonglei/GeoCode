@@ -10,6 +10,7 @@ import { recoverOpenCode, type OpenCodeCompatibility } from '@/lib/opencode/comp
 import { runCompatibilityCheck, takeCompatibilityCheck, type CompatibilityCheck } from './openCodeCompatibilityCheck';
 import { Closed } from '@/geocode/Closed'; // GeoCode: see the incompatible state
 import { StartupFailure } from '@/geocode/StartupFailure';
+import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 
 /**
  * The app mounts at once and keeps starting while the check runs; only a
@@ -92,7 +93,7 @@ export const OpenCodeCompatibilityGate: React.FC<React.PropsWithChildren<{ enabl
     {/* --- GeoCode: the kernel ships inside the app, so there is nothing to install or reconnect --- */}
     <StartupFailure cause="install" kernelVersion={compatibility.version} />
     <Closed>
-    <section className="app-region-drag flex h-full min-h-0 items-center justify-center overflow-y-auto bg-background px-6 py-10 text-foreground select-none" aria-labelledby={titleId}>
+    <ScrollableOverlay as="section" outerClassName="h-full min-h-0 bg-background" className="app-region-drag flex items-center justify-center px-6 py-10 text-foreground select-none" aria-labelledby={titleId} disableHorizontal>
       <div className="flex w-full max-w-sm flex-col items-center text-center">
         <OpenChamberLogo width={48} height={48} />
         <h1 id={titleId} className="mt-6 text-xl font-semibold tracking-tight">{t(outdated ? 'opencodeCompatibility.outdatedTitle' : 'opencodeCompatibility.title')}</h1>
@@ -137,7 +138,7 @@ export const OpenCodeCompatibilityGate: React.FC<React.PropsWithChildren<{ enabl
           <DesktopHostSwitcherInline />
         </div>
       </div>
-    </section>
+    </ScrollableOverlay>
     </Closed>
     {/* --- /GeoCode --- */}
     </>

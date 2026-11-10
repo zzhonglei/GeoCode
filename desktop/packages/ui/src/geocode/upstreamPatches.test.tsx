@@ -60,6 +60,8 @@ const reply: MarkdownPresentation = {
   mermaidControls: {},
   confirmFile: async () => null,
   code: createMarkdownCodePlugin({ isVSCode: false }),
+  uiBlocks: false,
+  uiBlockReply: null,
 };
 
 // Guards against a mention of an agent in a reply linking to OpenCode's documentation.

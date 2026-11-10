@@ -15,6 +15,7 @@ import {
 import { getPermissionToolPresentation } from './permissionToolPresentation';
 import { usePermissionFromSubagent, usePermissionResponse } from './usePermissionResponse';
 import { geoPermissionContent } from '@/geocode/geoPermission'; // GeoCode: a geo tool's own card body, in place of the generic one
+import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 
 /**
  * The agent's permission requests, docked above the composer in the same
@@ -153,14 +154,16 @@ const PermissionDockRequest: React.FC<{
         >
             {!collapsed ? (
                 <div>
-                    <div
+                    <ScrollableOverlay
                         ref={bodyRef}
-                        className="max-h-[50vh] overflow-y-auto overscroll-contain px-1.5"
-                        style={availableMaxHeight === undefined ? undefined : { maxHeight: Math.max(120, availableMaxHeight - 96) }}
+                        outerClassName="max-h-[50vh]"
+                        outerStyle={availableMaxHeight === undefined ? undefined : { maxHeight: Math.max(120, availableMaxHeight - 96) }}
+                        className="overscroll-contain px-1.5"
+                        disableHorizontal
                     >
                         {/* GeoCode: see the import */}
                         {geoPermissionContent(permission) ?? <PermissionRequestContent permission={permission} />}
-                    </div>
+                    </ScrollableOverlay>
                     <PermissionActions
                         permission={permission}
                         isResponding={isResponding}

@@ -2,6 +2,8 @@ import type { I18nKey } from '@/lib/i18n/messages/en';
 import type { Locale } from '@/lib/i18n/runtime';
 import type { I18nDictionary } from '@/lib/i18n/store';
 
+import { geoStatusMessages } from './geoStatusText';
+
 type Messages = Partial<Record<I18nKey, string>>;
 
 // Also in electron/package.json's build.extraMetadata.homepage, electron/main.mjs's GITHUB_BUG_REPORT_URL,
@@ -248,5 +250,5 @@ export const toGeoCodeDictionary = (locale: Locale, dictionary: Readonly<I18nDic
   for (const key in dictionary) {
     if (isMessageKey(key, dictionary)) renamed[key] = messages[key] ?? toGeoCodeText(dictionary[key]);
   }
-  return renamed;
+  return { ...renamed, ...geoStatusMessages(locale) };
 };

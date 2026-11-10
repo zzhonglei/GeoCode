@@ -2,10 +2,12 @@ import React from 'react';
 import { create } from 'zustand';
 
 import { isSkippedTimelineMessage } from '@/components/chat/lib/timelineRoles';
+import type { TimelineEntry } from '@/components/chat/lib/turns/timelineEntries';
 import type { ChatMessageEntry } from '@/components/chat/lib/turns/types';
 import { isInvisibleText } from '@/lib/invisibleText';
 import type { Part, ToolPart } from '@/lib/opencode/model';
 import { readSessionNotice } from '@/lib/opencode/session-notices';
+import { useUIStore } from '@/stores/useUIStore';
 
 import type { GeoTool } from './geoTools';
 import { isOsmTool } from './osmView';
@@ -154,3 +156,33 @@ export const usePublishGeoToolRuns = (
   }, [runs]);
   return runs;
 };
+
+const NO_MESSAGES: readonly ChatMessageEntry[] = [];
+
+/** The messages of timeline entries in order: a turn's prompt and replies, or a message the timeline draws alone. */
+const entryMessages = (entries: readonly TimelineEntry[]) =>
+  entries.flatMap((entry) => (entry.kind === 'turn' ? [entry.turn.userMessage, ...entry.turn.assistantMessages] : [entry.message]));
+
+type LiveTail = { get: () => TimelineEntry | null; subscribe: (listener: () => void) => () => void };
+
+/**
+ * Publishes the runs of the chat's timeline. A turn draws as several list rows, any of them unmounted off screen, so
+ * no row can publish for its turn. The live tail's parts reach its rows through `liveTail`, ahead of the history.
+ */
+export const GeoToolRunsSource = React.memo(function GeoToolRunsSource({
+  history,
+  liveTail,
+  working,
+}: {
+  history: readonly TimelineEntry[];
+  liveTail: LiveTail;
+  working: boolean;
+}) {
+  const showReasoningTraces = useUIStore((state) => state.showReasoningTraces);
+  const historyMessages = React.useMemo(() => entryMessages(history), [history]);
+  usePublishGeoToolRuns(historyMessages, showReasoningTraces, false);
+  const live = React.useSyncExternalStore(liveTail.subscribe, liveTail.get);
+  const liveMessages = React.useMemo(() => (live ? entryMessages([live]) : NO_MESSAGES), [live]);
+  usePublishGeoToolRuns(liveMessages, showReasoningTraces, working && live?.kind === 'turn' && live.isLastTurn);
+  return null;
+});

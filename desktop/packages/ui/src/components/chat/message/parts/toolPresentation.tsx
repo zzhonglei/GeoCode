@@ -103,6 +103,9 @@ export const getToolIcon = (toolName: string, presentation?: GuestToolRule | nul
     if (tool === 'geocode_image') { // GeoCode: the image tool's name in GeoCode
         return <Icon name="image" className={iconClass} />;
     }
+    if (tool === 'openchamber_secret') {
+        return <Icon name="shield-keyhole" className={iconClass} />;
+    }
     if (tool === 'geocode_knowledge') {
         return <Icon name="sticky-note" className={iconClass} />;
     }

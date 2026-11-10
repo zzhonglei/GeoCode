@@ -2,7 +2,6 @@ import React from 'react';
 
 import { dispatchRowExpand } from '@/components/chat/lib/scroll/timelineScrollIntent';
 import { MinDurationShineText } from '@/components/chat/message/parts/MinDurationShineText';
-import { ToolRevealOnMount } from '@/components/chat/message/parts/ToolRevealOnMount';
 import { Icon } from '@/components/icon/Icon';
 import { Text } from '@/components/ui/text';
 import { useDurationTickerNow } from '@/hooks/useDurationTicker';
@@ -292,14 +291,13 @@ const Written: React.FC<{ file: FileCard }> = ({ file }) => (
  */
 const OsmCallRow: React.FC<{
   part: ToolPart;
-  animate: boolean;
   title: string;
   description: string;
   running: boolean;
   doing?: string;
   bad: boolean;
   panel: React.ReactNode;
-}> = ({ part, animate, title, description, running, doing, bad, panel }) => {
+}> = ({ part, title, description, running, doing, bad, panel }) => {
   const open = useRunRowOpen(part.id);
   const toggleOpen = useRunRowToggle();
   const opens = !running;
@@ -309,88 +307,85 @@ const OsmCallRow: React.FC<{
     toggleOpen(part.id);
   };
   return (
-    <ToolRevealOnMount animate={animate} wipe>
-      <div className="w-full min-w-0">
-        <div
-          className={cn(
-            'group/tool oc-static-tool-row flex w-full min-w-0 items-center gap-x-1.5 rounded-xl py-1.5 pe-2 ps-px',
-            opens && 'cursor-pointer',
-          )}
-          role={opens ? 'button' : undefined}
-          tabIndex={opens ? 0 : undefined}
-          aria-expanded={opens ? open : undefined}
-          onClick={opens ? (event) => toggle(event.currentTarget) : undefined}
-          onKeyDown={(event) => {
-            if (!opens || (event.key !== 'Enter' && event.key !== ' ')) return;
-            event.preventDefault();
-            toggle(event.currentTarget);
-          }}
-        >
-          <div className="relative h-5 w-3.5 flex-shrink-0">
+    <div className="w-full min-w-0">
+      <div
+        className={cn(
+          'group/tool oc-static-tool-row flex w-full min-w-0 items-center gap-x-1.5 rounded-xl py-1.5 pe-2 ps-px',
+          opens && 'cursor-pointer',
+        )}
+        role={opens ? 'button' : undefined}
+        tabIndex={opens ? 0 : undefined}
+        aria-expanded={opens ? open : undefined}
+        onClick={opens ? (event) => toggle(event.currentTarget) : undefined}
+        onKeyDown={(event) => {
+          if (!opens || (event.key !== 'Enter' && event.key !== ' ')) return;
+          event.preventDefault();
+          toggle(event.currentTarget);
+        }}
+      >
+        <div className="relative h-5 w-3.5 flex-shrink-0">
+          <div
+            className={cn(
+              'absolute inset-0 flex items-center justify-center transition-opacity',
+              opens && (open ? 'opacity-0' : 'group-hover/tool:opacity-0'),
+            )}
+          >
+            <OsmLogo className="h-3.5 w-3.5" />
+          </div>
+          {opens ? (
             <div
               className={cn(
                 'absolute inset-0 flex items-center justify-center transition-opacity',
-                opens && (open ? 'opacity-0' : 'group-hover/tool:opacity-0'),
+                open ? 'opacity-100' : 'opacity-0 group-hover/tool:opacity-100',
               )}
             >
-              <OsmLogo className="h-3.5 w-3.5" />
+              <Icon name={open ? 'arrow-down-s' : 'arrow-right-s'} className="h-3.5 w-3.5" />
             </div>
-            {opens ? (
-              <div
-                className={cn(
-                  'absolute inset-0 flex items-center justify-center transition-opacity',
-                  open ? 'opacity-100' : 'opacity-0 group-hover/tool:opacity-100',
-                )}
-              >
-                <Icon name={open ? 'arrow-down-s' : 'arrow-right-s'} className="h-3.5 w-3.5" />
-              </div>
-            ) : null}
-          </div>
-          <MinDurationShineText
-            active={running}
-            minDurationMs={300}
-            className={cn('typography-meta flex-shrink-0 font-medium', ROW_TEXT_CLASS)}
-            style={{ color: bad ? 'var(--status-error)' : 'var(--tools-title)' }}
-            title={title}
-          >
-            {title}
-          </MinDurationShineText>
-          <Text
-            variant={animate ? 'generate-effect' : 'static'}
-            className={cn('typography-meta min-w-0 flex-1 truncate whitespace-nowrap', ROW_TEXT_CLASS)}
-            style={{ color: 'var(--tools-description)' }}
-            title={description}
-          >
-            {description}
-          </Text>
-          {doing ? (
-            <MinDurationShineText
-              active
-              className={cn('typography-meta flex-shrink-0 truncate whitespace-nowrap', ROW_TEXT_CLASS)}
-              style={{ color: 'var(--tools-description)' }}
-            >
-              {doing}
-            </MinDurationShineText>
           ) : null}
         </div>
-        {opens ? (
-          <Slide open={open}>
-            <Panel>{panel}</Panel>
-          </Slide>
+        <MinDurationShineText
+          active={running}
+          minDurationMs={300}
+          className={cn('typography-meta flex-shrink-0 font-medium', ROW_TEXT_CLASS)}
+          style={{ color: bad ? 'var(--status-error)' : 'var(--tools-title)' }}
+          title={title}
+        >
+          {title}
+        </MinDurationShineText>
+        <Text
+          variant="static"
+          className={cn('typography-meta min-w-0 flex-1 truncate whitespace-nowrap', ROW_TEXT_CLASS)}
+          style={{ color: 'var(--tools-description)' }}
+          title={description}
+        >
+          {description}
+        </Text>
+        {doing ? (
+          <MinDurationShineText
+            active
+            className={cn('typography-meta flex-shrink-0 truncate whitespace-nowrap', ROW_TEXT_CLASS)}
+            style={{ color: 'var(--tools-description)' }}
+          >
+            {doing}
+          </MinDurationShineText>
         ) : null}
       </div>
-    </ToolRevealOnMount>
+      {opens ? (
+        <Slide open={open}>
+          <Panel>{panel}</Panel>
+        </Slide>
+      ) : null}
+    </div>
   );
 };
 
-const OsmSearchRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, animate }) => {
+const OsmSearchRow: React.FC<{ part: ToolPart }> = ({ part }) => {
   const locale = useI18nStore((state) => state.locale);
   const view = osmSearchView(part, locale);
   const words = osmText(locale);
   return (
     <OsmCallRow
       part={part}
-      animate={animate}
       title={view.title}
       description={view.description}
       running={view.running}
@@ -406,14 +401,13 @@ const OsmSearchRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, an
   );
 };
 
-const OsmProbeRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, animate }) => {
+const OsmProbeRow: React.FC<{ part: ToolPart }> = ({ part }) => {
   const locale = useI18nStore((state) => state.locale);
   const view = osmProbeView(part, locale);
   const words = osmText(locale);
   return (
     <OsmCallRow
       part={part}
-      animate={animate}
       title={view.title}
       description={view.description}
       running={view.running}
@@ -442,7 +436,7 @@ const OsmProbeRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, ani
  * A download's row, as qgisrun's: the OSM logo and GeoAgent's label; while it runs, its step and the time so far,
  * opening to every step; once done, how many features it wrote, opening to its file or to why there is none.
  */
-const OsmDownloadRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, animate }) => {
+const OsmDownloadRow: React.FC<{ part: ToolPart }> = ({ part }) => {
   const locale = useI18nStore((state) => state.locale);
   const running = part.state.status === 'pending' || part.state.status === 'running';
   const now = useDurationTickerNow(running);
@@ -459,7 +453,6 @@ const OsmDownloadRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, 
   return (
     <RunRow
       id={part.id}
-      animate={animate}
       logo={<OsmLogo className="h-3.5 w-3.5" />}
       title={view.title}
       bad={view.bad}
@@ -483,11 +476,11 @@ const OsmDownloadRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, 
 };
 
 /** An OSM tool call's own row. */
-export const OsmRow: React.FC<{ part: ToolPart; animate: boolean }> = ({ part, animate }) =>
+export const OsmRow: React.FC<{ part: ToolPart }> = ({ part }) =>
   part.tool === 'osmsearch' ? (
-    <OsmSearchRow part={part} animate={animate} />
+    <OsmSearchRow part={part} />
   ) : part.tool === 'osmprobe' ? (
-    <OsmProbeRow part={part} animate={animate} />
+    <OsmProbeRow part={part} />
   ) : (
-    <OsmDownloadRow part={part} animate={animate} />
+    <OsmDownloadRow part={part} />
   );

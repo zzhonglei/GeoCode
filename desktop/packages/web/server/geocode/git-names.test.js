@@ -63,7 +63,7 @@ describe('GeoCode: git names', () => {
     const worktree = `${repo}-rivers`;
     roots.push(worktree);
     git(repo, ['worktree', 'add', '-q', '-b', 'agile-otter', worktree]);
-    await setWorktreePinned(worktree, true, 1_700_000_000_000);
+    await setWorktreePinned(worktree, true, null, 1_700_000_000_000);
     expect(git(repo, ['config', '--local', '--get-regexp', '^branch\\.']).trim()).toBe('branch.agile-otter.geocodepinned 1700000000000');
     const listed = await getWorktrees(repo);
     expect(listed.find((entry) => entry.branch === 'agile-otter')?.pinnedAt).toBe(1_700_000_000_000);
