@@ -1539,7 +1539,7 @@ export const useUIStore = create<UIStore>()(
         sidebarWidth: LEFT_SIDEBAR_DEFAULT_WIDTH,
         contextPanelByDirectory: {},
         contextRailOrder: [],
-        contextRailHiddenSurfaces: [],
+        contextRailHiddenSurfaces: ['terminal', 'pr', 'walkthrough'], // GeoCode: shown in the side panel only once the user turns them on
         mobileWorkspaceTabOrder: [],
         mobileWorkspaceHiddenTabs: [],
         mobileWorkStatusHiddenSections: ['subagents'],
