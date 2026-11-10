@@ -1,0 +1,132 @@
+# Builds GeoCode's installers: macOS arm64 (.dmg) and Windows x64 (.exe), both unsigned.
+#
+#   push a tag v<version>  builds both and puts them in a draft release, which the maintainer tries and publishes
+#   run it by hand         builds both and keeps them as the run's artifacts for three days, releasing nothing
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The app's version lives in build.extraMetadata.version alone; a tag that names another would release a build
+      # that reports a different version.
+      - name: Read the version
+        id: read
+        run: |
+          version=$(node -p "require('./desktop/packages/electron/package.json').build.extraMetadata.version")
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the app's version $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    name: build (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            label: macOS arm64
+            platform: darwin-arm64
+            # Ad hoc signed and not notarized, as GeoCode has no Apple certificate; Apple silicon runs no unsigned app.
+            package: >-
+              --mac dmg --arm64 --publish=never
+              -c.mac.identity=- -c.mac.notarize=false -c.dmg.sign=false
+            installer: desktop/packages/electron/dist/*.dmg
+          # windows-latest has a Visual Studio that node-gyp, which Electron's native modules build with, does not find.
+          # package.mjs leaves the installer unsigned when no certificate is given.
+          - os: windows-2022
+            label: Windows x64
+            platform: win32-x64
+            package: --win nsis --x64 --publish=never
+            installer: desktop/packages/electron/dist/*.exe
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: desktop/package.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Install kernel dependencies
+        working-directory: kernel
+        run: bun install --frozen-lockfile
+
+      - name: Install geoengine dependencies
+        working-directory: geoengine
+        run: bun install --frozen-lockfile
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: bun install --frozen-lockfile
+
+      # The conda packages stage-python.sh packs, and the pixi tools it packs them with: several hundred MB a run.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/python
+          key: python-${{ matrix.platform }}-${{ hashFiles('geoengine/environment/pixi.lock', 'geoengine/environment/tools.json') }}
+
+      - name: Package
+        working-directory: desktop/packages/electron
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: bun run package -- ${{ matrix.package }}
+
+      # Apple silicon refuses to start an app whose signature does not hold.
+      - name: Check the signature
+        if: runner.os == 'macOS'
+        run: codesign --verify --deep --strict --verbose=2 desktop/packages/electron/dist/mac-arm64/GeoCode.app
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: GeoCode-${{ needs.version.outputs.version }}-${{ matrix.platform }}
+          path: ${{ matrix.installer }}
+          if-no-files-found: error
+          retention-days: 3
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: installers
+          merge-multiple: true
+
+      # A draft: the maintainer tries the installers before anyone can download them. The notes open with how to start
+      # an unsigned app, followed by what GitHub lists from the merged pull requests.
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$GITHUB_REF_NAME" --jq .body > generated.md
+          cat .github/release-notes.md generated.md > notes.md
+          gh release create "$GITHUB_REF_NAME" installers/* --draft --title "GeoCode $VERSION" --notes-file notes.md
