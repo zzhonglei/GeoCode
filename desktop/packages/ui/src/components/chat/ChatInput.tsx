@@ -160,7 +160,7 @@ import { hasOpenDropdown } from '@/hooks/keyboard-shortcut-dom';
 import { useAuthSessionStore } from '@/lib/runtime-auth-expiry';
 import { useI18n } from '@/lib/i18n';
 import { useDraftHeading } from './useDraftHeading';
-import { DraftWordmark, DRAFT_SUBTITLE_CLASS } from '@/geocode/DraftWordmark'; // GeoCode: see the draft heading
+import { DraftWordmark } from '@/geocode/DraftWordmark'; // GeoCode: see the draft heading
 import { sessionEvents } from '@/lib/sessionEvents';
 import { useOpenCodeStartupStore } from '@/sync/opencode-startup-gate';
 import { eventMatchesShortcut, getEffectiveShortcutCombo, normalizeCombo, shortcutRegistry } from '@/lib/shortcuts';
@@ -4862,9 +4862,13 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
             {showDesktopDraftPresentation ? (
                 <div className={cn('chat-input-column mb-7 text-center', draftPresentationClassName)}>
                     <DraftWordmark />{/* GeoCode: its wordmark heading the new session */}
-                    <h1 className={DRAFT_SUBTITLE_CLASS}>{/* GeoCode: a subtitle under the wordmark */}
+                    {/* --- GeoCode: the question is the composer's placeholder --- */}
+                    <Closed>
+                    <h1 className="text-balance text-2xl font-normal tracking-tight text-foreground md:text-3xl">
                         {renderDraftTitle(draftHeading, draftProjectLabel)}
                     </h1>
+                    </Closed>
+                    {/* --- /GeoCode --- */}
                 </div>
             ) : null}
             <div className={cn('chat-input-column relative overflow-visible', isComposerExpanded && 'flex flex-1 min-h-0 flex-col')}>
@@ -5129,7 +5133,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
                                     : currentSessionId || newSessionDraftOpen
                                         ? inputMode === 'shell'
                                             ? t('chat.chatInput.placeholder.shell')
-                                            : t(useCompactChatPlaceholder ? 'chat.chatInput.placeholder.chatCompact' : 'chat.chatInput.placeholder.chat')
+                                            : currentSessionId ? t(useCompactChatPlaceholder ? 'chat.chatInput.placeholder.chatCompact' : 'chat.chatInput.placeholder.chat') : draftHeading // GeoCode: a new session asks its question here, not over the composer
                                         : t('chat.chatInput.placeholder.selectSession')}
                                 editable={Boolean(currentSessionId || newSessionDraftOpen)}
                                 autoCorrect={composerAutoCorrect({ isMobile })}

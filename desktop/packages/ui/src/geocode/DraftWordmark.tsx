@@ -3,9 +3,10 @@ import React from 'react';
 import wordmark from './geocode-wordmark.svg?url';
 
 /**
- * GeoCode's wordmark heading the new session, with the question under it as its subtitle: one group, the wordmark
- * first, set apart from the composer below. Pixel art drawn on a 512 × 112 grid, shown at three quarters of it, about
- * two thirds of the composer's width. Left out on a window too short to hold it. One drawing serves both themes.
+ * GeoCode's wordmark heading the new session, set apart from the composer below, whose placeholder asks the question
+ * (cut off where a long project name takes it past one line, as in the mini chat). Pixel art drawn on a 512 × 112
+ * grid, shown at three quarters of it, about two thirds of the composer's width. Left out on a window too short to hold
+ * it. One drawing serves both themes.
  */
 export const DraftWordmark: React.FC = () => (
   <img
@@ -18,7 +19,3 @@ export const DraftWordmark: React.FC = () => (
     className="mx-auto mb-4 block h-auto max-w-full select-none [@media(max-height:620px)]:hidden"
   />
 );
-
-/** The question under the wordmark: smaller and quieter than a heading, its project name in the text's own colour. */
-export const DRAFT_SUBTITLE_CLASS =
-  'text-balance text-lg font-normal text-muted-foreground md:text-xl [&>span]:font-semibold [&>span]:text-foreground';
