@@ -37,10 +37,11 @@ node scripts/test.mjs --list changed     # 只列出要跑什么与原因,不运
 |---|---|---|
 | `kernel` | 内核各包里 GeoCode 的测试:GeoCode 自己的测试文件整份运行,上游测试文件里只运行名称含 `GeoCode:` 的用例 | 无 |
 | `ui`、`web`、`electron` | 桌面端这三个包 `geocode/` 目录下的测试 | 无 |
-| `geoengine` | GeoEngine 的单元测试;`geoengine/<能力域>` 只跑 `engine`(引擎本身)、`python`、`qgis`、`gee` 或 `osm` 目录下的 | `PATH` 里的 `python3`,没有时相关的用例跳过 |
+| `geoengine` | GeoEngine 的单元测试;`geoengine/<能力域>` 只跑 `engine`(引擎本身)、`python`、`qgis`、`gee`、`osm` 或 `preview` 目录下的 | `PATH` 里的 `python3`,没有时相关的用例跳过 |
 | `qgis` | 在本机每一套 QGIS 上运行 | macOS 上的 QGIS |
 | `gee` | 在真实 Earth Engine 上运行 | `GEOENGINE_GEE_PROJECT=<项目 ID>`、登录过 Earth Engine、装好的内置环境 |
 | `osm` | 在装好的内置环境上运行 OSM 下载,服务是本机的假服务 | 装好的内置环境 |
+| `preview` | 在装好的内置环境上运行预览的读取端,读测试自己造的数据 | 装好的内置环境 |
 | `scripts` | `scripts/` 下脚本自己的测试 | 无(写入检测的只在 macOS 上跑) |
 
 GeoEngine 的单元测试慢在 OSM 与 GEE:它们验证暂停、重试、每秒一次请求这类与时间有关的行为,测试里真的等这些时间;`changed` 只在改到它们的能力域或引擎本身时才挑它们。
@@ -79,6 +80,7 @@ GeoEngine 的单元测试慢在 OSM 与 GEE:它们验证暂停、重试、每秒
 - 内置的 Python 环境:单元测试用一个很小的假包与替身 pixi-unpack,转去运行 `PATH` 里的 `python3`;真实的环境要在应用里验证。
 - GEE:单元测试不联网,earthengine-api 与 Google 的库换成替身,脚本用 `PATH` 里的 `python3` 真实执行。存资产的 `gee.save` 不在其中(改了它要另试,`CONVENTIONS.md` 第 7 节)。真实软件的测试只查询、下载到临时目录,不存资产。
 - OSM:都不联网,公共服务换成本机回环地址上的一个假服务。下载要 shapely 与 GDAL,由 `osm` 套件在装好的内置环境上运行。对真实公共服务的检查不做成自动测试(`CONVENTIONS.md` 第 7 节)。
+- 预览:单元测试里的读取进程是 Node 运行的一段替身,两个平台都能跑,测的是引擎怎样管读取进程。读取端自己要 GDAL、shapely 与 pyproj,由 `preview` 套件在装好的内置环境上运行,用的是源码里的读取端,不是装在环境里的那一份;矢量瓦片由测试里按格式规范另写的解码器读回来核对。地图在窗口里画得对不对不在其中。
 
 内核的 `packages/core` 有自己的测试脚本,它在运行器给的主目录里再换一层;上游测试文件里的 GeoCode 用例按名称挑选,其余用例不运行,但文件本身的准备代码照常执行。
 
