@@ -10,6 +10,7 @@ scripts/     构建与暂存、测试的运行器、打包版的检查、写入�
 kernel/      内核,基于 OpenCode
 desktop/     桌面应用,基于 OpenChamber
 geoengine/   地理引擎 GeoEngine,以及 Python 包 geocodekit(geoengine/python/)
+.github/     GitHub 上的检查(TESTING.md 第 10 节)与打包发布(第 6 节)
 ```
 
 `scripts/` 里:
@@ -81,7 +82,9 @@ bun run electron:dev:bundled
 
 沙箱里没有登录信息,要对话就在沙箱里连接一个模型服务,或在沙箱的全局配置里配一个本机的 OpenAI 兼容接口。opencode.ai 的免费模型不对 GeoCode 开放。测完删掉沙箱目录即可。
 
-## 6. 打包(macOS)
+## 6. 打包
+
+### 本机(macOS)
 
 ```bash
 cd desktop/packages/electron
@@ -93,6 +96,13 @@ CSC_IDENTITY_AUTO_DISCOVERY=false bun run package -- --dir -c.mac.identity=- -c.
 macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是它的源(Icon Composer 的文档,图层在其中的 `Assets/` 里),编译出的 `resources/icons/Assets.car` 提交在仓库里,打包只把它拷进应用,缺了它打包会失败。改了图层或 `icon.json` 之后,在 `desktop/packages/electron` 运行 `bun run generate:macos-icon` 重新生成(需要 Xcode),与源一起提交。
 
 在沙箱里运行打包出的应用,直接执行 `.app/Contents/MacOS/` 下的可执行文件,带上第 5 节的 `HOME`,Electron 的配置目录改用参数 `--user-data-dir=<沙箱里的目录>` 指定:打包出的应用不接受 `OPENCHAMBER_` 开头的环境变量(`ENVIRONMENT.md` 第 2.1 节)。这个参数来自 Chromium,Electron 的文档没有列出。再加上 `--remote-debugging-port=<端口>`,就能以 DevTools 协议从外部检查各个窗口。
+
+### GitHub 上的打包与发布
+
+发布用的安装包由 GitHub 打出:`.github/workflows/release.yml` 在 macOS 上打 arm64 的 dmg,在 Windows 上打 x64 的安装程序。GeoCode 没有代码签名的证书,两个平台都不签名:macOS 用临时签名、不公证,参数同上;Windows 不签名。用户第一次打开时要手动放行,做法写在每个 Release 说明的开头,取自 `.github/release-notes.md`。
+
+- 试构建:在 Actions 页手动运行,两个平台的安装包作为这次运行的附件保留三天,不发布。
+- 发布:推送标签 `v<版本号>`。版本号与 `desktop/packages/electron/package.json` 的 `build.extraMetadata.version` 不一致时拒绝打包。两个安装包放进一个草稿 Release,说明的其余部分由 GitHub 按合并的 PR 生成;维护者下载试用之后,在 GitHub 上发布它。
 
 ## 7. 检查
 
@@ -120,7 +130,7 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 
 ### Windows
 
-代码按两个平台都会运行来写(`CONVENTIONS.md` 第 1 节),而开发中的检查都在 macOS 上跑,下面这些写错了不会报。平台分支怎样测见 `TESTING.md` 第 9 节。
+代码按两个平台都会运行来写(`CONVENTIONS.md` 第 1 节)。开发中的检查在 macOS 上跑;CI 在 Windows 上跑类型检查与单元测试(`TESTING.md` 第 10 节),但以 shell 脚本假扮外部程序的测试在那里跳过,所以下面这些写错了未必会报。平台分支怎样测见 `TESTING.md` 第 9 节。
 
 - 路径:拼接与解析用 `path`,不手写 `/`;判断一个路径在不在另一个之下,`path.resolve` 之后用 `path.relative`,不比较字符串前缀。Windows 的路径不分大小写,盘符的大小写也不固定。文件网址与路径互转用 `fileURLToPath`、`pathToFileURL`,`new URL(...).pathname` 在 Windows 上得到 `/C:/…`。
 - 路径长度:超过 260 个字符的路径有的程序打不开,`snapshot`、`worktree` 与 `npm` 下容易超;套接字的路径也有约 100 字节的上限。
@@ -128,5 +138,5 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 - 结束程序:没有 POSIX 信号,`kill()` 直接终止,不带走子进程;结束整棵进程树用 `taskkill /T`。崩溃表现为很大的退出码(如 3221225477),`signal` 是空的,判断崩溃不能只看信号。
 - 文件:打开着的文件删不掉也改不了名(`EBUSY`、`EPERM`),杀毒软件与索引服务正扫着它时也一样;删除与改名要处理失败,目标被占着时改名覆盖它也会失败。可执行权限没有意义;建符号链接要管理员或开发者模式。
 - 环境变量:名字不分大小写,系统给的可能是 `Path`。`process.env` 本身不分,复制成普通对象后就分了,再设 `PATH` 会多出一份,子进程取哪一份不确定(`geoengine/src/runtime.ts` 的 `overlay`)。主目录在 `USERPROFILE`,没有 `HOME`,用 `os.homedir()`。
-- 文本与编码:外部程序的输出可能以 `\r\n` 换行,按行切分用 `/\r?\n/`。中文 Windows 的控制台与许多程序用系统代码页(简体是 GBK,繁体是 CP950),不是 UTF-8,读外部程序的输出要明确编码;内置环境的 Python 以 `-X utf8` 运行(`geoengine/src/bundled.ts`)。会被执行的 `.sh` 由 `.gitattributes` 固定为 LF 换行。
+- 文本与编码:外部程序的输出可能以 `\r\n` 换行,按行切分用 `/\r?\n/`;Windows 上 git 签出的文本文件同样以 `\r\n` 换行,读仓库里的源码与文档来匹配的代码也要照顾到。中文 Windows 的控制台与许多程序用系统代码页(简体是 GBK,繁体是 CP950),不是 UTF-8,读外部程序的输出要明确编码;内置环境的 Python 以 `-X utf8` 运行(`geoengine/src/bundled.ts`)。会被执行的 `.sh` 由 `.gitattributes` 固定为 LF 换行。
 - 脚本:`.sh` 在 Windows 上要 Git Bash 才能运行,新的构建与开发脚本用 Node 写。

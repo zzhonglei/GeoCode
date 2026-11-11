@@ -137,7 +137,26 @@ node scripts/app/geo.mjs --qgis <QGIS.app> --gee <项目 ID>   # 另加 GEE,用�
 - `node --test` 没有默认超时,要带 `--test-timeout`;假对象要像真的一样回应,否则测的是超时那条路。
 - `Bun.serve` 的 `idleTimeout` 默认 10 秒,模拟长时间没有输出的应答要设为 0。
 - Effect 的测试里,`yieldNow` 不等真实的 I/O;`it.effect` 用测试时钟,`sleep` 不会醒。等真实的进展用 `it.live` 加按条件的轮询。
+- 等一个状态出现时,从发出请求之前记下的位置往后找,不只看最后一个:CI 的机器快,状态可能在请求得到答复之前就已经走完。
+- 清理按登记的相反顺序进行,先结束进程,再删目录:Windows 删不掉还有进程在用的目录。
 
 ### 平台分支
 
 按平台走不同逻辑的代码,把平台当作参数传进来(如 `geoengine/src/runtime.ts` 的 `overlay`),不在函数里读 `process.platform`,测试在 macOS 上就能走 Windows 那条分支。处理 Windows 路径的代码用 `path.win32`(如 `geoengine/src/qgis/windows.ts`),不用跟着本机走的 `path`;要目录树时照 Windows 的布局搭假的(第 6 节的 QGIS)。在 macOS 上测不了的,如真实的 `cmd.exe`、进程树与文件占用,测试里不假装测过,汇报里列为没有验证。
+
+## 10. GitHub 上的检查
+
+每个 PR(草稿除外)与每次推到 `main`,GitHub 在 macOS 与 Windows 上各运行一遍 `.github/workflows/ci.yml`,两个平台都是 GeoCode 发布的平台。每个平台两个任务,同时进行:
+
+- `check`:安装三个目录的依赖,类型检查、lint、`own-anti-slop.mjs`,以及 `kernel`、`ui`、`web`、`electron`、`scripts` 五个套件。
+- `geoengine`:只装 `geoengine/` 的依赖,运行它的单元测试。它们真的等时间(第 3 节),单独一个任务,其余的不必排在它后面。
+
+真实软件的套件、打包版的检查与写入检测不在其中:运行器上没有 QGIS、Earth Engine 的账号与装好的内置环境。这些照 `CONVENTIONS.md` 第 7 节由维护者在本机补跑。
+
+四个任务都通过,PR 才能合并。套件没有运行(退出码 3)也算失败:这些套件在运行器上本该全部运行。通过不等于 Windows 上验证过:GeoEngine 以 shell 脚本假扮外部程序的测试在 Windows 上跳过(第 6 节),执行外部程序的那部分在 Windows 上仍然没有测试。
+
+在 GitHub 的 Actions 页手动运行时,可以只选一个平台,并只跑指定的测试,写法同 `scripts/test.mjs` 的参数;这时不做类型检查与 lint。在 macOS 上测不了的改动,这样在 Windows 上反复试一个测试文件:
+
+```bash
+gh workflow run ci.yml -f platform=Windows -f tests='--file <测试文件>'
+```

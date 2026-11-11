@@ -32,6 +32,8 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# The repository's ruleset ci-required asks for these jobs by name, as `check (<runner>)` and `geoengine (<runner>)`:
+# renamed here, the rule waits for a check that never comes and no pull request can be merged.
 jobs:
   check:
     if: ${{ !github.event.pull_request.draft }}
