@@ -113,20 +113,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: installers
           merge-multiple: true
 
-      # A draft: the maintainer tries the installers before anyone can download them. The notes open with how to start
-      # an unsigned app, followed by what GitHub lists from the merged pull requests.
+      # A draft with no notes: the maintainer writes them, and tries the installers before anyone can download them.
       - name: Create the draft release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$GITHUB_REF_NAME" --jq .body > generated.md
-          cat .github/release-notes.md generated.md > notes.md
-          gh release create "$GITHUB_REF_NAME" installers/* --draft --title "GeoCode $VERSION" --notes-file notes.md
+          gh release create "$GITHUB_REF_NAME" installers/* --repo "$GITHUB_REPOSITORY" \
+            --draft --title "GeoCode $VERSION" --notes ''
