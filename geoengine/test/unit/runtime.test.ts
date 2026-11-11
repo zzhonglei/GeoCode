@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Effect, Fiber } from "effect"
+import { type Duration, Effect, Fiber, Result } from "effect"
 import { Runtime } from "../../src/runtime.ts"
-import { alive } from "../support/common.ts"
+import { alive, until } from "../support/common.ts"
 
 const NODE = process.execPath
 
@@ -334,4 +334,150 @@ test("closing the runtime's scope ends the tasks still running", async () => {
   )
   assert.ok(pid > 0)
   assert.equal(alive(pid), false)
+})
+
+// A worker that answers each line as the line asks: `size` bytes of `fill` after a line naming them, or `raw` as it
+// is, and then exits when asked to.
+const ANSWERING = `require("readline").createInterface({ input: process.stdin }).on("line", (line) => {
+  const asked = JSON.parse(line)
+  const answer = asked.raw !== undefined
+    ? Buffer.from(asked.raw)
+    : Buffer.concat([
+        Buffer.from(JSON.stringify({ id: asked.id, bytes: asked.size }) + "\\n"),
+        Buffer.alloc(asked.size, asked.fill),
+      ])
+  process.stdout.write(answer, () => asked.exit && process.exit(0))
+})`
+
+type Frame = readonly [header: unknown, bytes: Uint8Array]
+
+/** Opens a worker, hands it and the answers it gives to `use`, and returns how it ended. */
+const serve = (
+  use: (worker: Runtime.Worker, frames: Frame[], runtime: Runtime.Interface) => Promise<void>,
+  options: { script?: string; idle?: Duration.Input; ledger?: Runtime.Ledger; onFrame?: () => void } = {},
+) => {
+  const frames: Frame[] = []
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const runtime = yield* Runtime.Service
+        const worker = yield* runtime.worker({
+          command: NODE,
+          args: ["-e", options.script ?? ANSWERING],
+          idle: options.idle ?? "10 seconds",
+          onFrame: (header, bytes) => {
+            frames.push([header, bytes])
+            options.onFrame?.()
+          },
+        })
+        yield* Effect.promise(() => use(worker, frames, runtime))
+        return yield* Effect.result(worker.ended)
+      }),
+    ).pipe(Effect.provide(Runtime.layer(options.ledger ?? quiet))),
+  )
+}
+
+const ask = (worker: Runtime.Worker, request: object) => worker.send(JSON.stringify(request))
+
+// Guards the cutting of a worker's output into answers: bytes that hold line ends, an answer arriving in many pieces,
+// several in one piece, and a line that names no bytes.
+test("a worker's answers arrive whole and in order, however its output is cut", async () => {
+  const large = 3 * 1024 * 1024
+  const ended = await serve(async (worker, frames) => {
+    ask(worker, { id: 1, size: 0, fill: 0 })
+    ask(worker, { id: 2, size: large, fill: 0x0a })
+    ask(worker, { raw: `{"id":3,"bytes":2}\nab{"id":4}\n{"id":5,"bytes":1}\nc` })
+    await until(() => frames.length === 5, 5000, "the five answers")
+    assert.deepEqual(
+      frames.map(([header, bytes]) => [(header as { id: number }).id, bytes.length]),
+      [
+        [1, 0],
+        [2, large],
+        [3, 2],
+        [4, 0],
+        [5, 1],
+      ],
+    )
+    assert.ok(frames[1][1].every((byte) => byte === 0x0a))
+    assert.equal(Buffer.from(frames[2][1]).toString(), "ab")
+    assert.equal(Buffer.from(frames[4][1]).toString(), "c")
+    // Each answer's bytes are its own: a view into what arrived would carry the answers after it wherever it is sent.
+    assert.equal(frames[2][1].buffer.byteLength, 2)
+    worker.stop()
+  })
+  assert.ok(Result.isSuccess(ended))
+  assert.equal(ended.success.reason, "abort")
+})
+
+// Guards a request made just before the clock runs out: were only answers to refresh it, the worker would be ended
+// in the middle of that request.
+test("the idle clock ends a worker left alone, but not one that is still being asked", async () => {
+  const started = Date.now()
+  const ended = await serve(
+    async (worker) => {
+      for (let n = 0; n < 8; n++) {
+        worker.send("{}")
+        await new Promise((resolve) => setTimeout(resolve, 150))
+      }
+    },
+    { script: `process.stdin.on("data", () => {})`, idle: "500 millis" },
+  )
+  assert.ok(Result.isSuccess(ended))
+  assert.equal(ended.success.reason, "idle")
+  assert.ok(Date.now() - started >= 1600, `ended after ${Date.now() - started} ms`)
+})
+
+// Guards the requests waiting on a worker: skipping an output that is no answer would leave them waiting for good.
+test("an output that is not an answer ends the worker, which fails", async () => {
+  for (const raw of ["Warning: something\n", `{"bytes":-1}\n`, `{"bytes":"3"}\n`]) {
+    let pid = 0
+    const ended = await serve(async (worker) => ask(worker, { raw }), {
+      ledger: { started: (started) => void (pid = started), ended: () => {} },
+    })
+    assert.ok(Result.isFailure(ended), raw)
+    await settle()
+    assert.equal(alive(pid), false)
+  }
+})
+
+test("a worker that names more bytes than an answer may hold is ended before any of them is kept", async () => {
+  const ended = await serve(async (worker) => ask(worker, { raw: `{"bytes":${2 ** 40}}\n` }))
+  assert.ok(Result.isSuccess(ended))
+  assert.equal(ended.success.reason, "output-limit")
+})
+
+// Thrown inside the handler of the process's output, it would otherwise end the engine.
+test("a consumer of answers that throws ends the worker, which fails with that error", async () => {
+  let pid = 0
+  const ended = await serve(async (worker) => ask(worker, { id: 1, size: 0, fill: 0 }), {
+    ledger: { started: (started) => void (pid = started), ended: () => {} },
+    onFrame: () => {
+      throw new Error("unreadable answer")
+    },
+  })
+  assert.ok(Result.isFailure(ended))
+  assert.equal(ended.failure.message, "unreadable answer")
+  await settle()
+  assert.equal(alive(pid), false)
+})
+
+test("a worker that fails with no one waiting on its end does not end the engine", async () => {
+  let pid = 0
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const runtime = yield* Runtime.Service
+        const worker = yield* runtime.worker({
+          command: NODE,
+          args: ["-e", ANSWERING],
+          idle: "10 seconds",
+          onFrame: () => {},
+        })
+        ask(worker, { raw: "no answer\n" })
+        yield* Effect.promise(() => until(() => pid > 0 && !alive(pid), 5000, "the worker to end"))
+        // A rejection no one handles is reported a turn of the event loop after it happens.
+        yield* Effect.promise(() => new Promise((resolve) => setImmediate(resolve)))
+      }),
+    ).pipe(Effect.provide(Runtime.layer({ started: (started) => void (pid = started), ended: () => {} }))),
+  )
 })
