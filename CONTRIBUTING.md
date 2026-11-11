@@ -2,7 +2,7 @@
 
 怎样给 GeoCode 提 issue 与 PR:什么要先讨论、代码放在哪里、跑哪些检查、标题怎样写、怎样审查与合并。开发环境与规则不在这里重复,在 `docs/development/` 的三份文档里:`CONVENTIONS.md` 是必须守的规则,`DEVELOPMENT.md` 讲怎样安装、构建与运行,`TESTING.md` 讲怎样测试。
 
-GeoCode 的主线 `main` 由维护者维护,所有改动经 PR 合入。issue、PR 的描述与讨论用中文或英文都可以;代码、注释与提交信息用英文。
+GeoCode 的主线 `main` 由维护者维护,其他人的改动经 PR 合入。issue、PR 的描述与讨论用中文或英文都可以;代码、注释与提交信息用英文。
 
 ## 1. 先开 issue 还是直接提 PR
 
@@ -24,7 +24,7 @@ GeoCode 自己的代码在 `geoengine/`、`scripts/`,以及 `kernel/`、`desktop
 
 `kernel/` 与 `desktop/` 是 OpenCode 与 OpenChamber 的源码,GeoCode 持续合并它们的新版本。要改那里的功能时,把逻辑写进所在包的 `geocode/` 目录,上游的文件里只留调用它的一两行,并用 `GeoCode:` 注释标出来;不格式化、不重排上游的行。合并上游时怎样照顾这些改动,由维护者负责:拿不准怎样改上游文件时,在 PR 里说明,维护者会调整。
 
-写代码之前,先读 `CONVENTIONS.md` 的第 1、2、4 节:从简的原则、GeoCode 的产品约束(输出不覆盖已有的文件,失败不当成空结果,路径与其他产品分开),以及各个目录的写法。代码在 macOS 与 Windows 上都会运行,常见的坑在 `DEVELOPMENT.md` 第 8 节。
+写代码之前,通读 `CONVENTIONS.md`:每一节都是要守的规则。最常用到的是第 2 节的产品约束(输出不覆盖已有的文件,失败不当成空结果,路径与其他产品分开)、第 4 节各个目录的写法与第 9 节的提交信息。代码在 macOS 与 Windows 上都会运行,常见的坑在 `DEVELOPMENT.md` 第 8 节。
 
 ## 3. 准备环境
 
@@ -34,8 +34,8 @@ GeoCode 自己的代码在 `geoengine/`、`scripts/`,以及 `kernel/`、`desktop
 
 提 PR 之前,在本机跑:
 
-- 改到的部分的类型检查与 lint,命令在 `DEVELOPMENT.md` 第 7 节;改了 `desktop/` 再跑 `node scripts/own-anti-slop.mjs`。
-- `node scripts/test.mjs changed`,它按改动挑出要跑的测试。
+- 改到的部分的类型检查与 lint,命令在 `DEVELOPMENT.md` 第 7 节;改了 `desktop/` 再跑 `node scripts/own-anti-slop.mjs`,它要的 `chamber-upstream` 分支怎样取得也在那一节。
+- `node scripts/test.mjs changed`,它按改动挑出要跑的测试。它只看还没提交的改动,所以在提交之前跑;已经提交的,指名改到的部分的套件,如 `node scripts/test.mjs kernel web`,套件见 `TESTING.md` 第 3 节。
 
 测试只经 `scripts/test.mjs` 运行:它给每次运行一个临时的主目录;直接运行包目录里的测试命令,有的会写进自己电脑上真实的主目录。新写的测试要先证明它会失败,做法在 `TESTING.md` 第 9 节。
 
@@ -49,18 +49,7 @@ PR 用 squash 合并,PR 的标题就是 `main` 上那次提交的信息,所以�
 type(scope): summary
 ```
 
-- 用英文写,类型见 `CONVENTIONS.md` 第 9 节。
-- `summary` 写用户能感受到的变化,而不是改了哪个函数,例如 `fix(desktop): show the agent's name, not its id, under each answer`。
-- `scope` 取下表之一;跨了几处的改动与只改文档的,不写 `scope`。
-
-| scope | 范围 |
-|---|---|
-| `kernel` | 内核 |
-| `desktop` | 桌面应用:主进程、壳服务端与界面 |
-| `geoengine` | GeoEngine 本身 |
-| `qgis`、`gee`、`osm` | 各能力域 |
-| `python` | 内置的 Python 环境与 `geocodekit` 的公共部分 |
-| `scripts` | 构建、测试与检查的脚本 |
+用英文写,`type` 与 `scope` 怎样取见 `CONVENTIONS.md` 第 9 节。`summary` 写用户能感受到的变化,而不是改了哪个函数,例如 `fix(desktop): show the agent's name, not its id, under each answer`。
 
 一个 PR 只做一件事。顺手看到的别的问题另开 issue 或 PR,不混进这次的改动。描述照模板填,简短说明改了什么、为什么、怎样验证的,写 diff 本身说不出的事,不必逐个文件列改动;改了界面的附上改动前后的截图。在 fork 上提 PR 时勾选「Allow edits by maintainers」,小问题维护者可以直接在 PR 上改。
 

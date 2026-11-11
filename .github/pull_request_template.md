@@ -29,5 +29,5 @@ Say what you did not verify, especially on the other platform (macOS or Windows)
 ## Checklist
 
 - [ ] This pull request does one thing
-- [ ] I ran `node scripts/test.mjs changed` and the type checks and lint of what I changed
+- [ ] I ran the type checks and lint of what I changed, and its tests through `node scripts/test.mjs`: `changed` before committing, or its suites by name after
 - [ ] Upstream files under `kernel/` and `desktop/` are untouched, or only call into a `geocode/` folder and are marked `GeoCode:`
