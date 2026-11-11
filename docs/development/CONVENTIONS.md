@@ -79,9 +79,11 @@ TypeScript 与 Effect,写法照 `kernel/`(第 4.1 节),只有「优先用 Bun �
 - 写法照 PEP 8,行宽 120;结构、公开的名字与函数的约定照 `GEOCODEKIT.md`。
 - 只用两个解释器都支持的写法:单元测试用 `PATH` 里的 `python3` 运行它,可能比内置环境的 3.13 旧(macOS 自带的是 3.9)。
 
-### 4.4 `scripts/`
+### 4.4 `scripts/` 与 `.github/`
 
 shell 脚本用 POSIX sh(`#!/bin/sh`),要能在 macOS 自带的 sh 上运行。
+
+工作流引用的 action 写完整的提交号,行尾注释它的版本号,如 `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`:版本标签可以被挪到别的代码上,提交号不会。仓库的设置拒绝运行没有这样固定的 action。
 
 ### 4.5 注释
 
