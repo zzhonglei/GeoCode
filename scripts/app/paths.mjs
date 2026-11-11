@@ -35,7 +35,8 @@ const OWN_IN_PROJECT = /^\.(git|geocode)(\/|$)/
 /** The entries of each file tree in the document, as paths under the home or the project. */
 export const trees = (text) => {
   const named = { home: [], project: [] }
-  for (const [, block] of text.matchAll(/^```\n([\s\S]*?)^```/gm)) {
+  // A Windows checkout ends its lines with carriage returns.
+  for (const [, block] of text.replaceAll('\r\n', '\n').matchAll(/^```\n([\s\S]*?)^```/gm)) {
     const [first, ...lines] = block.split('\n')
     const prefix = Object.keys(ROOTS).find((each) => first.startsWith(each))
     if (!prefix) continue
