@@ -27,9 +27,10 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same pull request or branch makes the older run moot.
+# A newer push to the same pull request or branch makes the older run moot. A run by hand is grouped apart: on main
+# it would otherwise cancel the checks of the latest push, or be cancelled by them.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 # The repository's ruleset ci-required asks for these jobs by name, as `check (<runner>)` and `geoengine (<runner>)`:
