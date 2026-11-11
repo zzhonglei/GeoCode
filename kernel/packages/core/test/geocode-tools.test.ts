@@ -249,8 +249,9 @@ const read = (input: Record<string, unknown>, session = sessionID) => ({
 
 const result = (value: unknown) => [JSON.stringify({ type: "result", ok: true, result: value })]
 
-// A directory's permission pattern as FileAccess writes it, with forward slashes on Windows too.
-const pattern = (directory: string) => path.join(directory, "*").replaceAll("\\", "/")
+// Permission resources as FileAccess writes them, with forward slashes on Windows too.
+const slashed = (file: string) => file.replaceAll("\\", "/")
+const pattern = (directory: string) => slashed(path.join(directory, "*"))
 
 describe("GeoCode: readgeodata", () => {
   // Guards against an agent that may only read, such as Explore, not being offered it.
@@ -293,7 +294,7 @@ describe("GeoCode: readgeodata", () => {
       // Guards against reading outside the project without asking for its directory first, as read asks.
       expect(assertions.map((input) => [input.action, input.resources])).toEqual([
         ["external_directory", [pattern(path.dirname(outside))]],
-        ["read", [outside]],
+        ["read", [slashed(outside)]],
       ])
     }),
   )
