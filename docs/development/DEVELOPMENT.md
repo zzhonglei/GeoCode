@@ -112,7 +112,7 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 | `desktop/` | 在 `desktop/` 执行 `bun run type-check` 与 `bun run lint`,再在仓库根目录执行 `node scripts/own-anti-slop.mjs`。壳服务端与主进程的 JS 不在类型检查与 lint 的范围里,只由 anti-slop 与测试把关 |
 | `geoengine/` | 在 `geoengine/` 执行 `bun run typecheck`;格式化用它自己目录下的 prettier |
 
-`own-anti-slop.mjs` 只查 `desktop/` 里 GeoCode 自己的文件,即原味分支 `chamber-upstream` 上没有的文件,还没加入 git 的也算;它要 `desktop/` 装好依赖、本地有 `chamber-upstream` 分支,缺了就拒绝运行(退出码 2)。`kernel/` 与 `geoengine/` 没有对应的检查。确实要保留的违规写进脚本的例外清单,注明原因与处数。
+`own-anti-slop.mjs` 只查 `desktop/` 里 GeoCode 自己的文件,即原味分支 `chamber-upstream` 上没有的文件,还没加入 git 的也算;它要 `desktop/` 装好依赖、本地有 `chamber-upstream` 分支,缺了就拒绝运行(退出码 2)。克隆与 fork 来的仓库没有这个本地分支,先取一份:`git fetch https://github.com/zzhonglei/GeoCode.git chamber-upstream:chamber-upstream`。`kernel/` 与 `geoengine/` 没有对应的检查。确实要保留的违规写进脚本的例外清单,注明原因与处数。
 
 `node scripts/dead-code.mjs <文件…>` 列出文件里没有被调用的函数与默认导入,可在改完代码后作参考。它只看单个文件,导出给别处用的也会报出,具名导入不查。
 

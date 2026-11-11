@@ -193,6 +193,17 @@ shell 脚本用 POSIX sh(`#!/bin/sh`),要能在 macOS 自带的 sh 上运行。
 ## 9. 提交
 
 - 提交信息的格式是 `type(scope): summary`,类型取 `feat`、`fix`、`docs`、`style`、`refactor`、`perf`、`test`、`chore`、`revert`;需要时后接一两句英文说明,改动的经过与测量数据写在这里。不带 AI 署名。
+- `scope` 说明改的是哪一部分,取下表之一;只改某一部分的文档也用它的 `scope`。跨了几部分的,与不属于其中任何一部分的(整个项目的文档、仓库的设置),不写 `scope`。
+
+| scope | 范围 |
+|---|---|
+| `kernel` | 内核 |
+| `desktop` | 桌面应用:主进程、壳服务端与界面 |
+| `geoengine` | GeoEngine 本身 |
+| `qgis`、`gee`、`osm` | 各能力域 |
+| `python` | 内置的 Python 环境与 `geocodekit` 的公共部分 |
+| `scripts` | 构建、测试与检查的脚本 |
+
 - 分支名不超过三个词,用连字符分隔,不带类型前缀。
 - 改完与提交前完整读一遍 `git diff`:命令可能改得比想的多。
 - 一批改动分成几次提交时,每一次都要能单独通过它该过的检查(第 7 节)。
