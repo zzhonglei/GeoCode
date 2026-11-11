@@ -117,7 +117,8 @@ export const list = (root, skip = []) => {
 export const pathsCheck = (box) => {
   const skip = ['electron-user-data']
   const before = new Set(list(box.home, skip))
-  const project = `${path.relative(box.home, box.project)}/`
+  // With forward slashes, as list joins the paths it compares this with.
+  const project = `${path.relative(box.home, box.project).split(path.sep).join('/')}/`
   return {
     after: () => {
       const documented = trees(fs.readFileSync(DOCUMENT, 'utf8'))
