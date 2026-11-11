@@ -5,7 +5,8 @@ import { Python } from "./python.ts"
 
 /**
  * Opens a dataset read-only and leaves nothing beside it; needs `gdal` and `os`. `file` is the file on disk, which a
- * subdataset's target only names.
+ * subdataset's target only names. `_untouched` in geocodekit/preview/_source.py gives the same options to the
+ * preview's reader.
  */
 const OPENING = String.raw`
 def untouched(target, flags, file):

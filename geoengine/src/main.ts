@@ -4,6 +4,7 @@ import { Config } from "./config.ts"
 import { Engine } from "./engine.ts"
 import { Gee } from "./gee/index.ts"
 import { Osm } from "./osm/index.ts"
+import { Preview } from "./preview/index.ts"
 import { Environment } from "./python/index.ts"
 import { Qgis } from "./qgis/index.ts"
 import { Runtime } from "./runtime.ts"
@@ -35,7 +36,13 @@ const layer = Layer.mergeAll(
 
 const fiber = Effect.runFork(
   Effect.scoped(
-    Engine.run(transport, [Environment.capability(places), Qgis.capability, Gee.capability, Osm.capability(locks)]),
+    Engine.run(transport, [
+      Environment.capability(places),
+      Qgis.capability,
+      Gee.capability,
+      Osm.capability(locks),
+      Preview.capability(),
+    ]),
   ).pipe(Effect.provide(layer)),
 )
 

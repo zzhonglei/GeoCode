@@ -4,7 +4,7 @@
 // report: what ran, what was skipped and why, and where a failure is.
 //
 // Usage:  node scripts/test.mjs [--list] <suite|changed|all>... [--file <test file>]...
-//   suites   kernel ui web electron geoengine qgis gee osm scripts
+//   suites   kernel ui web electron geoengine qgis gee osm preview scripts
 //   changed  the suites the working tree's changes against HEAD call for
 //   all      every suite
 //   --file   one test file, run as its suite runs it
@@ -87,7 +87,7 @@ const electronSteps = () => {
 }
 
 // GeoEngine's unit tests by the domain whose folder holds them; the engine's own sit in no folder.
-const UNIT = ['engine', 'python', 'qgis', 'gee', 'osm']
+const UNIT = ['engine', 'python', 'qgis', 'gee', 'osm', 'preview']
 export const unitDomain = (file) => /^geoengine\/test\/unit\/([^/]+)\//.exec(file)?.[1] ?? 'engine'
 
 // One file after another: some tests start processes and check that they were ended.
@@ -112,6 +112,7 @@ export const SUITES = {
   qgis: realSteps('qgis'),
   gee: realSteps('gee'),
   osm: realSteps('osm'),
+  preview: realSteps('preview'),
   scripts: scriptsSteps,
 }
 
@@ -132,9 +133,9 @@ export const unrun = () => {
   )
 }
 
-const REAL = ['qgis', 'gee', 'osm']
+const REAL = ['qgis', 'gee', 'osm', 'preview']
 // Whose scripts run in the bundled Python environment.
-const ENVIRONMENT = ['gee', 'osm']
+const ENVIRONMENT = ['gee', 'osm', 'preview']
 
 // Several tests of the kernel and the desktop read or import another part's sources, so a change anywhere but in
 // GeoEngine's tests runs them all; they are quick. GeoEngine's own tests touch GeoEngine alone.
