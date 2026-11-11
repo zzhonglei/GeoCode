@@ -1,6 +1,7 @@
 # The checks every pull request and every push to main pass on both platforms GeoCode ships for: type checks, lint
 # and the unit suites. The suites on real software (QGIS, Earth Engine, the installed environment) and the checks of
-# the packaged app need what a runner lacks, and stay with the maintainer.
+# the packaged app need what a runner lacks, and stay with the maintainer. release.yml runs them too, as a release's
+# tag may point at a commit pushed past them.
 #
 # Run by hand, it can try one platform and only the tests named, as scripts/test.mjs takes them: suites, or
 # `--file <test file>`. The type checks and lint are then left out.
@@ -23,14 +24,16 @@ on:
         description: 'Tests to run instead of the checks, as scripts/test.mjs takes them, e.g. --file <test file>'
         type: string
         default: ''
+  workflow_call:
 
 permissions:
   contents: read
 
 # A newer push to the same pull request or branch makes the older run moot. A run by hand is grouped apart: on main
-# it would otherwise cancel the checks of the latest push, or be cancelled by them.
+# it would otherwise cancel the checks of the latest push, or be cancelled by them. Called by release.yml, the group
+# takes that workflow's name.
 concurrency:
-  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 # The repository's ruleset ci-required asks for these jobs by name, as `check (<runner>)` and `geoengine (<runner>)`:

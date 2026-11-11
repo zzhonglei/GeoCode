@@ -102,7 +102,8 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 发布用的安装包由 GitHub 打出:`.github/workflows/release.yml` 在 macOS 上打 arm64 的 dmg,在 Windows 上打 x64 的安装程序。GeoCode 没有代码签名的证书,两个平台都不签名:macOS 用临时签名、不公证,参数同上;Windows 不签名。
 
 - 试构建:在 Actions 页手动运行,两个平台的安装包作为这次运行的附件保留三天,不发布。
-- 发布:推送标签 `v<版本号>`。版本号与 `desktop/packages/electron/package.json` 的 `build.extraMetadata.version` 不一致时拒绝打包。两个安装包放进一个说明为空的草稿 Release。维护者下载试用,写好发布说明之后,在 GitHub 上发布它。安装包没有签名,用户第一次打开时系统会拦下,发布说明里要写明怎样放行:macOS 在「系统设置 → 隐私与安全性」里点「仍要打开」,Windows 在提示上点「更多信息」再点「仍要运行」。
+- 发布:推送标签 `v<版本号>`。版本号与 `desktop/packages/electron/package.json` 的 `build.extraMetadata.version` 不一致时拒绝打包。打包的同时把 `ci.yml` 的检查再跑一遍,直接推到 `main` 的提交可能没经过它们;检查不通过就不建草稿。两个安装包放进一个说明为空的草稿 Release。维护者下载试用,写好发布说明之后,在 GitHub 上发布它。安装包没有签名,用户第一次打开时系统会拦下,发布说明里要写明怎样放行:macOS 在「系统设置 → 隐私与安全性」里点「仍要打开」,Windows 在提示上点「更多信息」再点「仍要运行」。
+- `v` 开头的标签推上去之后不能挪动,也不能删除(仓库的规则 `release-tags`,对维护者同样生效),安装包与源码因此始终对得上。发错了,改版本号再发一次。
 
 ## 7. 检查
 

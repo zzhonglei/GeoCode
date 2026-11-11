@@ -2,6 +2,9 @@
 #
 #   push a tag v<version>  builds both and puts them in a draft release, which the maintainer tries and publishes
 #   run it by hand         builds both and keeps them as the run's artifacts for three days, releasing nothing
+#
+# Either way the checks of ci.yml run beside the builds, and no draft is made unless they pass. The repository's
+# ruleset release-tags keeps a v tag from being moved or deleted, so a release that went wrong takes a new version.
 name: release
 
 on:
@@ -31,6 +34,10 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  # A push to main may skip the checks, and a tag can point at any commit.
+  ci:
+    uses: ./.github/workflows/ci.yml
 
   build:
     needs: version
@@ -108,7 +115,7 @@ jobs:
 
   release:
     if: github.ref_type == 'tag'
-    needs: [version, build]
+    needs: [version, ci, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
