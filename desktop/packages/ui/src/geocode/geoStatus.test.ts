@@ -12,7 +12,7 @@ test('GeoCode: the interface listens for the change the server sends', () => {
 // Guards against a QGIS failure GeoEngine reports that the interface cannot read, which it would show as unrecognized.
 test('GeoCode: the interface knows every QGIS failure GeoEngine reports', () => {
   const source = fs.readFileSync(new URL('../../../../../geoengine/src/qgis/index.ts', import.meta.url), 'utf8');
-  const union = source.match(/export type Failed =([\s\S]*?)\n\n/)?.[1] ?? '';
+  const union = source.match(/export type Failed =([\s\S]*?)\r?\n\r?\n/)?.[1] ?? '';
   const failures = [...union.matchAll(/"([a-z-]+)"/g)].map((match) => match[1]);
   expect(failures.length).toBeGreaterThan(0);
   expect([...QGIS_FAILURES].sort()).toEqual(failures.sort());
@@ -21,7 +21,7 @@ test('GeoCode: the interface knows every QGIS failure GeoEngine reports', () => 
 /** The literals of a type union declared in GeoEngine's source, as `export type <name> =`. */
 const unionIn = (file: string, name: string) => {
   const source = fs.readFileSync(new URL(`../../../../../geoengine/src/${file}`, import.meta.url), 'utf8');
-  const union = source.match(new RegExp(`export type ${name} =([\\s\\S]*?)\\n\\n`))?.[1] ?? '';
+  const union = source.match(new RegExp(`export type ${name} =([\\s\\S]*?)\\r?\\n\\r?\\n`))?.[1] ?? '';
   return [...union.matchAll(/"([a-z-]+)"/g)].map((match) => match[1]).sort();
 };
 

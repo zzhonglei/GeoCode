@@ -11,7 +11,8 @@ describe('GeoCode: the kernel is not found by its port', () => {
   const cleanup = [];
   const saved = process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY;
   afterEach(async () => {
-    for (const step of cleanup.splice(0)) await step();
+    // Last registered first: Windows cannot remove the folder a process still running works in.
+    for (const step of cleanup.splice(0).reverse()) await step();
     if (saved === undefined) delete process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY;
     else process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY = saved;
   });

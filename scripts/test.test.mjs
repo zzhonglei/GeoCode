@@ -1,6 +1,7 @@
 // The runner's own tests: agents take its report as the word on whether their work is checked, so how it picks
 // suites, reads the runners' reports and judges them is tested here.
 import assert from 'node:assert/strict'
+import path from 'node:path'
 import { test } from 'node:test'
 import { SUITES, calledFor, cases, fileStep, judge, parse, sandboxed, top, unrun } from './test.mjs'
 
@@ -83,15 +84,17 @@ test('a run gets a home and temporary folder of its own, and nothing pointing at
     GIT_DIR: '/Users/someone/repo/.git',
     ELECTRON_RUN_AS_NODE: '1',
   }
+  // The temporary folder is joined with the separator of the computer the tests run on.
+  const temporary = path.join('/tmp/home', 'tmp')
   assert.deepEqual(sandboxed(user, '/tmp/home', 'darwin'), {
     PATH: '/usr/bin',
     HOME: '/tmp/home',
-    TMPDIR: '/tmp/home/tmp',
+    TMPDIR: temporary,
     GEOENGINE_GEE_PROJECT: 'project',
   })
   const windows = sandboxed({ USERPROFILE: 'C:\\Users\\someone', TEMP: 'C:\\Temp' }, '/tmp/home', 'win32')
   assert.equal(windows.USERPROFILE, '/tmp/home')
-  assert.equal(windows.TEMP, '/tmp/home/tmp')
+  assert.equal(windows.TEMP, temporary)
 })
 
 // Reports as the three runners write them, trimmed.

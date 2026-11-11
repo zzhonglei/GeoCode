@@ -249,6 +249,9 @@ const read = (input: Record<string, unknown>, session = sessionID) => ({
 
 const result = (value: unknown) => [JSON.stringify({ type: "result", ok: true, result: value })]
 
+// A directory's permission pattern as FileAccess writes it, with forward slashes on Windows too.
+const pattern = (directory: string) => path.join(directory, "*").replaceAll("\\", "/")
+
 describe("GeoCode: readgeodata", () => {
   // Guards against an agent that may only read, such as Explore, not being offered it.
   it.effect("is offered wherever read is", () =>
@@ -289,7 +292,7 @@ describe("GeoCode: readgeodata", () => {
       yield* executeTool(registry, read({ path: outside }))
       // Guards against reading outside the project without asking for its directory first, as read asks.
       expect(assertions.map((input) => [input.action, input.resources])).toEqual([
-        ["external_directory", [path.join(path.dirname(outside), "*")]],
+        ["external_directory", [pattern(path.dirname(outside))]],
         ["read", [outside]],
       ])
     }),
@@ -579,7 +582,7 @@ describe("GeoCode: qgisrun", () => {
       expect(assertions).toHaveLength(1)
       expect(assertions[0]).toMatchObject({
         action: "qgisrun",
-        resources: ["native:truncatetable", path.join(elsewhere, "*")],
+        resources: ["native:truncatetable", pattern(elsewhere)],
         metadata: {
           guarded: true,
           external: [elsewhere],
@@ -604,7 +607,7 @@ describe("GeoCode: qgisrun", () => {
       })
       yield* executeTool(yield* Tool.Service, runs({ algorithm: "native:buffer", parameters: {} }))
       // Guards against "always allow" reaching every other directory of that repository without asking.
-      expect(assertions[0]).toMatchObject({ save: [path.join(results, "*")] })
+      expect(assertions[0]).toMatchObject({ save: [pattern(results)] })
     }).pipe(Effect.scoped),
   )
 
@@ -961,7 +964,7 @@ describe("GeoCode: geerun", () => {
       yield* executeTool(registry, gee({ path: outside }))
       // Guards against running a file outside the project without asking about its directory, as the shell asks.
       expect(assertions.map((input) => [input.action, input.resources])).toEqual([
-        ["external_directory", [path.join(path.dirname(outside), "*")]],
+        ["external_directory", [pattern(path.dirname(outside))]],
         ["geerun", ["*"]],
       ])
       // Guards against GeoEngine looking at a file outside the project before the user allows its directory.
@@ -1470,15 +1473,15 @@ describe("GeoCode: the OSM tools", () => {
       expect(assertions).toHaveLength(2)
       expect(assertions[0]).toMatchObject({
         action: "osmgetobjects",
-        resources: [path.join(elsewhere, "*")],
+        resources: [pattern(elsewhere)],
         // Guards against "always allow" reaching every other directory of the repository it is in.
-        save: [path.join(elsewhere, "*")],
+        save: [pattern(elsewhere)],
         metadata: {
           ids: ["R1"],
           output,
           description: "下载校园",
           external: [elsewhere],
-          guards: [path.join(elsewhere, "*")],
+          guards: [pattern(elsewhere)],
         },
       })
       expect(assertions[1]).toMatchObject({
