@@ -1,6 +1,9 @@
 # The checks every pull request and every push to main pass on both platforms GeoCode ships for: type checks, lint
 # and the unit suites. The suites on real software (QGIS, Earth Engine, the installed environment) and the checks of
 # the packaged app need what a runner lacks, and stay with the maintainer.
+#
+# Run by hand, it can try one platform and only the tests named, as scripts/test.mjs takes them: suites, or
+# `--file <test file>`. The type checks and lint are then left out.
 name: ci
 
 on:
@@ -10,6 +13,16 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to run on
+        type: choice
+        options: [both, macOS, Windows]
+        default: both
+      tests:
+        description: 'Tests to run instead of the checks, as scripts/test.mjs takes them, e.g. --file <test file>'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -22,18 +35,17 @@ concurrency:
 jobs:
   check:
     if: ${{ !github.event.pull_request.draft }}
-    name: check (${{ matrix.label }})
+    name: check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-15
-            label: macOS
-          # windows-latest has a Visual Studio that node-gyp, which Electron's native modules build with, does not find.
-          - os: windows-2022
-            label: Windows
+        # windows-latest has a Visual Studio that node-gyp, which Electron's native modules build with, does not find.
+        os: >-
+          ${{ fromJSON(inputs.platform == 'macOS' && '["macos-15"]'
+          || inputs.platform == 'Windows' && '["windows-2022"]'
+          || '["macos-15", "windows-2022"]') }}
     defaults:
       run:
         shell: bash
@@ -42,6 +54,7 @@ jobs:
 
       # own-anti-slop.mjs tells GeoCode's files in desktop/ from upstream's by this branch.
       - name: Fetch chamber-upstream
+        if: ${{ !inputs.tests }}
         run: git fetch --depth=1 origin chamber-upstream:chamber-upstream
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -51,6 +64,17 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
+
+      - name: Find bun's cache
+        id: bun-cache
+        run: echo "dir=$(bun pm cache)" >> "$GITHUB_OUTPUT"
+
+      # The packages bun downloads, shared by the three installs.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.bun-cache.outputs.dir }}
+          key: bun-${{ runner.os }}-${{ hashFiles('kernel/bun.lock', 'geoengine/bun.lock', 'desktop/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - name: Install kernel dependencies
         working-directory: kernel
@@ -65,24 +89,65 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Type check kernel
+        if: ${{ !inputs.tests }}
         working-directory: kernel
         run: bun run typecheck
 
       - name: Type check geoengine
+        if: ${{ !inputs.tests }}
         working-directory: geoengine
         run: bun run typecheck
 
       - name: Type check desktop
+        if: ${{ !inputs.tests }}
         working-directory: desktop
         run: bun run type-check
 
       - name: Lint desktop
+        if: ${{ !inputs.tests }}
         working-directory: desktop
         run: bun run lint
 
       - name: Anti-slop on GeoCode's desktop files
+        if: ${{ !inputs.tests }}
         run: node scripts/own-anti-slop.mjs
 
-      # Exit 3, a suite not run, fails the job too: these suites need nothing a runner lacks.
+      # Exit 3, a suite not run, fails the job too: these suites need nothing a runner lacks. GeoEngine's run in a job
+      # of their own, as they wait out real time.
       - name: Unit tests
-        run: node scripts/test.mjs kernel ui web electron geoengine scripts
+        env:
+          TESTS: ${{ inputs.tests || 'kernel ui web electron scripts' }}
+        run: node scripts/test.mjs $TESTS
+
+  geoengine:
+    if: ${{ !github.event.pull_request.draft && !inputs.tests }}
+    name: geoengine (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: >-
+          ${{ fromJSON(inputs.platform == 'macOS' && '["macos-15"]'
+          || inputs.platform == 'Windows' && '["windows-2022"]'
+          || '["macos-15", "windows-2022"]') }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: desktop/package.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Install geoengine dependencies
+        working-directory: geoengine
+        run: bun install --frozen-lockfile
+
+      - name: GeoEngine unit tests
+        run: node scripts/test.mjs geoengine
