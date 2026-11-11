@@ -1,0 +1,108 @@
+name: Bug report
+description: Something is broken, crashes, or does not work as it says.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write in English or Chinese. A new feature or a change goes to a feature request, a question to [Q&A](https://github.com/zzhonglei/GeoCode/discussions/categories/q-a).
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and found no report of this
+          required: true
+        - label: This issue is about one problem
+          required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What you did, step by step. If it happens only sometimes, say how often.
+      placeholder: |
+        1. Open a folder holding a Shapefile
+        2. Ask GeoAgent to clip it to the study area
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Paste any error message as it is.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - macOS
+        - Windows
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: GeoCode version
+      description: Shown in About GeoCode in the app menu. On Windows, press Alt to show the menu.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where it happens
+      multiple: true
+      options:
+        - Installing and starting
+        - Chat and models
+        - QGIS
+        - Google Earth Engine
+        - OpenStreetMap
+        - Bundled Python environment
+        - Interface and settings
+        - Not sure
+
+  - type: input
+    id: qgis
+    attributes:
+      label: QGIS version
+      description: If it involves QGIS.
+      placeholder: "3.44.4"
+
+  - type: input
+    id: model
+    attributes:
+      label: Model and provider
+      description: If it involves the chat.
+      placeholder: "DeepSeek / deepseek-chat"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Both logs help: paste the part around the error, after removing keys, tokens and paths you would rather not share.
+        - App log `main.log`: on macOS in `~/Library/Logs/GeoCode/`, on Windows in `%APPDATA%\GeoCode\logs\`
+        - Session and tool log `geocode.log`: on macOS in `~/.local/share/geocode/log/`, on Windows in `C:\Users\<user>\.local\share\geocode\log\`
+      render: text
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or recordings

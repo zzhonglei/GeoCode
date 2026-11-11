@@ -13,6 +13,7 @@ GeoCode is a desktop AI application for geographic work: `kernel/` is its kernel
 | Building, running or packaging the app | `docs/development/DEVELOPMENT.md`, and `.artifacts/METHOD.md` when it exists |
 | Writing or running tests | `docs/development/TESTING.md` |
 | Upgrading upstream | `.artifacts/UPGRADE.md` and `.artifacts/CLOSED.md` |
+| Opening an issue or a pull request | `CONTRIBUTING.md` |
 
 `.artifacts/` holds the maintainer's private notes and is not tracked. When it exists, its rules add to the conventions. Never reference `.artifacts/` from source code or from `docs/`.
 

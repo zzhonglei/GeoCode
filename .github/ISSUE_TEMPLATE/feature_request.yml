@@ -1,0 +1,41 @@
+name: Feature request
+description: Something new, or a change to how something works.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write in English or Chinese. A few sentences are enough: the geographic work you were doing, what got in the way, and what you would want instead.
+
+        If you want to build it yourself, wait for the maintainer to agree here before opening a pull request.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and found no such request
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do, and what gets in the way
+      description: The situation, not the solution.
+      placeholder: I preprocess dozens of satellite scenes the same way, and describe the steps again in every chat.
+    validations:
+      required: true
+
+  - type: textarea
+    id: want
+    attributes:
+      label: What you would want instead
+      description: The rough shape of it. Not knowing how it should work is fine.
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Sample data, how another tool does it (a QGIS or ArcGIS tool, say), a sketch.

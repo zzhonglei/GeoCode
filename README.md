@@ -37,6 +37,8 @@ GeoCode 建在两个开源项目之上:
 | [`docs/development/DEVELOPMENT.md`](docs/development/DEVELOPMENT.md) | 怎样安装、构建、运行、打包与发布、检查,以及常见的坑 |
 | [`docs/development/TESTING.md`](docs/development/TESTING.md) | 怎样运行测试、读结果,打包版的检查与写入检测,GitHub 上的检查,以及写测试的坑 |
 
+参与开发的流程见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
+
 ## 许可
 
 GeoCode 以 MIT 许可证发布,见 [`LICENSE`](LICENSE)。`kernel/` 与 `desktop/` 下的代码基于 OpenCode 与 OpenChamber,保留它们各自的版权声明与许可证,见 [`kernel/LICENSE`](kernel/LICENSE) 与 [`desktop/LICENSE`](desktop/LICENSE)。

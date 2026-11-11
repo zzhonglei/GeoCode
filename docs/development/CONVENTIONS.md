@@ -173,6 +173,7 @@ shell 脚本用 POSIX sh(`#!/bin/sh`),要能在 macOS 自带的 sh 上运行。
 | `CONVENTIONS.md` | 必须守的规则与理由 |
 | `DEVELOPMENT.md`、`TESTING.md` | 怎样做,与不知道就会踩的坑 |
 | `AGENTS.md` | 做什么事读什么,与底线 |
+| `CONTRIBUTING.md` | 提 issue 与 PR 的流程:什么要先讨论、跑哪些检查、标题怎样写;规则本身指向上面几份 |
 
 设计说明每篇开头一段摘要,说明这部分是什么与最关键的几个决定;同一层用同一个骨架(定位、核心设计、边界与约束、与其他部分的关系),`DESIGN.md` 是入口,不套骨架。设计说明以 GeoCode 为中心,所基于的项目只在说明 GeoCode 自身的设计所必需时提及。
 
