@@ -17,7 +17,19 @@ export type PreviewText = {
   /** Back to where the whole of the data shows. */
   whole: string;
   /** The panel beside the map: what its tabs are called, and what opens and closes it. */
-  tabs: { feature: string; table: string; info: string };
+  tabs: { feature: string; table: string; look: string; info: string };
+  /** What one band is coloured by: its classes, or a ramp by the reader's name for it; a ramp this has no word for goes by that name. */
+  ramps: Record<string, string>;
+  /**
+   * What a band's values are drawn between: all but the 2% at each end, all, two deviations about the mean, as they
+   * are, or as the lines were dragged. The 2% is the reader's, CUT in geoengine/python/geocodekit/preview/_raster.py.
+   */
+  stretches: { cut: string; minmax: string; deviation: string; none: string; custom: string };
+  ramp: string;
+  stretch: string;
+  measures: { min: string; max: string; mean: string; std: string };
+  /** Said of what is measured: it is of a sample of the raster, not of every pixel. */
+  sampled: string;
   openPanel: string;
   closePanel: string;
   /** Shown where a clicked feature's attributes go, before any is clicked. */
@@ -52,7 +64,13 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     zoomIn: 'Zoom in',
     zoomOut: 'Zoom out',
     whole: 'Show all of it',
-    tabs: { feature: 'Feature', table: 'Table', info: 'Info' },
+    tabs: { feature: 'Feature', table: 'Table', look: 'Display', info: 'Info' },
+    ramps: { classes: 'Classes', grey: 'Greyscale', terrain: 'Terrain', viridis: 'Viridis', magma: 'Magma', spectral: 'Spectral', rdylgn: 'Red–yellow–green', blues: 'Blues' },
+    stretches: { cut: '2% – 98%', minmax: 'Min – max', deviation: 'Mean ± 2σ', none: 'No stretch', custom: 'Custom' },
+    ramp: 'Colour ramp',
+    stretch: 'Stretch',
+    measures: { min: 'Min', max: 'Max', mean: 'Mean', std: 'Std dev' },
+    sampled: 'From a sample',
     openPanel: 'Show the panel',
     closePanel: 'Hide the panel',
     pickHint: 'Click a feature on the map to see its attributes.',
@@ -96,7 +114,13 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     zoomIn: '放大',
     zoomOut: '缩小',
     whole: '回到全图',
-    tabs: { feature: '要素', table: '属性表', info: '信息' },
+    tabs: { feature: '要素', table: '属性表', look: '显示', info: '信息' },
+    ramps: { classes: '分类', grey: '灰度', terrain: '地形', viridis: 'Viridis', magma: '岩浆', spectral: '光谱', rdylgn: '红黄绿', blues: '蓝' },
+    stretches: { cut: '2% – 98%', minmax: '最小 – 最大', deviation: '平均 ± 2σ', none: '不拉伸', custom: '自定义' },
+    ramp: '色带',
+    stretch: '拉伸',
+    measures: { min: '最小值', max: '最大值', mean: '平均值', std: '标准差' },
+    sampled: '取样',
     openPanel: '展开面板',
     closePanel: '收起面板',
     pickHint: '点击地图上的要素,查看它的属性。',
@@ -140,7 +164,13 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     zoomIn: '放大',
     zoomOut: '縮小',
     whole: '回到全圖',
-    tabs: { feature: '圖徵', table: '屬性表', info: '資訊' },
+    tabs: { feature: '圖徵', table: '屬性表', look: '顯示', info: '資訊' },
+    ramps: { classes: '分類', grey: '灰階', terrain: '地形', viridis: 'Viridis', magma: '岩漿', spectral: '光譜', rdylgn: '紅黃綠', blues: '藍' },
+    stretches: { cut: '2% – 98%', minmax: '最小 – 最大', deviation: '平均 ± 2σ', none: '不拉伸', custom: '自訂' },
+    ramp: '色帶',
+    stretch: '拉伸',
+    measures: { min: '最小值', max: '最大值', mean: '平均值', std: '標準差' },
+    sampled: '取樣',
     openPanel: '展開面板',
     closePanel: '收起面板',
     pickHint: '點選地圖上的圖徵,檢視它的屬性。',

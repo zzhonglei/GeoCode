@@ -48,6 +48,7 @@ const descriptionSchema = z.discriminatedUnion('kind', [
 
 export type GeoDescription = z.infer<typeof descriptionSchema>;
 export type VectorDescription = Extract<GeoDescription, { kind: 'vector' }>;
+export type RasterDescription = Extract<GeoDescription, { kind: 'raster' }>;
 export type GeoBounds = NonNullable<GeoDescription['bounds']>;
 
 /** An attribute's value as it is shown: text as it is, anything else as JSON writes it; no value stays none, told from empty text. */
@@ -65,6 +66,49 @@ const foundSchema = z.object({
     })
     .nullable(),
 });
+
+const measuredSchema = z.object({
+  min: z.number(),
+  max: z.number(),
+  mean: z.number(),
+  std: z.number(),
+  /** The values the band is drawn between unless the preview names others. */
+  between: z.tuple([z.number(), z.number()]),
+  /** How many values of the sample fall into each of as many even steps from `min` to `max`. */
+  counts: z.array(z.number()),
+});
+
+const statisticsSchema = z.object({
+  statistics: z.object({
+    /** Each band as a sample of it measures; none of a band without data. */
+    bands: z.array(measuredSchema.nullable()),
+    /** What one band may be coloured through, each the colours it passes from its low end to its high. */
+    ramps: z.record(z.string(), z.array(z.string())),
+    /**
+     * The classes of a band that has them, which it is drawn by unless the preview names a ramp: each with its
+     * colour and the share of the raster that is of it.
+     */
+    classes: z.array(z.object({ value: z.number(), color: z.array(z.number()), share: z.number(), name: z.string().nullable() })).optional(),
+    /** The classes' shares are of a sample of the raster, which is too large to count through. */
+    sampled: z.boolean().optional(),
+  }),
+});
+
+export type GeoStatistics = z.infer<typeof statisticsSchema>['statistics'];
+export type Measured = z.infer<typeof measuredSchema>;
+
+/**
+ * How the preview has a raster drawn, where it does not leave that to the reader: its bands, numbered from one, the
+ * values each is drawn between, without which they are drawn as they are, and the ramp one band is coloured through,
+ * or BY_CLASS in its place.
+ */
+export type GeoLook = { bands: number[]; ranges?: [number, number][]; ramp?: string };
+
+/**
+ * Asked for where a ramp would be, a band of classes is drawn by them, each in its own colour. The reader knows it as
+ * BY_CLASS in geoengine/python/geocodekit/preview/_raster.py.
+ */
+export const BY_CLASS = 'classes';
 
 /** A page of a layer's table: the row it begins at, and the numbers and the values of its features, a row each. */
 const rowsSchema = z.object({ offset: z.number(), fids: z.array(z.number()), rows: z.array(z.array(shownValue)) });
@@ -120,12 +164,21 @@ export const findGeoFeature = (target: Target, stamp: string, fid: number): Prom
 export const readGeoRows = (target: Target, stamp: string, row: number, signal?: AbortSignal): Promise<Outcome<GeoRows>> =>
   request(`${PREVIEW_PATH}/rows?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&row=${row}`, rowsSchema, signal);
 
+/** What a raster's bands measure, and what it may be drawn with. */
+export const readGeoStatistics = (target: Target, stamp: string, signal?: AbortSignal): Promise<Outcome<GeoStatistics>> =>
+  request(`${PREVIEW_PATH}/statistics?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}`, statisticsSchema, signal)
+    .then((outcome) => (outcome.ok ? { ok: true, value: outcome.value.statistics } : outcome));
+
 /**
  * The address of the tiles of the data under `stamp`, with the tile's own numbers left for the map to fill in. With
- * `fid`, the tiles are of that one feature alone. It comes last: tiles are told apart by how their addresses begin.
+ * `fid`, the tiles are of that one feature alone; with `look`, a raster's are drawn as it says. Both come last: tiles
+ * are told apart by how their addresses begin.
  */
-export const tileAddress = (target: Target, stamp: string, fid?: number): string =>
-  `${TILE_SCHEME}://tile?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&z={z}&x={x}&y={y}${fid === undefined ? '' : `&fid=${fid}`}`;
+export const tileAddress = (target: Target, stamp: string, asked: { fid?: number; look?: GeoLook | null } = {}): string => {
+  const fid = asked.fid === undefined ? '' : `&fid=${asked.fid}`;
+  const look = asked.look ? `&look=${encodeURIComponent(JSON.stringify(asked.look))}` : '';
+  return `${TILE_SCHEME}://tile?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&z={z}&x={x}&y={y}${fid}${look}`;
+};
 
 /** What a tile's address is asked of the shell server as. */
 export const tileRequestPath = (address: string): string => `${PREVIEW_PATH}/${address.slice(`${TILE_SCHEME}://`.length)}`;

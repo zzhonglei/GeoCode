@@ -10,7 +10,7 @@ import { runtimeFetch } from '@/lib/runtime-fetch';
 import { colorOf, EDGE, MARK, MARK_EDGE } from './geoColors';
 import { previewText } from './previewText';
 import { stilled } from './stilled';
-import { identifyGeoFeature, refusalCode, FORMS, tileAddress, tileRequestPath, TILE_SCHEME, type FoundFeature, type GeoBounds, type GeoDescription, type Form, type Target } from './previewClient';
+import { identifyGeoFeature, refusalCode, FORMS, tileAddress, tileRequestPath, TILE_SCHEME, type FoundFeature, type GeoBounds, type GeoDescription, type GeoLook, type Form, type Target } from './previewClient';
 
 /**
  * Where a map was last looked at, kept while its tab is hidden and the map itself is not, and from one layer of a
@@ -39,6 +39,24 @@ const show = (map: MapLibreMap, shown: readonly Form[]) => {
   for (const form of FORMS) {
     for (const layer of DRAWN_AS[form]) map.setLayoutProperty(layer, 'visibility', shown.includes(form) ? 'visible' : 'none');
   }
+};
+
+/**
+ * Draws a raster from these tiles, as the `order`th drawing of it, over those before it, which go once this one is
+ * whole: taken away first, they would leave the map blank until its tiles came. `latest` says which drawing is the
+ * last, by then.
+ */
+const drawRaster = (map: MapLibreMap, order: number, tiles: string, width: number, bounds: GeoBounds, latest: () => number) => {
+  const id = `raster-${order}`;
+  map.addSource(id, { type: 'raster', tiles: [tiles], tileSize: RASTER_TILE, bounds, maxzoom: nativeZoom(width, bounds) });
+  map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-fade-duration': 0 } });
+  map.once('idle', () => {
+    for (const layer of map.getStyle().layers) {
+      if (layer.type !== 'raster' || layer.id === `raster-${latest()}`) continue;
+      map.removeLayer(layer.id);
+      map.removeSource(layer.id);
+    }
+  });
 };
 
 /** Marks the one feature these tiles are of, over all the map draws; nothing with no tiles. */
@@ -96,6 +114,8 @@ const GeoMap: React.FC<{
   shown: readonly Form[];
   /** The number of the feature that is picked, which the map marks. */
   marked: number | null;
+  /** How a raster is drawn, none while that is left to the reader. */
+  look: GeoLook | null;
   /** Read when the map is made and written when it goes. */
   view: React.MutableRefObject<MapView | null>;
   /** Holds, for as long as there is a map, what moves it to where a feature lies. */
@@ -107,7 +127,7 @@ const GeoMap: React.FC<{
   onRefused: (code: string) => void;
   /** The map could not be made at all, as on a computer without WebGL. */
   onFailed: () => void;
-}> = ({ target, description, bounds, shown, marked, view, reach, onPick, onPointer, onRefused, onFailed }) => {
+}> = ({ target, description, bounds, shown, marked, look, view, reach, onPick, onPointer, onRefused, onFailed }) => {
   const { locale } = useI18n();
   const text = previewText(locale);
   // The room the map is given, and within it the map itself, which keeps the size it was last drawn at.
@@ -121,10 +141,14 @@ const GeoMap: React.FC<{
   const listeners = React.useRef({ onPick, onPointer, onRefused, onFailed });
   const showing = React.useRef(shown);
   const marking = React.useRef(marked);
+  const looking = React.useRef(look);
+  // How many times the map there is has drawn its raster.
+  const rasters = React.useRef(0);
   React.useEffect(() => {
     listeners.current = { onPick, onPointer, onRefused, onFailed };
     showing.current = shown;
     marking.current = marked;
+    looking.current = look;
   });
 
   React.useEffect(() => {
@@ -137,6 +161,7 @@ const GeoMap: React.FC<{
     };
     fit();
     const before = view.current;
+    rasters.current = 0;
     const tiles = tileAddress(target, description.stamp);
     const beginning = tiles.slice(0, tiles.indexOf('&z='));
     let map: MapLibreMap;
@@ -201,8 +226,8 @@ const GeoMap: React.FC<{
     let clicks = 0;
     map.on('load', () => {
       if (description.kind === 'raster') {
-        map.addSource('data', { type: 'raster', tiles: [tiles], tileSize: RASTER_TILE, bounds, maxzoom: nativeZoom(description.width, bounds) });
-        map.addLayer({ id: 'data', type: 'raster', source: 'data', paint: { 'raster-fade-duration': 0 } });
+        rasters.current = 1;
+        drawRaster(map, 1, tileAddress(target, description.stamp, { look: looking.current }), description.width, bounds, () => rasters.current);
         return;
       }
       // A vector tile's layers: polygons, lines and points as they are, and a dot for each line and polygon too small
@@ -218,7 +243,7 @@ const GeoMap: React.FC<{
       map.addLayer({ id: 'small-line', type: 'circle', source: 'data', 'source-layer': 'small-lines', paint: { 'circle-color': color, 'circle-radius': 1 } });
       map.addLayer({ id: 'point', type: 'circle', source: 'data', 'source-layer': 'points', paint: { 'circle-color': color, 'circle-radius': 3.5, 'circle-stroke-color': EDGE, 'circle-stroke-width': 0.75 } });
       show(map, showing.current);
-      mark(map, marking.current === null ? null : tileAddress(target, description.stamp, marking.current));
+      mark(map, marking.current === null ? null : tileAddress(target, description.stamp, { fid: marking.current }));
       map.on('click', (event) => {
         // With nothing shown there is nothing to click.
         if (showing.current.length === 0) return;
@@ -261,8 +286,15 @@ const GeoMap: React.FC<{
 
   React.useEffect(() => {
     // As above: marked when the map gets its layers, where it has none yet.
-    if (made.current?.getLayer('point')) mark(made.current, marked === null ? null : tileAddress(target, description.stamp, marked));
+    if (made.current?.getLayer('point')) mark(made.current, marked === null ? null : tileAddress(target, description.stamp, { fid: marked }));
   }, [marked, target, description.stamp]);
+
+  React.useEffect(() => {
+    // As above: a map that has drawn no raster yet draws it as asked when it does.
+    if (!made.current || description.kind !== 'raster' || rasters.current === 0) return;
+    rasters.current += 1;
+    drawRaster(made.current, rasters.current, tileAddress(target, description.stamp, { look }), description.width, bounds, () => rasters.current);
+  }, [look, target, description, bounds]);
 
   // Bare over the data, with a rim of the page's colour to stay legible on any of it.
   const control = 'flex size-7 items-center justify-center opacity-80 hover:opacity-100 [filter:drop-shadow(0_0_1.5px_var(--surface-background))_drop-shadow(0_0_1px_var(--surface-background))]';
