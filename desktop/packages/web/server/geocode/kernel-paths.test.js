@@ -36,6 +36,7 @@ describe('GeoCode: kernel paths', () => {
     expect(shell.kernelConfigDir()).toBe(kernel.config);
     expect(shell.kernelDataDir()).toBe(kernel.data);
     expect(shell.kernelStateDir()).toBe(kernel.state);
+    expect(shell.kernelCacheDir()).toBe(kernel.cache);
     expect(shell.kernelTmpDir()).toBe(kernel.tmp);
     // Apart from an installed OpenCode's: the two agreeing on another name would still share its files.
     expect(kernel.config).toBe(path.join(os.homedir(), '.config', 'geocode'));

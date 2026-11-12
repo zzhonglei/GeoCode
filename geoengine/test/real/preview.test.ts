@@ -38,22 +38,25 @@ const at = (longitude: number, latitude: number) => unit(longitude, latitude, TI
 const exactly = (longitude: number, latitude: number) => unit(longitude, latitude, TILE.z, TILE.x, TILE.y, true)
 
 let folder = ""
+let pyramids = ""
 let listed: string[] = []
 let engine: Awaited<ReturnType<typeof start>>
 
 before(async () => {
   if (missing) return
   folder = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "geoengine-preview-")))
+  pyramids = fs.mkdtempSync(path.join(os.tmpdir(), "geoengine-pyramids-"))
   execFileSync(base, ["-I", "-B", "-c", MAKE, folder])
   fs.writeFileSync(path.join(folder, "notes.gpkg"), "not a dataset")
   listed = fs.readdirSync(folder).toSorted()
-  engine = await start("preview-real", () => [pythonReady(base, "1.0.0"), Preview.capability(fromSource)])
+  engine = await start("preview-real", () => [pythonReady(base, "1.0.0"), Preview.capability(pyramids, fromSource)])
 })
 
 after(async () => {
   if (missing) return
   await engine?.stop()
   fs.rmSync(folder, { recursive: true, force: true })
+  fs.rmSync(pyramids, { recursive: true, force: true })
 })
 
 const file = (name: string) => path.join(folder, name)
@@ -348,6 +351,47 @@ test(
     assert.equal((await picture.opened.tile({ z: 10, x: 100, y: 100 })).empty, true)
   },
 )
+
+// Guards a large raster's first view, which without overviews reads every pixel of it for a tile, and guards the
+// overviews themselves: failing to make them is not a failure to draw, so nothing else would say they are not made.
+test("a large raster without overviews is given them, in the cache and not beside it", { skip: missing }, async () => {
+  const kept = () =>
+    fs.readdirSync(pyramids).filter((name) => fs.existsSync(path.join(pyramids, name, "raster.vrt.ovr")))
+  const strip = await open("strip.tif")
+  assert.deepEqual([strip.described.width, strip.described.height], [9000, 64])
+  assert.equal(kept().length, 1)
+  // The whole of it across one tile, read from an overview: dark in its west half, light in its east, clear where it
+  // has no data.
+  const image = file("strip.webp")
+  const answer = await strip.tile()
+  assert.ok(answer.bytes, `no tile: ${answer.code ?? "empty"}`)
+  fs.writeFileSync(image, answer.bytes)
+  const spots = JSON.stringify([
+    [
+      image,
+      [
+        [30, 510],
+        [150, 510],
+        [310, 510],
+      ],
+    ],
+  ])
+  const [[, none, west, east]] = JSON.parse(
+    execFileSync(base, ["-I", "-B", "-c", PIXELS, spots], { encoding: "utf-8" }),
+  ) as number[][][]
+  assert.equal(none[3], 0)
+  assert.ok(west[3] === 255 && east[3] === 255 && east[0] - west[0] > 100, `${west} and ${east}`)
+  // The same data is given them once, and changed data its own.
+  await open("strip.tif")
+  assert.equal(kept().length, 1)
+  const later = new Date(Date.now() + 5000)
+  fs.utimesSync(file("strip.tif"), later, later)
+  await open("strip.tif")
+  assert.equal(kept().length, 2)
+  // A raster of a size to read whole is left as it is.
+  await open("heights.tif")
+  assert.equal(kept().length, 2)
+})
 
 // Guards a whole tile's fill: its first ring says which way shells run, so one the grid turned over would make holes
 // of every shell after it. About two shells in a thousand are turned over where a tile shows a whole region.

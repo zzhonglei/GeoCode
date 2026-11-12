@@ -88,9 +88,10 @@ const cancellation = () => new Engine.Failure({ code: "cancelled", message: "the
 
 /**
  * What the interface shows of a geographic dataset: its description, the tiles of its map and the feature under a
- * click, each read from the file by a reader that stays for the next request. `launch` starts a reader.
+ * click, each read from the file by a reader that stays for the next request. `pyramids` is the folder the readers
+ * keep the overviews they make for large rasters in; `launch` starts a reader.
  */
-export const capability = (launch: Launch = READER): Engine.Capability =>
+export const capability = (pyramids: string, launch: Launch = READER): Engine.Capability =>
   Effect.gen(function* () {
     const status = yield* Status.Service
     const runtime = yield* Runtime.Service
@@ -154,7 +155,7 @@ export const capability = (launch: Launch = READER): Engine.Capability =>
           .pipe(Effect.mapError((error) => new Engine.Failure({ code: "shutting-down", message: error.message })))
         const started: Reader = { worker, waiting, asked }
         readers.set(key, started)
-        worker.send(JSON.stringify({ path: target.path, layer: target.layer }))
+        worker.send(JSON.stringify({ path: target.path, layer: target.layer, pyramids }))
         yield* Effect.forkIn(
           worker.ended.pipe(
             Effect.exit,

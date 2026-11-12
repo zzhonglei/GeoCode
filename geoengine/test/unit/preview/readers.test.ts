@@ -11,9 +11,9 @@ const NODE = process.execPath
 const standIn: Preview.Launch = () => ({ command: NODE, args: ["-e", STAND_IN] })
 
 const engine = (name: string) =>
-  start(name, () => [pythonReady("/the/base/python", "1.0.0"), Preview.capability(standIn)])
+  start(name, () => [pythonReady("/the/base/python", "1.0.0"), Preview.capability("/the/pyramids", standIn)])
 
-type Described = { opened: { path: string; layer?: string }; pid: number; cancels: number[] }
+type Described = { opened: { path: string; layer?: string; pyramids: string }; pid: number; cancels: number[] }
 
 /** The engine's answer to a request, a success's result or a failure's code. */
 const answered = async (running: Awaited<ReturnType<typeof engine>>, method: string, params: object) => {
@@ -48,8 +48,8 @@ test("each request is answered with its own tile, by one reader for each layer o
     const first = (await answered(running, "describe", { path: a })).result as Described
     const layer = (await answered(running, "describe", { path: b, layer: "roads" })).result as Described
     const other = (await answered(running, "describe", { path: b, layer: "rivers" })).result as Described
-    assert.deepEqual(first.opened, { path: a })
-    assert.deepEqual(layer.opened, { path: b, layer: "roads" })
+    assert.deepEqual(first.opened, { path: a, pyramids: "/the/pyramids" })
+    assert.deepEqual(layer.opened, { path: b, layer: "roads", pyramids: "/the/pyramids" })
     assert.equal(new Set([first.pid, layer.pid, other.pid]).size, 3)
     assert.deepEqual(started(running).toSorted(), [first.pid, layer.pid, other.pid].toSorted())
     // Guards a reader's own refusal, as of data that has changed, against reaching the interface as a plain failure.
@@ -125,7 +125,7 @@ test("a request made while the Python environment is being prepared is answered 
   let ready = () => {}
   const preparing = await start("preview-preparing", () => [
     pythonReady("/the/base/python", "1.0.0", new Promise((resolve) => (ready = resolve))),
-    Preview.capability(standIn),
+    Preview.capability("/the/pyramids", standIn),
   ])
   try {
     const id = preparing.send("preview.describe", { path: "/a.tif" })

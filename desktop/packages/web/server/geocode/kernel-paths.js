@@ -8,6 +8,7 @@ const KERNEL_APP = 'geocode';
 export const kernelConfigDir = () => path.join(os.homedir(), '.config', KERNEL_APP);
 export const kernelDataDir = () => path.join(os.homedir(), '.local', 'share', KERNEL_APP);
 export const kernelStateDir = () => path.join(os.homedir(), '.local', 'state', KERNEL_APP);
+export const kernelCacheDir = () => path.join(os.homedir(), '.cache', KERNEL_APP);
 export const kernelTmpDir = () => path.join(os.tmpdir(), KERNEL_APP);
 
 // The file name scripts/stage-kernel.sh gives the bundled kernel, which is the process name the system shows.

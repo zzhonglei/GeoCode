@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { app, utilityProcess } from 'electron';
-import { kernelConfigDir, kernelDataDir, kernelStateDir } from '@openchamber/web/server/geocode/kernel-paths.js';
+import { kernelCacheDir, kernelConfigDir, kernelDataDir, kernelStateDir } from '@openchamber/web/server/geocode/kernel-paths.js';
 import { withoutAppVariables, withoutDirectoryVariables } from '@openchamber/web/server/geocode/app-variables.js';
 import { createEnvironmentStore } from '@openchamber/web/server/lib/environment/store.js';
 import { overlayEnvironment } from '@openchamber/web/server/lib/environment/variables.js';
@@ -46,6 +46,8 @@ const fork = (log) => {
     `--data=${kernelDataDir()}`,
     // And its state directory, among whose lock files the OSM tools keep when Nominatim was last asked.
     `--state=${kernelStateDir()}`,
+    // And its cache directory, where a preview keeps the overviews it makes for a large raster.
+    `--cache=${kernelCacheDir()}`,
   ];
   return utilityProcess.fork(modulePath, args, {
     serviceName: 'GeoEngine',

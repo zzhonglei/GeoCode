@@ -128,8 +128,11 @@
 ~/.cache/geocode/
 ├── bin/          本机没有 ripgrep 时下载的 rg;目录每次启动就建立
 ├── npm/          按需安装的服务商 SDK 与格式化工具,7 天没用的旧版本自动清掉
-└── npm-cache/    下载 npm 包的缓存
+├── npm-cache/    下载 npm 包的缓存
+└── preview/      预览没有金字塔的大栅格时为它建的金字塔,每份数据一个文件夹;超过 4 GB 时最久没用的先删
 ```
+
+删掉 `preview/`,下次预览那些栅格时重新建,第一次打开多等几秒。金字塔只放在这里,不写在数据旁边。
 
 使用 GitLab 服务商时,这里还有两份 GitLab 模型信息的缓存;GitLab 的 SDK 在内核没有交给它密钥时,还读写数据目录里的 `auth.json`。
 
@@ -210,6 +213,7 @@ GeoCode 写文件多是先写旁边的临时文件、再改名替换,有的另�
 | 数据目录的 `snapshot/` | `*.init-*`、`index.geocode-*`、`geocode-pack.lock`、`geocode.gitconfig.*` | 建立与更新检查点仓库时的中间文件,过时的下次自动清掉 |
 | `python/` | `.unpack-<随机名>/`、`activate.*`、`.writing-<随机名>` | 安装环境与重写 `base` 里的文件时的中间文件,下次启动时清掉 |
 | 缓存目录的 `npm/`、`bin/` | `.staging-*`;`ripgrep-*` | 安装 npm 包与下载 ripgrep 的中间文件,前者过时后自动清掉 |
+| 缓存目录的 `preview/` | 名字以 `.making` 结尾的文件夹 | 建到一半的金字塔,缓存超过上限时与别的一起清掉 |
 | 配置目录 | `machine.json.tmp` | GeoEngine 写 `machine.json` 的临时副本,下一次写入时覆盖 |
 | 项目里被编辑或上传的文件旁 | 原名后接 `.tmp-<进程号>-…`、`.upload-<随机串>` | 在应用里保存或上传文件时的临时副本 |
 | 地理工具的输出旁 | `.<名字>.<进程号>.part`、`.<名字>.<进程号>.part.gpkg` | GEE 与 OSM 下载到一半的文件,运行结束时删掉,文件被别的程序占着时留下 |

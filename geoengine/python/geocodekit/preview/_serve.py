@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from osgeo import gdal
 
-from geocodekit.preview import _describe, _raster, _source
+from geocodekit.preview import _describe, _pyramid, _raster, _source
 
 THREADS = 4
 # How often a reader at work says that it is: reading a large layer into memory takes longer in silence than
@@ -21,12 +21,14 @@ BEAT = 15
 
 
 class Reader:
-    def __init__(self, path, layer):
-        self._path, self._layer = path, layer
+    def __init__(self, path, layer, pyramids):
+        # `pyramids` is the folder that the overviews made for large rasters are kept in.
+        self._path, self._layer, self._pyramids = path, layer, pyramids
         self._lock = threading.Lock()
         # What was last described: the description, the files it was read from and their stamp.
         self._known = None
-        # What is worked out once for the data under that stamp: a vector layer's geometry, a raster's look.
+        # What is worked out once for the data under that stamp: a vector layer's geometry, or what a raster's tiles
+        # are read through and how they look.
         self._held = None
         self._loading = threading.Lock()
 
@@ -39,13 +41,18 @@ class Reader:
     def describe(self, cancelled):
         with self._lock:
             described = self._redescribe()
-        if "forms" in described and "unplaced" not in described:
-            # Read now, as the first tile would have it read anyway. Why a layer cannot be read is left for its tiles
-            # to say: a description refused for it would leave the file's other layers out of reach as well.
-            try:
+        if "unplaced" in described:
+            return described
+        # Made ready now, as the first tile would have it anyway: the map is not shown before it can be drawn. Why a
+        # layer cannot be read is left for its tiles to say: a description refused for it would leave the file's
+        # other layers out of reach as well.
+        try:
+            if described["kind"] == "raster":
+                self._raster(described, cancelled)
+            elif "forms" in described:
                 described = dict(described, forms=self._vector(described, cancelled).forms)
-            except _source.Unshown:
-                pass
+        except _source.Unshown:
+            pass
         return described
 
     def _current(self, stamp):
@@ -92,15 +99,29 @@ class Reader:
             described["stamp"], lambda: _vector.load(self._path, described["layer"], lambda: False), cancelled
         )
 
+    def _opened(self, described, stand_in):
+        """The raster, through its stand-in where it has one that is still there."""
+        dataset = stand_in and _pyramid.opened(stand_in)
+        dataset = dataset or _source.opened(self._path, gdal.OF_RASTER, described["table"])
+        if dataset is None:
+            raise _source.Unshown("unopenable", gdal.GetLastErrorMsg())
+        return dataset
+
+    def _raster(self, described, cancelled):
+        """The stand-in a raster's tiles are read through, None for one read as it is, and how the tiles look."""
+
+        def ready():
+            stand_in = _pyramid.stand_in(self._path, described["table"], described["stamp"], self._pyramids)
+            return stand_in, _raster.Look(self._opened(described, stand_in))
+
+        return self._once(described["stamp"], ready, cancelled)
+
     def tile(self, request, cancelled):
         described = self._current(request["stamp"])
         z, x, y = request["z"], request["x"], request["y"]
         if described["kind"] == "raster":
-            dataset = _source.opened(self._path, gdal.OF_RASTER, described["table"])
-            if dataset is None:
-                raise _source.Unshown("unopenable", gdal.GetLastErrorMsg())
-            look = self._once(described["stamp"], lambda: _raster.Look(dataset), cancelled)
-            return _raster.tile(dataset, look, z, x, y, cancelled)
+            stand_in, look = self._raster(described, cancelled)
+            return _raster.tile(self._opened(described, stand_in), look, z, x, y, cancelled)
         from geocodekit.preview import _cut
 
         return _cut.tile(self._vector(described, cancelled), z, x, y, cancelled)
@@ -133,7 +154,7 @@ def main():
     _source.configure()
 
     opening = json.loads(sys.stdin.buffer.readline())
-    reader = Reader(opening["path"], opening.get("layer"))
+    reader = Reader(opening["path"], opening.get("layer"), opening["pyramids"])
     writing = threading.Lock()
     asked = set()
     unwanted = set()

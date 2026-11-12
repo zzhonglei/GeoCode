@@ -23,6 +23,7 @@ const places = {
   data: argument("data", "GeoCode's data directory"),
 }
 const locks = path.join(argument("state", "GeoCode's state directory"), "locks")
+const pyramids = path.join(argument("cache", "GeoCode's cache directory"), "preview")
 
 const transport = Transport.parentPort()
 
@@ -41,7 +42,7 @@ const fiber = Effect.runFork(
       Qgis.capability,
       Gee.capability,
       Osm.capability(locks),
-      Preview.capability(),
+      Preview.capability(pyramids),
     ]),
   ).pipe(Effect.provide(layer)),
 )

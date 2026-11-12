@@ -264,6 +264,16 @@ raster("heights.tif", 1, gdal.GDT_Float32, heights)
 raster("classes.tif", 1, gdal.GDT_Byte, classes)
 raster("unknown.tif", 1, gdal.GDT_Float32, unknown)
 
+# A raster too long to draw without overviews and with none: low in its west half, high in its east, and without data
+# at its western end.
+strip = gdal.GetDriverByName("GTiff").Create(os.path.join(folder, "strip.tif"), 9000, 64, 1, gdal.GDT_Int16)
+strip.SetGeoTransform((0, side / 9000, 0, side * 64 / 9000, 0, -side / 9000))
+strip.SetSpatialRef(wgs84)
+values = numpy.full((64, 9000), 100, dtype=numpy.int16); values[:, 4500:] = 1000; values[:, :1500] = -9999
+strip.GetRasterBand(1).WriteArray(values)
+strip.GetRasterBand(1).SetNoDataValue(-9999)
+strip = None
+
 # A GeoPackage of a vector layer and two rasters.
 both = ogr.GetDriverByName("GPKG").CreateDataSource(os.path.join(folder, "both.gpkg"))
 layer(both, "roads", wgs84, ogr.wkbLineString, [("a", "LINESTRING (0.1 0.1, 0.2 0.2)")])
