@@ -22,6 +22,11 @@ def plane(longitude, latitude):
     return x, y
 
 
+def degrees(x, y):
+    """The longitude and latitude of a place in the plane."""
+    return x * (180 / HALF), math.degrees(2 * math.atan(math.exp(y * (math.pi / HALF))) - math.pi / 2)
+
+
 def tile(z, x, y):
     """A tile's left and top edges and its side, in metres of the plane."""
     span = 2 * HALF / 2**z

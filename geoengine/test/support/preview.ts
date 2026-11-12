@@ -216,6 +216,14 @@ with open(os.path.join(folder, "lines.geojson"), "w") as out:
     for x in (0.1, 0.2):
         out.write('{"type": "Feature", "properties": {}, "geometry": {"type": "Point", "coordinates": [%s, 0.1]}}\n' % x)
 
+# More features than a page of a table has, each named by where it comes, in a file read a feature at a time and in
+# one whose attributes are kept in memory.
+many = [("p%d" % index, "POINT (0.1 0.1)") for index in range(2100)]
+made = ogr.GetDriverByName("GPKG").CreateDataSource(os.path.join(folder, "many.gpkg"))
+layer(made, "many", wgs84, ogr.wkbPoint, many)
+made = None
+geojson("many.geojson", [(name, '{"type": "Point", "coordinates": [0.1, 0.1]}') for name, _ in many])
+
 # A Shapefile with nothing to say where it lies, and one that says.
 for name, srs in (("unplaced", None), ("roads", wgs84)):
     made = ogr.GetDriverByName("ESRI Shapefile").CreateDataSource(os.path.join(folder, name + ".shp"))

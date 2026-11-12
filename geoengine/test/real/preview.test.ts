@@ -79,7 +79,15 @@ interface Answer {
   readonly height?: number
   readonly bytes?: Uint8Array
   readonly empty?: boolean
-  readonly found?: { readonly fid: number; readonly attributes: readonly (readonly [string, unknown])[] } | null
+  readonly found?: {
+    readonly fid: number
+    readonly row: number
+    readonly attributes: readonly (readonly [string, unknown])[]
+    readonly bounds: readonly number[] | null
+  } | null
+  readonly offset?: number
+  readonly fids?: readonly number[]
+  readonly rows?: readonly (readonly unknown[])[]
 }
 
 /** A request's result, or the code it failed with. */
@@ -100,8 +108,10 @@ const open = async (name: string, layer?: string) => {
   const described = await ask("describe", target)
   return {
     described,
-    tile: (tile: { z: number; x: number; y: number } = TILE) =>
-      ask("tile", { ...target, stamp: described.stamp, ...tile }),
+    tile: (tile: { z: number; x: number; y: number } = TILE, fid?: number) =>
+      ask("tile", { ...target, stamp: described.stamp, ...tile, ...(fid === undefined ? {} : { fid }) }),
+    feature: async (fid: number) => (await ask("identify", { ...target, stamp: described.stamp, fid })).found,
+    rows: (row: number) => ask("rows", { ...target, stamp: described.stamp, row }),
     click: async (longitude: number, latitude: number, tolerance = 5, forms?: readonly string[]) => {
       const [x, y] = plane(longitude, latitude)
       const shown = forms ? { forms } : {}
@@ -207,6 +217,66 @@ test("a click finds the smallest feature under it and its attributes", { skip: m
   // What is hidden is not clicked: neither the house nor the district it stands in, nor a point.
   assert.equal(await shapes.click(0.061, 0.061, 5, ["points", "lines"]), null)
   assert.equal(await shapes.click(0.01, 0.01, 5, ["lines", "polygons"]), null)
+})
+
+// Guards the mark of the feature that is picked, cut from that feature's parts alone: taken from the wrong places of
+// the layer's arrays, it would mark another feature's shape and fail nothing.
+test("a feature is found by its number, with where it lies, and is drawn alone", { skip: missing }, async () => {
+  const shapes = await open("shapes.gpkg")
+  const near = (bounds: readonly number[] | null | undefined, expected: readonly number[]) =>
+    bounds?.length === 4 && bounds.every((value, index) => Math.abs(value - expected[index]) < 1e-6)
+  const house = await shapes.click(0.061, 0.061)
+  assert.deepEqual([house?.fid, house?.row], [2, 1])
+  assert.ok(near(house?.bounds, [0.06, 0.06, 0.062, 0.062]), String(house?.bounds))
+  // Both of its parts, and the point and the line of a feature that is both.
+  const islands = await shapes.feature(11)
+  assert.deepEqual([islands?.row, islands?.attributes[0][1]], [10, "islands"])
+  assert.ok(near(islands?.bounds, [0.26, 0.02, 0.32, 0.04]), String(islands?.bounds))
+  assert.ok(near((await shapes.feature(13))?.bounds, [0.32, 0.3, 0.34, 0.33]))
+  // A feature without geometry lies nowhere, and a number of no feature finds none.
+  assert.deepEqual([(await shapes.feature(15))?.row, (await shapes.feature(15))?.bounds], [14, null])
+  assert.equal(await shapes.feature(99), null)
+
+  const district = drawn(await shapes.tile(TILE, 1))
+  assert.deepEqual(Object.keys(district), ["polygons"])
+  assert.deepEqual(district.polygons.parts.map(box), [boxed(0.05, 0.25, 0.25, 0.05), boxed(0.1, 0.2, 0.2, 0.1)])
+  const marked = drawn(await shapes.tile(TILE, 11))
+  assert.deepEqual(marked.polygons.parts.map(box), [boxed(0.26, 0.04, 0.28, 0.02), boxed(0.3, 0.04, 0.32, 0.02)])
+  assert.deepEqual(Object.keys(drawn(await shapes.tile(TILE, 13))).toSorted(), ["lines", "points"])
+  assert.equal((await shapes.tile(TILE, 15)).empty, true)
+
+  // Where the attributes are kept in memory, they are those of the row the feature is read as.
+  const route = await open("route.geojson")
+  assert.deepEqual([(await route.feature(1))?.row, (await route.feature(1))?.attributes[0][1]], [1, "way"])
+})
+
+// Guards the table's pages against beginning at the wrong feature, by either way of reading them: a page of other
+// rows than its numbers say looks as right as any.
+test("a layer's table is read a page at a time, with or without a place on the map", { skip: missing }, async () => {
+  const shapes = await open("shapes.gpkg")
+  const first = await shapes.rows(0)
+  assert.equal(first.offset, 0)
+  assert.deepEqual(first.fids, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+  assert.deepEqual(
+    [first.rows?.[0], first.rows?.[14]],
+    [
+      ["district", 1.5],
+      ["nowhere", 1.5],
+    ],
+  )
+
+  const paged = (answer: Answer) => [answer.offset, answer.fids?.length, answer.fids?.[0], answer.rows?.[0]?.[0]]
+  const many = await open("many.gpkg")
+  assert.deepEqual(paged(await many.rows(2050)), [2000, 100, 2001, "p2000"])
+  assert.deepEqual(paged(await many.rows(1999)), [0, 2000, 1, "p0"])
+  // Read from the file before the layer is in memory, and from memory once a tile has brought it there.
+  const kept = await open("many.geojson")
+  const read = await kept.rows(2050)
+  assert.deepEqual(paged(read), [2000, 100, 2000, "p2000"])
+  assert.ok((await kept.tile()).bytes)
+  assert.deepEqual(await kept.rows(2050), read)
+
+  assert.deepEqual((await (await open("unplaced.shp")).rows(0)).rows, [["a", 1.5]])
 })
 
 // Guards a GeoPackage's rasters, which a file described by its vector layers alone would hide for good.

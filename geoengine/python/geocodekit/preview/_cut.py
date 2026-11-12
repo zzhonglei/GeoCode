@@ -13,11 +13,6 @@ from geocodekit.preview._vector import LINE, POLYGON, starts
 CANDIDATES = 2000
 
 
-def _ranges(start, length):
-    """The places of every element of the runs, one run after another."""
-    return numpy.arange(int(length.sum())) + numpy.repeat(start - starts(length), length)
-
-
 def _only(values, lengths, kept):
     """The runs that are kept, of runs laid one after another."""
     return values[numpy.repeat(kept, lengths)], lengths[kept]
@@ -160,11 +155,9 @@ def tile(layer, z, x, y, cancelled):
     if lines is not None:
         small, within, crossing = sorted_out(lines.bounds, lines.size)
         dots("small-lines", lines.bounds[small])
-        lengths = lines.length[within]
-        xy = lines.xy[_ranges(lines.start[within], lengths)]
+        xy, lengths = lines.taken(within)
         if crossing.size:
-            cut = lines.length[crossing]
-            cut_xy, cut_lengths = _clipped_lines(lines.xy[_ranges(lines.start[crossing], cut)], cut, box)
+            cut_xy, cut_lengths = _clipped_lines(*lines.taken(crossing), box)
             xy, lengths = numpy.concatenate((xy, cut_xy)), numpy.concatenate((lengths, cut_lengths))
         check()
         if lengths.size:
@@ -178,16 +171,9 @@ def tile(layer, z, x, y, cancelled):
     if polygons is not None:
         small, within, crossing = sorted_out(polygons.bounds, polygons.size)
         dots("small-polygons", polygons.bounds[small])
-
-        def taken(chosen):
-            rings = polygons.rings[chosen]
-            which = _ranges(polygons.first[chosen], rings)
-            ring_lengths = polygons.ring_length[which]
-            return polygons.xy[_ranges(polygons.ring_start[which], ring_lengths)], ring_lengths, rings
-
-        xy, ring_lengths, rings = taken(within)
+        xy, ring_lengths, rings = polygons.taken(within)
         if crossing.size:
-            cut_xy, cut_lengths, cut_rings = _clipped_polygons(*taken(crossing), box)
+            cut_xy, cut_lengths, cut_rings = _clipped_polygons(*polygons.taken(crossing), box)
             xy = numpy.concatenate((xy, cut_xy))
             ring_lengths = numpy.concatenate((ring_lengths, cut_lengths))
             rings = numpy.concatenate((rings, cut_rings))
@@ -240,8 +226,7 @@ def nearest(layer, x, y, tolerance, forms):
     if lines is not None:
         near, area = about(lines.bounds)
         if near.size:
-            lengths = lines.length[near]
-            xy = lines.xy[_ranges(lines.start[near], lengths)]
+            xy, lengths = lines.taken(near)
             shapes = shapely.linestrings(xy, indices=numpy.repeat(numpy.arange(near.size), lengths))
             best(shapes, area, lines.fid[near])
 
@@ -249,11 +234,8 @@ def nearest(layer, x, y, tolerance, forms):
     if polygons is not None:
         near, area = about(polygons.bounds)
         if near.size:
-            rings = polygons.rings[near]
-            which = _ranges(polygons.first[near], rings)
-            ring_lengths = polygons.ring_length[which]
-            xy = polygons.xy[_ranges(polygons.ring_start[which], ring_lengths)]
-            ring_shapes = shapely.linearrings(xy, indices=numpy.repeat(numpy.arange(which.size), ring_lengths))
+            xy, ring_lengths, rings = polygons.taken(near)
+            ring_shapes = shapely.linearrings(xy, indices=numpy.repeat(numpy.arange(ring_lengths.size), ring_lengths))
             shapes = shapely.polygons(ring_shapes, indices=numpy.repeat(numpy.arange(near.size), rings))
             best(shapes, area, polygons.fid[near])
 

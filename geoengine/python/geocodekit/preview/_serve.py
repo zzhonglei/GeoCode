@@ -55,8 +55,9 @@ class Reader:
             pass
         return described
 
-    def _current(self, stamp):
-        """The description, when the data is still what the request was made for."""
+    def _current(self, stamp, placed=True):
+        """The description, when the data is still what the request was made for and, unless `placed` is False, has a
+        place on the map."""
         with self._lock:
             # A reader started for a preview already open has described nothing yet.
             if self._known is None:
@@ -67,7 +68,7 @@ class Reader:
                 raise _source.Unshown("changed")
         if stamp != described["stamp"]:
             raise _source.Unshown("changed")
-        if "unplaced" in described:
+        if placed and "unplaced" in described:
             raise _source.Unshown(described["unplaced"])
         return described
 
@@ -124,25 +125,53 @@ class Reader:
             return _raster.tile(self._opened(described, stand_in), look, z, x, y, cancelled)
         from geocodekit.preview import _cut
 
-        return _cut.tile(self._vector(described, cancelled), z, x, y, cancelled)
+        layer = self._vector(described, cancelled)
+        # Of one feature alone, the tile is the mark of the feature that is picked.
+        return _cut.tile(layer.only(request["fid"]) if "fid" in request else layer, z, x, y, cancelled)
 
     def identify(self, request, cancelled):
+        """The feature under a click, or the one of the number asked for: where it comes in the layer's table, its
+        attributes and where it lies."""
         described = self._current(request["stamp"])
         if described["kind"] != "vector":
             return None
         from geocodekit.preview import _cut, _vector
 
-        # Asked without them, a click looks among all three.
-        forms = request.get("forms", ("points", "lines", "polygons"))
         layer = self._vector(described, cancelled)
-        fid = _cut.nearest(layer, request["x"], request["y"], request["tolerance"], forms)
-        if fid is None:
+        if "fid" in request:
+            fid = request["fid"]
+        else:
+            # Asked without them, a click looks among all three.
+            forms = request.get("forms", ("points", "lines", "polygons"))
+            fid = _cut.nearest(layer, request["x"], request["y"], request["tolerance"], forms)
+        row = None if fid is None else layer.row(fid)
+        if row is None:
             return None
         if layer.attributes is not None:
-            found = layer.attributes.of(fid)
+            found = layer.attributes.of(row)
         else:
             found = _vector.attributes(self._path, described["layer"], fid)
-        return None if found is None else {"fid": fid, "attributes": found}
+        if found is None:
+            return None
+        return {"fid": fid, "row": row, "attributes": found, "bounds": layer.only(fid).bounds()}
+
+    def rows(self, request):
+        """The page of the layer's table that holds the row asked for: where the page begins, and the numbers and the
+        attributes of its features. A layer with no place on the map has a table all the same."""
+        described = self._current(request["stamp"], placed=False)
+        from geocodekit.preview import _vector
+
+        offset = request["row"] - request["row"] % _vector.ROWS
+        # From memory where the attributes are kept there, and only once they are: a table does not wait for the
+        # layer's geometry, which it shows nothing of.
+        held = self._held
+        layer = held[1] if held is not None and held[0] == described["stamp"] else None
+        if layer is not None and layer.attributes is not None:
+            numbers = layer.order[offset : offset + _vector.ROWS].tolist()
+            values = layer.attributes.rows(offset, _vector.ROWS)
+        else:
+            numbers, values = _vector.rows(self._path, described["layer"], offset, _vector.ROWS)
+        return {"offset": offset, "fids": numbers, "rows": values}
 
 
 def main():
@@ -183,6 +212,8 @@ def main():
                 write({"id": number, "result": {"empty": data is None}}, data or b"")
             elif request["do"] == "identify":
                 write({"id": number, "result": {"found": reader.identify(request, cancelled)}})
+            elif request["do"] == "rows":
+                write({"id": number, "result": reader.rows(request)})
             else:
                 write({"id": number, "error": {"code": "failed", "message": "no such request: %s" % request["do"]}})
         except _source.Cancelled:

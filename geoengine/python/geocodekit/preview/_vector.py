@@ -16,6 +16,9 @@ BATCH = 65536
 # long as opening it did, so their attributes are kept from the one reading. Text holds little for its size.
 READ_THROUGH = ("GeoJSON", "GeoJSONSeq")
 
+# As many rows as a page of a layer's table has.
+ROWS = 2000
+
 # What shapely numbers the kinds of geometry: the single ones, and from MULTI on those made of several.
 POINT, LINE, RING, POLYGON, MULTI = 0, 1, 2, 3, 4
 
@@ -25,9 +28,17 @@ def starts(lengths):
     return numpy.cumsum(lengths) - lengths
 
 
+def ranges(start, length):
+    """The places of every element of the runs, one run after another."""
+    return numpy.arange(int(length.sum())) + numpy.repeat(start - starts(length), length)
+
+
 class Points:
     def __init__(self, xy, fid):
         self.x, self.y, self.fid = numpy.ascontiguousarray(xy[:, 0]), numpy.ascontiguousarray(xy[:, 1]), fid
+
+    def only(self, chosen):
+        return Points(numpy.column_stack((self.x[chosen], self.y[chosen])), self.fid[chosen])
 
 
 class Lines:
@@ -36,6 +47,14 @@ class Lines:
         self.start = starts(length)
         self.bounds = _bounds(xy, self.start)
         self.size = _size(self.bounds)
+
+    def taken(self, chosen):
+        """The vertices of the lines chosen and how many each has."""
+        length = self.length[chosen]
+        return self.xy[ranges(self.start[chosen], length)], length
+
+    def only(self, chosen):
+        return Lines(*self.taken(chosen), self.fid[chosen])
 
 
 class Polygons:
@@ -50,32 +69,43 @@ class Polygons:
         self.bounds = _bounds(xy, self.ring_start)[self.first]
         self.size = _size(self.bounds)
 
+    def taken(self, chosen):
+        """The vertices of the polygons chosen, how many each of their rings has and how many rings each has."""
+        rings = self.rings[chosen]
+        which = ranges(self.first[chosen], rings)
+        ring_length = self.ring_length[which]
+        return self.xy[ranges(self.ring_start[which], ring_length)], ring_length, rings
+
+    def only(self, chosen):
+        return Polygons(*self.taken(chosen), self.fid[chosen])
+
 
 class Attributes:
-    """Every feature's attributes, as the columns they were read in rather than as objects."""
+    """Every feature's attributes in the order the layer is read in, as the columns they were read in rather than as
+    objects."""
 
-    def __init__(self, batches, number):
+    def __init__(self, batches):
         # Imported here and in `_whole`: no other layer's reader loads it.
         import pyarrow
 
-        table = pyarrow.Table.from_batches(batches)
-        # Through a list, as in `_whole`.
-        self._fid = numpy.array(table.column(number).to_pylist(), dtype=numpy.int64)
-        self._table = table.drop_columns([number])
+        self._table = pyarrow.Table.from_batches(batches)
 
-    def of(self, fid):
-        """As `attributes` gives them."""
-        rows = numpy.flatnonzero(self._fid == fid)
-        if rows.size == 0:
-            return None
-        return [[name, _plain(value)] for name, value in self._table.slice(int(rows[0]), 1).to_pylist()[0].items()]
+    def of(self, row):
+        """As `attributes` gives them, of the feature read as the `row`th."""
+        return [[name, _plain(value)] for name, value in self._table.slice(row, 1).to_pylist()[0].items()]
+
+    def rows(self, offset, count):
+        """As `rows` gives each feature's attributes."""
+        return [[_plain(value) for value in row.values()] for row in self._table.slice(offset, count).to_pylist()]
 
 
 class Layer:
-    """`attributes` is None where a click reads them from the file."""
+    """`order` holds the numbers of the layer's features in the order it is read in, which is that of its table's
+    rows. `attributes` is None where they are read from the file."""
 
-    def __init__(self, points, lines, polygons, attributes):
+    def __init__(self, points, lines, polygons, attributes, order):
         self.points, self.lines, self.polygons, self.attributes = points, lines, polygons, attributes
+        self.order = order
         # How many features have points, lines and polygons among their parts, for those that any has. A feature that
         # is a collection may have several of them.
         self.forms = {
@@ -83,6 +113,33 @@ class Layer:
             for name, parts in (("points", points), ("lines", lines), ("polygons", polygons))
             if parts is not None and parts.fid.size
         }
+
+    def row(self, fid):
+        """Where a feature comes in the layer's table, or None when the layer has no such feature."""
+        found = numpy.flatnonzero(self.order == fid)
+        return int(found[0]) if found.size else None
+
+    def only(self, fid):
+        """The layer of one feature alone: the mark of the feature that is picked is cut from it as any tile is."""
+
+        def chosen(parts):
+            which = numpy.empty(0, dtype=numpy.int64) if parts is None else numpy.flatnonzero(parts.fid == fid)
+            return parts.only(which) if which.size else None
+
+        return Layer(chosen(self.points), chosen(self.lines), chosen(self.polygons), None, numpy.array([fid]))
+
+    def bounds(self):
+        """West, south, east and north of all the layer holds, in degrees as a description gives them; None of one
+        that holds nothing."""
+        boxes = [parts.bounds for parts in (self.lines, self.polygons) if parts is not None and parts.fid.size]
+        if self.points is not None and self.points.fid.size:
+            boxes.append(numpy.column_stack((self.points.x, self.points.y, self.points.x, self.points.y)))
+        if not boxes:
+            return None
+        boxes = numpy.concatenate(boxes)
+        west, south = _mercator.degrees(float(boxes[:, 0].min()), float(boxes[:, 1].min()))
+        east, north = _mercator.degrees(float(boxes[:, 2].max()), float(boxes[:, 3].max()))
+        return [west, south, east, north]
 
 
 def _bounds(xy, start):
@@ -165,17 +222,23 @@ def _whole(layer, geometry, number, columns):
     import pyarrow
 
     for batch in layer.GetArrowStreamAsPyArrow(["INCLUDE_FID=YES", "MAX_FEATURES_IN_BATCH=%d" % BATCH]):
-        columns.append(pyarrow.RecordBatch.from_struct_array(batch).drop_columns([geometry]))
+        columns.append(pyarrow.RecordBatch.from_struct_array(batch).drop_columns([geometry, number]))
         # Through lists: asked for an array, pyarrow loads pandas first, which takes longer than a small file does.
         yield batch.field(geometry).to_pylist(), numpy.array(batch.field(number).to_pylist(), dtype=numpy.int64)
 
 
-def load(path, name, cancelled):
-    """The layer, read a batch of features at a time so that the file's own form of it never stays in memory."""
+def _opened(path, name):
+    """The dataset, which stays open for as long as it is held, and its layer of that name."""
     dataset = _source.opened(path, gdal.OF_VECTOR)
     layer = None if dataset is None else dataset.GetLayerByName(name)
     if layer is None:
         raise _source.Unshown("unopenable", gdal.GetLastErrorMsg())
+    return dataset, layer
+
+
+def load(path, name, cancelled):
+    """The layer, read a batch of features at a time so that the file's own form of it never stays in memory."""
+    dataset, layer = _opened(path, name)
     project = _Projection(layer.GetSpatialRef())
     # The names GDAL gives the two columns of a layer that has none of its own for them.
     geometry, number = layer.GetGeometryColumn() or "wkb_geometry", layer.GetFIDColumn() or "OGC_FID"
@@ -184,11 +247,12 @@ def load(path, name, cancelled):
         batches = _whole(layer, geometry, number, columns)
     else:
         batches = _geometry(layer, geometry, number)
-    points, lines, polygons = [], [], []
+    points, lines, polygons, order = [], [], [], []
     vertices = 0
     for wkb, fid in batches:
         if cancelled():
             raise _source.Cancelled()
+        order.append(fid)
         shapes, fid, kinds = _single(wkb, fid)
 
         chosen = kinds == POINT
@@ -232,7 +296,8 @@ def load(path, name, cancelled):
         Polygons(joined(polygons, 0, numpy.float64), joined(polygons, 1), joined(polygons, 2), joined(polygons, 3))
         if polygons
         else None,
-        Attributes(columns, number) if columns else None,
+        Attributes(columns) if columns else None,
+        numpy.concatenate(order) if order else numpy.empty(0, dtype=numpy.int64),
     )
 
 
@@ -252,10 +317,7 @@ def _plain(value):
 def attributes(path, name, fid):
     """A feature's attributes in the layer's order, each a name and a value, or None when the layer has no such
     feature."""
-    dataset = _source.opened(path, gdal.OF_VECTOR)
-    layer = None if dataset is None else dataset.GetLayerByName(name)
-    if layer is None:
-        raise _source.Unshown("unopenable", gdal.GetLastErrorMsg())
+    dataset, layer = _opened(path, name)
     feature = layer.GetFeature(fid)
     if feature is None:
         return None
@@ -263,3 +325,21 @@ def attributes(path, name, fid):
         [feature.GetFieldDefnRef(index).GetName(), _plain(feature.GetField(index))]
         for index in range(feature.GetFieldCount())
     ]
+
+
+def rows(path, name, offset, count):
+    """The numbers of as many as `count` of the layer's features from the `offset`th on, in the order the layer is
+    read in, and each one's attributes in the order of the layer's fields."""
+    dataset, layer = _opened(path, name)
+    # A table shows nothing of the geometry.
+    layer.SetIgnoredFields(["OGR_GEOMETRY"])
+    layer.SetNextByIndex(offset)
+    fields = range(layer.GetLayerDefn().GetFieldCount())
+    numbers, values = [], []
+    for _ in range(count):
+        feature = layer.GetNextFeature()
+        if feature is None:
+            break
+        numbers.append(feature.GetFID())
+        values.append([_plain(feature.GetField(index)) for index in fields])
+    return numbers, values

@@ -49,16 +49,23 @@ const TileParams = Schema.Struct({
   z: Schema.Int,
   x: Schema.Int,
   y: Schema.Int,
+  /** The one feature the tile is cut from, for the mark of the feature that is picked; all of them without it. */
+  fid: Schema.optionalKey(Schema.Int),
 })
-const IdentifyParams = Schema.Struct({
-  ...Target,
-  stamp: Schema.String,
-  x: Schema.Number,
-  y: Schema.Number,
-  tolerance: Schema.Number,
-  /** Those of a layer's points, lines and polygons that are shown; all three when it is not given. */
-  forms: Schema.optionalKey(Schema.Array(Schema.Literals(["points", "lines", "polygons"]))),
-})
+/** A click, or the number of the feature asked for. */
+const IdentifyParams = Schema.Union([
+  Schema.Struct({
+    ...Target,
+    stamp: Schema.String,
+    x: Schema.Number,
+    y: Schema.Number,
+    tolerance: Schema.Number,
+    /** Those of a layer's points, lines and polygons that are shown; all three when it is not given. */
+    forms: Schema.optionalKey(Schema.Array(Schema.Literals(["points", "lines", "polygons"]))),
+  }),
+  Schema.Struct({ ...Target, stamp: Schema.String, fid: Schema.Int }),
+])
+const RowsParams = Schema.Struct({ ...Target, stamp: Schema.String, row: Schema.Int })
 
 /** The line a reader's answer begins with. */
 const Answer = Schema.Struct({
@@ -73,6 +80,8 @@ const TileResult = Schema.Struct({ empty: Schema.Boolean })
 const decodeTileResult = Schema.decodeUnknownExit(TileResult)
 const IdentifyResult = Schema.Struct({ found: Schema.Unknown })
 const decodeIdentifyResult = Schema.decodeUnknownExit(IdentifyResult)
+const RowsResult = Schema.Struct({ offset: Schema.Int, fids: Schema.Unknown, rows: Schema.Unknown })
+const decodeRowsResult = Schema.decodeUnknownExit(RowsResult)
 
 type Settle = (outcome: Exit.Exit<{ readonly result: unknown; readonly bytes: Uint8Array }, Engine.Failure>) => void
 
@@ -87,9 +96,9 @@ interface Reader {
 const cancellation = () => new Engine.Failure({ code: "cancelled", message: "the request was cancelled" })
 
 /**
- * What the interface shows of a geographic dataset: its description, the tiles of its map and the feature under a
- * click, each read from the file by a reader that stays for the next request. `pyramids` is the folder the readers
- * keep the overviews they make for large rasters in; `launch` starts a reader.
+ * What the interface shows of a geographic dataset: its description, the tiles of its map, the feature under a click
+ * and the pages of its table, each read from the file by a reader that stays for the next request. `pyramids` is the
+ * folder the readers keep the overviews they make for large rasters in; `launch` starts a reader.
  */
 export const capability = (pyramids: string, launch: Launch = READER): Engine.Capability =>
   Effect.gen(function* () {
@@ -251,7 +260,13 @@ export const capability = (pyramids: string, launch: Launch = READER): Engine.Ca
       Effect.gen(function* () {
         const params = Schema.decodeUnknownExit(TileParams)(raw)
         if (Exit.isFailure(params)) return yield* invalid(params.cause)
-        const tile = { stamp: params.value.stamp, z: params.value.z, x: params.value.x, y: params.value.y }
+        const tile = {
+          stamp: params.value.stamp,
+          z: params.value.z,
+          x: params.value.x,
+          y: params.value.y,
+          fid: params.value.fid,
+        }
         const answer = yield* ask(params.value, { do: "tile", ...tile }, context.signal)
         const result = decodeTileResult(answer.result)
         if (Exit.isFailure(result)) return yield* unexpected(result.cause)
@@ -262,18 +277,32 @@ export const capability = (pyramids: string, launch: Launch = READER): Engine.Ca
       Effect.gen(function* () {
         const params = Schema.decodeUnknownExit(IdentifyParams)(raw)
         if (Exit.isFailure(params)) return yield* invalid(params.cause)
-        const click = {
-          stamp: params.value.stamp,
-          x: params.value.x,
-          y: params.value.y,
-          tolerance: params.value.tolerance,
-          forms: params.value.forms,
-        }
-        const answer = yield* ask(params.value, { do: "identify", ...click }, context.signal)
+        const asked =
+          "fid" in params.value
+            ? { stamp: params.value.stamp, fid: params.value.fid }
+            : {
+                stamp: params.value.stamp,
+                x: params.value.x,
+                y: params.value.y,
+                tolerance: params.value.tolerance,
+                forms: params.value.forms,
+              }
+        const answer = yield* ask(params.value, { do: "identify", ...asked }, context.signal)
         const result = decodeIdentifyResult(answer.result)
         if (Exit.isFailure(result)) return yield* unexpected(result.cause)
         return result.value
       })
 
-    return { domain: DOMAIN, methods: { describe, tile, identify } }
+    const rows: Engine.Method = (raw, context) =>
+      Effect.gen(function* () {
+        const params = Schema.decodeUnknownExit(RowsParams)(raw)
+        if (Exit.isFailure(params)) return yield* invalid(params.cause)
+        const page = { stamp: params.value.stamp, row: params.value.row }
+        const answer = yield* ask(params.value, { do: "rows", ...page }, context.signal)
+        const result = decodeRowsResult(answer.result)
+        if (Exit.isFailure(result)) return yield* unexpected(result.cause)
+        return result.value
+      })
+
+    return { domain: DOMAIN, methods: { describe, tile, identify, rows } }
   })
