@@ -1,5 +1,8 @@
 import React from 'react';
 
+import { Icon } from '@/components/icon/Icon';
+import type { IconName } from '@/components/icon/icons';
+import { Button } from '@/components/ui/button';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { getCurrentIntlLocale } from '@/lib/i18n';
 import type { FoundFeature, GeoDescription } from './previewClient';
@@ -12,19 +15,38 @@ const Row: React.FC<{ label: string; children: React.ReactNode }> = ({ label, ch
   </div>
 );
 
-/** The attributes of the feature last clicked, or what to do to see some. */
-export const FeatureTab: React.FC<{ picked: FoundFeature | null; text: PreviewText }> = ({ picked, text }) => {
+/** One of the panel's actions, as an icon alone: what it does is said by its label. */
+export const Action: React.FC<{ icon: IconName; label: string; disabled?: boolean; onClick: () => void }> = ({ icon, label, disabled, onClick }) => (
+  <Button variant="ghost" size="xs" className="size-[26px] px-0 text-muted-foreground" aria-label={label} title={label} disabled={disabled} onClick={onClick}>
+    <Icon name={icon} />
+  </Button>
+);
+
+/** A field without a value, as GIS software writes it, in every language. */
+export const NoValue: React.FC = () => <span className="italic text-muted-foreground">NULL</span>;
+
+/**
+ * The feature that is picked: which of the layer's `total` it is and its attributes, or what to do to pick one.
+ * `onReach` moves the map to it, where there is a map and the feature has a place on it.
+ */
+export const FeatureTab: React.FC<{ picked: FoundFeature | null; total: number; text: PreviewText; onReach?: () => void }> = ({ picked, total, text, onReach }) => {
   if (!picked) return <div className="p-3 typography-meta text-muted-foreground">{text.pickHint}</div>;
+  const locale = getCurrentIntlLocale();
   return (
-    <ScrollableOverlay outerClassName="h-full min-h-0" className="px-3 py-1.5 typography-meta">
-      {picked.attributes.length === 0 ? <div className="py-1.5 text-muted-foreground">{text.noAttributes}</div> : null}
-      {picked.attributes.map(([field, value], index) => (
-        <Row key={`${index}:${field}`} label={field}>
-          {/* As GIS software writes a field without a value, in every language. */}
-          {value === null ? <span className="italic text-muted-foreground">NULL</span> : value}
-        </Row>
-      ))}
-    </ScrollableOverlay>
+    <div className="flex h-full min-h-0 flex-col typography-meta">
+      <div className="flex shrink-0 items-center gap-2 pe-2 ps-3 pt-1.5">
+        <div className="min-w-0 flex-1 truncate text-muted-foreground">{text.nth((picked.row + 1).toLocaleString(locale), total.toLocaleString(locale))}</div>
+        {onReach ? <Action icon="zoom-in" label={text.reach} onClick={onReach} /> : null}
+      </div>
+      <ScrollableOverlay outerClassName="min-h-0 flex-1" className="px-3 pb-1.5">
+        {picked.attributes.length === 0 ? <div className="py-1.5 text-muted-foreground">{text.noAttributes}</div> : null}
+        {picked.attributes.map(([field, value], index) => (
+          <Row key={`${index}:${field}`} label={field}>
+            {value === null ? <NoValue /> : value}
+          </Row>
+        ))}
+      </ScrollableOverlay>
+    </div>
   );
 };
 

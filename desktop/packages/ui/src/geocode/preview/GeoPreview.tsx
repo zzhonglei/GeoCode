@@ -10,8 +10,9 @@ import { cancelWhenLayoutSettled, runWhenLayoutSettled } from '@/lib/layoutAnima
 import { cn } from '@/lib/utils';
 import type { MapView } from './GeoMap';
 import { GeoPanel, type PanelTab } from './GeoPanel';
+import { GeoTable } from './GeoTable';
 import { FeatureTab, InfoTab } from './GeoTabs';
-import { describeGeoData, FORMS, type Form, type FoundFeature, type GeoDescription, type Target } from './previewClient';
+import { describeGeoData, findGeoFeature, FORMS, type Form, type FoundFeature, type GeoBounds, type GeoDescription, type Target } from './previewClient';
 import { placeText, previewText, unshownText, type PreviewText } from './previewText';
 import { stilled } from './stilled';
 
@@ -80,6 +81,9 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   // The room the map and the panel share.
   const [room, setRoom] = React.useState({ width: 0, height: 0 });
   const view = React.useRef<MapView | null>(null);
+  const reach = React.useRef<((to: GeoBounds) => void) | null>(null);
+  // Counts what is picked, on the map and in the table: an answer to one that is no longer the last says nothing.
+  const picks = React.useRef(0);
   const shared = React.useRef<HTMLDivElement>(null);
   const target = React.useMemo<Target>(() => (layer === undefined ? { path } : { path, layer }), [path, layer]);
 
@@ -111,10 +115,11 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
     };
   }, []);
 
-  // Another layer is shown whole, not where the one before it was looked at. In an effect, which runs after the map
-  // that is leaving has written down where it was.
+  // Another layer of the file is looked at where the one before it was: a file's layers mostly lie in the same
+  // place, and the button on the map leads to those that do not. What showed there was the whole of the layer
+  // before, not of this one. In an effect, which runs after the map that is leaving has written down where it was.
   React.useEffect(() => {
-    view.current = null;
+    if (view.current) view.current = { ...view.current, whole: false };
   }, [target]);
 
   React.useEffect(() => {
@@ -193,8 +198,31 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
     </DropdownMenu>
   ) : null;
 
+  // What picks a feature and moves the map to it, where there is a map to show it on.
+  const mapped = Boolean(description && bounds && !unshown);
+  const stamp = description?.stamp;
+  const pick = mapped && stamp !== undefined ? (fid: number) => {
+    const mine = (picks.current += 1);
+    void findGeoFeature(target, stamp, fid).then((outcome) => {
+      if (mine !== picks.current) return;
+      if (outcome.ok) return setPicked(outcome.value);
+      if (outcome.code === 'changed') return setChanges((count) => count + 1);
+      setRefused(outcome.code);
+    });
+  } : undefined;
+  const lies = picked?.bounds;
+  const reachPicked = mapped && lies ? () => reach.current?.(lies) : undefined;
+
   const tabs: PanelTab[] = !description ? [] : [
-    ...(description.kind === 'vector' ? [{ id: 'feature', label: text.tabs.feature, content: <FeatureTab picked={picked} text={text} /> }] : []),
+    ...(description.kind === 'vector' ? [
+      { id: 'feature', label: text.tabs.feature, content: <FeatureTab picked={picked} total={description.features} text={text} onReach={reachPicked} /> },
+      {
+        id: 'table',
+        label: text.tabs.table,
+        // Made anew for other data, from its first row.
+        content: <GeoTable key={`${description.layer}\n${description.stamp}`} target={target} description={description} picked={picked} text={text} onPick={pick} onReach={reachPicked} onChanged={() => setChanges((count) => count + 1)} />,
+      },
+    ] : []),
     { id: 'info', label: text.tabs.info, content: <InfoTab description={description} text={text} /> },
   ];
 
@@ -221,11 +249,15 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
                 description={description}
                 bounds={bounds}
                 shown={shown}
+                marked={picked?.fid ?? null}
                 view={view}
+                reach={reach}
                 onPick={(found) => {
+                  picks.current += 1;
                   setPicked(found);
                   if (!found) return;
-                  setTab('feature');
+                  // Shown where it is being looked for: in the table when that is open, by its attributes otherwise.
+                  if (!open || tab !== 'table') setTab('feature');
                   setOpen(true);
                 }}
                 onPointer={onPointer}

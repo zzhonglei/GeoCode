@@ -47,14 +47,29 @@ const descriptionSchema = z.discriminatedUnion('kind', [
 ]);
 
 export type GeoDescription = z.infer<typeof descriptionSchema>;
+export type VectorDescription = Extract<GeoDescription, { kind: 'vector' }>;
 export type GeoBounds = NonNullable<GeoDescription['bounds']>;
 
 /** An attribute's value as it is shown: text as it is, anything else as JSON writes it; no value stays none, told from empty text. */
 const shownValue = z.union([z.string(), z.null(), z.unknown().transform((value) => JSON.stringify(value))]);
 
 const foundSchema = z.object({
-  found: z.object({ fid: z.number(), attributes: z.array(z.tuple([z.string(), shownValue])) }).nullable(),
+  found: z
+    .object({
+      fid: z.number(),
+      /** Where the feature comes in the layer's table, counted from none. */
+      row: z.number(),
+      attributes: z.array(z.tuple([z.string(), shownValue])),
+      /** West, south, east and north, in degrees; none of a feature without geometry. */
+      bounds: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),
+    })
+    .nullable(),
 });
+
+/** A page of a layer's table: the row it begins at, and the numbers and the values of its features, a row each. */
+const rowsSchema = z.object({ offset: z.number(), fids: z.array(z.number()), rows: z.array(z.array(shownValue)) });
+
+export type GeoRows = z.infer<typeof rowsSchema>;
 
 export type FoundFeature = NonNullable<z.infer<typeof foundSchema>['found']>;
 
@@ -96,9 +111,21 @@ export const identifyGeoFeature = (target: Target, stamp: string, at: { x: numbe
   request(`${PREVIEW_PATH}/identify?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&x=${at.x}&y=${at.y}&tolerance=${at.tolerance}&forms=${forms.join(',')}`, foundSchema)
     .then((outcome) => (outcome.ok ? { ok: true, value: outcome.value.found } : outcome));
 
-/** The address of the tiles of the data under `stamp`, with the tile's own numbers left for the map to fill in. */
-export const tileAddress = (target: Target, stamp: string): string =>
-  `${TILE_SCHEME}://tile?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&z={z}&x={x}&y={y}`;
+/** The feature of a number, as a click finds one. */
+export const findGeoFeature = (target: Target, stamp: string, fid: number): Promise<Outcome<FoundFeature | null>> =>
+  request(`${PREVIEW_PATH}/identify?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&fid=${fid}`, foundSchema)
+    .then((outcome) => (outcome.ok ? { ok: true, value: outcome.value.found } : outcome));
+
+/** The page of the layer's table that holds `row`. */
+export const readGeoRows = (target: Target, stamp: string, row: number, signal?: AbortSignal): Promise<Outcome<GeoRows>> =>
+  request(`${PREVIEW_PATH}/rows?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&row=${row}`, rowsSchema, signal);
+
+/**
+ * The address of the tiles of the data under `stamp`, with the tile's own numbers left for the map to fill in. With
+ * `fid`, the tiles are of that one feature alone. It comes last: tiles are told apart by how their addresses begin.
+ */
+export const tileAddress = (target: Target, stamp: string, fid?: number): string =>
+  `${TILE_SCHEME}://tile?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&z={z}&x={x}&y={y}${fid === undefined ? '' : `&fid=${fid}`}`;
 
 /** What a tile's address is asked of the shell server as. */
 export const tileRequestPath = (address: string): string => `${PREVIEW_PATH}/${address.slice(`${TILE_SCHEME}://`.length)}`;

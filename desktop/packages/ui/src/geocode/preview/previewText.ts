@@ -17,11 +17,19 @@ export type PreviewText = {
   /** Back to where the whole of the data shows. */
   whole: string;
   /** The panel beside the map: what its tabs are called, and what opens and closes it. */
-  tabs: { feature: string; info: string };
+  tabs: { feature: string; table: string; info: string };
   openPanel: string;
   closePanel: string;
   /** Shown where a clicked feature's attributes go, before any is clicked. */
   pickHint: string;
+  /** Which of the layer's features this one is; both are counts as the locale writes them. */
+  nth: (position: string, total: string) => string;
+  /** The rows a page of the table holds; all three are counts as the locale writes them. */
+  rows: (first: string, last: string, total: string) => string;
+  /** Moves the map to where the picked feature is. */
+  reach: string;
+  previousPage: string;
+  nextPage: string;
   /** What the rows of the info tab are called. */
   info: { layer: string; geometry: string; features: string; fields: string; crs: string; extent: string; size: string; bands: string; nodata: string };
   /** Some of the map's tiles failed; the rest is drawn. */
@@ -44,10 +52,15 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     zoomIn: 'Zoom in',
     zoomOut: 'Zoom out',
     whole: 'Show all of it',
-    tabs: { feature: 'Feature', info: 'Info' },
+    tabs: { feature: 'Feature', table: 'Table', info: 'Info' },
     openPanel: 'Show the panel',
     closePanel: 'Hide the panel',
     pickHint: 'Click a feature on the map to see its attributes.',
+    nth: (position, total) => `Feature ${position} of ${total}`,
+    rows: (first, last, total) => `Rows ${first}–${last} of ${total}`,
+    reach: 'Zoom to the feature',
+    previousPage: 'Previous page',
+    nextPage: 'Next page',
     info: { layer: 'Layer', geometry: 'Geometry', features: 'Features', fields: 'Fields', crs: 'Coordinate system', extent: 'Extent', size: 'Size', bands: 'Bands', nodata: 'no data' },
     partly: 'Part of the map could not be read.',
     unshown: {
@@ -83,10 +96,15 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     zoomIn: '放大',
     zoomOut: '缩小',
     whole: '回到全图',
-    tabs: { feature: '要素', info: '信息' },
+    tabs: { feature: '要素', table: '属性表', info: '信息' },
     openPanel: '展开面板',
     closePanel: '收起面板',
     pickHint: '点击地图上的要素,查看它的属性。',
+    nth: (position, total) => `第 ${position} 个要素,共 ${total} 个`,
+    rows: (first, last, total) => `第 ${first} 到 ${last} 行,共 ${total} 行`,
+    reach: '缩放到要素',
+    previousPage: '上一页',
+    nextPage: '下一页',
     info: { layer: '图层', geometry: '几何类型', features: '要素数', fields: '字段', crs: '坐标系', extent: '范围', size: '尺寸', bands: '波段', nodata: '无数据值' },
     partly: '地图有一部分没能读出来。',
     unshown: {
@@ -122,10 +140,15 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     zoomIn: '放大',
     zoomOut: '縮小',
     whole: '回到全圖',
-    tabs: { feature: '圖徵', info: '資訊' },
+    tabs: { feature: '圖徵', table: '屬性表', info: '資訊' },
     openPanel: '展開面板',
     closePanel: '收起面板',
     pickHint: '點選地圖上的圖徵,檢視它的屬性。',
+    nth: (position, total) => `第 ${position} 個圖徵,共 ${total} 個`,
+    rows: (first, last, total) => `第 ${first} 到 ${last} 列,共 ${total} 列`,
+    reach: '縮放至圖徵',
+    previousPage: '上一頁',
+    nextPage: '下一頁',
     info: { layer: '圖層', geometry: '幾何類型', features: '圖徵數', fields: '欄位', crs: '座標系統', extent: '範圍', size: '尺寸', bands: '波段', nodata: '無資料值' },
     partly: '地圖有一部分沒能讀出來。',
     unshown: {

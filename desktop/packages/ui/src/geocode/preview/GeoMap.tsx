@@ -7,12 +7,17 @@ import { Icon } from '@/components/icon/Icon';
 import { useI18n } from '@/lib/i18n';
 import { cancelWhenLayoutSettled, runWhenLayoutSettled } from '@/lib/layoutAnimation';
 import { runtimeFetch } from '@/lib/runtime-fetch';
+import { colorOf, EDGE, MARK, MARK_EDGE } from './geoColors';
 import { previewText } from './previewText';
 import { stilled } from './stilled';
 import { identifyGeoFeature, refusalCode, FORMS, tileAddress, tileRequestPath, TILE_SCHEME, type FoundFeature, type GeoBounds, type GeoDescription, type Form, type Target } from './previewClient';
 
-/** Where a map was last looked at, kept while its tab is hidden and the map itself is not. */
-export type MapView = { center: [number, number]; zoom: number };
+/**
+ * Where a map was last looked at, kept while its tab is hidden and the map itself is not, and from one layer of a
+ * file to the next. `whole` says that it showed the whole of its data, which the map that follows it then does at
+ * its own size.
+ */
+export type MapView = { center: [number, number]; zoom: number; whole: boolean };
 
 // A raster's tile is an image 512 pixels wide drawn 256 wide, so it is sharp on a display of twice the density.
 const RASTER_TILE = 256;
@@ -23,13 +28,35 @@ const PICK_RADIUS = 5;
 // The deepest tiles asked of a vector layer; deeper, the map draws these larger. Their vertices sit a pixel apart at
 // the deepest the map zooms.
 const VECTOR_DEPTH = 20;
-const COLOR = '#3b82f6';
+// How long the map takes back to where the whole of the data shows, in milliseconds.
+const BACK = 500;
+// The deepest a feature is zoomed to: a point has no size to fit the map to.
+const REACH_DEPTH = 17;
 // The map's layers that draw each of a vector layer's forms.
 const DRAWN_AS = { points: ['point'], lines: ['line', 'small-line'], polygons: ['fill', 'outline', 'small-polygon'] } satisfies Record<Form, readonly string[]>;
 
 const show = (map: MapLibreMap, shown: readonly Form[]) => {
   for (const form of FORMS) {
     for (const layer of DRAWN_AS[form]) map.setLayoutProperty(layer, 'visibility', shown.includes(form) ? 'visible' : 'none');
+  }
+};
+
+/** Marks the one feature these tiles are of, over all the map draws; nothing with no tiles. */
+const mark = (map: MapLibreMap, tiles: string | null) => {
+  for (const layer of map.getStyle().layers) {
+    if ('source' in layer && layer.source === 'mark') map.removeLayer(layer.id);
+  }
+  if (map.getSource('mark')) map.removeSource('mark');
+  if (tiles === null) return;
+  map.addSource('mark', { type: 'vector', tiles: [tiles], maxzoom: VECTOR_DEPTH });
+  const round = { 'line-cap': 'round', 'line-join': 'round' } as const;
+  map.addLayer({ id: 'mark-fill', type: 'fill', source: 'mark', 'source-layer': 'polygons', paint: { 'fill-color': MARK, 'fill-opacity': 0.85 } });
+  map.addLayer({ id: 'mark-outline', type: 'line', source: 'mark', 'source-layer': 'polygons', layout: round, paint: { 'line-color': MARK_EDGE, 'line-width': 2.5 } });
+  map.addLayer({ id: 'mark-line-edge', type: 'line', source: 'mark', 'source-layer': 'lines', layout: round, paint: { 'line-color': MARK_EDGE, 'line-width': 5.5 } });
+  map.addLayer({ id: 'mark-line', type: 'line', source: 'mark', 'source-layer': 'lines', layout: round, paint: { 'line-color': MARK, 'line-width': 2.5 } });
+  // A point, and a line or a polygon too small at this zoom to be seen as one.
+  for (const dots of ['points', 'small-lines', 'small-polygons']) {
+    map.addLayer({ id: `mark-${dots}`, type: 'circle', source: 'mark', 'source-layer': dots, paint: { 'circle-color': MARK, 'circle-radius': 5, 'circle-stroke-color': MARK_EDGE, 'circle-stroke-width': 2 } });
   }
 };
 
@@ -67,8 +94,12 @@ const GeoMap: React.FC<{
   bounds: GeoBounds;
   /** Those of a vector layer's points, lines and polygons that are drawn, and so can be clicked. */
   shown: readonly Form[];
+  /** The number of the feature that is picked, which the map marks. */
+  marked: number | null;
   /** Read when the map is made and written when it goes. */
   view: React.MutableRefObject<MapView | null>;
+  /** Holds, for as long as there is a map, what moves it to where a feature lies. */
+  reach: React.MutableRefObject<((to: GeoBounds) => void) | null>;
   onPick: (found: FoundFeature | null) => void;
   /** Where the pointer is over the map, as a longitude and a latitude, or that it has left. */
   onPointer: (at: readonly [number, number] | null) => void;
@@ -76,20 +107,24 @@ const GeoMap: React.FC<{
   onRefused: (code: string) => void;
   /** The map could not be made at all, as on a computer without WebGL. */
   onFailed: () => void;
-}> = ({ target, description, bounds, shown, view, onPick, onPointer, onRefused, onFailed }) => {
+}> = ({ target, description, bounds, shown, marked, view, reach, onPick, onPointer, onRefused, onFailed }) => {
   const { locale } = useI18n();
   const text = previewText(locale);
   // The room the map is given, and within it the map itself, which keeps the size it was last drawn at.
   const room = React.useRef<HTMLDivElement>(null);
   const container = React.useRef<HTMLDivElement>(null);
   const made = React.useRef<MapLibreMap | null>(null);
+  // Holds, for as long as there is a map, what sends it back to where the whole of the data shows.
+  const back = React.useRef<(() => void) | null>(null);
   // The map is made once for the data it shows; what it tells goes to whoever listens now, and a click looks among
   // what is shown now.
   const listeners = React.useRef({ onPick, onPointer, onRefused, onFailed });
   const showing = React.useRef(shown);
+  const marking = React.useRef(marked);
   React.useEffect(() => {
     listeners.current = { onPick, onPointer, onRefused, onFailed };
     showing.current = shown;
+    marking.current = marked;
   });
 
   React.useEffect(() => {
@@ -101,6 +136,7 @@ const GeoMap: React.FC<{
       within.style.height = `${around.clientHeight}px`;
     };
     fit();
+    const before = view.current;
     const tiles = tileAddress(target, description.stamp);
     const beginning = tiles.slice(0, tiles.indexOf('&z='));
     let map: MapLibreMap;
@@ -108,7 +144,7 @@ const GeoMap: React.FC<{
       map = new MapLibreMap({
         container: within,
         style: { version: 8, sources: {}, layers: [] },
-        ...(view.current ? view.current : { bounds, fitBoundsOptions: { padding: 24 } }),
+        ...(before && !before.whole ? { center: before.center, zoom: before.zoom } : { bounds, fitBoundsOptions: { padding: 24 } }),
         attributionControl: false,
         // Sized below, once its room has stopped changing: drawn whole again for every frame of a panel sliding,
         // it made the slide drop frames. Meanwhile it stays as it was drawn, centred in its room, whose moving
@@ -124,11 +160,29 @@ const GeoMap: React.FC<{
     }
     map.touchZoomRotate.disableRotation();
     made.current = map;
+    reach.current = (to) => map.fitBounds(to, { padding: 48, maxZoom: REACH_DEPTH });
+    // Whether the map shows the whole of the data: as it is made, unless it is made where another was looked at,
+    // and until it is next moved. While it does, it is fitted again to each size it is given: the panel under it
+    // opens at a click and takes a third of its room, and the whole of the data fitted to the room before would
+    // then be cut off, and not be where the button that shows all of it leads.
+    let whole = !before || before.whole;
+    // In `moving` milliseconds; at once when its size has changed, which is no move to follow.
+    const fitWhole = (moving: number) => {
+      map.fitBounds(bounds, { padding: 24, duration: moving });
+      whole = true;
+    };
+    back.current = () => fitWhole(BACK);
+    map.on('movestart', () => {
+      whole = false;
+    });
     const sizing = stilled(() => {
       if (within.clientWidth === around.clientWidth && within.clientHeight === around.clientHeight) return;
+      // Asked before the map is sized, which counts as a move.
+      const fitted = whole;
       fit();
-      // Drawn at once: a canvas is blank from being sized until it is next drawn, which shows as a flicker.
       map.resize();
+      if (fitted) fitWhole(0);
+      // Drawn at once: a canvas is blank from being sized until it is next drawn, which shows as a flicker.
       map.redraw();
     });
     const sized = new ResizeObserver(() => runWhenLayoutSettled(sizing.ask));
@@ -156,13 +210,15 @@ const GeoMap: React.FC<{
       // Asked of every tile in view, not only those within the bounds: a file's own record of its extent may be out of
       // date, and what lies outside it would never be drawn.
       map.addSource('data', { type: 'vector', tiles: [tiles], maxzoom: VECTOR_DEPTH });
-      map.addLayer({ id: 'fill', type: 'fill', source: 'data', 'source-layer': 'polygons', paint: { 'fill-color': COLOR, 'fill-opacity': 0.3 } });
-      map.addLayer({ id: 'outline', type: 'line', source: 'data', 'source-layer': 'polygons', paint: { 'line-color': COLOR, 'line-width': 1 } });
-      map.addLayer({ id: 'line', type: 'line', source: 'data', 'source-layer': 'lines', paint: { 'line-color': COLOR, 'line-width': 1 } });
-      map.addLayer({ id: 'small-polygon', type: 'circle', source: 'data', 'source-layer': 'small-polygons', paint: { 'circle-color': COLOR, 'circle-radius': 0.75 } });
-      map.addLayer({ id: 'small-line', type: 'circle', source: 'data', 'source-layer': 'small-lines', paint: { 'circle-color': COLOR, 'circle-radius': 0.75 } });
-      map.addLayer({ id: 'point', type: 'circle', source: 'data', 'source-layer': 'points', paint: { 'circle-color': COLOR, 'circle-radius': 2.5, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 0.5 } });
+      const color = colorOf(description.layer);
+      map.addLayer({ id: 'fill', type: 'fill', source: 'data', 'source-layer': 'polygons', paint: { 'fill-color': color, 'fill-opacity': 0.5 } });
+      map.addLayer({ id: 'outline', type: 'line', source: 'data', 'source-layer': 'polygons', paint: { 'line-color': EDGE, 'line-width': 0.75 } });
+      map.addLayer({ id: 'line', type: 'line', source: 'data', 'source-layer': 'lines', paint: { 'line-color': color, 'line-width': 1.5 } });
+      map.addLayer({ id: 'small-polygon', type: 'circle', source: 'data', 'source-layer': 'small-polygons', paint: { 'circle-color': color, 'circle-radius': 1 } });
+      map.addLayer({ id: 'small-line', type: 'circle', source: 'data', 'source-layer': 'small-lines', paint: { 'circle-color': color, 'circle-radius': 1 } });
+      map.addLayer({ id: 'point', type: 'circle', source: 'data', 'source-layer': 'points', paint: { 'circle-color': color, 'circle-radius': 3.5, 'circle-stroke-color': EDGE, 'circle-stroke-width': 0.75 } });
       show(map, showing.current);
+      mark(map, marking.current === null ? null : tileAddress(target, description.stamp, marking.current));
       map.on('click', (event) => {
         // With nothing shown there is nothing to click.
         if (showing.current.length === 0) return;
@@ -188,18 +244,25 @@ const GeoMap: React.FC<{
       sizing.drop();
       listeners.current.onPointer(null);
       made.current = null;
+      reach.current = null;
+      back.current = null;
       told.delete(tell);
       if (told.size === 0) refusals.delete(beginning);
       const center = map.getCenter();
-      view.current = { center: [center.lng, center.lat], zoom: map.getZoom() };
+      view.current = { center: [center.lng, center.lat], zoom: map.getZoom(), whole };
       map.remove();
     };
-  }, [target, description, bounds, view]);
+  }, [target, description, bounds, view, reach]);
 
   React.useEffect(() => {
     // Before the map has its layers, they are shown as asked when it gets them.
     if (made.current?.getLayer('point')) show(made.current, shown);
   }, [shown]);
+
+  React.useEffect(() => {
+    // As above: marked when the map gets its layers, where it has none yet.
+    if (made.current?.getLayer('point')) mark(made.current, marked === null ? null : tileAddress(target, description.stamp, marked));
+  }, [marked, target, description.stamp]);
 
   // Bare over the data, with a rim of the page's colour to stay legible on any of it.
   const control = 'flex size-7 items-center justify-center opacity-80 hover:opacity-100 [filter:drop-shadow(0_0_1.5px_var(--surface-background))_drop-shadow(0_0_1px_var(--surface-background))]';
@@ -214,7 +277,7 @@ const GeoMap: React.FC<{
         <button type="button" className={`${control} text-foreground`} aria-label={text.zoomOut} title={text.zoomOut} onClick={() => made.current?.zoomOut()}>
           <Icon name="subtract" className="size-4" />
         </button>
-        <button type="button" className={`${control} text-[var(--status-error)]`} aria-label={text.whole} title={text.whole} onClick={() => made.current?.fitBounds(bounds, { padding: 24 })}>
+        <button type="button" className={`${control} text-[var(--status-error)]`} aria-label={text.whole} title={text.whole} onClick={() => back.current?.()}>
           <Icon name="focus-3" className="size-4" />
         </button>
       </div>
