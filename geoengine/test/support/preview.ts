@@ -272,15 +272,33 @@ raster("heights.tif", 1, gdal.GDT_Float32, heights)
 raster("classes.tif", 1, gdal.GDT_Byte, classes)
 raster("unknown.tif", 1, gdal.GDT_Float32, unknown)
 
+# Whole numbers of three values and no colour table: 100 in its west half, 300 in its east but for one pixel of 200.
+# Larger than the sample a raster is measured in, which passes that pixel over.
+zones = gdal.GetDriverByName("GTiff").Create(os.path.join(folder, "zones.tif"), 1024, 1024, 1, gdal.GDT_Int16)
+zones.SetGeoTransform((0, side / 1024, 0, side, 0, -side / 1024))
+zones.SetSpatialRef(wgs84)
+values = numpy.full((1024, 1024), 100, dtype=numpy.int16); values[:, 512:] = 300; values[800, 800] = 200
+zones.GetRasterBand(1).WriteArray(values)
+zones = None
+
 # A raster too long to draw without overviews and with none: low in its west half, high in its east, and without data
 # at its western end.
 strip = gdal.GetDriverByName("GTiff").Create(os.path.join(folder, "strip.tif"), 9000, 64, 1, gdal.GDT_Int16)
 strip.SetGeoTransform((0, side / 9000, 0, side * 64 / 9000, 0, -side / 9000))
 strip.SetSpatialRef(wgs84)
-values = numpy.full((64, 9000), 100, dtype=numpy.int16); values[:, 4500:] = 1000; values[:, :1500] = -9999
+# Of a few hundred values, as measurements are and classes are not.
+values = numpy.tile(100 + numpy.arange(9000) % 200, (64, 1)).astype(numpy.int16); values[:, 4500:] += 900; values[:, :1500] = -9999
 strip.GetRasterBand(1).WriteArray(values)
 strip.GetRasterBand(1).SetNoDataValue(-9999)
 strip = None
+
+# As long, and of eight classes a thousand apart that change every third pixel, with no colour table: averaged into
+# overviews, they would be hundreds of values, none of them a class.
+wide = gdal.GetDriverByName("GTiff").Create(os.path.join(folder, "wide.tif"), 9000, 64, 1, gdal.GDT_Int16)
+wide.SetGeoTransform((0, side / 9000, 0, side * 64 / 9000, 0, -side / 9000))
+wide.SetSpatialRef(wgs84)
+wide.GetRasterBand(1).WriteArray(numpy.tile((numpy.arange(9000) // 3 % 8 + 1) * 1000, (64, 1)).astype(numpy.int16))
+wide = None
 
 # A GeoPackage of a vector layer and two rasters.
 both = ogr.GetDriverByName("GPKG").CreateDataSource(os.path.join(folder, "both.gpkg"))

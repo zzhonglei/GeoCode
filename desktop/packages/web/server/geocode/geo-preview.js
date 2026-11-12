@@ -9,7 +9,7 @@ const STATUS_BY_CODE = new Map([
 
 /**
  * What a window's preview of a geographic dataset asks for: the dataset's description, the tiles of its map, the
- * feature under a click and the pages of its table, each read by GeoEngine as it is asked for. A request the window
+ * feature under a click, the pages of its table and what its bands measure, each read by GeoEngine as it is asked for. A request the window
  * leaves is cancelled there, so a map that has moved on reads nothing for where it was. Without geoEngine, as when
  * the server runs outside the desktop app, every request is refused.
  */
@@ -34,6 +34,14 @@ export const registerGeoPreview = (app, { geoEngine }) => {
 
   // An empty value would read as zero.
   const number = (value) => (value === '' ? NaN : Number(value));
+  // What is not JSON stays the text it is, for GeoEngine to refuse.
+  const parsed = (text) => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  };
 
   // Named requests only, as the environment's are: the window reaches no other method of GeoEngine through these.
   app.get('/api/geocode/preview/describe', async (req, res) => {
@@ -42,10 +50,12 @@ export const registerGeoPreview = (app, { geoEngine }) => {
   });
 
   app.get('/api/geocode/preview/tile', async (req, res) => {
-    const { stamp, z, x, y, fid } = req.query;
+    const { stamp, z, x, y, fid, look } = req.query;
     const tile = { stamp, z: number(z), x: number(x), y: number(y) };
     // The one feature the tile is of, where it is the mark of the feature that is picked.
     if (fid !== undefined) tile.fid = number(fid);
+    // How the interface wants a raster drawn, where it says.
+    if (look !== undefined) tile.look = parsed(look);
     const result = await ask(req, res, 'preview.tile', tile);
     if (!result) return;
     // Nothing of the dataset lies in this tile.
@@ -61,6 +71,11 @@ export const registerGeoPreview = (app, { geoEngine }) => {
     // Those of the layer's points, lines and polygons that are shown, when not all are.
     if (fid === undefined && forms !== undefined) asked.forms = String(forms).split(',');
     const result = await ask(req, res, 'preview.identify', asked);
+    if (result) res.json(result);
+  });
+
+  app.get('/api/geocode/preview/statistics', async (req, res) => {
+    const result = await ask(req, res, 'preview.statistics', { stamp: req.query.stamp });
     if (result) res.json(result);
   });
 

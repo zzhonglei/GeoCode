@@ -122,7 +122,7 @@ class Reader:
         z, x, y = request["z"], request["x"], request["y"]
         if described["kind"] == "raster":
             stand_in, look = self._raster(described, cancelled)
-            return _raster.tile(self._opened(described, stand_in), look, z, x, y, cancelled)
+            return _raster.tile(self._opened(described, stand_in), look, z, x, y, cancelled, request.get("look"))
         from geocodekit.preview import _cut
 
         layer = self._vector(described, cancelled)
@@ -154,6 +154,14 @@ class Reader:
         if found is None:
             return None
         return {"fid": fid, "row": row, "attributes": found, "bounds": layer.only(fid).bounds()}
+
+    def statistics(self, request, cancelled):
+        """What is measured of a raster's bands, and what it may be drawn with."""
+        described = self._current(request["stamp"])
+        if described["kind"] != "raster":
+            return None
+        stand_in, look = self._raster(described, cancelled)
+        return look.statistics(self._opened(described, stand_in))
 
     def rows(self, request):
         """The page of the layer's table that holds the row asked for: where the page begins, and the numbers and the
@@ -214,6 +222,8 @@ def main():
                 write({"id": number, "result": {"found": reader.identify(request, cancelled)}})
             elif request["do"] == "rows":
                 write({"id": number, "result": reader.rows(request)})
+            elif request["do"] == "statistics":
+                write({"id": number, "result": {"statistics": reader.statistics(request, cancelled)}})
             else:
                 write({"id": number, "error": {"code": "failed", "message": "no such request: %s" % request["do"]}})
         except _source.Cancelled:

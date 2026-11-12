@@ -85,6 +85,16 @@ interface Answer {
     readonly attributes: readonly (readonly [string, unknown])[]
     readonly bounds: readonly number[] | null
   } | null
+  readonly statistics?: {
+    readonly bands: readonly ({ readonly [name: string]: number } & { readonly counts: readonly number[] })[]
+    readonly ramps: Readonly<Record<string, readonly string[]>>
+    readonly classes?: readonly {
+      readonly value: number
+      readonly color: readonly number[]
+      readonly count: number
+      readonly share: number
+    }[]
+  }
   readonly offset?: number
   readonly fids?: readonly number[]
   readonly rows?: readonly (readonly unknown[])[]
@@ -110,6 +120,8 @@ const open = async (name: string, layer?: string) => {
     described,
     tile: (tile: { z: number; x: number; y: number } = TILE, fid?: number) =>
       ask("tile", { ...target, stamp: described.stamp, ...tile, ...(fid === undefined ? {} : { fid }) }),
+    drawn: (look: object) => ask("tile", { ...target, stamp: described.stamp, ...TILE, look }),
+    statistics: async () => (await ask("statistics", { ...target, stamp: described.stamp })).statistics,
     feature: async (fid: number) => (await ask("identify", { ...target, stamp: described.stamp, fid })).found,
     rows: (row: number) => ask("rows", { ...target, stamp: described.stamp, row }),
     click: async (longitude: number, latitude: number, tolerance = 5, forms?: readonly string[]) => {
@@ -422,6 +434,108 @@ test(
   },
 )
 
+// Guards what the interface draws a raster by: the numbers under its histogram, and the bands, the range and the ramp
+// it asks for reaching the picture. Any of them dropped on the way, the tile is still a picture and nothing fails.
+test("a raster is measured, and drawn as the interface asks", { skip: missing }, async () => {
+  const heights = await open("heights.tif")
+  const measured = await heights.statistics()
+  const [band] = measured?.bands ?? []
+  assert.deepEqual([band.min, band.max], [0, 1000])
+  // Its mean above the middle: the corner without data is where it is lowest.
+  assert.ok(Math.abs(band.mean - 525) < 5 && band.low < 40 && band.high > 960, JSON.stringify({ ...band, counts: 0 }))
+  assert.equal(band.counts.length, 256)
+  // Every value of the sample that is data, about evenly: none of the corner that has none.
+  const counted = band.counts.reduce((sum, count) => sum + count, 0)
+  assert.equal(counted, 256 * 256 - 64 * 64)
+  assert.ok(Math.max(...band.counts) < 2 * (counted / 256), String(Math.max(...band.counts)))
+
+  const pixels = async (answer: Answer, name: string, places: number[][]) => {
+    assert.ok(answer.bytes, `no tile: ${answer.code ?? "empty"}`)
+    const image = file(name)
+    fs.writeFileSync(image, answer.bytes)
+    const out = execFileSync(base, ["-I", "-B", "-c", PIXELS, JSON.stringify([[image, places]])], { encoding: "utf-8" })
+    return (JSON.parse(out) as number[][][])[0].slice(1)
+  }
+  const near = (pixel: number[], expected: number[]) =>
+    pixel.every((value, index) => Math.abs(value - expected[index]) <= 14)
+  const colour = (hex: string) => [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).concat(255)
+  // Low in the west and high in the east, through the ramp from its one end to its other, clear where there is no
+  // data; and all above a range's high end drawn as that end.
+  const ramp = measured?.ramps.viridis ?? []
+  const spots = [
+    [130, 400],
+    [500, 400],
+    [40, 40],
+  ]
+  const [low, high, none] = await pixels(
+    await heights.drawn({ bands: [1], ranges: [[0, 1000]], ramp: "viridis" }),
+    "ramp.webp",
+    spots,
+  )
+  assert.ok(near(low, colour(ramp[1])) && near(high, colour(ramp.at(-1) ?? "")), `${low} and ${high}`)
+  assert.equal(none[3], 0)
+  const [cut] = await pixels(await heights.drawn({ bands: [1], ranges: [[0, 100]] }), "cut.webp", spots)
+  assert.ok(near(cut, [255, 255, 255, 255]), String(cut))
+  // Its bands in the order asked for: blue as red, where the picture is blue.
+  const picture = await open("picture.tif")
+  const [east] = await pixels(await picture.drawn({ bands: [3, 2, 1] }), "swapped.webp", [[400, 256]])
+  assert.ok(near(east, [255, 0, 0, 255]), String(east))
+
+  const classes = (await (await open("classes.tif")).statistics())?.classes
+  assert.deepEqual(
+    classes?.map((each) => [each.value, each.color, each.share]),
+    [
+      [1, [200, 30, 30, 255], 0.5],
+      [2, [30, 200, 30, 255], 0.5],
+    ],
+  )
+})
+
+// Guards a raster of classes that brings no colours, as a classification's result is: drawn as measurements it is
+// greys a shade apart. And guards its list of classes, which a count of a sample would leave the rare ones out of.
+test(
+  "whole numbers of few values are classes, each counted and in a colour of its own",
+  { skip: missing },
+  async () => {
+    const zones = await open("zones.tif")
+    const classes = (await zones.statistics())?.classes ?? []
+    assert.deepEqual(
+      classes.map((each) => [each.value, each.count]),
+      [
+        [100, 512 * 1024],
+        [200, 1],
+        [300, 512 * 1024 - 1],
+      ],
+    )
+    const image = file("zones.webp")
+    const colours = async (answer: Answer) => {
+      assert.ok(answer.bytes, `no tile: ${answer.code ?? "empty"}`)
+      fs.writeFileSync(image, answer.bytes)
+      const spots = JSON.stringify([
+        [
+          image,
+          [
+            [100, 256],
+            [400, 256],
+          ],
+        ],
+      ])
+      return (
+        JSON.parse(execFileSync(base, ["-I", "-B", "-c", PIXELS, spots], { encoding: "utf-8" })) as number[][][]
+      )[0]
+    }
+    // As it is opened, and asked for by name; through a ramp when one is asked for in their place.
+    const [, west, east] = await colours(await zones.tile())
+    assert.deepEqual([west, east], [classes[0].color, classes[2].color])
+    assert.notDeepEqual(west, east)
+    assert.deepEqual((await colours(await zones.drawn({ bands: [1], ramp: "classes" }))).slice(1), [west, east])
+    const [, low, high] = await colours(await zones.drawn({ bands: [1], ranges: [[100, 300]], ramp: "grey" }))
+    assert.ok(low[0] < 10 && low[0] === low[1] && high[0] > 245 && high[0] === high[1], `${low} and ${high}`)
+    // Measurements stay measurements: heights have no classes.
+    assert.equal((await (await open("heights.tif")).statistics())?.classes, undefined)
+  },
+)
+
 // Guards a large raster's first view, which without overviews reads every pixel of it for a tile, and guards the
 // overviews themselves: failing to make them is not a failure to draw, so nothing else would say they are not made.
 test("a large raster without overviews is given them, in the cache and not beside it", { skip: missing }, async () => {
@@ -461,6 +575,14 @@ test("a large raster without overviews is given them, in the cache and not besid
   // A raster of a size to read whole is left as it is.
   await open("heights.tif")
   assert.equal(kept().length, 2)
+  // Classes are not averaged into the overviews: a sample of the raster, read from them, still holds the classes
+  // alone, and so the raster is still seen to be one of classes.
+  const wide = await open("wide.tif")
+  assert.equal(kept().length, 3)
+  assert.deepEqual(
+    (await wide.statistics())?.classes?.map((each) => each.value),
+    [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000],
+  )
 })
 
 // Guards a whole tile's fill: its first ring says which way shells run, so one the grid turned over would make holes

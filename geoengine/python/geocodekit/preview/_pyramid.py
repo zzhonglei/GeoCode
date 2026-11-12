@@ -11,7 +11,7 @@ import traceback
 
 from osgeo import gdal
 
-from geocodekit.preview import _source
+from geocodekit.preview import _raster, _source
 
 # The longer side, in pixels, past which a raster is given overviews: up to it the whole raster is read in a moment.
 SIDE = 8192
@@ -47,8 +47,8 @@ def _build(dataset, entry):
         # Opened for reading alone, a dataset has its overviews written into a file beside it: beside the VRT here.
         standing = gdal.OpenEx(vrt, gdal.OF_RASTER | gdal.OF_READONLY, allowed_drivers=["VRT"])
         standing.BuildOverviews(
-            # A colour table's entries are classes, which have no average.
-            "NEAREST" if band.GetColorTable() is not None else "AVERAGE",
+            # Classes have no average: one between two of them is a value the raster does not hold, or another class.
+            "NEAREST" if _raster.of_classes(band) else "AVERAGE",
             levels,
             options=[
                 "COMPRESS=DEFLATE",

@@ -1,5 +1,6 @@
 """A raster's tiles: the part of it under a tile of the map, drawn as an image."""
 
+import colorsys
 import uuid
 
 import numpy
@@ -12,8 +13,48 @@ SIZE = 512
 QUALITY = 85
 # The longer side of the sample a band's range is found in.
 SAMPLE = 512
-# The share of a band's values left out at each end of its range, as QGIS draws a raster by default.
+# The share of a band's values left out at each end of its range, as QGIS draws a raster by default; the interface
+# names the range by them in desktop/packages/ui/src/geocode/preview/previewText.ts.
 CUT = (2, 98)
+# As many steps as a band's histogram has, from its least value to its greatest.
+BINS = 256
+# As many different values as a band of whole numbers may have and be taken for classes, each drawn in a colour of its
+# own, when it brings no colour table: land cover, a mask, zones. More are taken for measurements.
+CLASSES = 64
+# As many pixels as are counted one by one for the classes, which takes a moment: those of a raster that is drawn
+# without overviews. Of a larger raster a sample is counted, and may leave out the rarest classes.
+COUNTED = 8192 * 8192
+# The places a band is looked at in its own pixels to tell whether it is one of classes, each this many pixels a
+# side, by where along the band's width and height they lie.
+PLACES = ((0.5, 0.5), (0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75))
+PLACE = 512
+# The colour of a value that was met in no count of the classes.
+UNCOUNTED = (128, 128, 128, 255)
+# The pixels read at a time to count them.
+CHUNK = 16000000
+WHOLE = (gdal.GDT_Byte, gdal.GDT_Int8, gdal.GDT_UInt16, gdal.GDT_Int16, gdal.GDT_UInt32, gdal.GDT_Int32)
+# The name the interface asks for a band's classes by, where it would name a ramp; the interface has it as BY_CLASS in
+# desktop/packages/ui/src/geocode/preview/previewClient.ts.
+BY_CLASS = "classes"
+
+# What one band may be coloured through, each by the colours it passes from its low end to its high, evenly apart.
+# The interface draws them from here, so the colours of its legend are those of the map.
+RAMPS = {
+    "grey": ["#000000", "#ffffff"],
+    "terrain": ["#2b6654", "#429961", "#8cc273", "#e3de8c", "#f2b866", "#cc854d", "#9e6147", "#f7f7f7"],
+    "viridis": ["#440154", "#3b528b", "#21918c", "#5ec962", "#fde725"],
+    "magma": ["#000004", "#3b0f70", "#8c2981", "#de4968", "#fe9f6d", "#fcfdbf"],
+    "spectral": ["#5e4fa2", "#66c2a5", "#e6f598", "#fee08b", "#f46d43", "#9e0142"],
+    "rdylgn": ["#d73027", "#fdae61", "#ffffbf", "#a6d96a", "#1a9850"],
+    "blues": ["#f7fbff", "#c6dbef", "#6baed6", "#2171b5", "#08306b"],
+}
+
+
+def _ramp(name):
+    """A ramp as 256 colours, one for each step a band's values are drawn in."""
+    stops = numpy.array([[int(colour[at : at + 2], 16) for at in (1, 3, 5)] for colour in RAMPS[name]], dtype=float)
+    along = numpy.linspace(0, len(stops) - 1, 256)
+    return numpy.stack([numpy.interp(along, numpy.arange(len(stops)), stops[:, part]) for part in range(3)]).round()
 
 
 def shown(dataset):
@@ -27,8 +68,8 @@ def shown(dataset):
     return colours if all(colours) else [1, 2, 3]
 
 
-def _range(band):
-    """The values a band is drawn between, from a sample of it; GDAL reads the sample from an overview when one fits."""
+def _sample(band):
+    """The values of a sample of a band that are data; GDAL reads the sample from an overview when one fits."""
     scale = max(band.XSize, band.YSize) / SAMPLE
     width, height = max(1, round(band.XSize / scale)), max(1, round(band.YSize / scale))
     if scale <= 1:
@@ -37,17 +78,90 @@ def _range(band):
     valid = band.GetMaskBand().ReadAsArray(buf_xsize=width, buf_ysize=height) != 0
     if numpy.iscomplexobj(values):
         values = numpy.abs(values)
-    values = values[valid & numpy.isfinite(values)]
+    return values[valid & numpy.isfinite(values)]
+
+
+def of_classes(band):
+    """Whether a band looks to be one of classes, from a few places of it in its own pixels: asked before the band
+    has overviews, which must not mix its classes, and when a sample of the whole of it would read all of it."""
+    if band.GetColorTable() is not None:
+        return True
+    if band.DataType not in WHOLE:
+        return False
+    found = set()
+    width, height = min(PLACE, band.XSize), min(PLACE, band.YSize)
+    for across, down in PLACES:
+        left, top = int((band.XSize - width) * across), int((band.YSize - height) * down)
+        found.update(numpy.unique(band.ReadAsArray(left, top, width, height)).tolist())
+    return len(found) <= CLASSES
+
+
+def _counted(band, sure):
+    """Every value of a band of whole numbers with how many of its pixels have it, and whether that is of a sample
+    only; None for a band that is not one of classes. `sure` says that it is one however many values it has, as a
+    band with a colour table is."""
+    if band.DataType not in WHOLE:
+        return None
+    values, counts = numpy.unique(_sample(band), return_counts=True)
+    if not sure and values.size > CLASSES:
+        return None
+    if band.XSize * band.YSize > COUNTED:
+        return values, counts, True
+    if band.DataType == gdal.GDT_Byte:
+        counts = numpy.array(band.GetHistogram(-0.5, 255.5, 256, 0, 0), dtype=numpy.int64)
+        return numpy.flatnonzero(counts), counts[counts > 0], False
+    found = {}
+    rows = max(1, CHUNK // band.XSize)
+    mask = band.GetMaskBand()
+    for top in range(0, band.YSize, rows):
+        height = min(rows, band.YSize - top)
+        part = band.ReadAsArray(0, top, band.XSize, height)
+        part = part[mask.ReadAsArray(0, top, band.XSize, height) != 0]
+        for value, count in zip(*numpy.unique(part, return_counts=True)):
+            found[int(value)] = found.get(int(value), 0) + int(count)
+        if not sure and len(found) > CLASSES:
+            return None
+    values = numpy.array(sorted(found), dtype=numpy.int64)
+    return values, numpy.array([found[int(value)] for value in values], dtype=numpy.int64), False
+
+
+def _distinct(count):
+    """As many colours as told apart as that many can be, for classes that bring none: each a turn of the golden angle
+    on from the one before, so that neighbours differ most."""
+    colours = numpy.empty((count, 4), dtype=numpy.uint8)
+    for index in range(count):
+        hue = (0.58 + index * 0.6180339887) % 1.0
+        red, green, blue = colorsys.hsv_to_rgb(hue, (0.62, 0.45, 0.78)[index % 3], (0.82, 0.92, 0.66)[index % 3])
+        colours[index] = (round(red * 255), round(green * 255), round(blue * 255), 255)
+    return colours
+
+
+def _measured(band):
+    """What a sample of a band says of its values: their least and greatest, mean and deviation, the values that
+    leave out CUT of them at each end, how many fall into each of BINS steps from the least to the greatest, and the
+    values the band is drawn `between` when the interface names none. None of a band without data."""
+    values = _sample(band).astype(numpy.float64)
     if values.size == 0:
-        return 0.0, 1.0
+        return None
+    least, most = float(values.min()), float(values.max())
     low, high = (float(value) for value in numpy.percentile(values, CUT))
-    if high <= low:
-        low, high = float(values.min()), float(values.max())
-    return (low, high) if high > low else (low, low + 1.0)
+    counts = numpy.histogram(values, bins=BINS, range=(least, most if most > least else least + 1.0))[0]
+    between = (low, high) if high > low else (least, most)
+    return {
+        "between": list(between if between[1] > between[0] else (least, least + 1.0)),
+        "min": least,
+        "max": most,
+        "mean": float(values.mean()),
+        "std": float(values.std()),
+        "low": low,
+        "high": high,
+        "counts": counts.tolist(),
+    }
 
 
 class Look:
-    """How a raster is drawn, worked out once: which bands, between which values, or through which colour table."""
+    """What is worked out once of how a raster is drawn: the bands, the values they are drawn between or the colour
+    table they are drawn through when the interface does not say, and what is measured of each band."""
 
     def __init__(self, dataset):
         self.bands = shown(dataset)
@@ -61,8 +175,52 @@ class Look:
         # Three bands of bytes are a picture, drawn as it is.
         picture = len(bands) == 3 and all(band.DataType == gdal.GDT_Byte for band in bands)
         as_it_is = self.palette is not None or picture
-        self.ranges = None if as_it_is else [_range(band) for band in bands]
+        # The classes of one band of whole numbers: their values in order, their colours, how many pixels each has,
+        # and whether that was counted in a sample. Drawn by them unless the interface asks for a ramp. The colours
+        # are the colour table's where the band brings one, by which its tiles are then drawn.
+        self.classes = None
+        counted = _counted(bands[0], self.palette is not None) if len(bands) == 1 else None
+        if counted is not None and counted[0].size:
+            values, counts, sampled = counted
+            if self.palette is None:
+                colours = _distinct(values.size)
+            else:
+                colours = self.palette[numpy.clip(values, 0, len(self.palette) - 1)]
+            self.classes = (values.astype(numpy.int64), colours, counts, sampled)
+        # By the band's number. Those of the bands drawn are measured now, the rest when the interface asks.
+        self._measured = {}
+        measured = [self.measured(dataset, index) for index in self.bands]
+        self.ranges = None if as_it_is else [each["between"] if each else [0.0, 1.0] for each in measured]
         self.native = _native(dataset)
+
+    def measured(self, dataset, index):
+        if index not in self._measured:
+            self._measured[index] = _measured(dataset.GetRasterBand(index))
+        return self._measured[index]
+
+    def statistics(self, dataset):
+        """What the interface shows of the raster's values and offers to draw them with: each band as measured, the
+        ramps, and the classes of a band that has them, each with its colour, how many pixels are of it and the
+        share that is, with whether those were `sampled` rather than counted through."""
+        described = {
+            "bands": [self.measured(dataset, index) for index in range(1, dataset.RasterCount + 1)],
+            "ramps": RAMPS,
+        }
+        if self.classes is not None:
+            values, colours, counts, sampled = self.classes
+            names = dataset.GetRasterBand(self.bands[0]).GetCategoryNames() or []
+            described["sampled"] = sampled
+            described["classes"] = [
+                {
+                    "value": int(value),
+                    "color": colour.tolist(),
+                    "count": int(count),
+                    "share": float(count / counts.sum()),
+                    "name": names[int(value)] if 0 <= int(value) < len(names) and names[int(value)] else None,
+                }
+                for value, colour, count in zip(values, colours, counts)
+            ]
+        return described
 
 
 def _native(dataset):
@@ -93,12 +251,21 @@ def _encoded(image, lossless):
         gdal.Unlink(name)
 
 
-def tile(dataset, look, z, x, y, cancelled):
-    """The image of the tile, or None where the raster has nothing under it."""
+def tile(dataset, look, z, x, y, cancelled, asked=None):
+    """The image of the tile, or None where the raster has nothing under it. `asked` is how the interface wants the
+    raster drawn: its `bands`, one or three, numbered from one; the `ranges` their values are drawn between, a low
+    and a high for each, or none to draw them as they are; and, for one band, the `ramp` it is coloured through, or
+    BY_CLASS in its place for a band of classes. Without it the raster is drawn as `look` has it: by its classes
+    where it has them."""
     left, top, span = _mercator.tile(z, x, y)
-    # Closer than the raster's own pixels, they are shown as the squares they are; a colour table's entries are never
+    classed = look.classes is not None and (asked is None or asked.get("ramp") == BY_CLASS)
+    palette = look.palette if classed or asked is None else None
+    bands = look.bands if classed or asked is None else asked["bands"]
+    ranges = look.ranges if asked is None else asked.get("ranges")
+    ramp = _ramp(asked["ramp"]) if asked is not None and asked.get("ramp") in RAMPS and len(bands) == 1 else None
+    # Closer than the raster's own pixels, they are shown as the squares they are; the colours of classes are never
     # mixed.
-    nearest = look.palette is not None or (look.native is not None and span / SIZE < look.native)
+    nearest = classed or palette is not None or (look.native is not None and span / SIZE < look.native)
     try:
         warped = gdal.Warp(
             "",
@@ -108,7 +275,7 @@ def tile(dataset, look, z, x, y, cancelled):
             outputBounds=(left, top - span, left + span, top),
             width=SIZE,
             height=SIZE,
-            srcBands=look.bands,
+            srcBands=bands,
             dstAlpha=True,
             resampleAlg="near" if nearest else "bilinear",
             callback=lambda *_: 0 if cancelled() else 1,
@@ -127,18 +294,30 @@ def tile(dataset, look, z, x, y, cancelled):
     if not drawn.any():
         return None
     image = numpy.empty((4, SIZE, SIZE), dtype=numpy.uint8)
-    if look.palette is not None:
-        entries = look.palette[numpy.clip(values[0].astype(numpy.int64), 0, len(look.palette) - 1)]
+    if palette is not None:
+        entries = palette[numpy.clip(values[0].astype(numpy.int64), 0, len(palette) - 1)]
+        image[:] = numpy.moveaxis(entries, -1, 0)
+        image[3] = numpy.where(drawn, image[3], 0)
+        return _encoded(image, True)
+    if classed:
+        known, colours = look.classes[0], look.classes[1]
+        at = numpy.clip(numpy.searchsorted(known, values[0]), 0, known.size - 1)
+        # A class too rare for the sample a large raster's are counted in is drawn all the same, in no class's colour.
+        counted = (known[at] == values[0])[..., None]
+        entries = numpy.where(counted, colours[at], numpy.array(UNCOUNTED, dtype=numpy.uint8))
         image[:] = numpy.moveaxis(entries, -1, 0)
         image[3] = numpy.where(drawn, image[3], 0)
         return _encoded(image, True)
     for index in range(3):
         band = values[min(index, values.shape[0] - 1)]
-        if look.ranges is None:
-            image[index] = band
+        if ranges is None:
+            image[index] = numpy.clip(band, 0, 255)
             continue
-        low, high = look.ranges[min(index, len(look.ranges) - 1)]
+        low, high = ranges[min(index, len(ranges) - 1)]
         with numpy.errstate(invalid="ignore"):
-            image[index] = numpy.clip((band - low) * (255.0 / (high - low)), 0, 255)
+            # A range of no width draws all at or above it as the high end.
+            image[index] = numpy.clip((band - low) * (255.0 / max(high - low, 1e-12)), 0, 255)
+    if ramp is not None:
+        image[:3] = ramp[:, image[0]]
     image[3] = numpy.where(drawn, 255, 0)
     return _encoded(image, False)

@@ -51,6 +51,17 @@ const TileParams = Schema.Struct({
   y: Schema.Int,
   /** The one feature the tile is cut from, for the mark of the feature that is picked; all of them without it. */
   fid: Schema.optionalKey(Schema.Int),
+  /**
+   * How a raster is drawn, where the interface says: its bands, numbered from one, the values each is drawn between,
+   * without which they are drawn as they are, and the ramp one band is coloured through.
+   */
+  look: Schema.optionalKey(
+    Schema.Struct({
+      bands: Schema.Array(Schema.Int),
+      ranges: Schema.optionalKey(Schema.Array(Schema.Tuple([Schema.Number, Schema.Number]))),
+      ramp: Schema.optionalKey(Schema.String),
+    }),
+  ),
 })
 /** A click, or the number of the feature asked for. */
 const IdentifyParams = Schema.Union([
@@ -66,6 +77,7 @@ const IdentifyParams = Schema.Union([
   Schema.Struct({ ...Target, stamp: Schema.String, fid: Schema.Int }),
 ])
 const RowsParams = Schema.Struct({ ...Target, stamp: Schema.String, row: Schema.Int })
+const StatisticsParams = Schema.Struct({ ...Target, stamp: Schema.String })
 
 /** The line a reader's answer begins with. */
 const Answer = Schema.Struct({
@@ -82,6 +94,8 @@ const IdentifyResult = Schema.Struct({ found: Schema.Unknown })
 const decodeIdentifyResult = Schema.decodeUnknownExit(IdentifyResult)
 const RowsResult = Schema.Struct({ offset: Schema.Int, fids: Schema.Unknown, rows: Schema.Unknown })
 const decodeRowsResult = Schema.decodeUnknownExit(RowsResult)
+const StatisticsResult = Schema.Struct({ statistics: Schema.Unknown })
+const decodeStatisticsResult = Schema.decodeUnknownExit(StatisticsResult)
 
 type Settle = (outcome: Exit.Exit<{ readonly result: unknown; readonly bytes: Uint8Array }, Engine.Failure>) => void
 
@@ -96,8 +110,9 @@ interface Reader {
 const cancellation = () => new Engine.Failure({ code: "cancelled", message: "the request was cancelled" })
 
 /**
- * What the interface shows of a geographic dataset: its description, the tiles of its map, the feature under a click
- * and the pages of its table, each read from the file by a reader that stays for the next request. `pyramids` is the
+ * What the interface shows of a geographic dataset: its description, the tiles of its map, the feature under a click,
+ * the pages of its table and what its bands measure, each read from the file by a reader that stays for the next
+ * request. `pyramids` is the
  * folder the readers keep the overviews they make for large rasters in; `launch` starts a reader.
  */
 export const capability = (pyramids: string, launch: Launch = READER): Engine.Capability =>
@@ -266,6 +281,7 @@ export const capability = (pyramids: string, launch: Launch = READER): Engine.Ca
           x: params.value.x,
           y: params.value.y,
           fid: params.value.fid,
+          look: params.value.look,
         }
         const answer = yield* ask(params.value, { do: "tile", ...tile }, context.signal)
         const result = decodeTileResult(answer.result)
@@ -304,5 +320,15 @@ export const capability = (pyramids: string, launch: Launch = READER): Engine.Ca
         return result.value
       })
 
-    return { domain: DOMAIN, methods: { describe, tile, identify, rows } }
+    const statistics: Engine.Method = (raw, context) =>
+      Effect.gen(function* () {
+        const params = Schema.decodeUnknownExit(StatisticsParams)(raw)
+        if (Exit.isFailure(params)) return yield* invalid(params.cause)
+        const answer = yield* ask(params.value, { do: "statistics", stamp: params.value.stamp }, context.signal)
+        const result = decodeStatisticsResult(answer.result)
+        if (Exit.isFailure(result)) return yield* unexpected(result.cause)
+        return result.value
+      })
+
+    return { domain: DOMAIN, methods: { describe, tile, identify, rows, statistics } }
   })
