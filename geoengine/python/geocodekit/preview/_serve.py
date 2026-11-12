@@ -113,10 +113,14 @@ class Reader:
 
         # Asked without them, a click looks among all three.
         forms = request.get("forms", ("points", "lines", "polygons"))
-        fid = _cut.nearest(self._vector(described, cancelled), request["x"], request["y"], request["tolerance"], forms)
+        layer = self._vector(described, cancelled)
+        fid = _cut.nearest(layer, request["x"], request["y"], request["tolerance"], forms)
         if fid is None:
             return None
-        found = _vector.attributes(self._path, described["layer"], fid)
+        if layer.attributes is not None:
+            found = layer.attributes.of(fid)
+        else:
+            found = _vector.attributes(self._path, described["layer"], fid)
         return None if found is None else {"fid": fid, "attributes": found}
 
 

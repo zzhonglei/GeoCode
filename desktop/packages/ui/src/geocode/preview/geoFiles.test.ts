@@ -19,7 +19,7 @@ describe('GeoCode: geographic data opens as a map', () => {
         return { content: '\u0000\u0001', path };
       },
     };
-    for (const path of ['/data/roads.shp', '/data/Hubei.GPKG', 'C:\\data\\scene.tif', '/data/dem.tiff']) {
+    for (const path of ['/data/roads.shp', '/data/Hubei.GPKG', 'C:\\data\\scene.tif', '/data/dem.tiff', '/data/route.geojson']) {
       expect(isGeoDataFile(path)).toBe(true);
       expect(isBinaryFile(path)).toBe(true);
       expect(await validateContextFileOpen(files, path)).toEqual({ ok: true });

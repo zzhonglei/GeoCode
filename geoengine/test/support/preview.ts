@@ -200,6 +200,22 @@ layer(shapes, "shapes", wgs84, ogr.wkbUnknown, [
 layer(shapes, "towns", wgs84, ogr.wkbPoint, [("north", "POINT (0.2 0.3)")])
 shapes = None
 
+# GeoJSON of two kinds of geometry, and one whose coordinates are metres, of which the file says nothing.
+def geojson(name, geometries):
+    features = ['{"type": "Feature", "properties": {"name": "%s"}, "geometry": %s}' % each for each in geometries]
+    with open(os.path.join(folder, name), "w") as out:
+        out.write('{"type": "FeatureCollection", "features": [%s]}' % ", ".join(features))
+
+geojson("route.geojson", [
+    ("stop", '{"type": "Point", "coordinates": [0.1, 0.1]}'),
+    ("way", '{"type": "LineString", "coordinates": [[0.1, 0.1], [0.2, 0.2]]}'),
+])
+geojson("metres.geojson", [("stop", '{"type": "Point", "coordinates": [302000, 2770000]}')])
+# Under GeoJSON's name, a feature on each line.
+with open(os.path.join(folder, "lines.geojson"), "w") as out:
+    for x in (0.1, 0.2):
+        out.write('{"type": "Feature", "properties": {}, "geometry": {"type": "Point", "coordinates": [%s, 0.1]}}\n' % x)
+
 # A Shapefile with nothing to say where it lies, and one that says.
 for name, srs in (("unplaced", None), ("roads", wgs84)):
     made = ogr.GetDriverByName("ESRI Shapefile").CreateDataSource(os.path.join(folder, name + ".shp"))

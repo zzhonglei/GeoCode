@@ -360,6 +360,7 @@ const opensInFileCanvas = (path: string | null | undefined): boolean => Boolean(
 
 const isJsonFile = (path: string): boolean => {
   if (!path) return false;
+  if (isGeoDataFile(path)) return false; // GeoCode: GeoJSON opens as a map, with no tree of its text to switch to
   const ext = path.toLowerCase().split('.').pop();
   return ext === 'json' || ext === 'jsonc' || ext === 'json5' || ext === 'geojson';
 };

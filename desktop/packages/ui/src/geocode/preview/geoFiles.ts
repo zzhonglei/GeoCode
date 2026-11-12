@@ -1,8 +1,9 @@
 /**
  * The files that open as a map, by the names such files go by. The reader opens only the formats these name: DRIVERS
- * in geoengine/python/geocodekit/preview/_source.py lists them by their drivers.
+ * in geoengine/python/geocodekit/preview/_source.py lists them by their drivers. GeoJSON is among them though it is
+ * text: as text, a file is not opened past a size that geographic data often has.
  */
-const GEO_DATA_EXTENSIONS = new Set(['shp', 'gpkg', 'tif', 'tiff']);
+const GEO_DATA_EXTENSIONS = new Set(['shp', 'gpkg', 'tif', 'tiff', 'geojson']);
 
 export const isGeoDataFile = (path: string): boolean => {
   const name = path.split(/[/\\]/).pop() ?? path;

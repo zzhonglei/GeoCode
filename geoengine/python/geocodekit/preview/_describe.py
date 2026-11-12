@@ -52,6 +52,10 @@ def _vector_place(layer, srs):
     if extent is None:
         return {"unplaced": "empty"}
     west, east, south, north = extent
+    # GeoJSON is read as longitude and latitude whatever numbers it holds: its standard has no other coordinates, and
+    # many a file has.
+    if srs.IsGeographic() and (south < -90 or north > 90 or west < -360 or east > 360):
+        return {"unplaced": "not-degrees"}
     target = osr.SpatialReference()
     target.ImportFromEPSG(4326)
     target.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)

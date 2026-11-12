@@ -29,7 +29,8 @@ def configure():
 # The formats the preview reads, by their drivers' names; the names their files go by are in
 # desktop/packages/ui/src/geocode/preview/geoFiles.ts. Nothing else is opened, whatever a file is named: a virtual
 # raster or a service's description under one of those names would send GDAL to the files and addresses it lists.
-DRIVERS = ["ESRI Shapefile", "GPKG", "GTiff"]
+# GeoJSONSeq with GeoJSON: read as GeoJSON, a file of one feature a line would show its first feature alone.
+DRIVERS = ["ESRI Shapefile", "GPKG", "GTiff", "GeoJSON", "GeoJSONSeq"]
 
 
 def _untouched(path, flags):

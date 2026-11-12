@@ -12,6 +12,9 @@ from geocodekit.preview import _mercator, _source
 # As many vertices as a layer may bring into memory, sixteen bytes each.
 VERTICES = 20000000
 BATCH = 65536
+# The formats that give one feature only by reading the file through to it: a click on a large file would take as
+# long as opening it did, so their attributes are kept from the one reading. Text holds little for its size.
+READ_THROUGH = ("GeoJSON", "GeoJSONSeq")
 
 # What shapely numbers the kinds of geometry: the single ones, and from MULTI on those made of several.
 POINT, LINE, RING, POLYGON, MULTI = 0, 1, 2, 3, 4
@@ -48,9 +51,31 @@ class Polygons:
         self.size = _size(self.bounds)
 
 
+class Attributes:
+    """Every feature's attributes, as the columns they were read in rather than as objects."""
+
+    def __init__(self, batches, number):
+        # Imported here and in `_whole`: no other layer's reader loads it.
+        import pyarrow
+
+        table = pyarrow.Table.from_batches(batches)
+        # Through a list, as in `_whole`.
+        self._fid = numpy.array(table.column(number).to_pylist(), dtype=numpy.int64)
+        self._table = table.drop_columns([number])
+
+    def of(self, fid):
+        """As `attributes` gives them."""
+        rows = numpy.flatnonzero(self._fid == fid)
+        if rows.size == 0:
+            return None
+        return [[name, _plain(value)] for name, value in self._table.slice(int(rows[0]), 1).to_pylist()[0].items()]
+
+
 class Layer:
-    def __init__(self, points, lines, polygons):
-        self.points, self.lines, self.polygons = points, lines, polygons
+    """`attributes` is None where a click reads them from the file."""
+
+    def __init__(self, points, lines, polygons, attributes):
+        self.points, self.lines, self.polygons, self.attributes = points, lines, polygons, attributes
         # How many features have points, lines and polygons among their parts, for those that any has. A feature that
         # is a collection may have several of them.
         self.forms = {
@@ -122,6 +147,29 @@ class _Projection:
         return numpy.column_stack((x, y)), numpy.isfinite(x) & numpy.isfinite(y)
 
 
+def _geometry(layer, geometry, number):
+    """The layer's geometry and the numbers of its features, a batch at a time, and nothing of its attributes: those
+    of what is clicked are asked for one feature at a time."""
+    fields = layer.GetLayerDefn()
+    layer.SetIgnoredFields([fields.GetFieldDefn(index).GetName() for index in range(fields.GetFieldCount())])
+    batches = layer.GetArrowStreamAsNumPy(
+        options=["USE_MASKED_ARRAYS=NO", "INCLUDE_FID=YES", "MAX_FEATURES_IN_BATCH=%d" % BATCH]
+    )
+    for batch in batches:
+        # Geometry of one length throughout, as points are, comes as an array of that width rather than of objects.
+        yield batch[geometry].astype(object), batch[number].astype(numpy.int64)
+
+
+def _whole(layer, geometry, number, columns):
+    """As `_geometry`, with each batch's attributes added to `columns`."""
+    import pyarrow
+
+    for batch in layer.GetArrowStreamAsPyArrow(["INCLUDE_FID=YES", "MAX_FEATURES_IN_BATCH=%d" % BATCH]):
+        columns.append(pyarrow.RecordBatch.from_struct_array(batch).drop_columns([geometry]))
+        # Through lists: asked for an array, pyarrow loads pandas first, which takes longer than a small file does.
+        yield batch.field(geometry).to_pylist(), numpy.array(batch.field(number).to_pylist(), dtype=numpy.int64)
+
+
 def load(path, name, cancelled):
     """The layer, read a batch of features at a time so that the file's own form of it never stays in memory."""
     dataset = _source.opened(path, gdal.OF_VECTOR)
@@ -129,21 +177,19 @@ def load(path, name, cancelled):
     if layer is None:
         raise _source.Unshown("unopenable", gdal.GetLastErrorMsg())
     project = _Projection(layer.GetSpatialRef())
-    definition = layer.GetLayerDefn()
-    # Only the geometry is read: the attributes of what is clicked are asked for one feature at a time.
-    layer.SetIgnoredFields([definition.GetFieldDefn(index).GetName() for index in range(definition.GetFieldCount())])
     # The names GDAL gives the two columns of a layer that has none of its own for them.
     geometry, number = layer.GetGeometryColumn() or "wkb_geometry", layer.GetFIDColumn() or "OGC_FID"
-    batches = layer.GetArrowStreamAsNumPy(
-        options=["USE_MASKED_ARRAYS=NO", "INCLUDE_FID=YES", "MAX_FEATURES_IN_BATCH=%d" % BATCH]
-    )
+    columns = []
+    if dataset.GetDriver().ShortName in READ_THROUGH:
+        batches = _whole(layer, geometry, number, columns)
+    else:
+        batches = _geometry(layer, geometry, number)
     points, lines, polygons = [], [], []
     vertices = 0
-    for batch in batches:
+    for wkb, fid in batches:
         if cancelled():
             raise _source.Cancelled()
-        # Geometry of one length throughout, as points are, comes as an array of that width rather than of objects.
-        shapes, fid, kinds = _single(batch[geometry].astype(object), batch[number].astype(numpy.int64))
+        shapes, fid, kinds = _single(wkb, fid)
 
         chosen = kinds == POINT
         if chosen.any():
@@ -186,6 +232,7 @@ def load(path, name, cancelled):
         Polygons(joined(polygons, 0, numpy.float64), joined(polygons, 1), joined(polygons, 2), joined(polygons, 3))
         if polygons
         else None,
+        Attributes(columns, number) if columns else None,
     )
 
 

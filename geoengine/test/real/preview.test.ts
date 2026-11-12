@@ -240,6 +240,15 @@ test("a dataset says which layer it shows, and why it shows nothing", { skip: mi
   assert.equal(unplaced.described.features, 1)
   assert.deepEqual(await unplaced.tile(), { code: "no-crs" })
 
+  // GDAL takes GeoJSON for longitude and latitude whatever its numbers are; drawn as that, metres lie nowhere.
+  const route = await open("route.geojson")
+  assert.deepEqual(route.described.forms, { points: 1, lines: 1 })
+  assert.deepEqual(Object.keys(drawn(await route.tile())).toSorted(), ["lines", "points"])
+  assert.equal((await route.click(0.15, 0.15))?.attributes[0][1], "way")
+  assert.equal((await open("metres.geojson")).described.unplaced, "not-degrees")
+  // Guards a file of a feature a line, which read as one GeoJSON object is its first feature and no failure.
+  assert.equal((await open("lines.geojson")).described.features, 2)
+
   assert.deepEqual(await ask("describe", { path: file("absent.tif") }), { code: "missing" })
   assert.deepEqual(await ask("describe", { path: file("notes.gpkg") }), { code: "unopenable" })
   // Guards against a file that only lists others, which GDAL would go and open wherever they are.
