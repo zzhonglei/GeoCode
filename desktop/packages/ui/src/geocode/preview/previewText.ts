@@ -17,7 +17,11 @@ export type PreviewText = {
   /** Back to where the whole of the data shows. */
   whole: string;
   /** The panel beside the map: what its tabs are called, and what opens and closes it. */
-  tabs: { feature: string; table: string; look: string; info: string };
+  tabs: { feature: string; table: string; look: string; pixel: string; info: string };
+  /** Shown where a clicked pixel's values go, before any is clicked. */
+  pixelHint: string;
+  /** What is said of a pixel: where it is in the raster's grid, and of a band without data there. */
+  pixel: { column: string; row: string; noData: string };
   /** What one band is coloured by: its classes, or a ramp by the reader's name for it; a ramp this has no word for goes by that name. */
   ramps: Record<string, string>;
   /**
@@ -27,6 +31,14 @@ export type PreviewText = {
   stretches: { cut: string; minmax: string; deviation: string; none: string; custom: string };
   ramp: string;
   stretch: string;
+  /** How a raster of several bands is drawn: three of them as red, green and blue, or one alone. */
+  mode: string;
+  modes: { composite: string; single: string };
+  band: string;
+  /** What the columns of the table of bands are headed: the values that leave out 2% at each end, and the mean. */
+  columns: { low: string; high: string; mean: string };
+  /** What the button says that draws a band as red, green or blue. */
+  bandAs: (band: number, channel: 0 | 1 | 2) => string;
   measures: { min: string; max: string; mean: string; std: string };
   /** Said of what is measured: it is of a sample of the raster, not of every pixel. */
   sampled: string;
@@ -64,11 +76,18 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     zoomIn: 'Zoom in',
     zoomOut: 'Zoom out',
     whole: 'Show all of it',
-    tabs: { feature: 'Feature', table: 'Table', look: 'Display', info: 'Info' },
+    tabs: { feature: 'Feature', table: 'Table', look: 'Display', pixel: 'Pixel', info: 'Info' },
+    pixelHint: 'Click the raster on the map to see the values of the pixel there.',
+    pixel: { column: 'Column', row: 'Row', noData: 'no data' },
     ramps: { classes: 'Classes', grey: 'Greyscale', terrain: 'Terrain', viridis: 'Viridis', magma: 'Magma', spectral: 'Spectral', rdylgn: 'Red–yellow–green', blues: 'Blues' },
     stretches: { cut: '2% – 98%', minmax: 'Min – max', deviation: 'Mean ± 2σ', none: 'No stretch', custom: 'Custom' },
     ramp: 'Colour ramp',
     stretch: 'Stretch',
+    mode: 'Mode',
+    modes: { composite: 'Three bands', single: 'One band' },
+    band: 'Band',
+    columns: { low: '2%', high: '98%', mean: 'Mean' },
+    bandAs: (band, channel) => `Band ${band} as ${['red', 'green', 'blue'][channel]}`,
     measures: { min: 'Min', max: 'Max', mean: 'Mean', std: 'Std dev' },
     sampled: 'From a sample',
     openPanel: 'Show the panel',
@@ -114,11 +133,18 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     zoomIn: '放大',
     zoomOut: '缩小',
     whole: '回到全图',
-    tabs: { feature: '要素', table: '属性表', look: '显示', info: '信息' },
+    tabs: { feature: '要素', table: '属性表', look: '显示', pixel: '像元', info: '信息' },
+    pixelHint: '点击地图上的影像,查看这个像元的值。',
+    pixel: { column: '列', row: '行', noData: '无数据' },
     ramps: { classes: '分类', grey: '灰度', terrain: '地形', viridis: 'Viridis', magma: '岩浆', spectral: '光谱', rdylgn: '红黄绿', blues: '蓝' },
     stretches: { cut: '2% – 98%', minmax: '最小 – 最大', deviation: '平均 ± 2σ', none: '不拉伸', custom: '自定义' },
     ramp: '色带',
     stretch: '拉伸',
+    mode: '方式',
+    modes: { composite: '三波段合成', single: '单个波段' },
+    band: '波段',
+    columns: { low: '2%', high: '98%', mean: '平均' },
+    bandAs: (band, channel) => `波段 ${band} 作${['红', '绿', '蓝'][channel]}`,
     measures: { min: '最小值', max: '最大值', mean: '平均值', std: '标准差' },
     sampled: '取样',
     openPanel: '展开面板',
@@ -164,11 +190,18 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     zoomIn: '放大',
     zoomOut: '縮小',
     whole: '回到全圖',
-    tabs: { feature: '圖徵', table: '屬性表', look: '顯示', info: '資訊' },
+    tabs: { feature: '圖徵', table: '屬性表', look: '顯示', pixel: '像元', info: '資訊' },
+    pixelHint: '點選地圖上的影像,檢視這個像元的值。',
+    pixel: { column: '欄', row: '列', noData: '無資料' },
     ramps: { classes: '分類', grey: '灰階', terrain: '地形', viridis: 'Viridis', magma: '岩漿', spectral: '光譜', rdylgn: '紅黃綠', blues: '藍' },
     stretches: { cut: '2% – 98%', minmax: '最小 – 最大', deviation: '平均 ± 2σ', none: '不拉伸', custom: '自訂' },
     ramp: '色帶',
     stretch: '拉伸',
+    mode: '方式',
+    modes: { composite: '三波段合成', single: '單一波段' },
+    band: '波段',
+    columns: { low: '2%', high: '98%', mean: '平均' },
+    bandAs: (band, channel) => `波段 ${band} 作${['紅', '綠', '藍'][channel]}`,
     measures: { min: '最小值', max: '最大值', mean: '平均值', std: '標準差' },
     sampled: '取樣',
     openPanel: '展開面板',

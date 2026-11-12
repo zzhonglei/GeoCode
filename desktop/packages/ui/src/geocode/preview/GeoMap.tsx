@@ -10,7 +10,7 @@ import { runtimeFetch } from '@/lib/runtime-fetch';
 import { colorOf, EDGE, MARK, MARK_EDGE } from './geoColors';
 import { previewText } from './previewText';
 import { stilled } from './stilled';
-import { identifyGeoFeature, refusalCode, FORMS, tileAddress, tileRequestPath, TILE_SCHEME, type FoundFeature, type GeoBounds, type GeoDescription, type GeoLook, type Form, type Target } from './previewClient';
+import { identifyGeoFeature, readGeoPixel, refusalCode, FORMS, tileAddress, tileRequestPath, TILE_SCHEME, type FoundFeature, type FoundPixel, type GeoBounds, type GeoDescription, type GeoLook, type Form, type Target } from './previewClient';
 
 /**
  * Where a map was last looked at, kept while its tab is hidden and the map itself is not, and from one layer of a
@@ -49,7 +49,8 @@ const show = (map: MapLibreMap, shown: readonly Form[]) => {
 const drawRaster = (map: MapLibreMap, order: number, tiles: string, width: number, bounds: GeoBounds, latest: () => number) => {
   const id = `raster-${order}`;
   map.addSource(id, { type: 'raster', tiles: [tiles], tileSize: RASTER_TILE, bounds, maxzoom: nativeZoom(width, bounds) });
-  map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-fade-duration': 0 } });
+  // Under the mark of the pixel that is clicked, where there is one.
+  map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-fade-duration': 0 } }, map.getLayer('pixel-edge') ? 'pixel-edge' : undefined);
   map.once('idle', () => {
     for (const layer of map.getStyle().layers) {
       if (layer.type !== 'raster' || layer.id === `raster-${latest()}`) continue;
@@ -57,6 +58,29 @@ const drawRaster = (map: MapLibreMap, order: number, tiles: string, width: numbe
       map.removeSource(layer.id);
     }
   });
+};
+
+/** Marks the pixel of these corners over the raster: its edge, and a dot at its middle for where it is too small to see. */
+const markPixel = (map: MapLibreMap, corners: readonly (readonly [number, number])[] | null) => {
+  for (const layer of ['pixel-edge', 'pixel-dot']) {
+    if (map.getLayer(layer)) map.removeLayer(layer);
+  }
+  if (map.getSource('pixel')) map.removeSource('pixel');
+  if (corners === null || corners.length === 0) return;
+  const ring = [...corners, corners[0]].map(([longitude, latitude]) => [longitude, latitude]);
+  const middle = [0, 1].map((part) => corners.reduce((sum, corner) => sum + corner[part], 0) / corners.length);
+  map.addSource('pixel', {
+    type: 'geojson',
+    data: {
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: ring } },
+        { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: middle } },
+      ],
+    },
+  });
+  map.addLayer({ id: 'pixel-edge', type: 'line', source: 'pixel', filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': MARK_EDGE, 'line-width': 2 } });
+  map.addLayer({ id: 'pixel-dot', type: 'circle', source: 'pixel', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-color': MARK, 'circle-radius': 3, 'circle-stroke-color': MARK_EDGE, 'circle-stroke-width': 1.5 } });
 };
 
 /** Marks the one feature these tiles are of, over all the map draws; nothing with no tiles. */
@@ -116,6 +140,10 @@ const GeoMap: React.FC<{
   marked: number | null;
   /** How a raster is drawn, none while that is left to the reader. */
   look: GeoLook | null;
+  /** The pixel of a raster that is clicked, which the map marks. */
+  pixel: FoundPixel | null;
+  /** A raster was clicked: the pixel under the click, or none where the raster does not reach. */
+  onPixel: (found: FoundPixel | null) => void;
   /** Read when the map is made and written when it goes. */
   view: React.MutableRefObject<MapView | null>;
   /** Holds, for as long as there is a map, what moves it to where a feature lies. */
@@ -127,7 +155,7 @@ const GeoMap: React.FC<{
   onRefused: (code: string) => void;
   /** The map could not be made at all, as on a computer without WebGL. */
   onFailed: () => void;
-}> = ({ target, description, bounds, shown, marked, look, view, reach, onPick, onPointer, onRefused, onFailed }) => {
+}> = ({ target, description, bounds, shown, marked, look, pixel, view, reach, onPick, onPixel, onPointer, onRefused, onFailed }) => {
   const { locale } = useI18n();
   const text = previewText(locale);
   // The room the map is given, and within it the map itself, which keeps the size it was last drawn at.
@@ -138,15 +166,17 @@ const GeoMap: React.FC<{
   const back = React.useRef<(() => void) | null>(null);
   // The map is made once for the data it shows; what it tells goes to whoever listens now, and a click looks among
   // what is shown now.
-  const listeners = React.useRef({ onPick, onPointer, onRefused, onFailed });
+  const listeners = React.useRef({ onPick, onPixel, onPointer, onRefused, onFailed });
   const showing = React.useRef(shown);
   const marking = React.useRef(marked);
   const looking = React.useRef(look);
+  const pointing = React.useRef(pixel);
   // How many times the map there is has drawn its raster.
   const rasters = React.useRef(0);
   React.useEffect(() => {
-    listeners.current = { onPick, onPointer, onRefused, onFailed };
+    listeners.current = { onPick, onPixel, onPointer, onRefused, onFailed };
     showing.current = shown;
+    pointing.current = pixel;
     marking.current = marked;
     looking.current = look;
   });
@@ -228,6 +258,18 @@ const GeoMap: React.FC<{
       if (description.kind === 'raster') {
         rasters.current = 1;
         drawRaster(map, 1, tileAddress(target, description.stamp, { look: looking.current }), description.width, bounds, () => rasters.current);
+        markPixel(map, pointing.current?.outline ?? null);
+        map.on('click', (event) => {
+          const click = (clicks += 1);
+          const at = MercatorCoordinate.fromLngLat(event.lngLat.wrap());
+          void readGeoPixel(target, description.stamp, { x: (at.x * 2 - 1) * HALF, y: (1 - at.y * 2) * HALF }).then((outcome) => {
+            // A click answered after a later one says nothing any more.
+            if (click !== clicks) return;
+            if (outcome.ok) return listeners.current.onPixel(outcome.value);
+            listeners.current.onPixel(null);
+            listeners.current.onRefused(outcome.code);
+          });
+        });
         return;
       }
       // A vector tile's layers: polygons, lines and points as they are, and a dot for each line and polygon too small
@@ -288,6 +330,11 @@ const GeoMap: React.FC<{
     // As above: marked when the map gets its layers, where it has none yet.
     if (made.current?.getLayer('point')) mark(made.current, marked === null ? null : tileAddress(target, description.stamp, { fid: marked }));
   }, [marked, target, description.stamp]);
+
+  React.useEffect(() => {
+    // As above, of a map that has drawn no raster yet.
+    if (made.current && rasters.current > 0) markPixel(made.current, pixel?.outline ?? null);
+  }, [pixel]);
 
   React.useEffect(() => {
     // As above: a map that has drawn no raster yet draws it as asked when it does.

@@ -12,8 +12,8 @@ import type { MapView } from './GeoMap';
 import { GeoPanel, type PanelTab } from './GeoPanel';
 import { LookTab } from './GeoLook';
 import { GeoTable } from './GeoTable';
-import { FeatureTab, InfoTab } from './GeoTabs';
-import { describeGeoData, findGeoFeature, FORMS, readGeoStatistics, type Form, type FoundFeature, type GeoBounds, type GeoDescription, type GeoLook, type GeoStatistics, type Target } from './previewClient';
+import { FeatureTab, InfoTab, PixelTab } from './GeoTabs';
+import { describeGeoData, findGeoFeature, FORMS, readGeoStatistics, type Form, type FoundFeature, type FoundPixel, type GeoBounds, type GeoDescription, type GeoLook, type GeoStatistics, type Target } from './previewClient';
 import { placeText, previewText, unshownText, type PreviewText } from './previewText';
 import { stilled } from './stilled';
 
@@ -72,6 +72,8 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   const [hidden, setHidden] = React.useState<readonly Form[]>([]);
   const [known, setKnown] = React.useState<Known | null>(null);
   const [picked, setPicked] = React.useState<FoundFeature | null>(null);
+  // The pixel of a raster that was last clicked.
+  const [pixel, setPixel] = React.useState<FoundPixel | null>(null);
   // How a raster is drawn, once the preview says and until its data is another's: none leaves it to the reader.
   const [look, setLook] = React.useState<GeoLook | null>(null);
   // What was measured of the raster under a stamp, or the code that was refused with.
@@ -140,6 +142,7 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
           // The same data keeps its map as it is.
           if (same && 'description' in before && before.description.stamp === outcome.value.stamp) return before;
           setPicked(null);
+          setPixel(null);
           setLook(null);
           return { target, description: outcome.value };
         }
@@ -159,18 +162,19 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   const name = path.split(/[/\\]/).pop() ?? path;
   const beside = room.width >= BESIDE_WIDTH && room.width > room.height * BESIDE_RATIO;
 
-  // A raster of one band is measured: its numbers go under its histogram, and name what it is offered to be drawn by.
-  const single = description?.kind === 'raster' && description.bands.length === 1 && !description.unplaced ? description.stamp : null;
+  // A raster is measured: the numbers go under its histogram and into the table of its bands, and name what it is
+  // offered to be drawn by.
+  const gauged = description?.kind === 'raster' && !description.unplaced ? description.stamp : null;
   React.useEffect(() => {
-    if (single === null || !visible) return;
+    if (gauged === null || !visible) return;
     const leaving = new AbortController();
-    void readGeoStatistics(target, single, leaving.signal).then((outcome) => {
+    void readGeoStatistics(target, gauged, leaving.signal).then((outcome) => {
       if (leaving.signal.aborted) return;
       if (!outcome.ok && outcome.code === 'changed') return setChanges((count) => count + 1);
-      setMeasured({ target, stamp: single, outcome: outcome.ok ? { statistics: outcome.value } : { code: outcome.code } });
+      setMeasured({ target, stamp: gauged, outcome: outcome.ok ? { statistics: outcome.value } : { code: outcome.code } });
     });
     return () => leaving.abort();
-  }, [target, single, visible]);
+  }, [target, gauged, visible]);
 
   const forms = formsOf(description);
   const several = forms.length > 1;
@@ -242,14 +246,15 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
         content: <GeoTable key={`${description.layer}\n${description.stamp}`} target={target} description={description} picked={picked} text={text} onPick={pick} onReach={reachPicked} onChanged={() => setChanges((count) => count + 1)} />,
       },
     ] : []),
-    ...(description.kind === 'raster' && single !== null ? [
+    ...(description.kind === 'raster' && gauged !== null ? [
       {
         id: 'look',
         label: text.tabs.look,
-        content: <LookTab description={description} measured={measured && measured.target === target && measured.stamp === single ? measured.outcome : null} look={look} text={text} onLook={setLook} />,
+        content: <LookTab description={description} measured={measured && measured.target === target && measured.stamp === gauged ? measured.outcome : null} look={look} text={text} onLook={setLook} />,
       },
     ] : []),
-    { id: 'info', label: text.tabs.info, content: <InfoTab description={description} text={text} /> },
+    ...(description.kind === 'raster' && gauged !== null ? [{ id: 'pixel', label: text.tabs.pixel, content: <PixelTab pixel={pixel} text={text} /> }] : []),
+    { id: 'info', label: text.tabs.info, content: <InfoTab description={description} text={text} drawn={look?.bands} /> },
   ];
 
   return (
@@ -277,6 +282,13 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
                 shown={shown}
                 marked={picked?.fid ?? null}
                 look={look}
+                pixel={pixel}
+                onPixel={(found) => {
+                  setPixel(found);
+                  if (!found) return;
+                  setTab('pixel');
+                  setOpen(true);
+                }}
                 view={view}
                 reach={reach}
                 onPick={(found) => {

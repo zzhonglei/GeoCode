@@ -72,6 +72,9 @@ const measuredSchema = z.object({
   max: z.number(),
   mean: z.number(),
   std: z.number(),
+  /** The values that leave out the share of the band's values at each end that a stretch by default does. */
+  low: z.number(),
+  high: z.number(),
   /** The values the band is drawn between unless the preview names others. */
   between: z.tuple([z.number(), z.number()]),
   /** How many values of the sample fall into each of as many even steps from `min` to `max`. */
@@ -109,6 +112,24 @@ export type GeoLook = { bands: number[]; ranges?: [number, number][]; ramp?: str
  * BY_CLASS in geoengine/python/geocodekit/preview/_raster.py.
  */
 export const BY_CLASS = 'classes';
+
+const pixelSchema = z.object({
+  pixel: z
+    .object({
+      /** Counted from none. */
+      column: z.number(),
+      row: z.number(),
+      /** Each band's value as the file holds it; none where the band has no data there. */
+      values: z.array(z.number().nullable()),
+      /** The pixel's centre in the raster's own coordinates; none of a raster not placed by a grid. */
+      centre: z.tuple([z.number(), z.number()]).nullable(),
+      /** Its four corners, each a longitude and a latitude. */
+      outline: z.array(z.tuple([z.number(), z.number()])),
+    })
+    .nullable(),
+});
+
+export type FoundPixel = NonNullable<z.infer<typeof pixelSchema>['pixel']>;
 
 /** A page of a layer's table: the row it begins at, and the numbers and the values of its features, a row each. */
 const rowsSchema = z.object({ offset: z.number(), fids: z.array(z.number()), rows: z.array(z.array(shownValue)) });
@@ -163,6 +184,11 @@ export const findGeoFeature = (target: Target, stamp: string, fid: number): Prom
 /** The page of the layer's table that holds `row`. */
 export const readGeoRows = (target: Target, stamp: string, row: number, signal?: AbortSignal): Promise<Outcome<GeoRows>> =>
   request(`${PREVIEW_PATH}/rows?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&row=${row}`, rowsSchema, signal);
+
+/** The raster's pixel at a place in the map's plane, or none where the raster does not reach. */
+export const readGeoPixel = (target: Target, stamp: string, at: { x: number; y: number }): Promise<Outcome<FoundPixel | null>> =>
+  request(`${PREVIEW_PATH}/pixel?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&x=${at.x}&y=${at.y}`, pixelSchema)
+    .then((outcome) => (outcome.ok ? { ok: true, value: outcome.value.pixel } : outcome));
 
 /** What a raster's bands measure, and what it may be drawn with. */
 export const readGeoStatistics = (target: Target, stamp: string, signal?: AbortSignal): Promise<Outcome<GeoStatistics>> =>

@@ -5,7 +5,7 @@ import type { IconName } from '@/components/icon/icons';
 import { Button } from '@/components/ui/button';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { getCurrentIntlLocale } from '@/lib/i18n';
-import type { FoundFeature, GeoDescription } from './previewClient';
+import type { FoundFeature, FoundPixel, GeoDescription } from './previewClient';
 import { placeText, type PreviewText } from './previewText';
 
 const Row: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
@@ -50,8 +50,39 @@ export const FeatureTab: React.FC<{ picked: FoundFeature | null; total: number; 
   );
 };
 
-/** What the data is, at more length than the line above the map has room for. */
-export const InfoTab: React.FC<{ description: GeoDescription; text: PreviewText }> = ({ description, text }) => {
+/**
+ * The pixel that is clicked: where it is in the raster's grid and in the raster's own coordinates, and each band's
+ * value as the file holds it, or what to do to click one.
+ */
+export const PixelTab: React.FC<{ pixel: FoundPixel | null; text: PreviewText }> = ({ pixel, text }) => {
+  if (!pixel) return <div className="p-3 typography-meta text-muted-foreground">{text.pixelHint}</div>;
+  const locale = getCurrentIntlLocale();
+  // As many decimals as tell neighbouring pixels apart, whether the coordinates are degrees or metres.
+  const coordinate = (value: number) => value.toLocaleString(locale, { maximumFractionDigits: Math.abs(value) < 1000 ? 6 : 2 });
+  return (
+    <ScrollableOverlay outerClassName="h-full min-h-0" className="px-3 py-1.5 typography-meta">
+      <Row label={text.pixel.column}><span className="font-mono">{(pixel.column + 1).toLocaleString(locale)}</span></Row>
+      <Row label={text.pixel.row}><span className="font-mono">{(pixel.row + 1).toLocaleString(locale)}</span></Row>
+      {pixel.centre ? (
+        <>
+          <Row label="X"><span className="font-mono">{coordinate(pixel.centre[0])}</span></Row>
+          <Row label="Y"><span className="font-mono">{coordinate(pixel.centre[1])}</span></Row>
+        </>
+      ) : null}
+      {pixel.values.map((value, index) => (
+        <Row key={index} label={`${text.band} ${index + 1}`}>
+          {value === null ? <span className="italic text-muted-foreground">{text.pixel.noData}</span> : <span className="font-mono">{value.toLocaleString(locale, { maximumFractionDigits: 6 })}</span>}
+        </Row>
+      ))}
+    </ScrollableOverlay>
+  );
+};
+
+/**
+ * What the data is, at more length than the line above the map has room for. `drawn` is the bands a raster is drawn
+ * from, where the preview has chosen them.
+ */
+export const InfoTab: React.FC<{ description: GeoDescription; text: PreviewText; drawn?: readonly number[] }> = ({ description, text, drawn }) => {
   const locale = getCurrentIntlLocale();
   const crs = !description.crs ? text.noCrs : description.crs.code ? `${description.crs.name} (${description.crs.code})` : description.crs.name;
   const extent = description.bounds
@@ -75,7 +106,7 @@ export const InfoTab: React.FC<{ description: GeoDescription; text: PreviewText 
                 {band.nodata === null ? '' : ` · ${text.info.nodata} ${band.nodata}`}
               </div>
             ))}
-            {description.bands.length > description.shown.length ? <div className="text-muted-foreground">{text.shown(description.shown.join(', '))}</div> : null}
+            {description.bands.length > (drawn ?? description.shown).length ? <div className="text-muted-foreground">{text.shown((drawn ?? description.shown).join(', '))}</div> : null}
           </Row>
         </>
       )}
