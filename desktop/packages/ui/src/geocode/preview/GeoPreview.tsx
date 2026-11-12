@@ -182,7 +182,8 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
               {picked.attributes.map(([field, value], index) => (
                 <div key={`${index}:${field}`} className="flex gap-2 py-0.5">
                   <span className="shrink-0 text-muted-foreground">{field}</span>
-                  <span className="min-w-0 break-words text-foreground">{value}</span>
+                  {/* As GIS software writes a field without a value, in every language. */}
+                  {value === null ? <span className="italic text-muted-foreground">NULL</span> : <span className="min-w-0 break-words text-foreground">{value}</span>}
                 </div>
               ))}
             </div>

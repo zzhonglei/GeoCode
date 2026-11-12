@@ -49,8 +49,8 @@ const descriptionSchema = z.discriminatedUnion('kind', [
 export type GeoDescription = z.infer<typeof descriptionSchema>;
 export type GeoBounds = NonNullable<GeoDescription['bounds']>;
 
-/** An attribute's value as it is shown: text as it is, nothing for no value, anything else as JSON writes it. */
-const shownValue = z.union([z.string(), z.null().transform(() => ''), z.unknown().transform((value) => JSON.stringify(value))]);
+/** An attribute's value as it is shown: text as it is, anything else as JSON writes it; no value stays none, told from empty text. */
+const shownValue = z.union([z.string(), z.null(), z.unknown().transform((value) => JSON.stringify(value))]);
 
 const foundSchema = z.object({
   found: z.object({ fid: z.number(), attributes: z.array(z.tuple([z.string(), shownValue])) }).nullable(),
