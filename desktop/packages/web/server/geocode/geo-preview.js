@@ -9,7 +9,8 @@ const STATUS_BY_CODE = new Map([
 
 /**
  * What a window's preview of a geographic dataset asks for: the dataset's description, the tiles of its map, the
- * feature under a click, the pages of its table and what its bands measure, each read by GeoEngine as it is asked for. A request the window
+ * feature or the pixel under a click, the pages of its table and what its bands measure, each read by GeoEngine as it
+ * is asked for. A request the window
  * leaves is cancelled there, so a map that has moved on reads nothing for where it was. Without geoEngine, as when
  * the server runs outside the desktop app, every request is refused.
  */
@@ -71,6 +72,11 @@ export const registerGeoPreview = (app, { geoEngine }) => {
     // Those of the layer's points, lines and polygons that are shown, when not all are.
     if (fid === undefined && forms !== undefined) asked.forms = String(forms).split(',');
     const result = await ask(req, res, 'preview.identify', asked);
+    if (result) res.json(result);
+  });
+
+  app.get('/api/geocode/preview/pixel', async (req, res) => {
+    const result = await ask(req, res, 'preview.pixel', { stamp: req.query.stamp, x: number(req.query.x), y: number(req.query.y) });
     if (result) res.json(result);
   });
 

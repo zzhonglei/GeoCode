@@ -1,6 +1,7 @@
 """A raster's tiles: the part of it under a tile of the map, drawn as an image."""
 
 import colorsys
+import math
 import uuid
 
 import numpy
@@ -13,6 +14,10 @@ SIZE = 512
 QUALITY = 85
 # The longer side of the sample a band's range is found in.
 SAMPLE = 512
+# As many bytes as are read at once for the samples of several bands together.
+TOGETHER = 128 * 1024 * 1024
+# The fewest rows read at once for them.
+STRIP = 64
 # The share of a band's values left out at each end of its range, as QGIS draws a raster by default; the interface
 # names the range by them in desktop/packages/ui/src/geocode/preview/previewText.ts.
 CUT = (2, 98)
@@ -68,17 +73,73 @@ def shown(dataset):
     return colours if all(colours) else [1, 2, 3]
 
 
+def _sampled(band):
+    """The width and the height of the sample of a band."""
+    scale = max(band.XSize, band.YSize) / SAMPLE
+    if scale <= 1:
+        return band.XSize, band.YSize
+    return max(1, round(band.XSize / scale)), max(1, round(band.YSize / scale))
+
+
 def _sample(band):
     """The values of a sample of a band that are data; GDAL reads the sample from an overview when one fits."""
-    scale = max(band.XSize, band.YSize) / SAMPLE
-    width, height = max(1, round(band.XSize / scale)), max(1, round(band.YSize / scale))
-    if scale <= 1:
-        width, height = band.XSize, band.YSize
+    width, height = _sampled(band)
     values = band.ReadAsArray(buf_xsize=width, buf_ysize=height)
     valid = band.GetMaskBand().ReadAsArray(buf_xsize=width, buf_ysize=height) != 0
     if numpy.iscomplexobj(values):
         values = numpy.abs(values)
     return values[valid & numpy.isfinite(values)]
+
+
+def _thinned(dataset, chosen, every):
+    """Every `every`th pixel each way of these bands, from the raster's own pixels read a strip of rows at a time."""
+    first = dataset.GetRasterBand(1)
+    rows = max(STRIP, first.GetBlockSize()[1])
+    kept = []
+    for top in range(0, dataset.RasterYSize, rows):
+        height = min(rows, dataset.RasterYSize - top)
+        strip = dataset.ReadAsArray(0, top, dataset.RasterXSize, height, band_list=chosen)
+        strip = strip.reshape((len(chosen), height, dataset.RasterXSize))
+        kept.append(strip[:, (-top) % every :: every, ::every])
+    return numpy.concatenate(kept, axis=1)
+
+
+def _samples(dataset, indices):
+    """A sample of each of the bands of these numbers, as `_sample` gives one, read several bands at a time. Read
+    one by one, two hundred bands of a file that keeps the bands of a pixel together took a minute, each of them the
+    whole file read; and so did all of them read reduced at once, which GDAL reads band by band. Where there are no
+    overviews to read a reduced raster from, the raster's own pixels are read, in strips, and thinned."""
+    first = dataset.GetRasterBand(1)
+    width, height = _sampled(first)
+    every = math.ceil(max(first.XSize, first.YSize) / SAMPLE)
+    thin = every > 1 and first.GetOverviewCount() == 0
+    size = gdal.GetDataTypeSizeBytes(first.DataType)
+    # Of the strips, where those are read: a strip of all the bands at once is the file read once.
+    held = first.XSize * max(STRIP, first.GetBlockSize()[1]) * size if thin else width * height * size
+    at_once = max(1, TOGETHER // max(1, held))
+    for start in range(0, len(indices), at_once):
+        chosen = indices[start : start + at_once]
+        if thin:
+            read = _thinned(dataset, chosen, every)
+        else:
+            read = dataset.ReadAsArray(buf_xsize=width, buf_ysize=height, band_list=chosen)
+            read = read.reshape((len(chosen), height, width))
+        for index, values in zip(chosen, read):
+            band = dataset.GetRasterBand(index)
+            if numpy.iscomplexobj(values):
+                values = numpy.abs(values)
+            valid = numpy.isfinite(values)
+            # What it has no data by, without its mask read where that is the band itself read again.
+            flags, nodata = band.GetMaskFlags(), band.GetNoDataValue()
+            if flags & gdal.GMF_NODATA and nodata is not None:
+                valid &= values != nodata
+            elif not flags & gdal.GMF_ALL_VALID:
+                mask = band.GetMaskBand()
+                if thin:
+                    valid &= mask.ReadAsArray()[::every, ::every] != 0
+                else:
+                    valid &= mask.ReadAsArray(buf_xsize=width, buf_ysize=height) != 0
+            yield index, values[valid]
 
 
 def of_classes(band):
@@ -140,7 +201,12 @@ def _measured(band):
     """What a sample of a band says of its values: their least and greatest, mean and deviation, the values that
     leave out CUT of them at each end, how many fall into each of BINS steps from the least to the greatest, and the
     values the band is drawn `between` when the interface names none. None of a band without data."""
-    values = _sample(band).astype(numpy.float64)
+    return _measure(_sample(band))
+
+
+def _measure(sample):
+    """As `_measured`, of the sample of a band."""
+    values = sample.astype(numpy.float64)
     if values.size == 0:
         return None
     least, most = float(values.min()), float(values.max())
@@ -202,8 +268,11 @@ class Look:
         """What the interface shows of the raster's values and offers to draw them with: each band as measured, the
         ramps, and the classes of a band that has them, each with its colour, how many pixels are of it and the
         share that is, with whether those were `sampled` rather than counted through."""
+        rest = [index for index in range(1, dataset.RasterCount + 1) if index not in self._measured]
+        for index, sample in _samples(dataset, rest):
+            self._measured[index] = _measure(sample)
         described = {
-            "bands": [self.measured(dataset, index) for index in range(1, dataset.RasterCount + 1)],
+            "bands": [self._measured[index] for index in range(1, dataset.RasterCount + 1)],
             "ramps": RAMPS,
         }
         if self.classes is not None:
@@ -232,6 +301,40 @@ def _native(dataset):
     except RuntimeError:
         return None
     return None if warped is None else abs(warped.GetGeoTransform()[1])
+
+
+def pixel(dataset, x, y):
+    """The pixel under a place in the map's plane: its `column` and `row`, counted from none; its `values`, one for
+    each band as the file holds it, None where the band has no data there; its `centre` in the raster's own
+    coordinates, None of a raster that is placed by other means than a grid; and its `outline`, the four corners as
+    longitudes and latitudes. None for a place outside the raster."""
+    across = gdal.Transformer(dataset, None, ["DST_SRS=EPSG:3857"])
+    reached, at = across.TransformPoint(1, x, y)
+    if not reached or not (math.isfinite(at[0]) and math.isfinite(at[1])):
+        return None
+    column, row = math.floor(at[0]), math.floor(at[1])
+    if not (0 <= column < dataset.RasterXSize and 0 <= row < dataset.RasterYSize):
+        return None
+    values = []
+    for index in range(1, dataset.RasterCount + 1):
+        band = dataset.GetRasterBand(index)
+        value = band.ReadAsArray(column, row, 1, 1)[0, 0]
+        if numpy.iscomplexobj(value):
+            value = numpy.abs(value)
+        known = band.GetMaskBand().ReadAsArray(column, row, 1, 1)[0, 0] != 0 and numpy.isfinite(value)
+        values.append(value.item() if known else None)
+    outline = []
+    for right, down in ((0, 0), (1, 0), (1, 1), (0, 1)):
+        corner = across.TransformPoint(0, column + right, row + down)[1]
+        outline.append(list(_mercator.degrees(corner[0], corner[1])))
+    grid = dataset.GetGeoTransform(can_return_null=True)
+    centre = None
+    if grid is not None:
+        centre = [
+            grid[0] + (column + 0.5) * grid[1] + (row + 0.5) * grid[2],
+            grid[3] + (column + 0.5) * grid[4] + (row + 0.5) * grid[5],
+        ]
+    return {"column": column, "row": row, "values": values, "centre": centre, "outline": outline}
 
 
 def _encoded(image, lossless):

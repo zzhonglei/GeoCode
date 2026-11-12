@@ -300,6 +300,17 @@ wide.SetSpatialRef(wgs84)
 wide.GetRasterBand(1).WriteArray(numpy.tile((numpy.arange(9000) // 3 % 8 + 1) * 1000, (64, 1)).astype(numpy.int16))
 wide = None
 
+# Five bands larger than the sample a band is measured in and without overviews, each rising from west to east from
+# a hundred times its number, with no data in the north-west corner.
+bands = gdal.GetDriverByName("GTiff").Create(os.path.join(folder, "bands.tif"), 1300, 1300, 5, gdal.GDT_Int16)
+bands.SetGeoTransform((0, side / 1300, 0, side, 0, -side / 1300))
+bands.SetSpatialRef(wgs84)
+for number in range(1, 6):
+    values = numpy.tile(numpy.arange(1300) + number * 100, (1300, 1)).astype(numpy.int16); values[:300, :300] = -9999
+    bands.GetRasterBand(number).WriteArray(values)
+    bands.GetRasterBand(number).SetNoDataValue(-9999)
+bands = None
+
 # A GeoPackage of a vector layer and two rasters.
 both = ogr.GetDriverByName("GPKG").CreateDataSource(os.path.join(folder, "both.gpkg"))
 layer(both, "roads", wgs84, ogr.wkbLineString, [("a", "LINESTRING (0.1 0.1, 0.2 0.2)")])

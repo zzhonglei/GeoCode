@@ -95,6 +95,13 @@ interface Answer {
       readonly share: number
     }[]
   }
+  readonly pixel?: {
+    readonly column: number
+    readonly row: number
+    readonly values: readonly (number | null)[]
+    readonly centre: readonly number[] | null
+    readonly outline: readonly (readonly number[])[]
+  } | null
   readonly offset?: number
   readonly fids?: readonly number[]
   readonly rows?: readonly (readonly unknown[])[]
@@ -122,6 +129,10 @@ const open = async (name: string, layer?: string) => {
       ask("tile", { ...target, stamp: described.stamp, ...tile, ...(fid === undefined ? {} : { fid }) }),
     drawn: (look: object) => ask("tile", { ...target, stamp: described.stamp, ...TILE, look }),
     statistics: async () => (await ask("statistics", { ...target, stamp: described.stamp })).statistics,
+    pixel: async (longitude: number, latitude: number) => {
+      const [x, y] = plane(longitude, latitude)
+      return (await ask("pixel", { ...target, stamp: described.stamp, x, y })).pixel
+    },
     feature: async (fid: number) => (await ask("identify", { ...target, stamp: described.stamp, fid })).found,
     rows: (row: number) => ask("rows", { ...target, stamp: described.stamp, row }),
     click: async (longitude: number, latitude: number, tolerance = 5, forms?: readonly string[]) => {
@@ -481,6 +492,20 @@ test("a raster is measured, and drawn as the interface asks", { skip: missing },
   const [east] = await pixels(await picture.drawn({ bands: [3, 2, 1] }), "swapped.webp", [[400, 256]])
   assert.ok(near(east, [255, 0, 0, 255]), String(east))
 
+  // The bands that are not drawn, the fourth and the fifth here, are measured together, from every third pixel of the
+  // raster each way: each band its own values, the pixels without data left out, and as many of them as that
+  // thinning keeps.
+  const several = (await (await open("bands.tif")).statistics())?.bands ?? []
+  assert.deepEqual(
+    several.slice(3).map((each) => [each.min, each.max]),
+    [
+      [400, 1699],
+      [500, 1799],
+    ],
+  )
+  const kept = several[4].counts.reduce((sum, count) => sum + count, 0)
+  assert.equal(kept, 434 * 434 - 100 * 100)
+
   const classes = (await (await open("classes.tif")).statistics())?.classes
   assert.deepEqual(
     classes?.map((each) => [each.value, each.color, each.share]),
@@ -489,6 +514,30 @@ test("a raster is measured, and drawn as the interface asks", { skip: missing },
       [2, [30, 200, 30, 255], 0.5],
     ],
   )
+})
+
+// Guards the values a click reads out against being those of a neighbouring pixel, or of the picture drawn rather
+// than of the file: either would be a number as good as any to look at.
+test("a click on a raster reads the pixel under it, as the file holds it", { skip: missing }, async () => {
+  const side = 0.3515625 / 256
+  const heights = await open("heights.tif")
+  // The pixel of column 200 and row 100, a little off its centre; its value is where it lies from west to east.
+  const found = await heights.pixel(200.3 * side, 0.3515625 - 100.7 * side)
+  assert.deepEqual([found?.column, found?.row], [200, 100])
+  assert.ok(Math.abs((found?.values[0] ?? 0) - (200 / 255) * 1000) < 0.01, String(found?.values))
+  const [x, y] = found?.centre ?? []
+  assert.ok(Math.abs(x - 200.5 * side) < 1e-9 && Math.abs(y - (0.3515625 - 100.5 * side)) < 1e-9, `${x}, ${y}`)
+  const corners = found?.outline ?? []
+  assert.equal(corners.length, 4)
+  assert.ok(Math.abs(corners[0][0] - 200 * side) < 1e-7 && Math.abs(corners[2][0] - 201 * side) < 1e-7, String(corners))
+  assert.ok(Math.abs(corners[0][1] - (0.3515625 - 100 * side)) < 1e-7, String(corners))
+  // No value where the band has no data, and no pixel outside the raster.
+  assert.deepEqual((await heights.pixel(10 * side, 0.3515625 - 10 * side))?.values, [null])
+  assert.equal(await heights.pixel(0.4, 0.1), null)
+  // Every band, whichever are drawn.
+  const picture = await open("picture.tif")
+  assert.deepEqual((await picture.pixel(50 * side, 0.1))?.values, [255, 0, 0])
+  assert.deepEqual((await picture.pixel(200 * side, 0.1))?.values, [0, 0, 255])
 })
 
 // Guards a raster of classes that brings no colours, as a classification's result is: drawn as measurements it is

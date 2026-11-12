@@ -78,6 +78,7 @@ const IdentifyParams = Schema.Union([
 ])
 const RowsParams = Schema.Struct({ ...Target, stamp: Schema.String, row: Schema.Int })
 const StatisticsParams = Schema.Struct({ ...Target, stamp: Schema.String })
+const PixelParams = Schema.Struct({ ...Target, stamp: Schema.String, x: Schema.Number, y: Schema.Number })
 
 /** The line a reader's answer begins with. */
 const Answer = Schema.Struct({
@@ -96,6 +97,8 @@ const RowsResult = Schema.Struct({ offset: Schema.Int, fids: Schema.Unknown, row
 const decodeRowsResult = Schema.decodeUnknownExit(RowsResult)
 const StatisticsResult = Schema.Struct({ statistics: Schema.Unknown })
 const decodeStatisticsResult = Schema.decodeUnknownExit(StatisticsResult)
+const PixelResult = Schema.Struct({ pixel: Schema.Unknown })
+const decodePixelResult = Schema.decodeUnknownExit(PixelResult)
 
 type Settle = (outcome: Exit.Exit<{ readonly result: unknown; readonly bytes: Uint8Array }, Engine.Failure>) => void
 
@@ -111,8 +114,8 @@ const cancellation = () => new Engine.Failure({ code: "cancelled", message: "the
 
 /**
  * What the interface shows of a geographic dataset: its description, the tiles of its map, the feature under a click,
- * the pages of its table and what its bands measure, each read from the file by a reader that stays for the next
- * request. `pyramids` is the
+ * the pages of its table, what its bands measure and the pixel under a click, each read from the file by a reader
+ * that stays for the next request. `pyramids` is the
  * folder the readers keep the overviews they make for large rasters in; `launch` starts a reader.
  */
 export const capability = (pyramids: string, launch: Launch = READER): Engine.Capability =>
@@ -330,5 +333,16 @@ export const capability = (pyramids: string, launch: Launch = READER): Engine.Ca
         return result.value
       })
 
-    return { domain: DOMAIN, methods: { describe, tile, identify, rows, statistics } }
+    const pixel: Engine.Method = (raw, context) =>
+      Effect.gen(function* () {
+        const params = Schema.decodeUnknownExit(PixelParams)(raw)
+        if (Exit.isFailure(params)) return yield* invalid(params.cause)
+        const click = { stamp: params.value.stamp, x: params.value.x, y: params.value.y }
+        const answer = yield* ask(params.value, { do: "pixel", ...click }, context.signal)
+        const result = decodePixelResult(answer.result)
+        if (Exit.isFailure(result)) return yield* unexpected(result.cause)
+        return result.value
+      })
+
+    return { domain: DOMAIN, methods: { describe, tile, identify, rows, statistics, pixel } }
   })

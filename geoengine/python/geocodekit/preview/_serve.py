@@ -163,6 +163,14 @@ class Reader:
         stand_in, look = self._raster(described, cancelled)
         return look.statistics(self._opened(described, stand_in))
 
+    def pixel(self, request, cancelled):
+        """The raster's pixel under a click."""
+        described = self._current(request["stamp"])
+        if described["kind"] != "raster":
+            return None
+        stand_in, _ = self._raster(described, cancelled)
+        return _raster.pixel(self._opened(described, stand_in), request["x"], request["y"])
+
     def rows(self, request):
         """The page of the layer's table that holds the row asked for: where the page begins, and the numbers and the
         attributes of its features. A layer with no place on the map has a table all the same."""
@@ -222,6 +230,8 @@ def main():
                 write({"id": number, "result": {"found": reader.identify(request, cancelled)}})
             elif request["do"] == "rows":
                 write({"id": number, "result": reader.rows(request)})
+            elif request["do"] == "pixel":
+                write({"id": number, "result": {"pixel": reader.pixel(request, cancelled)}})
             elif request["do"] == "statistics":
                 write({"id": number, "result": {"statistics": reader.statistics(request, cancelled)}})
             else:
