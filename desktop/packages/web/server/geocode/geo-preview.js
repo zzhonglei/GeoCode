@@ -52,8 +52,11 @@ export const registerGeoPreview = (app, { geoEngine }) => {
   });
 
   app.get('/api/geocode/preview/identify', async (req, res) => {
-    const { stamp, x, y, tolerance } = req.query;
-    const result = await ask(req, res, 'preview.identify', { stamp, x: number(x), y: number(y), tolerance: number(tolerance) });
+    const { stamp, x, y, tolerance, forms } = req.query;
+    const click = { stamp, x: number(x), y: number(y), tolerance: number(tolerance) };
+    // Those of the layer's points, lines and polygons that are shown, when not all are.
+    if (forms !== undefined) click.forms = String(forms).split(',');
+    const result = await ask(req, res, 'preview.identify', click);
     if (result) res.json(result);
   });
 };

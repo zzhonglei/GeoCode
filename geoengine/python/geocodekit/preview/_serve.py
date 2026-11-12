@@ -36,9 +36,17 @@ class Reader:
         self._known = (described, files)
         return described
 
-    def describe(self):
+    def describe(self, cancelled):
         with self._lock:
-            return self._redescribe()
+            described = self._redescribe()
+        if "forms" in described and "unplaced" not in described:
+            # Read now, as the first tile would have it read anyway. Why a layer cannot be read is left for its tiles
+            # to say: a description refused for it would leave the file's other layers out of reach as well.
+            try:
+                described = dict(described, forms=self._vector(described, cancelled).forms)
+            except _source.Unshown:
+                pass
+        return described
 
     def _current(self, stamp):
         """The description, when the data is still what the request was made for."""
@@ -103,7 +111,9 @@ class Reader:
             return None
         from geocodekit.preview import _cut, _vector
 
-        fid = _cut.nearest(self._vector(described, cancelled), request["x"], request["y"], request["tolerance"])
+        # Asked without them, a click looks among all three.
+        forms = request.get("forms", ("points", "lines", "polygons"))
+        fid = _cut.nearest(self._vector(described, cancelled), request["x"], request["y"], request["tolerance"], forms)
         if fid is None:
             return None
         found = _vector.attributes(self._path, described["layer"], fid)
@@ -142,7 +152,7 @@ def main():
             if cancelled():
                 raise _source.Cancelled()
             if request["do"] == "describe":
-                write({"id": number, "result": reader.describe()})
+                write({"id": number, "result": reader.describe(cancelled)})
             elif request["do"] == "tile":
                 data = reader.tile(request, cancelled)
                 write({"id": number, "result": {"empty": data is None}}, data or b"")

@@ -21,11 +21,17 @@ const place = {
   unplaced: z.string().optional(),
 };
 
+/** What a vector layer's features are drawn as; a layer of several is shown with any of them hidden. */
+export const FORMS = ['points', 'lines', 'polygons'] as const;
+export type Form = (typeof FORMS)[number];
+
 const descriptionSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('vector'),
     features: z.number(),
     geometry: z.string().nullable(),
+    /** How many features are drawn as each, of a layer whose type does not say; null where the layer was not read. */
+    forms: z.object({ points: z.number().optional(), lines: z.number().optional(), polygons: z.number().optional() }).nullable().optional(),
     fields: z.array(z.object({ name: z.string(), type: z.string() })),
     ...place,
   }),
@@ -85,9 +91,9 @@ const request = async <T>(address: string, schema: z.ZodType<T>, signal?: AbortS
 export const describeGeoData = (target: Target, signal?: AbortSignal): Promise<Outcome<GeoDescription>> =>
   request(`${PREVIEW_PATH}/describe?${targetQuery(target)}`, descriptionSchema, signal);
 
-/** The feature at a place in the map's plane, within `tolerance` metres of it. */
-export const identifyGeoFeature = (target: Target, stamp: string, at: { x: number; y: number; tolerance: number }): Promise<Outcome<FoundFeature | null>> =>
-  request(`${PREVIEW_PATH}/identify?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&x=${at.x}&y=${at.y}&tolerance=${at.tolerance}`, foundSchema)
+/** The feature at a place in the map's plane, within `tolerance` metres of it, among the `forms` that are shown. */
+export const identifyGeoFeature = (target: Target, stamp: string, at: { x: number; y: number; tolerance: number }, forms: readonly Form[]): Promise<Outcome<FoundFeature | null>> =>
+  request(`${PREVIEW_PATH}/identify?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&x=${at.x}&y=${at.y}&tolerance=${at.tolerance}&forms=${forms.join(',')}`, foundSchema)
     .then((outcome) => (outcome.ok ? { ok: true, value: outcome.value.found } : outcome));
 
 /** The address of the tiles of the data under `stamp`, with the tile's own numbers left for the map to fill in. */

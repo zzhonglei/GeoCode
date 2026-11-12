@@ -101,8 +101,9 @@ def _clipped_polygons(xy, ring_lengths, rings, box):
 
 
 def tile(layer, z, x, y, cancelled):
-    """The tile as Mapbox Vector Tile bytes, in layers named points, lines, polygons and dots, or None when the layer
-    has nothing in it."""
+    """The tile as Mapbox Vector Tile bytes, or None when the layer has nothing in it. Its layers are named points,
+    lines and polygons, and small-lines and small-polygons for the dots of those too small to draw: what is shown of
+    a layer is chosen by which of the three its features are."""
     left, top, span = _mercator.tile(z, x, y)
     unit = span / EXTENT
     cell = CELL * unit
@@ -143,7 +144,10 @@ def tile(layer, z, x, y, cancelled):
             raise _source.Cancelled()
 
     layers = []
-    centres = []
+
+    def dots(name, bounds):
+        """A dot where each of the parts too small to draw lies."""
+        layers.append(_mvt.points(name, *thinned((bounds[:, :2] + bounds[:, 2:]) / 2)))
 
     points = layer.points
     if points is not None:
@@ -155,7 +159,7 @@ def tile(layer, z, x, y, cancelled):
     lines = layer.lines
     if lines is not None:
         small, within, crossing = sorted_out(lines.bounds, lines.size)
-        centres.append((lines.bounds[small, :2] + lines.bounds[small, 2:]) / 2)
+        dots("small-lines", lines.bounds[small])
         lengths = lines.length[within]
         xy = lines.xy[_ranges(lines.start[within], lengths)]
         if crossing.size:
@@ -173,7 +177,7 @@ def tile(layer, z, x, y, cancelled):
     polygons = layer.polygons
     if polygons is not None:
         small, within, crossing = sorted_out(polygons.bounds, polygons.size)
-        centres.append((polygons.bounds[small, :2] + polygons.bounds[small, 2:]) / 2)
+        dots("small-polygons", polygons.bounds[small])
 
         def taken(chosen):
             rings = polygons.rings[chosen]
@@ -199,20 +203,17 @@ def tile(layer, z, x, y, cancelled):
             at, ring_lengths = _only(at, ring_lengths, drawable)
             layers.append(_mvt.paths("polygons", _wound(at, ring_lengths, shell[drawable]), ring_lengths, True))
     check()
-
-    if centres:
-        layers.append(_mvt.points("dots", *thinned(numpy.concatenate(centres))))
     return b"".join(layers) or None
 
 
-def nearest(layer, x, y, tolerance):
+def nearest(layer, x, y, tolerance, forms):
     """The number of the feature a click at `x`, `y` lands on, within `tolerance` metres of the plane: the smallest
-    of those under it, so that a building is picked rather than the district it stands in. None when it lands on
-    nothing."""
+    of those under it, so that a building is picked rather than the district it stands in. `forms` names those of
+    points, lines and polygons that are shown, and so can be clicked. None when it lands on nothing."""
     found = []
     here = shapely.Point(x, y)
 
-    points = layer.points
+    points = layer.points if "points" in forms else None
     if points is not None and points.x.size:
         distance = numpy.hypot(points.x - x, points.y - y)
         closest = int(numpy.argmin(distance))
@@ -235,7 +236,7 @@ def nearest(layer, x, y, tolerance):
         for index in numpy.flatnonzero(distance <= tolerance):
             found.append((float(area[index]), float(distance[index]), int(fid[index])))
 
-    lines = layer.lines
+    lines = layer.lines if "lines" in forms else None
     if lines is not None:
         near, area = about(lines.bounds)
         if near.size:
@@ -244,7 +245,7 @@ def nearest(layer, x, y, tolerance):
             shapes = shapely.linestrings(xy, indices=numpy.repeat(numpy.arange(near.size), lengths))
             best(shapes, area, lines.fid[near])
 
-    polygons = layer.polygons
+    polygons = layer.polygons if "polygons" in forms else None
     if polygons is not None:
         near, area = about(polygons.bounds)
         if near.size:

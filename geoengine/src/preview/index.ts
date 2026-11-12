@@ -56,6 +56,8 @@ const IdentifyParams = Schema.Struct({
   x: Schema.Number,
   y: Schema.Number,
   tolerance: Schema.Number,
+  /** Those of a layer's points, lines and polygons that are shown; all three when it is not given. */
+  forms: Schema.optionalKey(Schema.Array(Schema.Literals(["points", "lines", "polygons"]))),
 })
 
 /** The line a reader's answer begins with. */
@@ -264,6 +266,7 @@ export const capability = (launch: Launch = READER): Engine.Capability =>
           x: params.value.x,
           y: params.value.y,
           tolerance: params.value.tolerance,
+          forms: params.value.forms,
         }
         const answer = yield* ask(params.value, { do: "identify", ...click }, context.signal)
         const result = decodeIdentifyResult(answer.result)

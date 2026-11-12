@@ -6,7 +6,7 @@ import { ContentLoadingState, ContentState } from '@/components/ui/content-state
 import { ArtifactMetaBar } from '@/components/views/files/previews/ArtifactMetaBar';
 import { getCurrentIntlLocale, useI18n } from '@/lib/i18n';
 import type { MapView } from './GeoMap';
-import { describeGeoData, type FoundFeature, type GeoDescription, type Target } from './previewClient';
+import { describeGeoData, FORMS, type FoundFeature, type GeoDescription, type Form, type Target } from './previewClient';
 import { previewText, unshownText, type PreviewText } from './previewText';
 
 // Its own chunk: the map library is loaded when the first geographic file is opened.
@@ -23,11 +23,20 @@ const crsOf = (description: GeoDescription, text: PreviewText): string => {
 /** The refusals of a tile that say the whole layer cannot be drawn, not that one tile failed. */
 const WHOLE = new Set(['too-large', 'unopenable', 'missing', 'no-layer', 'not-ready']);
 
+/** Those of points, lines and polygons a layer has features of, each with how many, where its type does not say. */
+const formsOf = (description: GeoDescription | null): [Form, number][] => {
+  const counted = description?.kind === 'vector' ? description.forms : null;
+  return counted ? FORMS.flatMap((form): [Form, number][] => (counted[form] ? [[form, counted[form]]] : [])) : [];
+};
+
 /** The line above the map: what the data is, in the numbers a user would otherwise have to ask for. */
 const factsOf = (description: GeoDescription, text: PreviewText): string[] => {
   const locale = getCurrentIntlLocale();
   if (description.kind === 'vector') {
-    return [text.features(description.features, description.features.toLocaleString(locale)), description.geometry ?? '', text.fields(description.fields.length), crsOf(description, text)];
+    const forms = formsOf(description);
+    // A layer of several is told by the buttons that show and hide them.
+    const geometry = description.forms ? (forms.length === 1 ? text.forms[forms[0][0]] : '') : (description.geometry ?? '');
+    return [text.features(description.features, description.features.toLocaleString(locale)), geometry, text.fields(description.fields.length), crsOf(description, text)];
   }
   const types = [...new Set(description.bands.map((band) => band.type))];
   return [
@@ -48,6 +57,8 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   const { locale } = useI18n();
   const text = previewText(locale);
   const [layer, setLayer] = React.useState<string | undefined>(undefined);
+  // Those of the layer's points, lines and polygons that are not drawn.
+  const [hidden, setHidden] = React.useState<readonly Form[]>([]);
   const [known, setKnown] = React.useState<Known | null>(null);
   const [picked, setPicked] = React.useState<FoundFeature | null>(null);
   const [mapFailed, setMapFailed] = React.useState(false);
@@ -97,6 +108,7 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
         value={description?.layer ?? ''}
         onChange={(event) => {
           view.current = null;
+          setHidden([]);
           setLayer(event.target.value);
         }}
       >
@@ -107,9 +119,28 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
     </label>
   ) : null;
 
+  const forms = formsOf(description);
+  const several = forms.length > 1;
+  // Hidden only while there are buttons to show it again: a file may come to hold one form alone.
+  const shown = React.useMemo<readonly Form[]>(() => (several ? FORMS.filter((form) => !hidden.includes(form)) : FORMS), [hidden, several]);
+  const formPicker = several ? forms.map(([form, count]) => (
+    <button
+      key={form}
+      type="button"
+      aria-pressed={!hidden.includes(form)}
+      className={`rounded border border-border px-1.5 py-0.5 typography-meta ${hidden.includes(form) ? 'text-muted-foreground opacity-50' : 'bg-background text-foreground'}`}
+      onClick={() => {
+        setPicked(null);
+        setHidden(hidden.includes(form) ? hidden.filter((each) => each !== form) : [...hidden, form]);
+      }}
+    >
+      {text.forms[form]} {count.toLocaleString(getCurrentIntlLocale())}
+    </button>
+  )) : null;
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ArtifactMetaBar items={description ? factsOf(description, text) : []} actions={layerPicker} />
+      <ArtifactMetaBar items={description ? factsOf(description, text) : []} actions={formPicker || layerPicker ? <>{formPicker}{layerPicker}</> : null} />
       <div className="relative min-h-0 flex-1">
         {!current ? <ContentLoadingState label={text.reading} /> : null}
         {unshown ? (
@@ -122,6 +153,7 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
               target={target}
               description={description}
               bounds={bounds}
+              shown={shown}
               view={view}
               onPick={setPicked}
               onRefused={(code) => (code === 'changed' ? setChanges((count) => count + 1) : setRefused(code))}

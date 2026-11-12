@@ -82,6 +82,10 @@ def _vector(layer):
         ],
         "crs": _crs(srs),
     }
+    if ogr.GT_Flatten(layer.GetGeomType()) in (ogr.wkbUnknown, ogr.wkbGeometryCollection):
+        # The layer's type does not say which of points, lines and polygons its features are, and the three are shown
+        # or hidden apart. The reader counts them once it has read the layer.
+        described["forms"] = None
     described.update(_vector_place(layer, srs))
     return described
 

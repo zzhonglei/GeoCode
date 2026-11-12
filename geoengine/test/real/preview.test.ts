@@ -67,6 +67,7 @@ interface Answer {
   readonly layers?: readonly { readonly name: string; readonly kind: string }[]
   readonly bands?: readonly unknown[]
   readonly features?: number
+  readonly forms?: Readonly<Record<string, number>>
   readonly fields?: readonly { readonly name: string }[]
   readonly bounds?: readonly number[]
   readonly unplaced?: string
@@ -98,9 +99,10 @@ const open = async (name: string, layer?: string) => {
     described,
     tile: (tile: { z: number; x: number; y: number } = TILE) =>
       ask("tile", { ...target, stamp: described.stamp, ...tile }),
-    click: async (longitude: number, latitude: number, tolerance = 5) => {
+    click: async (longitude: number, latitude: number, tolerance = 5, forms?: readonly string[]) => {
       const [x, y] = plane(longitude, latitude)
-      return (await ask("identify", { ...target, stamp: described.stamp, x, y, tolerance })).found
+      const shown = forms ? { forms } : {}
+      return (await ask("identify", { ...target, stamp: described.stamp, x, y, tolerance, ...shown })).found
     },
   }
 }
@@ -123,6 +125,8 @@ test("a vector layer's tile holds each shape as a display can tell it apart", { 
     ["shapes", "towns"],
   )
   assert.equal(shapes.described.features, 15)
+  // Features, not their parts: the islands are one, and the feature of a point and a line is among both.
+  assert.deepEqual(shapes.described.forms, { points: 4, lines: 4, polygons: 7 })
   assert.deepEqual(
     shapes.described.fields?.map((field) => field.name),
     ["name", "size"],
@@ -132,7 +136,7 @@ test("a vector layer's tile holds each shape as a display can tell it apart", { 
   assert.ok(Math.abs(south - 0.01) < 1e-6 && Math.abs(north - 0.34) < 1e-6, `${south} to ${north}`)
 
   const tile = drawn(await shapes.tile())
-  assert.deepEqual(Object.keys(tile).toSorted(), ["dots", "lines", "points", "polygons"])
+  assert.deepEqual(Object.keys(tile).toSorted(), ["lines", "points", "polygons", "small-polygons"])
   for (const layer of Object.values(tile)) assert.equal(layer.extent, 4096)
 
   // A shell runs clockwise and its hole follows it the other way, however the file wound them: that order and
@@ -170,8 +174,8 @@ test("a vector layer's tile holds each shape as a display can tell it apart", { 
     tile.points.parts.map(([point]) => String(point)).toSorted(),
     [exactly(0.01, 0.01), exactly(0.03, 0.01), exactly(0.33, 0.33)].map(String).toSorted(),
   )
-  assert.equal(tile.dots.parts.length, 1)
-  const [[dot]] = tile.dots.parts
+  assert.equal(tile["small-polygons"].parts.length, 1)
+  const [[dot]] = tile["small-polygons"].parts
   assert.ok(Math.abs(dot[0] - at(0.3, 0.2)[0]) <= 2 && Math.abs(dot[1] - at(0.3, 0.2)[1]) <= 2, String(dot))
 
   // Farther out the house is too small to be a shape as well.
@@ -197,6 +201,9 @@ test("a click finds the smallest feature under it and its attributes", { skip: m
   assert.equal(await named(0.01, 0.01), "well")
   assert.equal(await named(0.33, 0.3), "both")
   assert.equal(await named(0.27, 0.27), "raised")
+  // What is hidden is not clicked: neither the house nor the district it stands in, nor a point.
+  assert.equal(await shapes.click(0.061, 0.061, 5, ["points", "lines"]), null)
+  assert.equal(await shapes.click(0.01, 0.01, 5, ["lines", "polygons"]), null)
 })
 
 // Guards a GeoPackage's rasters, which a file described by its vector layers alone would hide for good.

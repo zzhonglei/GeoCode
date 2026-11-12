@@ -51,6 +51,13 @@ class Polygons:
 class Layer:
     def __init__(self, points, lines, polygons):
         self.points, self.lines, self.polygons = points, lines, polygons
+        # How many features have points, lines and polygons among their parts, for those that any has. A feature that
+        # is a collection may have several of them.
+        self.forms = {
+            name: int(numpy.unique(parts.fid).size)
+            for name, parts in (("points", points), ("lines", lines), ("polygons", polygons))
+            if parts is not None and parts.fid.size
+        }
 
 
 def _bounds(xy, start):

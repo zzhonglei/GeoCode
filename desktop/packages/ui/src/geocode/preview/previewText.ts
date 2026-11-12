@@ -8,6 +8,8 @@ export type PreviewText = {
   bands: (count: number) => string;
   shown: (bands: string) => string;
   layer: string;
+  /** What a layer's features are drawn as, each a name to show or hide them by. */
+  forms: { points: string; lines: string; polygons: string };
   noCrs: string;
   attributes: string;
   close: string;
@@ -26,6 +28,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     bands: (count) => (count === 1 ? '1 band' : `${count} bands`),
     shown: (bands) => `showing ${bands}`,
     layer: 'Layer',
+    forms: { points: 'Points', lines: 'Lines', polygons: 'Polygons' },
     noCrs: 'No coordinate system',
     attributes: 'Attributes',
     close: 'Close',
@@ -57,6 +60,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     bands: (count) => `${count} 个波段`,
     shown: (bands) => `显示波段 ${bands}`,
     layer: '图层',
+    forms: { points: '点', lines: '线', polygons: '面' },
     noCrs: '没有坐标系',
     attributes: '属性',
     close: '关闭',
@@ -88,6 +92,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     bands: (count) => `${count} 個波段`,
     shown: (bands) => `顯示波段 ${bands}`,
     layer: '圖層',
+    forms: { points: '點', lines: '線', polygons: '面' },
     noCrs: '沒有座標系統',
     attributes: '屬性',
     close: '關閉',
