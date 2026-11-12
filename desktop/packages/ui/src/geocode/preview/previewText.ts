@@ -4,16 +4,26 @@ export type PreviewText = {
   reading: string;
   /** `shown` is the count as the locale writes it. */
   features: (count: number, shown: string) => string;
-  fields: (count: number) => string;
   bands: (count: number) => string;
   shown: (bands: string) => string;
   layer: string;
   /** What a layer's features are drawn as, each a name to show or hide them by. */
   forms: { points: string; lines: string; polygons: string };
   noCrs: string;
-  attributes: string;
   close: string;
   noAttributes: string;
+  zoomIn: string;
+  zoomOut: string;
+  /** Back to where the whole of the data shows. */
+  whole: string;
+  /** The panel beside the map: what its tabs are called, and what opens and closes it. */
+  tabs: { feature: string; info: string };
+  openPanel: string;
+  closePanel: string;
+  /** Shown where a clicked feature's attributes go, before any is clicked. */
+  pickHint: string;
+  /** What the rows of the info tab are called. */
+  info: { layer: string; geometry: string; features: string; fields: string; crs: string; extent: string; size: string; bands: string; nodata: string };
   /** Some of the map's tiles failed; the rest is drawn. */
   partly: string;
   /** Why nothing is shown, by the reader's code for it; `other` words a code this list does not have. */
@@ -24,15 +34,21 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
   en: {
     reading: 'Reading…',
     features: (count, shown) => (count === 1 ? '1 feature' : `${shown} features`),
-    fields: (count) => (count === 1 ? '1 field' : `${count} fields`),
     bands: (count) => (count === 1 ? '1 band' : `${count} bands`),
     shown: (bands) => `showing ${bands}`,
     layer: 'Layer',
     forms: { points: 'Points', lines: 'Lines', polygons: 'Polygons' },
     noCrs: 'No coordinate system',
-    attributes: 'Attributes',
     close: 'Close',
     noAttributes: 'This feature has no attributes.',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    whole: 'Show all of it',
+    tabs: { feature: 'Feature', info: 'Info' },
+    openPanel: 'Show the panel',
+    closePanel: 'Hide the panel',
+    pickHint: 'Click a feature on the map to see its attributes.',
+    info: { layer: 'Layer', geometry: 'Geometry', features: 'Features', fields: 'Fields', crs: 'Coordinate system', extent: 'Extent', size: 'Size', bands: 'Bands', nodata: 'no data' },
     partly: 'Part of the map could not be read.',
     unshown: {
       missing: 'The file is no longer there.',
@@ -57,15 +73,21 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
   'zh-CN': {
     reading: '读取中…',
     features: (_count, shown) => `${shown} 个要素`,
-    fields: (count) => `${count} 个字段`,
     bands: (count) => `${count} 个波段`,
     shown: (bands) => `显示波段 ${bands}`,
     layer: '图层',
     forms: { points: '点', lines: '线', polygons: '面' },
     noCrs: '没有坐标系',
-    attributes: '属性',
     close: '关闭',
     noAttributes: '这个要素没有属性。',
+    zoomIn: '放大',
+    zoomOut: '缩小',
+    whole: '回到全图',
+    tabs: { feature: '要素', info: '信息' },
+    openPanel: '展开面板',
+    closePanel: '收起面板',
+    pickHint: '点击地图上的要素,查看它的属性。',
+    info: { layer: '图层', geometry: '几何类型', features: '要素数', fields: '字段', crs: '坐标系', extent: '范围', size: '尺寸', bands: '波段', nodata: '无数据值' },
     partly: '地图有一部分没能读出来。',
     unshown: {
       missing: '文件已经不在了。',
@@ -90,15 +112,21 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
   'zh-TW': {
     reading: '讀取中…',
     features: (_count, shown) => `${shown} 個圖徵`,
-    fields: (count) => `${count} 個欄位`,
     bands: (count) => `${count} 個波段`,
     shown: (bands) => `顯示波段 ${bands}`,
     layer: '圖層',
     forms: { points: '點', lines: '線', polygons: '面' },
     noCrs: '沒有座標系統',
-    attributes: '屬性',
     close: '關閉',
     noAttributes: '這個圖徵沒有屬性。',
+    zoomIn: '放大',
+    zoomOut: '縮小',
+    whole: '回到全圖',
+    tabs: { feature: '圖徵', info: '資訊' },
+    openPanel: '展開面板',
+    closePanel: '收起面板',
+    pickHint: '點選地圖上的圖徵,檢視它的屬性。',
+    info: { layer: '圖層', geometry: '幾何類型', features: '圖徵數', fields: '欄位', crs: '座標系統', extent: '範圍', size: '尺寸', bands: '波段', nodata: '無資料值' },
     partly: '地圖有一部分沒能讀出來。',
     unshown: {
       missing: '檔案已經不在了。',
@@ -123,5 +151,9 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
 };
 
 export const previewText = (locale: Locale): PreviewText => TEXT[locale] ?? TEXT.en;
+
+/** A longitude and a latitude as a map reads them out, in every language, to the ten metres or so that four decimals tell apart. */
+export const placeText = (longitude: number, latitude: number): string =>
+  `${Math.abs(longitude).toFixed(4)}°${longitude < 0 ? 'W' : 'E'}, ${Math.abs(latitude).toFixed(4)}°${latitude < 0 ? 'S' : 'N'}`;
 
 export const unshownText = (text: PreviewText, code: string): string => text.unshown[code] ?? text.unshown.other;
