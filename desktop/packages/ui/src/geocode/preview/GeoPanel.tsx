@@ -32,7 +32,7 @@ export const GeoPanel: React.FC<{
 }> = ({ tabs, active, open, beside, room, text, onActive, onOpen }) => {
   const [height, setHeight] = React.useState(HEIGHT);
   // `release` ends the hold a drag puts on what follows the layout, the map among it: sized on every frame of the
-  // drag, it made the drag stutter.
+  // drag, it would make the drag stutter.
   const drag = React.useRef<{ from: number; height: number; release: () => void } | null>(null);
   const drop = () => {
     drag.current?.release();

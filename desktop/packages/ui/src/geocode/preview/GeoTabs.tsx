@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { getCurrentIntlLocale } from '@/lib/i18n';
 import type { FoundFeature, FoundPixel, GeoDescription } from './previewClient';
-import { placeText, type PreviewText } from './previewText';
+import { placeText, valueText, type PreviewText } from './previewText';
 
 const Row: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="flex gap-3 border-b border-edge-muted py-1.5 last:border-b-0">
@@ -71,7 +71,7 @@ export const PixelTab: React.FC<{ pixel: FoundPixel | null; text: PreviewText }>
       ) : null}
       {pixel.values.map((value, index) => (
         <Row key={index} label={`${text.band} ${index + 1}`}>
-          {value === null ? <span className="italic text-muted-foreground">{text.pixel.noData}</span> : <span className="font-mono">{value.toLocaleString(locale, { maximumFractionDigits: 6 })}</span>}
+          {value === null ? <span className="italic text-muted-foreground">{text.pixel.noData}</span> : <span className="font-mono">{valueText(value, locale)}</span>}
         </Row>
       ))}
     </ScrollableOverlay>

@@ -42,6 +42,8 @@ const descriptionSchema = z.discriminatedUnion('kind', [
     bands: z.array(z.object({ type: z.string(), color: z.string(), nodata: z.number().nullable() })),
     shown: z.array(z.number()),
     overviews: z.number(),
+    // Metres of the map's plane a pixel is wide, where the raster has a place on it and the reader could tell.
+    resolution: z.number().nullable().optional(),
     ...place,
   }),
 ]);
@@ -145,7 +147,7 @@ export const refusalCode = async (response: Response): Promise<string> =>
   refusalSchema.safeParse(await response.json().catch(() => null)).data?.code ?? 'failed';
 
 /** A refusal carries the reader's code for it, which the preview words; it is never read as an empty answer. */
-export type Outcome<T> = { ok: true; value: T } | { ok: false; code: string; reason: string };
+export type Outcome<T> = { ok: true; value: T } | { ok: false; code: string };
 
 /** A dataset, or one layer of it, as the routes are told which. */
 export type Target = { path: string; layer?: string };
@@ -157,15 +159,15 @@ const targetQuery = (target: Target): string => {
 };
 
 const request = async <T>(address: string, schema: z.ZodType<T>, signal?: AbortSignal): Promise<Outcome<T>> => {
-  const response = await runtimeFetch(address, { signal }).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
-  if ('error' in response) return { ok: false, code: 'unavailable', reason: response.error };
+  const response = await runtimeFetch(address, { signal }).catch(() => ({ error: true }));
+  if ('error' in response) return { ok: false, code: 'unavailable' };
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const refusal = refusalSchema.safeParse(body);
-    return { ok: false, code: refusal.data?.code ?? 'failed', reason: refusal.data?.error ?? `The request failed (${response.status})` };
+    return { ok: false, code: refusal.data?.code ?? 'failed' };
   }
   const parsed = schema.safeParse(body);
-  return parsed.success ? { ok: true, value: parsed.data } : { ok: false, code: 'failed', reason: 'The answer was in a form this interface cannot read' };
+  return parsed.success ? { ok: true, value: parsed.data } : { ok: false, code: 'failed' };
 };
 
 export const describeGeoData = (target: Target, signal?: AbortSignal): Promise<Outcome<GeoDescription>> =>

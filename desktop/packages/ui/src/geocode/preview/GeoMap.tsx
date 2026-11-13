@@ -34,7 +34,7 @@ const BACK = 500;
 // The deepest a feature is zoomed to: a point has no size to fit the map to.
 const REACH_DEPTH = 17;
 // The map's layers that draw each of a vector layer's forms.
-const DRAWN_AS = { points: ['point'], lines: ['line', 'small-line'], polygons: ['fill', 'outline', 'small-polygon'] } satisfies Record<Form, readonly string[]>;
+const DRAWN_AS = { points: ['point'], lines: ['line', 'small-line'], polygons: ['fill', 'outline', 'thin-polygon', 'small-polygon'] } satisfies Record<Form, readonly string[]>;
 
 const show = (map: MapLibreMap, shown: readonly Form[]) => {
   for (const form of FORMS) {
@@ -47,9 +47,9 @@ const show = (map: MapLibreMap, shown: readonly Form[]) => {
  * whole: taken away first, they would leave the map blank until its tiles came. `latest` says which drawing is the
  * last, by then.
  */
-const drawRaster = (map: MapLibreMap, order: number, tiles: string, width: number, bounds: GeoBounds, latest: () => number) => {
+const drawRaster = (map: MapLibreMap, order: number, tiles: string, resolution: number | null, bounds: GeoBounds, latest: () => number) => {
   const id = `raster-${order}`;
-  map.addSource(id, { type: 'raster', tiles: [tiles], tileSize: RASTER_TILE, bounds, maxzoom: nativeZoom(width, bounds) });
+  map.addSource(id, { type: 'raster', tiles: [tiles], tileSize: RASTER_TILE, bounds, maxzoom: nativeZoom(resolution) });
   // Under the mark of the pixel that is clicked, where there is one.
   map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-fade-duration': 0 } }, map.getLayer('pixel-edge') ? 'pixel-edge' : undefined);
   map.once('idle', () => {
@@ -95,8 +95,11 @@ const mark = (map: MapLibreMap, tiles: string | null) => {
   const round = { 'line-cap': 'round', 'line-join': 'round' } as const;
   map.addLayer({ id: 'mark-fill', type: 'fill', source: 'mark', 'source-layer': 'polygons', paint: { 'fill-color': MARK, 'fill-opacity': 0.85 } });
   map.addLayer({ id: 'mark-outline', type: 'line', source: 'mark', 'source-layer': 'polygons', layout: round, paint: { 'line-color': MARK_EDGE, 'line-width': 2.5 } });
-  map.addLayer({ id: 'mark-line-edge', type: 'line', source: 'mark', 'source-layer': 'lines', layout: round, paint: { 'line-color': MARK_EDGE, 'line-width': 5.5 } });
-  map.addLayer({ id: 'mark-line', type: 'line', source: 'mark', 'source-layer': 'lines', layout: round, paint: { 'line-color': MARK, 'line-width': 2.5 } });
+  // A line, and a polygon too thin at this zoom to have an inside.
+  for (const lines of ['lines', 'thin-polygons']) {
+    map.addLayer({ id: `mark-${lines}-edge`, type: 'line', source: 'mark', 'source-layer': lines, layout: round, paint: { 'line-color': MARK_EDGE, 'line-width': 5.5 } });
+    map.addLayer({ id: `mark-${lines}`, type: 'line', source: 'mark', 'source-layer': lines, layout: round, paint: { 'line-color': MARK, 'line-width': 2.5 } });
+  }
   // A point, and a line or a polygon too small at this zoom to be seen as one.
   for (const dots of ['points', 'small-lines', 'small-polygons']) {
     map.addLayer({ id: `mark-${dots}`, type: 'circle', source: 'mark', 'source-layer': dots, paint: { 'circle-color': MARK, 'circle-radius': 5, 'circle-stroke-color': MARK_EDGE, 'circle-stroke-width': 2 } });
@@ -124,11 +127,12 @@ addProtocol(TILE_SCHEME, async (parameters, abortController) => {
   throw new Error(`The tile could not be read (${code})`);
 });
 
-/** The deepest zoom at which a tile still shows no more pixels than the raster has there. */
-const nativeZoom = (width: number, bounds: GeoBounds): number => {
-  const degreesPerPixel = (bounds[2] - bounds[0]) / width;
-  return Math.max(0, Math.min(22, Math.ceil(Math.log2(360 / (degreesPerPixel * RASTER_TILE * 2)))));
-};
+/**
+ * The deepest zoom at which a tile still shows no more pixels than the raster has there, of pixels `resolution` metres
+ * of the map's plane wide; the map's own deepest where the reader could not say how wide they are.
+ */
+const nativeZoom = (resolution: number | null): number =>
+  resolution === null ? 22 : Math.max(0, Math.min(22, Math.ceil(Math.log2((2 * HALF) / (resolution * RASTER_TILE * 2)))));
 
 const GeoMap: React.FC<{
   target: Target;
@@ -152,11 +156,13 @@ const GeoMap: React.FC<{
   onPick: (found: FoundFeature | null) => void;
   /** Where the pointer is over the map, as a longitude and a latitude, or that it has left. */
   onPointer: (at: readonly [number, number] | null) => void;
-  /** A tile or a click was refused, with the code it was refused with. */
+  /** A tile was refused, with the code it was refused with. */
   onRefused: (code: string) => void;
+  /** What a click was to find could not be read, with the code it was refused with. */
+  onMissed: (code: string) => void;
   /** The map could not be made at all, as on a computer without WebGL. */
   onFailed: () => void;
-}> = ({ target, description, bounds, shown, marked, look, pixel, view, reach, onPick, onPixel, onPointer, onRefused, onFailed }) => {
+}> = ({ target, description, bounds, shown, marked, look, pixel, view, reach, onPick, onPixel, onPointer, onRefused, onMissed, onFailed }) => {
   const { locale } = useI18n();
   const text = previewText(locale);
   // The room the map is given, and within it the map itself, which keeps the size it was last drawn at.
@@ -167,7 +173,7 @@ const GeoMap: React.FC<{
   const back = React.useRef<(() => void) | null>(null);
   // The map is made once for the data it shows; what it tells goes to whoever listens now, and a click looks among
   // what is shown now.
-  const listeners = React.useRef({ onPick, onPixel, onPointer, onRefused, onFailed });
+  const listeners = React.useRef({ onPick, onPixel, onPointer, onRefused, onMissed, onFailed });
   const showing = React.useRef(shown);
   const marking = React.useRef(marked);
   const looking = React.useRef(look);
@@ -179,7 +185,7 @@ const GeoMap: React.FC<{
   // it is too large to draw.
   const [drawn, setDrawn] = React.useState<GeoDescription | null>(null);
   React.useEffect(() => {
-    listeners.current = { onPick, onPixel, onPointer, onRefused, onFailed };
+    listeners.current = { onPick, onPixel, onPointer, onRefused, onMissed, onFailed };
     showing.current = shown;
     pointing.current = pixel;
     marking.current = marked;
@@ -207,7 +213,7 @@ const GeoMap: React.FC<{
         ...(before && !before.whole ? { center: before.center, zoom: before.zoom } : { bounds, fitBoundsOptions: { padding: 24 } }),
         attributionControl: false,
         // Sized below, once its room has stopped changing: drawn whole again for every frame of a panel sliding,
-        // it made the slide drop frames. Meanwhile it stays as it was drawn, centred in its room, whose moving
+        // it would make the slide drop frames. Meanwhile it stays as it was drawn, centred in its room, whose moving
         // edges cover and uncover it; a map that follows its room keeps its centre in the same way, so nothing
         // jumps when it is drawn again.
         trackResize: false,
@@ -264,7 +270,7 @@ const GeoMap: React.FC<{
       map.once('idle', () => setDrawn(description));
       if (description.kind === 'raster') {
         rasters.current = 1;
-        drawRaster(map, 1, tileAddress(target, description.stamp, { look: looking.current }), description.width, bounds, () => rasters.current);
+        drawRaster(map, 1, tileAddress(target, description.stamp, { look: looking.current }), description.resolution ?? null, bounds, () => rasters.current);
         markPixel(map, pointing.current?.outline ?? null);
         map.on('click', (event) => {
           const click = (clicks += 1);
@@ -274,7 +280,7 @@ const GeoMap: React.FC<{
             if (click !== clicks) return;
             if (outcome.ok) return listeners.current.onPixel(outcome.value);
             listeners.current.onPixel(null);
-            listeners.current.onRefused(outcome.code);
+            listeners.current.onMissed(outcome.code);
           });
         });
         return;
@@ -288,6 +294,7 @@ const GeoMap: React.FC<{
       map.addLayer({ id: 'fill', type: 'fill', source: 'data', 'source-layer': 'polygons', paint: { 'fill-color': color, 'fill-opacity': 0.5 } });
       map.addLayer({ id: 'outline', type: 'line', source: 'data', 'source-layer': 'polygons', paint: { 'line-color': EDGE, 'line-width': 0.75 } });
       map.addLayer({ id: 'line', type: 'line', source: 'data', 'source-layer': 'lines', paint: { 'line-color': color, 'line-width': 1.5 } });
+      map.addLayer({ id: 'thin-polygon', type: 'line', source: 'data', 'source-layer': 'thin-polygons', paint: { 'line-color': color, 'line-width': 1.5 } });
       map.addLayer({ id: 'small-polygon', type: 'circle', source: 'data', 'source-layer': 'small-polygons', paint: { 'circle-color': color, 'circle-radius': 1 } });
       map.addLayer({ id: 'small-line', type: 'circle', source: 'data', 'source-layer': 'small-lines', paint: { 'circle-color': color, 'circle-radius': 1 } });
       map.addLayer({ id: 'point', type: 'circle', source: 'data', 'source-layer': 'points', paint: { 'circle-color': color, 'circle-radius': 3.5, 'circle-stroke-color': EDGE, 'circle-stroke-width': 0.75 } });
@@ -306,7 +313,7 @@ const GeoMap: React.FC<{
           if (outcome.ok) return listeners.current.onPick(outcome.value);
           // Not a click that landed on nothing.
           listeners.current.onPick(null);
-          listeners.current.onRefused(outcome.code);
+          listeners.current.onMissed(outcome.code);
         });
       });
     });
@@ -347,7 +354,7 @@ const GeoMap: React.FC<{
     // As above: a map that has drawn no raster yet draws it as asked when it does.
     if (!made.current || description.kind !== 'raster' || rasters.current === 0) return;
     rasters.current += 1;
-    drawRaster(made.current, rasters.current, tileAddress(target, description.stamp, { look }), description.width, bounds, () => rasters.current);
+    drawRaster(made.current, rasters.current, tileAddress(target, description.stamp, { look }), description.resolution ?? null, bounds, () => rasters.current);
   }, [look, target, description, bounds]);
 
   // Bare over the data, with a rim of the page's colour to stay legible on any of it.

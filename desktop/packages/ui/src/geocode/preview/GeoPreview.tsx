@@ -79,8 +79,8 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   // What was measured of the raster under a stamp, or the code that was refused with.
   const [measured, setMeasured] = React.useState<{ target: Target; stamp: string; outcome: { statistics: GeoStatistics } | { code: string } } | null>(null);
   const [mapFailed, setMapFailed] = React.useState(false);
-  // The code a tile or a click was last refused with.
-  const [refused, setRefused] = React.useState<string | null>(null);
+  // The code a tile or a click was last refused with, and whether it was a click.
+  const [refused, setRefused] = React.useState<{ code: string; clicked: boolean } | null>(null);
   // Raised when the reader says the data is no longer what was described.
   const [changes, setChanges] = React.useState(0);
   const [tab, setTab] = React.useState('feature');
@@ -92,6 +92,9 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   // Counts what is picked, on the map and in the table: an answer to one that is no longer the last says nothing.
   const picks = React.useRef(0);
   const shared = React.useRef<HTMLDivElement>(null);
+  // The layer the file opens with, which is asked for by no name: asked for by its name, it would be another reader's
+  // and be read again.
+  const opened = React.useRef<string | null>(null);
   const target = React.useMemo<Target>(() => (layer === undefined ? { path } : { path, layer }), [path, layer]);
 
   const pointers = React.useRef(new Set<(at: readonly [number, number] | null) => void>());
@@ -129,11 +132,18 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
     if (view.current) view.current = { ...view.current, whole: false };
   }, [target]);
 
+  // Changed, the file may open with another layer. Until the preview has opened it as it is, every layer is asked for
+  // by its name.
+  React.useEffect(() => {
+    opened.current = null;
+  }, [revision, changes]);
+
   React.useEffect(() => {
     if (!visible) return;
     const leaving = new AbortController();
     void describeGeoData(target, leaving.signal).then((outcome) => {
       if (leaving.signal.aborted) return;
+      if (outcome.ok && target.layer === undefined) opened.current = outcome.value.layer;
       // Whatever was refused is asked for again by the map this description draws.
       if (outcome.ok) setRefused(null);
       setKnown((before) => {
@@ -156,7 +166,7 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
 
   const current = known !== null && known.target === target ? known : null;
   const description = current && 'description' in current ? current.description : null;
-  const whole = refused !== null && WHOLE.has(refused) ? refused : null;
+  const whole = refused !== null && WHOLE.has(refused.code) ? refused.code : null;
   const unshown = current && 'code' in current ? current.code : mapFailed ? 'no-map' : (description?.unplaced ?? whole);
   const bounds = description?.bounds;
   const name = path.split(/[/\\]/).pop() ?? path;
@@ -195,7 +205,7 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
           value={description.layer}
           onValueChange={(chosen) => {
             setHidden([]);
-            setLayer(String(chosen));
+            setLayer(chosen === opened.current ? undefined : String(chosen));
           }}
         >
           {description.layers.map((each) => (
@@ -230,7 +240,7 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
       if (mine !== picks.current) return;
       if (outcome.ok) return setPicked(outcome.value);
       if (outcome.code === 'changed') return setChanges((count) => count + 1);
-      setRefused(outcome.code);
+      setRefused({ code: outcome.code, clicked: true });
     });
   } : undefined;
   const lies = picked?.bounds;
@@ -300,14 +310,15 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
                   setOpen(true);
                 }}
                 onPointer={onPointer}
-                onRefused={(code) => (code === 'changed' ? setChanges((count) => count + 1) : setRefused(code))}
+                onRefused={(code) => (code === 'changed' ? setChanges((count) => count + 1) : setRefused({ code, clicked: false }))}
+                onMissed={(code) => (code === 'changed' ? setChanges((count) => count + 1) : setRefused({ code, clicked: true }))}
                 onFailed={() => setMapFailed(true)}
               />
             </React.Suspense>
           ) : null}
           {refused && bounds && !unshown ? (
             <div role="alert" className="absolute bottom-2 start-2 flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 typography-meta text-muted-foreground shadow-md">
-              {text.partly}
+              {refused.clicked ? text.missed : text.partly}
               <button type="button" aria-label={text.close} title={text.close} className="rounded p-0.5 hover:bg-interactive-hover" onClick={() => setRefused(null)}>
                 <Icon name="close" className="size-3.5" />
               </button>

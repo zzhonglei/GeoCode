@@ -58,6 +58,8 @@ export type PreviewText = {
   info: { layer: string; geometry: string; features: string; fields: string; crs: string; extent: string; size: string; bands: string; nodata: string };
   /** Some of the map's tiles failed; the rest is drawn. */
   partly: string;
+  missed: string;
+  bandEmpty: string;
   /** Why nothing is shown, by the reader's code for it; `other` words a code this list does not have. */
   unshown: Record<string, string> & { other: string };
 };
@@ -100,6 +102,8 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     nextPage: 'Next page',
     info: { layer: 'Layer', geometry: 'Geometry', features: 'Features', fields: 'Fields', crs: 'Coordinate system', extent: 'Extent', size: 'Size', bands: 'Bands', nodata: 'no data' },
     partly: 'Part of the map could not be read.',
+    missed: 'What was clicked could not be read.',
+    bandEmpty: 'This band has no data.',
     unshown: {
       missing: 'The file is no longer there.',
       unopenable: 'This file could not be read as geographic data.',
@@ -157,6 +161,8 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     nextPage: '下一页',
     info: { layer: '图层', geometry: '几何类型', features: '要素数', fields: '字段', crs: '坐标系', extent: '范围', size: '尺寸', bands: '波段', nodata: '无数据值' },
     partly: '地图有一部分没能读出来。',
+    missed: '点选的内容没能读出来。',
+    bandEmpty: '这个波段没有数据。',
     unshown: {
       missing: '文件已经不在了。',
       unopenable: '这个文件无法作为地理数据读取。',
@@ -214,6 +220,8 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     nextPage: '下一頁',
     info: { layer: '圖層', geometry: '幾何類型', features: '圖徵數', fields: '欄位', crs: '座標系統', extent: '範圍', size: '尺寸', bands: '波段', nodata: '無資料值' },
     partly: '地圖有一部分沒能讀出來。',
+    missed: '點選的內容沒能讀出來。',
+    bandEmpty: '這個波段沒有資料。',
     unshown: {
       missing: '檔案已經不在了。',
       unopenable: '這個檔案無法作為地理資料讀取。',
@@ -241,5 +249,12 @@ export const previewText = (locale: Locale): PreviewText => TEXT[locale] ?? TEXT
 /** A longitude and a latitude as a map reads them out, in every language, to the ten metres or so that four decimals tell apart. */
 export const placeText = (longitude: number, latitude: number): string =>
   `${Math.abs(longitude).toFixed(4)}°${longitude < 0 ? 'W' : 'E'}, ${Math.abs(latitude).toFixed(4)}°${latitude < 0 ? 'S' : 'N'}`;
+
+/**
+ * A value of a band as it is read out: whole as it is, and else to six figures, however small; past a hundred
+ * thousand, to the whole.
+ */
+export const valueText = (value: number, locale: string): string =>
+  value.toLocaleString(locale, Number.isInteger(value) || Math.abs(value) >= 1e5 ? { maximumFractionDigits: 0 } : { maximumSignificantDigits: 6 });
 
 export const unshownText = (text: PreviewText, code: string): string => text.unshown[code] ?? text.unshown.other;

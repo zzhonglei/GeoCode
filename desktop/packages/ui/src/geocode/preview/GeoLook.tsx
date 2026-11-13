@@ -7,7 +7,7 @@ import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { getCurrentIntlLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { BY_CLASS, type GeoLook, type GeoStatistics, type Measured, type RasterDescription } from './previewClient';
-import { unshownText, type PreviewText } from './previewText';
+import { unshownText, valueText, type PreviewText } from './previewText';
 
 type Range = [number, number];
 type Stretch = keyof PreviewText['stretches'];
@@ -16,12 +16,6 @@ type Stretch = keyof PreviewText['stretches'];
 const PLAIN = 'grey';
 // What a band of bytes is drawn between when it is drawn as it is.
 const BYTES: Range = [0, 255];
-
-/** A value of a band as it is read out: whole where it is large, with the decimals that tell small ones apart. */
-const figure = (value: number, locale: string): string => {
-  const size = Math.abs(value);
-  return value.toLocaleString(locale, { maximumFractionDigits: size >= 100 ? 0 : size >= 1 ? 2 : 4 });
-};
 
 /** The ranges a band is offered to be drawn between, by what they are called; `none` is for a band of bytes alone. */
 const rangesOf = (band: Measured, bytes: boolean): [Stretch, Range | null][] => {
@@ -132,8 +126,8 @@ const Spread: React.FC<{ band: Measured; range: Range; colours: readonly string[
           <div key={index} aria-hidden="true" className="absolute top-0.5 size-0 -translate-x-1/2 border-x-[4.5px] border-b-[6px] border-x-transparent border-b-foreground" style={{ left: `${at}%` }} />
         ))}
         {/* Each kept within the strip, where a line stands at its end. */}
-        <div className="absolute top-[11px] whitespace-nowrap" style={{ left: `${from}%`, transform: `translateX(-${from}%)` }}>{figure(low, locale)}</div>
-        <div className="absolute top-[11px] whitespace-nowrap" style={{ left: `${to}%`, transform: `translateX(-${to}%)` }}>{figure(high, locale)}</div>
+        <div className="absolute top-[11px] whitespace-nowrap" style={{ left: `${from}%`, transform: `translateX(-${from}%)` }}>{valueText(low, locale)}</div>
+        <div className="absolute top-[11px] whitespace-nowrap" style={{ left: `${to}%`, transform: `translateX(-${to}%)` }}>{valueText(high, locale)}</div>
       </div>
     </div>
   );
@@ -174,7 +168,7 @@ const OneBand: React.FC<{
 }> = ({ number, bytes, statistics, classes, look, text, lead, onLook }) => {
   const locale = getCurrentIntlLocale();
   const band = statistics.bands[number - 1];
-  if (!band) return <>{lead}<div className="text-muted-foreground">{text.unshown.empty}</div></>;
+  if (!band) return <>{lead}<div className="text-muted-foreground">{text.bandEmpty}</div></>;
 
   const offered = rangesOf(band, bytes);
   // Left to the reader, a band is drawn by its classes where it has them, else between the first of the ranges offered.
@@ -233,7 +227,7 @@ const OneBand: React.FC<{
             {(['min', 'max', 'mean', 'std'] as const).map((measure) => (
               <div key={measure} className="flex min-w-0 flex-col gap-px">
                 <div className="truncate text-[11px] text-muted-foreground">{text.measures[measure]}</div>
-                <div className="truncate font-mono text-foreground">{figure(band[measure], locale)}</div>
+                <div className="truncate font-mono text-foreground">{valueText(band[measure], locale)}</div>
               </div>
             ))}
           </div>
@@ -342,7 +336,7 @@ const Picture: React.FC<{
                 );
               })}
               {(['low', 'high', 'mean'] as const).map((measure) => (
-                <div key={measure} className="truncate border-t border-edge-muted py-1 text-end text-foreground">{band ? figure(band[measure], locale) : ''}</div>
+                <div key={measure} className="truncate border-t border-edge-muted py-1 text-end text-foreground">{band ? valueText(band[measure], locale) : ''}</div>
               ))}
             </React.Fragment>
           );
