@@ -23,6 +23,9 @@ COARSEST = 256
 # As many bytes of overviews as are kept; past them, those used the longest ago go.
 KEPT = 4 * 1024**3
 VRT = "raster.vrt"
+# Seconds since overviews being made were last written to, past which no reader is making them any more: one ended
+# while it made them, and left them half made.
+ABANDONED = 3600
 
 
 def opened(vrt):
@@ -78,7 +81,15 @@ def _trim(folder):
     entries = []
     for name in os.listdir(folder):
         entry = os.path.join(folder, name)
-        if os.path.isdir(entry):
+        if not os.path.isdir(entry):
+            continue
+        # Those still being made, by this reader or another, are left to it; those a reader left go. By their files'
+        # times: a folder's own is from when a file was last made in it, not written to.
+        if name.endswith(".making"):
+            files = [os.path.join(entry, each) for each in os.listdir(entry)]
+            if max([os.path.getmtime(each) for each in files] or [os.path.getmtime(entry)]) < time.time() - ABANDONED:
+                shutil.rmtree(entry, ignore_errors=True)
+        else:
             size = sum(os.path.getsize(os.path.join(entry, each)) for each in os.listdir(entry))
             entries.append((os.path.getmtime(entry), size, entry))
     total = sum(size for _, size, _ in entries)
@@ -110,8 +121,13 @@ def stand_in(path, table, stamp, folder):
             os.utime(entry)
             return vrt
         _build(dataset, entry)
-        _trim(folder)
     except (RuntimeError, OSError):
         traceback.print_exc()
         return None
+    # Apart: overviews just made are read all the same when the others cannot be trimmed, as when another reader
+    # takes one of them away first.
+    try:
+        _trim(folder)
+    except OSError:
+        traceback.print_exc()
     return vrt

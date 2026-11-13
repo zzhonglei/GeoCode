@@ -15,6 +15,9 @@ from osgeo import gdal
 from geocodekit.preview import _describe, _pyramid, _raster, _source
 
 THREADS = 4
+# Of those, the threads that read pages of a layer's table alone: tiles waiting for a layer to be read into memory
+# would else hold every thread, and the table needs nothing of it.
+TABLE_THREADS = 1
 # How often a reader at work says that it is: reading a large layer into memory takes longer in silence than
 # GeoEngine leaves a reader that neither is asked nor says anything.
 BEAT = 15
@@ -32,15 +35,22 @@ class Reader:
         self._held = None
         self._loading = threading.Lock()
 
-    def _redescribe(self):
+    def _described(self):
         described, files = _describe.describe(self._path, self._layer)
         described["stamp"] = _source.stamp(files)
-        self._known = (described, files)
-        return described
+        return described, files
 
     def describe(self, cancelled):
+        # Read without the lock, which every tile takes: a GeoJSON is read whole to be described, and the tiles of
+        # the data as it was described go on meanwhile.
+        known = self._described()
         with self._lock:
-            described = self._redescribe()
+            self._known = known
+            # Why the data could not be read is asked again with its description, as it may have passed: another
+            # program had the file for a moment. Not that a layer is too large, which takes long to come to.
+            if self._held is not None and self._held[2] is not None and self._held[2].code != "too-large":
+                self._held = None
+        described = known[0]
         if "unplaced" in described:
             return described
         # Made ready now, as the first tile would have it anyway: the map is not shown before it can be drawn. Why a
@@ -61,7 +71,7 @@ class Reader:
         with self._lock:
             # A reader started for a preview already open has described nothing yet.
             if self._known is None:
-                self._redescribe()
+                self._known = self._described()
             described, files = self._known
             if _source.stamp(files) != described["stamp"]:
                 self._known = self._held = None
@@ -80,10 +90,25 @@ class Reader:
                 raise _source.Cancelled()
             held = self._held
             if held is None or held[0] != stamp:
+                with self._lock:
+                    # Asked for data that has changed since: what may be held of the data as it now is stays, and the
+                    # data is not read for what no longer is.
+                    if self._known is None or self._known[0]["stamp"] != stamp:
+                        raise _source.Unshown("changed")
+                    # What was made of the data before it changed goes first: a large layer would be held twice.
+                    self._held = None
+                held = None
                 try:
                     held = (stamp, make(), None)
                 except _source.Unshown as refusal:
-                    held = (stamp, None, refusal)
+                    # Kept without its traceback, which holds what was reading the data: the file open, and all that
+                    # was read of it.
+                    held = (stamp, None, _source.Unshown(refusal.code, str(refusal)))
+                except Exception as error:
+                    # Kept as well, every request waiting for it would else read the data again, and as a file that
+                    # cannot be read: nothing of the data can be shown.
+                    traceback.print_exc()
+                    held = (stamp, None, _source.Unshown("unopenable", "%s: %s" % (type(error).__name__, error)))
                 with self._lock:
                     if self._known is not None and self._known[0]["stamp"] == stamp:
                         self._held = held
@@ -250,12 +275,14 @@ def main():
     def beat():
         while True:
             time.sleep(BEAT)
-            if asked:
+            # For the requests still wanted alone: a reader stuck in what no one waits for any more is let go.
+            if asked - unwanted:
                 # An answer to no request: GeoEngine asks none by this number.
                 write({"id": 0})
 
     threading.Thread(target=beat, daemon=True).start()
     pool = ThreadPoolExecutor(THREADS)
+    table = ThreadPoolExecutor(TABLE_THREADS)
     for line in sys.stdin.buffer:
         request = json.loads(line)
         if "cancel" in request:
@@ -264,6 +291,6 @@ def main():
                 unwanted.add(request["cancel"])
             continue
         asked.add(request["id"])
-        pool.submit(answer, request)
+        (table if request["do"] == "rows" else pool).submit(answer, request)
     # GeoEngine has closed the input or is gone; what is still being read is wanted by no one.
     os._exit(0)

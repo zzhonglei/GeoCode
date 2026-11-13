@@ -1,6 +1,6 @@
 """A tile of a vector layer, and the feature under a click. A tile keeps what a display can tell apart: a part
 smaller than a cell of the tile's grid is drawn as a dot, one a cell at most, and a larger one keeps one vertex a
-cell."""
+cell; a polygon longer than a cell and narrower than one, as the line it is then."""
 
 import numpy
 import shapely
@@ -46,15 +46,21 @@ def _distinct(units, lengths, closed):
     return units[kept], lengths, lengths >= (3 if closed else 2)
 
 
+def _turns(units, lengths):
+    """Twice the area each ring holds, positive where it runs clockwise as drawn."""
+    start = starts(lengths)
+    following = numpy.arange(units.shape[0]) + 1
+    following[start + lengths - 1] = start
+    return numpy.add.reduceat(units[:, 0] * units[following, 1] - units[following, 0] * units[:, 1], start)
+
+
 def _wound(units, lengths, shell):
     """The rings each wound as a tile tells what it is by: a shell clockwise as drawn, a hole the other way. Falling
     onto the grid can turn a thin ring over, and the first ring of a tile's polygons says which way its shells run:
     turned over, it would make holes of them all."""
     start = starts(lengths)
     count = units.shape[0]
-    following = numpy.arange(count) + 1
-    following[start + lengths - 1] = start
-    turn = numpy.add.reduceat(units[:, 0] * units[following, 1] - units[following, 0] * units[:, 1], start)
+    turn = _turns(units, lengths)
     wrong = numpy.where(shell, turn < 0, turn > 0)
     if not wrong.any():
         return units
@@ -97,8 +103,8 @@ def _clipped_polygons(xy, ring_lengths, rings, box):
 
 def tile(layer, z, x, y, cancelled):
     """The tile as Mapbox Vector Tile bytes, or None when the layer has nothing in it. Its layers are named points,
-    lines and polygons, and small-lines and small-polygons for the dots of those too small to draw: what is shown of
-    a layer is chosen by which of the three its features are."""
+    lines and polygons, small-lines and small-polygons for the dots of those too small to draw, and thin-polygons for
+    the lines of polygons too thin to: what is shown of a layer is chosen by which of the three its features are."""
     left, top, span = _mercator.tile(z, x, y)
     unit = span / EXTENT
     cell = CELL * unit
@@ -184,6 +190,12 @@ def tile(layer, z, x, y, cancelled):
             at, ring_lengths, drawable = _distinct(at, ring_lengths, True)
             shell = numpy.zeros(ring_lengths.size, dtype=bool)
             shell[starts(rings)] = True
+            # A shell fallen onto one line of the grid has no inside left, however many vertices it keeps, and is not
+            # small enough to be a dot.
+            thin = shell & (ring_lengths >= 2) & (~drawable | (_turns(at, ring_lengths) == 0))
+            if thin.any():
+                layers.append(_mvt.paths("thin-polygons", *_only(at, ring_lengths, thin), False))
+                drawable &= ~thin
             # A hole left without its shell would be read as a hole of the polygon before it.
             drawable &= numpy.repeat(drawable[starts(rings)], rings)
             at, ring_lengths = _only(at, ring_lengths, drawable)

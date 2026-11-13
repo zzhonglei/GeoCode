@@ -5,7 +5,7 @@ import math
 import uuid
 
 import numpy
-from osgeo import gdal, osr
+from osgeo import gdal
 
 from geocodekit.preview import _mercator, _source
 
@@ -91,36 +91,43 @@ def _sample(band):
     return values[valid & numpy.isfinite(values)]
 
 
-def _thinned(dataset, chosen, every):
-    """Every `every`th pixel each way of these bands, from the raster's own pixels read a strip of rows at a time."""
-    first = dataset.GetRasterBand(1)
-    rows = max(STRIP, first.GetBlockSize()[1])
+def _thinned(read, height, rows, every):
+    """Every `every`th pixel each way of a raster `height` rows high, of which `read(top, count)` reads `count` rows
+    from row `top`, the rows second to last in what it gives; read a strip of `rows` rows at a time."""
     kept = []
-    for top in range(0, dataset.RasterYSize, rows):
-        height = min(rows, dataset.RasterYSize - top)
-        strip = dataset.ReadAsArray(0, top, dataset.RasterXSize, height, band_list=chosen)
-        strip = strip.reshape((len(chosen), height, dataset.RasterXSize))
-        kept.append(strip[:, (-top) % every :: every, ::every])
-    return numpy.concatenate(kept, axis=1)
+    for top in range(0, height, rows):
+        count = min(rows, height - top)
+        kept.append(read(top, count)[..., (-top) % every :: every, ::every])
+    return numpy.concatenate(kept, axis=-2)
 
 
 def _samples(dataset, indices):
-    """A sample of each of the bands of these numbers, as `_sample` gives one, read several bands at a time. Read
-    one by one, two hundred bands of a file that keeps the bands of a pixel together took a minute, each of them the
-    whole file read; and so did all of them read reduced at once, which GDAL reads band by band. Where there are no
-    overviews to read a reduced raster from, the raster's own pixels are read, in strips, and thinned."""
+    """A sample of each of the bands of these numbers, as `_sample` gives one, read several bands at a time: of a
+    file that keeps the bands of a pixel together, each band read alone is the whole file read, and so is each band
+    of several read reduced at once, which GDAL reads band by band. Where there are no overviews to read a reduced
+    raster from, the raster's own pixels are read, in strips, and thinned."""
     first = dataset.GetRasterBand(1)
     width, height = _sampled(first)
     every = math.ceil(max(first.XSize, first.YSize) / SAMPLE)
     thin = every > 1 and first.GetOverviewCount() == 0
+    rows = max(STRIP, first.GetBlockSize()[1])
     size = gdal.GetDataTypeSizeBytes(first.DataType)
     # Of the strips, where those are read: a strip of all the bands at once is the file read once.
-    held = first.XSize * max(STRIP, first.GetBlockSize()[1]) * size if thin else width * height * size
+    held = first.XSize * rows * size if thin else width * height * size
     at_once = max(1, TOGETHER // max(1, held))
+    # The mask of all the bands, read once for them all.
+    shared = None
     for start in range(0, len(indices), at_once):
         chosen = indices[start : start + at_once]
         if thin:
-            read = _thinned(dataset, chosen, every)
+            read = _thinned(
+                lambda top, count: dataset.ReadAsArray(0, top, first.XSize, count, band_list=chosen).reshape(
+                    (len(chosen), count, first.XSize)
+                ),
+                first.YSize,
+                rows,
+                every,
+            )
         else:
             read = dataset.ReadAsArray(buf_xsize=width, buf_ysize=height, band_list=chosen)
             read = read.reshape((len(chosen), height, width))
@@ -135,10 +142,17 @@ def _samples(dataset, indices):
                 valid &= values != nodata
             elif not flags & gdal.GMF_ALL_VALID:
                 mask = band.GetMaskBand()
-                if thin:
-                    valid &= mask.ReadAsArray()[::every, ::every] != 0
+                if flags & gdal.GMF_PER_DATASET and shared is not None:
+                    read_mask = shared
+                elif thin:
+                    read_mask = _thinned(
+                        lambda top, count: mask.ReadAsArray(0, top, mask.XSize, count), mask.YSize, rows, every
+                    )
                 else:
-                    valid &= mask.ReadAsArray(buf_xsize=width, buf_ysize=height) != 0
+                    read_mask = mask.ReadAsArray(buf_xsize=width, buf_ysize=height)
+                if flags & gdal.GMF_PER_DATASET:
+                    shared = read_mask
+                valid &= read_mask != 0
             yield index, values[valid]
 
 
@@ -257,7 +271,7 @@ class Look:
         self._measured = {}
         measured = [self.measured(dataset, index) for index in self.bands]
         self.ranges = None if as_it_is else [each["between"] if each else [0.0, 1.0] for each in measured]
-        self.native = _native(dataset)
+        self.native = native(dataset)
 
     def measured(self, dataset, index):
         if index not in self._measured:
@@ -292,15 +306,27 @@ class Look:
         return described
 
 
-def _native(dataset):
-    """The side of the raster's pixels in metres of the map's plane, or None where that cannot be said."""
-    plane = osr.SpatialReference()
-    plane.ImportFromEPSG(3857)
+def native(dataset):
+    """The side of the raster's pixels in metres of the map's plane, the least of it at a few places of the raster
+    that the map shows, or None where that cannot be said. Of a pixel and its neighbours, not of the raster's extent:
+    a raster across the antimeridian would else have pixels as wide as the world is over its width. Not where the
+    plane ends, short of the poles, where a step of a pixel would come out as the way round the pole."""
+    asked = []
+    for across, down in PLACES:
+        x, y = across * dataset.RasterXSize, down * dataset.RasterYSize
+        asked += [(x, y), (x + 1, y), (x, y + 1)]
     try:
-        warped = gdal.AutoCreateWarpedVRT(dataset, None, plane.ExportToWkt())
+        points, reached = gdal.Transformer(dataset, None, ["DST_SRS=EPSG:4326"]).TransformPoints(0, asked)
     except RuntimeError:
         return None
-    return None if warped is None else abs(warped.GetGeoTransform()[1])
+    longitudes, latitudes = (numpy.array([point[index] for point in points]).reshape(-1, 3) for index in (0, 1))
+    shown = (numpy.array(reached, dtype=bool).reshape(-1, 3) & (numpy.abs(latitudes) < _mercator.LATITUDE)).all(axis=1)
+    across, up = _mercator.plane(longitudes, latitudes)
+    # A step east across the antimeridian comes out a world to the west.
+    across = (across[:, 1:] - across[:, :1] + _mercator.HALF) % (2 * _mercator.HALF) - _mercator.HALF
+    sides = numpy.hypot(across, up[:, 1:] - up[:, :1]).mean(axis=1)[shown]
+    sides = sides[numpy.isfinite(sides) & (sides > 0)]
+    return float(sides.min()) if sides.size else None
 
 
 def pixel(dataset, x, y):

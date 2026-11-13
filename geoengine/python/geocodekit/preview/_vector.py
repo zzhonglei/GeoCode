@@ -204,6 +204,15 @@ class _Projection:
         return numpy.column_stack((x, y)), numpy.isfinite(x) & numpy.isfinite(y)
 
 
+def _west(xy, lengths):
+    """The parts of these lengths, laid one after another, with each that lies wholly from 180 degrees on moved a
+    world west: in longitudes counted from 0 to 360, those are the map's west. Moved a vertex at a time, a part reaching
+    across 180 would reach round the whole map; it stays as it is, drawn up to the map's edge."""
+    past = numpy.minimum.reduceat(xy[:, 0], starts(lengths)) >= _mercator.HALF
+    xy[:, 0] -= numpy.repeat(past, lengths) * (2 * _mercator.HALF)
+    return xy
+
+
 def _geometry(layer, geometry, number):
     """The layer's geometry and the numbers of its features, a batch at a time, and nothing of its attributes: those
     of what is clicked are asked for one feature at a time."""
@@ -258,6 +267,7 @@ def load(path, name, cancelled):
         chosen = kinds == POINT
         if chosen.any():
             xy, placed = project(shapely.get_coordinates(shapes[chosen]))
+            xy = _west(xy, numpy.ones(xy.shape[0], dtype=numpy.int64))
             points.append((xy[placed], fid[chosen][placed]))
             vertices += int(placed.sum())
 
@@ -266,6 +276,7 @@ def load(path, name, cancelled):
             xy, of = shapely.get_coordinates(shapes[chosen], return_index=True)
             length = numpy.bincount(of, minlength=int(chosen.sum()))
             xy, placed = project(xy)
+            xy = _west(xy, length)
             kept = ~_any(~placed, starts(length))
             lines.append((xy[numpy.repeat(kept, length)], length[kept], fid[chosen][kept]))
             vertices += xy.shape[0]
@@ -277,6 +288,7 @@ def load(path, name, cancelled):
             xy, ring = shapely.get_coordinates(rings, return_index=True)
             ring_length = numpy.bincount(ring, minlength=rings.size)
             xy, placed = project(xy)
+            xy = _west(xy, numpy.add.reduceat(ring_length, starts(count)))
             kept = ~_any(_any(~placed, starts(ring_length)), starts(count))
             ring_kept = numpy.repeat(kept, count)
             polygons.append(

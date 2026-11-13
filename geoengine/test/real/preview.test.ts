@@ -77,6 +77,7 @@ interface Answer {
   readonly shown?: readonly number[]
   readonly width?: number
   readonly height?: number
+  readonly resolution?: number | null
   readonly bytes?: Uint8Array
   readonly empty?: boolean
   readonly found?: {
@@ -505,6 +506,13 @@ test("a raster is measured, and drawn as the interface asks", { skip: missing },
   )
   const kept = several[4].counts.reduce((sum, count) => sum + count, 0)
   assert.equal(kept, 434 * 434 - 100 * 100)
+  // The same where what has no data is what a mask the bands share hides, thinned as the bands are.
+  const hidden = (await (await open("masked.tif")).statistics())?.bands ?? []
+  assert.deepEqual([hidden[3].min, hidden[3].max], [400, 1699])
+  assert.equal(
+    hidden[3].counts.reduce((sum, count) => sum + count, 0),
+    434 * 434 - 100 * 100,
+  )
 
   const classes = (await (await open("classes.tif")).statistics())?.classes
   assert.deepEqual(
@@ -590,9 +598,23 @@ test(
 test("a large raster without overviews is given them, in the cache and not beside it", { skip: missing }, async () => {
   const kept = () =>
     fs.readdirSync(pyramids).filter((name) => fs.existsSync(path.join(pyramids, name, "raster.vrt.ovr")))
+  // Overviews a reader was making: those written to two hours ago were left half made, those written to now are
+  // still being made.
+  const making = (name: string, written: Date) => {
+    fs.mkdirSync(path.join(pyramids, name))
+    fs.writeFileSync(path.join(pyramids, name, "part.ovr"), "half made")
+    fs.utimesSync(path.join(pyramids, name, "part.ovr"), written, written)
+  }
+  making("left.1.making", new Date(Date.now() - 2 * 3600 * 1000))
+  making("going.2.making", new Date())
   const strip = await open("strip.tif")
   assert.deepEqual([strip.described.width, strip.described.height], [9000, 64])
   assert.equal(kept().length, 1)
+  assert.deepEqual(
+    fs.readdirSync(pyramids).filter((name) => name.endsWith(".making")),
+    ["going.2.making"],
+  )
+  fs.rmSync(path.join(pyramids, "going.2.making"), { recursive: true })
   // The whole of it across one tile, read from an overview: dark in its west half, light in its east, clear where it
   // has no data.
   const image = file("strip.webp")
@@ -677,6 +699,42 @@ test(
   },
 )
 
+// Guards a long, thin polygon, as a river's bank, against vanishing where the whole of it shows: on a tile's grid it
+// has no inside left there, and is too long to be one of the dots of what is too small to see.
+test("a polygon too thin to fill at a zoom is drawn as the line it is there", { skip: missing }, async () => {
+  const bank = await open("bank.geojson")
+  assert.equal(drawn(await bank.tile()).polygons.parts.length, 1)
+  const far = drawn(await bank.tile({ z: 6, x: 32, y: 31 }))
+  assert.equal(far["thin-polygons"]?.parts.length, 1)
+  assert.equal(far.polygons, undefined)
+})
+
+// Guards data of longitudes counted from 0 to 360, as much of climate data is, against half of it never being asked
+// for: the map shows longitudes from -180 to 180. And a raster across the antimeridian against being drawn as if its
+// pixels were as wide as the world is over its width.
+test("data past 180 degrees of longitude lies where the map shows it", { skip: missing }, async () => {
+  const world = await open("world.tif")
+  assert.deepEqual([world.described.bounds?.[0], world.described.bounds?.[2]], [-180, 180])
+  const dateline = await open("dateline.geojson")
+  assert.equal(drawn(await dateline.tile({ z: 10, x: 28, y: 511 })).points.parts.length, 1)
+  // The line from 180 on, at the map's western edge.
+  assert.equal(drawn(await dateline.tile({ z: 10, x: 0, y: 511 })).lines.parts.length, 1)
+  // The line across 180 is not drawn round the world, through the tile at the prime meridian.
+  assert.equal((await dateline.tile()).empty, true)
+  // Wholly past 180, opened where it lies rather than on the whole world.
+  assert.deepEqual((await open("hawaii.geojson")).described.bounds?.map(Math.round), [-155, 20, -155, 20])
+  // A hundred metres a pixel, a little more on the map's plane at eighteen degrees south.
+  const resolution = (await open("fiji.tif")).described.resolution ?? 0
+  assert.ok(resolution > 100 && resolution < 110, String(resolution))
+  // Round the South Pole: its inside reaches the map's southern edge, all the way round, and its pixels, six
+  // kilometres wide, are measured where the map shows them, not as the way round the pole.
+  // A raster in longitudes and latitudes up to a pole keeps its own longitudes.
+  assert.deepEqual((await open("arctic.tif")).described.bounds?.map(Math.round), [-5, 80, 5, 85])
+  const antarctica = (await open("antarctica.tif")).described
+  assert.deepEqual(antarctica.bounds?.slice(0, 3).map(Math.round), [-180, -85, 180])
+  assert.ok((antarctica.resolution ?? 0) > 6000 && (antarctica.resolution ?? 0) < 30000, String(antarctica.resolution))
+})
+
 // Guards the user's folder: the statistics GDAL writes down once it has computed them are what reading would leave.
 test("the readers leave nothing beside the data", { skip: missing }, () => {
   const made = fs.readdirSync(folder).filter((name) => !name.endsWith(".webp"))
@@ -703,5 +761,26 @@ test(
       const held = open.split("\n").filter((line) => line.includes(folder))
       assert.deepEqual(held, [])
     }
+  },
+)
+
+// Guards a file GeoAgent is about to replace, of a layer too large to draw: what the refusal is kept with must not
+// keep what read the layer alive, the file open with it, for as long as the reader serves the layer's table.
+test(
+  "a layer too large to draw is refused, and its file is not held open",
+  { skip: missing || (!fs.existsSync(LSOF) && `no ${LSOF} to list a reader's open files with`) },
+  async () => {
+    const long = await open("long.gpkg")
+    assert.deepEqual(await long.tile(), { code: "too-large" })
+    assert.equal((await long.rows(0)).rows?.length, 1)
+    const reader = engine.sent
+      .flatMap((message) => (message.type === "task" && message.event === "start" ? [message.pid] : []))
+      .at(-1)
+    assert.ok(reader !== undefined && alive(reader))
+    const held = execFileSync(LSOF, ["-p", String(reader), "-Fn"], { encoding: "utf-8" })
+    assert.deepEqual(
+      held.split("\n").filter((line) => line.includes(folder)),
+      [],
+    )
   },
 )

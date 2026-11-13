@@ -35,10 +35,14 @@ def _geographic(west, south, east, north):
     south, north = max(south, -LATITUDE), min(north, LATITUDE)
     if south >= north and abs(south) >= LATITUDE:
         return {"unplaced": "polar"}
-    # Data across the antimeridian comes back with its west past its east.
-    if west > east:
+    # In longitudes counted from 0 to 360, data wholly past 180 lies in the map's west, which shows longitudes from
+    # -180 to 180. Data across the antimeridian comes back with its west past its east, and data in those longitudes
+    # across 180 reaches past it: both reach round the map.
+    if west >= 180:
+        west, east = west - 360, east - 360
+    if west > east or west < -180 or east > 180:
         west, east = -180.0, 180.0
-    return {"bounds": [max(west, -180.0), south, min(east, 180.0), north]}
+    return {"bounds": [west, south, east, north]}
 
 
 def _vector_place(layer, srs):
@@ -111,13 +115,21 @@ def _raster_place(dataset, srs):
         + [(width, step * height) for step in steps]
     )
     try:
-        points, reached = gdal.Transformer(dataset, None, ["DST_SRS=EPSG:4326"]).TransformPoints(0, edge)
+        transformer = gdal.Transformer(dataset, None, ["DST_SRS=EPSG:4326"])
+        points, reached = transformer.TransformPoints(0, edge)
     except RuntimeError:
         return {"unplaced": "unprojectable"}
     known = [point for point, ok in zip(points, reached) if ok]
     if not known:
         return {"unplaced": "unprojectable"}
     longitudes, latitudes = [point[0] for point in known], [point[1] for point in known]
+    # A projected raster round a pole holds it within its edges, which come no nearer to it; and all longitudes meet
+    # there. A raster in longitudes and latitudes that reaches a pole has its edge along it.
+    for pole in () if srs.IsGeographic() else (90.0, -90.0):
+        reached, (column, row, _) = transformer.TransformPoint(1, 0.0, pole)
+        if reached and 0 <= column <= width and 0 <= row <= height:
+            longitudes += [-180.0, 180.0]
+            latitudes.append(pole)
     return _geographic(min(longitudes), min(latitudes), max(longitudes), max(latitudes))
 
 
@@ -141,6 +153,8 @@ def _raster_described(dataset):
         "crs": _crs(srs),
     }
     described.update(_raster_place(dataset, srs))
+    if "bounds" in described:
+        described["resolution"] = _raster.native(dataset)
     return described
 
 

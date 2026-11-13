@@ -159,7 +159,7 @@ export const unit = (
  * east.
  */
 export const MAKE = String.raw`
-import os, sys
+import json, os, sys
 import numpy
 from osgeo import gdal, ogr, osr
 gdal.UseExceptions()
@@ -310,6 +310,71 @@ for number in range(1, 6):
     bands.GetRasterBand(number).WriteArray(values)
     bands.GetRasterBand(number).SetNoDataValue(-9999)
 bands = None
+
+# Four bands as those, whose pixels without data are those a mask they share hides, with values of their own there.
+masked = gdal.GetDriverByName("GTiff").Create(os.path.join(folder, "masked.tif"), 1300, 1300, 4, gdal.GDT_Int16)
+masked.SetGeoTransform((0, side / 1300, 0, side, 0, -side / 1300))
+masked.SetSpatialRef(wgs84)
+for number in range(1, 5):
+    values = numpy.tile(numpy.arange(1300) + number * 100, (1300, 1)).astype(numpy.int16); values[:300, :300] = -9999
+    masked.GetRasterBand(number).WriteArray(values)
+masked.CreateMaskBand(gdal.GMF_PER_DATASET)
+hidden = numpy.full((1300, 1300), 255, dtype=numpy.uint8); hidden[:300, :300] = 0
+masked.GetRasterBand(1).GetMaskBand().WriteArray(hidden)
+masked = None
+
+# A polygon a third of a degree long and a thousandth wide, with vertices along both its sides, as a river's bank
+# has: where the whole of it shows, it is narrower than a tile's grid can draw an inside of.
+side_a = [[0.01 + 0.1 * step, 0.1] for step in range(4)]
+side_b = [[0.31 - 0.1 * step, 0.101] for step in range(4)]
+ring = json.dumps(side_a + side_b + side_a[:1])
+geojson("bank.geojson", [("bank", '{"type": "Polygon", "coordinates": [%s]}' % ring)])
+
+# The world in longitudes counted from 0 to 360; a point east of 180 in them, which the map shows west of 0, and a
+# line across 180, which reaches no further round than the map's edge, and one from 180 on; and a point wholly past
+# 180.
+world = gdal.GetDriverByName("GTiff").Create(os.path.join(folder, "world.tif"), 360, 170, 1, gdal.GDT_Byte)
+world.SetGeoTransform((0, 1, 0, 85, 0, -1))
+world.SetSpatialRef(wgs84)
+world.GetRasterBand(1).Fill(7)
+world = None
+geojson("dateline.geojson", [
+    ("east", '{"type": "Point", "coordinates": [190, 0.1]}'),
+    ("across", '{"type": "LineString", "coordinates": [[170, 0.2], [190, 0.2]]}'),
+    ("onward", '{"type": "LineString", "coordinates": [[180, 0.1], [180.2, 0.1]]}'),
+])
+geojson("hawaii.geojson", [("hilo", '{"type": "Point", "coordinates": [205, 19.7]}')])
+
+# Across the antimeridian: two thousand pixels of a hundred metres each way, in the UTM zone that begins at it.
+utm = osr.SpatialReference(); utm.ImportFromEPSG(32701)
+fiji = gdal.GetDriverByName("GTiff").Create(os.path.join(folder, "fiji.tif"), 2000, 2000, 1, gdal.GDT_Byte)
+fiji.SetGeoTransform((100000, 100, 0, 8100000, 0, -100))
+fiji.SetSpatialRef(utm)
+fiji = None
+
+# In longitudes and latitudes, up to the North Pole, across the prime meridian.
+arctic = gdal.GetDriverByName("GTiff").Create(os.path.join(folder, "arctic.tif"), 10, 10, 1, gdal.GDT_Byte)
+arctic.SetGeoTransform((-5, 1, 0, 90, 0, -1))
+arctic.SetSpatialRef(wgs84)
+arctic = None
+
+# Round the South Pole: a thousand pixels of six kilometres each way in the polar stereographic projection.
+polar = osr.SpatialReference(); polar.ImportFromEPSG(3031)
+south = gdal.GetDriverByName("GTiff").Create(os.path.join(folder, "antarctica.tif"), 1000, 1000, 1, gdal.GDT_Byte)
+south.SetGeoTransform((-3000000, 6000, 0, 3000000, 0, -6000))
+south.SetSpatialRef(polar)
+south = None
+
+# One line of more vertices than the reader holds of a layer, which it refuses to draw.
+count = 20000001
+line = numpy.empty((count, 2)); line[:, 0] = numpy.linspace(0.01, 0.3, count); line[:, 1] = 0.2
+made = ogr.GetDriverByName("GPKG").CreateDataSource(os.path.join(folder, "long.gpkg"))
+long = made.CreateLayer("long", wgs84, ogr.wkbLineString)
+feature = ogr.Feature(long.GetLayerDefn())
+wkb = numpy.array([1], "u1").tobytes() + numpy.array([2, count], "<u4").tobytes() + line.astype("<f8").tobytes()
+feature.SetGeometry(ogr.CreateGeometryFromWkb(wkb))
+long.CreateFeature(feature)
+feature = long = made = line = wkb = None
 
 # A GeoPackage of a vector layer and two rasters.
 both = ogr.GetDriverByName("GPKG").CreateDataSource(os.path.join(folder, "both.gpkg"))
