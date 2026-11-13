@@ -147,6 +147,7 @@ import { useProjectsStore } from '@/stores/useProjectsStore';
 import { Closed } from '@/geocode/Closed'; // GeoCode: see the Excalidraw hint
 import { GeoPreview } from '@/geocode/preview/GeoPreview'; // GeoCode: see renderArtifactPreview
 import { isGeoDataFile } from '@/geocode/preview/geoFiles'; // GeoCode: see renderArtifactPreview
+import { useGeoPanelAction } from '@/geocode/preview/panelState'; // GeoCode: see the toolbar's groups
 import { watchFileOnScreen } from '@/lib/watchedFiles';
 
 
@@ -922,6 +923,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
     return openPaths[0] ?? null;
   }, [openPaths, selectedPath]);
   const selectedFile = React.useMemo(() => (effectiveSelectedPath ? toFileNode(effectiveSelectedPath) : null), [effectiveSelectedPath, toFileNode]);
+  const geoPanelAction = useGeoPanelAction(selectedFile?.path); // GeoCode: the button that opens a geographic file's panel, none for another file
   const selectedFilePath = selectedFile?.path ?? '';
   const selectedFilePathRef = React.useRef(selectedFilePath);
   selectedFilePathRef.current = selectedFilePath;
@@ -4504,6 +4506,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
         // buttons whatever the file is.
         groups={[
           [modeAction, annotateAction],
+          [geoPanelAction], // GeoCode: before the comment button
           [searchAction, commentAction],
         ]}
         menuOnly={[goToLineAction, symbolsAction, wrapAction, readAloudAction, ...fileActions, autoSaveAction]}

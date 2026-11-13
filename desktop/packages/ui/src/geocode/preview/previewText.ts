@@ -42,7 +42,8 @@ export type PreviewText = {
   measures: { min: string; max: string; mean: string; std: string };
   /** Said of what is measured: it is of a sample of the raster, not of every pixel. */
   sampled: string;
-  openPanel: string;
+  /** The files view's toolbar button that opens and closes the panel. */
+  panel: string;
   closePanel: string;
   /** Shown where a clicked feature's attributes go, before any is clicked. */
   pickHint: string;
@@ -92,7 +93,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     bandAs: (band, channel) => `Band ${band} as ${['red', 'green', 'blue'][channel]}`,
     measures: { min: 'Min', max: 'Max', mean: 'Mean', std: 'Std dev' },
     sampled: 'From a sample',
-    openPanel: 'Show the panel',
+    panel: 'Data panel',
     closePanel: 'Hide the panel',
     pickHint: 'Click a feature on the map to see its attributes.',
     nth: (position, total) => `Feature ${position} of ${total}`,
@@ -150,7 +151,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     bandAs: (band, channel) => `波段 ${band} 作${['红', '绿', '蓝'][channel]}`,
     measures: { min: '最小值', max: '最大值', mean: '平均值', std: '标准差' },
     sampled: '取样',
-    openPanel: '展开面板',
+    panel: '数据面板',
     closePanel: '收起面板',
     pickHint: '点击地图上的要素,查看它的属性。',
     nth: (position, total) => `第 ${position} 个要素,共 ${total} 个`,
@@ -208,7 +209,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     bandAs: (band, channel) => `波段 ${band} 作${['紅', '綠', '藍'][channel]}`,
     measures: { min: '最小值', max: '最大值', mean: '平均值', std: '標準差' },
     sampled: '取樣',
-    openPanel: '展開面板',
+    panel: '資料面板',
     closePanel: '收起面板',
     pickHint: '點選地圖上的圖徵,檢視它的屬性。',
     nth: (position, total) => `第 ${position} 個圖徵,共 ${total} 個`,

@@ -10,6 +10,7 @@ import { cancelWhenLayoutSettled, runWhenLayoutSettled } from '@/lib/layoutAnima
 import { cn } from '@/lib/utils';
 import type { MapView } from './GeoMap';
 import { GeoPanel, type PanelTab } from './GeoPanel';
+import { usePanelStore } from './panelState';
 import { LookTab } from './GeoLook';
 import { GeoTable } from './GeoTable';
 import { FeatureTab, InfoTab, PixelTab } from './GeoTabs';
@@ -30,8 +31,8 @@ const WHOLE = new Set(['too-large', 'unopenable', 'missing', 'no-layer', 'not-re
 // program may hold the file for a moment. Read no better then, the data is shown as failed, not as the map it was.
 const RETRY_MS = 1000;
 
-// The panel goes beside the map from this width on, where the room is also wider than it is tall by this much: the
-// app's side panel is mostly taller than wide, and a map with a panel beside it there would be a sliver.
+// The panel lies along the map's right from this width on, where the room is also wider than it is tall by this much:
+// the app's side panel is mostly taller than wide, and a panel along its right would hide most of the map.
 const BESIDE_WIDTH = 720;
 const BESIDE_RATIO = 1.25;
 
@@ -88,7 +89,10 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   // Raised when the reader says the data is no longer what was described.
   const [changes, setChanges] = React.useState(0);
   const [tab, setTab] = React.useState('feature');
-  const [open, setOpen] = React.useState(false);
+  // Opened and closed here and by the button the files view's toolbar has for it.
+  const open = usePanelStore((state) => state.open[path] === true);
+  const setPanel = usePanelStore((state) => state.setOpen);
+  const setOpen = (next: boolean) => setPanel(path, next);
   // The room the map and the panel share.
   const [room, setRoom] = React.useState({ width: 0, height: 0 });
   const view = React.useRef<MapView | null>(null);
@@ -302,8 +306,8 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
           <Pointer listen={listen} />
         </div>
       ) : null}
-      <div ref={shared} className={cn('flex min-h-0 flex-1', beside ? 'flex-row' : 'flex-col')}>
-        <div className="relative min-h-0 min-w-0 flex-1">
+      <div ref={shared} className="relative min-h-0 flex-1 overflow-hidden">
+        <div className="absolute inset-0">
           {!current ? <ContentLoadingState label={text.reading} /> : null}
           {unshown ? (
             <ContentState icon={<FileTypeIcon filePath={path} className="size-10" />} title={name} description={unshownText(text, unshown)} actions={download} />
@@ -349,17 +353,6 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
                 <Icon name="close" className="size-3.5" />
               </button>
             </div>
-          ) : null}
-          {beside && !open && tabs.length > 0 ? (
-            <button
-              type="button"
-              className="absolute end-1.5 top-1.5 flex size-7 items-center justify-center text-foreground opacity-80 hover:opacity-100 [filter:drop-shadow(0_0_1.5px_var(--surface-background))_drop-shadow(0_0_1px_var(--surface-background))]"
-              aria-label={text.openPanel}
-              title={text.openPanel}
-              onClick={() => setOpen(true)}
-            >
-              <Icon name="arrow-left-s" className="size-4" />
-            </button>
           ) : null}
         </div>
         <GeoPanel tabs={tabs} active={tab} open={open} beside={beside} room={room.height} text={text} onActive={setTab} onOpen={setOpen} />
