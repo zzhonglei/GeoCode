@@ -26,6 +26,10 @@ type Known = { target: Target } & ({ description: GeoDescription } | { code: str
 /** The refusals of a tile that say the whole layer cannot be drawn, not that one tile failed. */
 const WHOLE = new Set(['too-large', 'unopenable', 'missing', 'no-layer', 'not-ready']);
 
+// How long a map whose data has stopped reading stays before the data is read once more, in milliseconds: another
+// program may hold the file for a moment. Read no better then, the data is shown as failed, not as the map it was.
+const RETRY_MS = 1000;
+
 // The panel goes beside the map from this width on, where the room is also wider than it is tall by this much: the
 // app's side panel is mostly taller than wide, and a map with a panel beside it there would be a sliver.
 const BESIDE_WIDTH = 720;
@@ -88,6 +92,10 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   // The room the map and the panel share.
   const [room, setRoom] = React.useState({ width: 0, height: 0 });
   const view = React.useRef<MapView | null>(null);
+  // What is known, for the description that comes back to see what it would replace.
+  const knownNow = React.useRef<Known | null>(null);
+  // Set while the map of data that failed to read is kept for one more reading.
+  const retrying = React.useRef(false);
   const reach = React.useRef<((to: GeoBounds) => void) | null>(null);
   // Counts what is picked, on the map and in the table: an answer to one that is no longer the last says nothing.
   const picks = React.useRef(0);
@@ -139,29 +147,47 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   }, [revision, changes]);
 
   React.useEffect(() => {
+    knownNow.current = known;
+  }, [known]);
+
+  React.useEffect(() => {
     if (!visible) return;
     const leaving = new AbortController();
+    let retry: number | undefined;
     void describeGeoData(target, leaving.signal).then((outcome) => {
       if (leaving.signal.aborted) return;
-      if (outcome.ok && target.layer === undefined) opened.current = outcome.value.layer;
+      if (!outcome.ok) {
+        const before = knownNow.current;
+        const drawn = before !== null && before.target === target && 'description' in before;
+        // A file half written reads as broken for a moment, so its map stays for one more reading; a file that is
+        // gone is said to be at once.
+        if (drawn && outcome.code !== 'missing' && !retrying.current) {
+          retrying.current = true;
+          retry = window.setTimeout(() => setChanges((count) => count + 1), RETRY_MS);
+          return;
+        }
+        retrying.current = false;
+        setKnown({ target, code: outcome.code });
+        return;
+      }
+      retrying.current = false;
+      if (target.layer === undefined) opened.current = outcome.value.layer;
       // Whatever was refused is asked for again by the map this description draws.
-      if (outcome.ok) setRefused(null);
+      setRefused(null);
       setKnown((before) => {
         const same = before !== null && before.target === target;
-        if (outcome.ok) {
-          // The same data keeps its map as it is.
-          if (same && 'description' in before && before.description.stamp === outcome.value.stamp) return before;
-          setPicked(null);
-          setPixel(null);
-          setLook(null);
-          return { target, description: outcome.value };
-        }
-        // A file half written reads as broken for a moment: what was shown stays until it reads again, or is gone.
-        if (same && 'description' in before && outcome.code !== 'missing') return before;
-        return { target, code: outcome.code };
+        // The same data keeps its map as it is.
+        if (same && 'description' in before && before.description.stamp === outcome.value.stamp) return before;
+        setPicked(null);
+        setPixel(null);
+        setLook(null);
+        return { target, description: outcome.value };
       });
     });
-    return () => leaving.abort();
+    return () => {
+      leaving.abort();
+      window.clearTimeout(retry);
+    };
   }, [target, revision, changes, visible]);
 
   const current = known !== null && known.target === target ? known : null;
