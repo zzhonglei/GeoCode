@@ -4,6 +4,7 @@ import { Config } from "./config.ts"
 import { Engine } from "./engine.ts"
 import { Gee } from "./gee/index.ts"
 import { Osm } from "./osm/index.ts"
+import { Preview } from "./preview/index.ts"
 import { Environment } from "./python/index.ts"
 import { Qgis } from "./qgis/index.ts"
 import { Runtime } from "./runtime.ts"
@@ -22,6 +23,7 @@ const places = {
   data: argument("data", "GeoCode's data directory"),
 }
 const locks = path.join(argument("state", "GeoCode's state directory"), "locks")
+const pyramids = path.join(argument("cache", "GeoCode's cache directory"), "preview")
 
 const transport = Transport.parentPort()
 
@@ -35,7 +37,13 @@ const layer = Layer.mergeAll(
 
 const fiber = Effect.runFork(
   Effect.scoped(
-    Engine.run(transport, [Environment.capability(places), Qgis.capability, Gee.capability, Osm.capability(locks)]),
+    Engine.run(transport, [
+      Environment.capability(places),
+      Qgis.capability,
+      Gee.capability,
+      Osm.capability(locks),
+      Preview.capability(pyramids),
+    ]),
   ).pipe(Effect.provide(layer)),
 )
 

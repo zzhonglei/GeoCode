@@ -6,6 +6,7 @@ import {
   isSubagentTool,
   isWriteTool,
 } from '@/lib/opencode/tools';
+import { isGeoDataFile } from '@/geocode/preview/geoFiles'; // GeoCode: see isBinaryFile
 
 /** v2 file tools report `path`; the other keys cover MCP and plugin tools. */
 const readInputPath = (input: Record<string, unknown> | undefined): string | null => {
@@ -869,6 +870,7 @@ export function isBinaryFile(filePath: string): boolean {
   if (isSvgFile(filePath)) {
     return false;
   }
+  if (isGeoDataFile(filePath)) return true; // GeoCode: geographic data is never read as text; FilesView shows it as a map
   const ext = getFileExtension(filePath);
   return BINARY_FILE_EXTENSIONS.has(ext);
 }

@@ -30,11 +30,13 @@ test('a change calls for the suites of what it touches, and for the real suites 
     'geoengine/python',
     'geoengine/gee',
     'geoengine/osm',
+    'geoengine/preview',
     'gee',
     'osm',
+    'preview',
   ])
-  assert.deepEqual(calledFor('geoengine/src/runtime.ts'), [...desktop, 'geoengine', 'qgis', 'gee', 'osm'])
-  assert.deepEqual(calledFor('geoengine/test/support/engine.ts'), ['geoengine', 'qgis', 'gee', 'osm'])
+  assert.deepEqual(calledFor('geoengine/src/runtime.ts'), [...desktop, 'geoengine', 'qgis', 'gee', 'osm', 'preview'])
+  assert.deepEqual(calledFor('geoengine/test/support/engine.ts'), ['geoengine', 'qgis', 'gee', 'osm', 'preview'])
   // geocodekit is installed at the app's version.
   assert.ok(calledFor('desktop/packages/electron/package.json').includes('geoengine/python'))
   assert.deepEqual(calledFor('scripts/test.mjs'), Object.keys(SUITES))

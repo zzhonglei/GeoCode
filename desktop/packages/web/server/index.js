@@ -195,6 +195,7 @@ import { applyOutboundProxyFromEnv } from './lib/outbound-proxy.js';
 import { closedSurface } from './geocode/closed-surface.js'; // GeoCode: see main
 import { loopbackHostOnly } from './geocode/loopback-host.js'; // GeoCode: see main
 import { registerGeoEngine } from './geocode/geoengine.js'; // GeoCode: see main
+import { registerGeoPreview } from './geocode/geo-preview.js'; // GeoCode: see main
 import { registerGeoTools } from './geocode/geo-tools.js'; // GeoCode: see main
 import { applySystemCertificates } from './lib/system-ca.js';
 import { readOpenCodeLoad } from './lib/diagnostics/opencode-load.js';
@@ -2819,6 +2820,7 @@ async function main(options = {}) {
     getArchive: () => spaceArchive,
   });
   registerGeoEngine(app, { geoEngine: options.geoEngine, broadcast: broadcastOpenChamberUiEvent }); // GeoCode: behind the API auth gate, before the OpenCode proxy
+  registerGeoPreview(app, { geoEngine: options.geoEngine }); // GeoCode: what a window's preview of a geographic dataset reads, behind the API auth gate as well
   app.get(SPACE_TASK_TITLE_ROUTE, async (_req, res) => {
     if (!insideSpaceTaskNaming) return res.status(404).json({ error: 'This server is not inside an isolated space.' });
     res.json(await insideSpaceTaskNaming.read());

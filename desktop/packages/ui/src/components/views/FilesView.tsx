@@ -145,6 +145,8 @@ import { sessionEvents } from '@/lib/sessionEvents';
 import { syncScheduledTaskLoops } from '@/lib/scheduledTasksApi';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { Closed } from '@/geocode/Closed'; // GeoCode: see the Excalidraw hint
+import { GeoPreview } from '@/geocode/preview/GeoPreview'; // GeoCode: see renderArtifactPreview
+import { isGeoDataFile } from '@/geocode/preview/geoFiles'; // GeoCode: see renderArtifactPreview
 import { watchFileOnScreen } from '@/lib/watchedFiles';
 
 
@@ -358,6 +360,7 @@ const opensInFileCanvas = (path: string | null | undefined): boolean => Boolean(
 
 const isJsonFile = (path: string): boolean => {
   if (!path) return false;
+  if (isGeoDataFile(path)) return false; // GeoCode: GeoJSON opens as a map, with no tree of its text to switch to
   const ext = path.toLowerCase().split('.').pop();
   return ext === 'json' || ext === 'jsonc' || ext === 'json5' || ext === 'geojson';
 };
@@ -3832,6 +3835,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
     if (isSelectedFont) {
       return <FontArtifact src={pdfSrc} name={file.name} sizeBytes={artifactSize} />;
     }
+    if (isGeoDataFile(file.path)) return <GeoPreview key={file.path} path={file.path} revision={fileContentRevision} visible={visible} download={downloadButton} />; // GeoCode: geographic data opens as a map
     if (isUnsupportedBinary) {
       return <BinaryArtifact name={file.name} path={file.path} sizeBytes={artifactSize} download={downloadButton} />;
     }

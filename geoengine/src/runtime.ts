@@ -17,6 +17,12 @@ const SHUTDOWN_GRACE_MS = 2000
 /** In characters. Also caps the stderr kept in incremental mode, which the caller cannot override. */
 const DEFAULT_OUTPUT_LIMIT = 4 * 1024 * 1024
 
+/**
+ * The most one answer of a worker may hold, its line or its bytes: an answer gone wrong must not fill the engine's
+ * memory.
+ */
+const FRAME_LIMIT = 64 * 1024 * 1024
+
 /** The precision of the clocks, not a property of the task. */
 const POLL_MS = 100
 
@@ -140,6 +146,29 @@ export interface Result {
   readonly drainIncomplete: boolean
 }
 
+/**
+ * A process that stays to answer requests, each a line written to it. Its idle clock counts the time in which it was
+ * neither asked nor wrote anything: it ends a worker no one uses, and one that hangs once no one asks it any more.
+ * So it must be longer than the longest a request may take in silence.
+ */
+export type WorkerOptions = Pick<Options, "command" | "args" | "cwd" | "env" | "grace"> & {
+  readonly idle: Duration.Input
+  /**
+   * Each answer is a line of JSON and, after it, as many bytes as the number under its `bytes` says. The bytes are the
+   * consumer's own copy, empty when the line names none. If it throws, the worker is ended and fails with that error,
+   * as it does on an answer that is not one.
+   */
+  readonly onFrame: (header: unknown, bytes: Uint8Array) => void
+}
+
+export interface Worker {
+  /** Writes a line to the process. Dropped once the process has exited: whoever waits on it learns from `ended`. */
+  readonly send: (line: string) => void
+  readonly stop: () => void
+  /** Settles when the process is gone, however it went; `stdout` is empty. */
+  readonly ended: Effect.Effect<Result, Error>
+}
+
 /** Every task process is reported, so the main process can end what a crashed engine leaves behind. */
 export interface Ledger {
   readonly started: (pid: number) => void
@@ -151,6 +180,8 @@ export class ShuttingDown extends Data.TaggedError("GeoEngineShuttingDown")<{ re
 
 export interface Interface {
   readonly run: (options: Options) => Effect.Effect<Result, Error>
+  /** Shutdown ends a worker as it ends a run. */
+  readonly worker: (options: WorkerOptions) => Effect.Effect<Worker, ShuttingDown>
   /** Refuses every run from now on, ends the running ones and waits until none is left. */
   readonly shutdown: () => Effect.Effect<void>
 }
@@ -183,6 +214,29 @@ export const layer = (ledger: Ledger) =>
           return Effect.sync(() => execution.stop("abort"))
         })
 
+      const worker = (options: WorkerOptions) =>
+        Effect.suspend(() => {
+          if (closing) return Effect.fail(new ShuttingDown({ message: "GeoEngine is shutting down" }))
+          const execution = execute(options, ledger)
+          live.add(execution)
+          // Settled here, so a worker no one waits on does not end the engine with an unhandled rejection.
+          const settled = execution.result.then(
+            (result) => {
+              live.delete(execution)
+              return Effect.succeed(result)
+            },
+            (error: unknown) => {
+              live.delete(execution)
+              return Effect.fail(error instanceof Error ? error : new Error(String(error)))
+            },
+          )
+          return Effect.succeed<Worker>({
+            send: execution.write,
+            stop: () => execution.stop("abort"),
+            ended: Effect.flatten(Effect.promise(() => settled)),
+          })
+        })
+
       const shutdown = () =>
         Effect.promise(async () => {
           closing = true
@@ -197,28 +251,33 @@ export const layer = (ledger: Ledger) =>
         })
 
       yield* Effect.addFinalizer(shutdown)
-      return Service.of({ run, shutdown })
+      return Service.of({ run, worker, shutdown })
     }),
   )
 
 interface Execution {
   readonly result: Promise<Result>
   readonly stop: (reason: Reason, graceMs?: number) => void
+  /** A worker's only. */
+  readonly write: (line: string) => void
 }
 
-function execute(options: Options, ledger: Ledger): Execution {
-  if (options.signal?.aborted) return { result: Promise.resolve(aborted()), stop: () => {} }
+function execute(options: Options | WorkerOptions, ledger: Ledger): Execution {
+  const task = "delivery" in options ? options : undefined
+  const worker = "onFrame" in options ? options : undefined
+  if (task?.signal?.aborted) return { result: Promise.resolve(aborted()), stop: () => {}, write: () => {} }
 
   const now = () => performance.now()
   const startedAt = now()
   const grace = Duration.toMillis(options.grace ?? DEFAULT_GRACE)
-  const totalMs = options.clocks.total === undefined ? undefined : Duration.toMillis(options.clocks.total)
-  const idleMs = options.clocks.idle === undefined ? undefined : Duration.toMillis(options.clocks.idle)
-  const limit = options.delivery.mode === "collect" ? (options.delivery.limit ?? DEFAULT_OUTPUT_LIMIT) : undefined
+  const totalMs = task?.clocks.total === undefined ? undefined : Duration.toMillis(task.clocks.total)
+  const idle = worker ? worker.idle : task?.clocks.idle
+  const idleMs = idle === undefined ? undefined : Duration.toMillis(idle)
+  const limit = task?.delivery.mode === "collect" ? (task.delivery.limit ?? DEFAULT_OUTPUT_LIMIT) : undefined
   const cap = limit ?? DEFAULT_OUTPUT_LIMIT
   const stdout = boundedBuffer(cap)
   const stderr = boundedBuffer(cap)
-  const incremental = options.delivery.mode === "incremental" ? options.delivery : undefined
+  const incremental = task?.delivery.mode === "incremental" ? task.delivery : undefined
   const interleaved = incremental?.source === "all"
 
   let lastActivity = startedAt
@@ -227,8 +286,10 @@ function execute(options: Options, ledger: Ledger): Execution {
   let accumulated = 0
   let reason: Reason | undefined
   let exit: { code: number | null; signal: NodeJS.Signals | null } | undefined
-  let consumerError: unknown
+  // What a consumer threw, or what was wrong with a worker's answer: the run is ended and fails with it.
+  let failure: unknown
   let stop: (reason: Reason, graceMs?: number) => void = () => {}
+  let write: (line: string) => void = () => {}
   // Defined before the spawn: a failed spawn settles, and removes this listener, before the rest of the setup runs.
   const onAbort = () => stop("abort")
 
@@ -236,7 +297,7 @@ function execute(options: Options, ledger: Ledger): Execution {
     const child = launch(options.command, [...options.args], {
       cwd: options.cwd,
       env: overlay(base(process.env, process.platform), options.env ?? {}, process.platform),
-      stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+      stdio: [task?.input === undefined && !worker ? "ignore" : "pipe", "pipe", "pipe"],
       // Its own process group on POSIX, so one signal reaches everything the task starts.
       detached: POSIX,
       windowsHide: true,
@@ -263,14 +324,14 @@ function execute(options: Options, ledger: Ledger): Execution {
       clearInterval(watchdog)
       clearTimeout(forceKill)
       clearTimeout(settlement)
-      options.signal?.removeEventListener("abort", onAbort)
+      task?.signal?.removeEventListener("abort", onAbort)
       release()
       return true
     }
 
     const finish = (drainIncomplete: boolean) => {
       if (!settle()) return
-      if (consumerError !== undefined) return reject(consumerError)
+      if (failure !== undefined) return reject(failure)
       const out = truncate(stdout.text(), cap)
       const err = truncate(stderr.text(), cap)
       resolve({
@@ -313,16 +374,16 @@ function execute(options: Options, ledger: Ledger): Execution {
       }, graceMs)
     }
 
-    options.signal?.addEventListener("abort", onAbort, { once: true })
+    task?.signal?.addEventListener("abort", onAbort, { once: true })
 
     const deliver = (target: "stdout" | "stderr", chunk: string) => {
       if (!chunk) return
       if (incremental && (target === "stdout" || interleaved)) {
-        if (consumerError !== undefined) return
+        if (failure !== undefined) return
         try {
           return incremental.onChunk(chunk, target)
         } catch (error) {
-          consumerError = error
+          failure = error
           return stop("abort")
         }
       }
@@ -336,11 +397,62 @@ function execute(options: Options, ledger: Ledger): Execution {
       lastActivity = now()
       deliver(target, decoders[target].write(data))
     }
-    child.stdout?.on("data", read("stdout"))
+
+    // A worker's stdout, cut into answers. What has arrived of the answer still incomplete is kept in pieces, joined
+    // once it is whole: a large answer comes in many pieces, and joining at each would copy it over and over.
+    let pieces: Buffer[] = []
+    let held = 0
+    // The line of the answer whose bytes are still arriving.
+    let awaited: { readonly header: unknown; readonly bytes: number } | undefined
+    const frames = (data: Buffer) => {
+      lastActivity = now()
+      if (!worker || failure !== undefined || reason !== undefined) return
+      pieces.push(data)
+      held += data.length
+      // Nothing left over held a line's end, so only the new piece can.
+      if (awaited ? held < awaited.bytes : !data.includes(0x0a)) {
+        // Only a line can outgrow the limit here: an answer's bytes were refused when its line named them.
+        if (held > FRAME_LIMIT) stop("output-limit")
+        return
+      }
+      let rest = pieces.length === 1 ? data : Buffer.concat(pieces)
+      try {
+        for (;;) {
+          if (awaited === undefined) {
+            const end = rest.indexOf(0x0a)
+            if (end < 0) break
+            const line = rest.subarray(0, end).toString("utf8")
+            rest = rest.subarray(end + 1)
+            const header = frameHeader(line)
+            if (header.bytes > FRAME_LIMIT) return stop("output-limit")
+            awaited = header
+          }
+          if (rest.length < awaited.bytes) break
+          // Copied out: the consumer may keep or send it on, and a view would hold the answers after it too.
+          const bytes = new Uint8Array(rest.subarray(0, awaited.bytes))
+          rest = rest.subarray(awaited.bytes)
+          const header = awaited.header
+          awaited = undefined
+          worker.onFrame(header, bytes)
+        }
+      } catch (error) {
+        failure = error
+        return stop("abort")
+      }
+      pieces = rest.length > 0 ? [rest] : []
+      held = rest.length
+    }
+
+    child.stdout?.on("data", worker ? frames : read("stdout"))
     child.stderr?.on("data", read("stderr"))
     // A task that exits without reading its input breaks the pipe; that is its business, not a crash of the engine.
     child.stdin?.on("error", () => {})
-    if (options.input !== undefined) child.stdin?.end(options.input)
+    if (task?.input !== undefined) child.stdin?.end(task.input)
+    write = (line) => {
+      if (exit !== undefined || settled) return
+      lastActivity = now()
+      child.stdin?.write(`${line}\n`)
+    }
 
     // The monotonic clock stops while macOS sleeps but runs on while Windows does: a poll that comes far later than
     // due is taken for a sleep on either, so a laptop does not wake to find every running task idle.
@@ -375,7 +487,22 @@ function execute(options: Options, ledger: Ledger): Execution {
     })
   })
 
-  return { result, stop: (next, graceMs) => stop(next, graceMs) }
+  return { result, stop: (next, graceMs) => stop(next, graceMs), write: (line) => write(line) }
+}
+
+/** The line that opens a worker's answer, and how many bytes it says follow it. */
+function frameHeader(line: string) {
+  const header: unknown = (() => {
+    try {
+      return JSON.parse(line)
+    } catch {
+      throw new Error(`a worker's answer did not begin with a line of JSON: ${line.slice(0, 200)}`)
+    }
+  })()
+  const bytes = (header as { readonly bytes?: unknown } | null)?.bytes ?? 0
+  if (typeof bytes !== "number" || !Number.isSafeInteger(bytes) || bytes < 0)
+    throw new Error(`a worker's answer gave ${JSON.stringify(bytes)} as its number of bytes`)
+  return { header, bytes }
 }
 
 /**
