@@ -145,6 +145,10 @@
       {
         "from": "../ui/src/lib/ghostty/fonts/LICENSE",
         "to": "licenses/Symbols Nerd Font.txt"
+      },
+      {
+        "from": "../ui/node_modules/maplibre-gl/LICENSE.txt",
+        "to": "licenses/MapLibre GL JS.txt"
       }
     ],
     "afterPack": "scripts/after-pack.cjs",
