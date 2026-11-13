@@ -88,7 +88,8 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   const [refused, setRefused] = React.useState<{ code: string; clicked: boolean } | null>(null);
   // Raised when the reader says the data is no longer what was described.
   const [changes, setChanges] = React.useState(0);
-  const [tab, setTab] = React.useState('feature');
+  // A vector layer's table to begin with; a raster, which has none, opens at its first tab.
+  const [tab, setTab] = React.useState('table');
   // Opened and closed here and by the button the files view's toolbar has for it.
   const open = usePanelStore((state) => state.open[path] === true);
   const setPanel = usePanelStore((state) => state.setOpen);

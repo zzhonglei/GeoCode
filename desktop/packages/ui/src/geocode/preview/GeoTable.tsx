@@ -10,6 +10,9 @@ import { readGeoRows, type FoundFeature, type GeoRows, type Target, type VectorD
 import { unshownText, type PreviewText } from './previewText';
 
 const ROW_HEIGHT = 25;
+// The header that stays over the rows, a row of the same cells: the rows begin under it, and a row scrolled to is
+// brought out from under it.
+const HEAD_HEIGHT = ROW_HEIGHT;
 // The rows of no page: the same from one drawing to the next, as a page's are.
 const NONE: GeoRows['rows'] = [];
 // The widest and the narrowest a column is, in characters of the cells' font.
@@ -88,7 +91,14 @@ export const GeoTable: React.FC<{
   const widths = React.useMemo(() => widthsOf(names, rows), [names, rows]);
   // The numbers of the rows, as wide as the last of them.
   const numbered = String(description.features).length;
-  const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => ROW_HEIGHT, overscan: 12 });
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scroller.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 12,
+    paddingStart: HEAD_HEIGHT,
+    scrollPaddingStart: HEAD_HEIGHT,
+  });
 
   // A page begins at its top: left to itself, the table stays as far down each page as it was scrolled in the last.
   const offset = page?.offset;
@@ -107,13 +117,14 @@ export const GeoTable: React.FC<{
 
   const locale = getCurrentIntlLocale();
   const drawn = virtualizer.getVirtualItems();
-  const above = drawn[0]?.start ?? 0;
+  const above = (drawn[0]?.start ?? HEAD_HEIGHT) - HEAD_HEIGHT;
   const below = drawn.length > 0 ? virtualizer.getTotalSize() - drawn[drawn.length - 1].end : 0;
   const cell = 'border-b border-e border-edge-muted px-2 py-1';
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ScrollableOverlay ref={scroller} outerClassName="min-h-0 flex-1">
+      {/* Scrolled sideways without a bar: the app's scrollbar keeps its sideways thumb hidden, and the overflow is let back. */}
+      <ScrollableOverlay ref={scroller} outerClassName="min-h-0 flex-1" disableHorizontal className="overflow-x-auto">
         {/* A fixed layout only holds with a width of the table's own; without one a long value widens its column. */}
         <table
           className="min-w-full table-fixed border-separate border-spacing-0 font-mono typography-meta"
