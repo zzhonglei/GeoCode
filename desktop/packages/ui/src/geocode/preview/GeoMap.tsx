@@ -286,7 +286,8 @@ const GeoMap: React.FC<{
         return;
       }
       // A vector tile's layers: polygons, lines and points as they are, and a dot for each line and polygon too small
-      // to be seen as one at the tile's zoom.
+      // to be seen as one at the tile's zoom. Their names are given by `tile` in
+      // geoengine/python/geocodekit/preview/_cut.py; `mark` reads them too.
       // Asked of every tile in view, not only those within the bounds: a file's own record of its extent may be out of
       // date, and what lies outside it would never be drawn.
       map.addSource('data', { type: 'vector', tiles: [tiles], maxzoom: VECTOR_DEPTH });

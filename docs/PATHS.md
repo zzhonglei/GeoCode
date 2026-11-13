@@ -213,7 +213,7 @@ GeoCode 写文件多是先写旁边的临时文件、再改名替换,有的另�
 | 数据目录的 `snapshot/` | `*.init-*`、`index.geocode-*`、`geocode-pack.lock`、`geocode.gitconfig.*` | 建立与更新检查点仓库时的中间文件,过时的下次自动清掉 |
 | `python/` | `.unpack-<随机名>/`、`activate.*`、`.writing-<随机名>` | 安装环境与重写 `base` 里的文件时的中间文件,下次启动时清掉 |
 | 缓存目录的 `npm/`、`bin/` | `.staging-*`;`ripgrep-*` | 安装 npm 包与下载 ripgrep 的中间文件,前者过时后自动清掉 |
-| 缓存目录的 `preview/` | 名字以 `.making` 结尾的文件夹 | 建到一半的金字塔,缓存超过上限时与别的一起清掉 |
+| 缓存目录的 `preview/` | 名字以 `.making` 结尾的文件夹 | 建到一半的金字塔,一小时没有写入的在下次建金字塔时清掉 |
 | 配置目录 | `machine.json.tmp` | GeoEngine 写 `machine.json` 的临时副本,下一次写入时覆盖 |
 | 项目里被编辑或上传的文件旁 | 原名后接 `.tmp-<进程号>-…`、`.upload-<随机串>` | 在应用里保存或上传文件时的临时副本 |
 | 地理工具的输出旁 | `.<名字>.<进程号>.part`、`.<名字>.<进程号>.part.gpkg` | GEE 与 OSM 下载到一半的文件,运行结束时删掉,文件被别的程序占着时留下 |

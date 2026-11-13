@@ -104,7 +104,9 @@ def _clipped_polygons(xy, ring_lengths, rings, box):
 def tile(layer, z, x, y, cancelled):
     """The tile as Mapbox Vector Tile bytes, or None when the layer has nothing in it. Its layers are named points,
     lines and polygons, small-lines and small-polygons for the dots of those too small to draw, and thin-polygons for
-    the lines of polygons too thin to: what is shown of a layer is chosen by which of the three its features are."""
+    the lines of polygons too thin to: what is shown of a layer is chosen by which of the three its features are. The
+    map reads them by these names, in desktop/packages/ui/src/geocode/preview/GeoMap.tsx where it adds the data's
+    layers and in its `mark`."""
     left, top, span = _mercator.tile(z, x, y)
     unit = span / EXTENT
     cell = CELL * unit
