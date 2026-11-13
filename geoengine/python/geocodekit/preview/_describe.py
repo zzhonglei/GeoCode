@@ -48,10 +48,9 @@ def _geographic(west, south, east, north):
 def _vector_place(layer, srs):
     if layer.GetGeomType() == ogr.wkbNone:
         return {"unplaced": "no-geometry"}
-    if srs is None:
+    # A local system, as a GeoPackage's undefined Cartesian one is, places the data nowhere either.
+    if srs is None or srs.IsLocal():
         return {"unplaced": "no-crs"}
-    if srs.IsLocal():
-        return {"unplaced": "local-crs"}
     extent = layer.GetExtent(force=1, can_return_null=1)
     if extent is None:
         return {"unplaced": "empty"}
@@ -102,10 +101,9 @@ def _raster_place(dataset, srs):
     placed = dataset.GetGeoTransform(can_return_null=True)
     if (placed is None or tuple(placed) == NOWHERE) and dataset.GetGCPCount() == 0:
         return {"unplaced": "no-georeference"}
-    if srs is None:
+    # A local system, as a GeoPackage's undefined Cartesian one is, places the data nowhere either.
+    if srs is None or srs.IsLocal():
         return {"unplaced": "no-crs"}
-    if srs.IsLocal():
-        return {"unplaced": "local-crs"}
     width, height = dataset.RasterXSize, dataset.RasterYSize
     steps = [index / (ALONG - 1) for index in range(ALONG)]
     edge = (
