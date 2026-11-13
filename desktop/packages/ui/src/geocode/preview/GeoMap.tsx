@@ -4,6 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 
 import { Icon } from '@/components/icon/Icon';
+import { ContentLoadingState } from '@/components/ui/content-state';
 import { useI18n } from '@/lib/i18n';
 import { cancelWhenLayoutSettled, runWhenLayoutSettled } from '@/lib/layoutAnimation';
 import { runtimeFetch } from '@/lib/runtime-fetch';
@@ -173,6 +174,10 @@ const GeoMap: React.FC<{
   const pointing = React.useRef(pixel);
   // How many times the map there is has drawn its raster.
   const rasters = React.useRef(0);
+  // The data the map has drawn its first view of. Until then it is blank, there being nothing under the data: a large
+  // vector layer is read into memory for its first tiles, which takes seconds, and is refused at the end of them when
+  // it is too large to draw.
+  const [drawn, setDrawn] = React.useState<GeoDescription | null>(null);
   React.useEffect(() => {
     listeners.current = { onPick, onPixel, onPointer, onRefused, onFailed };
     showing.current = shown;
@@ -255,6 +260,8 @@ const GeoMap: React.FC<{
 
     let clicks = 0;
     map.on('load', () => {
+      // Once the tiles of the first view are in, whether drawn or refused.
+      map.once('idle', () => setDrawn(description));
       if (description.kind === 'raster') {
         rasters.current = 1;
         drawRaster(map, 1, tileAddress(target, description.stamp, { look: looking.current }), description.width, bounds, () => rasters.current);
@@ -349,6 +356,7 @@ const GeoMap: React.FC<{
     <div ref={room} className="relative h-full w-full overflow-hidden">
       {/* In its style, which the map library's own stylesheet cannot override. */}
       <div ref={container} style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }} />
+      {drawn !== description ? <ContentLoadingState label={text.reading} className="pointer-events-none absolute inset-0" /> : null}
       <div className="absolute start-1.5 top-1.5 flex flex-col">
         <button type="button" className={`${control} text-foreground`} aria-label={text.zoomIn} title={text.zoomIn} onClick={() => made.current?.zoomIn()}>
           <Icon name="add" className="size-4" />
