@@ -278,23 +278,25 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
 
   const tabs: PanelTab[] = !description ? [] : [
     ...(description.kind === 'vector' ? [
-      { id: 'feature', label: text.tabs.feature, content: <FeatureTab picked={picked} total={description.features} text={text} onReach={reachPicked} /> },
+      { id: 'feature', label: text.tabs.feature, icon: 'map-pin-2', content: <FeatureTab picked={picked} total={description.features} text={text} onReach={reachPicked} /> },
       {
         id: 'table',
         label: text.tabs.table,
+        icon: 'table-2',
         // Made anew for other data, from its first row.
         content: <GeoTable key={`${description.layer}\n${description.stamp}`} target={target} description={description} picked={picked} text={text} onPick={pick} onReach={reachPicked} onChanged={() => setChanges((count) => count + 1)} />,
       },
-    ] : []),
+    ] satisfies PanelTab[] : []),
     ...(description.kind === 'raster' && gauged !== null ? [
       {
         id: 'look',
         label: text.tabs.look,
+        icon: 'palette',
         content: <LookTab description={description} measured={measured && measured.target === target && measured.stamp === gauged ? measured.outcome : null} look={look} text={text} onLook={setLook} />,
       },
-    ] : []),
-    ...(description.kind === 'raster' && gauged !== null ? [{ id: 'pixel', label: text.tabs.pixel, content: <PixelTab pixel={pixel} text={text} /> }] : []),
-    { id: 'info', label: text.tabs.info, content: <InfoTab description={description} text={text} drawn={look?.bands} /> },
+    ] satisfies PanelTab[] : []),
+    ...(description.kind === 'raster' && gauged !== null ? [{ id: 'pixel', label: text.tabs.pixel, icon: 'focus-3', content: <PixelTab pixel={pixel} text={text} /> }] satisfies PanelTab[] : []),
+    { id: 'info', label: text.tabs.info, icon: 'information', content: <InfoTab description={description} text={text} drawn={look?.bands} /> },
   ];
 
   return (

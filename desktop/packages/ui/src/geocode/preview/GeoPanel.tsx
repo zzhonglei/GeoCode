@@ -1,10 +1,12 @@
 import React from 'react';
 
-import { Icon } from '@/components/icon/Icon';
+import type { IconName } from '@/components/icon/icons';
+import { ToolbarTooltipButton } from '@/components/ui/action-toolbar';
 import { cn } from '@/lib/utils';
 import type { PreviewText } from './previewText';
 
-export type PanelTab = { id: string; label: string; content: React.ReactNode };
+/** A tab shows as its icon alone, as the files view's toolbar shows its actions; `label` is said where it is pointed at. */
+export type PanelTab = { id: string; label: string; icon: IconName; content: React.ReactNode };
 
 // The panel's height over the bottom of the map, in pixels: as it opens, and the least it is dragged to.
 const HEIGHT = 280;
@@ -80,30 +82,11 @@ export const GeoPanel: React.FC<{
       onLostPointerCapture={drop}
     >
       {beside ? null : <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-[3px] h-[3px] w-9 -translate-x-1/2 rounded-full bg-[color-mix(in_srgb,var(--foreground)_18%,transparent)]" />}
-      {tabs.map((tab) => {
-        const current = tab.id === shown.id;
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            aria-pressed={current}
-            className={cn('h-[26px] rounded-md px-3 typography-meta', current ? 'oc-raised bg-[var(--surface-background)] font-medium text-foreground dark:bg-surface-elevated' : 'text-muted-foreground hover:text-foreground')}
-            onClick={() => onActive(tab.id)}
-          >
-            {tab.label}
-          </button>
-        );
-      })}
+      {tabs.map((tab) => (
+        <ToolbarTooltipButton key={tab.id} label={tab.label} icon={tab.icon} pressed={tab.id === shown.id} onClick={() => onActive(tab.id)} />
+      ))}
       <div className="pointer-events-none flex-1" />
-      <button
-        type="button"
-        className="flex size-[26px] items-center justify-center rounded-md text-muted-foreground hover:bg-interactive-hover hover:text-foreground"
-        aria-label={text.closePanel}
-        title={text.closePanel}
-        onClick={() => onOpen(false)}
-      >
-        <Icon name="close" className="size-4" />
-      </button>
+      <ToolbarTooltipButton label={text.closePanel} icon="close" onClick={() => onOpen(false)} />
     </div>
   );
 
