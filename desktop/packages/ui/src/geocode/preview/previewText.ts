@@ -57,6 +57,8 @@ export type PreviewText = {
   nextPage: string;
   /** What the rows of the info tab are called. */
   info: { layer: string; geometry: string; features: string; fields: string; crs: string; extent: string; size: string; bands: string; nodata: string };
+  /** The headings of a vector layer's information, the corners its extent is given by, and its table of fields. */
+  about: { overview: string; place: string; southwest: string; northeast: string; field: string; type: string };
   /** Some of the map's tiles failed; the rest is drawn. */
   partly: string;
   missed: string;
@@ -102,6 +104,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     previousPage: 'Previous page',
     nextPage: 'Next page',
     info: { layer: 'Layer', geometry: 'Geometry', features: 'Features', fields: 'Fields', crs: 'Coordinate system', extent: 'Extent', size: 'Size', bands: 'Bands', nodata: 'no data' },
+    about: { overview: 'Overview', place: 'Coordinate system and extent', southwest: 'SW', northeast: 'NE', field: 'Field', type: 'Type' },
     partly: 'Part of the map could not be read.',
     missed: 'What was clicked could not be read.',
     bandEmpty: 'This band has no data.',
@@ -160,6 +163,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     previousPage: '上一页',
     nextPage: '下一页',
     info: { layer: '图层', geometry: '几何类型', features: '要素数', fields: '字段', crs: '坐标系', extent: '范围', size: '尺寸', bands: '波段', nodata: '无数据值' },
+    about: { overview: '概览', place: '坐标系与范围', southwest: '西南', northeast: '东北', field: '字段', type: '类型' },
     partly: '地图有一部分没能读出来。',
     missed: '点选的内容没能读出来。',
     bandEmpty: '这个波段没有数据。',
@@ -218,6 +222,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     previousPage: '上一頁',
     nextPage: '下一頁',
     info: { layer: '圖層', geometry: '幾何類型', features: '圖徵數', fields: '欄位', crs: '座標系統', extent: '範圍', size: '尺寸', bands: '波段', nodata: '無資料值' },
+    about: { overview: '概覽', place: '座標系統與範圍', southwest: '西南', northeast: '東北', field: '欄位', type: '類型' },
     partly: '地圖有一部分沒能讀出來。',
     missed: '點選的內容沒能讀出來。',
     bandEmpty: '這個波段沒有資料。',
