@@ -87,7 +87,10 @@ interface Answer {
     readonly bounds: readonly number[] | null
   } | null
   readonly statistics?: {
-    readonly bands: readonly ({ readonly [name: string]: number } & { readonly counts: readonly number[] })[]
+    readonly bands: readonly ({ readonly [name: string]: number } & {
+      readonly counts: readonly number[]
+      readonly edges: readonly number[]
+    })[]
     readonly ramps: Readonly<Record<string, readonly string[]>>
     readonly suspect?: { readonly value: number; readonly share: number }
     readonly classes?: readonly {
@@ -513,6 +516,12 @@ test("a raster is measured, and drawn as the interface asks", { skip: missing },
     ],
   )
   const kept = several[4].counts.reduce((sum, count) => sum + count, 0)
+  // Of whole numbers, in steps of as many of them each, six here from half below the least, and so each step past the
+  // corner without data holds as many of the thinned values as the next: steps of 5.07 values held one or two in turn,
+  // a comb.
+  assert.deepEqual(several[3].edges, [399.5, 1701.5])
+  const past = several[3].counts.slice(Math.ceil((700 - 399.5) / 6))
+  assert.equal(new Set(past).size, 1, String(past))
   assert.equal(kept, 434 * 434 - 100 * 100)
   // The same where what has no data is what a mask the bands share hides, thinned as the bands are.
   const hidden = (await (await open("masked.tif")).statistics())?.bands ?? []

@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { BY_CLASS, type Measured } from './previewClient';
 import { bandLook, drawnColour } from './rasterLook';
 
-const BAND: Measured = { min: 0, max: 1000, mean: 400, std: 120, low: 20, high: 900, between: [20, 900], counts: [1, 2, 3] };
+const BAND: Measured = { min: 0, max: 1000, mean: 400, std: 120, low: 20, high: 900, between: [20, 900], counts: [1, 2, 3], edges: [0, 1000] };
 const CLASSES = [{ value: 10, color: [0, 100, 0, 255], share: 1, name: null }];
 
 // The pixel tab shows the colour a value is drawn in; worked out apart from the reader, it must come out as the

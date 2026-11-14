@@ -226,7 +226,10 @@ const Spread: React.FC<{ band: Measured; range: Range; colours: readonly string[
   const [from, to] = [place(low), place(high)];
   // Their square roots: a band's most common value, as the sea is in a model of heights, would else flatten the rest.
   const peak = Math.sqrt(Math.max(1, ...band.counts));
-  const outline = band.counts.map((count, index) => `L${index + 0.5} ${100 - (96 * Math.sqrt(count)) / peak}`).join(' ');
+  // Each step at its middle, along the band's range, where its steps run from and to.
+  const [first, last] = band.edges;
+  const step = (last - first) / Math.max(1, band.counts.length);
+  const outline = band.counts.map((count, index) => `L${along(first + (index + 0.5) * step)} ${100 - (96 * Math.sqrt(count)) / peak}`).join(' ');
   // The ramp runs from the low value to the high even where those lie outside the band's range, as two deviations
   // about a mean may: the strip then shows the part of the ramp the map is drawn in.
   const between = colours.map((colour, index) => `${colour} ${along(low) + ((along(high) - along(low)) * index) / Math.max(1, colours.length - 1)}%`);
@@ -257,8 +260,8 @@ const Spread: React.FC<{ band: Measured; range: Range; colours: readonly string[
         }}
         onPointerCancel={() => setHeld(null)}
       >
-        <svg aria-hidden="true" viewBox="0 0 256 100" preserveAspectRatio="none" className="block h-full w-full text-foreground">
-          <path d={`M0 100 ${outline} L256 100 Z`} fill="currentColor" fillOpacity={0.13} stroke="currentColor" strokeOpacity={0.5} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        <svg aria-hidden="true" viewBox="0 0 100 100" preserveAspectRatio="none" className="block h-full w-full text-foreground">
+          <path d={`M${along(first)} 100 ${outline} L${along(last)} 100 Z`} fill="currentColor" fillOpacity={0.13} stroke="currentColor" strokeOpacity={0.5} strokeWidth={1} vectorEffect="non-scaling-stroke" />
         </svg>
         <div className="absolute inset-y-0 start-0 bg-background opacity-65" style={{ width: `${from}%` }} />
         <div className="absolute inset-y-0 end-0 bg-background opacity-65" style={{ width: `${100 - to}%` }} />
@@ -411,8 +414,8 @@ const Spreads: React.FC<{ bands: (Measured | null)[] }> = ({ bands }) => {
     <svg aria-hidden="true" viewBox="0 0 256 100" preserveAspectRatio="none" className="block h-[72px] w-full">
       {bands.map((band, channel) => {
         if (!band) return null;
-        const step = (band.max - band.min || 1) / band.counts.length;
-        const line = band.counts.map((count, index) => `${index === 0 ? 'M' : 'L'}${((band.min + (index + 0.5) * step - least) / span) * 256} ${100 - (96 * Math.sqrt(count)) / peak}`).join(' ');
+        const step = (band.edges[1] - band.edges[0]) / Math.max(1, band.counts.length);
+        const line = band.counts.map((count, index) => `${index === 0 ? 'M' : 'L'}${((band.edges[0] + (index + 0.5) * step - least) / span) * 256} ${100 - (96 * Math.sqrt(count)) / peak}`).join(' ');
         return <path key={channel} d={line} fill="none" stroke={CHANNELS[channel]} strokeWidth={1.25} vectorEffect="non-scaling-stroke" />;
       })}
     </svg>

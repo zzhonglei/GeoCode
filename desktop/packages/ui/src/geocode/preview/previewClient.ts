@@ -79,8 +79,12 @@ const measuredSchema = z.object({
   high: z.number(),
   /** The values the band is drawn between unless the preview names others. */
   between: z.tuple([z.number(), z.number()]),
-  /** How many values of the sample fall into each of as many even steps from `min` to `max`. */
+  /**
+   * How many values of the sample fall into each of as many even steps from the first of the `edges` to the last:
+   * from `min` to `max`, or, of a band of whole numbers, from half below the least by a whole number of values each.
+   */
   counts: z.array(z.number()),
+  edges: z.tuple([z.number(), z.number()]),
 });
 
 const statisticsSchema = z.object({

@@ -21,7 +21,8 @@ STRIP = 64
 # The share of a band's values left out at each end of its range, as QGIS draws a raster by default; the interface
 # names the range by them in desktop/packages/ui/src/geocode/preview/previewText.ts.
 CUT = (2, 98)
-# As many steps as a band's histogram has, from its least value to its greatest.
+# As many steps as a band's histogram has, from its least value to its greatest; of a band of whole numbers, as many
+# as there are values between when they are fewer.
 BINS = 256
 # As many different values as a band of whole numbers may have and be taken for classes, each drawn in a colour of its
 # own, when it brings no colour table: land cover, a mask, zones. More are taken for measurements.
@@ -223,10 +224,10 @@ def _distinct(count):
 
 def _measured(band, blank=None):
     """What a sample of a band says of its values: their least and greatest, mean and deviation, the values that
-    leave out CUT of them at each end, how many fall into each of BINS steps from the least to the greatest, the
-    share of them that the least and the greatest each are, and the
-    values the band is drawn `between` when the interface names none. None of a band without data. Of the values
-    that are not `blank`, where the interface takes it for no data besides the band's own."""
+    leave out CUT of them at each end, how many fall into each step of its histogram and the values the steps run
+    from and to, its `edges`, the share of them that the least and the greatest each are, and the values the band is
+    drawn `between` when the interface names none. None of a band without data. Of the values that are not `blank`,
+    where the interface takes it for no data besides the band's own."""
     return _measure(_sample(band, blank))
 
 
@@ -237,7 +238,15 @@ def _measure(sample):
         return None
     least, most = float(values.min()), float(values.max())
     low, high = (float(value) for value in numpy.percentile(values, CUT))
-    counts = numpy.histogram(values, bins=BINS, range=(least, most if most > least else least + 1.0))[0]
+    if sample.dtype.kind in "iu":
+        # Steps of as many whole numbers each, from half below the least: steps that held one value and two in turn,
+        # as 256 even steps over 147 values do, would draw the histogram as the teeth of a comb.
+        width = math.ceil((most - least + 1) / BINS)
+        steps = math.ceil((most - least + 1) / width)
+        edges = (least - 0.5, least - 0.5 + steps * width)
+    else:
+        steps, edges = BINS, (least, most if most > least else least + 1.0)
+    counts = numpy.histogram(values, bins=steps, range=edges)[0]
     between = (low, high) if high > low else (least, most)
     return {
         "between": list(between if between[1] > between[0] else (least, least + 1.0)),
@@ -248,6 +257,7 @@ def _measure(sample):
         "low": low,
         "high": high,
         "counts": counts.tolist(),
+        "edges": list(edges),
         "ends": [float(numpy.count_nonzero(values == end) / values.size) for end in (least, most)],
     }
 
