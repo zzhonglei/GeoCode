@@ -79,6 +79,27 @@ export type PreviewText = {
     overviews: string;
     levels: (count: number) => string;
   };
+  /**
+   * What a raster has no data by, under that title: what is said where its file declares no value, of a value it
+   * declares, of the value the preview takes for no data besides and of what that changes, the button to add one,
+   * the field it is typed in and what takes it; what takes it back; and the hint of a border of no data the file does
+   * not declare, `share` of the pixels at the `least` end of the values or the greatest, with what takes the value
+   * for no data and what says it is not one.
+   */
+  blank: {
+    title: string;
+    undeclared: string;
+    declared: string;
+    preview: string;
+    only: string;
+    add: string;
+    value: string;
+    confirm: string;
+    remove: string;
+    suspect: (value: string, share: string, least: boolean) => string;
+    take: string;
+    dismiss: string;
+  };
   /** Some of the map's tiles failed; the rest is drawn. */
   partly: string;
   missed: string;
@@ -136,6 +157,20 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
       nodata: 'No data',
       overviews: 'Overviews',
       levels: (count) => (count === 0 ? 'None' : count === 1 ? '1 level' : `${count} levels`),
+    },
+    blank: {
+      title: 'No data',
+      undeclared: 'None declared by the file',
+      declared: 'Declared by the file',
+      preview: 'preview',
+      only: 'Taken for no data in the preview alone; the file is not changed',
+      add: 'Take another value for no data, in the preview alone',
+      value: 'Value',
+      confirm: 'Take it for no data',
+      remove: 'Take it back',
+      suspect: (value, share, least) => `About ${share} of the pixels are ${value}, the ${least ? 'least' : 'greatest'} value in the data: it looks like an edge of no data the file does not declare.`,
+      take: 'Take for no data',
+      dismiss: 'It is not',
     },
     partly: 'Part of the map could not be read.',
     missed: 'What was clicked could not be read.',
@@ -208,6 +243,20 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
       overviews: '金字塔',
       levels: (count) => (count === 0 ? '没有' : `${count} 层`),
     },
+    blank: {
+      title: '无效像元',
+      undeclared: '文件没有声明',
+      declared: '文件声明的无数据值',
+      preview: '预览',
+      only: '只在预览里当作无数据，不改文件',
+      add: '另外把一个值当作无数据，只影响预览',
+      value: '值',
+      confirm: '当作无数据',
+      remove: '取消',
+      suspect: (value, share, least) => `约 ${share} 的像元值为 ${value}，是数据里最${least ? '小' : '大'}的值，像是影像边缘没有声明的无数据区域。`,
+      take: '当作无数据',
+      dismiss: '不是无数据',
+    },
     partly: '地图有一部分没能读出来。',
     missed: '点选的内容没能读出来。',
     bandEmpty: '这个波段没有数据。',
@@ -278,6 +327,20 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
       nodata: '無資料值',
       overviews: '金字塔',
       levels: (count) => (count === 0 ? '沒有' : `${count} 層`),
+    },
+    blank: {
+      title: '無效像元',
+      undeclared: '檔案沒有宣告',
+      declared: '檔案宣告的無資料值',
+      preview: '預覽',
+      only: '只在預覽中當作無資料，不改檔案',
+      add: '另外把一個值當作無資料，只影響預覽',
+      value: '值',
+      confirm: '當作無資料',
+      remove: '取消',
+      suspect: (value, share, least) => `約 ${share} 的像元值為 ${value}，是資料中最${least ? '小' : '大'}的值，像是影像邊緣沒有宣告的無資料區域。`,
+      take: '當作無資料',
+      dismiss: '不是無資料',
     },
     partly: '地圖有一部分沒能讀出來。',
     missed: '點選的內容沒能讀出來。',

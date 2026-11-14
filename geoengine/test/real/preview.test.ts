@@ -89,6 +89,7 @@ interface Answer {
   readonly statistics?: {
     readonly bands: readonly ({ readonly [name: string]: number } & { readonly counts: readonly number[] })[]
     readonly ramps: Readonly<Record<string, readonly string[]>>
+    readonly suspect?: { readonly value: number; readonly share: number }
     readonly classes?: readonly {
       readonly value: number
       readonly color: readonly number[]
@@ -138,10 +139,15 @@ const open = async (name: string, layer?: string) => {
     tile: (tile: { z: number; x: number; y: number } = TILE, fid?: number) =>
       ask("tile", { ...target, stamp: described.stamp, ...tile, ...(fid === undefined ? {} : { fid }) }),
     drawn: (look: object) => ask("tile", { ...target, stamp: described.stamp, ...TILE, look }),
-    statistics: async () => (await ask("statistics", { ...target, stamp: described.stamp })).statistics,
-    pixel: async (longitude: number, latitude: number) => {
+    /** The tile every dataset lies in, without the pixels that hold `blank` in all the bands drawn. */
+    blanked: (blank: number) => ask("tile", { ...target, stamp: described.stamp, ...TILE, blank }),
+    statistics: async (blank?: number) =>
+      (await ask("statistics", { ...target, stamp: described.stamp, ...(blank === undefined ? {} : { blank }) }))
+        .statistics,
+    pixel: async (longitude: number, latitude: number, blank?: number) => {
       const [x, y] = plane(longitude, latitude)
-      return (await ask("pixel", { ...target, stamp: described.stamp, x, y })).pixel
+      const asked = { ...target, stamp: described.stamp, x, y, ...(blank === undefined ? {} : { blank }) }
+      return (await ask("pixel", asked)).pixel
     },
     feature: async (fid: number) => (await ask("identify", { ...target, stamp: described.stamp, fid })).found,
     rows: (row: number) => ask("rows", { ...target, stamp: described.stamp, row }),
@@ -536,8 +542,50 @@ test("a pixel of a picture is not drawn where any of its bands has no data", { s
   ])
   assert.equal(west[3], 0, String(west))
   // The east as the file has it, as near as an image compressed with loss keeps it.
-  assert.ok([200, 200, 200, 255].every((value, index) => Math.abs(east[index] - value) <= 14), String(east))
+  assert.ok(
+    [200, 200, 200, 255].every((value, index) => Math.abs(east[index] - value) <= 14),
+    String(east),
+  )
 })
+
+// Guards the value taken for no data besides a raster's own, as a border of 0 that an export leaves undeclared: told
+// of where it is suspected, and once taken, left out of what is measured, of the map where every band drawn holds it,
+// and of a click's values; a band that holds it alone, as blue may in a shadow, is still drawn and read there.
+test(
+  "a value taken for no data is suspected where a border holds it, and left out once taken",
+  { skip: missing },
+  async () => {
+    const side = 0.3515625 / 256
+    const bordered = await open("bordered.tif")
+    const plain = await bordered.statistics()
+    assert.deepEqual(plain?.suspect, { value: 0, share: 0.25 })
+    // Measured with it, the band is drawn from 0 up: the border takes more than the 2% a stretch leaves out.
+    assert.deepEqual([plain?.bands[0].min, plain?.bands[0].low], [0, 0])
+    const taken = await bordered.statistics(0)
+    assert.equal(taken?.suspect, undefined)
+    assert.ok(
+      (taken?.bands ?? []).every((band) => band.min >= 300),
+      JSON.stringify(taken?.bands.map((band) => band.min)),
+    )
+
+    const spots = [
+      [60, 256],
+      [400, 100],
+      [400, 450],
+    ]
+    const [edge, inside, shadow] = await pixels(await bordered.blanked(0), "bordered.webp", spots)
+    assert.equal(edge[3], 0, String(edge))
+    assert.equal(inside[3], 255, String(inside))
+    assert.equal(shadow[3], 255, String(shadow))
+    const [drawnEdge] = await pixels(await bordered.tile(), "bordered-plain.webp", spots)
+    assert.equal(drawnEdge[3], 255, String(drawnEdge))
+
+    assert.deepEqual((await bordered.pixel(30.5 * side, 0.3515625 - 100.5 * side))?.values, [0, 0, 0])
+    assert.deepEqual((await bordered.pixel(30.5 * side, 0.3515625 - 100.5 * side, 0))?.values, [null, null, null])
+    const dark = await bordered.pixel(200.5 * side, 0.3515625 - 225.5 * side, 0)
+    assert.ok(dark?.values.every((value) => value !== null) && dark.values[2] === 0, String(dark?.values))
+  },
+)
 
 // Guards the values a click reads out against being those of a neighbouring pixel, or of the picture drawn rather
 // than of the file: either would be a number as good as any to look at.

@@ -270,6 +270,17 @@ def partial(made):
         made.GetRasterBand(number).WriteArray(values)
     made.GetRasterBand(2).SetNoDataValue(0)
 
+def bordered(made):
+    # Rising from 300 in the west to 4000 in the east, but for a border of 0 in its west quarter, in all three bands
+    # and not declared as no data, as an export fills the edge of a scene; and for the south-east of its third band
+    # alone, 0 there as a band of blue may be in a shadow.
+    for number in (1, 2, 3):
+        values = numpy.tile(numpy.linspace(300, 4000, 256), (256, 1)).astype(numpy.uint16)
+        values[:, :64] = 0
+        if number == 3:
+            values[192:, 64:] = 0
+        made.GetRasterBand(number).WriteArray(values)
+
 def unknown(made):
     # As heights, with NaN for where it has no data, as rasters written by Python often have.
     values = numpy.tile(numpy.linspace(0, 1000, 256, dtype=numpy.float32), (256, 1))
@@ -279,6 +290,7 @@ def unknown(made):
 
 raster("picture.tif", 3, gdal.GDT_Byte, picture)
 raster("partial.tif", 3, gdal.GDT_Byte, partial)
+raster("bordered.tif", 3, gdal.GDT_UInt16, bordered)
 raster("heights.tif", 1, gdal.GDT_Float32, heights)
 raster("classes.tif", 1, gdal.GDT_Byte, classes)
 raster("unknown.tif", 1, gdal.GDT_Float32, unknown)

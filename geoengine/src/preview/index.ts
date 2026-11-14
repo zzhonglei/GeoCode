@@ -42,6 +42,8 @@ const EnvironmentReady = Schema.Struct({ status: Schema.Literal("ready"), base: 
 const decodeEnvironmentReady = Schema.decodeUnknownExit(EnvironmentReady)
 
 const Target = { path: Schema.String, layer: Schema.optionalKey(Schema.String) }
+/** A value a raster's bands are taken to have no data by besides their own, where the interface says one. */
+const Blank = { blank: Schema.optionalKey(Schema.Finite) }
 const DescribeParams = Schema.Struct(Target)
 const TileParams = Schema.Struct({
   ...Target,
@@ -62,6 +64,7 @@ const TileParams = Schema.Struct({
       ramp: Schema.optionalKey(Schema.String),
     }),
   ),
+  ...Blank,
 })
 /** A click, or the number of the feature asked for. */
 const IdentifyParams = Schema.Union([
@@ -77,8 +80,8 @@ const IdentifyParams = Schema.Union([
   Schema.Struct({ ...Target, stamp: Schema.String, fid: Schema.Int }),
 ])
 const RowsParams = Schema.Struct({ ...Target, stamp: Schema.String, row: Schema.Int })
-const StatisticsParams = Schema.Struct({ ...Target, stamp: Schema.String })
-const PixelParams = Schema.Struct({ ...Target, stamp: Schema.String, x: Schema.Number, y: Schema.Number })
+const StatisticsParams = Schema.Struct({ ...Target, stamp: Schema.String, ...Blank })
+const PixelParams = Schema.Struct({ ...Target, stamp: Schema.String, x: Schema.Number, y: Schema.Number, ...Blank })
 
 /** The line a reader's answer begins with. */
 const Answer = Schema.Struct({
@@ -285,6 +288,7 @@ export const capability = (pyramids: string, launch: Launch = READER): Engine.Ca
           y: params.value.y,
           fid: params.value.fid,
           look: params.value.look,
+          blank: params.value.blank,
         }
         const answer = yield* ask(params.value, { do: "tile", ...tile }, context.signal)
         const result = decodeTileResult(answer.result)
@@ -327,7 +331,8 @@ export const capability = (pyramids: string, launch: Launch = READER): Engine.Ca
       Effect.gen(function* () {
         const params = Schema.decodeUnknownExit(StatisticsParams)(raw)
         if (Exit.isFailure(params)) return yield* invalid(params.cause)
-        const answer = yield* ask(params.value, { do: "statistics", stamp: params.value.stamp }, context.signal)
+        const measure = { stamp: params.value.stamp, blank: params.value.blank }
+        const answer = yield* ask(params.value, { do: "statistics", ...measure }, context.signal)
         const result = decodeStatisticsResult(answer.result)
         if (Exit.isFailure(result)) return yield* unexpected(result.cause)
         return result.value
@@ -337,7 +342,7 @@ export const capability = (pyramids: string, launch: Launch = READER): Engine.Ca
       Effect.gen(function* () {
         const params = Schema.decodeUnknownExit(PixelParams)(raw)
         if (Exit.isFailure(params)) return yield* invalid(params.cause)
-        const click = { stamp: params.value.stamp, x: params.value.x, y: params.value.y }
+        const click = { stamp: params.value.stamp, x: params.value.x, y: params.value.y, blank: params.value.blank }
         const answer = yield* ask(params.value, { do: "pixel", ...click }, context.signal)
         const result = decodePixelResult(answer.result)
         if (Exit.isFailure(result)) return yield* unexpected(result.cause)

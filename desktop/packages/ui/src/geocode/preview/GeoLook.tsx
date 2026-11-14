@@ -1,9 +1,10 @@
 import React from 'react';
 
+import { Icon } from '@/components/icon/Icon';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { getCurrentIntlLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { Section } from './GeoTabs';
+import { Action, Section } from './GeoTabs';
 import { BY_CLASS, type GeoLook, type GeoStatistics, type Measured, type RasterDescription } from './previewClient';
 import { unshownText, valueText, type PreviewText } from './previewText';
 import { bandLook, BYTES, CHANNEL_NAMES, CHANNELS, classColour, PLAIN, rampColours, type Classes, type Range } from './rasterLook';
@@ -107,6 +108,90 @@ const StretchChoice: React.FC<{ value: Stretch; options: readonly Option<Stretch
     <Segments label={text.stretch} value={value} options={options} onValue={onValue} />
   </div>
 );
+
+/**
+ * That a value may be a border of no data the file does not declare, `share` of the raster at its `least` end or its
+ * greatest: told, with what to do about it, to take it for no data in the preview, or to say it is not.
+ */
+const Suspect: React.FC<{ value: number; share: number; least: boolean; text: PreviewText; onTake: () => void; onDismiss: () => void }> = ({ value, share, least, text, onTake, onDismiss }) => {
+  const locale = getCurrentIntlLocale();
+  return (
+    <div className="flex items-start gap-1.5 rounded-md bg-[color-mix(in_srgb,var(--interactive-selection-foreground)_8%,transparent)] py-1 pe-1 ps-2">
+      <Icon name="information" className="mt-[3px] size-3.5 shrink-0 text-[var(--interactive-selection-foreground)]" />
+      <span className="min-w-0 flex-1 py-0.5">{text.blank.suspect(valueText(value, locale), share.toLocaleString(locale, { style: 'percent', maximumFractionDigits: 0 }), least)}</span>
+      <button
+        type="button"
+        className="mt-px shrink-0 whitespace-nowrap rounded px-1 font-medium leading-[22px] text-[var(--interactive-selection-foreground)] hover:bg-[color-mix(in_srgb,var(--interactive-selection-foreground)_10%,transparent)]"
+        onClick={onTake}
+      >
+        {text.blank.take}
+      </button>
+      <Action icon="close" label={text.blank.dismiss} onClick={onDismiss} />
+    </div>
+  );
+};
+
+const CHIP = 'inline-flex items-center rounded font-mono leading-[18px]';
+
+/**
+ * What the raster has no data by: the values its bands declare, and one the preview takes for no data besides them,
+ * to add and to take back, which changes the preview alone and never the file.
+ */
+const Blanks: React.FC<{ description: RasterDescription; blank: number | null; text: PreviewText; onBlank: (blank: number | null) => void }> = ({ description, blank, text, onBlank }) => {
+  const locale = getCurrentIntlLocale();
+  const [adding, setAdding] = React.useState(false);
+  const [typed, setTyped] = React.useState('');
+  const declared = [...new Set(description.bands.flatMap((band) => (band.nodata === null ? [] : [band.nodata])))];
+  return (
+    <Section title={text.blank.title}>
+      <div className="flex min-h-[26px] flex-wrap items-center gap-1.5">
+        {declared.length === 0 ? <span className="text-muted-foreground">{text.blank.undeclared}</span> : null}
+        {declared.map((value) => (
+          <span key={value} title={text.blank.declared} className={cn(CHIP, 'px-1.5 bg-[color-mix(in_srgb,var(--foreground)_7%,transparent)]')}>{valueText(value, locale)}</span>
+        ))}
+        {blank !== null ? (
+          <span title={text.blank.only} className={cn(CHIP, 'bg-interactive-selection ps-1.5 text-interactive-selection-foreground')}>
+            {valueText(blank, locale)}
+            <span className="ms-1 font-sans text-[10px] opacity-85">{text.blank.preview}</span>
+            <button type="button" aria-label={text.blank.remove} title={text.blank.remove} className="inline-flex size-[18px] items-center justify-center opacity-70 hover:opacity-100" onClick={() => onBlank(null)}>
+              <Icon name="close" className="size-3" />
+            </button>
+          </span>
+        ) : adding ? (
+          <form
+            className={cn(CHIP, 'ps-1.5 ring-1 ring-[var(--interactive-selection-foreground)]')}
+            onSubmit={(event) => {
+              event.preventDefault();
+              const value = Number(typed);
+              if (typed.trim() === '' || !Number.isFinite(value)) return;
+              setAdding(false);
+              onBlank(value);
+            }}
+          >
+            <input
+              // Opened to be typed in.
+              autoFocus
+              value={typed}
+              inputMode="decimal"
+              aria-label={text.blank.value}
+              placeholder={text.blank.value}
+              className="w-14 bg-transparent font-mono leading-[18px] text-foreground outline-none"
+              onChange={(event) => setTyped(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setAdding(false);
+              }}
+            />
+            <button type="submit" aria-label={text.blank.confirm} title={text.blank.confirm} className="inline-flex size-[18px] items-center justify-center text-[var(--interactive-selection-foreground)]">
+              <Icon name="check" className="size-3" />
+            </button>
+          </form>
+        ) : (
+          <Action icon="add" label={text.blank.add} onClick={() => setAdding(true)} />
+        )}
+      </div>
+    </Section>
+  );
+};
 
 /**
  * How a band's values are spread, with the two lines the band is drawn between, each to be dragged, and under it
@@ -439,17 +524,24 @@ const BandTable: React.FC<{
  * to the reader, and `onLook` changes it; `dragged` is the range each band's lines were last dragged to, told to
  * `onDragged`. A raster of several bands is drawn as a picture of three of them or as one of them alone, chosen in
  * the table of its bands; one band is drawn and chosen for as a raster of one band is. Where the panel is wide, the
- * bands stand on one side and how they are drawn on the other.
+ * bands stand on one side and how they are drawn on the other. Under them is what the raster has no data by, with
+ * `blank`, the value the preview takes for no data besides, changed by `onBlank`; above how it is drawn, a hint of a
+ * border of no data the file does not declare, until `onDismiss` says it is not one.
  */
 export const LookTab: React.FC<{
   description: RasterDescription;
   measured: { statistics: GeoStatistics } | { code: string } | null;
   look: GeoLook | null;
   dragged: ReadonlyMap<number, Range>;
+  blank: number | null;
+  /** Whether a border of no data the file does not declare is still to be hinted at, where one is suspected. */
+  hinted: boolean;
   text: PreviewText;
   onLook: (look: GeoLook) => void;
   onDragged: (band: number, range: Range) => void;
-}> = ({ description, measured, look, dragged, text, onLook, onDragged }) => {
+  onBlank: (blank: number | null) => void;
+  onDismiss: () => void;
+}> = ({ description, measured, look, dragged, blank, hinted, text, onLook, onDragged, onBlank, onDismiss }) => {
   if (measured === null) return <div className="p-3 typography-meta text-muted-foreground">{text.reading}</div>;
   if ('code' in measured) return <div className="p-3 typography-meta text-muted-foreground">{unshownText(text, measured.code)}</div>;
   const statistics = measured.statistics;
@@ -488,6 +580,18 @@ export const LookTab: React.FC<{
         onDragged,
       });
   const column = 'flex min-w-0 flex-col gap-3';
+  const suspect = hinted ? statistics.suspect : undefined;
+  const hint = suspect ? (
+    <Suspect
+      value={suspect.value}
+      share={suspect.share}
+      least={suspect.value <= (statistics.bands[drawn[0] - 1]?.min ?? suspect.value)}
+      text={text}
+      onTake={() => onBlank(suspect.value)}
+      onDismiss={onDismiss}
+    />
+  ) : null;
+  const blanks = <Blanks description={description} blank={blank} text={text} onBlank={onBlank} />;
 
   return (
     <ScrollableOverlay outerClassName="h-full min-h-0" className="@container p-3 typography-meta">
@@ -506,22 +610,36 @@ export const LookTab: React.FC<{
                 onChannel={(channel, band) => onLook(pictureOf(picture.bands.map((each, at) => (at === channel ? band : each)), statistics, stretchesOf(description, statistics, picture).stretch))}
                 onBand={(band) => onLook(alone(band))}
               />
+              <div className="hidden @[34rem]:block">{blanks}</div>
             </div>
             <div className={column}>
+              {hint}
               {drawing.ramps}
               <div className="flex min-w-0 flex-col">{drawing.rest}</div>
+              <div className="@[34rem]:hidden">{blanks}</div>
             </div>
           </>
         ) : drawing.listed ? (
           <>
-            <div className={column}>{drawing.ramps}</div>
-            <div className={column}>{drawing.rest}</div>
+            <div className={column}>
+              {drawing.ramps}
+              <div className="hidden @[34rem]:block">{blanks}</div>
+            </div>
+            <div className={column}>
+              {hint}
+              {drawing.rest}
+              <div className="@[34rem]:hidden">{blanks}</div>
+            </div>
           </>
         ) : (
-          <div className={column}>
-            {drawing.ramps}
-            <div className="flex min-w-0 flex-col">{drawing.rest}</div>
-          </div>
+          <>
+            <div className={column}>
+              {hint}
+              {drawing.ramps}
+              <div className="flex min-w-0 flex-col">{drawing.rest}</div>
+            </div>
+            <div className={column}>{blanks}</div>
+          </>
         )}
       </div>
     </ScrollableOverlay>

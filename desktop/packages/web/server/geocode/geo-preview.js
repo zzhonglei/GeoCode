@@ -34,6 +34,8 @@ export const registerGeoPreview = (app, { geoEngine }) => {
 
   // An empty value would read as zero.
   const number = (value) => (value === '' ? NaN : Number(value));
+  // A value a raster's bands are taken to have no data by besides their own, where the window says one.
+  const blankOf = (query) => (query.blank === undefined ? {} : { blank: number(query.blank) });
   // What is not JSON stays the text it is, for GeoEngine to refuse.
   const parsed = (text) => {
     try {
@@ -51,7 +53,7 @@ export const registerGeoPreview = (app, { geoEngine }) => {
 
   app.get('/api/geocode/preview/tile', async (req, res) => {
     const { stamp, z, x, y, fid, look } = req.query;
-    const tile = { stamp, z: number(z), x: number(x), y: number(y) };
+    const tile = { stamp, z: number(z), x: number(x), y: number(y), ...blankOf(req.query) };
     // The one feature the tile is of, where it is the mark of the feature that is picked.
     if (fid !== undefined) tile.fid = number(fid);
     // How the interface wants a raster drawn, where it says.
@@ -75,12 +77,12 @@ export const registerGeoPreview = (app, { geoEngine }) => {
   });
 
   app.get('/api/geocode/preview/pixel', async (req, res) => {
-    const result = await ask(req, res, 'preview.pixel', { stamp: req.query.stamp, x: number(req.query.x), y: number(req.query.y) });
+    const result = await ask(req, res, 'preview.pixel', { stamp: req.query.stamp, x: number(req.query.x), y: number(req.query.y), ...blankOf(req.query) });
     if (result) res.json(result);
   });
 
   app.get('/api/geocode/preview/statistics', async (req, res) => {
-    const result = await ask(req, res, 'preview.statistics', { stamp: req.query.stamp });
+    const result = await ask(req, res, 'preview.statistics', { stamp: req.query.stamp, ...blankOf(req.query) });
     if (result) res.json(result);
   });
 

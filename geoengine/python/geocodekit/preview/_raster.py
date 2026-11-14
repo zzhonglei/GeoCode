@@ -33,6 +33,10 @@ COUNTED = 8192 * 8192
 # side, by where along the band's width and height they lie.
 PLACES = ((0.5, 0.5), (0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75))
 PLACE = 512
+# The share of a band's sample that one value at either end of its values may take, in a band that says nothing of
+# where it has no data, before it is told as what may be a border of no data the file does not declare: a scene
+# exported or cut out with its edge filled with nothing but 0 has a quarter of its pixels and more of it.
+SUSPECT = 0.05
 # The colour of a value that was met in no count of the classes.
 UNCOUNTED = (128, 128, 128, 255)
 # The pixels read at a time to count them.
@@ -83,14 +87,16 @@ def _sampled(band):
     return max(1, round(band.XSize / scale)), max(1, round(band.YSize / scale))
 
 
-def _sample(band):
-    """The values of a sample of a band that are data; GDAL reads the sample from an overview when one fits."""
+def _sample(band, blank=None):
+    """The values of a sample of a band that are data, and not `blank`, a value the interface takes for no data
+    besides the band's own; GDAL reads the sample from an overview when one fits."""
     width, height = _sampled(band)
     values = band.ReadAsArray(buf_xsize=width, buf_ysize=height)
     valid = band.GetMaskBand().ReadAsArray(buf_xsize=width, buf_ysize=height) != 0
     if numpy.iscomplexobj(values):
         values = numpy.abs(values)
-    return values[valid & numpy.isfinite(values)]
+    values = values[valid & numpy.isfinite(values)]
+    return values if blank is None else values[values != blank]
 
 
 def _thinned(read, height, rows, every):
@@ -103,7 +109,7 @@ def _thinned(read, height, rows, every):
     return numpy.concatenate(kept, axis=-2)
 
 
-def _samples(dataset, indices):
+def _samples(dataset, indices, blank=None):
     """A sample of each of the bands of these numbers, as `_sample` gives one, read several bands at a time: of a
     file that keeps the bands of a pixel together, each band read alone is the whole file read, and so is each band
     of several read reduced at once, which GDAL reads band by band. Where there are no overviews to read a reduced
@@ -155,6 +161,8 @@ def _samples(dataset, indices):
                 if flags & gdal.GMF_PER_DATASET:
                     shared = read_mask
                 valid &= read_mask != 0
+            if blank is not None:
+                valid &= values != blank
             yield index, values[valid]
 
 
@@ -213,11 +221,13 @@ def _distinct(count):
     return colours
 
 
-def _measured(band):
+def _measured(band, blank=None):
     """What a sample of a band says of its values: their least and greatest, mean and deviation, the values that
-    leave out CUT of them at each end, how many fall into each of BINS steps from the least to the greatest, and the
-    values the band is drawn `between` when the interface names none. None of a band without data."""
-    return _measure(_sample(band))
+    leave out CUT of them at each end, how many fall into each of BINS steps from the least to the greatest, the
+    share of them that the least and the greatest each are, and the
+    values the band is drawn `between` when the interface names none. None of a band without data. Of the values
+    that are not `blank`, where the interface takes it for no data besides the band's own."""
+    return _measure(_sample(band, blank))
 
 
 def _measure(sample):
@@ -238,6 +248,7 @@ def _measure(sample):
         "low": low,
         "high": high,
         "counts": counts.tolist(),
+        "ends": [float(numpy.count_nonzero(values == end) / values.size) for end in (least, most)],
     }
 
 
@@ -258,7 +269,7 @@ class Look:
         )
         # Three bands of bytes are a picture, drawn as it is.
         picture = len(bands) == 3 and all(band.DataType == gdal.GDT_Byte for band in bands)
-        as_it_is = self.palette is not None or picture
+        self._as_it_is = self.palette is not None or picture
         # The classes of one band of whole numbers: their values in order, their colours, how many pixels each has,
         # and whether that was counted in a sample. Drawn by them unless the interface asks for a ramp. The colours
         # are the colour table's where the band brings one, by which its tiles are then drawn.
@@ -271,30 +282,63 @@ class Look:
             else:
                 colours = self.palette[numpy.clip(values, 0, len(self.palette) - 1)]
             self.classes = (values.astype(numpy.int64), colours, counts, sampled)
-        # By the band's number. Those of the bands drawn are measured now, the rest when the interface asks.
+        # By the band's number and the value taken for no data besides its own, None for none. Those of the bands drawn
+        # are measured now, the rest when the interface asks.
         self._measured = {}
-        measured = [self.measured(dataset, index) for index in self.bands]
-        self.ranges = None if as_it_is else [each["between"] if each else [0.0, 1.0] for each in measured]
+        self.ranges = self.ranges_of(dataset, None)
         self.native = native(dataset)
 
-    def measured(self, dataset, index):
-        if index not in self._measured:
-            self._measured[index] = _measured(dataset.GetRasterBand(index))
-        return self._measured[index]
+    def measured(self, dataset, index, blank=None):
+        if (index, blank) not in self._measured:
+            self._measured[(index, blank)] = _measured(dataset.GetRasterBand(index), blank)
+        return self._measured[(index, blank)]
 
-    def statistics(self, dataset):
+    def ranges_of(self, dataset, blank):
+        """The values the bands drawn are drawn between when the interface does not say, measured without `blank`;
+        None for a raster drawn as it is."""
+        if self._as_it_is:
+            return None
+        measured = [self.measured(dataset, index, blank) for index in self.bands]
+        return [each["between"] if each else [0.0, 1.0] for each in measured]
+
+    def _suspect(self, dataset):
+        """A value that may be a border of no data the file does not declare: at the same end of the values of each
+        band drawn that says nothing of where it has no data, and as much as SUSPECT of each. Only told, never taken
+        for no data unasked: 0 is as often a value as any, the sea's height or a class."""
+        found = None
+        for index in self.bands:
+            band = dataset.GetRasterBand(index)
+            measured = self.measured(dataset, index)
+            if band.GetMaskFlags() != gdal.GMF_ALL_VALID or measured is None:
+                continue
+            pairs = zip((measured["min"], measured["max"]), measured["ends"])
+            ends = [(value, share) for value, share in pairs if share >= SUSPECT]
+            if found is not None:
+                ends = [(value, min(share, found[1])) for value, share in ends if value == found[0]]
+            if not ends:
+                return None
+            found = ends[0]
+        return None if found is None else {"value": found[0], "share": found[1]}
+
+    def statistics(self, dataset, blank=None):
         """What the interface shows of the raster's values and offers to draw them with: each band as measured, the
         ramps, and the classes of a band that has them, each with its colour, how many pixels are of it and the
-        share that is, with whether those were `sampled` rather than counted through."""
-        rest = [index for index in range(1, dataset.RasterCount + 1) if index not in self._measured]
-        for index, sample in _samples(dataset, rest):
-            self._measured[index] = _measure(sample)
+        share that is, with whether those were `sampled` rather than counted through; all of them without `blank`,
+        where the interface takes it for no data besides the bands' own. And a value that may be a border of no
+        data the file does not declare, other than `blank`, where one is `suspect`."""
+        rest = [index for index in range(1, dataset.RasterCount + 1) if (index, blank) not in self._measured]
+        for index, sample in _samples(dataset, rest, blank):
+            self._measured[(index, blank)] = _measure(sample)
         described = {
-            "bands": [self._measured[index] for index in range(1, dataset.RasterCount + 1)],
+            "bands": [self._measured[(index, blank)] for index in range(1, dataset.RasterCount + 1)],
             "ramps": RAMPS,
         }
+        suspect = self._suspect(dataset)
+        if suspect is not None and suspect["value"] != blank:
+            described["suspect"] = suspect
         if self.classes is not None:
             values, colours, counts, sampled = self.classes
+            kept = values != blank if blank is not None else numpy.ones(values.size, dtype=bool)
             names = dataset.GetRasterBand(self.bands[0]).GetCategoryNames() or []
             described["sampled"] = sampled
             described["classes"] = [
@@ -302,10 +346,10 @@ class Look:
                     "value": int(value),
                     "color": colour.tolist(),
                     "count": int(count),
-                    "share": float(count / counts.sum()),
+                    "share": float(count / counts[kept].sum()),
                     "name": names[int(value)] if 0 <= int(value) < len(names) and names[int(value)] else None,
                 }
-                for value, colour, count in zip(values, colours, counts)
+                for value, colour, count in zip(values[kept], colours[kept], counts[kept])
             ]
         return described
 
@@ -333,11 +377,13 @@ def native(dataset):
     return float(sides.min()) if sides.size else None
 
 
-def pixel(dataset, x, y):
+def pixel(dataset, x, y, blank=None):
     """The pixel under a place in the map's plane: its `column` and `row`, counted from none; its `values`, one for
     each band as the file holds it, None where the band has no data there; its `centre` in the raster's own
     coordinates, None of a raster that is placed by other means than a grid; and its `outline`, the four corners as
-    longitudes and latitudes. None for a place outside the raster."""
+    longitudes and latitudes. None for a place outside the raster. `blank` is a value the interface takes for no data
+    besides the bands' own, as `tile` takes it: none of the values are data where all the bands hold it, and a band
+    that holds it alone, as blue may in a shadow, is read out as it is."""
     across = gdal.Transformer(dataset, None, ["DST_SRS=EPSG:3857"])
     reached, at = across.TransformPoint(1, x, y)
     if not reached or not (math.isfinite(at[0]) and math.isfinite(at[1])):
@@ -353,6 +399,8 @@ def pixel(dataset, x, y):
             value = numpy.abs(value)
         known = band.GetMaskBand().ReadAsArray(column, row, 1, 1)[0, 0] != 0 and numpy.isfinite(value)
         values.append(value.item() if known else None)
+    if blank is not None and all(value == blank for value in values):
+        values = [None] * len(values)
     outline = []
     for right, down in ((0, 0), (1, 0), (1, 1), (0, 1)):
         corner = across.TransformPoint(0, column + right, row + down)[1]
@@ -393,17 +441,23 @@ def _encoded(image, lossless):
         gdal.Unlink(name)
 
 
-def tile(dataset, look, z, x, y, cancelled, asked=None):
+def tile(dataset, look, z, x, y, cancelled, asked=None, blank=None):
     """The image of the tile, or None where the raster has nothing under it. `asked` is how the interface wants the
     raster drawn: its `bands`, one or three, numbered from one; the `ranges` their values are drawn between, a low
     and a high for each, or none to draw them as they are; and, for one band, the `ramp` it is coloured through, or
     BY_CLASS in its place for a band of classes. Without it the raster is drawn as `look` has it: by its classes
-    where it has them."""
+    where it has them. `blank` is a value the interface takes for no data besides the bands' own: a pixel all the
+    bands drawn hold it in is not drawn, as a border of 0 is in all of them, and a band holding it alone, as a
+    picture's blue may in a shadow, keeps its pixel. What is measured of a band leaves it out band by band, which
+    only narrows the range the band is drawn between."""
     left, top, span = _mercator.tile(z, x, y)
     classed = look.classes is not None and (asked is None or asked.get("ramp") == BY_CLASS)
     palette = look.palette if classed or asked is None else None
     bands = look.bands if classed or asked is None else asked["bands"]
-    ranges = look.ranges if asked is None else asked.get("ranges")
+    if asked is not None:
+        ranges = asked.get("ranges")
+    else:
+        ranges = look.ranges if blank is None else look.ranges_of(dataset, blank)
     ramp = _ramp(asked["ramp"]) if asked is not None and asked.get("ramp") in RAMPS and len(bands) == 1 else None
     # Closer than the raster's own pixels, they are shown as the squares they are; the colours of classes are never
     # mixed.
@@ -440,6 +494,8 @@ def tile(dataset, look, z, x, y, cancelled, asked=None):
     for index, value in enumerate(nodata):
         if value is not None:
             drawn &= values[index] != value
+    if blank is not None:
+        drawn &= (values != blank).any(axis=0)
     if numpy.iscomplexobj(values):
         values = numpy.abs(values)
     if values.dtype.kind == "f":

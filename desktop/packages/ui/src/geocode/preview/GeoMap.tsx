@@ -144,6 +144,8 @@ const GeoMap: React.FC<{
   marked: number | null;
   /** How a raster is drawn, none while that is left to the reader. */
   look: GeoLook | null;
+  /** A value a raster's bands are taken to have no data by besides their own, none where the preview takes none. */
+  blank: number | null;
   /** The pixel of a raster that is clicked, which the map marks. */
   pixel: FoundPixel | null;
   /** A raster was clicked: the pixel under the click, or none where the raster does not reach. */
@@ -161,7 +163,7 @@ const GeoMap: React.FC<{
   onMissed: (code: string) => void;
   /** The map could not be made at all, as on a computer without WebGL. */
   onFailed: () => void;
-}> = ({ target, description, bounds, shown, marked, look, pixel, view, reach, onPick, onPixel, onPointer, onRefused, onMissed, onFailed }) => {
+}> = ({ target, description, bounds, shown, marked, look, blank, pixel, view, reach, onPick, onPixel, onPointer, onRefused, onMissed, onFailed }) => {
   const { locale } = useI18n();
   const text = previewText(locale);
   // The room the map is given, and within it the map itself, which keeps the size it was last drawn at.
@@ -176,6 +178,7 @@ const GeoMap: React.FC<{
   const showing = React.useRef(shown);
   const marking = React.useRef(marked);
   const looking = React.useRef(look);
+  const blanking = React.useRef(blank);
   const pointing = React.useRef(pixel);
   // How many times the map there is has drawn its raster.
   const rasters = React.useRef(0);
@@ -189,6 +192,7 @@ const GeoMap: React.FC<{
     pointing.current = pixel;
     marking.current = marked;
     looking.current = look;
+    blanking.current = blank;
   });
 
   React.useEffect(() => {
@@ -269,12 +273,12 @@ const GeoMap: React.FC<{
       map.once('idle', () => setDrawn(description));
       if (description.kind === 'raster') {
         rasters.current = 1;
-        drawRaster(map, 1, tileAddress(target, description.stamp, { look: looking.current }), description.resolution ?? null, bounds, () => rasters.current);
+        drawRaster(map, 1, tileAddress(target, description.stamp, { look: looking.current, blank: blanking.current }), description.resolution ?? null, bounds, () => rasters.current);
         markPixel(map, pointing.current?.outline ?? null);
         map.on('click', (event) => {
           const click = (clicks += 1);
           const at = MercatorCoordinate.fromLngLat(event.lngLat.wrap());
-          void readGeoPixel(target, description.stamp, { x: (at.x * 2 - 1) * HALF, y: (1 - at.y * 2) * HALF }).then((outcome) => {
+          void readGeoPixel(target, description.stamp, { x: (at.x * 2 - 1) * HALF, y: (1 - at.y * 2) * HALF }, blanking.current).then((outcome) => {
             // A click answered after a later one says nothing any more.
             if (click !== clicks) return;
             if (outcome.ok) return listeners.current.onPixel(outcome.value);
@@ -354,8 +358,8 @@ const GeoMap: React.FC<{
     // As above: a map that has drawn no raster yet draws it as asked when it does.
     if (!made.current || description.kind !== 'raster' || rasters.current === 0) return;
     rasters.current += 1;
-    drawRaster(made.current, rasters.current, tileAddress(target, description.stamp, { look }), description.resolution ?? null, bounds, () => rasters.current);
-  }, [look, target, description, bounds]);
+    drawRaster(made.current, rasters.current, tileAddress(target, description.stamp, { look, blank }), description.resolution ?? null, bounds, () => rasters.current);
+  }, [look, blank, target, description, bounds]);
 
   // Bare over the data, with a rim of the page's colour to stay legible on any of it.
   const control = 'flex size-7 items-center justify-center opacity-80 hover:opacity-100 [filter:drop-shadow(0_0_1.5px_var(--surface-background))_drop-shadow(0_0_1px_var(--surface-background))]';

@@ -336,10 +336,10 @@ const VectorInfo: React.FC<{ description: VectorDescription; text: PreviewText }
 
 /**
  * What a raster is: an overview, its coordinate system and extent, and its bands as a table, with the colour each
- * holds as the file says, its value of no data, and the bands drawn marked as the map draws them; laid out as a
- * vector layer's is. `drawn` is the bands it is drawn from.
+ * holds as the file says, its value of no data and `blank`, the one the preview takes for no data besides, and the
+ * bands drawn marked as the map draws them; laid out as a vector layer's is. `drawn` is the bands it is drawn from.
  */
-const RasterInfo: React.FC<{ description: RasterDescription; drawn: readonly number[]; text: PreviewText }> = ({ description, drawn, text }) => {
+const RasterInfo: React.FC<{ description: RasterDescription; drawn: readonly number[]; blank: number | null; text: PreviewText }> = ({ description, drawn, blank, text }) => {
   const locale = getCurrentIntlLocale();
   const composite = drawn.length > 1;
   const head = 'border-b border-edge-muted py-1 pe-3 text-start font-normal';
@@ -378,7 +378,17 @@ const RasterInfo: React.FC<{ description: RasterDescription; drawn: readonly num
                     <td className={cn(cell, 'font-mono text-foreground')}>{number}</td>
                     <td className={cell}><FieldType type={band.type} /></td>
                     <td className={cn(cell, 'text-foreground')}>{band.color === 'Undefined' ? <span className="text-muted-foreground">—</span> : band.color}</td>
-                    <td className={cn(cell, 'text-end font-mono text-foreground')}>{band.nodata === null ? <span className="text-muted-foreground">—</span> : valueText(band.nodata, locale)}</td>
+                    <td className={cn(cell, 'text-end font-mono text-foreground')}>
+                      {band.nodata === null && blank === null ? <span className="text-muted-foreground">—</span> : null}
+                      {band.nodata === null ? null : valueText(band.nodata, locale)}
+                      {band.nodata !== null && blank !== null ? ', ' : null}
+                      {blank === null ? null : (
+                        <>
+                          {valueText(blank, locale)}
+                          <span className="ms-1 font-sans text-muted-foreground">{text.blank.preview}</span>
+                        </>
+                      )}
+                    </td>
                     <td className={cn(cell, 'pe-0 text-center')}>
                       <span className="inline-flex gap-1 align-middle">
                         {composite
@@ -399,7 +409,9 @@ const RasterInfo: React.FC<{ description: RasterDescription; drawn: readonly num
 
 /**
  * What the data is, at more length than the line above the map has room for. `drawn` is the bands a raster is drawn
- * from, where the preview has chosen them.
+ * from, where the preview has chosen them; `blank` is a value it takes for no data besides the bands' own.
  */
-export const InfoTab: React.FC<{ description: GeoDescription; text: PreviewText; drawn?: readonly number[] }> = ({ description, text, drawn }) =>
-  description.kind === 'vector' ? <VectorInfo description={description} text={text} /> : <RasterInfo description={description} drawn={drawn ?? description.shown} text={text} />;
+export const InfoTab: React.FC<{ description: GeoDescription; text: PreviewText; drawn?: readonly number[]; blank?: number | null }> = ({ description, text, drawn, blank }) =>
+  description.kind === 'vector'
+    ? <VectorInfo description={description} text={text} />
+    : <RasterInfo description={description} drawn={drawn ?? description.shown} blank={blank ?? null} text={text} />;

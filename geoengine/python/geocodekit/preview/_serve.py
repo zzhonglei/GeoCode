@@ -147,7 +147,8 @@ class Reader:
         z, x, y = request["z"], request["x"], request["y"]
         if described["kind"] == "raster":
             stand_in, look = self._raster(described, cancelled)
-            return _raster.tile(self._opened(described, stand_in), look, z, x, y, cancelled, request.get("look"))
+            dataset = self._opened(described, stand_in)
+            return _raster.tile(dataset, look, z, x, y, cancelled, request.get("look"), request.get("blank"))
         from geocodekit.preview import _cut
 
         layer = self._vector(described, cancelled)
@@ -181,12 +182,13 @@ class Reader:
         return {"fid": fid, "row": row, "attributes": found, "bounds": layer.only(fid).bounds()}
 
     def statistics(self, request, cancelled):
-        """What is measured of a raster's bands, and what it may be drawn with."""
+        """What is measured of a raster's bands, and what it may be drawn with; without the value `blank`, where the
+        interface takes one for no data besides the bands' own."""
         described = self._current(request["stamp"])
         if described["kind"] != "raster":
             return None
         stand_in, look = self._raster(described, cancelled)
-        return look.statistics(self._opened(described, stand_in))
+        return look.statistics(self._opened(described, stand_in), request.get("blank"))
 
     def pixel(self, request, cancelled):
         """The raster's pixel under a click."""
@@ -194,7 +196,7 @@ class Reader:
         if described["kind"] != "raster":
             return None
         stand_in, _ = self._raster(described, cancelled)
-        return _raster.pixel(self._opened(described, stand_in), request["x"], request["y"])
+        return _raster.pixel(self._opened(described, stand_in), request["x"], request["y"], request.get("blank"))
 
     def rows(self, request):
         """The page of the layer's table that holds the row asked for: where the page begins, and the numbers and the

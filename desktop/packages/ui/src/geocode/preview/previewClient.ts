@@ -96,6 +96,11 @@ const statisticsSchema = z.object({
     classes: z.array(z.object({ value: z.number(), color: z.array(z.number()), share: z.number(), name: z.string().nullable() })).optional(),
     /** The classes' shares are of a sample of the raster, which is too large to count through. */
     sampled: z.boolean().optional(),
+    /**
+     * A value that may be a border of no data the file does not declare, with the share of the raster that is of it:
+     * at one end of the values of the bands drawn, which say nothing of where they have no data.
+     */
+    suspect: z.object({ value: z.number(), share: z.number() }).optional(),
   }),
 });
 
@@ -187,25 +192,32 @@ export const findGeoFeature = (target: Target, stamp: string, fid: number): Prom
 export const readGeoRows = (target: Target, stamp: string, row: number, signal?: AbortSignal): Promise<Outcome<GeoRows>> =>
   request(`${PREVIEW_PATH}/rows?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&row=${row}`, rowsSchema, signal);
 
-/** The raster's pixel at a place in the map's plane, or none where the raster does not reach. */
-export const readGeoPixel = (target: Target, stamp: string, at: { x: number; y: number }): Promise<Outcome<FoundPixel | null>> =>
-  request(`${PREVIEW_PATH}/pixel?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&x=${at.x}&y=${at.y}`, pixelSchema)
+/**
+ * A value the raster's bands are taken to have no data by besides their own, as an address asks for it: encoded, as
+ * the `+` of a value written with its power of ten, as -3.4e+38 is, would else be read as a space.
+ */
+const blankQuery = (blank: number | null): string => (blank === null ? '' : `&blank=${encodeURIComponent(blank)}`);
+
+/** The raster's pixel at a place in the map's plane, or none where the raster does not reach; a band holding `blank` has no data there. */
+export const readGeoPixel = (target: Target, stamp: string, at: { x: number; y: number }, blank: number | null): Promise<Outcome<FoundPixel | null>> =>
+  request(`${PREVIEW_PATH}/pixel?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&x=${at.x}&y=${at.y}${blankQuery(blank)}`, pixelSchema)
     .then((outcome) => (outcome.ok ? { ok: true, value: outcome.value.pixel } : outcome));
 
-/** What a raster's bands measure, and what it may be drawn with. */
-export const readGeoStatistics = (target: Target, stamp: string, signal?: AbortSignal): Promise<Outcome<GeoStatistics>> =>
-  request(`${PREVIEW_PATH}/statistics?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}`, statisticsSchema, signal)
+/** What a raster's bands measure, without the value `blank` where the preview takes one for no data, and what it may be drawn with. */
+export const readGeoStatistics = (target: Target, stamp: string, blank: number | null, signal?: AbortSignal): Promise<Outcome<GeoStatistics>> =>
+  request(`${PREVIEW_PATH}/statistics?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}${blankQuery(blank)}`, statisticsSchema, signal)
     .then((outcome) => (outcome.ok ? { ok: true, value: outcome.value.statistics } : outcome));
 
 /**
  * The address of the tiles of the data under `stamp`, with the tile's own numbers left for the map to fill in. With
- * `fid`, the tiles are of that one feature alone; with `look`, a raster's are drawn as it says. Both come last: tiles
- * are told apart by how their addresses begin.
+ * `fid`, the tiles are of that one feature alone; with `look`, a raster's are drawn as it says, and with `blank`,
+ * without the pixels all its bands drawn hold that value in. They come last: tiles are told apart by how their
+ * addresses begin.
  */
-export const tileAddress = (target: Target, stamp: string, asked: { fid?: number; look?: GeoLook | null } = {}): string => {
+export const tileAddress = (target: Target, stamp: string, asked: { fid?: number; look?: GeoLook | null; blank?: number | null } = {}): string => {
   const fid = asked.fid === undefined ? '' : `&fid=${asked.fid}`;
   const look = asked.look ? `&look=${encodeURIComponent(JSON.stringify(asked.look))}` : '';
-  return `${TILE_SCHEME}://tile?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&z={z}&x={x}&y={y}${fid}${look}`;
+  return `${TILE_SCHEME}://tile?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&z={z}&x={x}&y={y}${fid}${look}${blankQuery(asked.blank ?? null)}`;
 };
 
 /** What a tile's address is asked of the shell server as. */

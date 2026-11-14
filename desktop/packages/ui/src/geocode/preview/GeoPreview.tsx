@@ -84,8 +84,12 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   const [look, setLook] = React.useState<GeoLook | null>(null);
   // The range each band's lines were last dragged to, to go back to, for as long as its data is the same.
   const [dragged, setDragged] = React.useState<ReadonlyMap<number, Range>>(() => new Map());
-  // What was measured of the raster under a stamp, or the code that was refused with.
-  const [measured, setMeasured] = React.useState<{ target: Target; stamp: string; outcome: { statistics: GeoStatistics } | { code: string } } | null>(null);
+  // A value the raster's bands are taken to have no data by besides their own, until its data is another's.
+  const [blank, setBlank] = React.useState<number | null>(null);
+  // Whether a border of no data the file does not declare is still hinted at, until the user says it is not one.
+  const [hinted, setHinted] = React.useState(true);
+  // What was measured of the raster under a stamp without `blank`, or the code that was refused with.
+  const [measured, setMeasured] = React.useState<{ target: Target; stamp: string; blank: number | null; outcome: { statistics: GeoStatistics } | { code: string } } | null>(null);
   const [mapFailed, setMapFailed] = React.useState(false);
   // The code a tile or a click was last refused with, and whether it was a click.
   const [refused, setRefused] = React.useState<{ code: string; clicked: boolean } | null>(null);
@@ -190,6 +194,8 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
         setPixel(null);
         setLook(null);
         setDragged(new Map());
+        setBlank(null);
+        setHinted(true);
         return { target, description: outcome.value };
       });
     });
@@ -213,13 +219,21 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   React.useEffect(() => {
     if (gauged === null || !visible) return;
     const leaving = new AbortController();
-    void readGeoStatistics(target, gauged, leaving.signal).then((outcome) => {
+    void readGeoStatistics(target, gauged, blank, leaving.signal).then((outcome) => {
       if (leaving.signal.aborted) return;
       if (!outcome.ok && outcome.code === 'changed') return setChanges((count) => count + 1);
-      setMeasured({ target, stamp: gauged, outcome: outcome.ok ? { statistics: outcome.value } : { code: outcome.code } });
+      setMeasured({ target, stamp: gauged, blank, outcome: outcome.ok ? { statistics: outcome.value } : { code: outcome.code } });
     });
     return () => leaving.abort();
-  }, [target, gauged, visible]);
+  }, [target, gauged, blank, visible]);
+  // Another value for no data measures the raster anew: the ranges it was drawn between, and those dragged to, were
+  // of the values as they were, and so were the values of the pixel that was clicked.
+  const takeBlank = (taken: number | null) => {
+    setBlank(taken);
+    setLook(null);
+    setDragged(new Map());
+    setPixel(null);
+  };
 
   const forms = formsOf(description);
   const several = forms.length > 1;
@@ -282,7 +296,7 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   const reachPicked = mapped && lies ? () => reach.current?.(lies) : undefined;
 
   // What was measured of the raster as it is now, none while it is being measured.
-  const measuredNow = measured && measured.target === target && measured.stamp === gauged ? measured.outcome : null;
+  const measuredNow = measured && measured.target === target && measured.stamp === gauged && measured.blank === blank ? measured.outcome : null;
   const tabs: PanelTab[] = !description ? [] : [
     ...(description.kind === 'vector' ? [
       { id: 'feature', label: text.tabs.feature, icon: 'map-pin-2', content: <FeatureTab picked={picked} total={description.features} text={text} onReach={reachPicked} /> },
@@ -299,7 +313,21 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
         id: 'look',
         label: text.tabs.look,
         icon: 'palette',
-        content: <LookTab description={description} measured={measuredNow} look={look} dragged={dragged} text={text} onLook={setLook} onDragged={(band, range) => setDragged((before) => new Map(before).set(band, range))} />,
+        content: (
+          <LookTab
+            description={description}
+            measured={measuredNow}
+            look={look}
+            dragged={dragged}
+            blank={blank}
+            hinted={hinted}
+            text={text}
+            onLook={setLook}
+            onDragged={(band, range) => setDragged((before) => new Map(before).set(band, range))}
+            onBlank={takeBlank}
+            onDismiss={() => setHinted(false)}
+          />
+        ),
       },
     ] satisfies PanelTab[] : []),
     ...(description.kind === 'raster' && gauged !== null ? [
@@ -311,7 +339,7 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
         content: <PixelTab pixel={pixel} description={description} statistics={measuredNow && 'statistics' in measuredNow ? measuredNow.statistics : null} look={look} text={text} />,
       },
     ] satisfies PanelTab[] : []),
-    { id: 'info', label: text.tabs.info, icon: 'information', content: <InfoTab description={description} text={text} drawn={look?.bands} /> },
+    { id: 'info', label: text.tabs.info, icon: 'information', content: <InfoTab description={description} text={text} drawn={look?.bands} blank={blank} /> },
   ];
 
   return (
@@ -339,6 +367,7 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
                 shown={shown}
                 marked={picked?.fid ?? null}
                 look={look}
+                blank={blank}
                 pixel={pixel}
                 onPixel={(found) => {
                   setPixel(found);
