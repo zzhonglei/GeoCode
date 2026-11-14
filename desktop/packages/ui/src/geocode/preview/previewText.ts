@@ -31,6 +31,8 @@ export type PreviewText = {
    * are, or as the lines were dragged. The 2% is the reader's, CUT in geoengine/python/geocodekit/preview/_raster.py.
    */
   stretches: { cut: string; minmax: string; deviation: string; none: string; custom: string };
+  /** What each of those short names is in full, said where it is pointed at. */
+  stretchHints: { cut: string; minmax: string; deviation: string; none: string };
   /** What the custom range says of itself: how it comes to be offered, before any line is dragged, and once one has been. */
   custom: { hint: string; back: string };
   ramp: string;
@@ -125,7 +127,13 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     pixelHint: 'Click the raster on the map to see the values of the pixel there.',
     pixel: { column: 'Column', row: 'Row', noData: 'no data', place: 'Location', profile: 'Spectral profile', values: 'Values', drawnAs: 'Its colour on the map' },
     ramps: { classes: 'Classes', grey: 'Greyscale', terrain: 'Terrain', viridis: 'Viridis', magma: 'Magma', spectral: 'Spectral', rdylgn: 'Red–yellow–green', blues: 'Blues' },
-    stretches: { cut: '2–98%', minmax: 'Min–max', deviation: 'Mean ± 2σ', none: 'None', custom: 'Custom' },
+    stretches: { cut: '2–98%', minmax: 'Min–max', deviation: '±2σ', none: 'None', custom: 'Custom' },
+    stretchHints: {
+      cut: 'All but the 2% of the values at each end',
+      minmax: 'From the least value to the greatest',
+      deviation: 'Two standard deviations either side of the mean',
+      none: 'The values as they are, from 0 to 255',
+    },
     custom: { hint: 'Drag the lines on the histogram to set a range of your own', back: 'Back to the range you dragged' },
     ramp: 'Colour ramp',
     stretch: 'Stretch',
@@ -210,7 +218,8 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     pixelHint: '点击地图上的影像,查看这个像元的值。',
     pixel: { column: '列', row: '行', noData: '无数据', place: '位置', profile: '光谱曲线', values: '值', drawnAs: '在地图上的颜色' },
     ramps: { classes: '分类', grey: '灰度', terrain: '地形', viridis: 'Viridis', magma: '岩浆', spectral: '光谱', rdylgn: '红黄绿', blues: '蓝' },
-    stretches: { cut: '2–98%', minmax: '最小–最大', deviation: '平均 ± 2σ', none: '不拉伸', custom: '自定义' },
+    stretches: { cut: '2–98%', minmax: '最小–最大', deviation: '±2σ', none: '不拉伸', custom: '自定义' },
+    stretchHints: { cut: '去掉两端各 2% 的值', minmax: '从最小值到最大值', deviation: '平均值上下各两个标准差', none: '按原值显示，0 到 255' },
     custom: { hint: '拖动直方图上的线来自定义范围', back: '回到拖出来的范围' },
     ramp: '色带',
     stretch: '拉伸',
@@ -253,7 +262,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
       value: '值',
       confirm: '当作无数据',
       remove: '取消',
-      suspect: (value, share, least) => `约 ${share} 的像元值为 ${value}，是数据里最${least ? '小' : '大'}的值，像是影像边缘没有声明的无数据区域。`,
+      suspect: (value, share, least) => `约 ${share} 的像元值为\u00a0${value}，是数据里最${least ? '小' : '大'}的值，像是影像边缘没有声明的无数据区域。`,
       take: '当作无数据',
       dismiss: '不是无数据',
     },
@@ -295,7 +304,8 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     pixelHint: '點選地圖上的影像,檢視這個像元的值。',
     pixel: { column: '欄', row: '列', noData: '無資料', place: '位置', profile: '光譜曲線', values: '值', drawnAs: '在地圖上的顏色' },
     ramps: { classes: '分類', grey: '灰階', terrain: '地形', viridis: 'Viridis', magma: '岩漿', spectral: '光譜', rdylgn: '紅黃綠', blues: '藍' },
-    stretches: { cut: '2–98%', minmax: '最小–最大', deviation: '平均 ± 2σ', none: '不拉伸', custom: '自訂' },
+    stretches: { cut: '2–98%', minmax: '最小–最大', deviation: '±2σ', none: '不拉伸', custom: '自訂' },
+    stretchHints: { cut: '去掉兩端各 2% 的值', minmax: '從最小值到最大值', deviation: '平均值上下各兩個標準差', none: '按原值顯示，0 到 255' },
     custom: { hint: '拖曳直方圖上的線來自訂範圍', back: '回到拖曳出來的範圍' },
     ramp: '色帶',
     stretch: '拉伸',
@@ -338,7 +348,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
       value: '值',
       confirm: '當作無資料',
       remove: '取消',
-      suspect: (value, share, least) => `約 ${share} 的像元值為 ${value}，是資料中最${least ? '小' : '大'}的值，像是影像邊緣沒有宣告的無資料區域。`,
+      suspect: (value, share, least) => `約 ${share} 的像元值為\u00a0${value}，是資料中最${least ? '小' : '大'}的值，像是影像邊緣沒有宣告的無資料區域。`,
       take: '當作無資料',
       dismiss: '不是無資料',
     },

@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { Icon } from '@/components/icon/Icon';
+import { Button } from '@/components/ui/button';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { getCurrentIntlLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -43,10 +44,18 @@ type Option<T extends string> = { value: T; label: string; off?: boolean; hint?:
 /**
  * A few options side by side, one of them chosen, drawn as the settings draw such a choice (SettingsChipGroup): the
  * options in a recessed track and the chosen one raised out of it; smaller, as the panel's other controls are. An
- * option that is `off` keeps its place, greyed, and its `hint` says how it comes to be offered.
+ * option that is `off` keeps its place, greyed, and its `hint` says how it comes to be offered. Where they `fill` the
+ * row, they share it on one line, each cut short rather than any of them falling to a line of its own.
  */
-const Segments = <T extends string>({ label, value, options, onValue }: { label: string; value: T; options: readonly Option<T>[]; onValue: (value: T) => void }) => (
-  <div role="group" aria-label={label} className="oc-recessed inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-lg bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)] p-0.5">
+const Segments = <T extends string>({ label, value, options, fill, onValue }: { label: string; value: T; options: readonly Option<T>[]; fill?: boolean; onValue: (value: T) => void }) => (
+  <div
+    role="group"
+    aria-label={label}
+    className={cn(
+      'oc-recessed items-center gap-0.5 rounded-lg bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)] p-0.5',
+      fill ? 'flex w-full' : 'inline-flex max-w-full flex-wrap',
+    )}
+  >
     {options.map((option) => {
       const chosen = option.value === value;
       return (
@@ -58,7 +67,8 @@ const Segments = <T extends string>({ label, value, options, onValue }: { label:
           aria-disabled={option.off || undefined}
           title={option.hint}
           className={cn(
-            'h-5 whitespace-nowrap rounded-md px-2 typography-meta',
+            'h-5 whitespace-nowrap rounded-md typography-meta',
+            fill ? 'min-w-0 flex-1 truncate px-1.5' : 'px-2',
             chosen
               ? 'oc-raised bg-[var(--surface-background)] text-foreground dark:bg-[var(--surface-elevated)]'
               : option.off ? 'cursor-default text-muted-foreground opacity-45' : 'text-muted-foreground hover:text-foreground',
@@ -101,12 +111,20 @@ const Ramps: React.FC<{ value: string; offered: readonly { name: string; backgro
   </Section>
 );
 
-/** What a band or a picture is drawn between to choose, under its histogram. */
+/**
+ * What a band or a picture is drawn between to choose, under its histogram and a title of its own, on one line
+ * however narrow the panel: by short names, each saying in full what it is where it is pointed at.
+ */
 const StretchChoice: React.FC<{ value: Stretch; options: readonly Option<Stretch>[]; text: PreviewText; onValue: (value: Stretch) => void }> = ({ value, options, text, onValue }) => (
-  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-    <span className="text-muted-foreground">{text.stretch}</span>
-    <Segments label={text.stretch} value={value} options={options} onValue={onValue} />
-  </div>
+  <Section title={text.stretch}>
+    <Segments
+      label={text.stretch}
+      value={value}
+      options={options.map((option) => (option.value === 'custom' ? option : { ...option, hint: text.stretchHints[option.value] }))}
+      fill
+      onValue={onValue}
+    />
+  </Section>
 );
 
 /**
@@ -115,17 +133,15 @@ const StretchChoice: React.FC<{ value: Stretch; options: readonly Option<Stretch
  */
 const Suspect: React.FC<{ value: number; share: number; least: boolean; text: PreviewText; onTake: () => void; onDismiss: () => void }> = ({ value, share, least, text, onTake, onDismiss }) => {
   const locale = getCurrentIntlLocale();
+  // In the colours the app tells of something in (as its toasts do), the words across the whole of it and what to do
+  // under them, so that neither squeezes the other.
   return (
-    <div className="flex items-start gap-1.5 rounded-md bg-[color-mix(in_srgb,var(--interactive-selection-foreground)_8%,transparent)] py-1 pe-1 ps-2">
-      <Icon name="information" className="mt-[3px] size-3.5 shrink-0 text-[var(--interactive-selection-foreground)]" />
-      <span className="min-w-0 flex-1 py-0.5">{text.blank.suspect(valueText(value, locale), share.toLocaleString(locale, { style: 'percent', maximumFractionDigits: 0 }), least)}</span>
-      <button
-        type="button"
-        className="mt-px shrink-0 whitespace-nowrap rounded px-1 font-medium leading-[22px] text-[var(--interactive-selection-foreground)] hover:bg-[color-mix(in_srgb,var(--interactive-selection-foreground)_10%,transparent)]"
-        onClick={onTake}
-      >
-        {text.blank.take}
-      </button>
+    <div className="flex items-start gap-1.5 rounded-md border border-[color-mix(in_srgb,var(--status-info)_12%,transparent)] bg-[color-mix(in_srgb,var(--status-info)_5%,transparent)] py-1 pe-1 ps-2">
+      <Icon name="information" className="mt-[5px] size-3.5 shrink-0 text-[var(--status-info)]" />
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5 py-1">
+        <span>{text.blank.suspect(valueText(value, locale), share.toLocaleString(locale, { style: 'percent', maximumFractionDigits: 0 }), least)}</span>
+        <Button variant="info" size="xs" onClick={onTake}>{text.blank.take}</Button>
+      </div>
       <Action icon="close" label={text.blank.dismiss} onClick={onDismiss} />
     </div>
   );
@@ -451,7 +467,7 @@ const BandTable: React.FC<{
         <tr>
           <th scope="col" className={cn(head, 'text-start')}>{text.band}</th>
           {composite
-            ? CHANNEL_NAMES.map((name) => <th key={name} scope="col" className={cn(head, 'w-5 text-center')}>{name}</th>)
+            ? CHANNEL_NAMES.map((name) => <th key={name} scope="col" className={cn(head, 'w-4 px-0.5 text-center')}>{name}</th>)
             : <th scope="col" className={cn(head, 'w-10 text-center')}>{text.columns.drawn}</th>}
           <th scope="col" className={cn(head, 'text-end')}>{text.columns.low}</th>
           <th scope="col" className={cn(head, 'text-end')}>{text.columns.high}</th>
@@ -469,7 +485,8 @@ const BandTable: React.FC<{
               className={cn(!composite && 'cursor-pointer hover:bg-[var(--interactive-hover)]', chosen && 'bg-interactive-selection hover:bg-interactive-selection')}
               onClick={composite || chosen ? undefined : () => onBand(number)}
             >
-              <td className={cn(cell, 'max-w-0 truncate text-foreground')}>
+              {/* The band's name whole: the marks beside it give up their room first, as narrow as their dots. */}
+              <td className={cn(cell, 'whitespace-nowrap text-foreground')}>
                 {number}
                 {each.color === 'Undefined' ? null : <span className="ms-1.5 font-sans text-muted-foreground">{each.color}</span>}
               </td>
@@ -477,7 +494,7 @@ const BandTable: React.FC<{
                 ([0, 1, 2] as const).map((channel) => {
                   const given = drawn[channel] === number;
                   return (
-                    <td key={channel} className={cn(cell, 'text-center')}>
+                    <td key={channel} className={cn(cell, 'px-0.5 text-center')}>
                       <button
                         type="button"
                         aria-label={text.bandAs(number, channel)}
