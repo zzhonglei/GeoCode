@@ -1,5 +1,6 @@
 import { getLanguageFromExtension } from '@/lib/toolHelpers';
 import { FILE_TYPE_ICON_IDS } from '@/lib/fileTypeIconIds';
+import { geoFileIconHref } from '@/geocode/preview/geoFileIcons'; // GeoCode: see getFileTypeIconHref
 
 type ThemeVariant = 'light' | 'dark';
 
@@ -297,6 +298,10 @@ export const getFileTypeIconHref = (
   filePath: string,
   options?: { extension?: string; themeVariant?: ThemeVariant }
 ): string => {
+  // --- GeoCode: geographic data has icons of its own ---
+  const geoIconHref = geoFileIconHref(filePath, options?.themeVariant);
+  if (geoIconHref) return geoIconHref;
+  // --- /GeoCode ---
   ensureFileTypeSprite();
   const resolvedBaseIconName = resolveIconName(filePath, options?.extension);
   const baseIconName = FILE_TYPE_ICON_IDS.has(resolvedBaseIconName) ? resolvedBaseIconName : fallbackIconName;
