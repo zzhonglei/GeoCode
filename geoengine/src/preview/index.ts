@@ -55,13 +55,14 @@ const TileParams = Schema.Struct({
   fid: Schema.optionalKey(Schema.Int),
   /**
    * How a raster is drawn, where the interface says: its bands, numbered from one, the values each is drawn between,
-   * without which they are drawn as they are, and the ramp one band is coloured through.
+   * without which they are drawn as they are, and the ramp one band is coloured through, `reversed` or not.
    */
   look: Schema.optionalKey(
     Schema.Struct({
       bands: Schema.Array(Schema.Int),
       ranges: Schema.optionalKey(Schema.Array(Schema.Tuple([Schema.Number, Schema.Number]))),
       ramp: Schema.optionalKey(Schema.String),
+      reversed: Schema.optionalKey(Schema.Boolean),
     }),
   ),
   ...Blank,

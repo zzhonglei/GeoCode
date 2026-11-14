@@ -15,22 +15,28 @@ export const CHANNEL_NAMES = ['R', 'G', 'B'] as const;
 
 export const classColour = (each: Classes[number]): string => `rgb(${each.color.slice(0, 3).join(' ')} / ${(each.color[3] ?? 255) / 255})`;
 
-/** The colours a ramp passes through, by its name; grey's where the reader offers no ramp of that name. */
-export const rampColours = (statistics: GeoStatistics, ramp: string): readonly string[] =>
-  statistics.ramps[ramp] ?? statistics.ramps[PLAIN] ?? ['#000000', '#ffffff'];
+/**
+ * The colours a ramp passes through, by its name, from its low end to its high or, `reversed`, from its high end to
+ * its low; grey's where the reader offers no ramp of that name.
+ */
+export const rampColours = (statistics: GeoStatistics, ramp: string, reversed = false): readonly string[] => {
+  const colours = statistics.ramps[ramp] ?? statistics.ramps[PLAIN] ?? ['#000000', '#ffffff'];
+  return reversed ? [...colours].reverse() : colours;
+};
 
 /** How one band drawn alone is drawn: see `bandLook`. */
-export type BandLook = { ramp: string; classed: boolean; range: Range | null };
+export type BandLook = { ramp: string; classed: boolean; range: Range | null; reversed: boolean };
 
 /**
  * How one band drawn alone is drawn: through the ramp the preview names, or else by its classes where it has them
  * and else in grey, as the reader draws it when left to itself; and between the range the preview names, none to
- * draw it as it is, or else the one the reader chose for it. `classes` are the band's, none of a band without them.
+ * draw it as it is, or else the one the reader chose for it; with its ramp `reversed` where the preview says, which
+ * classes never are. `classes` are the band's, none of a band without them.
  */
 export const bandLook = (band: Measured, classes: Classes | null, look: GeoLook | null): BandLook => {
   const ramp = look?.ramp ?? (classes ? BY_CLASS : PLAIN);
   const classed = classes !== null && ramp === BY_CLASS;
-  return { ramp, classed, range: look && !classed ? (look.ranges?.[0] ?? null) : band.between };
+  return { ramp, classed, range: look && !classed ? (look.ranges?.[0] ?? null) : band.between, reversed: !classed && look?.reversed === true };
 };
 
 const channelsOf = (colour: string): number[] => [1, 3, 5].map((at) => Number.parseInt(colour.slice(at, at + 2), 16));

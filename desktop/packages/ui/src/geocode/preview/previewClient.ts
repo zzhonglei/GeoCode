@@ -117,9 +117,9 @@ export type Measured = z.infer<typeof measuredSchema>;
 /**
  * How the preview has a raster drawn, where it does not leave that to the reader: its bands, numbered from one, the
  * values each is drawn between, without which they are drawn as they are, and the ramp one band is coloured through,
- * or BY_CLASS in its place.
+ * or BY_CLASS in its place, `reversed` to run it from its high end to its low.
  */
-export type GeoLook = { bands: number[]; ranges?: [number, number][]; ramp?: string };
+export type GeoLook = { bands: number[]; ranges?: [number, number][]; ramp?: string; reversed?: boolean };
 
 /**
  * Asked for where a ramp would be, a band of classes is drawn by them, each in its own colour. The reader knows it as

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { BY_CLASS, type Measured } from './previewClient';
-import { bandLook, drawnColour } from './rasterLook';
+import { bandLook, drawnColour, rampColours } from './rasterLook';
 
 const BAND: Measured = { min: 0, max: 1000, mean: 400, std: 120, low: 20, high: 900, between: [20, 900], counts: [1, 2, 3], edges: [0, 1000] };
 const CLASSES = [{ value: 10, color: [0, 100, 0, 255], share: 1, name: null }];
@@ -24,6 +24,12 @@ describe('GeoCode: the colour of a pixel is the one the map draws it in', () => 
     expect(drawnColour(64, null, ['#000000', '#ffffff'])).toBe('rgb(64 64 64)');
   });
 
+  test('a reversed ramp is the ramp read from its high end, as the reader turns its 256 colours round', () => {
+    const statistics = { bands: [], ramps: { blues: ['#f7fbff', '#6baed6', '#08306b'] } };
+    expect(rampColours(statistics, 'blues', true)).toEqual(['#08306b', '#6baed6', '#f7fbff']);
+    expect(drawnColour(0, [0, 255], rampColours(statistics, 'blues', true))).toBe('rgb(8 48 107)');
+  });
+
   test('a ramp of several colours passes through each of them evenly', () => {
     // The middle of three colours, at step 127 of 255, just short of it.
     expect(drawnColour(127, [0, 255], ['#000000', '#c8c8c8', '#ffffff'])).toBe('rgb(199 199 199)');
@@ -32,12 +38,14 @@ describe('GeoCode: the colour of a pixel is the one the map draws it in', () => 
 
 describe('GeoCode: a band drawn alone is drawn as the reader draws it when left to itself', () => {
   test('by its classes where it has them, else in grey between the range the reader chose', () => {
-    expect(bandLook(BAND, CLASSES, null)).toEqual({ ramp: BY_CLASS, classed: true, range: [20, 900] });
-    expect(bandLook(BAND, null, null)).toEqual({ ramp: 'grey', classed: false, range: [20, 900] });
+    expect(bandLook(BAND, CLASSES, null)).toEqual({ ramp: BY_CLASS, classed: true, range: [20, 900], reversed: false });
+    expect(bandLook(BAND, null, null)).toEqual({ ramp: 'grey', classed: false, range: [20, 900], reversed: false });
   });
 
   test('else through the ramp and between the range the preview names, or as it is with none', () => {
-    expect(bandLook(BAND, CLASSES, { bands: [1], ramp: 'terrain', ranges: [[0, 500]] })).toEqual({ ramp: 'terrain', classed: false, range: [0, 500] });
-    expect(bandLook(BAND, null, { bands: [1], ramp: 'grey' })).toEqual({ ramp: 'grey', classed: false, range: null });
+    expect(bandLook(BAND, CLASSES, { bands: [1], ramp: 'terrain', ranges: [[0, 500]], reversed: true })).toEqual({ ramp: 'terrain', classed: false, range: [0, 500], reversed: true });
+    expect(bandLook(BAND, null, { bands: [1], ramp: 'grey' })).toEqual({ ramp: 'grey', classed: false, range: null, reversed: false });
+    // Classes have no way round to run.
+    expect(bandLook(BAND, CLASSES, { bands: [1], ramp: 'classes', reversed: true }).reversed).toBe(false);
   });
 });

@@ -141,8 +141,8 @@ export const PixelTab: React.FC<{ pixel: FoundPixel | null; description: RasterD
     const band = statistics?.bands[number - 1];
     if (!statistics || !band) return null;
     const classes = number === description.shown[0] ? (statistics.classes ?? null) : null;
-    const { ramp, classed, range } = bandLook(band, classes, look);
-    if (!classed) return <Swatch colour={drawnColour(value, range, rampColours(statistics, ramp))} label={text.pixel.drawnAs} />;
+    const { ramp, classed, range, reversed } = bandLook(band, classes, look);
+    if (!classed) return <Swatch colour={drawnColour(value, range, rampColours(statistics, ramp, reversed))} label={text.pixel.drawnAs} />;
     const found = classes?.find((each) => each.value === value);
     return found ? (
       <span className="flex min-w-0 items-center gap-2">

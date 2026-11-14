@@ -498,6 +498,13 @@ test("a raster is measured, and drawn as the interface asks", { skip: missing },
   )
   assert.ok(near(low, colour(ramp[1])) && near(high, colour(ramp.at(-1) ?? "")), `${low} and ${high}`)
   assert.equal(none[3], 0)
+  // Reversed, the same ramp from its high end: the low values in the colour a quarter of the way down from it.
+  const [lowBack, highBack] = await pixels(
+    await heights.drawn({ bands: [1], ranges: [[0, 1000]], ramp: "viridis", reversed: true }),
+    "reversed.webp",
+    spots,
+  )
+  assert.ok(near(lowBack, colour(ramp.at(-2) ?? "")) && near(highBack, colour(ramp[0])), `${lowBack} and ${highBack}`)
   const [cut] = await pixels(await heights.drawn({ bands: [1], ranges: [[0, 100]] }), "cut.webp", spots)
   assert.ok(near(cut, [255, 255, 255, 255]), String(cut))
   // Its bands in the order asked for: blue as red, where the picture is blue.

@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { Icon } from '@/components/icon/Icon';
+import { PRESSED_CLASS } from '@/components/ui/action-toolbar';
 import { Button } from '@/components/ui/button';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { getCurrentIntlLocale } from '@/lib/i18n';
@@ -23,10 +24,11 @@ const rangesOf = (band: Measured, bytes: boolean): [Stretch, Range | null][] => 
   return offered;
 };
 
-/** One band as the preview draws it: through `ramp`, between `range`, or as it is with none. */
-const lookOf = (bands: number[], ramp: string, range: Range | null): GeoLook => {
+/** One band as the preview draws it: through `ramp`, `reversed` or not, between `range`, or as it is with none. */
+const lookOf = (bands: number[], ramp: string, range: Range | null, reversed: boolean): GeoLook => {
   const look: GeoLook = { bands, ramp };
   if (range) look.ranges = [range];
+  if (reversed) look.reversed = true;
   return look;
 };
 
@@ -84,9 +86,38 @@ const Segments = <T extends string>({ label, value, options, fill, onValue }: { 
   </div>
 );
 
-/** The ramps and classes a band may be coloured by, each as the strip it is, the one it is coloured by marked and named. */
-const Ramps: React.FC<{ value: string; offered: readonly { name: string; background: string }[]; text: PreviewText; onValue: (name: string) => void }> = ({ value, offered, text, onValue }) => (
-  <Section title={text.ramp} aside={text.ramps[value] ?? value}>
+/**
+ * The ramps and classes a band may be coloured by, each as the strip it is, the one it is coloured by marked and
+ * named; and beside its name, where it is a ramp, what runs every ramp the other way, as QGIS inverts a ramp.
+ */
+const Ramps: React.FC<{
+  value: string;
+  offered: readonly { name: string; background: string }[];
+  reversed: boolean;
+  text: PreviewText;
+  onValue: (name: string) => void;
+  onReverse: () => void;
+}> = ({ value, offered, reversed, text, onValue, onReverse }) => (
+  <Section
+    title={text.ramp}
+    aside={
+      <span className="flex items-center gap-1.5">
+        <span className="min-w-0 truncate">{text.ramps[value] ?? value}</span>
+        {value === BY_CLASS ? null : (
+          <button
+            type="button"
+            aria-pressed={reversed}
+            aria-label={text.reverse}
+            title={text.reverse}
+            className={cn('inline-flex size-5 shrink-0 items-center justify-center rounded', reversed ? PRESSED_CLASS : 'text-muted-foreground hover:bg-interactive-hover hover:text-foreground')}
+            onClick={onReverse}
+          >
+            <Icon name="arrow-left-right" className="size-3.5" />
+          </button>
+        )}
+      </span>
+    }
+  >
     <div role="radiogroup" aria-label={text.ramp} className="flex flex-wrap gap-1.5 py-0.5">
       {offered.map(({ name, background }) => {
         const label = text.ramps[name] ?? name;
@@ -332,16 +363,23 @@ const oneBand = ({ number, bytes, statistics, classes, look, dragged, text, onLo
   if (!band) return { ramps: null, rest: <div className="text-muted-foreground">{text.bandEmpty}</div>, listed: false };
 
   const offered = rangesOf(band, bytes);
-  const { ramp, classed, range } = bandLook(band, classes, look);
+  const { ramp, classed, range, reversed } = bandLook(band, classes, look);
   const stretch = range === null ? 'none' : (offered.find(([, each]) => each && each[0] === range[0] && each[1] === range[1])?.[0] ?? 'custom');
-  const colours = rampColours(statistics, ramp);
+  const colours = rampColours(statistics, ramp, reversed);
   const bands = [number];
+  // Kept as the ramp is chosen anew, and as the band is drawn by its classes and then by a ramp again.
+  const turned = look?.reversed === true;
   const ramps = (
     <Ramps
       value={ramp}
-      offered={[...(classes ? [{ name: BY_CLASS, background: blocks(classes) }] : []), ...Object.entries(statistics.ramps).map(([name, each]) => ({ name, background: strip(each) }))]}
+      offered={[
+        ...(classes ? [{ name: BY_CLASS, background: blocks(classes) }] : []),
+        ...Object.keys(statistics.ramps).map((name) => ({ name, background: strip(rampColours(statistics, name, turned)) })),
+      ]}
+      reversed={reversed}
       text={text}
-      onValue={(chosen) => onLook(lookOf(bands, chosen, range))}
+      onValue={(chosen) => onLook(lookOf(bands, chosen, range, turned))}
+      onReverse={() => onLook(lookOf(bands, ramp, range, !reversed))}
     />
   );
   if (classed && classes) return { ramps, rest: <ClassList classes={classes} sampled={statistics.sampled ?? false} text={text} />, listed: true };
@@ -361,7 +399,7 @@ const oneBand = ({ number, bytes, statistics, classes, look, dragged, text, onLo
           colours={colours}
           onRange={(moved) => {
             onDragged(number, moved);
-            onLook(lookOf(bands, ramp, moved));
+            onLook(lookOf(bands, ramp, moved, reversed));
           }}
         />
         <StretchChoice
@@ -370,11 +408,11 @@ const oneBand = ({ number, bytes, statistics, classes, look, dragged, text, onLo
           text={text}
           onValue={(chosen) => {
             if (chosen === 'custom') {
-              if (dragged) onLook(lookOf(bands, ramp, dragged));
+              if (dragged) onLook(lookOf(bands, ramp, dragged, reversed));
               return;
             }
             const found = offered.find(([name]) => name === chosen);
-            if (found) onLook(lookOf(bands, ramp, found[1]));
+            if (found) onLook(lookOf(bands, ramp, found[1], reversed));
           }}
         />
         <div className="mt-2.5 grid grid-cols-4 gap-2 border-t border-edge-muted pt-2.5">
@@ -573,8 +611,9 @@ export const LookTab: React.FC<{
   // first of the ranges offered.
   const picture = look ?? pictureOf(description.shown, statistics, description.shown.every(bytes) ? 'none' : 'cut');
   const composite = drawn.length > 1;
-  // A band chosen alone keeps the ramp it was coloured by, but not classes, which are another band's.
-  const alone = (band: number): GeoLook => lookOf([band], look?.ramp && look.ramp !== BY_CLASS ? look.ramp : PLAIN, statistics.bands[band - 1]?.between ?? null);
+  // A band chosen alone keeps the ramp it was coloured by and which way it runs, but not classes, which are another band's.
+  const alone = (band: number): GeoLook =>
+    lookOf([band], look?.ramp && look.ramp !== BY_CLASS ? look.ramp : PLAIN, statistics.bands[band - 1]?.between ?? null, look?.reversed === true);
 
   // A picture takes three bands.
   const modes = description.bands.length >= 3 ? (

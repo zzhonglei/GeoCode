@@ -36,6 +36,8 @@ export type PreviewText = {
   /** What the custom range says of itself: how it comes to be offered, before any line is dragged, and once one has been. */
   custom: { hint: string; back: string };
   ramp: string;
+  /** What runs every ramp from its high end to its low. */
+  reverse: string;
   stretch: string;
   /** How a raster of several bands is drawn: three of them as red, green and blue, or one alone. */
   mode: string;
@@ -138,6 +140,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     },
     custom: { hint: 'Drag the lines on the histogram to set a range of your own', back: 'Back to the range you dragged' },
     ramp: 'Colour ramp',
+    reverse: 'Reverse the ramp',
     stretch: 'Stretch',
     mode: 'Mode',
     modes: { composite: 'Three bands', single: 'One band' },
@@ -226,6 +229,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     stretchHints: { cut: '去掉两端各 2% 的值', minmax: '从最小值到最大值', deviation: '平均值上下各两个标准差', none: '按原值显示，0 到 255' },
     custom: { hint: '拖动直方图上的线来自定义范围', back: '回到拖出来的范围' },
     ramp: '色带',
+    reverse: '反转色带',
     stretch: '拉伸',
     mode: '方式',
     modes: { composite: '三波段合成', single: '单个波段' },
@@ -314,6 +318,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     stretchHints: { cut: '去掉兩端各 2% 的值', minmax: '從最小值到最大值', deviation: '平均值上下各兩個標準差', none: '按原值顯示，0 到 255' },
     custom: { hint: '拖曳直方圖上的線來自訂範圍', back: '回到拖曳出來的範圍' },
     ramp: '色帶',
+    reverse: '反轉色帶',
     stretch: '拉伸',
     mode: '方式',
     modes: { composite: '三波段合成', single: '單一波段' },

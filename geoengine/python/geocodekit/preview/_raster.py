@@ -454,12 +454,12 @@ def _encoded(image, lossless):
 def tile(dataset, look, z, x, y, cancelled, asked=None, blank=None):
     """The image of the tile, or None where the raster has nothing under it. `asked` is how the interface wants the
     raster drawn: its `bands`, one or three, numbered from one; the `ranges` their values are drawn between, a low
-    and a high for each, or none to draw them as they are; and, for one band, the `ramp` it is coloured through, or
-    BY_CLASS in its place for a band of classes. Without it the raster is drawn as `look` has it: by its classes
-    where it has them. `blank` is a value the interface takes for no data besides the bands' own: a pixel all the
-    bands drawn hold it in is not drawn, as a border of 0 is in all of them, and a band holding it alone, as a
-    picture's blue may in a shadow, keeps its pixel. What is measured of a band leaves it out band by band, which
-    only narrows the range the band is drawn between."""
+    and a high for each, or none to draw them as they are; and, for one band, the `ramp` it is coloured through, from
+    its high end to its low where it is `reversed`, or BY_CLASS in its place for a band of classes. Without it the
+    raster is drawn as `look` has it: by its classes where it has them. `blank` is a value the interface takes for no
+    data besides the bands' own: a pixel all the bands drawn hold it in is not drawn, as a border of 0 is in all of
+    them, and a band holding it alone, as a picture's blue may in a shadow, keeps its pixel. What is measured of a
+    band leaves it out band by band, which only narrows the range the band is drawn between."""
     left, top, span = _mercator.tile(z, x, y)
     classed = look.classes is not None and (asked is None or asked.get("ramp") == BY_CLASS)
     palette = look.palette if classed or asked is None else None
@@ -469,6 +469,8 @@ def tile(dataset, look, z, x, y, cancelled, asked=None, blank=None):
     else:
         ranges = look.ranges if blank is None else look.ranges_of(dataset, blank)
     ramp = _ramp(asked["ramp"]) if asked is not None and asked.get("ramp") in RAMPS and len(bands) == 1 else None
+    if ramp is not None and asked.get("reversed"):
+        ramp = ramp[:, ::-1]
     # Closer than the raster's own pixels, they are shown as the squares they are; the colours of classes are never
     # mixed.
     nearest = classed or palette is not None or (look.native is not None and span / SIZE < look.native)
