@@ -37,7 +37,10 @@ const DBNAME = new RegExp(String.raw`(?<=^ogr:|\s)dbname=${VALUE}`, "d")
 
 const TABLE = new RegExp(String.raw`(?<=^ogr:|\s)table=${VALUE}`, "d")
 
-/** The files of a Shapefile: any one of them left behind makes the name taken. */
+/**
+ * The files of a Shapefile: any one of them left behind makes the name taken. Also listed, each for its own use, in
+ * desktop/packages/ui/src/geocode/files/geoSidecars.ts and kernel/packages/core/src/geocode/snapshot.ts.
+ */
 const SHAPEFILE = [".shp", ".shx", ".dbf", ".prj", ".cpg", ".qix", ".sbn", ".sbx", ".fix", ".qmd", ".shp.xml"]
 
 /** An example file for an output written nowhere, by the output's type. */

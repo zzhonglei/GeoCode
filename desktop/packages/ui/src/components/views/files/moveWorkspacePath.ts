@@ -2,6 +2,7 @@ import { isFilesystemError } from '@/lib/api/files-errors';
 import type { FilesAPI } from '@/lib/api/types';
 import { beginFilePathMove } from '@/lib/filePathMoves';
 import { useUIStore } from '@/stores/useUIStore';
+import { renameDataset } from '@/geocode/files/geoDatasets'; // GeoCode: see moveWorkspacePath
 
 type WorkspacePathMoveResult = 'moved' | 'conflict' | 'failed';
 
@@ -23,7 +24,7 @@ export const moveWorkspacePath = async (
 
   const move = beginFilePathMove(fromPath);
   try {
-    const result = await files.rename(fromPath, toPath);
+    const result = await renameDataset(files, fromPath, toPath); // GeoCode: a geographic dataset moves with its sidecars
     if (!result.success) {
       move.abort();
       return 'failed';

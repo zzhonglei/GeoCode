@@ -148,6 +148,9 @@ import { Closed } from '@/geocode/Closed'; // GeoCode: see the Excalidraw hint
 import { GeoPreview } from '@/geocode/preview/GeoPreview'; // GeoCode: see renderArtifactPreview
 import { isGeoDataFile } from '@/geocode/preview/geoFiles'; // GeoCode: see renderArtifactPreview
 import { useGeoPanelAction } from '@/geocode/preview/panelState'; // GeoCode: see the toolbar's groups
+import { datasetStatus, withoutGeoSidecars } from '@/geocode/files/geoSidecars'; // GeoCode: see loadDirectory and getFileStatus
+import { deleteDataset, refusesDatasetRename, refusesHiddenSidecarName } from '@/geocode/files/geoDatasets'; // GeoCode: see the create, rename and delete dialogs
+import { DatasetPartsNote } from '@/geocode/files/DatasetPartsNote'; // GeoCode: see the delete dialog
 import { watchFileOnScreen } from '@/lib/watchedFiles';
 
 
@@ -662,6 +665,7 @@ const Dialogs: React.FC<DialogsProps> = ({
             {activeDialog === 'createFolder' && t('filesView.dialog.createFolder.description', { path: dialogData?.path ?? t('filesView.dialog.rootFallback') })}
             {activeDialog === 'rename' && t('filesView.dialog.rename.description', { name: dialogData?.name ?? '' })}
             {activeDialog === 'delete' && t('filesView.dialog.delete.description', { name: dialogData?.name ?? '' })}
+            {activeDialog === 'delete' && dialogData ? <DatasetPartsNote path={dialogData.path} /> : null}{/* GeoCode: the sidecars that go with it */}
           </DialogDescription>
         </DialogHeader>
 
@@ -1338,7 +1342,11 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
           ? (await files.listDirectory(normalizedDir, { respectGitignore })).entries
           : await opencodeClient.listLocalDirectory(normalizedDir, { respectGitignore });
         if (!isCurrentRequest()) return;
-        const mapped = mapDirectoryEntries(normalizedDir, entries);
+        // --- GeoCode: a geographic dataset lists as its main file, its sidecars hidden as GIS software hides them ---
+        const shownEntries = await withoutGeoSidecars(normalizedDir, entries, files);
+        if (!isCurrentRequest()) return;
+        // --- /GeoCode ---
+        const mapped = mapDirectoryEntries(normalizedDir, shownEntries); // GeoCode: shownEntries
         loadedDirsRef.current = new Set(loadedDirsRef.current);
         loadedDirsRef.current.add(normalizedDir);
         setLoadErrorsByDir((prev) => {
@@ -1523,6 +1531,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
       const parentPath = dialogData.path;
       const prefix = parentPath ? `${parentPath}/` : '';
       const newPath = normalizePath(`${prefix}${dialogInputValue.trim()}`);
+      if (await refusesHiddenSidecarName(files, newPath)) { done(); return; } // GeoCode: writing would empty a sidecar the tree hides
       await files.writeFile(newPath, '')
         .then(async (result) => {
           if (result.success) {
@@ -1580,6 +1589,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
 
       // Open tabs and the editor, unsaved edits included, follow the new name.
       try {
+        if (await refusesDatasetRename(files, oldPath, newPath)) return; // GeoCode: a dataset's main file keeps its extension
         const result = await moveWorkspacePath(files, { tabs: panelRoot, files: root }, oldPath, newPath);
         if (result === 'moved') {
           toast.success(t('sidebarFilesTree.toast.renamedSuccessfully'));
@@ -1610,7 +1620,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
 
       const deletedPath = dialogData.path;
       const parentDir = deletedPath.split('/').slice(0, -1).join('/');
-      await files.delete(deletedPath)
+      await deleteDataset(files, deletedPath) // GeoCode: a geographic dataset goes with its sidecars
         .then(async (result) => {
           if (result.success) {
             toast.success(t('sidebarFilesTree.toast.deletedSuccessfully'));
@@ -2605,7 +2615,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
   const statusIndex = React.useMemo(() => buildFileTreeStatusIndex(treeEnabled ? gitStatus?.files ?? [] : []), [gitStatus?.files, treeEnabled]);
   const getFileStatus = React.useCallback((path: string): FileTreeGitStatus | null => {
     const relative = path.startsWith(root + '/') ? path.slice(root.length + 1) : path;
-    return statusIndex.statusByPath.get(relative) ?? null;
+    return statusIndex.statusByPath.get(relative) ?? datasetStatus(statusIndex.statusByPath, relative); // GeoCode: or as its hidden sidecars changed
   }, [statusIndex, root]);
 
   const getFolderBadge = React.useCallback((dirPath: string): { modified: number; added: number } | null => {

@@ -3,6 +3,7 @@ import { devtools } from 'zustand/middleware';
 import { opencodeClient, type ProjectFileSearchHit } from '@/lib/opencode/client';
 import { getRuntimeKey } from '@/lib/runtime-switch';
 import { getRegisteredRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
+import { withoutListedSidecars } from '@/geocode/files/geoSidecars'; // GeoCode: see searchFiles
 
 const CACHE_TTL_MS = 30_000;
 const MAX_CACHE_ENTRIES = 40;
@@ -131,6 +132,7 @@ export const useFileSearchStore = create<FileSearchStoreState>()(
               return true;
             })].slice(0, limit);
           })
+          .then((files) => withoutListedSidecars(files)) // GeoCode: a geographic dataset is found as its main file
           .then((files) => {
             if (supplementalFailed) return files;
             set((state) => {

@@ -3,7 +3,10 @@ export * as GeoSnapshot from "./snapshot.js"
 import path from "path"
 import type { RelativePath } from "../schema.js"
 
-/** Extensions of the files that go with a dataset of the same name: shapefile parts and indexes, world files. */
+/**
+ * Extensions of the files that go with a dataset of the same name: shapefile parts and indexes, world files. Also
+ * listed, each for its own use, in desktop/packages/ui/src/geocode/files/geoSidecars.ts and geoengine/src/qgis/plan.ts.
+ */
 const SIDECARS = new Set([
   "shx",
   "dbf",

@@ -16,6 +16,8 @@ import { isFilesystemError } from '@/lib/api/files-errors';
 import { notifyFileContentInvalidated } from '@/lib/fileContentInvalidation';
 import { useI18n } from '@/lib/i18n';
 import { getRuntimeKey } from '@/lib/runtime-switch';
+import { staleAfterUpload, staleBeforeUpload } from '@/geocode/files/geoDatasets'; // GeoCode: see uploadFiles
+import { ReplacedPartsNote } from '@/geocode/files/DatasetPartsNote'; // GeoCode: see the replace dialog
 
 type UploadConflicts = {
   directory: string;
@@ -81,6 +83,7 @@ export const useFileTreeUpload = ({ root, refreshDirectory }: FileTreeUploadOpti
     uploadingRef.current = true;
     setUploadingDirectory(directory);
     if (overwrite) setUploadConflicts(null);
+    const staleParts = await staleBeforeUpload(directory, selectedFiles, overwrite); // GeoCode: the old data's sidecars, read before anything is written
 
     const outcomes: UploadOutcome[] = [];
     for (let index = 0; index < selectedFiles.length; index += MAX_PARALLEL_UPLOADS) {
@@ -113,6 +116,12 @@ export const useFileTreeUpload = ({ root, refreshDirectory }: FileTreeUploadOpti
       return outcomes[index] === 'uploaded' && name ? [joinPath(directory, name)] : [];
     });
     const isCurrentDestination = rootRef.current === operationRoot && getRuntimeKey() === operationRuntime;
+    // --- GeoCode: a replaced dataset loses the sidecars of its old data, as when GDAL writes over it ---
+    if (getRuntimeKey() === operationRuntime) {
+      const replaced = selectedFiles.filter((_, index) => outcomes[index] === 'uploaded').map((file) => file.name);
+      await staleAfterUpload(directory, staleParts, { replacing: overwrite, heldBack: conflictingFiles, replaced });
+    }
+    // --- /GeoCode ---
 
     try {
       if (uploadedPaths.length > 0) {
@@ -178,6 +187,7 @@ export const useFileTreeUpload = ({ root, refreshDirectory }: FileTreeUploadOpti
               </div>
             ))}
           </ScrollableOverlay>
+          {uploadConflicts ? <ReplacedPartsNote heldBack={uploadConflicts.files} /> : null}{/* GeoCode: the old data's sidecars that replacing deletes */}
           <DialogFooter>
             <Button variant="outline" onClick={() => setUploadConflicts(null)} disabled={uploadingDirectory !== null}>
               {t('sidebarFilesTree.dialog.cancel')}

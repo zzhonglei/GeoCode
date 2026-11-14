@@ -86,6 +86,9 @@ import {
   type FileTreeEntry,
 } from './fileTreeMoveDrag';
 import { buildFileTreeRows, withPinnedRowIndexes, type FileTreeRow } from './fileTreeRows';
+import { datasetStatus, withoutGeoSidecars } from '@/geocode/files/geoSidecars'; // GeoCode: see loadDirectory and getFileStatus
+import { deleteDataset, refusesDatasetRename, refusesHiddenSidecarName } from '@/geocode/files/geoDatasets'; // GeoCode: see the create, rename and delete dialogs
+import { DatasetPartsNote } from '@/geocode/files/DatasetPartsNote'; // GeoCode: see the delete dialog
 
 type FileNode = {
   name: string;
@@ -870,7 +873,11 @@ const SidebarFilesTreeContent: React.FC<{ visible: boolean; currentDirectory: st
           : await opencodeClient.listLocalDirectory(normalizedDir, { respectGitignore });
         if (stale()) return;
         entryCountByDirRef.current.set(normalizedDir, entries.length);
-        const mapped = mapDirectoryEntries(normalizedDir, entries);
+        // --- GeoCode: a geographic dataset lists as its main file, its sidecars hidden as GIS software hides them ---
+        const shownEntries = await withoutGeoSidecars(normalizedDir, entries, files);
+        if (stale()) return;
+        // --- /GeoCode ---
+        const mapped = mapDirectoryEntries(normalizedDir, shownEntries); // GeoCode: shownEntries
         loadedDirsRef.current = new Set(loadedDirsRef.current);
         loadedDirsRef.current.add(normalizedDir);
         setLoadErrorsByDir((prev) => {
@@ -1168,7 +1175,7 @@ const SidebarFilesTreeContent: React.FC<{ visible: boolean; currentDirectory: st
   const getFileStatus = React.useCallback((path: string): FileTreeGitStatus | null => {
     if (statusByPath.size === 0) return null;
     const relative = path.startsWith(root + '/') ? path.slice(root.length + 1) : path;
-    return statusByPath.get(relative) ?? null;
+    return statusByPath.get(relative) ?? datasetStatus(statusByPath, relative); // GeoCode: or as its hidden sidecars changed
   }, [statusByPath, root]);
 
   const getFolderBadge = React.useCallback((dirPath: string): { modified: number; added: number } | null => {
@@ -1384,6 +1391,7 @@ const SidebarFilesTreeContent: React.FC<{ visible: boolean; currentDirectory: st
       const prefix = parentPath ? `${parentPath}/` : '';
       const newPath = normalizePath(`${prefix}${dialogInputValue.trim()}`);
 
+      if (await refusesHiddenSidecarName(files, newPath)) { done(); return; } // GeoCode: writing would empty a sidecar the tree hides
       await files.writeFile(newPath, '')
         .then(async (result) => {
           if (result.success) {
@@ -1441,6 +1449,7 @@ const SidebarFilesTreeContent: React.FC<{ visible: boolean; currentDirectory: st
 
       // Open tabs and the editor, unsaved edits included, follow the new name.
       try {
+        if (await refusesDatasetRename(files, oldPath, newPath)) return; // GeoCode: a dataset's main file keeps its extension
         const result = await moveWorkspacePath(files, { tabs: panelRoot, files: root }, oldPath, newPath);
         if (result === 'moved') {
           toast.success(t('sidebarFilesTree.toast.renamedSuccessfully'));
@@ -1468,7 +1477,7 @@ const SidebarFilesTreeContent: React.FC<{ visible: boolean; currentDirectory: st
 
       const deletedPath = dialogData.path;
       const parentDir = deletedPath.split('/').slice(0, -1).join('/');
-      await files.delete(deletedPath)
+      await deleteDataset(files, deletedPath) // GeoCode: a geographic dataset goes with its sidecars
         .then(async (result) => {
           if (result.success) {
             toast.success(t('sidebarFilesTree.toast.deletedSuccessfully'));
@@ -1968,6 +1977,7 @@ const SidebarFilesTreeContent: React.FC<{ visible: boolean; currentDirectory: st
               {activeDialog === 'createFolder' && t('sidebarFilesTree.dialog.createFolder.description', { path: dialogData?.path ?? t('sidebarFilesTree.dialog.rootFallback') })}
               {activeDialog === 'rename' && t('sidebarFilesTree.dialog.rename.description', { name: dialogData?.name ?? '' })}
               {activeDialog === 'delete' && t('sidebarFilesTree.dialog.delete.description', { name: dialogData?.name ?? '' })}
+              {activeDialog === 'delete' && dialogData ? <DatasetPartsNote path={dialogData.path} /> : null}{/* GeoCode: the sidecars that go with it */}
             </DialogDescription>
           </DialogHeader>
 
