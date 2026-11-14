@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import type { MapView } from './GeoMap';
 import { GeoPanel, type PanelTab } from './GeoPanel';
 import { usePanelStore } from './panelState';
-import { LookTab } from './GeoLook';
+import { LookTab, type Range } from './GeoLook';
 import { GeoTable } from './GeoTable';
 import { FeatureTab, InfoTab, PixelTab } from './GeoTabs';
 import { describeGeoData, findGeoFeature, FORMS, readGeoStatistics, type Form, type FoundFeature, type FoundPixel, type GeoBounds, type GeoDescription, type GeoLook, type GeoStatistics, type Target } from './previewClient';
@@ -81,6 +81,8 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   const [pixel, setPixel] = React.useState<FoundPixel | null>(null);
   // How a raster is drawn, once the preview says and until its data is another's: none leaves it to the reader.
   const [look, setLook] = React.useState<GeoLook | null>(null);
+  // The range each band's lines were last dragged to, to go back to, for as long as its data is the same.
+  const [dragged, setDragged] = React.useState<ReadonlyMap<number, Range>>(() => new Map());
   // What was measured of the raster under a stamp, or the code that was refused with.
   const [measured, setMeasured] = React.useState<{ target: Target; stamp: string; outcome: { statistics: GeoStatistics } | { code: string } } | null>(null);
   const [mapFailed, setMapFailed] = React.useState(false);
@@ -186,6 +188,7 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
         setPicked(null);
         setPixel(null);
         setLook(null);
+        setDragged(new Map());
         return { target, description: outcome.value };
       });
     });
@@ -293,7 +296,7 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
         id: 'look',
         label: text.tabs.look,
         icon: 'palette',
-        content: <LookTab description={description} measured={measured && measured.target === target && measured.stamp === gauged ? measured.outcome : null} look={look} text={text} onLook={setLook} />,
+        content: <LookTab description={description} measured={measured && measured.target === target && measured.stamp === gauged ? measured.outcome : null} look={look} dragged={dragged} text={text} onLook={setLook} onDragged={(band, range) => setDragged((before) => new Map(before).set(band, range))} />,
       },
     ] satisfies PanelTab[] : []),
     ...(description.kind === 'raster' && gauged !== null ? [{ id: 'pixel', label: text.tabs.pixel, icon: 'focus-3', content: <PixelTab pixel={pixel} text={text} /> }] satisfies PanelTab[] : []),

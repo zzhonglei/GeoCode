@@ -1,15 +1,13 @@
 import React from 'react';
 
-import { Icon } from '@/components/icon/Icon';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { dropdownTriggerVariants } from '@/components/ui/dropdown-trigger';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { getCurrentIntlLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { Section } from './GeoTabs';
 import { BY_CLASS, type GeoLook, type GeoStatistics, type Measured, type RasterDescription } from './previewClient';
 import { unshownText, valueText, type PreviewText } from './previewText';
 
-type Range = [number, number];
+export type Range = [number, number];
 type Stretch = keyof PreviewText['stretches'];
 
 // The ramp a band is drawn through when the preview names none.
@@ -48,20 +46,75 @@ const blocks = (classes: Classes): string => {
 /** A ramp as a strip from its low end to its high. */
 const strip = (colours: readonly string[]): string => `linear-gradient(90deg, ${colours.join(', ')})`;
 
-const Choice: React.FC<{ label: string; value: string; onValue: (value: string) => void; shown: React.ReactNode; children: React.ReactNode }> = ({ label, value, onValue, shown, children }) => (
-  <DropdownMenu>
-    <DropdownMenuTrigger asChild nativeButton={false}>
-      <div className={cn(dropdownTriggerVariants(), 'w-fit min-w-0 shrink-0')} title={label}>
-        {shown}
-        <Icon name="arrow-down-s" />
-      </div>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align="start">
-      <DropdownMenuRadioGroup value={value} onValueChange={(chosen) => onValue(String(chosen))}>
-        {children}
-      </DropdownMenuRadioGroup>
-    </DropdownMenuContent>
-  </DropdownMenu>
+type Option<T extends string> = { value: T; label: string; off?: boolean; hint?: string };
+
+/**
+ * A few options side by side, one of them chosen, drawn as the settings draw such a choice (SettingsChipGroup): the
+ * options in a recessed track and the chosen one raised out of it; smaller, as the panel's other controls are. An
+ * option that is `off` keeps its place, greyed, and its `hint` says how it comes to be offered.
+ */
+const Segments = <T extends string>({ label, value, options, onValue }: { label: string; value: T; options: readonly Option<T>[]; onValue: (value: T) => void }) => (
+  <div role="group" aria-label={label} className="oc-recessed inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-lg bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)] p-0.5">
+    {options.map((option) => {
+      const chosen = option.value === value;
+      return (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={chosen}
+          // Not disabled outright: a disabled button takes no pointer, and its hint would not show.
+          aria-disabled={option.off || undefined}
+          title={option.hint}
+          className={cn(
+            'h-5 whitespace-nowrap rounded-md px-2 typography-meta',
+            chosen
+              ? 'oc-raised bg-[var(--surface-background)] text-foreground dark:bg-[var(--surface-elevated)]'
+              : option.off ? 'cursor-default text-muted-foreground opacity-45' : 'text-muted-foreground hover:text-foreground',
+          )}
+          onClick={() => {
+            if (!option.off && !chosen) onValue(option.value);
+          }}
+        >
+          {option.label}
+        </button>
+      );
+    })}
+  </div>
+);
+
+/** The ramps and classes a band may be coloured by, each as the strip it is, the one it is coloured by marked and named. */
+const Ramps: React.FC<{ value: string; offered: readonly { name: string; background: string }[]; text: PreviewText; onValue: (name: string) => void }> = ({ value, offered, text, onValue }) => (
+  <Section title={text.ramp} aside={text.ramps[value] ?? value}>
+    <div role="radiogroup" aria-label={text.ramp} className="flex flex-wrap gap-1.5 py-0.5">
+      {offered.map(({ name, background }) => {
+        const label = text.ramps[name] ?? name;
+        return (
+          <button
+            key={name}
+            type="button"
+            role="radio"
+            aria-checked={name === value}
+            aria-label={label}
+            title={label}
+            className={cn(
+              'h-3.5 w-[30px] rounded-[3px] border border-[color-mix(in_srgb,var(--foreground)_18%,transparent)]',
+              name === value && 'outline outline-2 outline-offset-1 outline-[var(--interactive-selection-foreground)]',
+            )}
+            style={{ background }}
+            onClick={() => onValue(name)}
+          />
+        );
+      })}
+    </div>
+  </Section>
+);
+
+/** What a band or a picture is drawn between to choose, under its histogram. */
+const StretchChoice: React.FC<{ value: Stretch; options: readonly Option<Stretch>[]; text: PreviewText; onValue: (value: Stretch) => void }> = ({ value, options, text, onValue }) => (
+  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+    <span className="text-muted-foreground">{text.stretch}</span>
+    <Segments label={text.stretch} value={value} options={options} onValue={onValue} />
+  </div>
 );
 
 /**
@@ -133,42 +186,55 @@ const Spread: React.FC<{ band: Measured; range: Range; colours: readonly string[
   );
 };
 
-/** A band's classes, each with its colour and how much of the raster is of it; `sampled` where that is of a sample. */
+/**
+ * A band's classes, each with its colour and how much of the raster is of it, `sampled` where that is of a sample.
+ * A class without a name, as most rasters of classes bring none, has a bar of its share where the name would be.
+ */
 const ClassList: React.FC<{ classes: Classes; sampled: boolean; text: PreviewText }> = ({ classes, sampled, text }) => {
   const locale = getCurrentIntlLocale();
+  const most = Math.max(...classes.map((each) => each.share));
   return (
-    <>
+    <div>
       {classes.map((each) => (
         <div key={each.value} className="flex items-center gap-2.5 border-b border-edge-muted py-1.5 last:border-b-0">
           <span aria-hidden="true" className="size-3.5 shrink-0 rounded-[3px] border border-edge-muted" style={{ backgroundColor: colourOf(each) }} />
           <span className="w-10 shrink-0 font-mono tabular-nums text-foreground">{each.value}</span>
-          <span className="min-w-0 flex-1 truncate text-foreground">{each.name ?? ''}</span>
-          <span className="shrink-0 font-mono tabular-nums text-muted-foreground">{(each.share * 100).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</span>
+          <span className="min-w-0 flex-1 truncate text-foreground">
+            {each.name ?? (
+              <span aria-hidden="true" className="block h-1.5 rounded-full bg-[color-mix(in_srgb,var(--foreground)_22%,transparent)]" style={{ width: `${most > 0 ? Math.max(2, (each.share / most) * 100) : 2}%` }} />
+            )}
+          </span>
+          <span className="w-12 shrink-0 text-end font-mono tabular-nums text-muted-foreground">{(each.share * 100).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</span>
         </div>
       ))}
       {sampled ? <div className="py-1.5 text-[11px] text-muted-foreground">{text.sampled}</div> : null}
-    </>
+    </div>
   );
 };
 
+/** How one band is drawn, in parts a wide panel lays side by side: see `oneBand`. */
+type Drawing = { ramps: React.ReactNode; rest: React.ReactNode; listed: boolean };
+
 /**
- * One band as it is drawn and measured: its ramp or its classes and the range it is drawn between to choose, its
- * histogram or the list of its classes, and what is measured of it. `classes` are this band's, none of a band that
- * has none. `lead` goes above, where the band is one of several.
+ * One band as it is drawn and measured: the ramps and classes it may be coloured by to choose, and then either the
+ * range it is drawn between, to drag or to choose, with what is measured of it, or the list of its classes, which is
+ * `listed` to stand apart where there is room. `classes` are this band's, none of a band that has none; `dragged` is
+ * the range its lines were last dragged to, offered to go back to.
  */
-const OneBand: React.FC<{
+const oneBand = ({ number, bytes, statistics, classes, look, dragged, text, onLook, onDragged }: {
   number: number;
   bytes: boolean;
   statistics: GeoStatistics;
   classes: Classes | null;
   look: GeoLook | null;
+  dragged: Range | undefined;
   text: PreviewText;
-  lead?: React.ReactNode;
   onLook: (look: GeoLook) => void;
-}> = ({ number, bytes, statistics, classes, look, text, lead, onLook }) => {
+  onDragged: (band: number, range: Range) => void;
+}): Drawing => {
   const locale = getCurrentIntlLocale();
   const band = statistics.bands[number - 1];
-  if (!band) return <>{lead}<div className="text-muted-foreground">{text.bandEmpty}</div></>;
+  if (!band) return { ramps: null, rest: <div className="text-muted-foreground">{text.bandEmpty}</div>, listed: false };
 
   const offered = rangesOf(band, bytes);
   // Left to the reader, a band is drawn by its classes where it has them, else between the first of the ranges offered.
@@ -178,64 +244,59 @@ const OneBand: React.FC<{
   const stretch = range === null ? 'none' : (offered.find(([, each]) => each && each[0] === range[0] && each[1] === range[1])?.[0] ?? 'custom');
   const colours = statistics.ramps[ramp] ?? statistics.ramps[PLAIN] ?? ['#000000', '#ffffff'];
   const bands = [number];
-
-  return (
-    <>
-      {lead}
-      <div className="flex items-center justify-between gap-2 pb-3">
-        <Choice
-          label={text.ramp}
-          value={ramp}
-          onValue={(chosen) => onLook(lookOf(bands, chosen, range))}
-          shown={<><span aria-hidden="true" className="h-2 w-[34px] shrink-0 rounded-sm" style={{ background: classed ? blocks(classes) : strip(colours) }} /><span className="truncate">{text.ramps[ramp] ?? ramp}</span></>}
-        >
-          {classes ? (
-            <DropdownMenuRadioItem value={BY_CLASS}>
-              <span aria-hidden="true" className="h-2 w-12 shrink-0 rounded-sm" style={{ background: blocks(classes) }} />
-              {text.ramps[BY_CLASS]}
-            </DropdownMenuRadioItem>
-          ) : null}
-          {Object.entries(statistics.ramps).map(([name, each]) => (
-            <DropdownMenuRadioItem key={name} value={name}>
-              <span aria-hidden="true" className="h-2 w-12 shrink-0 rounded-sm" style={{ background: strip(each) }} />
-              {text.ramps[name] ?? name}
-            </DropdownMenuRadioItem>
-          ))}
-        </Choice>
-        {classed ? null : (
-          <Choice
-            label={text.stretch}
-            value={stretch}
-            onValue={(chosen) => {
-              const found = offered.find(([name]) => name === chosen);
-              if (found) onLook(lookOf(bands, ramp, found[1]));
-            }}
-            shown={<span className="truncate">{text.stretches[stretch]}</span>}
-          >
-            {offered.map(([name]) => (
-              <DropdownMenuRadioItem key={name} value={name}>{text.stretches[name]}</DropdownMenuRadioItem>
-            ))}
-          </Choice>
-        )}
-      </div>
-      {classed ? (
-        <ClassList classes={classes} sampled={statistics.sampled ?? false} text={text} />
-      ) : (
-        <>
-          <Spread band={band} range={range ?? BYTES} colours={colours} onRange={(dragged) => onLook(lookOf(bands, ramp, dragged))} />
-          <div className="mt-1.5 grid grid-cols-4 gap-2 border-t border-edge-muted pt-2.5">
-            {(['min', 'max', 'mean', 'std'] as const).map((measure) => (
-              <div key={measure} className="flex min-w-0 flex-col gap-px">
-                <div className="truncate text-[11px] text-muted-foreground">{text.measures[measure]}</div>
-                <div className="truncate font-mono text-foreground">{valueText(band[measure], locale)}</div>
-              </div>
-            ))}
-          </div>
-          <div className="pt-2 text-[11px] text-muted-foreground">{text.sampled}</div>
-        </>
-      )}
-    </>
+  const ramps = (
+    <Ramps
+      value={ramp}
+      offered={[...(classes ? [{ name: BY_CLASS, background: blocks(classes) }] : []), ...Object.entries(statistics.ramps).map(([name, each]) => ({ name, background: strip(each) }))]}
+      text={text}
+      onValue={(chosen) => onLook(lookOf(bands, chosen, range))}
+    />
   );
+  if (classed) return { ramps, rest: <ClassList classes={classes} sampled={statistics.sampled ?? false} text={text} />, listed: true };
+
+  const options: Option<Stretch>[] = [
+    ...offered.map(([name]) => ({ value: name, label: text.stretches[name] })),
+    { value: 'custom', label: text.stretches.custom, off: !dragged, hint: dragged ? text.custom.back : text.custom.hint },
+  ];
+  return {
+    ramps,
+    listed: false,
+    rest: (
+      <>
+        <Spread
+          band={band}
+          range={range ?? BYTES}
+          colours={colours}
+          onRange={(moved) => {
+            onDragged(number, moved);
+            onLook(lookOf(bands, ramp, moved));
+          }}
+        />
+        <StretchChoice
+          value={stretch}
+          options={options}
+          text={text}
+          onValue={(chosen) => {
+            if (chosen === 'custom') {
+              if (dragged) onLook(lookOf(bands, ramp, dragged));
+              return;
+            }
+            const found = offered.find(([name]) => name === chosen);
+            if (found) onLook(lookOf(bands, ramp, found[1]));
+          }}
+        />
+        <div className="mt-2.5 grid grid-cols-4 gap-2 border-t border-edge-muted pt-2.5">
+          {(['min', 'max', 'mean', 'std'] as const).map((measure) => (
+            <div key={measure} className="flex min-w-0 flex-col gap-px">
+              <div className="truncate text-[11px] text-muted-foreground">{text.measures[measure]}</div>
+              <div className="truncate font-mono text-foreground">{valueText(band[measure], locale)}</div>
+            </div>
+          ))}
+        </div>
+        <div className="pt-2 text-[11px] text-muted-foreground">{text.sampled}</div>
+      </>
+    ),
+  };
 };
 
 // What the three bands of a picture are drawn as, and the colours their lines and marks are drawn in: these are of
@@ -277,89 +338,135 @@ const Spreads: React.FC<{ bands: (Measured | null)[] }> = ({ bands }) => {
 /** Whether two pictures are drawn between the same values. */
 const sameRanges = (one: GeoLook, other: GeoLook): boolean => JSON.stringify(one.ranges ?? null) === JSON.stringify(other.ranges ?? null);
 
-/**
- * A raster of several bands as a picture of three of them: what they are drawn between to choose, how their values
- * are spread, and a table of all the bands, in which a band is given to red, green or blue by the mark in its row.
- * `look` is the picture as it is drawn.
- */
-const Picture: React.FC<{
-  description: RasterDescription;
-  statistics: GeoStatistics;
-  look: GeoLook;
-  text: PreviewText;
-  lead: (more: React.ReactNode) => React.ReactNode;
-  onLook: (look: GeoLook) => void;
-}> = ({ description, statistics, look, text, lead, onLook }) => {
-  const locale = getCurrentIntlLocale();
+/** What a picture is offered to be drawn between, by what it is called, and which of those it is drawn between. */
+type Stretches = { kinds: Stretch[]; stretch: Stretch };
+
+const stretchesOf = (description: RasterDescription, statistics: GeoStatistics, look: GeoLook): Stretches => {
   const bytes = look.bands.every((number) => description.bands[number - 1]?.type === 'Byte');
   const kinds: Stretch[] = bytes ? ['cut', 'minmax', 'deviation', 'none'] : ['cut', 'minmax', 'deviation'];
-  const stretch = kinds.find((kind) => sameRanges(pictureOf(look.bands, statistics, kind), look)) ?? 'cut';
+  return { kinds, stretch: kinds.find((kind) => sameRanges(pictureOf(look.bands, statistics, kind), look)) ?? 'cut' };
+};
 
+/** A raster of several bands as a picture of three of them: how their values are spread, and what they are drawn between to choose. */
+const Picture: React.FC<{ description: RasterDescription; statistics: GeoStatistics; look: GeoLook; text: PreviewText; onLook: (look: GeoLook) => void }> = ({ description, statistics, look, text, onLook }) => {
+  const { kinds, stretch } = stretchesOf(description, statistics, look);
   return (
-    <>
-      {lead(
-        <Choice label={text.stretch} value={stretch} onValue={(chosen) => onLook(pictureOf(look.bands, statistics, kinds.find((kind) => kind === chosen) ?? 'cut'))} shown={<span className="truncate">{text.stretches[stretch]}</span>}>
-          {kinds.map((kind) => (
-            <DropdownMenuRadioItem key={kind} value={kind}>{text.stretches[kind]}</DropdownMenuRadioItem>
-          ))}
-        </Choice>,
-      )}
+    <div className="flex flex-col gap-2">
       <Spreads bands={look.bands.map((number) => statistics.bands[number - 1] ?? null)} />
-      <div className="mt-2 grid grid-cols-[2.25rem_1.25rem_1.25rem_1.25rem_repeat(3,minmax(0,1fr))] items-center gap-x-1 border-t border-edge-muted pt-1.5 font-mono text-[11px]">
-        <div className="py-1 text-muted-foreground">{text.band}</div>
-        {CHANNEL_NAMES.map((name) => (
-          <div key={name} className="py-1 text-center text-muted-foreground">{name}</div>
-        ))}
-        <div className="py-1 text-end text-muted-foreground">{text.columns.low}</div>
-        <div className="py-1 text-end text-muted-foreground">{text.columns.high}</div>
-        <div className="py-1 text-end text-muted-foreground">{text.columns.mean}</div>
-        {description.bands.map((_, index) => {
+      <StretchChoice value={stretch} options={kinds.map((kind) => ({ value: kind, label: text.stretches[kind] }))} text={text} onValue={(chosen) => onLook(pictureOf(look.bands, statistics, chosen))} />
+      <div className="text-[11px] text-muted-foreground">{text.sampled}</div>
+    </div>
+  );
+};
+
+/**
+ * The bands of a raster, a row each with what is measured of it, in which the bands drawn are chosen: as red, green
+ * or blue by the marks in a band's row where three are drawn as a picture, else by the band's row itself. A band is
+ * named by its number and by the colour the file says it holds, where it says one.
+ */
+const BandTable: React.FC<{
+  description: RasterDescription;
+  statistics: GeoStatistics;
+  drawn: readonly number[];
+  composite: boolean;
+  text: PreviewText;
+  onChannel: (channel: 0 | 1 | 2, band: number) => void;
+  onBand: (band: number) => void;
+}> = ({ description, statistics, drawn, composite, text, onChannel, onBand }) => {
+  const locale = getCurrentIntlLocale();
+  const head = 'border-b border-edge-muted px-1 py-1 font-normal text-muted-foreground';
+  const cell = 'border-b border-edge-muted px-1 py-1';
+  const mark = 'size-3 rounded-full border border-[color-mix(in_srgb,var(--foreground)_30%,transparent)] align-middle';
+  return (
+    <table className="w-full border-collapse font-mono text-[11px] [&_tr:last-child>td]:border-b-0">
+      <thead>
+        <tr>
+          <th scope="col" className={cn(head, 'text-start')}>{text.band}</th>
+          {composite
+            ? CHANNEL_NAMES.map((name) => <th key={name} scope="col" className={cn(head, 'w-5 text-center')}>{name}</th>)
+            : <th scope="col" className={cn(head, 'w-10 text-center')}>{text.columns.drawn}</th>}
+          <th scope="col" className={cn(head, 'text-end')}>{text.columns.low}</th>
+          <th scope="col" className={cn(head, 'text-end')}>{text.columns.high}</th>
+          <th scope="col" className={cn(head, 'text-end')}>{text.columns.mean}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {description.bands.map((each, index) => {
           const number = index + 1;
           const band = statistics.bands[index];
+          const chosen = !composite && drawn[0] === number;
           return (
-            <React.Fragment key={number}>
-              <div className="border-t border-edge-muted py-1 text-foreground">{number}</div>
-              {([0, 1, 2] as const).map((channel) => {
-                const given = look.bands[channel] === number;
-                return (
-                  <div key={channel} className="flex justify-center border-t border-edge-muted py-1">
-                    <button
-                      type="button"
-                      aria-label={text.bandAs(number, channel)}
-                      title={text.bandAs(number, channel)}
-                      aria-pressed={given}
-                      className="size-3 rounded-full border border-[color-mix(in_srgb,var(--foreground)_30%,transparent)]"
-                      style={given ? { backgroundColor: CHANNELS[channel], borderColor: CHANNELS[channel] } : undefined}
-                      onClick={() => onLook(pictureOf(look.bands.map((each, at) => (at === channel ? number : each)), statistics, stretch))}
-                    />
-                  </div>
-                );
-              })}
+            <tr
+              key={number}
+              className={cn(!composite && 'cursor-pointer hover:bg-[var(--interactive-hover)]', chosen && 'bg-interactive-selection hover:bg-interactive-selection')}
+              onClick={composite || chosen ? undefined : () => onBand(number)}
+            >
+              <td className={cn(cell, 'max-w-0 truncate text-foreground')}>
+                {number}
+                {each.color === 'Undefined' ? null : <span className="ms-1.5 font-sans text-muted-foreground">{each.color}</span>}
+              </td>
+              {composite ? (
+                ([0, 1, 2] as const).map((channel) => {
+                  const given = drawn[channel] === number;
+                  return (
+                    <td key={channel} className={cn(cell, 'text-center')}>
+                      <button
+                        type="button"
+                        aria-label={text.bandAs(number, channel)}
+                        title={text.bandAs(number, channel)}
+                        aria-pressed={given}
+                        className={mark}
+                        style={given ? { backgroundColor: CHANNELS[channel], borderColor: CHANNELS[channel] } : undefined}
+                        onClick={() => onChannel(channel, number)}
+                      />
+                    </td>
+                  );
+                })
+              ) : (
+                <td className={cn(cell, 'text-center')}>
+                  <button
+                    type="button"
+                    aria-label={text.bandAlone(number)}
+                    title={text.bandAlone(number)}
+                    aria-pressed={chosen}
+                    className={mark}
+                    style={chosen ? { backgroundColor: 'var(--interactive-selection-foreground)', borderColor: 'var(--interactive-selection-foreground)' } : undefined}
+                    onClick={(event) => {
+                      // The row would choose it as well.
+                      event.stopPropagation();
+                      if (!chosen) onBand(number);
+                    }}
+                  />
+                </td>
+              )}
               {(['low', 'high', 'mean'] as const).map((measure) => (
-                <div key={measure} className="truncate border-t border-edge-muted py-1 text-end text-foreground">{band ? valueText(band[measure], locale) : ''}</div>
+                <td key={measure} className={cn(cell, 'truncate text-end tabular-nums text-foreground')}>{band ? valueText(band[measure], locale) : ''}</td>
               ))}
-            </React.Fragment>
+            </tr>
           );
         })}
-      </div>
-      <div className="pt-2 text-[11px] text-muted-foreground">{text.sampled}</div>
-    </>
+      </tbody>
+    </table>
   );
 };
 
 /**
  * How a raster is drawn, and what is measured of it. `measured` is what the reader measured or the code it was
  * refused with, none while it is being read; `look` is how the preview has the raster drawn, none while that is left
- * to the reader, and `onLook` changes it. A raster of several bands is drawn as a picture of three of them or as one
- * of them alone, which is then drawn and chosen for as a raster of one band is.
+ * to the reader, and `onLook` changes it; `dragged` is the range each band's lines were last dragged to, told to
+ * `onDragged`. A raster of several bands is drawn as a picture of three of them or as one of them alone, chosen in
+ * the table of its bands; one band is drawn and chosen for as a raster of one band is. Where the panel is wide, the
+ * bands stand on one side and how they are drawn on the other.
  */
 export const LookTab: React.FC<{
   description: RasterDescription;
   measured: { statistics: GeoStatistics } | { code: string } | null;
   look: GeoLook | null;
+  dragged: ReadonlyMap<number, Range>;
   text: PreviewText;
   onLook: (look: GeoLook) => void;
-}> = ({ description, measured, look, text, onLook }) => {
+  onDragged: (band: number, range: Range) => void;
+}> = ({ description, measured, look, dragged, text, onLook, onDragged }) => {
   if (measured === null) return <div className="p-3 typography-meta text-muted-foreground">{text.reading}</div>;
   if ('code' in measured) return <div className="p-3 typography-meta text-muted-foreground">{unshownText(text, measured.code)}</div>;
   const statistics = measured.statistics;
@@ -370,46 +477,70 @@ export const LookTab: React.FC<{
   // Left to the reader, three bands of bytes are a picture drawn as it is, and any others are drawn between the
   // first of the ranges offered.
   const picture = look ?? pictureOf(description.shown, statistics, description.shown.every(bytes) ? 'none' : 'cut');
-  const mode = drawn.length === 1 ? 'single' : 'composite';
-  const alone = (band: number): GeoLook => lookOf([band], PLAIN, statistics.bands[band - 1]?.between ?? null);
+  const composite = drawn.length > 1;
+  // A band chosen alone keeps the ramp it was coloured by, but not classes, which are another band's.
+  const alone = (band: number): GeoLook => lookOf([band], look?.ramp && look.ramp !== BY_CLASS ? look.ramp : PLAIN, statistics.bands[band - 1]?.between ?? null);
 
   // A picture takes three bands.
   const modes = description.bands.length >= 3 ? (
-    <Choice
+    <Segments
       label={text.mode}
-      value={mode}
+      value={composite ? 'composite' : 'single'}
+      options={[{ value: 'composite', label: text.modes.composite }, { value: 'single', label: text.modes.single }]}
       onValue={(chosen) => onLook(chosen === 'single' ? alone(number) : pictureOf(description.shown.length === 3 ? description.shown : [1, 2, 3], statistics, description.shown.every(bytes) ? 'none' : 'cut'))}
-      shown={<span className="truncate">{text.modes[mode]}</span>}
-    >
-      <DropdownMenuRadioItem value="composite">{text.modes.composite}</DropdownMenuRadioItem>
-      <DropdownMenuRadioItem value="single">{text.modes.single}</DropdownMenuRadioItem>
-    </Choice>
+    />
   ) : null;
-  const lead = (more: React.ReactNode) => (several ? <div className="flex items-center justify-between gap-2 pb-3">{modes}{more}</div> : null);
+  const drawing: Drawing = composite
+    ? { ramps: null, rest: <Picture description={description} statistics={statistics} look={picture} text={text} onLook={onLook} />, listed: false }
+    : oneBand({
+        number,
+        bytes: bytes(number),
+        statistics,
+        // The classes the reader found are those of the band it draws by default, and it draws by them that band alone.
+        classes: number === description.shown[0] ? (statistics.classes ?? null) : null,
+        look,
+        dragged: dragged.get(number),
+        text,
+        onLook,
+        onDragged,
+      });
+  const column = 'flex min-w-0 flex-col gap-3';
 
   return (
-    <ScrollableOverlay outerClassName="h-full min-h-0" className="flex flex-col p-3 typography-meta">
-      {mode === 'composite' ? (
-        <Picture description={description} statistics={statistics} look={picture} text={text} lead={lead} onLook={onLook} />
-      ) : (
-        <OneBand
-          number={number}
-          bytes={bytes(number)}
-          statistics={statistics}
-          // The classes the reader found are those of the band it draws by default, and it draws by them that band alone.
-          classes={number === description.shown[0] ? (statistics.classes ?? null) : null}
-          look={look}
-          text={text}
-          lead={lead(
-            <Choice label={text.band} value={String(number)} onValue={(chosen) => onLook(alone(Number(chosen)))} shown={<span className="truncate">{text.band} {number}</span>}>
-              {description.bands.map((_, index) => (
-                <DropdownMenuRadioItem key={index} value={String(index + 1)}>{text.band} {index + 1}</DropdownMenuRadioItem>
-              ))}
-            </Choice>,
-          )}
-          onLook={onLook}
-        />
-      )}
+    <ScrollableOverlay outerClassName="h-full min-h-0" className="@container p-3 typography-meta">
+      <div className="grid gap-x-6 gap-y-3 @[34rem]:grid-cols-2">
+        {several ? (
+          <>
+            <div className={column}>
+              {modes ? <div>{modes}</div> : null}
+              <BandTable
+                description={description}
+                statistics={statistics}
+                drawn={drawn}
+                composite={composite}
+                text={text}
+                // The picture keeps what it is drawn between, of the band given in place of another as well.
+                onChannel={(channel, band) => onLook(pictureOf(picture.bands.map((each, at) => (at === channel ? band : each)), statistics, stretchesOf(description, statistics, picture).stretch))}
+                onBand={(band) => onLook(alone(band))}
+              />
+            </div>
+            <div className={column}>
+              {drawing.ramps}
+              <div className="flex min-w-0 flex-col">{drawing.rest}</div>
+            </div>
+          </>
+        ) : drawing.listed ? (
+          <>
+            <div className={column}>{drawing.ramps}</div>
+            <div className={column}>{drawing.rest}</div>
+          </>
+        ) : (
+          <div className={column}>
+            {drawing.ramps}
+            <div className="flex min-w-0 flex-col">{drawing.rest}</div>
+          </div>
+        )}
+      </div>
     </ScrollableOverlay>
   );
 };

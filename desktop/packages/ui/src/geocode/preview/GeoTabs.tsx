@@ -106,9 +106,13 @@ const FieldType: React.FC<{ type: string }> = ({ type }) => (
   </span>
 );
 
-const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+/** A part of a tab under its title, and what is chosen in it at the title's end where it says so. */
+export const Section: React.FC<{ title: string; aside?: React.ReactNode; children: React.ReactNode }> = ({ title, aside, children }) => (
   <section className="min-w-0">
-    <h4 className="mb-1 font-medium text-muted-foreground">{title}</h4>
+    <h4 className="mb-1 flex justify-between gap-3 font-medium text-muted-foreground">
+      <span className="min-w-0 truncate">{title}</span>
+      {aside ? <span className="min-w-0 truncate text-foreground">{aside}</span> : null}
+    </h4>
     {children}
   </section>
 );
