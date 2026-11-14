@@ -78,6 +78,7 @@ interface Answer {
   readonly width?: number
   readonly height?: number
   readonly resolution?: number | null
+  readonly cell?: { readonly width: number; readonly height: number; readonly unit: string | null } | null
   readonly bytes?: Uint8Array
   readonly empty?: boolean
   readonly found?: {
@@ -796,8 +797,13 @@ test("data past 180 degrees of longitude lies where the map shows it", { skip: m
   // Wholly past 180, opened where it lies rather than on the whole world.
   assert.deepEqual((await open("hawaii.geojson")).described.bounds?.map(Math.round), [-155, 20, -155, 20])
   // A hundred metres a pixel, a little more on the map's plane at eighteen degrees south.
-  const resolution = (await open("fiji.tif")).described.resolution ?? 0
+  const fiji = (await open("fiji.tif")).described
+  const resolution = fiji.resolution ?? 0
   assert.ok(resolution > 100 && resolution < 110, String(resolution))
+  // The raster's own pixels, as the file has them: a hundred metres, not the more the map's plane makes of them; and
+  // of a raster in longitudes and latitudes, in degrees.
+  assert.deepEqual(fiji.cell, { width: 100, height: 100, unit: "metre" })
+  assert.deepEqual((await open("arctic.tif")).described.cell, { width: 1, height: 1, unit: "degree" })
   // Round the South Pole: its inside reaches the map's southern edge, all the way round, and its pixels, six
   // kilometres wide, are measured where the map shows them, not as the way round the pole.
   // A raster in longitudes and latitudes up to a pole keeps its own longitudes.

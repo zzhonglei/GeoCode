@@ -131,6 +131,20 @@ def _raster_place(dataset, srs):
     return _geographic(min(longitudes), min(latitudes), max(longitudes), max(latitudes))
 
 
+def _cell(dataset, srs):
+    """The size of the raster's pixels in its own coordinates, across and down, and the unit they are in: its
+    coordinate system's, by GDAL's name for it (`metre` and `degree` most often), none where it has no coordinate
+    system; None for a raster placed by other means than a grid. As the file has it, unlike `resolution`, which is
+    of the map's plane and grows away from the equator."""
+    grid = dataset.GetGeoTransform(can_return_null=True)
+    if grid is None:
+        return None
+    unit = None
+    if srs is not None:
+        unit = srs.GetAngularUnitsName() if srs.IsGeographic() else srs.GetLinearUnitsName()
+    return {"width": math.hypot(grid[1], grid[4]), "height": math.hypot(grid[2], grid[5]), "unit": unit}
+
+
 def _raster_described(dataset):
     bands = [dataset.GetRasterBand(index) for index in range(1, dataset.RasterCount + 1)]
     srs = dataset.GetSpatialRef() or dataset.GetGCPSpatialRef()
@@ -149,6 +163,7 @@ def _raster_described(dataset):
         "shown": _raster.shown(dataset),
         "overviews": bands[0].GetOverviewCount(),
         "crs": _crs(srs),
+        "cell": _cell(dataset, srs),
     }
     described.update(_raster_place(dataset, srs))
     if "bounds" in described:

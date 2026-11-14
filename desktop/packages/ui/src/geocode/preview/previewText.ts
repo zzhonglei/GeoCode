@@ -67,7 +67,7 @@ export type PreviewText = {
   info: { layer: string; geometry: string; features: string; fields: string; size: string; bands: string };
   /**
    * The headings of the information of a layer or a raster, the corners its extent is given by, the columns of its
-   * table of fields or of bands, and how many overviews a raster has.
+   * table of fields or of bands, how many overviews a raster has, and the size of its pixels with the word for metres.
    */
   about: {
     overview: string;
@@ -80,6 +80,8 @@ export type PreviewText = {
     nodata: string;
     overviews: string;
     levels: (count: number) => string;
+    resolution: string;
+    metres: string;
   };
   /**
    * What a raster has no data by, under that title: what is said where its file declares no value, of a value it
@@ -165,6 +167,8 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
       nodata: 'No data',
       overviews: 'Overviews',
       levels: (count) => (count === 0 ? 'None' : count === 1 ? '1 level' : `${count} levels`),
+      resolution: 'Resolution',
+      metres: 'm',
     },
     blank: {
       title: 'No data',
@@ -251,6 +255,8 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
       nodata: '无数据值',
       overviews: '金字塔',
       levels: (count) => (count === 0 ? '没有' : `${count} 层`),
+      resolution: '分辨率',
+      metres: '米',
     },
     blank: {
       title: '无效像元',
@@ -337,6 +343,8 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
       nodata: '無資料值',
       overviews: '金字塔',
       levels: (count) => (count === 0 ? '沒有' : `${count} 層`),
+      resolution: '解析度',
+      metres: '公尺',
     },
     blank: {
       title: '無效像元',

@@ -335,6 +335,17 @@ const VectorInfo: React.FC<{ description: VectorDescription; text: PreviewText }
 };
 
 /**
+ * The size of a raster's pixels as its file has it, across and down, in its unit: metres and degrees as the locale
+ * writes them, any other unit by GDAL's name for it.
+ */
+const cellText = (cell: NonNullable<RasterDescription['cell']>, text: PreviewText, locale: string): string => {
+  const [across, down] = [valueText(cell.width, locale), valueText(cell.height, locale)];
+  if (cell.unit === 'degree') return `${across}° × ${down}°`;
+  const unit = cell.unit === 'metre' ? text.about.metres : cell.unit;
+  return unit ? `${across} × ${down} ${unit}` : `${across} × ${down}`;
+};
+
+/**
  * What a raster is: an overview, its coordinate system and extent, and its bands as a table, with the colour each
  * holds as the file says, its value of no data and `blank`, the one the preview takes for no data besides, and the
  * bands drawn marked as the map draws them; laid out as a vector layer's is. `drawn` is the bands it is drawn from.
@@ -353,6 +364,7 @@ const RasterInfo: React.FC<{ description: RasterDescription; drawn: readonly num
               pairs={[
                 [text.info.layer, description.layer],
                 [text.info.size, `${description.width.toLocaleString(locale)} × ${description.height.toLocaleString(locale)}`],
+                ...(description.cell ? [[text.about.resolution, cellText(description.cell, text, locale)] as const] : []),
                 [text.about.overviews, text.about.levels(description.overviews)],
               ]}
             />

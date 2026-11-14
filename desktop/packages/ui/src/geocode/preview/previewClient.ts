@@ -44,6 +44,9 @@ const descriptionSchema = z.discriminatedUnion('kind', [
     overviews: z.number(),
     // Metres of the map's plane a pixel is wide, where the raster has a place on it and the reader could tell.
     resolution: z.number().nullable().optional(),
+    // The size of its pixels as the file has it, across and down, in its coordinate system's unit by GDAL's name for
+    // it, `metre` or `degree` most often; none of a raster placed by other means than a grid.
+    cell: z.object({ width: z.number(), height: z.number(), unit: z.string().nullable() }).nullable().optional(),
     ...place,
   }),
 ]);
