@@ -120,6 +120,15 @@ const drawn = (answer: Answer) => {
   return layers(answer.bytes)
 }
 
+/** The red, green, blue and alpha of a raster's tile at these places in it, of an answer that brought one. */
+const pixels = async (answer: Answer, name: string, places: number[][]) => {
+  assert.ok(answer.bytes, `no tile: ${answer.code ?? "empty"}`)
+  const image = file(name)
+  fs.writeFileSync(image, answer.bytes)
+  const out = execFileSync(base, ["-I", "-B", "-c", PIXELS, JSON.stringify([[image, places]])], { encoding: "utf-8" })
+  return (JSON.parse(out) as number[][][])[0].slice(1)
+}
+
 /** A dataset's description and a function asking for its tiles and clicks as described. */
 const open = async (name: string, layer?: string) => {
   const target = { path: file(name), ...(layer ? { layer } : {}) }
@@ -461,13 +470,6 @@ test("a raster is measured, and drawn as the interface asks", { skip: missing },
   assert.equal(counted, 256 * 256 - 64 * 64)
   assert.ok(Math.max(...band.counts) < 2 * (counted / 256), String(Math.max(...band.counts)))
 
-  const pixels = async (answer: Answer, name: string, places: number[][]) => {
-    assert.ok(answer.bytes, `no tile: ${answer.code ?? "empty"}`)
-    const image = file(name)
-    fs.writeFileSync(image, answer.bytes)
-    const out = execFileSync(base, ["-I", "-B", "-c", PIXELS, JSON.stringify([[image, places]])], { encoding: "utf-8" })
-    return (JSON.parse(out) as number[][][])[0].slice(1)
-  }
   const near = (pixel: number[], expected: number[]) =>
     pixel.every((value, index) => Math.abs(value - expected[index]) <= 14)
   const colour = (hex: string) => [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).concat(255)
@@ -522,6 +524,19 @@ test("a raster is measured, and drawn as the interface asks", { skip: missing },
       [2, [30, 200, 30, 255], 0.5],
     ],
   )
+})
+
+// Guards a picture against a pixel where one of its bands has no data: the warp gives it the alpha of the bands that
+// have, and it was drawn with that band as nothing, a fringe of another colour along the edge of a scene.
+test("a pixel of a picture is not drawn where any of its bands has no data", { skip: missing }, async () => {
+  const partial = await open("partial.tif")
+  const [west, east] = await pixels(await partial.tile(), "partial.webp", [
+    [130, 400],
+    [500, 400],
+  ])
+  assert.equal(west[3], 0, String(west))
+  // The east as the file has it, as near as an image compressed with loss keeps it.
+  assert.ok([200, 200, 200, 255].every((value, index) => Math.abs(east[index] - value) <= 14), String(east))
 })
 
 // Guards the values a click reads out against being those of a neighbouring pixel, or of the picture drawn rather

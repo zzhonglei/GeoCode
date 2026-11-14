@@ -367,6 +367,15 @@ def pixel(dataset, x, y):
     return {"column": column, "row": row, "values": values, "centre": centre, "outline": outline}
 
 
+def _nodata(band):
+    """The value a band has no data by, where it says one that the warp can write: none where its mask says where
+    it has no data instead, or where it is NaN, which a band of numbers that are not finite is left out by anyway."""
+    value = band.GetNoDataValue()
+    if value is None or not band.GetMaskFlags() & gdal.GMF_NODATA or math.isnan(value):
+        return None
+    return value
+
+
 def _encoded(image, lossless):
     """A picture of four bands of bytes, as WebP."""
     held = gdal.GetDriverByName("MEM").Create("", image.shape[2], image.shape[1], 4, gdal.GDT_Byte)
@@ -399,6 +408,13 @@ def tile(dataset, look, z, x, y, cancelled, asked=None):
     # Closer than the raster's own pixels, they are shown as the squares they are; the colours of classes are never
     # mixed.
     nearest = classed or palette is not None or (look.native is not None and span / SIZE < look.native)
+    # The alpha the warp gives a pixel is that of any band with data there; each band drawn is told its value of no
+    # data as well, which the warp writes where that band has none, so that a pixel of a picture is not drawn where
+    # one of its bands has no data, as the bands of a scene end apart at its edge.
+    nodata = [_nodata(dataset.GetRasterBand(index)) for index in bands]
+    told = {}
+    if any(value is not None for value in nodata):
+        told["dstNodata"] = " ".join("None" if value is None else repr(value) for value in nodata)
     try:
         warped = gdal.Warp(
             "",
@@ -412,6 +428,7 @@ def tile(dataset, look, z, x, y, cancelled, asked=None):
             dstAlpha=True,
             resampleAlg="near" if nearest else "bilinear",
             callback=lambda *_: 0 if cancelled() else 1,
+            **told,
         )
     except RuntimeError:
         if cancelled():
@@ -420,6 +437,9 @@ def tile(dataset, look, z, x, y, cancelled, asked=None):
     values = warped.ReadAsArray()
     drawn = values[-1] != 0
     values = values[:-1]
+    for index, value in enumerate(nodata):
+        if value is not None:
+            drawn &= values[index] != value
     if numpy.iscomplexobj(values):
         values = numpy.abs(values)
     if values.dtype.kind == "f":

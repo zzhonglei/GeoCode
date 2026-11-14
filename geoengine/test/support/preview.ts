@@ -260,6 +260,16 @@ def classes(made):
     band.SetColorTable(table)
     band.WriteArray(values)
 
+def partial(made):
+    # Grey all over but for its second band, which has no data in its west half, as the bands of a scene from a
+    # satellite end apart at its edge.
+    for number in (1, 2, 3):
+        values = numpy.full((256, 256), 200, dtype=numpy.uint8)
+        if number == 2:
+            values[:, :128] = 0
+        made.GetRasterBand(number).WriteArray(values)
+    made.GetRasterBand(2).SetNoDataValue(0)
+
 def unknown(made):
     # As heights, with NaN for where it has no data, as rasters written by Python often have.
     values = numpy.tile(numpy.linspace(0, 1000, 256, dtype=numpy.float32), (256, 1))
@@ -268,6 +278,7 @@ def unknown(made):
     made.GetRasterBand(1).SetNoDataValue(float("nan"))
 
 raster("picture.tif", 3, gdal.GDT_Byte, picture)
+raster("partial.tif", 3, gdal.GDT_Byte, partial)
 raster("heights.tif", 1, gdal.GDT_Float32, heights)
 raster("classes.tif", 1, gdal.GDT_Byte, classes)
 raster("unknown.tif", 1, gdal.GDT_Float32, unknown)
