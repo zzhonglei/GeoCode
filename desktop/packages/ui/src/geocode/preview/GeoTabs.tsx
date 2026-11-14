@@ -10,13 +10,6 @@ import type { FoundFeature, FoundPixel, GeoDescription, GeoLook, GeoStatistics, 
 import { placeText, valueText, type PreviewText } from './previewText';
 import { bandLook, CHANNEL_NAMES, CHANNELS, classColour, drawnColour, rampColours } from './rasterLook';
 
-const Row: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-  <div className="flex gap-3 border-b border-edge-muted py-1.5 last:border-b-0">
-    <div className="w-20 shrink-0 text-muted-foreground">{label}</div>
-    <div className="min-w-0 flex-1 break-words text-foreground">{children}</div>
-  </div>
-);
-
 /** One of the panel's actions, as an icon alone: what it does is said by its label. */
 export const Action: React.FC<{ icon: IconName; label: string; disabled?: boolean; onClick: () => void }> = ({ icon, label, disabled, onClick }) => (
   <Button variant="ghost" size="xs" className="size-[26px] px-0 text-muted-foreground" aria-label={label} title={label} disabled={disabled} onClick={onClick}>
@@ -117,6 +110,13 @@ const Profile: React.FC<{ values: readonly (number | null)[]; drawn: readonly nu
   );
 };
 
+/** That a band is drawn as red, green or blue, as a square of that colour with its letter. */
+const ChannelMark: React.FC<{ channel: 0 | 1 | 2 }> = ({ channel }) => (
+  <span className="inline-flex size-4 items-center justify-center rounded font-mono text-[10px] font-semibold text-white" style={{ backgroundColor: CHANNELS[channel] }}>
+    {CHANNEL_NAMES[channel]}
+  </span>
+);
+
 /** A colour as a square of it, as a ramp's or a class's colours are shown. */
 const Swatch: React.FC<{ colour: string; label: string }> = ({ colour, label }) => (
   <span role="img" aria-label={label} title={label} className="inline-block size-3.5 shrink-0 rounded-[3px] border border-edge-muted align-middle" style={{ backgroundColor: colour }} />
@@ -193,11 +193,7 @@ export const PixelTab: React.FC<{ pixel: FoundPixel | null; description: RasterD
                     <td className={cn(cell, 'w-1/2 max-w-0 ps-3 text-foreground')}>
                       {value === null ? null : composite ? (
                         <span className="flex gap-1">
-                          {channels.map((channel) => (
-                            <span key={channel} className="inline-flex size-4 items-center justify-center rounded font-mono text-[10px] font-semibold text-white" style={{ backgroundColor: CHANNELS[channel] }}>
-                              {CHANNEL_NAMES[channel]}
-                            </span>
-                          ))}
+                          {channels.map((channel) => <ChannelMark key={channel} channel={channel} />)}
                         </span>
                       ) : drawn[0] === number ? shownAs(number, value) : null}
                     </td>
@@ -213,14 +209,19 @@ export const PixelTab: React.FC<{ pixel: FoundPixel | null; description: RasterD
 };
 
 /**
- * A field's type by GDAL's name for it, coloured as code is coloured by kind, so that the numbers stand out among the
- * text at a glance: text, whole numbers, other numbers and dates; any other type in grey.
+ * A field's or a band's type by GDAL's name for it, coloured as code is coloured by kind, so that the numbers stand
+ * out among the text at a glance: text, whole numbers, other numbers and dates; any other type, such as a band of
+ * complex numbers, in grey.
  */
 const TYPE_COLOURS = new Map([
   ['String', 'var(--syntax-string)'],
   ['Integer', 'var(--syntax-number)'],
   ['Integer64', 'var(--syntax-number)'],
+  ...['Byte', 'Int8', 'UInt16', 'Int16', 'UInt32', 'Int32', 'UInt64', 'Int64'].map((type) => [type, 'var(--syntax-number)'] as const),
   ['Real', 'var(--syntax-type)'],
+  ['Float16', 'var(--syntax-type)'],
+  ['Float32', 'var(--syntax-type)'],
+  ['Float64', 'var(--syntax-type)'],
   ['Date', 'var(--syntax-keyword)'],
   ['DateTime', 'var(--syntax-keyword)'],
   ['Time', 'var(--syntax-keyword)'],
@@ -258,6 +259,31 @@ const Pairs: React.FC<{ pairs: readonly (readonly [string, React.ReactNode])[] }
   </div>
 );
 
+/** Where the data lies: its coordinate system, by name and code, and the corners of its extent. */
+const Place: React.FC<{ description: GeoDescription; text: PreviewText }> = ({ description, text }) => {
+  const bounds = description.bounds;
+  return (
+    <Section title={text.about.place}>
+      {description.crs ? (
+        <div className="mb-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          <span className="text-foreground">{description.crs.name}</span>
+          {description.crs.code ? <span className="rounded px-1.5 font-mono leading-[17px] bg-[color-mix(in_srgb,var(--foreground)_7%,transparent)]">{description.crs.code}</span> : null}
+        </div>
+      ) : (
+        <div className="mb-1 text-muted-foreground">{text.noCrs}</div>
+      )}
+      {bounds ? (
+        <Pairs
+          pairs={[
+            [text.about.southwest, <span className="font-mono">{placeText(bounds[0], bounds[1])}</span>],
+            [text.about.northeast, <span className="font-mono">{placeText(bounds[2], bounds[3])}</span>],
+          ]}
+        />
+      ) : null}
+    </Section>
+  );
+};
+
 /**
  * What a vector layer is: an overview, its coordinate system and extent, and its fields as a table, in two columns
  * where the panel is wide enough and one under the other where it is not.
@@ -268,7 +294,6 @@ const VectorInfo: React.FC<{ description: VectorDescription; text: PreviewText }
     ? (['points', 'lines', 'polygons'] as const).flatMap((form) => (description.forms?.[form] ? [`${text.forms[form]} ${description.forms[form].toLocaleString(locale)}`] : [])).join(' · ')
     : null;
   const geometry = description.geometry ?? forms;
-  const bounds = description.bounds;
   return (
     <ScrollableOverlay outerClassName="h-full min-h-0" className="@container px-3 py-2 typography-meta">
       <div className="grid gap-x-6 gap-y-3 @[34rem]:grid-cols-2">
@@ -282,24 +307,7 @@ const VectorInfo: React.FC<{ description: VectorDescription; text: PreviewText }
               ]}
             />
           </Section>
-          <Section title={text.about.place}>
-            {description.crs ? (
-              <div className="mb-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                <span className="text-foreground">{description.crs.name}</span>
-                {description.crs.code ? <span className="rounded px-1.5 font-mono leading-[17px] bg-[color-mix(in_srgb,var(--foreground)_7%,transparent)]">{description.crs.code}</span> : null}
-              </div>
-            ) : (
-              <div className="mb-1 text-muted-foreground">{text.noCrs}</div>
-            )}
-            {bounds ? (
-              <Pairs
-                pairs={[
-                  [text.about.southwest, <span className="font-mono">{placeText(bounds[0], bounds[1])}</span>],
-                  [text.about.northeast, <span className="font-mono">{placeText(bounds[2], bounds[3])}</span>],
-                ]}
-              />
-            ) : null}
-          </Section>
+          <Place description={description} text={text} />
         </div>
         {description.fields.length > 0 ? (
           <Section title={`${text.info.fields} · ${description.fields.length.toLocaleString(locale)}`}>
@@ -327,31 +335,71 @@ const VectorInfo: React.FC<{ description: VectorDescription; text: PreviewText }
 };
 
 /**
- * What the data is, at more length than the line above the map has room for. `drawn` is the bands a raster is drawn
- * from, where the preview has chosen them.
+ * What a raster is: an overview, its coordinate system and extent, and its bands as a table, with the colour each
+ * holds as the file says, its value of no data, and the bands drawn marked as the map draws them; laid out as a
+ * vector layer's is. `drawn` is the bands it is drawn from.
  */
-export const InfoTab: React.FC<{ description: GeoDescription; text: PreviewText; drawn?: readonly number[] }> = ({ description, text, drawn }) => {
-  if (description.kind === 'vector') return <VectorInfo description={description} text={text} />;
+const RasterInfo: React.FC<{ description: RasterDescription; drawn: readonly number[]; text: PreviewText }> = ({ description, drawn, text }) => {
   const locale = getCurrentIntlLocale();
-  const crs = !description.crs ? text.noCrs : description.crs.code ? `${description.crs.name} (${description.crs.code})` : description.crs.name;
-  const extent = description.bounds
-    ? `${placeText(description.bounds[0], description.bounds[1])} – ${placeText(description.bounds[2], description.bounds[3])}`
-    : null;
+  const composite = drawn.length > 1;
+  const head = 'border-b border-edge-muted py-1 pe-3 text-start font-normal';
+  const cell = 'border-b border-edge-muted py-1 pe-3';
   return (
-    <ScrollableOverlay outerClassName="h-full min-h-0" className="px-3 py-1.5 typography-meta">
-      <Row label={text.info.layer}>{description.layer}</Row>
-      <Row label={text.info.size}>{`${description.width.toLocaleString(locale)} × ${description.height.toLocaleString(locale)}`}</Row>
-      <Row label={text.info.bands}>
-        {description.bands.map((band, index) => (
-          <div key={index}>
-            {index + 1} · {band.type}
-            {band.nodata === null ? '' : ` · ${text.info.nodata} ${band.nodata}`}
-          </div>
-        ))}
-        {description.bands.length > (drawn ?? description.shown).length ? <div className="text-muted-foreground">{text.shown((drawn ?? description.shown).join(', '))}</div> : null}
-      </Row>
-      <Row label={text.info.crs}>{crs}</Row>
-      {extent ? <Row label={text.info.extent}>{extent}</Row> : null}
+    <ScrollableOverlay outerClassName="h-full min-h-0" className="@container px-3 py-2 typography-meta">
+      <div className="grid gap-x-6 gap-y-3 @[34rem]:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-3">
+          <Section title={text.about.overview}>
+            <Pairs
+              pairs={[
+                [text.info.layer, description.layer],
+                [text.info.size, `${description.width.toLocaleString(locale)} × ${description.height.toLocaleString(locale)}`],
+                [text.about.overviews, text.about.levels(description.overviews)],
+              ]}
+            />
+          </Section>
+          <Place description={description} text={text} />
+        </div>
+        <Section title={`${text.info.bands} · ${description.bands.length.toLocaleString(locale)}`}>
+          <table className="w-full border-collapse [&_tr:last-child>td]:border-b-0">
+            <thead>
+              <tr className="text-muted-foreground">
+                <th scope="col" className={head}>#</th>
+                <th scope="col" className={head}>{text.about.type}</th>
+                <th scope="col" className={head}>{text.about.colour}</th>
+                <th scope="col" className={cn(head, 'text-end')}>{text.about.nodata}</th>
+                <th scope="col" className={cn(head, 'pe-0 text-center')}>{text.columns.drawn}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {description.bands.map((band, index) => {
+                const number = index + 1;
+                return (
+                  <tr key={number}>
+                    <td className={cn(cell, 'font-mono text-foreground')}>{number}</td>
+                    <td className={cell}><FieldType type={band.type} /></td>
+                    <td className={cn(cell, 'text-foreground')}>{band.color === 'Undefined' ? <span className="text-muted-foreground">—</span> : band.color}</td>
+                    <td className={cn(cell, 'text-end font-mono text-foreground')}>{band.nodata === null ? <span className="text-muted-foreground">—</span> : valueText(band.nodata, locale)}</td>
+                    <td className={cn(cell, 'pe-0 text-center')}>
+                      <span className="inline-flex gap-1 align-middle">
+                        {composite
+                          ? ([0, 1, 2] as const).filter((channel) => drawn[channel] === number).map((channel) => <ChannelMark key={channel} channel={channel} />)
+                          : drawn[0] === number ? <span className="size-3 rounded-full bg-[var(--interactive-selection-foreground)]" /> : null}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Section>
+      </div>
     </ScrollableOverlay>
   );
 };
+
+/**
+ * What the data is, at more length than the line above the map has room for. `drawn` is the bands a raster is drawn
+ * from, where the preview has chosen them.
+ */
+export const InfoTab: React.FC<{ description: GeoDescription; text: PreviewText; drawn?: readonly number[] }> = ({ description, text, drawn }) =>
+  description.kind === 'vector' ? <VectorInfo description={description} text={text} /> : <RasterInfo description={description} drawn={drawn ?? description.shown} text={text} />;

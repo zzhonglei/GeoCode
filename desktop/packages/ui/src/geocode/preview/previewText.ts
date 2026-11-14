@@ -5,7 +5,6 @@ export type PreviewText = {
   /** `shown` is the count as the locale writes it. */
   features: (count: number, shown: string) => string;
   bands: (count: number) => string;
-  shown: (bands: string) => string;
   layer: string;
   /** What a layer's features are drawn as, each a name to show or hide them by. */
   forms: { points: string; lines: string; polygons: string };
@@ -63,9 +62,23 @@ export type PreviewText = {
   previousPage: string;
   nextPage: string;
   /** What the rows of the info tab are called. */
-  info: { layer: string; geometry: string; features: string; fields: string; crs: string; extent: string; size: string; bands: string; nodata: string };
-  /** The headings of a vector layer's information, the corners its extent is given by, and its table of fields. */
-  about: { overview: string; place: string; southwest: string; northeast: string; field: string; type: string };
+  info: { layer: string; geometry: string; features: string; fields: string; size: string; bands: string };
+  /**
+   * The headings of the information of a layer or a raster, the corners its extent is given by, the columns of its
+   * table of fields or of bands, and how many overviews a raster has.
+   */
+  about: {
+    overview: string;
+    place: string;
+    southwest: string;
+    northeast: string;
+    field: string;
+    type: string;
+    colour: string;
+    nodata: string;
+    overviews: string;
+    levels: (count: number) => string;
+  };
   /** Some of the map's tiles failed; the rest is drawn. */
   partly: string;
   missed: string;
@@ -79,7 +92,6 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     reading: 'Reading…',
     features: (count, shown) => (count === 1 ? '1 feature' : `${shown} features`),
     bands: (count) => (count === 1 ? '1 band' : `${count} bands`),
-    shown: (bands) => `showing ${bands}`,
     layer: 'Layer',
     forms: { points: 'Points', lines: 'Lines', polygons: 'Polygons' },
     noCrs: 'No coordinate system',
@@ -112,8 +124,19 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     reach: 'Zoom to the feature',
     previousPage: 'Previous page',
     nextPage: 'Next page',
-    info: { layer: 'Layer', geometry: 'Geometry', features: 'Features', fields: 'Fields', crs: 'Coordinate system', extent: 'Extent', size: 'Size', bands: 'Bands', nodata: 'no data' },
-    about: { overview: 'Overview', place: 'Coordinate system and extent', southwest: 'SW', northeast: 'NE', field: 'Field', type: 'Type' },
+    info: { layer: 'Layer', geometry: 'Geometry', features: 'Features', fields: 'Fields', size: 'Size', bands: 'Bands' },
+    about: {
+      overview: 'Overview',
+      place: 'Coordinate system and extent',
+      southwest: 'SW',
+      northeast: 'NE',
+      field: 'Field',
+      type: 'Type',
+      colour: 'Colour',
+      nodata: 'No data',
+      overviews: 'Overviews',
+      levels: (count) => (count === 0 ? 'None' : count === 1 ? '1 level' : `${count} levels`),
+    },
     partly: 'Part of the map could not be read.',
     missed: 'What was clicked could not be read.',
     bandEmpty: 'This band has no data.',
@@ -140,7 +163,6 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     reading: '读取中…',
     features: (_count, shown) => `${shown} 个要素`,
     bands: (count) => `${count} 个波段`,
-    shown: (bands) => `显示波段 ${bands}`,
     layer: '图层',
     forms: { points: '点', lines: '线', polygons: '面' },
     noCrs: '没有坐标系',
@@ -173,8 +195,19 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     reach: '缩放到要素',
     previousPage: '上一页',
     nextPage: '下一页',
-    info: { layer: '图层', geometry: '几何类型', features: '要素数', fields: '字段', crs: '坐标系', extent: '范围', size: '尺寸', bands: '波段', nodata: '无数据值' },
-    about: { overview: '概览', place: '坐标系与范围', southwest: '西南', northeast: '东北', field: '字段', type: '类型' },
+    info: { layer: '图层', geometry: '几何类型', features: '要素数', fields: '字段', size: '尺寸', bands: '波段' },
+    about: {
+      overview: '概览',
+      place: '坐标系与范围',
+      southwest: '西南',
+      northeast: '东北',
+      field: '字段',
+      type: '类型',
+      colour: '颜色',
+      nodata: '无数据值',
+      overviews: '金字塔',
+      levels: (count) => (count === 0 ? '没有' : `${count} 层`),
+    },
     partly: '地图有一部分没能读出来。',
     missed: '点选的内容没能读出来。',
     bandEmpty: '这个波段没有数据。',
@@ -201,7 +234,6 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     reading: '讀取中…',
     features: (_count, shown) => `${shown} 個圖徵`,
     bands: (count) => `${count} 個波段`,
-    shown: (bands) => `顯示波段 ${bands}`,
     layer: '圖層',
     forms: { points: '點', lines: '線', polygons: '面' },
     noCrs: '沒有座標系統',
@@ -234,8 +266,19 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     reach: '縮放至圖徵',
     previousPage: '上一頁',
     nextPage: '下一頁',
-    info: { layer: '圖層', geometry: '幾何類型', features: '圖徵數', fields: '欄位', crs: '座標系統', extent: '範圍', size: '尺寸', bands: '波段', nodata: '無資料值' },
-    about: { overview: '概覽', place: '座標系統與範圍', southwest: '西南', northeast: '東北', field: '欄位', type: '類型' },
+    info: { layer: '圖層', geometry: '幾何類型', features: '圖徵數', fields: '欄位', size: '尺寸', bands: '波段' },
+    about: {
+      overview: '概覽',
+      place: '座標系統與範圍',
+      southwest: '西南',
+      northeast: '東北',
+      field: '欄位',
+      type: '類型',
+      colour: '顏色',
+      nodata: '無資料值',
+      overviews: '金字塔',
+      levels: (count) => (count === 0 ? '沒有' : `${count} 層`),
+    },
     partly: '地圖有一部分沒能讀出來。',
     missed: '點選的內容沒能讀出來。',
     bandEmpty: '這個波段沒有資料。',
