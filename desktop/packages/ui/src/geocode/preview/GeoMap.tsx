@@ -100,10 +100,9 @@ const mark = (map: MapLibreMap, tiles: string | null) => {
     map.addLayer({ id: `mark-${lines}-edge`, type: 'line', source: 'mark', 'source-layer': lines, layout: round, paint: { 'line-color': MARK_EDGE, 'line-width': 5.5 } });
     map.addLayer({ id: `mark-${lines}`, type: 'line', source: 'mark', 'source-layer': lines, layout: round, paint: { 'line-color': MARK, 'line-width': 2.5 } });
   }
-  // A point, and a line or a polygon too small at this zoom to be seen as one.
-  for (const dots of ['points', 'small-lines', 'small-polygons']) {
-    map.addLayer({ id: `mark-${dots}`, type: 'circle', source: 'mark', 'source-layer': dots, paint: { 'circle-color': MARK, 'circle-radius': 5, 'circle-stroke-color': MARK_EDGE, 'circle-stroke-width': 2 } });
-  }
+  // A point. Not the dots of the parts too small at this zoom, as QGIS marks a feature by its shape alone: a
+  // province's islands would each stand out as a large ring.
+  map.addLayer({ id: 'mark-points', type: 'circle', source: 'mark', 'source-layer': 'points', paint: { 'circle-color': MARK, 'circle-radius': 5, 'circle-stroke-color': MARK_EDGE, 'circle-stroke-width': 2 } });
 };
 
 /**
