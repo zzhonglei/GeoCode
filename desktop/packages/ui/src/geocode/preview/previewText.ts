@@ -50,6 +50,8 @@ export type PreviewText = {
   /** What the button says that draws a band alone. */
   bandAlone: (band: number) => string;
   measures: { min: string; max: string; mean: string; std: string };
+  /** The heading of what is measured of a band. */
+  statistics: string;
   /** Said of what is measured: it is of a sample of the raster, not of every pixel. */
   sampled: string;
   /** The files view's toolbar button that opens and closes the panel. */
@@ -149,6 +151,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     bandAs: (band, channel) => `Band ${band} as ${['red', 'green', 'blue'][channel]}`,
     bandAlone: (band) => `Show band ${band} alone`,
     measures: { min: 'Min', max: 'Max', mean: 'Mean', std: 'Std dev' },
+    statistics: 'Statistics',
     sampled: 'From a sample',
     panel: 'Data panel',
     closePanel: 'Hide the panel',
@@ -238,6 +241,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     bandAs: (band, channel) => `波段 ${band} 作${['红', '绿', '蓝'][channel]}`,
     bandAlone: (band) => `只显示波段 ${band}`,
     measures: { min: '最小值', max: '最大值', mean: '平均值', std: '标准差' },
+    statistics: '统计',
     sampled: '取样',
     panel: '数据面板',
     closePanel: '收起面板',
@@ -327,6 +331,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     bandAs: (band, channel) => `波段 ${band} 作${['紅', '綠', '藍'][channel]}`,
     bandAlone: (band) => `只顯示波段 ${band}`,
     measures: { min: '最小值', max: '最大值', mean: '平均值', std: '標準差' },
+    statistics: '統計',
     sampled: '取樣',
     panel: '資料面板',
     closePanel: '收起面板',

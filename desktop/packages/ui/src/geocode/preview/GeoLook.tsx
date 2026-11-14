@@ -339,12 +339,12 @@ const ClassList: React.FC<{ classes: Classes; sampled: boolean; text: PreviewTex
 };
 
 /** How one band is drawn, in parts a wide panel lays side by side: see `oneBand`. */
-type Drawing = { ramps: React.ReactNode; rest: React.ReactNode; listed: boolean };
+type Drawing = { ramps: React.ReactNode; rest: React.ReactNode; facts: React.ReactNode; listed: boolean };
 
 /**
  * One band as it is drawn and measured: the ramps and classes it may be coloured by to choose, and then either the
- * range it is drawn between, to drag or to choose, with what is measured of it, or the list of its classes, which is
- * `listed` to stand apart where there is room. `classes` are this band's, none of a band that has none; `dragged` is
+ * range it is drawn between, to drag or to choose, with what is measured of it as `facts` of its own, or the list of
+ * its classes, which is `listed` to stand apart where there is room. `classes` are this band's, none of a band that has none; `dragged` is
  * the range its lines were last dragged to, offered to go back to.
  */
 const oneBand = ({ number, bytes, statistics, classes, look, dragged, text, onLook, onDragged }: {
@@ -360,7 +360,7 @@ const oneBand = ({ number, bytes, statistics, classes, look, dragged, text, onLo
 }): Drawing => {
   const locale = getCurrentIntlLocale();
   const band = statistics.bands[number - 1];
-  if (!band) return { ramps: null, rest: <div className="text-muted-foreground">{text.bandEmpty}</div>, listed: false };
+  if (!band) return { ramps: null, rest: <div className="text-muted-foreground">{text.bandEmpty}</div>, facts: null, listed: false };
 
   const offered = rangesOf(band, bytes);
   const { ramp, classed, range, reversed } = bandLook(band, classes, look);
@@ -382,7 +382,7 @@ const oneBand = ({ number, bytes, statistics, classes, look, dragged, text, onLo
       onReverse={() => onLook(lookOf(bands, ramp, range, !reversed))}
     />
   );
-  if (classed && classes) return { ramps, rest: <ClassList classes={classes} sampled={statistics.sampled ?? false} text={text} />, listed: true };
+  if (classed && classes) return { ramps, rest: <ClassList classes={classes} sampled={statistics.sampled ?? false} text={text} />, facts: null, listed: true };
 
   const options: Option<Stretch>[] = [
     ...offered.map(([name]) => ({ value: name, label: text.stretches[name] })),
@@ -415,7 +415,11 @@ const oneBand = ({ number, bytes, statistics, classes, look, dragged, text, onLo
             if (found) onLook(lookOf(bands, ramp, found[1], reversed));
           }}
         />
-        <div className="mt-2.5 grid grid-cols-4 gap-2 border-t border-edge-muted pt-2.5">
+      </>
+    ),
+    facts: (
+      <Section title={text.statistics}>
+        <div className="grid grid-cols-4 gap-2">
           {(['min', 'max', 'mean', 'std'] as const).map((measure) => (
             <div key={measure} className="flex min-w-0 flex-col gap-px">
               <div className="truncate text-[11px] text-muted-foreground">{text.measures[measure]}</div>
@@ -424,7 +428,7 @@ const oneBand = ({ number, bytes, statistics, classes, look, dragged, text, onLo
           ))}
         </div>
         <div className="pt-2 text-[11px] text-muted-foreground">{text.sampled}</div>
-      </>
+      </Section>
     ),
   };
 };
@@ -625,7 +629,7 @@ export const LookTab: React.FC<{
     />
   ) : null;
   const drawing: Drawing = composite
-    ? { ramps: null, rest: <Picture description={description} statistics={statistics} look={picture} text={text} onLook={onLook} />, listed: false }
+    ? { ramps: null, facts: null, rest: <Picture description={description} statistics={statistics} look={picture} text={text} onLook={onLook} />, listed: false }
     : oneBand({
         number,
         bytes: bytes(number),
@@ -675,6 +679,7 @@ export const LookTab: React.FC<{
               {hint}
               {drawing.ramps}
               <div className="flex min-w-0 flex-col">{drawing.rest}</div>
+              {drawing.facts}
               <div className="@[34rem]:hidden">{blanks}</div>
             </div>
           </>
@@ -691,13 +696,19 @@ export const LookTab: React.FC<{
             </div>
           </>
         ) : (
+          // How it is drawn on one side and what the data is on the other, which an empty side would else leave
+          // lopsided; one under the other, the hint comes first.
           <>
             <div className={column}>
-              {hint}
+              {hint ? <div className="@[34rem]:hidden">{hint}</div> : null}
               {drawing.ramps}
               <div className="flex min-w-0 flex-col">{drawing.rest}</div>
             </div>
-            <div className={column}>{blanks}</div>
+            <div className={column}>
+              {hint ? <div className="hidden @[34rem]:block">{hint}</div> : null}
+              {drawing.facts}
+              {blanks}
+            </div>
           </>
         )}
       </div>
