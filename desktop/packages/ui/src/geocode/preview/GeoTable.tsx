@@ -139,7 +139,7 @@ export const GeoTable: React.FC<{
         {/* A fixed layout only holds with a width of the table's own; without one a long value widens its column. */}
         <table
           className="min-w-full table-fixed border-separate border-spacing-0 font-mono typography-meta"
-          style={{ width: `calc(${numbered}ch + 1rem + 1px + ${widths.map((_, column) => widthOfColumn(column)).join(' + ')})` }}
+          style={{ width: `calc(${[`${numbered}ch + 1rem + 1px`, ...widths.map((_, column) => widthOfColumn(column))].join(' + ')})` }}
         >
           <colgroup>
             <col style={{ width: `calc(${numbered}ch + 1rem + 1px)` }} />
@@ -149,7 +149,8 @@ export const GeoTable: React.FC<{
           </colgroup>
           <thead className="sticky top-0 z-20 bg-[var(--surface-subtle)]">
             <tr>
-              <th scope="col" className={cn(cell, 'sticky start-0 bg-[var(--surface-subtle)] text-start font-medium text-muted-foreground')}>#</th>
+              {/* Over the headers that pass under it, which their handles make positioned and so drawn after it. */}
+              <th scope="col" className={cn(cell, 'sticky start-0 z-10 bg-[var(--surface-subtle)] text-start font-medium text-muted-foreground')}>#</th>
               {names.map((name, column) => (
                 <th key={column} scope="col" className={cn(cell, 'relative truncate text-start font-medium text-foreground last:border-e-0')} title={name}>
                   {name}
@@ -176,8 +177,6 @@ export const GeoTable: React.FC<{
                       after.delete(column);
                       return after;
                     })}
-                    // A click on the edge is not one on the header, which a sort will take.
-                    onClick={(event) => event.stopPropagation()}
                   />
                 </th>
               ))}
