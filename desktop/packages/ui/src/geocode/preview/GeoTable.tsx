@@ -18,6 +18,9 @@ const NONE: GeoRows['rows'] = [];
 // The widest and the narrowest a column is, in characters of the cells' font.
 const LEAST = 4;
 const MOST = 64;
+// The narrowest and the widest a column is dragged to, in pixels.
+const DRAGGED_LEAST = 40;
+const DRAGGED_MOST = 600;
 
 /** How wide a value is in the cells' font, in its `ch`: a character of Chinese, Japanese or Korean takes two. */
 const widthOf = (value: string): number => {
@@ -89,6 +92,14 @@ export const GeoTable: React.FC<{
   const rows = page?.rows ?? NONE;
   const names = React.useMemo(() => description.fields.map((field) => field.name), [description.fields]);
   const widths = React.useMemo(() => widthsOf(names, rows), [names, rows]);
+  // The columns dragged to a width of the user's, in pixels, kept from page to page; a double click on a column's
+  // edge gives it back the width of its values, as QGIS does.
+  const [dragged, setDragged] = React.useState<ReadonlyMap<number, number>>(() => new Map());
+  const drag = React.useRef<{ column: number; from: number; width: number } | null>(null);
+  const widthOfColumn = (column: number) => {
+    const chosen = dragged.get(column);
+    return chosen === undefined ? `calc(${widths[column]}ch + 1rem + 1px)` : `${chosen}px`;
+  };
   // The numbers of the rows, as wide as the last of them.
   const numbered = String(description.features).length;
   const virtualizer = useVirtualizer({
@@ -128,20 +139,46 @@ export const GeoTable: React.FC<{
         {/* A fixed layout only holds with a width of the table's own; without one a long value widens its column. */}
         <table
           className="min-w-full table-fixed border-separate border-spacing-0 font-mono typography-meta"
-          style={{ width: `calc(${numbered + widths.reduce((sum, width) => sum + width, 0)}ch + ${widths.length + 1} * (1rem + 1px))` }}
+          style={{ width: `calc(${numbered}ch + 1rem + 1px + ${widths.map((_, column) => widthOfColumn(column)).join(' + ')})` }}
         >
           <colgroup>
             <col style={{ width: `calc(${numbered}ch + 1rem + 1px)` }} />
-            {widths.map((width, column) => (
-              <col key={column} style={{ width: `calc(${width}ch + 1rem + 1px)` }} />
+            {widths.map((_, column) => (
+              <col key={column} style={{ width: widthOfColumn(column) }} />
             ))}
           </colgroup>
           <thead className="sticky top-0 z-20 bg-[var(--surface-subtle)]">
             <tr>
               <th scope="col" className={cn(cell, 'sticky start-0 bg-[var(--surface-subtle)] text-start font-medium text-muted-foreground')}>#</th>
               {names.map((name, column) => (
-                <th key={column} scope="col" className={cn(cell, 'truncate text-start font-medium text-foreground last:border-e-0')} title={name}>
+                <th key={column} scope="col" className={cn(cell, 'relative truncate text-start font-medium text-foreground last:border-e-0')} title={name}>
                   {name}
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-y-0 end-0 w-1.5 cursor-col-resize touch-none hover:bg-[color-mix(in_srgb,var(--foreground)_15%,transparent)]"
+                    onPointerDown={(event) => {
+                      if (event.button !== 0) return;
+                      const header = event.currentTarget.parentElement;
+                      if (!header) return;
+                      drag.current = { column, from: event.clientX, width: header.getBoundingClientRect().width };
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerMove={(event) => {
+                      const dragging = drag.current;
+                      if (!dragging) return;
+                      const width = Math.round(Math.max(DRAGGED_LEAST, Math.min(DRAGGED_MOST, dragging.width + event.clientX - dragging.from)));
+                      setDragged((before) => new Map(before).set(dragging.column, width));
+                    }}
+                    onPointerUp={() => (drag.current = null)}
+                    onLostPointerCapture={() => (drag.current = null)}
+                    onDoubleClick={() => setDragged((before) => {
+                      const after = new Map(before);
+                      after.delete(column);
+                      return after;
+                    })}
+                    // A click on the edge is not one on the header, which a sort will take.
+                    onClick={(event) => event.stopPropagation()}
+                  />
                 </th>
               ))}
             </tr>
