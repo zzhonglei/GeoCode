@@ -40,11 +40,16 @@ export const FeatureTab: React.FC<{ picked: FoundFeature | null; total: number; 
       </div>
       <ScrollableOverlay outerClassName="min-h-0 flex-1" className="px-3 pb-1.5">
         {picked.attributes.length === 0 ? <div className="py-1.5 text-muted-foreground">{text.noAttributes}</div> : null}
-        {picked.attributes.map(([field, value], index) => (
-          <Row key={`${index}:${field}`} label={field}>
-            {value === null ? <NoValue /> : value}
-          </Row>
-        ))}
+        {/* The names as wide as the longest of them, to under half the panel, past which a name wraps: a field name
+            is often long, as OpenStreetMap's addr:housenumber is, and must not run under its value. */}
+        <div className="grid grid-cols-[fit-content(45%)_minmax(0,1fr)] [&>*:nth-last-child(-n+2)]:border-b-0">
+          {picked.attributes.map(([field, value], index) => (
+            <React.Fragment key={`${index}:${field}`}>
+              <div className="border-b border-edge-muted py-1.5 pe-3 text-muted-foreground [overflow-wrap:anywhere]">{field}</div>
+              <div className="min-w-0 border-b border-edge-muted py-1.5 text-foreground [overflow-wrap:anywhere]">{value === null ? <NoValue /> : value}</div>
+            </React.Fragment>
+          ))}
+        </div>
       </ScrollableOverlay>
     </div>
   );
