@@ -20,8 +20,11 @@ export type PreviewText = {
   tabs: { feature: string; table: string; look: string; pixel: string; info: string };
   /** Shown where a clicked pixel's values go, before any is clicked. */
   pixelHint: string;
-  /** What is said of a pixel: where it is in the raster's grid, and of a band without data there. */
-  pixel: { column: string; row: string; noData: string };
+  /**
+   * What is said of a pixel: where it is in the raster's grid, and of a band without data there; the headings of
+   * where it is, of its values as a line and of its values; and what the colour its value is drawn in stands for.
+   */
+  pixel: { column: string; row: string; noData: string; place: string; profile: string; values: string; drawnAs: string };
   /** What one band is coloured by: its classes, or a ramp by the reader's name for it; a ramp this has no word for goes by that name. */
   ramps: Record<string, string>;
   /**
@@ -87,7 +90,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     whole: 'Show all of it',
     tabs: { feature: 'Feature', table: 'Table', look: 'Display', pixel: 'Pixel', info: 'Info' },
     pixelHint: 'Click the raster on the map to see the values of the pixel there.',
-    pixel: { column: 'Column', row: 'Row', noData: 'no data' },
+    pixel: { column: 'Column', row: 'Row', noData: 'no data', place: 'Location', profile: 'Spectral profile', values: 'Values', drawnAs: 'Its colour on the map' },
     ramps: { classes: 'Classes', grey: 'Greyscale', terrain: 'Terrain', viridis: 'Viridis', magma: 'Magma', spectral: 'Spectral', rdylgn: 'Red–yellow–green', blues: 'Blues' },
     stretches: { cut: '2–98%', minmax: 'Min–max', deviation: 'Mean ± 2σ', none: 'None', custom: 'Custom' },
     custom: { hint: 'Drag the lines on the histogram to set a range of your own', back: 'Back to the range you dragged' },
@@ -148,7 +151,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     whole: '回到全图',
     tabs: { feature: '要素', table: '属性表', look: '显示', pixel: '像元', info: '信息' },
     pixelHint: '点击地图上的影像,查看这个像元的值。',
-    pixel: { column: '列', row: '行', noData: '无数据' },
+    pixel: { column: '列', row: '行', noData: '无数据', place: '位置', profile: '光谱曲线', values: '值', drawnAs: '在地图上的颜色' },
     ramps: { classes: '分类', grey: '灰度', terrain: '地形', viridis: 'Viridis', magma: '岩浆', spectral: '光谱', rdylgn: '红黄绿', blues: '蓝' },
     stretches: { cut: '2–98%', minmax: '最小–最大', deviation: '平均 ± 2σ', none: '不拉伸', custom: '自定义' },
     custom: { hint: '拖动直方图上的线来自定义范围', back: '回到拖出来的范围' },
@@ -209,7 +212,7 @@ const TEXT: { en: PreviewText } & Partial<Record<Locale, PreviewText>> = {
     whole: '回到全圖',
     tabs: { feature: '圖徵', table: '屬性表', look: '顯示', pixel: '像元', info: '資訊' },
     pixelHint: '點選地圖上的影像,檢視這個像元的值。',
-    pixel: { column: '欄', row: '列', noData: '無資料' },
+    pixel: { column: '欄', row: '列', noData: '無資料', place: '位置', profile: '光譜曲線', values: '值', drawnAs: '在地圖上的顏色' },
     ramps: { classes: '分類', grey: '灰階', terrain: '地形', viridis: 'Viridis', magma: '岩漿', spectral: '光譜', rdylgn: '紅黃綠', blues: '藍' },
     stretches: { cut: '2–98%', minmax: '最小–最大', deviation: '平均 ± 2σ', none: '不拉伸', custom: '自訂' },
     custom: { hint: '拖曳直方圖上的線來自訂範圍', back: '回到拖曳出來的範圍' },

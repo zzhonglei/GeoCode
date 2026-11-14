@@ -56,7 +56,9 @@ RAMPS = {
 
 
 def _ramp(name):
-    """A ramp as 256 colours, one for each step a band's values are drawn in."""
+    """A ramp as 256 colours, one for each step a band's values are drawn in. The interface works out the colour of a
+    clicked pixel the same way, as `drawnColour` in desktop/packages/ui/src/geocode/preview/rasterLook.ts: a change
+    here is made there too."""
     stops = numpy.array([[int(colour[at : at + 2], 16) for at in (1, 3, 5)] for colour in RAMPS[name]], dtype=float)
     along = numpy.linspace(0, len(stops) - 1, 256)
     return numpy.stack([numpy.interp(along, numpy.arange(len(stops)), stops[:, part]) for part in range(3)]).round()
@@ -241,7 +243,9 @@ def _measure(sample):
 
 class Look:
     """What is worked out once of how a raster is drawn: the bands, the values they are drawn between or the colour
-    table they are drawn through when the interface does not say, and what is measured of each band."""
+    table they are drawn through when the interface does not say, and what is measured of each band. How one band is
+    drawn when the interface does not say is told there as well, by `bandLook` in
+    desktop/packages/ui/src/geocode/preview/rasterLook.ts: a change to it here is made there too."""
 
     def __init__(self, dataset):
         self.bands = shown(dataset)
@@ -444,7 +448,8 @@ def tile(dataset, look, z, x, y, cancelled, asked=None):
             continue
         low, high = ranges[min(index, len(ranges) - 1)]
         with numpy.errstate(invalid="ignore"):
-            # A range of no width draws all at or above it as the high end.
+            # A range of no width draws all at or above it as the high end. Scaled as `drawnColour` in
+            # desktop/packages/ui/src/geocode/preview/rasterLook.ts scales a clicked pixel's value.
             image[index] = numpy.clip((band - low) * (255.0 / max(high - low, 1e-12)), 0, 255)
     if ramp is not None:
         image[:3] = ramp[:, image[0]]

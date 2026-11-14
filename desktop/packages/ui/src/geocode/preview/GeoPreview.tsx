@@ -11,7 +11,8 @@ import { cn } from '@/lib/utils';
 import type { MapView } from './GeoMap';
 import { GeoPanel, type PanelTab } from './GeoPanel';
 import { usePanelStore } from './panelState';
-import { LookTab, type Range } from './GeoLook';
+import type { Range } from './rasterLook';
+import { LookTab } from './GeoLook';
 import { GeoTable } from './GeoTable';
 import { FeatureTab, InfoTab, PixelTab } from './GeoTabs';
 import { describeGeoData, findGeoFeature, FORMS, readGeoStatistics, type Form, type FoundFeature, type FoundPixel, type GeoBounds, type GeoDescription, type GeoLook, type GeoStatistics, type Target } from './previewClient';
@@ -280,6 +281,8 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
   const lies = picked?.bounds;
   const reachPicked = mapped && lies ? () => reach.current?.(lies) : undefined;
 
+  // What was measured of the raster as it is now, none while it is being measured.
+  const measuredNow = measured && measured.target === target && measured.stamp === gauged ? measured.outcome : null;
   const tabs: PanelTab[] = !description ? [] : [
     ...(description.kind === 'vector' ? [
       { id: 'feature', label: text.tabs.feature, icon: 'map-pin-2', content: <FeatureTab picked={picked} total={description.features} text={text} onReach={reachPicked} /> },
@@ -296,10 +299,18 @@ export const GeoPreview: React.FC<{ path: string; revision: number; visible: boo
         id: 'look',
         label: text.tabs.look,
         icon: 'palette',
-        content: <LookTab description={description} measured={measured && measured.target === target && measured.stamp === gauged ? measured.outcome : null} look={look} dragged={dragged} text={text} onLook={setLook} onDragged={(band, range) => setDragged((before) => new Map(before).set(band, range))} />,
+        content: <LookTab description={description} measured={measuredNow} look={look} dragged={dragged} text={text} onLook={setLook} onDragged={(band, range) => setDragged((before) => new Map(before).set(band, range))} />,
       },
     ] satisfies PanelTab[] : []),
-    ...(description.kind === 'raster' && gauged !== null ? [{ id: 'pixel', label: text.tabs.pixel, icon: 'focus-3', content: <PixelTab pixel={pixel} text={text} /> }] satisfies PanelTab[] : []),
+    ...(description.kind === 'raster' && gauged !== null ? [
+      {
+        id: 'pixel',
+        label: text.tabs.pixel,
+        // Not the crosshair, which is the map's button back to the whole of the data.
+        icon: 'scan-2',
+        content: <PixelTab pixel={pixel} description={description} statistics={measuredNow && 'statistics' in measuredNow ? measuredNow.statistics : null} look={look} text={text} />,
+      },
+    ] satisfies PanelTab[] : []),
     { id: 'info', label: text.tabs.info, icon: 'information', content: <InfoTab description={description} text={text} drawn={look?.bands} /> },
   ];
 

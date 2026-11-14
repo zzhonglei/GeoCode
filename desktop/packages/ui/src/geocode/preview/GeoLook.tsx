@@ -6,14 +6,9 @@ import { cn } from '@/lib/utils';
 import { Section } from './GeoTabs';
 import { BY_CLASS, type GeoLook, type GeoStatistics, type Measured, type RasterDescription } from './previewClient';
 import { unshownText, valueText, type PreviewText } from './previewText';
+import { bandLook, BYTES, CHANNEL_NAMES, CHANNELS, classColour, PLAIN, rampColours, type Classes, type Range } from './rasterLook';
 
-export type Range = [number, number];
 type Stretch = keyof PreviewText['stretches'];
-
-// The ramp a band is drawn through when the preview names none.
-const PLAIN = 'grey';
-// What a band of bytes is drawn between when it is drawn as it is.
-const BYTES: Range = [0, 255];
 
 /** The ranges a band is offered to be drawn between, by what they are called; `none` is for a band of bytes alone. */
 const rangesOf = (band: Measured, bytes: boolean): [Stretch, Range | null][] => {
@@ -33,14 +28,10 @@ const lookOf = (bands: number[], ramp: string, range: Range | null): GeoLook => 
   return look;
 };
 
-type Classes = NonNullable<GeoStatistics['classes']>;
-
-const colourOf = (each: Classes[number]): string => `rgb(${each.color.slice(0, 3).join(' ')} / ${(each.color[3] ?? 255) / 255})`;
-
 /** The colours of a band's classes side by side, the first few of them, as a strip stands for a ramp. */
 const blocks = (classes: Classes): string => {
   const few = classes.slice(0, 6);
-  return `linear-gradient(90deg, ${few.map((each, index) => `${colourOf(each)} ${(index * 100) / few.length}% ${((index + 1) * 100) / few.length}%`).join(', ')})`;
+  return `linear-gradient(90deg, ${few.map((each, index) => `${classColour(each)} ${(index * 100) / few.length}% ${((index + 1) * 100) / few.length}%`).join(', ')})`;
 };
 
 /** A ramp as a strip from its low end to its high. */
@@ -197,7 +188,7 @@ const ClassList: React.FC<{ classes: Classes; sampled: boolean; text: PreviewTex
     <div>
       {classes.map((each) => (
         <div key={each.value} className="flex items-center gap-2.5 border-b border-edge-muted py-1.5 last:border-b-0">
-          <span aria-hidden="true" className="size-3.5 shrink-0 rounded-[3px] border border-edge-muted" style={{ backgroundColor: colourOf(each) }} />
+          <span aria-hidden="true" className="size-3.5 shrink-0 rounded-[3px] border border-edge-muted" style={{ backgroundColor: classColour(each) }} />
           <span className="w-10 shrink-0 font-mono tabular-nums text-foreground">{each.value}</span>
           <span className="min-w-0 flex-1 truncate text-foreground">
             {each.name ?? (
@@ -237,12 +228,9 @@ const oneBand = ({ number, bytes, statistics, classes, look, dragged, text, onLo
   if (!band) return { ramps: null, rest: <div className="text-muted-foreground">{text.bandEmpty}</div>, listed: false };
 
   const offered = rangesOf(band, bytes);
-  // Left to the reader, a band is drawn by its classes where it has them, else between the first of the ranges offered.
-  const ramp = look?.ramp ?? (classes ? BY_CLASS : PLAIN);
-  const classed = classes !== null && ramp === BY_CLASS;
-  const range = look && !classed ? (look.ranges?.[0] ?? null) : band.between;
+  const { ramp, classed, range } = bandLook(band, classes, look);
   const stretch = range === null ? 'none' : (offered.find(([, each]) => each && each[0] === range[0] && each[1] === range[1])?.[0] ?? 'custom');
-  const colours = statistics.ramps[ramp] ?? statistics.ramps[PLAIN] ?? ['#000000', '#ffffff'];
+  const colours = rampColours(statistics, ramp);
   const bands = [number];
   const ramps = (
     <Ramps
@@ -252,7 +240,7 @@ const oneBand = ({ number, bytes, statistics, classes, look, dragged, text, onLo
       onValue={(chosen) => onLook(lookOf(bands, chosen, range))}
     />
   );
-  if (classed) return { ramps, rest: <ClassList classes={classes} sampled={statistics.sampled ?? false} text={text} />, listed: true };
+  if (classed && classes) return { ramps, rest: <ClassList classes={classes} sampled={statistics.sampled ?? false} text={text} />, listed: true };
 
   const options: Option<Stretch>[] = [
     ...offered.map(([name]) => ({ value: name, label: text.stretches[name] })),
@@ -298,11 +286,6 @@ const oneBand = ({ number, bytes, statistics, classes, look, dragged, text, onLo
     ),
   };
 };
-
-// What the three bands of a picture are drawn as, and the colours their lines and marks are drawn in: these are of
-// the data, as the colours of a ramp are.
-const CHANNELS = ['#e03131', '#2f9e44', '#1971c2'] as const;
-const CHANNEL_NAMES = ['R', 'G', 'B'] as const;
 
 /** Three bands as a picture: each band's range by what it is called, or none of them where they are drawn as they are. */
 const pictureOf = (bands: number[], statistics: GeoStatistics, stretch: Stretch): GeoLook => {

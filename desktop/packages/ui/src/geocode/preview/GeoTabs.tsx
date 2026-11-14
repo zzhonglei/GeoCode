@@ -5,8 +5,10 @@ import type { IconName } from '@/components/icon/icons';
 import { Button } from '@/components/ui/button';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { getCurrentIntlLocale } from '@/lib/i18n';
-import type { FoundFeature, FoundPixel, GeoDescription, VectorDescription } from './previewClient';
+import { cn } from '@/lib/utils';
+import type { FoundFeature, FoundPixel, GeoDescription, GeoLook, GeoStatistics, RasterDescription, VectorDescription } from './previewClient';
 import { placeText, valueText, type PreviewText } from './previewText';
+import { bandLook, CHANNEL_NAMES, CHANNELS, classColour, drawnColour, rampColours } from './rasterLook';
 
 const Row: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="flex gap-3 border-b border-edge-muted py-1.5 last:border-b-0">
@@ -55,30 +57,157 @@ export const FeatureTab: React.FC<{ picked: FoundFeature | null; total: number; 
   );
 };
 
+/** A whole number of tens to a power at or past a value from none, to end a scale with: 5,000 for 4,210. */
+const roundedPast = (value: number): number => {
+  if (value <= 0) return 0;
+  const step = 10 ** Math.floor(Math.log10(value));
+  return Math.ceil(value / step) * step;
+};
+
+// The spectral profile's drawing, in the units it is drawn in: its width and height, and the room left of it for the
+// scale's values and under it for the bands' numbers.
+const PROFILE = { width: 300, height: 118, left: 44, right: 8, top: 6, bottom: 18 };
+
 /**
- * The pixel that is clicked: where it is in the raster's grid and in the raster's own coordinates, and each band's
- * value as the file holds it, or what to do to click one.
+ * A pixel's values band after band as a line, broken at a band without data there, on a scale from none, or the
+ * least of them where that is less, to the greatest; the bands drawn are marked as the map draws them, in red, green
+ * and blue, or as the band drawn alone is marked in the table of bands.
  */
-export const PixelTab: React.FC<{ pixel: FoundPixel | null; text: PreviewText }> = ({ pixel, text }) => {
+const Profile: React.FC<{ values: readonly (number | null)[]; drawn: readonly number[]; composite: boolean; text: PreviewText }> = ({ values, drawn, composite, text }) => {
+  const locale = getCurrentIntlLocale();
+  const known = values.filter((value) => value !== null);
+  if (known.length === 0) return null;
+  const { width, height, left, right, top, bottom } = PROFILE;
+  const [least, most] = [-roundedPast(-Math.min(0, ...known)), roundedPast(Math.max(0, ...known))];
+  const span = most - least || 1;
+  const x = (index: number) => left + (index * (width - left - right)) / Math.max(1, values.length - 1);
+  const y = (value: number) => top + (height - top - bottom) * (1 - (value - least) / span);
+  // Its ends, and none between them where the values pass it, else halfway.
+  const marks = [least, least < 0 && most > 0 ? 0 : (least + most) / 2, most];
+  // A number under every band, or under every so many of a great many.
+  const every = Math.ceil(values.length / 16);
+  const line = values.map((value, index) => (value === null ? '' : `${index > 0 && values[index - 1] !== null ? 'L' : 'M'}${x(index)} ${y(value)}`)).join(' ');
+  return (
+    <svg role="img" aria-label={text.pixel.profile} viewBox={`0 0 ${width} ${height}`} className="block h-auto w-full max-w-[420px] overflow-visible font-mono">
+      <g className="text-muted-foreground">
+        {marks.map((value, index) => (
+          <React.Fragment key={index}>
+            <line x1={left} x2={width - right} y1={y(value)} y2={y(value)} stroke="currentColor" strokeOpacity={0.25} strokeWidth={0.75} />
+            <text x={left - 6} y={y(value) + 3.5} textAnchor="end" fontSize={10} fill="currentColor">{value.toLocaleString(locale, { maximumSignificantDigits: 3 })}</text>
+          </React.Fragment>
+        ))}
+        {values.map((_, index) => (index % every === 0 ? <text key={index} x={x(index)} y={height - 4} textAnchor="middle" fontSize={10} fill="currentColor">{index + 1}</text> : null))}
+      </g>
+      <g className="text-foreground">
+        <path d={line} fill="none" stroke="currentColor" strokeOpacity={0.7} strokeWidth={1.5} />
+        {values.map((value, index) => {
+          if (value === null) return null;
+          const number = index + 1;
+          const channel = composite ? drawn.indexOf(number) : -1;
+          const alone = !composite && drawn[0] === number;
+          const colour = channel >= 0 ? CHANNELS[channel] : alone ? 'var(--interactive-selection-foreground)' : null;
+          return (
+            <circle key={index} cx={x(index)} cy={y(value)} r={colour ? 3.5 : 2.5} fill={colour ?? 'var(--background)'} stroke={colour ?? 'currentColor'} strokeWidth={1.25}>
+              <title>{`${text.band} ${number}: ${valueText(value, locale)}`}</title>
+            </circle>
+          );
+        })}
+      </g>
+    </svg>
+  );
+};
+
+/** A colour as a square of it, as a ramp's or a class's colours are shown. */
+const Swatch: React.FC<{ colour: string; label: string }> = ({ colour, label }) => (
+  <span role="img" aria-label={label} title={label} className="inline-block size-3.5 shrink-0 rounded-[3px] border border-edge-muted align-middle" style={{ backgroundColor: colour }} />
+);
+
+/**
+ * The pixel that is clicked: where it is in the raster's grid and in the raster's own coordinates; its values band
+ * after band as a line, where there are several; and each band's value as the file holds it, the bands drawn marked
+ * as the map draws them, a band drawn alone by the colour its value is drawn in and the name of its class where it
+ * has one. Or what to do to click one. `statistics` say what a band is drawn through, once measured; `look` is how
+ * the preview has the raster drawn, none where that is left to the reader. In two columns where the panel is wide.
+ */
+export const PixelTab: React.FC<{ pixel: FoundPixel | null; description: RasterDescription; statistics: GeoStatistics | null; look: GeoLook | null; text: PreviewText }> = ({ pixel, description, statistics, look, text }) => {
   if (!pixel) return <div className="p-3 typography-meta text-muted-foreground">{text.pixelHint}</div>;
   const locale = getCurrentIntlLocale();
   // As many decimals as tell neighbouring pixels apart, whether the coordinates are degrees or metres.
   const coordinate = (value: number) => value.toLocaleString(locale, { maximumFractionDigits: Math.abs(value) < 1000 ? 6 : 2 });
+  const drawn = look?.bands ?? description.shown;
+  const composite = drawn.length > 1;
+  // How the map shows a value of the band drawn alone: in the colour it is drawn in, and as its class where it has one.
+  const shownAs = (number: number, value: number): React.ReactNode => {
+    const band = statistics?.bands[number - 1];
+    if (!statistics || !band) return null;
+    const classes = number === description.shown[0] ? (statistics.classes ?? null) : null;
+    const { ramp, classed, range } = bandLook(band, classes, look);
+    if (!classed) return <Swatch colour={drawnColour(value, range, rampColours(statistics, ramp))} label={text.pixel.drawnAs} />;
+    const found = classes?.find((each) => each.value === value);
+    return found ? (
+      <span className="flex min-w-0 items-center gap-2">
+        <Swatch colour={classColour(found)} label={text.pixel.drawnAs} />
+        {found.name ? <span className="min-w-0 truncate">{found.name}</span> : null}
+      </span>
+    ) : null;
+  };
+  const cell = 'border-b border-edge-muted py-1';
+
   return (
-    <ScrollableOverlay outerClassName="h-full min-h-0" className="px-3 py-1.5 typography-meta">
-      <Row label={text.pixel.column}><span className="font-mono">{(pixel.column + 1).toLocaleString(locale)}</span></Row>
-      <Row label={text.pixel.row}><span className="font-mono">{(pixel.row + 1).toLocaleString(locale)}</span></Row>
-      {pixel.centre ? (
-        <>
-          <Row label="X"><span className="font-mono">{coordinate(pixel.centre[0])}</span></Row>
-          <Row label="Y"><span className="font-mono">{coordinate(pixel.centre[1])}</span></Row>
-        </>
-      ) : null}
-      {pixel.values.map((value, index) => (
-        <Row key={index} label={`${text.band} ${index + 1}`}>
-          {value === null ? <span className="italic text-muted-foreground">{text.pixel.noData}</span> : <span className="font-mono">{valueText(value, locale)}</span>}
-        </Row>
-      ))}
+    <ScrollableOverlay outerClassName="h-full min-h-0" className="@container px-3 py-2 typography-meta">
+      <div className="grid gap-x-6 gap-y-3 @[34rem]:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-3">
+          <Section title={text.pixel.place}>
+            <Pairs
+              pairs={[
+                [text.pixel.column, <span className="font-mono">{(pixel.column + 1).toLocaleString(locale)}</span>],
+                [text.pixel.row, <span className="font-mono">{(pixel.row + 1).toLocaleString(locale)}</span>],
+                ...(pixel.centre
+                  ? [['X', <span className="font-mono">{coordinate(pixel.centre[0])}</span>] as const, ['Y', <span className="font-mono">{coordinate(pixel.centre[1])}</span>] as const]
+                  : []),
+              ]}
+            />
+          </Section>
+          {pixel.values.length > 1 ? (
+            <Section title={text.pixel.profile}>
+              <Profile values={pixel.values} drawn={drawn} composite={composite} text={text} />
+            </Section>
+          ) : null}
+        </div>
+        <Section title={text.pixel.values}>
+          <table className="w-full border-collapse [&_tr:last-child>td]:border-b-0">
+            <tbody>
+              {pixel.values.map((value, index) => {
+                const number = index + 1;
+                const colour = description.bands[index]?.color;
+                const channels = composite ? ([0, 1, 2] as const).filter((channel) => drawn[channel] === number) : [];
+                return (
+                  <tr key={number}>
+                    <td className={cn(cell, 'pe-3 text-foreground')}>
+                      <span className="font-mono">{number}</span>
+                      {colour && colour !== 'Undefined' ? <span className="ms-1.5 text-muted-foreground">{colour}</span> : null}
+                    </td>
+                    <td className={cn(cell, 'text-end font-mono tabular-nums text-foreground')}>
+                      {value === null ? <span className="font-sans italic text-muted-foreground">{text.pixel.noData}</span> : valueText(value, locale)}
+                    </td>
+                    <td className={cn(cell, 'w-1/2 max-w-0 ps-3 text-foreground')}>
+                      {value === null ? null : composite ? (
+                        <span className="flex gap-1">
+                          {channels.map((channel) => (
+                            <span key={channel} className="inline-flex size-4 items-center justify-center rounded font-mono text-[10px] font-semibold text-white" style={{ backgroundColor: CHANNELS[channel] }}>
+                              {CHANNEL_NAMES[channel]}
+                            </span>
+                          ))}
+                        </span>
+                      ) : drawn[0] === number ? shownAs(number, value) : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Section>
+      </div>
     </ScrollableOverlay>
   );
 };
