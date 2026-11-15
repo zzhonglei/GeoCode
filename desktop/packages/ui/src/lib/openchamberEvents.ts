@@ -14,6 +14,7 @@ import { sessionWarmingSnapshotSchema, type SessionWarmingSnapshot } from '@/sto
 import { z } from 'zod';
 import { trackedItemRecordsSchema } from './trackedItems/model';
 import { GEO_STATUS_EVENT, geoStatusEventSchema, type GeoStatusEvent } from '@/geocode/geoStatus'; // GeoCode: see dispatchFromEnvelope
+import { FOLDER_CHANGED_EVENT, folderChangedEventSchema, type FolderChangedEvent } from '@/geocode/files/folderChanged'; // GeoCode: see dispatchFromEnvelope
 import type { SyncEvent } from './opencode/events';
 import { classifyStreamPayload } from '@/sync/event-pipeline';
 
@@ -286,6 +287,7 @@ type OpenChamberEvent =
   /** An agent turn finished in `directory`; its branches may have a new pull request. */
   | { type: 'source-control-activity'; directory: string }
   | GeoStatusEvent // GeoCode: GeoEngine's statuses
+  | FolderChangedEvent // GeoCode: folders a file tree shows changed on disk
   | RoutingUpdatedEvent
   | RoutingDecisionEvent
   | RoutingPermissionHeldEvent
@@ -584,10 +586,15 @@ const dispatchFromEnvelope = (envelope: { type: string; properties: unknown }) =
     return;
   }
 
-  // --- GeoCode: GeoEngine's statuses, see geocode/GeoStatusButtons.tsx ---
+  // --- GeoCode: GeoEngine's statuses, see geocode/GeoStatusButtons.tsx; folders changed on disk, see geocode/files/useGeoFolderWatch.ts ---
   if (envelope.type === GEO_STATUS_EVENT) {
     const parsed = geoStatusEventSchema.safeParse(envelope.properties);
     if (parsed.success) for (const listener of listeners) listener({ type: 'geo-status', ...parsed.data });
+    return;
+  }
+  if (envelope.type === FOLDER_CHANGED_EVENT) {
+    const parsed = folderChangedEventSchema.safeParse(envelope.properties);
+    if (parsed.success) for (const listener of listeners) listener({ type: 'folder-changed', ...parsed.data });
     return;
   }
   // --- /GeoCode ---

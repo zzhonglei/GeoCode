@@ -151,6 +151,7 @@ import { useGeoPanelAction } from '@/geocode/preview/panelState'; // GeoCode: se
 import { datasetStatus, withoutGeoSidecars } from '@/geocode/files/geoSidecars'; // GeoCode: see loadDirectory and getFileStatus
 import { deleteDataset, refusesDatasetRename, refusesHiddenSidecarName } from '@/geocode/files/geoDatasets'; // GeoCode: see the create, rename and delete dialogs
 import { DatasetPartsNote } from '@/geocode/files/DatasetPartsNote'; // GeoCode: see the delete dialog
+import { useGeoFolderWatch } from '@/geocode/files/useGeoFolderWatch'; // GeoCode: see the poll of expanded directories
 import { watchFileOnScreen } from '@/lib/watchedFiles';
 
 
@@ -1498,6 +1499,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
 
     return () => clearInterval(interval);
   }, [directoryRequests, expandedPaths, files.listDirectory, refreshDirectory, treeActive]);
+  useGeoFolderWatch({ root, directories: expandedPaths, active: treeActive, onChanges: ({ directories }) => directories.forEach((dir) => void refreshDirectory(dir)) }); // GeoCode: the tree follows its folders on disk as they change, without waiting for the poll
 
   const handleDialogSubmit = React.useCallback(async (e?: React.FormEvent) => {
     e?.preventDefault();

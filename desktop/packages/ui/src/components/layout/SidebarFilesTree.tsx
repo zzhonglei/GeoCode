@@ -49,7 +49,9 @@ import { useFileTreeUpload } from '@/components/views/files/useFileTreeUpload';
 import { useFileTreeDisclosure } from '@/components/views/files/useFileTreeDisclosure';
 import { moveWorkspacePath } from '@/components/views/files/moveWorkspacePath';
 import { INTERNAL_FILE_PATH_TYPE } from '@/components/chat/composer/attachments/dataTransfer';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- GeoCode: useFileTreeChanges is used only in the closed call, see useGeoFolderWatch below
 import { AUTO_RELIST_MAX_ENTRIES, useFileTreeChanges, type FileTreeChangeBatch } from '@/components/views/files/useFileTreeChanges';
+import { useGeoFolderWatch } from '@/geocode/files/useGeoFolderWatch'; // GeoCode: see the call
 import { FileContentSearchResults } from '@/components/views/files/FileContentSearchResults';
 import { fileContentMatchKey, useFileContentSearch } from '@/components/views/files/useFileContentSearch';
 import type { FileContentSearchMatch } from '@/lib/api/types';
@@ -1068,7 +1070,10 @@ const SidebarFilesTreeContent: React.FC<{ visible: boolean; currentDirectory: st
     })();
   }, [loadDirectory, root]);
 
+  /* --- GeoCode: the tree follows its folders on disk instead of guessing changes from the agent's activity ---
   useFileTreeChanges({ root, active: visible, whileInactive: 'drop', onChanges: applyFileTreeChanges });
+  --- /GeoCode --- */
+  useGeoFolderWatch({ root, directories: expandedPaths, active: visible, onChanges: applyFileTreeChanges }); // GeoCode: see above
 
   // --- Fuzzy search scoring (matching FilesView) ---
 

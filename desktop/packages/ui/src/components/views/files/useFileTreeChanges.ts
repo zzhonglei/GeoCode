@@ -15,7 +15,10 @@ const BATCH_DELAY_MS = 2000;
  * its own: each re-list sends the whole listing again. The refresh button and
  * expanding it still read it.
  */
+/* --- GeoCode: the sidebar re-lists a folder only once its names changed on disk (geocode/files/useGeoFolderWatch.ts), at most once a second, and the listing never leaves the computer ---
 export const AUTO_RELIST_MAX_ENTRIES = 1000;
+--- /GeoCode --- */
+export const AUTO_RELIST_MAX_ENTRIES = Number.POSITIVE_INFINITY; // GeoCode: see above
 
 /**
  * `directories` are the listings under the root that changed; `null` means
