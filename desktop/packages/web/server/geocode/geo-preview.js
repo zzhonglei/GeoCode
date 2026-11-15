@@ -9,9 +9,10 @@ const STATUS_BY_CODE = new Map([
 
 /**
  * What a window's preview of a geographic dataset asks for: the dataset's description, the tiles of its map, the
- * feature or the pixel under a click, the pages of its table and what its bands measure, each read by GeoEngine as it
- * is asked for. A request the window leaves is cancelled there, so a map that has moved on reads nothing for where
- * it was. Without geoEngine, as when the server runs outside the desktop app, every request is refused.
+ * feature or the pixel under a click, the pages of its table and what its bands measure; and, for a map a page in the
+ * chat draws, a vector layer as GeoJSON and a raster's values. Each is read by GeoEngine as it is asked for. A request
+ * the window leaves is cancelled there, so a map that has moved on reads nothing for where it was. Without geoEngine,
+ * as when the server runs outside the desktop app, every request is refused.
  */
 export const registerGeoPreview = (app, { geoEngine }) => {
   const ask = async (req, res, method, params) => {
@@ -84,6 +85,25 @@ export const registerGeoPreview = (app, { geoEngine }) => {
   app.get('/api/geocode/preview/statistics', async (req, res) => {
     const result = await ask(req, res, 'preview.statistics', { stamp: req.query.stamp, ...blankOf(req.query) });
     if (result) res.json(result);
+  });
+
+  // Fields are a JSON array, as a field's name may hold a comma.
+  app.get('/api/geocode/preview/features', async (req, res) => {
+    const result = await ask(req, res, 'preview.features', { fields: parsed(req.query.fields) });
+    if (!result) return;
+    res.type('application/geo+json').send(Buffer.from(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength));
+  });
+
+  // One body, as readGeoGrid in ui/src/geocode/preview/previewClient.ts reads it: the length of the grid's description
+  // as four bytes, little-endian; the description as JSON; then the bands as 32-bit floats. Not in a header: the
+  // window reads only the headers the server exposes across origins. Bands are a JSON array.
+  app.get('/api/geocode/preview/grid', async (req, res) => {
+    const result = await ask(req, res, 'preview.grid', { bands: parsed(req.query.bands) });
+    if (!result) return;
+    const description = Buffer.from(JSON.stringify(result.grid));
+    const length = Buffer.alloc(4);
+    length.writeUInt32LE(description.length);
+    res.type('application/octet-stream').send(Buffer.concat([length, description, Buffer.from(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength)]));
   });
 
   app.get('/api/geocode/preview/rows', async (req, res) => {

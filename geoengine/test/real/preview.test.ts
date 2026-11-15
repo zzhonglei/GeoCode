@@ -111,6 +111,13 @@ interface Answer {
   readonly offset?: number
   readonly fids?: readonly number[]
   readonly rows?: readonly (readonly unknown[])[]
+  readonly grid?: {
+    readonly width: number
+    readonly height: number
+    readonly bands: number
+    readonly coordinates: readonly (readonly number[])[]
+    readonly palette?: Readonly<Record<string, string>>
+  }
 }
 
 /** A request's result, or the code it failed with. */
@@ -869,3 +876,58 @@ test(
     )
   },
 )
+
+/** The bands of a page's grid as numbers, a band each. */
+const bandsOf = (answer: Answer) => {
+  assert.ok(answer.grid && answer.bytes, `no grid: ${answer.code ?? "no bytes"}`)
+  const values = new Float32Array(answer.bytes.slice().buffer)
+  const size = answer.grid.width * answer.grid.height
+  return Array.from({ length: answer.grid.bands }, (_, band) => values.subarray(band * size, (band + 1) * size))
+}
+
+// Guards what a map page in the chat is given of a vector layer: the fields it names and no others, none when it names
+// none, in longitudes and latitudes; a file of several layers is not read as its first unless named.
+test("a page reads a vector layer as GeoJSON with only the fields it names", { skip: missing }, async () => {
+  const geojson = (answer: Answer) => {
+    assert.ok(answer.bytes, `no GeoJSON: ${answer.code}`)
+    return JSON.parse(new TextDecoder().decode(answer.bytes)) as {
+      features: { id: number; properties: Record<string, unknown>; geometry: { coordinates: number[] } }[]
+    }
+  }
+  assert.deepEqual(await ask("features", { path: file("shapes.gpkg"), fields: [] }), { code: "layers" })
+  const bare = geojson(await ask("features", { path: file("shapes.gpkg"), layer: "towns", fields: [] }))
+  assert.deepEqual(bare.features[0]!.properties, {})
+  assert.equal(typeof bare.features[0]!.id, "number")
+  assert.deepEqual(bare.features[0]!.geometry.coordinates, [0.2, 0.3])
+  const named = geojson(await ask("features", { path: file("shapes.gpkg"), layer: "towns", fields: ["name"] }))
+  assert.deepEqual(named.features[0]!.properties, { name: "north" })
+  assert.deepEqual(await ask("features", { path: file("shapes.gpkg"), layer: "towns", fields: ["nope"] }), {
+    code: "fields",
+  })
+})
+
+// Guards what a map page is given of a raster: no data as NaN rather than a number it would colour, classes as the
+// values they are with their colours, and a world in longitudes from 0 to 360 where the map shows it, whole.
+test("a page reads a raster's values on the map's plane, as it can colour them", { skip: missing }, async () => {
+  const heights = bandsOf(await ask("grid", { path: file("heights.tif"), bands: [1] }))[0]!
+  const known = Array.from(heights).filter((value) => !Number.isNaN(value))
+  assert.ok(known.length < heights.length, "the corner without data is NaN")
+  assert.ok(Math.min(...known) >= 0 && Math.max(...known) <= 1000, "no -9999 among the values")
+
+  const classes = await ask("grid", { path: file("classes.tif"), bands: [1] })
+  const held = new Set(Array.from(bandsOf(classes)[0]!).filter((value) => !Number.isNaN(value)))
+  assert.deepEqual([...held].toSorted(), [1, 2])
+  assert.deepEqual(classes.grid?.palette, { "1": "#c81e1e", "2": "#1ec81e" })
+
+  const world = await ask("grid", { path: file("world.tif"), bands: [1] })
+  const corners = world.grid?.coordinates ?? []
+  assert.deepEqual(
+    corners.map(([longitude]) => Math.round(longitude!)),
+    [-180, 180, 180, -180],
+  )
+  assert.ok(Math.abs(corners[0]![1]! - 85) < 0.01, "its north edge where the file has it")
+  assert.ok(world.grid!.width > 1000, "drawn at a size a reply shows, not as planned past the plane's edges")
+
+  assert.deepEqual(await ask("grid", { path: file("both.gpkg"), layer: "roads", bands: [1] }), { code: "kind" })
+  assert.deepEqual(await ask("grid", { path: file("heights.tif"), bands: [2] }), { code: "bands" })
+})

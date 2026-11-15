@@ -198,6 +198,30 @@ class Reader:
         stand_in, _ = self._raster(described, cancelled)
         return _raster.pixel(self._opened(described, stand_in), request["x"], request["y"], request.get("blank"))
 
+    def features(self, request, cancelled):
+        """A vector layer as GeoJSON for a page in the chat, with only the fields asked for, as the file is now."""
+        from geocodekit.preview import _page
+
+        described, _ = self._described()
+        chosen = self._layer is not None
+        return _page.features(self._path, described, chosen, request["fields"], cancelled, request["id"])
+
+    def grid(self, request, cancelled):
+        """A raster's values on a grid for a page in the chat, read through the overviews the preview's tiles use."""
+        from geocodekit.preview import _page
+
+        known = self._described()
+        # Kept as describe keeps it: the overviews are made for the data as it was last described.
+        with self._lock:
+            self._known = known
+        described = known[0]
+
+        def opened():
+            stand_in, _ = self._raster(described, cancelled)
+            return self._opened(described, stand_in)
+
+        return _page.grid(opened, described, self._layer is not None, request["bands"], cancelled)
+
     def rows(self, request):
         """The page of the layer's table that holds the row asked for: where the page begins, and the numbers and the
         attributes of its features. A layer with no place on the map has a table all the same."""
@@ -261,6 +285,11 @@ def main():
                 write({"id": number, "result": {"pixel": reader.pixel(request, cancelled)}})
             elif request["do"] == "statistics":
                 write({"id": number, "result": {"statistics": reader.statistics(request, cancelled)}})
+            elif request["do"] == "features":
+                write({"id": number, "result": {}}, reader.features(request, cancelled))
+            elif request["do"] == "grid":
+                header, data = reader.grid(request, cancelled)
+                write({"id": number, "result": header}, data)
             else:
                 write({"id": number, "error": {"code": "failed", "message": "no such request: %s" % request["do"]}})
         except _source.Cancelled:

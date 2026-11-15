@@ -227,5 +227,45 @@ export const tileAddress = (target: Target, stamp: string, asked: { fid?: number
   return `${TILE_SCHEME}://tile?${targetQuery(target)}&stamp=${encodeURIComponent(stamp)}&z={z}&x={x}&y={y}${fid}${look}${blankQuery(asked.blank ?? null)}`;
 };
 
+/** Why a read for a page in the chat was refused: the reader's words, and its code where it gave one. */
+export type PageRefusal = { ok: false; message: string; code?: string };
+
+const forPage = async (address: string): Promise<{ ok: true; body: ArrayBuffer } | PageRefusal> => {
+  const response = await runtimeFetch(address).catch(() => null);
+  if (!response) return { ok: false, message: 'GeoCode could not be reached to read the data' };
+  if (response.ok) return { ok: true, body: await response.arrayBuffer() };
+  const refusal = refusalSchema.safeParse(await response.json().catch(() => null));
+  return { ok: false, message: refusal.data?.error ?? `the data could not be read (${response.status})`, code: refusal.data?.code };
+};
+
+/** A vector layer as GeoJSON bytes, with only `fields` of its attributes, for a page in the chat. */
+export const readGeoFeatures = (target: Target, fields: readonly string[]) =>
+  forPage(`${PREVIEW_PATH}/features?${targetQuery(target)}&fields=${encodeURIComponent(JSON.stringify(fields))}`);
+
+const gridSchema = z.object({
+  width: z.number(),
+  height: z.number(),
+  bands: z.number(),
+  /** Top left, top right, bottom right and bottom left, as a map's image source takes them. */
+  coordinates: z.array(z.tuple([z.number(), z.number()])),
+  /** The colour of each class the grid holds, where the band has a colour table. */
+  palette: z.record(z.string(), z.string()).optional(),
+});
+
+export type GeoGrid = z.infer<typeof gridSchema>;
+
+/**
+ * A raster's values on a grid of the map's plane, for a page in the chat: the grid's size, corners and class colours,
+ * and the bands' 32-bit floats, read from the body the grid route in web/server/geocode/geo-preview.js writes.
+ */
+export const readGeoGrid = async (target: Target, bands: readonly number[]): Promise<{ ok: true; grid: GeoGrid; bytes: ArrayBuffer } | PageRefusal> => {
+  const read = await forPage(`${PREVIEW_PATH}/grid?${targetQuery(target)}&bands=${encodeURIComponent(JSON.stringify(bands))}`);
+  if (!read.ok) return read;
+  const length = new DataView(read.body).getUint32(0, true);
+  const grid = gridSchema.safeParse(JSON.parse(new TextDecoder().decode(read.body.slice(4, 4 + length))));
+  if (!grid.success) return { ok: false, message: 'the raster was not read as expected' };
+  return { ok: true, grid: grid.data, bytes: read.body.slice(4 + length) };
+};
+
 /** What a tile's address is asked of the shell server as. */
 export const tileRequestPath = (address: string): string => `${PREVIEW_PATH}/${address.slice(`${TILE_SCHEME}://`.length)}`;

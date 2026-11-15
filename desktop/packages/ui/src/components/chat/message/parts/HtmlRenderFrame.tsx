@@ -46,6 +46,7 @@ import {
     type HtmlRenderSubmission,
 } from './htmlRender';
 import { useRenderPageHtml } from './renderPageImages';
+import { answerGeoPage, useGeoPageHtml } from '@/geocode/pageMaps/pageMaps'; // GeoCode: see HtmlRenderFrame and HtmlRenderDocument
 import { saveFile } from './saveFile';
 import { useHtmlRenderTheme } from './useHtmlRenderTheme';
 import { PageAskStatus } from './PageAskStatus';
@@ -207,6 +208,7 @@ function HtmlRenderDocument({ partId, html, title, className, style, contained =
         const handleMessage = (event: MessageEvent) => {
             const frame = frameRef.current;
             if (!frame || event.source !== frame.contentWindow) return;
+            if (answerGeoPage(event, frame)) return; // GeoCode: the data a map page asks for
             const message = readHtmlRenderFrameMessage(event);
             if (message?.kind === 'size') {
                 setShown(true);
@@ -375,7 +377,7 @@ function HtmlRenderFrame({ part, html, title, ask }: HtmlRenderFrameProps) {
     const theme = useHtmlRenderTheme();
     // The page with its local images in place; null while they load, and the
     // frame keeps the page's space meanwhile.
-    const loadedHtml = useRenderPageHtml(part, html);
+    const loadedHtml = useGeoPageHtml(useRenderPageHtml(part, html)); // GeoCode: a page that draws a map gets MapLibre and geocode.vector and raster first
     const pageHtml = loadedHtml ?? html;
     const [height, setHeight] = React.useState(() => rememberedHeights.get(partId) ?? HTML_RENDER_MIN_HEIGHT);
     const [fullscreen, setFullscreen] = React.useState(false);

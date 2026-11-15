@@ -14,7 +14,7 @@ const ENVIRONMENT_DOMAIN = "python"
 
 /**
  * As many readers as run at once, one for each dataset being looked at; a vector layer's reader holds its geometry in
- * memory. One more ends the reader asked the longest ago.
+ * memory. One more ends the idle reader asked the longest ago.
  */
 const READERS = 4
 
@@ -83,6 +83,10 @@ const IdentifyParams = Schema.Union([
 const RowsParams = Schema.Struct({ ...Target, stamp: Schema.String, row: Schema.Int })
 const StatisticsParams = Schema.Struct({ ...Target, stamp: Schema.String, ...Blank })
 const PixelParams = Schema.Struct({ ...Target, stamp: Schema.String, x: Schema.Number, y: Schema.Number, ...Blank })
+/** The fields a page in the chat draws a vector layer by; none but these come with its features. */
+const FeaturesParams = Schema.Struct({ ...Target, fields: Schema.Array(Schema.String) })
+/** The bands, numbered from one, whose values a page in the chat colours a raster by. */
+const GridParams = Schema.Struct({ ...Target, bands: Schema.Array(Schema.Int) })
 
 /** The line a reader's answer begins with. */
 const Answer = Schema.Struct({
@@ -103,6 +107,15 @@ const StatisticsResult = Schema.Struct({ statistics: Schema.Unknown })
 const decodeStatisticsResult = Schema.decodeUnknownExit(StatisticsResult)
 const PixelResult = Schema.Struct({ pixel: Schema.Unknown })
 const decodePixelResult = Schema.decodeUnknownExit(PixelResult)
+const GridResult = Schema.Struct({
+  width: Schema.Int,
+  height: Schema.Int,
+  bands: Schema.Int,
+  /** Its corners as a map's image source takes them: top left, top right, bottom right, bottom left. */
+  coordinates: Schema.Array(Schema.Tuple([Schema.Number, Schema.Number])),
+  palette: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+})
+const decodeGridResult = Schema.decodeUnknownExit(GridResult)
 
 type Settle = (outcome: Exit.Exit<{ readonly result: unknown; readonly bytes: Uint8Array }, Engine.Failure>) => void
 
@@ -160,8 +173,12 @@ export const capability = (pyramids: string, launch: Launch = READER): Engine.Ca
         const key = JSON.stringify([target.path, target.layer ?? null])
         const running = readers.get(key)
         if (running) return running
-        if (readers.size >= READERS) {
-          const oldest = [...readers].sort((a, b) => a[1].asked - b[1].asked)[0]
+        // Only a reader with nothing to answer makes way: ending one that is answering fails its request, whose one
+        // retry would end another's in turn, as a page that reads five datasets at once would. Past the number while
+        // all are answering, until one is idle.
+        const idle = [...readers].filter(([, other]) => other.waiting.size === 0)
+        if (readers.size >= READERS && idle.length) {
+          const oldest = idle.sort((a, b) => a[1].asked - b[1].asked)[0]
           // Out of the way at once: until it has ended it would count against the readers after this one too.
           readers.delete(oldest[0])
           oldest[1].worker.stop()
@@ -350,5 +367,25 @@ export const capability = (pyramids: string, launch: Launch = READER): Engine.Ca
         return result.value
       })
 
-    return { domain: DOMAIN, methods: { describe, tile, identify, rows, statistics, pixel } }
+    /** A vector layer as GeoJSON bytes, read as the file is now: a page asks for no stamp. */
+    const features: Engine.Method = (raw, context) =>
+      Effect.gen(function* () {
+        const params = Schema.decodeUnknownExit(FeaturesParams)(raw)
+        if (Exit.isFailure(params)) return yield* invalid(params.cause)
+        const answer = yield* ask(params.value, { do: "features", fields: params.value.fields }, context.signal)
+        return { bytes: answer.bytes }
+      })
+
+    /** A raster's values on a grid of the map's plane as bytes, with the grid's size, corners and class colours. */
+    const grid: Engine.Method = (raw, context) =>
+      Effect.gen(function* () {
+        const params = Schema.decodeUnknownExit(GridParams)(raw)
+        if (Exit.isFailure(params)) return yield* invalid(params.cause)
+        const answer = yield* ask(params.value, { do: "grid", bands: params.value.bands }, context.signal)
+        const result = decodeGridResult(answer.result)
+        if (Exit.isFailure(result)) return yield* unexpected(result.cause)
+        return { grid: result.value, bytes: answer.bytes }
+      })
+
+    return { domain: DOMAIN, methods: { describe, tile, identify, rows, statistics, pixel, features, grid } }
   })
