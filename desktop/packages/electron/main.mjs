@@ -1493,6 +1493,7 @@ import { assertDesktopCommandOpen } from './geocode/closed-commands.mjs'; // Geo
 import { isMadeJumpListLink, jumpListSessionLinks } from './geocode/jump-list.mjs'; // GeoCode: see handleDeepLinks
 import { localClientToken, localServerPassword, mintLocalClientToken } from './geocode/local-access.mjs'; // GeoCode: see spawnLocalServer and readDesktopLocalClientToken
 import { geoEngineFailure, geoEngineRequest, geoEngineStatuses, onGeoEngineStatus, startGeoEngine, stopGeoEngine } from './geocode/geoengine.mjs'; // GeoCode: see resolveInitialUrl, shutdownBackgroundServices, handleInvoke, startWebUiServer and the startup failure
+import { openInQgis } from './geocode/open-in-qgis.mjs'; // GeoCode: see handleInvoke
 
 // Merge the user's login-shell env (PATH, etc.) into this process before we
 // import/start the server in-process. The server and its children (opencode
@@ -4298,6 +4299,9 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
 
     case 'geocode_geoengine_failure': // GeoCode: why GeoEngine stopped, for the failure page
       return geoEngineFailure();
+
+    case 'geocode_open_in_qgis': // GeoCode: a file in the QGIS set up in Settings, for the files view's Open In menu
+      return openInQgis(args.filePath, geoEngineStatuses().qgis);
 
     case 'desktop_get_launch_at_login': {
       if (process.platform === 'linux') {

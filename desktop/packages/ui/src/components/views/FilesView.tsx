@@ -151,6 +151,7 @@ import { useGeoPanelAction } from '@/geocode/preview/panelState'; // GeoCode: se
 import { datasetStatus, withoutGeoSidecars } from '@/geocode/files/geoSidecars'; // GeoCode: see loadDirectory and getFileStatus
 import { deleteDataset, refusesDatasetRename, refusesHiddenSidecarName } from '@/geocode/files/geoDatasets'; // GeoCode: see the create, rename and delete dialogs
 import { DatasetPartsNote } from '@/geocode/files/DatasetPartsNote'; // GeoCode: see the delete dialog
+import { OpenInQgisItem } from '@/geocode/OpenInQgisItem'; // GeoCode: see openInAppMenuItems
 import { useGeoFolderWatch } from '@/geocode/files/useGeoFolderWatch'; // GeoCode: see the poll of expanded directories
 import { watchFileOnScreen } from '@/lib/watchedFiles';
 
@@ -4208,6 +4209,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
           <span className="typography-ui-label text-foreground">{t('sidebarFilesTree.menu.openInDefaultApp')}</span>
         </DropdownMenuItem>
         {openInApps.length > 0 ? <DropdownMenuSeparator /> : null}
+        <OpenInQgisItem path={selectedFile?.path} />{/* GeoCode: the QGIS set up in Settings, first of the apps */}
         {openInApps.map((app) => (
           <DropdownMenuItem
             key={app.id}

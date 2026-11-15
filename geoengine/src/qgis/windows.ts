@@ -59,7 +59,10 @@ const DISK: Disk = {
 
 const LAUNCHER = /^python-(qgis.*)\.bat$/i
 
-/** The program QGIS's shortcuts start, which is where a user who looks for QGIS finds it. */
+/**
+ * The program QGIS's shortcuts start, which is where a user who looks for QGIS finds it. The files view opens QGIS by
+ * the same name, in qgisProgram of desktop/packages/electron/geocode/open-in-qgis.mjs.
+ */
 const PROGRAM = /^(qgis.*)-bin\.exe$/i
 
 /** How GeoAgent finds QGIS on this computer, for setting it up itself. */
