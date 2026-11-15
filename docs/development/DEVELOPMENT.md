@@ -105,6 +105,8 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 - 发布:推送标签 `v<版本号>`。版本号与 `desktop/packages/electron/package.json` 的 `build.extraMetadata.version` 不一致时拒绝打包。打包的同时把 `ci.yml` 的检查再跑一遍,直接推到 `main` 的提交可能没经过它们;检查不通过就不建草稿。两个安装包放进一个说明为空的草稿 Release。维护者下载试用,写好发布说明之后,在 GitHub 上发布它。安装包没有签名,用户第一次打开时系统会拦下,发布说明里要写明怎样放行:macOS 在「系统设置 → 隐私与安全性」里点「仍要打开」,Windows 在提示上点「更多信息」再点「仍要运行」。
 - `v` 开头的标签推上去之后不能挪动,也不能删除(仓库的规则 `release-tags`,对维护者同样生效),安装包与源码因此始终对得上。发错了,改版本号再发一次。
 
+GitHub 仓库的 `Code → Download ZIP` 是源码包,不是安装程序。试构建的安装包从对应 Actions 运行的 Artifacts 下载;正式安装包从已发布的 Release 下载。
+
 ## 7. 检查
 
 | 部分 | 命令 |
@@ -138,6 +140,7 @@ macOS 的应用图标不在打包时生成。`resources/icons/AppIcon.icon` 是�
 - 启动程序:`.bat` 与 `.cmd` 不经 shell 就启动不了(Node 拒绝),经 `cmd.exe` 时命令行里的 `"`、`%`、`^` 与空格会被改写,所以脚本与请求经标准输入交给子进程(`QGIS.md` 第 2.1 节)。cross-spawn 经 `cmd.exe` 启动时,程序不存在不一定报 `ENOENT`。
 - 结束程序:没有 POSIX 信号,`kill()` 直接终止,不带走子进程;结束整棵进程树用 `taskkill /T`。崩溃表现为很大的退出码(如 3221225477),`signal` 是空的,判断崩溃不能只看信号。
 - 文件:打开着的文件删不掉也改不了名(`EBUSY`、`EPERM`),杀毒软件与索引服务正扫着它时也一样;删除与改名要处理失败,目标被占着时改名覆盖它也会失败。可执行权限没有意义;建符号链接要管理员或开发者模式。
+- 打包:electron-builder 解 `winCodeSign` 工具包时会遇到包内 macOS 文件的符号链接。普通权限下报 `Cannot create symbolic link` 时,启用开发者模式或以管理员身份运行终端后重试。CI 成功不代表本机普通终端具备创建符号链接的权限;即使 `dist/win-unpacked` 已生成,也要以打包命令成功退出为准。
 - 环境变量:名字不分大小写,系统给的可能是 `Path`。`process.env` 本身不分,复制成普通对象后就分了,再设 `PATH` 会多出一份,子进程取哪一份不确定(`geoengine/src/runtime.ts` 的 `overlay`)。主目录在 `USERPROFILE`,没有 `HOME`,用 `os.homedir()`。
 - 文本与编码:外部程序的输出可能以 `\r\n` 换行,按行切分用 `/\r?\n/`;Windows 上 git 签出的文本文件同样以 `\r\n` 换行,读仓库里的源码与文档来匹配的代码也要照顾到。中文 Windows 的控制台与许多程序用系统代码页(简体是 GBK,繁体是 CP950),不是 UTF-8,读外部程序的输出要明确编码;内置环境的 Python 以 `-X utf8` 运行(`geoengine/src/bundled.ts`)。会被执行的 `.sh` 由 `.gitattributes` 固定为 LF 换行。
 - 脚本:`.sh` 在 Windows 上要 Git Bash 才能运行,新的构建与开发脚本用 Node 写。
