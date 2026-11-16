@@ -10,7 +10,8 @@ from geocodekit.preview import _mercator, _source
 # The most either may weigh, under the most one answer of a reader may (FRAME_LIMIT in geoengine/src/runtime.ts):
 # past that, GeoEngine ends the reader rather than take the answer.
 LIMIT = 32 * 1024 * 1024
-# As many features as are worth turning into GeoJSON at all: a layer with more outweighs the limit long before.
+# As many features as are worth turning into GeoJSON at all: a layer with more outweighs the limit long before. The
+# agent is told it (desktop/packages/web/server/geocode/map-pages.js).
 FEATURES = 500000
 # The longer side, in pixels, of a raster's grid: as much as a reply shows. A raster with fewer is not enlarged.
 SIDE = 2048

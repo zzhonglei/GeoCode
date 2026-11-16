@@ -11,7 +11,7 @@ import { asClassicScript } from './classicScript';
  * app's own copy, so a map draws offline; `geocode.vector` and `geocode.raster`, which read data through the chat
  * (pageMaps.ts); and a line at the top of the page that shows what went wrong, titled in the interface's language
  * (self.geocodeKitText, set before the kit by pageMaps.ts). Loaded only for such a page, as it weighs what MapLibre
- * does.
+ * does. The agent reads how to use them in packages/web/server/geocode/map-pages.js; change both together.
  */
 
 // As a string in a script: `</` could close the script it stands in.

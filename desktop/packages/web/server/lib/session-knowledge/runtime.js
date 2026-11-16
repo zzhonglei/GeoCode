@@ -15,6 +15,7 @@
  */
 import { isRecord } from '../shared/guards.js';
 import { UI_BLOCKS_GUIDANCE } from './ui-blocks-guidance.js';
+import { MAP_PAGE_GUIDANCE } from '../../geocode/map-pages.js'; // GeoCode: see RENDER_PAGE_GUIDANCE
 
 const PINS_METADATA_KEY = 'project_context_pins';
 
@@ -133,7 +134,8 @@ export const DIRECT_TOOLS_GUIDANCE = "The geocode tools (geocode, geocode_render
  */
 export const RENDER_PAGE_GUIDANCE = "The geocode_render tool draws an HTML page inline in the chat, above your reply." // GeoCode: the tool's name in GeoCode
   + " Use it for what UI blocks cannot show: how something looks (a proposed interface change, before and after, layout options),"
-  + " or a custom drawing the block components do not cover. Never for data: charts, tables and comparisons are UI blocks, even when the user asks to see them."
+  + " or a custom drawing the block components do not cover. Never for data other than maps: charts, tables and comparisons are UI blocks, even when the user asks to see them." // GeoCode: maps of geographic data
+  + " " + MAP_PAGE_GUIDANCE // GeoCode: when to draw a map
   + " At most one page per answer."
   + " A mockup of the user's own project takes its look from that project's code (theme tokens, CSS variables, styles), not from GeoCode's theme." // GeoCode: product name
   + " Draw a page that only shows right before your final reply, and keep the reply to what the page does not show."

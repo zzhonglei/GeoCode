@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { kernelTmpDir } from '../../geocode/kernel-paths.js'; // GeoCode: see OPENCODE_TEMP_DIRECTORY
 import { withModelChatsId } from '../../geocode/chats-id.js'; // GeoCode: see MODEL_CHATS_ID
+import { MAP_PAGE_DESCRIPTION } from '../../geocode/map-pages.js'; // GeoCode: see RENDER_PAGE_HTML_DESCRIPTION
 
 import { asNonEmptyString, isBoolean } from '../shared/guards.js';
 import {
@@ -251,13 +252,14 @@ const OPENCODE_TEMP_DIRECTORY = kernelTmpDir(); // GeoCode: the kernel's own tem
 // The variables are the ones packages/ui/src/components/chat/message/parts/htmlRender.ts
 // injects; change both together.
 const RENDER_PAGE_HTML_DESCRIPTION = [
-  `One self-contained HTML document, at most ${RENDER_PAGE_MAX_HTML_LENGTH} characters, with inline <style> and <script>. Never data: a chart, table or comparison is an openui-lang block in your reply. Remote scripts and stylesheets do not load in every client, so draw with inline SVG or your own script.`,
+  `One self-contained HTML document, at most ${RENDER_PAGE_MAX_HTML_LENGTH} characters, with inline <style> and <script>. Never data other than maps: a chart, table or comparison is an openui-lang block in your reply. Remote scripts and stylesheets do not load in every client, so draw with inline SVG or your own script, and maps with maplibregl (below).`, // GeoCode: maps of geographic data
   "Layout: fluid width, as wide as the reply column (about 720px on desktop, 360px on phones), no horizontal padding on the outermost element, nothing wider; stack or wrap, and give a wide table its own overflow-x:auto box. The frame takes the page's height, so keep it short, give drawings fixed pixel heights, and never use 100vh or height:100% on html or body.",
   "Ready classes in the app's look, so these need no CSS of your own: .oc-box (a box; a box inside it steps up a tone), .oc-muted (secondary text), .oc-table on a div around a <table> (scrolls sideways when wide), .oc-num (tabular figures, end-aligned), .oc-badge with optional data-tone=\"success|warning|error|info\", .oc-dot (a legend dot) and .oc-bar (a horizontal bar) colored by --color (default --chart-1), the bar as long as --value (a percentage), .oc-field (a <label> around its text and control), .oc-input on an input, select or textarea, .oc-switch on a checkbox, .oc-segmented around <button>s (aria-pressed=\"true\" on the chosen one; also tabs). A line only where it means something, such as a divider between sections.",
   "Theme variables on :root, updated live on a theme switch: --background, --foreground, --muted, --muted-foreground, --card, --card-foreground, --border, --primary, --primary-foreground, --destructive, --warning, --success, --info, --code-background, --code-foreground, --chart-1 to --chart-6 (series), --radius, --font-sans, --font-mono. A base stylesheet already sets text color, font and size; the root font size is the chat's text size and follows the user's interface size, so size text in rem or em, not px. A page with its own colors, such as a mockup of the user's project, sets a color on all its text and gives itself a background: text without a color takes the theme's, and without a background the page shows the chat's.",
   "Scripts may add tooltips, tabs, toggles, sorting. On a phone a tap shows a hover tooltip, so keep tooltips and popups inside the page and flip them near an edge.",
   `Images: https, data:, or local PNG, JPEG, GIF or WebP files named by complete absolute paths in src, CSS url() or quoted script strings. The renderer finds and inlines these paths before the page runs, so do not build paths from directory and filename fragments. To switch images, put each full path in a script string and assign the selected value to img.src, for example: const images = { a: '/absolute/path/a.png', b: '/absolute/path/b.png' }; image.src = images[key]. Each file can be 10 MB; all images together can be ${RENDER_PAGE_IMAGE_BUDGET_BYTES / (1024 * 1024)} MB per page. The result names any that do not show. Save a screenshot for a page in ${OPENCODE_TEMP_DIRECTORY}.`,
-  "The page is sandboxed: no access to GeoCode, the network session or local files; links open in the user's browser.", // GeoCode: product name
+  "The page is sandboxed: no access to GeoCode, the network session or local files other than the geographic data it reads (below); links open in the user's browser.", // GeoCode: product name; the data a map reads
+  MAP_PAGE_DESCRIPTION, // GeoCode: maps of geographic data
 ].join(' ');
 
 const RENDER_PAGE_AWAIT_DESCRIPTION = [
@@ -355,8 +357,8 @@ const NOTIFY_TOOL_DESCRIPTION = "Notify the user outside the chat: when long wor
 // data reads this description, and with the page as the only visual it named,
 // a weak model drew HTML for a plain comparison.
 const RENDER_TOOL_DESCRIPTION = "Draw a finished HTML page inline in the chat, above your reply, or ask the user to choose on one (awaitAnswer). "
-  + "Never for data: tables, charts, comparisons, steps and flows are openui-lang UI blocks in your reply, even when the user asks to see them. "
-  + "A choice that sets the direction of the work: send ui with awaitAnswer; the form adds a note field for the user's conditions. html is for mockups and custom drawings. "
+  + "Never for data other than maps: tables, charts, comparisons, steps and flows are openui-lang UI blocks in your reply, even when the user asks to see them. " // GeoCode: maps of geographic data
+  + "A choice that sets the direction of the work: send ui with awaitAnswer; the form adds a note field for the user's conditions. html is for mockups, custom drawings and interactive maps of geographic data. " // GeoCode: maps of geographic data
   + "The page is part of your reply and sits on the chat's background: leave html, body and the outermost element without a background, add no outer card, border or banner title, and set boxes apart by tone. Style with the theme variables listed under html. "
   + "How to write a page is in the descriptions of the ui and html parameters, how to ask on one in awaitAnswer's; there is no read action.";
 
