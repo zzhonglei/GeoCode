@@ -4,7 +4,7 @@ import maplibreCss from 'maplibre-gl/dist/maplibre-gl.css?raw';
 
 import { HTML_RENDER_MIN_HEIGHT } from '@/components/chat/message/parts/htmlRender';
 
-import { BASEMAP_SCHEME } from '../basemapClient';
+import { BASEMAP_SCHEME, BASEMAP_UNREAD } from '../basemapClient';
 import { asClassicScript } from './classicScript';
 
 /**
@@ -47,10 +47,21 @@ var Base=self.maplibregl.Map;
 // And a handler for "load" added once the map has loaded runs then, rather than never: a page that awaits its data
 // before adding one would otherwise draw none, the basemap loading first.
 var loaded=new WeakSet();
+// The basemaps geocode.basemap gave, by a mark in their metadata that a copy of the style keeps, with the sources and
+// layers that were the basemap's as it was given: a page may copy the style, or add its own to it, before drawing. For
+// each map drawn on one, the basemap's parts, kept as the basemap changes; with the images the page added, which a
+// style replaced whole would drop.
+var MARK="geocode:basemap",handed=new Map(),under=new Map(),images=new WeakMap();
+function partsOf(style){return {sources:Object.keys(style.sources||{}),layers:(style.layers||[]).map(function(l){return l.id;})};}
+function hand(style){var mark=String(handed.size+1);handed.set(mark,partsOf(style));style.metadata=Object.assign({},style.metadata);style.metadata[MARK]=mark;return style;}
+function markOf(style){return style&&typeof style==="object"&&style.metadata&&style.metadata[MARK];}
 function later(map,handler){var timer=setTimeout(function(){handler.call(map,{type:"load",target:map});});return {unsubscribe:function(){clearTimeout(timer);}};}
 self.maplibregl.Map=class Map extends Base{constructor(options){super(Object.assign({},options,{attributionControl:{compact:false},scrollZoom:false}));
 var map=this;super.once("load",function(){loaded.add(map);});
-this.on("error",function(e){report("map",e&&e.error&&e.error.message||"error");});}
+this.on("error",function(e){var m=e&&e.error&&e.error.message||"error";if(m.indexOf(${inScript(BASEMAP_UNREAD)})<0)report("map",m);});}
+setStyle(style,o){var mark=markOf(style);if(mark&&handed.has(mark))under.set(this,handed.get(mark));else under.delete(this);return super.setStyle(style,o);}
+addImage(id,image,o){var kept=images.get(this)||new Map();images.set(this,kept);kept.set(id,[image,o]);return super.addImage(id,image,o);}
+removeImage(id){var kept=images.get(this);if(kept)kept.delete(id);return super.removeImage(id);}
 on(type,a,b){return type==="load"&&loaded.has(this)&&typeof a==="function"&&b===undefined?later(this,a):super.on(type,a,b);}
 once(type,a,b){if(type!=="load"||!loaded.has(this))return super.once(type,a,b);
 if(a===undefined)return Promise.resolve({type:"load",target:this});if(typeof a!=="function"||b!==undefined)return super.once(type,a,b);later(this,a);return this;}};
@@ -63,22 +74,40 @@ var style=document.createElement("style");style.textContent="*,*::before,*::afte
 var asked=new Map(),next=1;
 // A failed read is shown even where the page catches it.
 function fail(w,error){own.add(error);report("data",error.message+(typeof w.path==="string"?" ("+w.path.split(/[\\\\/]/).pop()+")":""));w.reject(error);}
-window.addEventListener("message",function(event){var d=event.data,w;if(event.source!==parent||!d||d.type!=="geocode/result")return;w=asked.get(d.id);if(!w)return;asked.delete(d.id);
-if(d.error)return fail(w,new Error(d.error));try{w.resolve(w.read(d));}catch(x){fail(w,x);}});
+window.addEventListener("message",function(event){var d=event.data,w;if(event.source===parent&&d&&d.type==="geocode/basemap-changed")return swapBasemaps();
+if(event.source!==parent||!d||d.type!=="geocode/result")return;w=asked.get(d.id);if(!w)return;asked.delete(d.id);
+if(d.error)return w.quiet?w.reject(new Error(d.error)):fail(w,new Error(d.error));try{w.resolve(w.read(d));}catch(x){fail(w,x);}});
 function ask(type,path,options,extra,problem,read){return new Promise(function(resolve,reject){var w={path:path,resolve:resolve,reject:reject,read:read},id;
 if(typeof path!=="string")problem="path must be a string";else if(options.layer!==undefined&&typeof options.layer!=="string")problem="layer must be a layer's name";
 // A page opened outside GeoCode, as one saved with the download button, has no chat to read through.
 else if(parent===self)problem="the data can be read only in GeoCode";
 if(problem)return fail(w,new Error(problem));id=next++;asked.set(id,w);
 parent.postMessage(Object.assign({type:type,id:id,path:path,layer:options.layer},extra),"*");});}
-// The basemap's tiles and icons, which its style names by this scheme, read through the chat as the data is.
+// The basemap's tiles and icons, which its style names by this scheme, read through the chat as the data is. One that
+// cannot be read, as an online basemap's while offline, leaves the map blank there, as in the preview: no fault of the
+// page's, so not shown as one.
 self.maplibregl.addProtocol("${BASEMAP_SCHEME}",function(params){return new Promise(function(resolve,reject){var id=next++;
-asked.set(id,{resolve:resolve,reject:reject,read:function(d){return {data:params.type==="json"?JSON.parse(new TextDecoder().decode(d.bytes)):d.bytes};}});
+asked.set(id,{quiet:true,resolve:resolve,reject:reject,read:function(d){return {data:params.type==="json"?JSON.parse(new TextDecoder().decode(d.bytes)):d.bytes};}});
 parent.postMessage({type:"geocode/basemap-resource",id:id,url:params.url},"*");});});
+// The style of the basemap the settings choose, in the interface's theme and language; an empty one when they choose
+// none, or when it cannot be read, so the page's map still draws its data.
+function basemap(){return new Promise(function(resolve){var empty={version:8,sources:{},layers:[]},
+w={quiet:true,resolve:function(style){resolve(hand(style));},reject:function(){resolve(hand(empty));},read:function(d){return d.style||empty;}},id;
+if(parent===self)return fail(w,new Error("the basemap can be read only in GeoCode"));id=next++;asked.set(id,w);parent.postMessage({type:"geocode/basemap",id:id},"*");});}
+// When the settings, the theme or the language change, each map drawn on the basemap gets the new one: its old
+// sources and layers give way, the page's own stay above, and the page's script never learns of it.
+var round=0;
+function swapBasemaps(){if(!under.size)return;var mine=++round;basemap().then(function(fresh){if(mine!==round)return;
+under.forEach(function(old,map){var style=JSON.parse(JSON.stringify(fresh));
+Base.prototype.setStyle.call(map,style,{transformStyle:function(before,after){if(!before)return after;
+var sources=Object.assign({},after.sources),own=before.layers.filter(function(l){return old.layers.indexOf(l.id)<0;}),ids=own.map(function(l){return l.id;});
+Object.keys(before.sources).forEach(function(k){if(old.sources.indexOf(k)<0)sources[k]=before.sources[k];});
+return Object.assign({},after,{sources:sources,layers:after.layers.filter(function(l){return ids.indexOf(l.id)<0;}).concat(own)},
+before.projection?{projection:before.projection}:{},before.terrain?{terrain:before.terrain}:{});}});
+under.set(map,partsOf(style));
+map.once("idle",function(){var kept=images.get(map);if(kept)kept.forEach(function(v,id){if(!map.hasImage(id))Base.prototype.addImage.call(map,id,v[0],v[1]);});});});});}
 self.geocode=Object.freeze({
-// The style of the basemap the settings choose, in the interface's theme and language; an empty one when they choose none.
-basemap:function(){return new Promise(function(resolve,reject){var w={resolve:resolve,reject:reject,read:function(d){return d.style||{version:8,sources:{},layers:[]};}},id;
-if(parent===self)return fail(w,new Error("the basemap can be read only in GeoCode"));id=next++;asked.set(id,w);parent.postMessage({type:"geocode/basemap",id:id},"*");});},
+basemap:basemap,
 vector:function(path,options){options=options||{};var fields=options.fields===undefined?[]:options.fields;
 return ask("geocode/vector",path,options,{fields:fields},!Array.isArray(fields)||fields.some(function(f){return typeof f!=="string";})?"fields must be an array of field names":"",
 function(d){return JSON.parse(new TextDecoder().decode(d.bytes));});},

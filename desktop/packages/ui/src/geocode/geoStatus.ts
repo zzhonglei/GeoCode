@@ -202,14 +202,31 @@ export const geeStatusOf = (statuses: GeoStatuses): GeeView | undefined => {
   return parsed.success ? parsed.data : { status: 'unreadable', value: held.value };
 };
 
-// State in geoengine/src/basemap/index.ts.
+// State in geoengine/src/basemap/index.ts, whose lists of kinds and styles these are; the settings page lists them from
+// here (BASEMAP_CHOICES). Tianditu's key is there only as its fingerprint.
+const basemapSources = z.enum(['offline', 'openfreemap', 'versatiles', 'osm', 'tianditu', 'custom', 'none']);
+const openFreeMapStyles = z.enum(['liberty', 'bright', 'positron', 'fiord']);
+const versaTilesStyles = z.enum(['colorful', 'gray', 'muted']);
+const tiandituLayers = z.enum(['vec', 'img', 'ter']);
 const basemapSchema = z.object({
-  source: z.enum(['offline', 'none']),
+  source: basemapSources,
+  openfreemap: openFreeMapStyles,
+  versatiles: versaTilesStyles,
+  tianditu: z.object({ layer: tiandituLayers, key: z.string().optional() }),
+  custom: z.object({ url: z.string(), attribution: z.string().optional() }).optional(),
   available: z.boolean(),
   invalid: z.string().optional(),
 });
 
 export type BasemapStatus = z.infer<typeof basemapSchema>;
+
+/** The kinds of basemap, the styles of each online vector one and Tianditu's layers, in the order the settings list them. */
+export const BASEMAP_CHOICES = {
+  sources: basemapSources.options,
+  openfreemap: openFreeMapStyles.options,
+  versatiles: versaTilesStyles.options,
+  tianditu: tiandituLayers.options,
+};
 
 /** The basemap the settings choose; undefined before GeoEngine reports it, or as a value this interface cannot read. */
 export const basemapStatusOf = (statuses: GeoStatuses): BasemapStatus | undefined => {

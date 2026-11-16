@@ -5,6 +5,7 @@ const STATUS_BY_CODE = new Map([
   ['changed', 409],
   ['not-ready', 503],
   ['unavailable', 503],
+  ['unreachable', 502],
 ]);
 
 /**

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Basemap } from "../../../src/basemap/index.ts"
 import DARK from "../../../src/basemap/dark.json" with { type: "json" }
 import LIBERTY from "../../../src/basemap/liberty.json" with { type: "json" }
+import { offline } from "../../../src/basemap/styles.ts"
 
 type Layer = { id: string; layout?: { "text-field"?: unknown } }
 
@@ -16,7 +16,7 @@ test("every label that names a place shows the interface's language, from the bu
     ["dark", DARK],
   ] as const) {
     for (const locale of ["en", "zh-CN", "zh-TW"] as const) {
-      const style = Basemap.style(theme, locale)
+      const style = offline(theme, locale)
       const named = (style.layers as Layer[]).filter((layer) =>
         JSON.stringify(layer.layout?.["text-field"] ?? null).includes('"name'),
       )

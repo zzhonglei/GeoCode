@@ -8,13 +8,14 @@ import { toast } from '@/components/ui';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { BasemapSection } from './BasemapSection';
+import { BasemapDetails } from './BasemapDetails';
+import { basemapLineOf, basemapText } from './basemapText';
 import { GeeDetails } from './GeeDetails';
 import { GeeLogo } from './GeeLogo';
 import { geeLabel, geeText } from './geeText';
 import { chooseQgis, fetchQgisInstalls, pickQgisApp, recheckQgis, useGeoStatuses, type QgisInstall } from './geoEngineClient';
 import { useGeoSettingsStore } from './geoSettingsStore';
-import { geeStatusOf, lightOf, qgisStatusOf, type GeeView, type QgisView } from './geoStatus';
+import { basemapStatusOf, geeStatusOf, lightOf, qgisStatusOf, type GeeView, type QgisView } from './geoStatus';
 import { QgisLogo } from './QgisLogo';
 import { QgisStatusDetails } from './QgisStatusDetails';
 import { QGIS_STATUS, qgisText, releaseOf, summaryOf, type QgisText } from './qgisText';
@@ -75,6 +76,7 @@ export const GeoEnvironmentPage: React.FC = () => {
   if (open === 'qgis') {
     return <QgisDetails text={text} status={status} revision={statuses.qgis?.revision ?? -1} onBack={() => setOpen(null)} />;
   }
+  if (open === 'basemap') return <BasemapDetails onBack={() => setOpen(null)} />;
   if (open === 'gee') {
     return (
       <GeeDetails
@@ -104,8 +106,13 @@ export const GeoEnvironmentPage: React.FC = () => {
           <GeeStatusPill status={gee} />
           <Icon name="arrow-right-s" className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         </button>
+        <button type="button" onClick={() => setOpen('basemap')} className={cn(ROW_CLASS, 'py-2.5 hover:bg-[var(--interactive-hover)]/50')}>
+          <Icon name="global" className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="typography-ui-label shrink-0 font-medium text-foreground">{basemapText(locale).title}</span>
+          <span className="typography-meta min-w-0 flex-1 truncate text-muted-foreground">{basemapLineOf(basemapStatusOf(statuses), basemapText(locale))}</span>
+          <Icon name="arrow-right-s" className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        </button>
       </div>
-      <BasemapSection />
     </SettingsPageLayout>
   );
 };

@@ -41,5 +41,8 @@ export const registerGeoEngine = (app, { geoEngine, broadcast }) => {
   // Waits for the user in the browser, reporting the address to open first; leaving the page's request cancels it.
   app.post('/api/geocode/gee/sign-in', (_req, res) => streamGeoEngine(res, geoEngine, 'gee.signIn', {}));
 
-  app.put('/api/geocode/basemap', express.json({ limit: '64kb' }), (req, res) => answer(res, 'basemap.configure', { source: req.body?.source }));
+  app.put('/api/geocode/basemap', express.json({ limit: '64kb' }), (req, res) => answer(res, 'basemap.configure', Object.fromEntries(
+    // What the body names of a change, and nothing it does not: GeoEngine leaves the rest as written.
+    ['source', 'openfreemap', 'versatiles', 'tianditu', 'custom'].flatMap((key) => (req.body?.[key] === undefined ? [] : [[key, req.body[key]]])),
+  )));
 };

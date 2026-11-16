@@ -24,7 +24,7 @@ const places = {
   data: argument("data", "GeoCode's data directory"),
 }
 const locks = path.join(argument("state", "GeoCode's state directory"), "locks")
-const pyramids = path.join(argument("cache", "GeoCode's cache directory"), "preview")
+const cache = argument("cache", "GeoCode's cache directory")
 const basemap = argument("basemap", "folder of the bundled basemap")
 
 const transport = Transport.parentPort()
@@ -44,8 +44,8 @@ const fiber = Effect.runFork(
       Qgis.capability,
       Gee.capability,
       Osm.capability(locks),
-      Preview.capability(pyramids),
-      Basemap.capability(basemap),
+      Preview.capability(path.join(cache, "preview")),
+      Basemap.capability(basemap, path.join(cache, "basemap")),
     ]),
   ).pipe(Effect.provide(layer)),
 )

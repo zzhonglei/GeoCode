@@ -26,7 +26,7 @@
 ```
 ~/.config/geocode/
 ├── geocode.json        全局配置:模型与服务商、权限、MCP 服务、网页搜索等。也可以写成 geocode.jsonc(允许注释)
-├── machine.json        本机地理执行环境的配置:QGIS 的位置、GEE 的 Cloud 项目与底图的选择,GeoEngine 写入,也可以手改(见 GEOENGINE.md 第 2.5 节)
+├── machine.json        本机地理执行环境的配置:QGIS 的位置、GEE 的 Cloud 项目、底图的选择与天地图的 key,GeoEngine 写入,也可以手改(见 GEOENGINE.md 第 2.5 节)
 ├── AGENTS.md           写给所有项目的指示,每次对话都会带上
 ├── agents/             自定义 agent,每个一份 .md
 ├── commands/           自定义命令,每个一份 .md
@@ -126,6 +126,7 @@
 
 ```
 ~/.cache/geocode/
+├── basemap/      在线底图的瓦片、样式与图标,7 天后重新下载,下载不到时仍用旧的;超过 1 GB 时最早下载的先删(见 GEOENGINE.md 第 2.10 节)
 ├── bin/          本机没有 ripgrep 时下载的 rg;目录每次启动就建立
 ├── npm/          按需安装的服务商 SDK 与格式化工具,7 天没用的旧版本自动清掉
 ├── npm-cache/    下载 npm 包的缓存

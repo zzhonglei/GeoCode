@@ -2,8 +2,9 @@ import React from 'react';
 import { z } from 'zod';
 
 import { useI18nStore, type Locale } from '@/lib/i18n';
+import { subscribeOpenchamberEvents } from '@/lib/openchamberEvents';
 
-import { readBasemapResource, readBasemapStyle } from '../basemapClient';
+import { BASEMAP_UNREAD, readBasemapResource, readBasemapStyle } from '../basemapClient';
 import { toGeoCodeLocale } from '../languages';
 import { readGeoFeatures, readGeoGrid, type GeoGrid, type PageRefusal } from '../preview/previewClient';
 import { previewText } from '../preview/previewText';
@@ -101,6 +102,36 @@ const refused = (refusal: PageRefusal): Refused => {
   return { error: refusal.message === refusal.code ? worded : `${worded} (${refusal.message})` };
 };
 
+// The pages that drew the basemap, told when it changes; one whose frame is gone is dropped then.
+const basemapPages = new Set<PageFrame>();
+let watching = false;
+
+/** Tells the pages that the basemap changed: their kit swaps it under the page's own sources and layers. */
+const basemapChanged = () => {
+  for (const frame of basemapPages) {
+    if (frame.contentWindow) frame.contentWindow.postMessage({ type: 'geocode/basemap-changed' }, '*');
+    else basemapPages.delete(frame);
+  }
+};
+
+/**
+ * From the first page that draws the basemap on: what changes it is the settings' choice, which GeoEngine reports once
+ * written, the interface's theme and its language, as basemap.ts reads them for the preview.
+ */
+const watchBasemap = () => {
+  if (watching) return;
+  watching = true;
+  subscribeOpenchamberEvents((event) => {
+    if (event.type === 'geo-status' && event.domain === 'basemap') basemapChanged();
+  });
+  new MutationObserver((records) => {
+    if (records.some((record) => record.oldValue !== document.documentElement.dataset.theme)) basemapChanged();
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'], attributeOldValue: true });
+  useI18nStore.subscribe((state, before) => {
+    if (toGeoCodeLocale(state.locale) !== toGeoCodeLocale(before.locale)) basemapChanged();
+  });
+};
+
 /**
  * Answers a page's `geocode.vector` and `geocode.raster`, true when the message was one. The page reads only data it
  * names in full: the path must stand in its document, as a local image must, so a page cannot read any file it builds
@@ -112,12 +143,16 @@ export const answerGeoPage = (event: MessageEvent, frame: PageFrame): boolean =>
   const basemap = basemapRequest.safeParse(event.data);
   if (basemap.success) {
     const request = basemap.data;
-    // The basemap is the app's own, so any page may read it: as the interface is drawn now.
+    // The basemap is the app's own, so any page may read it: as the interface is drawn now, and again as it changes.
+    if (request.type === 'geocode/basemap') {
+      basemapPages.add(frame);
+      watchBasemap();
+    }
     const answer: Promise<Answer> =
       request.type === 'geocode/basemap'
         ? readBasemapStyle(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light', toGeoCodeLocale(useI18nStore.getState().locale)).then((style) => ({ style }))
         : readBasemapResource(request.url).then((bytes) => ({ bytes }));
-    void answer.catch(() => ({ error: 'the basemap could not be read' })).then(replyTo(request.id));
+    void answer.catch(() => ({ error: BASEMAP_UNREAD })).then(replyTo(request.id));
     return true;
   }
   const asked = geoRequest.safeParse(event.data);

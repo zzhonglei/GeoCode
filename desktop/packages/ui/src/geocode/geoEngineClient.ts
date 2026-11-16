@@ -11,6 +11,7 @@ import {
   pythonOverlayOf,
   withGeoStatusEvent,
   withGeoStatusSnapshot,
+  type BasemapStatus,
   type GeoStatuses,
   type PythonGate,
   type PreparingGate,
@@ -116,11 +117,20 @@ export const chooseQgis = (path: string) => request(QGIS_PATH, doneSchema, {
 
 export const recheckQgis = () => request(`${QGIS_PATH}/recheck`, doneSchema, { method: 'POST' });
 
-/** Writes the settings' basemap; the status reports it once written. */
-export const chooseBasemap = (source: 'offline' | 'none') => request('/api/geocode/basemap', doneSchema, {
+/** A change to the settings' basemap: what it names changes, the rest stays. */
+export interface BasemapChange {
+  source?: BasemapStatus['source'];
+  openfreemap?: BasemapStatus['openfreemap'];
+  versatiles?: BasemapStatus['versatiles'];
+  tianditu?: { key?: string; layer?: BasemapStatus['tianditu']['layer'] };
+  custom?: { url: string; attribution?: string };
+}
+
+/** Writes a change to the settings' basemap; the status reports it once written. */
+export const configureBasemap = (change: BasemapChange) => request('/api/geocode/basemap', doneSchema, {
   method: 'PUT',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ source }),
+  body: JSON.stringify(change),
 });
 
 const pickedSchema = z.string().min(1);

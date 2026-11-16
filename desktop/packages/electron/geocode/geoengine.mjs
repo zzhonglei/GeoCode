@@ -6,6 +6,7 @@ import { kernelCacheDir, kernelConfigDir, kernelDataDir, kernelStateDir } from '
 import { withoutAppVariables, withoutDirectoryVariables } from '@openchamber/web/server/geocode/app-variables.js';
 import { createEnvironmentStore } from '@openchamber/web/server/lib/environment/store.js';
 import { overlayEnvironment } from '@openchamber/web/server/lib/environment/variables.js';
+import { withEngineProxy } from './engine-proxy.mjs';
 import { createSupervisor } from './geoengine-supervisor.mjs';
 
 const MACHINE_FILE = 'machine.json';
@@ -56,7 +57,7 @@ const fork = (log) => {
   ];
   return utilityProcess.fork(modulePath, args, {
     serviceName: 'GeoEngine',
-    env: withoutAppVariables(overlayEnvironment(process.env, settingsVariables(log))),
+    env: withEngineProxy(withoutAppVariables(overlayEnvironment(process.env, settingsVariables(log)))),
     stdio: ['ignore', 'inherit', 'pipe'],
   });
 };

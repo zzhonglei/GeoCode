@@ -5,7 +5,7 @@ import type { SettingsPageMeta } from '@/lib/settings/metadata';
 export const GEO_ENVIRONMENT_SEARCH_ITEM = {
   id: 'geo-environment',
   page: 'geo-environment' as const,
-  keywords: ['qgis', 'gis', 'geo', 'geoengine', 'environment', '地理', '環境', '环境', 'gee', 'earth engine'],
+  keywords: ['qgis', 'gis', 'geo', 'geoengine', 'environment', '地理', '環境', '环境', 'gee', 'earth engine', 'basemap', '底图', '底圖'],
 };
 
 const CLOSED_PAGES: ReadonlySet<string> = new Set(['remote-instances', 'tunnel', 'extensions', 'plugins', 'magic-prompts', 'snippets', 'skills.catalog', 'isolated-spaces', 'about'] satisfies SettingsPageMeta['slug'][]);

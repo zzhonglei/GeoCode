@@ -19,14 +19,18 @@ export const useBasemapTheme = (): BasemapTheme => (useOptionalThemeSystem()?.cu
 
 /**
  * The basemap's style for the interface as it is now, read again when the theme, the language or the settings' choice
- * changes; undefined while it is read.
+ * changes; undefined while it is read, null for none, as when an online basemap cannot be reached.
  */
 export const useBasemapStyle = (): StyleSpecification | null | undefined => {
   const theme = useBasemapTheme();
   const locale = toGeoCodeLocale(useI18n().locale);
-  // Offline until GeoEngine says otherwise, so the style is not read twice as the app starts.
-  const source = basemapStatusOf(useGeoStatuses())?.source ?? 'offline';
-  const key = `${theme} ${locale} ${source}`;
+  // Read again whenever the choice changes, as for another style or another layer of Tianditu's; the offline basemap
+  // until GeoEngine says otherwise, so the style is not read twice as the app starts.
+  const status = basemapStatusOf(useGeoStatuses());
+  const choice = status
+    ? [status.source, status.openfreemap, status.versatiles, status.tianditu, status.custom ?? null]
+    : ['offline'];
+  const key = JSON.stringify([theme, locale, ...choice]);
   const [read, setRead] = React.useState<{ key: string; style: StyleSpecification | null }>();
   React.useEffect(() => {
     let live = true;

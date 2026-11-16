@@ -12,7 +12,7 @@ export const MAP_PAGE_DESCRIPTION = [
   '`geocode.raster(path, { layer, bands })` returns what geotiff.js\'s readRasters does: an array with a Float32Array for each band (default [1]), and width and height on it.',
   'The raster is reprojected to Web Mercator, with nodata as NaN; coordinates holds its four corners for an image or canvas source, and palette, for a band with a color table, maps each value present to its color.',
   'layer names one layer of a file that holds several, such as a GeoPackage.',
-  '`geocode.basemap()` returns the style of GeoCode\'s own basemap, which works offline and names places in the interface\'s language: pass it as the map\'s `style`, or leave it out for a map with none.',
+  '`geocode.basemap()` returns the style of the basemap the user chose in GeoCode\'s settings; pass it as the map\'s `style`.',
   'Prefer opaque fills for polygons, as desktop GIS draws them.',
   'Add controls around the map where they help the user explore the data.',
   'For example: `const roads = await geocode.vector(\'/data/city.gpkg\', { layer: \'roads\', fields: [\'name\', \'class\'] }); map.addSource(\'roads\', { type: \'geojson\', data: roads });`',

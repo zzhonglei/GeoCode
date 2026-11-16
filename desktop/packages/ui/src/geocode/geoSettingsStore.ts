@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type GeoDomain = 'qgis' | 'gee';
+type GeoDomain = 'qgis' | 'gee' | 'basemap';
 
 type GeoSettingsState = {
   /** An environment whose details the Geo environment page should open; the page takes it and clears it. */
