@@ -4,12 +4,13 @@ import maplibreCss from 'maplibre-gl/dist/maplibre-gl.css?raw';
 
 import { HTML_RENDER_MIN_HEIGHT } from '@/components/chat/message/parts/htmlRender';
 
+import { BASEMAP_SCHEME } from '../basemapClient';
 import { asClassicScript } from './classicScript';
 
 /**
  * What a page in the chat that draws a map gets before its own scripts: MapLibre as the global `maplibregl`, from the
  * app's own copy, so a map draws offline; `geocode.vector` and `geocode.raster`, which read data through the chat
- * (pageMaps.ts); and a line at the top of the page that shows what went wrong, titled in the interface's language
+ * (pageMaps.ts), and `geocode.basemap`, the app's basemap read the same way; and a line at the top of the page that shows what went wrong, titled in the interface's language
  * (self.geocodeKitText, set before the kit by pageMaps.ts). Loaded only for such a page, as it weighs what MapLibre
  * does. The agent reads how to use them in packages/web/server/geocode/map-pages.js; change both together.
  */
@@ -39,15 +40,26 @@ if(document.body)show();else document.addEventListener("DOMContentLoaded",show);
 window.addEventListener("error",function(e){report("script",e.message);});
 window.addEventListener("unhandledrejection",function(e){var r=e.reason;if(!own.has(r))report("script",r&&r.message||r);});
 var Base=self.maplibregl.Map;
-// No attribution control unless the page asks for one, as the preview's maps have none: the data is the user's own,
-// and MapLibre's notice ships with the app's licenses. Never zoomed by the wheel, whatever the page asks, so scrolling
-// the chat over a map scrolls the chat; dragging, which takes a deliberate press, still moves it.
-self.maplibregl.Map=class Map extends Base{constructor(options){super(Object.assign({attributionControl:false},options,{scrollZoom:false}));
-this.on("error",function(e){report("map",e&&e.error&&e.error.message||"error");});}};
+// Whatever the page asks: the credit of the basemap, written small in the corner as the preview's is, rather than
+// MapLibre's own folded behind a button; nothing else the page draws has one, so a map without the basemap shows none.
+// Never zoomed by the wheel, so scrolling the chat over a map scrolls the chat; dragging, which takes a deliberate
+// press, still moves it.
+// And a handler for "load" added once the map has loaded runs then, rather than never: a page that awaits its data
+// before adding one would otherwise draw none, the basemap loading first.
+var loaded=new WeakSet();
+function later(map,handler){var timer=setTimeout(function(){handler.call(map,{type:"load",target:map});});return {unsubscribe:function(){clearTimeout(timer);}};}
+self.maplibregl.Map=class Map extends Base{constructor(options){super(Object.assign({},options,{attributionControl:{compact:false},scrollZoom:false}));
+var map=this;super.once("load",function(){loaded.add(map);});
+this.on("error",function(e){report("map",e&&e.error&&e.error.message||"error");});}
+on(type,a,b){return type==="load"&&loaded.has(this)&&typeof a==="function"&&b===undefined?later(this,a):super.on(type,a,b);}
+once(type,a,b){if(type!=="load"||!loaded.has(this))return super.once(type,a,b);
+if(a===undefined)return Promise.resolve({type:"load",target:this});if(typeof a!=="function"||b!==undefined)return super.once(type,a,b);later(this,a);return this;}};
 Object.freeze(self.maplibregl);
 var worker=URL.createObjectURL(new Blob([${inScript(workerSource)}],{type:"text/javascript"}));
 self.maplibregl.setWorkerUrl(worker);
-var style=document.createElement("style");style.textContent=${inScript(maplibreCss)};document.head.appendChild(style);
+// Borders and padding within the widths a page sets, as most pages are written for: a map 100% wide with a border
+// would otherwise overflow the frame. Before the page's own styles, which win over it.
+var style=document.createElement("style");style.textContent="*,*::before,*::after{box-sizing:border-box}"+${inScript(maplibreCss)}+".maplibregl-ctrl.maplibregl-ctrl-attrib{background:transparent;padding:0 4px;font-size:9px;line-height:14px;color:var(--muted-foreground)}";document.head.appendChild(style);
 var asked=new Map(),next=1;
 // A failed read is shown even where the page catches it.
 function fail(w,error){own.add(error);report("data",error.message+(typeof w.path==="string"?" ("+w.path.split(/[\\\\/]/).pop()+")":""));w.reject(error);}
@@ -59,7 +71,14 @@ if(typeof path!=="string")problem="path must be a string";else if(options.layer!
 else if(parent===self)problem="the data can be read only in GeoCode";
 if(problem)return fail(w,new Error(problem));id=next++;asked.set(id,w);
 parent.postMessage(Object.assign({type:type,id:id,path:path,layer:options.layer},extra),"*");});}
+// The basemap's tiles and icons, which its style names by this scheme, read through the chat as the data is.
+self.maplibregl.addProtocol("${BASEMAP_SCHEME}",function(params){return new Promise(function(resolve,reject){var id=next++;
+asked.set(id,{resolve:resolve,reject:reject,read:function(d){return {data:params.type==="json"?JSON.parse(new TextDecoder().decode(d.bytes)):d.bytes};}});
+parent.postMessage({type:"geocode/basemap-resource",id:id,url:params.url},"*");});});
 self.geocode=Object.freeze({
+// The style of the basemap the settings choose, in the interface's theme and language; an empty one when they choose none.
+basemap:function(){return new Promise(function(resolve,reject){var w={resolve:resolve,reject:reject,read:function(d){return d.style||{version:8,sources:{},layers:[]};}},id;
+if(parent===self)return fail(w,new Error("the basemap can be read only in GeoCode"));id=next++;asked.set(id,w);parent.postMessage({type:"geocode/basemap",id:id},"*");});},
 vector:function(path,options){options=options||{};var fields=options.fields===undefined?[]:options.fields;
 return ask("geocode/vector",path,options,{fields:fields},!Array.isArray(fields)||fields.some(function(f){return typeof f!=="string";})?"fields must be an array of field names":"",
 function(d){return JSON.parse(new TextDecoder().decode(d.bytes));});},

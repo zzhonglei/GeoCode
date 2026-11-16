@@ -202,6 +202,21 @@ export const geeStatusOf = (statuses: GeoStatuses): GeeView | undefined => {
   return parsed.success ? parsed.data : { status: 'unreadable', value: held.value };
 };
 
+// State in geoengine/src/basemap/index.ts.
+const basemapSchema = z.object({
+  source: z.enum(['offline', 'none']),
+  available: z.boolean(),
+  invalid: z.string().optional(),
+});
+
+export type BasemapStatus = z.infer<typeof basemapSchema>;
+
+/** The basemap the settings choose; undefined before GeoEngine reports it, or as a value this interface cannot read. */
+export const basemapStatusOf = (statuses: GeoStatuses): BasemapStatus | undefined => {
+  const parsed = basemapSchema.safeParse(statuses.basemap?.value);
+  return parsed.success ? parsed.data : undefined;
+};
+
 export type Light = 'ready' | 'checking' | 'idle' | 'failed';
 
 export const DOT_CLASS = {

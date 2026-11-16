@@ -37,7 +37,7 @@ node scripts/test.mjs --list changed     # 只列出要跑什么与原因,不运
 |---|---|---|
 | `kernel` | 内核各包里 GeoCode 的测试:GeoCode 自己的测试文件整份运行,上游测试文件里只运行名称含 `GeoCode:` 的用例 | 无 |
 | `ui`、`web`、`electron` | 桌面端这三个包 `geocode/` 目录下的测试 | 无 |
-| `geoengine` | GeoEngine 的单元测试;`geoengine/<能力域>` 只跑 `engine`(引擎本身)、`python`、`qgis`、`gee`、`osm` 或 `preview` 目录下的 | `PATH` 里的 `python3`,没有时相关的用例跳过 |
+| `geoengine` | GeoEngine 的单元测试;`geoengine/<能力域>` 只跑 `engine`(引擎本身)、`python`、`qgis`、`gee`、`osm`、`preview` 或 `basemap` 目录下的 | `PATH` 里的 `python3`,没有时相关的用例跳过 |
 | `qgis` | 在本机每一套 QGIS 上运行 | macOS 上的 QGIS |
 | `gee` | 在真实 Earth Engine 上运行 | `GEOENGINE_GEE_PROJECT=<项目 ID>`、登录过 Earth Engine、装好的内置环境 |
 | `osm` | 在装好的内置环境上运行 OSM 下载,服务是本机的假服务 | 装好的内置环境 |

@@ -3,13 +3,16 @@ import { z } from 'zod';
 
 import { useI18nStore, type Locale } from '@/lib/i18n';
 
+import { readBasemapResource, readBasemapStyle } from '../basemapClient';
+import { toGeoCodeLocale } from '../languages';
 import { readGeoFeatures, readGeoGrid, type GeoGrid, type PageRefusal } from '../preview/previewClient';
 import { previewText } from '../preview/previewText';
 
 /**
  * Maps in the pages an agent shows with geocode_render: a page that names `maplibregl`, `geocode.vector` or
- * `geocode.raster` gets MapLibre and those two before its own scripts (pageMapKit.ts), and the chat reads the data the
- * page asks for through the preview's routes, which the page, sandboxed, cannot reach.
+ * `geocode.raster` gets MapLibre, those two and `geocode.basemap` before its own scripts (pageMapKit.ts), and the chat
+ * reads the data and the basemap the page asks for through the preview's routes, which the page, sandboxed, cannot
+ * reach.
  */
 
 const USES_MAP = /\bmaplibregl\b|\bgeocode\.(?:vector|raster)\b/;
@@ -75,11 +78,15 @@ const geoRequest = z.discriminatedUnion('type', [
   z.object({ type: z.literal('geocode/vector'), ...target, fields: z.array(z.string()) }),
   z.object({ type: z.literal('geocode/raster'), ...target, bands: z.array(z.number().int()) }),
 ]);
+const basemapRequest = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('geocode/basemap'), id: z.number() }),
+  z.object({ type: z.literal('geocode/basemap-resource'), id: z.number(), url: z.string() }),
+]);
 
 /** What a page's read failed for, in the words its line shows. */
 type Refused = { error: string };
 
-type Answer = { bytes: ArrayBuffer; grid?: GeoGrid } | Refused;
+type Answer = { bytes: ArrayBuffer; grid?: GeoGrid } | { style: unknown } | Refused;
 
 /** As much of a page's frame as answering it takes: what the page is, and the window it is answered in. */
 export type PageFrame = { readonly srcdoc: string; readonly contentWindow: Pick<Window, 'postMessage'> | null };
@@ -100,12 +107,24 @@ const refused = (refusal: PageRefusal): Refused => {
  * a path to.
  */
 export const answerGeoPage = (event: MessageEvent, frame: PageFrame): boolean => {
+  const replyTo = (id: number) => (answer: Answer) =>
+    frame.contentWindow?.postMessage({ type: 'geocode/result', id, ...answer }, '*', 'bytes' in answer ? [answer.bytes] : []);
+  const basemap = basemapRequest.safeParse(event.data);
+  if (basemap.success) {
+    const request = basemap.data;
+    // The basemap is the app's own, so any page may read it: as the interface is drawn now.
+    const answer: Promise<Answer> =
+      request.type === 'geocode/basemap'
+        ? readBasemapStyle(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light', toGeoCodeLocale(useI18nStore.getState().locale)).then((style) => ({ style }))
+        : readBasemapResource(request.url).then((bytes) => ({ bytes }));
+    void answer.catch(() => ({ error: 'the basemap could not be read' })).then(replyTo(request.id));
+    return true;
+  }
   const asked = geoRequest.safeParse(event.data);
   if (!asked.success) return false;
   const request = asked.data;
   const { id, path, layer } = request;
-  const reply = (answer: Answer) =>
-    frame.contentWindow?.postMessage({ type: 'geocode/result', id, ...answer }, '*', 'bytes' in answer ? [answer.bytes] : []);
+  const reply = replyTo(id);
   // A Windows path in a script string has its backslashes doubled.
   const named = [path, path.replaceAll('\\', '\\\\'), path.replaceAll('\\', '/')].some((written) => frame.srcdoc.includes(written));
   if (!named) {

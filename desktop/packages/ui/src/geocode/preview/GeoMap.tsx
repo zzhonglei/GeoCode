@@ -8,6 +8,7 @@ import { ContentLoadingState } from '@/components/ui/content-state';
 import { useI18n } from '@/lib/i18n';
 import { cancelWhenLayoutSettled, runWhenLayoutSettled } from '@/lib/layoutAnimation';
 import { runtimeFetch } from '@/lib/runtime-fetch';
+import { useBasemapStyle } from '../basemap';
 import { colorOf, EDGE, MARK, MARK_EDGE } from './geoColors';
 import { previewText } from './previewText';
 import { stilled } from './stilled';
@@ -166,6 +167,7 @@ const GeoMap: React.FC<{
 }> = ({ target, description, bounds, shown, marked, look, blank, pixel, view, reach, onPick, onPixel, onPointer, onRefused, onMissed, onFailed }) => {
   const { locale } = useI18n();
   const text = previewText(locale);
+  const basemap = useBasemapStyle();
   // The room the map is given, and within it the map itself, which keeps the size it was last drawn at.
   const room = React.useRef<HTMLDivElement>(null);
   const container = React.useRef<HTMLDivElement>(null);
@@ -198,7 +200,8 @@ const GeoMap: React.FC<{
   React.useEffect(() => {
     const around = room.current;
     const within = container.current;
-    if (!around || !within) return;
+    // Made once the basemap is known, which goes under the data; made again when the theme or language changes it.
+    if (!around || !within || basemap === undefined) return;
     const fit = () => {
       within.style.width = `${around.clientWidth}px`;
       within.style.height = `${around.clientHeight}px`;
@@ -212,9 +215,10 @@ const GeoMap: React.FC<{
     try {
       map = new MapLibreMap({
         container: within,
-        style: { version: 8, sources: {}, layers: [] },
+        style: basemap ?? { version: 8, sources: {}, layers: [] },
         ...(before && !before.whole ? { center: before.center, zoom: before.zoom } : { bounds, fitBoundsOptions: { padding: 24 } }),
-        attributionControl: false,
+        // The basemap's credit, written small in the corner; none without it.
+        attributionControl: basemap ? { compact: false } : false,
         // Sized below, once its room has stopped changing: drawn whole again for every frame of a panel sliding,
         // it would make the slide drop frames. Meanwhile it stays as it was drawn, centred in its room, whose moving
         // edges cover and uncover it; a map that follows its room keeps its centre in the same way, so nothing
@@ -295,7 +299,7 @@ const GeoMap: React.FC<{
       // date, and what lies outside it would never be drawn.
       map.addSource('data', { type: 'vector', tiles: [tiles], maxzoom: VECTOR_DEPTH });
       const color = colorOf(description.layer);
-      map.addLayer({ id: 'fill', type: 'fill', source: 'data', 'source-layer': 'polygons', paint: { 'fill-color': color, 'fill-opacity': 0.5 } });
+      map.addLayer({ id: 'fill', type: 'fill', source: 'data', 'source-layer': 'polygons', paint: { 'fill-color': color } });
       map.addLayer({ id: 'outline', type: 'line', source: 'data', 'source-layer': 'polygons', paint: { 'line-color': EDGE, 'line-width': 0.75 } });
       map.addLayer({ id: 'line', type: 'line', source: 'data', 'source-layer': 'lines', paint: { 'line-color': color, 'line-width': 1.5 } });
       map.addLayer({ id: 'thin-polygon', type: 'line', source: 'data', 'source-layer': 'thin-polygons', paint: { 'line-color': color, 'line-width': 1.5 } });
@@ -337,7 +341,7 @@ const GeoMap: React.FC<{
       view.current = { center: [center.lng, center.lat], zoom: map.getZoom(), whole };
       map.remove();
     };
-  }, [target, description, bounds, view, reach]);
+  }, [target, description, bounds, view, reach, basemap]);
 
   React.useEffect(() => {
     // Before the map has its layers, they are shown as asked when it gets them.
@@ -364,7 +368,7 @@ const GeoMap: React.FC<{
   // Bare over the data, with a rim of the page's colour to stay legible on any of it.
   const control = 'flex size-7 items-center justify-center opacity-80 hover:opacity-100 [filter:drop-shadow(0_0_1.5px_var(--surface-background))_drop-shadow(0_0_1px_var(--surface-background))]';
   return (
-    <div ref={room} className="relative h-full w-full overflow-hidden">
+    <div ref={room} className="relative h-full w-full overflow-hidden [&_.maplibregl-ctrl-attrib]:!bg-transparent [&_.maplibregl-ctrl-attrib]:!px-1 [&_.maplibregl-ctrl-attrib]:!text-[9px] [&_.maplibregl-ctrl-attrib]:!leading-[14px] [&_.maplibregl-ctrl-attrib]:!text-muted-foreground">
       {/* In its style, which the map library's own stylesheet cannot override. */}
       <div ref={container} style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }} />
       {drawn !== description ? <ContentLoadingState label={text.reading} className="pointer-events-none absolute inset-0" /> : null}

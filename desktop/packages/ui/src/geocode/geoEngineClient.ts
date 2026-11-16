@@ -116,6 +116,13 @@ export const chooseQgis = (path: string) => request(QGIS_PATH, doneSchema, {
 
 export const recheckQgis = () => request(`${QGIS_PATH}/recheck`, doneSchema, { method: 'POST' });
 
+/** Writes the settings' basemap; the status reports it once written. */
+export const chooseBasemap = (source: 'offline' | 'none') => request('/api/geocode/basemap', doneSchema, {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ source }),
+});
+
 const pickedSchema = z.string().min(1);
 
 /**

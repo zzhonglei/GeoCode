@@ -87,7 +87,7 @@ const electronSteps = () => {
 }
 
 // GeoEngine's unit tests by the domain whose folder holds them; the engine's own sit in no folder.
-const UNIT = ['engine', 'python', 'qgis', 'gee', 'osm', 'preview']
+const UNIT = ['engine', 'python', 'qgis', 'gee', 'osm', 'preview', 'basemap']
 export const unitDomain = (file) => /^geoengine\/test\/unit\/([^/]+)\//.exec(file)?.[1] ?? 'engine'
 
 // One file after another: some tests start processes and check that they were ended.
@@ -170,6 +170,8 @@ export const calledFor = (file) => {
   if (support) return ['geoengine', ...REAL]
   const domain = /^(?:src|python\/geocodekit)\/([^/]+)\//.exec(inside)?.[1]
   if (REAL.includes(domain)) return [...EVERY, `geoengine/${domain}`, domain]
+  // A domain with no real software to test against.
+  if (domain === 'basemap') return [...EVERY, `geoengine/${domain}`]
   // The rest of the geocode package, the environment's manifest and lock, and how its interpreters start.
   if (/^(python|environment|src\/python)\//.test(inside) || inside === 'src/bundled.ts') {
     return [...EVERY, 'geoengine/python', ...ENVIRONMENT.map((each) => `geoengine/${each}`), ...ENVIRONMENT]

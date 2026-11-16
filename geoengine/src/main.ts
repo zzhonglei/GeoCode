@@ -1,5 +1,6 @@
 import path from "node:path"
 import { Cause, Effect, Exit, Layer, Logger } from "effect"
+import { Basemap } from "./basemap/index.ts"
 import { Config } from "./config.ts"
 import { Engine } from "./engine.ts"
 import { Gee } from "./gee/index.ts"
@@ -24,6 +25,7 @@ const places = {
 }
 const locks = path.join(argument("state", "GeoCode's state directory"), "locks")
 const pyramids = path.join(argument("cache", "GeoCode's cache directory"), "preview")
+const basemap = argument("basemap", "folder of the bundled basemap")
 
 const transport = Transport.parentPort()
 
@@ -43,6 +45,7 @@ const fiber = Effect.runFork(
       Gee.capability,
       Osm.capability(locks),
       Preview.capability(pyramids),
+      Basemap.capability(basemap),
     ]),
   ).pipe(Effect.provide(layer)),
 )

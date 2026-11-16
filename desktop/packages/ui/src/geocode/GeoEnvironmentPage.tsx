@@ -8,6 +8,7 @@ import { toast } from '@/components/ui';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { BasemapSection } from './BasemapSection';
 import { GeeDetails } from './GeeDetails';
 import { GeeLogo } from './GeeLogo';
 import { geeLabel, geeText } from './geeText';
@@ -104,6 +105,7 @@ export const GeoEnvironmentPage: React.FC = () => {
           <Icon name="arrow-right-s" className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         </button>
       </div>
+      <BasemapSection />
     </SettingsPageLayout>
   );
 };

@@ -10,7 +10,8 @@ const STATUS_BY_CODE = new Map([
 /**
  * What a window's preview of a geographic dataset asks for: the dataset's description, the tiles of its map, the
  * feature or the pixel under a click, the pages of its table and what its bands measure; and, for a map a page in the
- * chat draws, a vector layer as GeoJSON and a raster's values. Each is read by GeoEngine as it is asked for. A request
+ * chat draws, a vector layer as GeoJSON and a raster's values; and the basemap under both. Each is read by GeoEngine as
+ * it is asked for. A request
  * the window leaves is cancelled there, so a map that has moved on reads nothing for where it was. Without geoEngine,
  * as when the server runs outside the desktop app, every request is refused.
  */
@@ -109,5 +110,26 @@ export const registerGeoPreview = (app, { geoEngine }) => {
   app.get('/api/geocode/preview/rows', async (req, res) => {
     const result = await ask(req, res, 'preview.rows', { stamp: req.query.stamp, row: number(req.query.row) });
     if (result) res.json(result);
+  });
+
+  // The basemap the settings choose, in the interface's theme and language; null when they choose none. Its style names
+  // its tiles and icons by a scheme of its own, which the maps read through the two routes after it.
+  app.get('/api/geocode/basemap/style', async (req, res) => {
+    const result = await ask(req, res, 'basemap.style', { theme: req.query.theme, locale: req.query.locale });
+    if (result) res.json(result);
+  });
+
+  app.get('/api/geocode/basemap/tile/:layer/:z/:x/:y', async (req, res) => {
+    const { layer, z, x, y } = req.params;
+    const result = await ask(req, res, 'basemap.tile', { layer, z: number(z), x: number(x), y: number(y) });
+    if (!result) return;
+    if (!result.bytes) return res.status(204).end();
+    res.type('application/octet-stream').send(Buffer.from(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength));
+  });
+
+  app.get('/api/geocode/basemap/sprite/:file', async (req, res) => {
+    const result = await ask(req, res, 'basemap.sprite', { file: req.params.file });
+    if (!result) return;
+    res.type(req.params.file.endsWith('.json') ? 'application/json' : 'image/png').send(Buffer.from(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength));
   });
 };

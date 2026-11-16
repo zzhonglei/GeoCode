@@ -17,7 +17,8 @@ geoengine/   地理引擎 GeoEngine,以及 Python 包 geocodekit(geoengine/pytho
 
 | 文件 | 做什么 |
 |---|---|
-| `stage-kernel.sh`、`stage-geoengine.sh`、`stage-python.sh` | 构建并暂存内核、GeoEngine 与内置的 Python 环境(第 4 节) |
+| `stage-kernel.sh`、`stage-geoengine.sh`、`stage-python.sh`、`stage-basemap.mjs` | 构建并暂存内核、GeoEngine、内置的 Python 环境与离线底图(第 4 节) |
+| `cut-basemap.mjs` | 从 OpenFreeMap 的全球数据截取离线底图,更新底图时由维护者使用(第 4 节) |
 | `test.mjs` | 测试的唯一入口(`TESTING.md`) |
 | `app/` | 打包版的检查(`TESTING.md` 第 7 节) |
 | `foreign-writes.sh` | 写入检测(`TESTING.md` 第 8 节) |
@@ -54,6 +55,8 @@ GeoEngine 由 `./scripts/stage-geoengine.sh` 构建并暂存到 `desktop/package
 OSM 工具读的预设库 `geocodekit/osm/_data.json` 由 `geoengine/` 里的 `bun ./script/osm-data.ts` 按脚本里锁定的版本下载、裁剪后写出;改了版本之后运行它,与写出的文件一起提交。
 
 内置的 Python 环境(`PYTHON.md`)由 `./scripts/stage-python.sh` 按 `geoengine/environment/` 里的定义打包,与这个平台的 pixi-unpack 一起暂存到 `desktop/packages/electron/resources/python/`,打包时作为额外资源收进应用。环境的标识没变时它直接跳过,开发模式的启动脚本每次启动前都运行它;给出 `win32-x64` 或 `darwin-arm64` 能为另一个平台准备。改了 `geoengine/environment/pixi.toml` 之后,运行 `./scripts/stage-python.sh --lock` 重新生成两个平台的锁定清单 `pixi.lock`,与它一起提交:打包只照锁定清单,两者对不上时暂存直接报错。
+
+离线底图(`GEOENGINE.md` 第 2.10 节)的数据放在 GeoCode 仓库的一个 Release 里(`basemap-<日期>`)。`node scripts/stage-basemap.mjs` 把它下载到 `.cache/basemap/`,核对脚本里记下的校验值,再暂存到 `desktop/packages/electron/resources/basemap/`,打包时作为额外资源收进应用;开发模式的启动脚本与打包流程都运行它,只在缓存里没有时下载。数据放在自己的 Release 里,因为 OpenFreeMap 只保留最近几期的全球数据。更新底图时,用 `node scripts/cut-basemap.mjs <期号> openmaptiles-z6.pmtiles` 按范围截取新一期的第 0 到 6 级,与原有的晕渲、图标一起发成新的 Release,再改 `stage-basemap.mjs` 里的地址与校验值。
 
 更新锁定清单之后,在两个平台上检查环境(还没有做成脚本,手动运行)。检查在工作环境里运行,不设任何变量,再在用户环境里的 `GDAL_DATA`、`PROJ_DATA` 等指向别处、`~/.gdal/gdalrc` 关掉了驱动时另跑一遍:
 

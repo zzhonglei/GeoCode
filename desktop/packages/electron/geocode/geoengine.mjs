@@ -32,6 +32,10 @@ const enginePath = () => path.join(app.getAppPath(), 'resources', 'geoengine', '
 const pythonBundlePath = () =>
   app.isPackaged ? path.join(process.resourcesPath, 'python') : path.join(app.getAppPath(), 'resources', 'python');
 
+// Staged by scripts/stage-basemap.mjs; beside app.asar once packaged, as the engine reads its archives by ranges.
+const basemapPath = () =>
+  app.isPackaged ? path.join(process.resourcesPath, 'basemap') : path.join(app.getAppPath(), 'resources', 'basemap');
+
 const fork = (log) => {
   const modulePath = enginePath();
   if (!fs.existsSync(modulePath)) {
@@ -48,6 +52,7 @@ const fork = (log) => {
     `--state=${kernelStateDir()}`,
     // And its cache directory, where a preview keeps the overviews it makes for a large raster.
     `--cache=${kernelCacheDir()}`,
+    `--basemap=${basemapPath()}`,
   ];
   return utilityProcess.fork(modulePath, args, {
     serviceName: 'GeoEngine',

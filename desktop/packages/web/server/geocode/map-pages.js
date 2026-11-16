@@ -1,6 +1,6 @@
 // What the agent reads about drawing maps of geographic data in a geocode_render page, beside upstream's rules for a
 // page: how, at the end of the html parameter's description in lib/agent-tool/runtime.js, and when, in the render
-// guidance of lib/session-knowledge/runtime.js. The page gets maplibregl and the two functions from
+// guidance of lib/session-knowledge/runtime.js. The page gets maplibregl and the geocode functions from
 // packages/ui/src/geocode/pageMaps/pageMapKit.ts, and the limit on features is FEATURES in
 // geoengine/python/geocodekit/preview/_page.py; change them together.
 
@@ -12,6 +12,8 @@ export const MAP_PAGE_DESCRIPTION = [
   '`geocode.raster(path, { layer, bands })` returns what geotiff.js\'s readRasters does: an array with a Float32Array for each band (default [1]), and width and height on it.',
   'The raster is reprojected to Web Mercator, with nodata as NaN; coordinates holds its four corners for an image or canvas source, and palette, for a band with a color table, maps each value present to its color.',
   'layer names one layer of a file that holds several, such as a GeoPackage.',
+  '`geocode.basemap()` returns the style of GeoCode\'s own basemap, which works offline and names places in the interface\'s language: pass it as the map\'s `style`, or leave it out for a map with none.',
+  'Prefer opaque fills for polygons, as desktop GIS draws them.',
   'Add controls around the map where they help the user explore the data.',
   'For example: `const roads = await geocode.vector(\'/data/city.gpkg\', { layer: \'roads\', fields: [\'name\', \'class\'] }); map.addSource(\'roads\', { type: \'geojson\', data: roads });`',
 ].join(' ');
