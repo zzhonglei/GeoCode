@@ -1,7 +1,13 @@
 import React from 'react';
 
 import { Icon } from '@/components/icon/Icon';
-import { SettingsBackButton, SettingsCardPill, type SettingsCardTone } from '@/components/sections/shared/SettingsCards';
+import {
+  SETTINGS_CARD_GRID_CLASS,
+  SettingsBackButton,
+  SettingsCard,
+  SettingsCardPill,
+  type SettingsCardTone,
+} from '@/components/sections/shared/SettingsCards';
 import { SettingsPageLayout } from '@/components/sections/shared/SettingsPageLayout';
 import { SETTINGS_HELPER_CLASS, SettingsSection } from '@/components/sections/shared/SettingsSection';
 import { toast } from '@/components/ui';
@@ -9,16 +15,17 @@ import { Button } from '@/components/ui/button';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { BasemapDetails } from './BasemapDetails';
+import { BasemapLogo } from './BasemapLogo';
 import { basemapLineOf, basemapText } from './basemapText';
 import { GeeDetails } from './GeeDetails';
 import { GeeLogo } from './GeeLogo';
-import { geeLabel, geeText } from './geeText';
+import { geeText } from './geeText';
 import { chooseQgis, fetchQgisInstalls, pickQgisApp, recheckQgis, useGeoStatuses, type QgisInstall } from './geoEngineClient';
 import { useGeoSettingsStore } from './geoSettingsStore';
-import { basemapStatusOf, geeStatusOf, lightOf, qgisStatusOf, type GeeView, type QgisView } from './geoStatus';
+import { basemapStatusOf, geeStatusOf, lightOf, qgisStatusOf, type BasemapStatus, type Light, type QgisView } from './geoStatus';
 import { QgisLogo } from './QgisLogo';
 import { QgisStatusDetails } from './QgisStatusDetails';
-import { QGIS_STATUS, qgisText, releaseOf, summaryOf, type QgisText } from './qgisText';
+import { QGIS_STATUS, qgisText, releaseOf, type QgisText } from './qgisText';
 import { GEO_ENVIRONMENT_SEARCH_ITEM } from './settings';
 import { LIST_CLASS, ROW_CLASS, TONE } from './settingsList';
 
@@ -43,19 +50,27 @@ const configuredOf = (status: QgisView | undefined): Configured => {
   return { path: status.diagnostics.path, app: status.diagnostics.app };
 };
 
-/** Beside a name in the list, in a row whose size it does not change: what runs, once it is ready. */
-const lineOf = (status: QgisView | undefined, text: QgisText) =>
-  status?.status === 'ready' ? summaryOf(status, text) : undefined;
-
-const geeLineOf = (status: GeeView | undefined) => (status?.status === 'ready' ? status.project : undefined);
-
 const StatusPill: React.FC<{ status: QgisView | undefined }> = ({ status }) => (
   status ? <SettingsCardPill tone={TONE[lightOf(status.status)]}>{QGIS_STATUS[status.status]}</SettingsCardPill> : null
 );
 
-const GeeStatusPill: React.FC<{ status: GeeView | undefined }> = ({ status }) => (
-  status ? <SettingsCardPill tone={TONE[lightOf(status.status)]}>{geeLabel(status)}</SettingsCardPill> : null
+/** An overview card's pill: one word for the light, as what is wrong is said on the environment's own page. */
+const LightPill: React.FC<{ light: Light | undefined; text: QgisText }> = ({ light, text }) => (
+  light ? <SettingsCardPill tone={TONE[light]}>{text.lights[light]}</SettingsCardPill> : null
 );
+
+/** An overview card's last line, a line tall even when empty, so a card keeps its height through every state. */
+const CardLine: React.FC<{ children?: string }> = ({ children }) => (
+  <span className="block h-lh min-w-0 truncate">{children}</span>
+);
+
+/** The QGIS a card names: its release and how many algorithms it offers, once it is ready. */
+const qgisLineOf = (status: QgisView | undefined, text: QgisText) =>
+  status?.status === 'ready' ? `${releaseOf(status.versions.qgis)} · ${text.algorithms(status.algorithms)}` : undefined;
+
+/** A basemap that cannot be drawn as chosen: a block written wrong, or the offline one without its files. */
+const basemapLightOf = (status: BasemapStatus | undefined): Light | undefined =>
+  status && (status.invalid !== undefined || (status.source === 'offline' && !status.available)) ? 'failed' : undefined;
 
 export const GeoEnvironmentPage: React.FC = () => {
   const { locale } = useI18n();
@@ -89,29 +104,41 @@ export const GeoEnvironmentPage: React.FC = () => {
     );
   }
 
+  const qgisLight = status ? lightOf(status.status) : undefined;
+  const geeLight = gee ? lightOf(gee.status) : undefined;
+  const basemap = basemapStatusOf(statuses);
+  const basemapWords = basemapText(locale);
+
+  // Every card has a description and a last line whatever its state, so a change of state moves nothing on the page.
   return (
     <SettingsPageLayout title={text.pageTitle} description={text.pageDescription}>
-      <div className={LIST_CLASS} data-settings-item={GEO_ENVIRONMENT_SEARCH_ITEM.id}>
-        <button type="button" onClick={() => setOpen('qgis')} className={cn(ROW_CLASS, 'py-2.5 hover:bg-[var(--interactive-hover)]/50')}>
-          <QgisLogo className="size-5 shrink-0" />
-          <span className="typography-ui-label shrink-0 font-medium text-foreground">QGIS</span>
-          <span className="typography-meta min-w-0 flex-1 truncate text-muted-foreground">{lineOf(status, text)}</span>
-          <StatusPill status={status} />
-          <Icon name="arrow-right-s" className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        </button>
-        <button type="button" onClick={() => setOpen('gee')} className={cn(ROW_CLASS, 'py-2.5 hover:bg-[var(--interactive-hover)]/50')}>
-          <GeeLogo className="size-5 shrink-0" />
-          <span className="typography-ui-label shrink-0 font-medium text-foreground">Google Earth Engine</span>
-          <span className="typography-meta min-w-0 flex-1 truncate text-muted-foreground">{geeLineOf(gee)}</span>
-          <GeeStatusPill status={gee} />
-          <Icon name="arrow-right-s" className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        </button>
-        <button type="button" onClick={() => setOpen('basemap')} className={cn(ROW_CLASS, 'py-2.5 hover:bg-[var(--interactive-hover)]/50')}>
-          <Icon name="global" className="size-5 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="typography-ui-label shrink-0 font-medium text-foreground">{basemapText(locale).title}</span>
-          <span className="typography-meta min-w-0 flex-1 truncate text-muted-foreground">{basemapLineOf(basemapStatusOf(statuses), basemapText(locale))}</span>
-          <Icon name="arrow-right-s" className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        </button>
+      <div className={SETTINGS_CARD_GRID_CLASS} data-settings-item={GEO_ENVIRONMENT_SEARCH_ITEM.id}>
+        <SettingsCard
+          icon={<QgisLogo className="size-5" />}
+          title="QGIS"
+          description={text.cardDescription}
+          badges={<LightPill light={qgisLight} text={text} />}
+          footer={<CardLine>{qgisLineOf(status, text)}</CardLine>}
+          muted={qgisLight === 'idle'}
+          onOpen={() => setOpen('qgis')}
+        />
+        <SettingsCard
+          icon={<GeeLogo className="size-5" />}
+          title="Google Earth Engine"
+          description={geeText(locale).cardDescription}
+          badges={<LightPill light={geeLight} text={text} />}
+          footer={<CardLine />}
+          muted={geeLight === 'idle'}
+          onOpen={() => setOpen('gee')}
+        />
+        <SettingsCard
+          icon={<BasemapLogo className="size-5" />}
+          title={basemapWords.title}
+          description={basemapWords.cardDescription}
+          badges={<LightPill light={basemapLightOf(basemap)} text={text} />}
+          footer={<CardLine>{basemapLineOf(basemap, basemapWords)}</CardLine>}
+          onOpen={() => setOpen('basemap')}
+        />
       </div>
     </SettingsPageLayout>
   );

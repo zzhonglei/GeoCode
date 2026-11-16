@@ -1,6 +1,6 @@
 import { useI18nStore, type Locale } from '@/lib/i18n';
 
-import type { QgisStatus, QgisView } from './geoStatus';
+import type { Light, QgisStatus, QgisView } from './geoStatus';
 
 type Shown =QgisStatus['status'] | 'unreadable';
 
@@ -35,6 +35,10 @@ export type QgisText = {
   manage: string;
   pageTitle: string;
   pageDescription: string;
+  /** What QGIS is for, on its card in the overview. */
+  cardDescription: string;
+  /** The overview cards' pills, one word for each light: what is wrong is said on the environment's own page. */
+  lights: Record<Light, string>;
   back: string;
   installsHeading: string;
   rescan: string;
@@ -58,7 +62,9 @@ const TEXT: { en: QgisText } & Partial<Record<Locale, QgisText>> = {
     copied: 'Copied',
     manage: 'Manage in Settings',
     pageTitle: 'Geo environment',
-    pageDescription: 'The software on this computer that GeoCode runs geographic tasks with.',
+    pageDescription: 'Set up GeoCode\'s geo environment.',
+    cardDescription: 'Geodata processing and spatial analysis',
+    lights: { ready: 'Ready', checking: 'Checking', idle: 'Not set up', failed: 'Needs attention' },
     back: 'Back to Geo environment',
     installsHeading: 'Installations',
     rescan: 'Scan again',
@@ -79,7 +85,9 @@ const TEXT: { en: QgisText } & Partial<Record<Locale, QgisText>> = {
     copied: '已复制',
     manage: '在设置中管理',
     pageTitle: '地理环境',
-    pageDescription: 'GeoCode 用这台电脑上的这些软件执行地理任务。',
+    pageDescription: '设置 GeoCode 的地理环境。',
+    cardDescription: '地理数据处理与空间分析',
+    lights: { ready: '就绪', checking: '检查中', idle: '未设置', failed: '需要处理' },
     back: '返回地理环境',
     installsHeading: '已安装',
     rescan: '重新扫描',
@@ -100,7 +108,9 @@ const TEXT: { en: QgisText } & Partial<Record<Locale, QgisText>> = {
     copied: '已複製',
     manage: '在設定中管理',
     pageTitle: '地理環境',
-    pageDescription: 'GeoCode 用這台電腦上的這些軟體執行地理任務。',
+    pageDescription: '設定 GeoCode 的地理環境。',
+    cardDescription: '地理資料處理與空間分析',
+    lights: { ready: '就緒', checking: '檢查中', idle: '未設定', failed: '需要處理' },
     back: '返回地理環境',
     installsHeading: '已安裝',
     rescan: '重新掃描',

@@ -11,6 +11,8 @@ export interface BasemapText {
   title: string;
   back: string;
   description: string;
+  /** What the basemap is for, on its card in the overview. */
+  cardDescription: string;
   names: Record<Source, string>;
   details: Record<Source, string>;
   layers: Record<Layer, string>;
@@ -35,6 +37,7 @@ const TEXT: { en: BasemapText } & Partial<Record<Locale, BasemapText>> = {
     title: 'Basemap',
     back: 'Geo environment',
     description: 'Drawn under geographic data, in the files view and in the maps the agent shows.',
+    cardDescription: 'Reference map under your data',
     names: {
       offline: 'Offline basemap',
       openfreemap: 'OpenFreeMap',
@@ -73,6 +76,7 @@ const TEXT: { en: BasemapText } & Partial<Record<Locale, BasemapText>> = {
     title: '底图',
     back: '地理环境',
     description: '画在地理数据下面，用于文件预览与智能体展示的地图。',
+    cardDescription: '地图显示的参考底图',
     names: {
       offline: '离线底图',
       openfreemap: 'OpenFreeMap',
@@ -111,6 +115,7 @@ const TEXT: { en: BasemapText } & Partial<Record<Locale, BasemapText>> = {
     title: '底圖',
     back: '地理環境',
     description: '畫在地理資料下面，用於檔案預覽與智慧體展示的地圖。',
+    cardDescription: '地圖顯示的參考底圖',
     names: {
       offline: '離線底圖',
       openfreemap: 'OpenFreeMap',

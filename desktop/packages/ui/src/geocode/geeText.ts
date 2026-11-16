@@ -52,6 +52,8 @@ export const geeDiagnosticsOf = (view: GeeView): string => {
 };
 
 export type GeeText = {
+  /** What Google Earth Engine is for, on its card in the overview. */
+  cardDescription: string;
   accountHeading: string;
   notChecked: string;
   signedOut: string;
@@ -105,6 +107,7 @@ export type GeeText = {
 
 const PAGE_TEXT: { en: GeeText } & Partial<Record<Locale, GeeText>> = {
   en: {
+    cardDescription: 'Cloud remote sensing and data access',
     accountHeading: 'Google account',
     notChecked: 'Not checked yet',
     signedOut: 'No Earth Engine credentials on this computer yet',
@@ -148,6 +151,7 @@ const PAGE_TEXT: { en: GeeText } & Partial<Record<Locale, GeeText>> = {
     },
   },
   'zh-CN': {
+    cardDescription: '云端遥感分析与数据获取',
     accountHeading: 'Google 账号',
     notChecked: '尚未检查',
     signedOut: '这台电脑上还没有 Earth Engine 的登录凭据',
@@ -191,6 +195,7 @@ const PAGE_TEXT: { en: GeeText } & Partial<Record<Locale, GeeText>> = {
     },
   },
   'zh-TW': {
+    cardDescription: '雲端遙測分析與資料取得',
     accountHeading: 'Google 帳號',
     notChecked: '尚未檢查',
     signedOut: '這台電腦上還沒有 Earth Engine 的登入憑證',
