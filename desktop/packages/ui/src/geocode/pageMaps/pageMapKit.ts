@@ -40,9 +40,9 @@ window.addEventListener("error",function(e){report("script",e.message);});
 window.addEventListener("unhandledrejection",function(e){var r=e.reason;if(!own.has(r))report("script",r&&r.message||r);});
 var Base=self.maplibregl.Map;
 // No attribution control unless the page asks for one, as the preview's maps have none: the data is the user's own,
-// and MapLibre's notice ships with the app's licenses. Never moved by dragging or the wheel, whatever the page asks, so
-// scrolling the chat over a map scrolls the chat; clicks and hover still reach it, and its code can still move it.
-self.maplibregl.Map=class Map extends Base{constructor(options){super(Object.assign({attributionControl:false},options,{interactive:false}));
+// and MapLibre's notice ships with the app's licenses. Never zoomed by the wheel, whatever the page asks, so scrolling
+// the chat over a map scrolls the chat; dragging, which takes a deliberate press, still moves it.
+self.maplibregl.Map=class Map extends Base{constructor(options){super(Object.assign({attributionControl:false},options,{scrollZoom:false}));
 this.on("error",function(e){report("map",e&&e.error&&e.error.message||"error");});}};
 Object.freeze(self.maplibregl);
 var worker=URL.createObjectURL(new Blob([${inScript(workerSource)}],{type:"text/javascript"}));
