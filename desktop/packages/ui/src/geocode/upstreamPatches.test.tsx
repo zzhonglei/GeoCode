@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { Window } from 'happy-dom';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { sessionMessageReference, sessionReference } from '@/components/chat/composer/sessionReferences';
 import { MarkdownLink } from '@/components/chat/markdown/MarkdownLink';
 import { MarkdownPresentationContext, type MarkdownPresentation } from '@/components/chat/markdown/MarkdownPresentationContext';
 import { createMarkdownCodePlugin } from '@/components/chat/markdown/streamdownCode';
+import { parseUiBlock } from '@/components/chat/uiBlocks/catalog';
+import { UI_BLOCK_EXAMPLES, buildUiBlocksGuidance } from '@/components/chat/uiBlocks/guidance';
+import { UI_BLOCKS_GUIDANCE_PATH, renderUiBlocksGuidanceModule } from '@/components/chat/uiBlocks/guidanceModule';
 import { I18nProvider } from '@/lib/i18n';
 import { getDefaultMagicPromptTemplate, loadMagicPrompts } from '@/lib/magicPrompts';
 import { buildAgentHref } from '@/lib/messages/inlineMessageLinks';
@@ -76,5 +80,17 @@ describe('GeoCode: an agent mention in a reply', () => {
     );
     expect(html).toContain('data-openchamber-agent-mention');
     expect(html).not.toContain('href=');
+  });
+});
+
+// Guards against the agent reading an example that draws nothing, or the server sending the guidance as it was before
+// GeoCode's examples: upstream's guidance.test.ts checks both, and GeoCode runs only its own tests.
+describe('GeoCode: the UI block examples', () => {
+  test('each draws, and the server copy is current (run ui-blocks:generate after a change)', () => {
+    for (const example of UI_BLOCK_EXAMPLES) {
+      expect(buildUiBlocksGuidance()).toContain(example);
+      expect(parseUiBlock(example, true).kind).toBe('ready');
+    }
+    expect(readFileSync(UI_BLOCKS_GUIDANCE_PATH, 'utf8')).toBe(renderUiBlocksGuidanceModule(buildUiBlocksGuidance()));
   });
 });
