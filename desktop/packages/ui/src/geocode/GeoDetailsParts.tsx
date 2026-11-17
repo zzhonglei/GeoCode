@@ -160,18 +160,22 @@ export const Verdict: React.FC<{
   action?: React.ReactNode;
   text: VerdictText;
 }> = ({ kind, line, diagnostics, action, text }) => {
-  const [expanded, setExpanded] = React.useState(false);
+  // Open for the diagnostics it was opened on: a recheck that ends in the same failure shows them again, one that ends
+  // in another failure finds them closed.
+  const [openFor, setOpenFor] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
   const failed = kind === 'failed';
+  const expanded = failed && openFor === diagnostics;
   return (
     <>
       <div className="mt-4 flex h-[51px] items-center gap-2.5 border-t border-[var(--interactive-border)] pt-3">
         <Icon name={VERDICT_ICON[kind].name} className={cn('size-[18px] shrink-0', VERDICT_ICON[kind].className)} aria-hidden />
-        <p className="typography-meta line-clamp-2 min-w-0 flex-1 text-foreground">{line}</p>
+        {/* Cut short where a failure's buttons leave it little room; the whole of it on hover. */}
+        <p className="typography-meta line-clamp-2 min-w-0 flex-1 text-foreground" title={line}>{line}</p>
         {failed ? (
           <div className="flex shrink-0 items-center gap-0.5">
             {action}
-            <Button variant="ghost" size="xs" className="text-muted-foreground" aria-expanded={expanded} onClick={() => setExpanded((open) => !open)}>
+            <Button variant="ghost" size="xs" className="text-muted-foreground" aria-expanded={expanded} onClick={() => setOpenFor(expanded ? null : diagnostics)}>
               {text.details}
             </Button>
             <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => { void copyTextToClipboard(diagnostics).then((outcome) => setCopied(outcome.ok)); }}>
@@ -180,7 +184,7 @@ export const Verdict: React.FC<{
           </div>
         ) : null}
       </div>
-      {failed && expanded ? (
+      {expanded ? (
         <pre className="typography-micro mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md bg-[var(--surface-muted)] p-2 font-mono text-foreground">{diagnostics}</pre>
       ) : null}
     </>
