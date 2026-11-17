@@ -69,7 +69,8 @@ type Tone = 'plain' | 'muted' | 'error';
 
 /**
  * The quota as both views show it, in rows that are there in every state, so a state changing changes no layout:
- * the share used beside the bar, the bar, and the settings page's two lines or the status card's one.
+ * the share used, the bar, and two lines, which the settings page's overview puts beside its heading and under its
+ * bar, or the status card's one.
  */
 export type QuotaRows = {
   /** The share used, or that the project has no limit. */

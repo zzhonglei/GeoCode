@@ -2,7 +2,6 @@ import React from 'react';
 
 import { Icon } from '@/components/icon/Icon';
 import { UsageProgressBar } from '@/components/sections/usage/UsageProgressBar';
-import { SettingsSection } from '@/components/sections/shared/SettingsSection';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/useUIStore';
@@ -59,17 +58,62 @@ export const GeeQuotaCard: React.FC<{ project: string; text: GeeText['quota'] }>
   );
 };
 
+/** The overview's quota line: what was used beside the heading, and when it resets under the bar, or why it is not known. */
+const stripOf = (rows: QuotaRows, text: GeeText['quota']) => {
+  if (rows.first.tone === 'error') {
+    const why = [rows.first.detail ?? rows.first.text, rows.second.text].filter(Boolean).join('\n');
+    return { value: rows.value, valueTone: rows.valueTone, line: rows.first.text, lineTone: rows.first.tone, title: why };
+  }
+  // A dashed bar alone does not say there is no limit.
+  const value = rows.bar.kind === 'unlimited' ? text.together(rows.first.text, rows.value) : rows.first.text;
+  return { value, valueTone: rows.first.tone, line: rows.second.text, lineTone: rows.second.tone, title: rows.second.text };
+};
+
+/** The heading, the hours used or the share, the bar and one line, the same rows in every state. */
+const Strip: React.FC<{
+  heading: string;
+  value: string;
+  valueTone: QuotaRows['valueTone'];
+  bar: QuotaRows['bar'];
+  line: string;
+  lineTone: QuotaRows['valueTone'];
+  title: string;
+  refresh?: React.ReactNode;
+}> = ({ heading, value, valueTone, bar, line, lineTone, title, refresh }) => (
+  <div className="border-t border-[var(--interactive-border)] px-4 pb-3 pt-2.5">
+    <div className="flex h-6 items-center gap-2">
+      <span className="typography-micro min-w-0 flex-1 truncate text-muted-foreground">{heading}</span>
+      <span className={cn('typography-meta truncate tabular-nums', TONE_CLASS[valueTone])} title={value}>{value}</span>
+      {refresh ?? <span aria-hidden className="size-6 shrink-0" />}
+    </div>
+    <QuotaBar bar={bar} className="mt-1.5" />
+    <p className={cn('typography-micro mt-1.5 h-4 truncate leading-4', TONE_CLASS[lineTone])} title={title || undefined}>
+      {/* A no-break space holds an empty line's height; a plain one would collapse. */}
+      {line || '\u00a0'}
+    </p>
+  </div>
+);
+
 /**
- * The settings page's last section: the same rows in every state, as the status card's, with two lines and a refresh
- * button; a refresh leaves the quota shown until the new one comes, and when none does.
+ * The bottom of the settings page's overview, in every state: the project's quota once Earth Engine is ready, with a
+ * refresh that leaves it shown until the new one comes, and when none does; the same rows, empty, before then.
  */
-export const GeeQuotaSection: React.FC<{ project: string; text: GeeText['quota'] }> = ({ project, text }) => {
+export const GeeQuotaStrip: React.FC<{ project: string | undefined; text: GeeText['quota'] }> = ({ project, text }) =>
+  project === undefined ? (
+    <Strip heading={text.heading} value="—" valueTone="muted" bar={{ kind: 'empty' }} line={text.notReady} lineTone="muted" title="" />
+  ) : (
+    <LiveStrip project={project} text={text} />
+  );
+
+const LiveStrip: React.FC<{ project: string; text: GeeText['quota'] }> = ({ project, text }) => {
   const rows = useQuotaRows(project, text);
   const refresh = useGeeQuota((state) => state.refresh);
   return (
-    <SettingsSection
-      title={text.heading}
-      titleAccessory={
+    <Strip
+      heading={text.heading}
+      bar={rows.bar}
+      {...stripOf(rows, text)}
+      refresh={(
         <Button
           size="icon"
           variant="ghost"
@@ -82,24 +126,7 @@ export const GeeQuotaSection: React.FC<{ project: string; text: GeeText['quota']
         >
           <Icon name="refresh" className={cn('size-3.5', rows.busy && 'animate-spin')} />
         </Button>
-      }
-      settingsItem="geo-environment.gee.quota"
-    >
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center gap-3.5">
-          <QuotaBar bar={rows.bar} className="min-w-0 flex-1" />
-          <span className={cn('typography-meta shrink-0 whitespace-nowrap tabular-nums', TONE_CLASS[rows.valueTone])}>
-            {rows.value}
-          </span>
-        </div>
-        <p className={cn('typography-meta truncate', TONE_CLASS[rows.first.tone])} title={rows.first.detail ?? rows.first.text}>
-          {rows.first.text}
-        </p>
-        <p className={cn('typography-micro truncate', TONE_CLASS[rows.second.tone])} title={rows.second.text || undefined}>
-          {/* A no-break space holds an empty line's height; a plain one would collapse. */}
-          {rows.second.text || ' '}
-        </p>
-      </div>
-    </SettingsSection>
+      )}
+    />
   );
 };

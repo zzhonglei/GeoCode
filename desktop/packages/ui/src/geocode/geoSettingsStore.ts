@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 
+import { useAgentsStore } from '@/stores/useAgentsStore';
+import { useUIStore } from '@/stores/useUIStore';
+
 type GeoDomain = 'qgis' | 'gee' | 'basemap';
 
 type GeoSettingsState = {
@@ -13,3 +16,9 @@ export const useGeoSettingsStore = create<GeoSettingsState>()((set) => ({
   requested: null,
   request: (requested) => set({ requested }),
 }));
+
+/** The tool permissions are each agent's own; GeoAgent's are the ones that matter for the geo tools. */
+export const openPermissions = () => {
+  useAgentsStore.getState().setSelectedAgent('geoagent');
+  useUIStore.getState().requestSettingsJump('agents', 'agents.permissions');
+};

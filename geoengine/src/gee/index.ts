@@ -17,7 +17,10 @@ const DOMAIN = "gee"
 /** The domain of GeoCode's Python environment, whose base GEE runs in. */
 const ENVIRONMENT_DOMAIN = "python"
 
-/** Generous: initializing and one minimal computation only have to finish, on a slow connection too. */
+/**
+ * Generous: initializing and one minimal computation only have to finish, on a slow connection too. The settings page
+ * names it in its words for a check that timed out (`check-timeout` in desktop/packages/ui/src/geocode/geeText.ts).
+ */
 const CHECK_TIMEOUT = "90 seconds"
 
 /** How long a run waits for a check in progress; longer than the check may take. */

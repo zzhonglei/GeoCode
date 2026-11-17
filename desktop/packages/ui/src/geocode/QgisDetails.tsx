@@ -1,7 +1,6 @@
 import React from 'react';
 
 import { Icon } from '@/components/icon/Icon';
-import type { IconName } from '@/components/icon/icons';
 import {
   SETTINGS_CARD_GRID_CLASS,
   SettingsAddCard,
@@ -14,15 +13,13 @@ import { SettingsPageLayout } from '@/components/sections/shared/SettingsPageLay
 import { SettingsSection } from '@/components/sections/shared/SettingsSection';
 import { toast } from '@/components/ui';
 import { Button } from '@/components/ui/button';
-import { useWaitingBlink } from '@/hooks/useDurationTicker';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
-import { copyTextToClipboard } from '@/lib/clipboard';
 import { useI18n } from '@/lib/i18n';
 import { openExternalUrl } from '@/lib/url';
 import { cn, getRevealLabelKey } from '@/lib/utils';
-import { useAgentsStore } from '@/stores/useAgentsStore';
-import { useUIStore } from '@/stores/useUIStore';
+import { CheckFrame, CheckSteps, OverviewBackdrop, Uses, Verdict, type StepMark, type Use } from './GeoDetailsParts';
 import { chooseQgis, fetchQgisInstalls, pickQgisApp, recheckQgis, type QgisInstall } from './geoEngineClient';
+import { openPermissions } from './geoSettingsStore';
 import { lightOf, type Light, type QgisView } from './geoStatus';
 import { QgisLogo } from './QgisLogo';
 import { codenameOf, diagnosticsOf, qgisText, releaseOf, type QgisText } from './qgisText';
@@ -137,7 +134,7 @@ export const QgisDetails: React.FC<{ status: QgisView | undefined; revision: num
           </Button>
         )}
       >
-        <Uses ready={light === 'ready'} text={text} />
+        <Uses uses={usesOf(text)} ready={light === 'ready'} colour="var(--status-success)" />
       </SettingsSection>
       <SettingsSection
         title={text.installsHeading}
@@ -185,47 +182,8 @@ export const QgisDetails: React.FC<{ status: QgisView | undefined; revision: num
   );
 };
 
-/** The tool permissions are each agent's own; GeoAgent's are the ones that matter for the geo tools. */
-const openPermissions = () => {
-  useAgentsStore.getState().setSelectedAgent('geoagent');
-  useUIStore.getState().requestSettingsJump('agents', 'agents.permissions');
-};
-
 const installTone = (light: Light | undefined): SettingsCardTone =>
   light === 'failed' ? 'error' : light === 'checking' ? 'warning' : light === 'ready' ? 'success' : 'neutral';
-
-const TINT = {
-  ready: 'var(--status-success)',
-  checking: 'var(--status-warning)',
-  failed: 'var(--status-error)',
-  idle: 'var(--muted-foreground)',
-} satisfies Record<Light, string>;
-
-/** Contour lines drawn behind the overview's right side; decoration only. */
-const CONTOURS = [0, 1, 2, 3, 4, 5, 6].map(
-  (i) => `M${40 - i * 4} ${200 - i * 6} C ${70 + i * 6} ${150 - i * 14}, ${110 + i * 4} ${170 - i * 18}, ${150 + i * 2} ${120 - i * 12} S ${230 - i * 3} ${60 - i * 6}, 300 ${50 - i * 9}`,
-);
-
-const Contours: React.FC<{ light: Light }> = ({ light }) => (
-  <div
-    aria-hidden
-    className="pointer-events-none absolute inset-y-0 end-0 w-[62%] overflow-hidden [mask-image:linear-gradient(to_left,#000_35%,transparent)]"
-  >
-    <svg
-      viewBox="0 0 300 220"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1"
-      className={cn('absolute -end-9 -top-11 h-[230px] w-[320px]', light === 'idle' ? 'opacity-20' : 'opacity-50')}
-      style={{ color: TINT[light] }}
-    >
-      {CONTOURS.map((d, i) => <path key={d} d={d} opacity={1 - i * 0.11} />)}
-      {[0, 1, 2].map((i) => (
-        <ellipse key={i} cx="225" cy="95" rx={26 + i * 18} ry={16 + i * 12} transform="rotate(-18 225 95)" opacity={0.9 - i * 0.25} />
-      ))}
-    </svg>
-  </div>
-);
 
 /** Where the overview's second line points: the QGIS in use, or the settings file when that cannot be read. */
 const locationOf = (status: QgisView | undefined) => {
@@ -262,12 +220,7 @@ const Overview: React.FC<{ status: QgisView | undefined; listedVersion: string |
   return (
     <div className="oc-tile overflow-hidden rounded-xl">
       <div className="relative overflow-hidden">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={unset ? undefined : { background: `radial-gradient(90% 120% at 0% 0%, color-mix(in srgb, ${TINT[light]} 9%, transparent), transparent 60%)` }}
-        />
-        <Contours light={light} />
+        <OverviewBackdrop light={light} ready="var(--status-success)" texture="contours" />
         <div className="relative flex items-center gap-3.5 p-4">
           <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-background)] ring-1 ring-[var(--interactive-border)] ring-inset">
             <QgisLogo className={cn('size-[26px]', unset && 'opacity-45 grayscale')} />
@@ -326,7 +279,7 @@ const Fact: React.FC<{ value: string | undefined; label: string }> = ({ value, l
   </div>
 );
 
-type Mark = 'done' | 'failed' | 'busy' | 'waiting' | 'skipped';
+type Mark = Extract<StepMark, 'done' | 'failed' | 'busy' | 'waiting' | 'skipped'>;
 
 /** The step a failure stops at, in the check's order: the app, Python, GDAL, the transform, QGIS's core, Processing. */
 const stopOf = (status: QgisView['status']): number | undefined => {
@@ -368,118 +321,27 @@ const stepsOf = (status: QgisView | undefined, text: QgisText): { mark: Mark; de
   });
 };
 
-const DOT_CLASS = {
-  done: 'border-[var(--status-success)] bg-[var(--status-success)] text-white',
-  failed: 'border-[var(--status-error)] bg-[var(--status-error)] text-white',
-  busy: 'border-[var(--status-warning)] bg-[var(--surface-background)] text-[var(--status-warning)]',
-  waiting: 'border-[var(--interactive-border-hover)] bg-[var(--surface-background)] text-muted-foreground',
-  skipped: 'border-dashed border-[var(--interactive-border-hover)] bg-[var(--surface-background)] text-muted-foreground',
-} satisfies Record<Mark, string>;
-
 /** The check as GeoEngine makes it, step by step, with what it found or why it stopped on the line under it. */
 const Check: React.FC<{ status: QgisView | undefined; text: QgisText }> = ({ status, text }) => {
-  const steps = stepsOf(status, text);
-  const blink = useWaitingBlink(status?.status === 'checking');
-  // How far along the line is green: up to the last step passed, or to the one that failed.
-  const reached = steps.reduce((last, step, i) => (step.mark === 'done' || step.mark === 'failed' ? i : last), 0);
-  const share = `${(reached / (steps.length - 1)) * 100}%`;
-
-  return (
-    <div className="rounded-xl border border-[var(--interactive-border)] px-4 pb-3 pt-4">
-      <ol className="relative grid grid-cols-1 @xl:grid-cols-6">
-        {/* The line through the dots: down their centres in a column, across them in a row. */}
-        <span aria-hidden className="absolute start-[12px] top-[19px] bottom-[19px] w-0.5 bg-[var(--interactive-border-hover)] @xl:hidden">
-          <span className="absolute inset-x-0 top-0 bg-[var(--status-success)]" style={{ height: share }} />
-        </span>
-        <span aria-hidden className="absolute start-[8.333%] end-[8.333%] top-[12px] hidden h-0.5 bg-[var(--interactive-border-hover)] @xl:block">
-          <span className="absolute inset-y-0 start-0 bg-[var(--status-success)]" style={{ width: share }} />
-        </span>
-        {steps.map((step, i) => (
-          <li
-            key={text.steps[i]}
-            className="relative grid grid-cols-[26px_1fr_auto] items-center gap-2.5 py-1.5 @xl:flex @xl:flex-col @xl:items-center @xl:gap-0 @xl:py-0 @xl:text-center"
-          >
-            <span className={cn('z-10 flex size-[26px] items-center justify-center rounded-full border-2 text-[11px] font-semibold', DOT_CLASS[step.mark], step.mark === 'busy' && blink)}>
-              {step.mark === 'done' ? <Icon name="check" className="size-3.5" /> : step.mark === 'failed' ? <Icon name="close" className="size-3.5" /> : i + 1}
-            </span>
-            <span
-              className={cn(
-                'typography-micro h-[18px] truncate font-semibold leading-[18px] @xl:mt-2',
-                step.mark === 'failed' ? 'text-[var(--status-error)]' : step.mark === 'skipped' || step.mark === 'waiting' ? 'text-muted-foreground' : 'text-foreground',
-              )}
-            >
-              {text.steps[i]}
-            </span>
-            <span className="h-4 max-w-full truncate text-[11px] leading-4 text-muted-foreground @xl:mt-0.5" title={step.detail}>{step.detail}</span>
-          </li>
-        ))}
-      </ol>
-      <Verdict status={status} text={text} />
-    </div>
-  );
-};
-
-/** The check's outcome in a line of the interface's language, two lines' room whatever it says. */
-const Verdict: React.FC<{ status: QgisView | undefined; text: QgisText }> = ({ status, text }) => {
-  const [expanded, setExpanded] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
+  const steps = stepsOf(status, text).map((step, i) => ({ ...step, name: text.steps[i] }));
   const shown = status?.status ?? 'unconfigured';
   const fault = shown === 'ready' || shown === 'checking' || shown === 'unconfigured' ? undefined : shown;
-  const icon: { name: IconName; className: string } = fault
-    ? { name: 'error-warning', className: 'text-[var(--status-error)]' }
-    : shown === 'ready'
-      ? { name: 'checkbox-circle', className: 'text-[var(--status-success)]' }
-      : shown === 'checking'
-        ? { name: 'loader-4', className: 'animate-spin text-[var(--status-warning)]' }
-        : { name: 'information', className: 'text-muted-foreground' };
+  const kind = fault ? 'failed' : shown === 'ready' ? 'ready' : shown === 'checking' ? 'checking' : 'idle';
   const line = fault ? text.explain[fault] : shown === 'ready' ? text.verdicts.ready : shown === 'checking' ? text.verdicts.checking : text.verdicts.idle;
-  const diagnostics = status && fault ? diagnosticsOf(status) : '';
-
   return (
-    <>
-      <div className="mt-4 flex h-[51px] items-center gap-2.5 border-t border-[var(--interactive-border)] pt-3">
-        <Icon name={icon.name} className={cn('size-[18px] shrink-0', icon.className)} aria-hidden />
-        <p className="typography-meta line-clamp-2 min-w-0 flex-1 text-foreground">{line}</p>
-        {fault ? (
-          <div className="flex shrink-0 items-center gap-0.5">
-            <Button variant="ghost" size="xs" className="text-muted-foreground" aria-expanded={expanded} onClick={() => setExpanded((open) => !open)}>
-              {text.details}
-            </Button>
-            <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => { void copyTextToClipboard(diagnostics).then((outcome) => setCopied(outcome.ok)); }}>
-              {copied ? text.copied : text.copy}
-            </Button>
-          </div>
-        ) : null}
-      </div>
-      {fault && expanded ? (
-        <pre className="typography-micro mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md bg-[var(--surface-muted)] p-2 font-mono text-foreground">{diagnostics}</pre>
-      ) : null}
-    </>
+    <CheckFrame>
+      <CheckSteps steps={steps} columns={6} />
+      <Verdict kind={kind} line={line} diagnostics={status && fault ? diagnosticsOf(status) : ''} text={text} />
+    </CheckFrame>
   );
 };
 
-const USES = [
-  { key: 'read', icon: 'file-search', tool: 'readgeodata' },
-  { key: 'lookup', icon: 'book-open', tool: 'qgisdoc' },
-  { key: 'run', icon: 'play', tool: 'qgisrun' },
-] as const;
-
-/** What the agent does with QGIS, one tile for each of its tools, faded while QGIS cannot be used. */
-const Uses: React.FC<{ ready: boolean; text: QgisText }> = ({ ready, text }) => (
-  <div className="grid grid-cols-1 gap-2.5 @xl:grid-cols-3">
-    {USES.map((use) => (
-      <div key={use.key} title={use.tool} className={cn('oc-tile min-w-0 rounded-xl p-3.5 transition-opacity', !ready && 'opacity-55')}>
-        <div className="flex items-center gap-2.5">
-          <span className="oc-tile-inset flex size-8 shrink-0 items-center justify-center rounded-[9px] text-[var(--status-success)]">
-            <Icon name={use.icon} className="size-[17px]" />
-          </span>
-          <span className="typography-ui-label truncate font-semibold text-foreground">{text.uses[use.key].name}</span>
-        </div>
-        <p className="typography-micro mt-2 truncate text-muted-foreground">{text.uses[use.key].text}</p>
-      </div>
-    ))}
-  </div>
-);
+/** What the agent does with QGIS, one tile for each of its tools. */
+const usesOf = (text: QgisText): Use[] => [
+  { key: 'read', icon: 'file-search', tool: 'readgeodata', ...text.uses.read },
+  { key: 'lookup', icon: 'book-open', tool: 'qgisdoc', ...text.uses.lookup },
+  { key: 'run', icon: 'play', tool: 'qgisrun', ...text.uses.run },
+];
 
 /** No QGIS on this computer: as tall as a row of cards, with the way to get one and the way to choose one elsewhere. */
 const Nothing: React.FC<{ text: QgisText; locked: boolean; onChoose: () => void }> = ({ text, locked, onChoose }) => (

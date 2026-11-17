@@ -180,6 +180,8 @@ const geeDiagnosticsSchema = z.object({
   project: z.string().optional(),
   refusal: z.enum(GEE_REFUSALS).optional(),
   said: z.string().optional(),
+  /** The HTTP status of Earth Engine answering that it is failing or busy. */
+  status: z.number().optional(),
   output: z.string().optional(),
   traceback: z.string().optional(),
 });
