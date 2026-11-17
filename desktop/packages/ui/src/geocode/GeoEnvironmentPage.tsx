@@ -11,7 +11,7 @@ import { GeeLogo } from './GeeLogo';
 import { geeText } from './geeText';
 import { useGeoStatuses } from './geoEngineClient';
 import { useGeoSettingsStore } from './geoSettingsStore';
-import { basemapStatusOf, geeStatusOf, lightOf, qgisStatusOf, type BasemapStatus, type Light, type QgisView } from './geoStatus';
+import { basemapLightOf, basemapStatusOf, geeStatusOf, lightOf, qgisStatusOf, type QgisView } from './geoStatus';
 import { LightPill, QgisDetails } from './QgisDetails';
 import { QgisLogo } from './QgisLogo';
 import { qgisText, releaseOf, type QgisText } from './qgisText';
@@ -25,10 +25,6 @@ const CardLine: React.FC<{ children?: string }> = ({ children }) => (
 /** The QGIS a card names: its release and how many algorithms it offers, once it is ready. */
 const qgisLineOf = (status: QgisView | undefined, text: QgisText) =>
   status?.status === 'ready' ? `${releaseOf(status.versions.qgis)} · ${text.algorithms(status.algorithms)}` : undefined;
-
-/** A basemap that cannot be drawn as chosen: a block written wrong, or the offline one without its files. */
-const basemapLightOf = (status: BasemapStatus | undefined): Light | undefined =>
-  status && (status.invalid !== undefined || (status.source === 'offline' && !status.available)) ? 'failed' : undefined;
 
 export const GeoEnvironmentPage: React.FC = () => {
   const { locale } = useI18n();

@@ -238,6 +238,24 @@ export const basemapStatusOf = (statuses: GeoStatuses): BasemapStatus | undefine
 
 export type Light = 'ready' | 'checking' | 'idle' | 'failed';
 
+/** Why no basemap is drawn: the block is written wrong, the offline basemap's files are missing, its tiles do not load. */
+export type BasemapFault = 'invalid' | 'missing' | 'unreachable';
+
+/**
+ * What keeps the settings' basemap from being drawn. GeoEngine tells of the first two; that the tiles of an online one
+ * cannot be loaded is found only by a map trying, as the basemap's settings page does.
+ */
+export const basemapFaultOf = (status: BasemapStatus | undefined, unreachable: boolean): BasemapFault | undefined => {
+  if (!status) return undefined;
+  if (status.invalid !== undefined) return 'invalid';
+  if (status.source === 'offline' && !status.available) return 'missing';
+  return unreachable && status.source !== 'none' && status.source !== 'offline' ? 'unreachable' : undefined;
+};
+
+/** A basemap that GeoEngine says cannot be drawn as chosen, for its card in the overview. */
+export const basemapLightOf = (status: BasemapStatus | undefined): Light | undefined =>
+  basemapFaultOf(status, false) ? 'failed' : undefined;
+
 export const DOT_CLASS = {
   ready: 'bg-[var(--status-success)]',
   // Blinks while checking, through useWaitingBlink where it is shown.

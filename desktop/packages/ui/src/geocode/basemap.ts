@@ -1,5 +1,6 @@
 import React from 'react';
-import { addProtocol, type StyleSpecification } from 'maplibre-gl';
+import { addProtocol, setWorkerUrl, type StyleSpecification } from 'maplibre-gl';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 
 import { useOptionalThemeSystem } from '@/contexts/useThemeSystem';
 import { useI18n } from '@/lib/i18n';
@@ -7,6 +8,9 @@ import { BASEMAP_SCHEME, readBasemapResource, readBasemapStyle, type BasemapThem
 import { useGeoStatuses } from './geoEngineClient';
 import { basemapStatusOf } from './geoStatus';
 import { toGeoCodeLocale } from './languages';
+
+// Here, as every map of the app draws a basemap and so imports this module: the file preview's and the settings'.
+setWorkerUrl(workerUrl);
 
 // The icons' index is asked for as JSON, the rest as bytes.
 addProtocol(BASEMAP_SCHEME, async (parameters, abortController) => {
