@@ -187,7 +187,7 @@ test(
 )
 
 test(
-  "on Windows the environment's folders come first in PATH, and its certificates stand in for the user's empty ones",
+  "on Windows the environment's folders come first in PATH, the working environment's before the base's, and its certificates stand in for the user's empty ones",
   { skip: !python3 },
   async () => {
     const directory = await temporary()
@@ -195,37 +195,50 @@ test(
       const where = Environment.layout(path.join(directory, "data"))
       await settle(directory, await bundle(directory, "one"))
       const module = path.join(where.stdlib("3.13.16"), "site-packages", "_geocode_environment.py")
-      // The written module run as on Windows: Windows's paths, and a base of its own.
+      // The written module run as on Windows: Windows's paths, and a base of its own, from the Python at prefix.
       const base = "C:\\Users\\me\\.local\\share\\geocode\\python\\base"
-      const script = [
-        "import json, ntpath, os, sys",
-        'sys.platform = "win32"',
-        "os.path = ntpath",
-        'os.pathsep = ";"',
-        `sys.base_prefix = ${JSON.stringify(base)}`,
-        `exec(open(${JSON.stringify(module)}, encoding="utf-8").read(), {"__name__": "_geocode_environment"})`,
-        'print(json.dumps({name: os.environ.get(name) for name in ["PATH", "SSL_CERT_FILE", "SSL_CERT_DIR"]}))',
-      ].join("\n")
+      const run = (prefix: string, PATH: string) =>
+        JSON.parse(
+          execFileSync(
+            python3!,
+            [
+              "-I",
+              "-c",
+              [
+                "import json, ntpath, os, sys",
+                'sys.platform = "win32"',
+                "os.path = ntpath",
+                'os.pathsep = ";"',
+                `sys.base_prefix = ${JSON.stringify(base)}`,
+                `sys.prefix = ${JSON.stringify(prefix)}`,
+                `exec(open(${JSON.stringify(module)}, encoding="utf-8").read(), {"__name__": "_geocode_environment"})`,
+                'print(json.dumps({name: os.environ.get(name) for name in ["PATH", "SSL_CERT_FILE", "SSL_CERT_DIR"]}))',
+              ].join("\n"),
+            ],
+            { encoding: "utf-8", env: { PATH, SSL_CERT_FILE: "", SSL_CERT_DIR: "C:\\the user's\\certs" } },
+          ),
+        )
       const library = path.win32.join(base, "Library")
+      const folders = [
+        base,
+        path.win32.join(library, "mingw-w64", "bin"),
+        path.win32.join(library, "usr", "bin"),
+        path.win32.join(library, "bin"),
+        path.win32.join(base, "Scripts"),
+        path.win32.join(base, "bin"),
+      ]
       const user = "C:\\Program Files\\QGIS\\bin"
-      const output = execFileSync(python3!, ["-I", "-c", script], {
-        encoding: "utf-8",
-        // The base already in PATH, as a Python started from another of the environment leaves it.
-        env: { PATH: [base, user].join(";"), SSL_CERT_FILE: "", SSL_CERT_DIR: "C:\\the user's\\certs" },
-      })
-      assert.deepEqual(JSON.parse(output), {
-        PATH: [
-          base,
-          path.win32.join(library, "mingw-w64", "bin"),
-          path.win32.join(library, "usr", "bin"),
-          path.win32.join(library, "bin"),
-          path.win32.join(base, "Scripts"),
-          path.win32.join(base, "bin"),
-          user,
-        ].join(";"),
+      // The base already in PATH, as a Python started from another of the environment leaves it.
+      assert.deepEqual(run(base, [base, user].join(";")), {
+        PATH: [...folders, user].join(";"),
         SSL_CERT_FILE: path.win32.join(library, "ssl", "cacert.pem"),
         SSL_CERT_DIR: "C:\\the user's\\certs",
       })
+      // Guards against the base's folders going before the working environment's, as its activated shell has them:
+      // a pip or python a script runs would be the base's.
+      const scripts = path.win32.join(path.win32.dirname(base), "envs", "default", "Scripts")
+      const activated = run(path.win32.dirname(scripts), [scripts, ...folders, user].join(";"))
+      assert.equal(activated.PATH, [scripts, ...folders, user].join(";"))
     } finally {
       await fs.rm(directory, { recursive: true, force: true })
     }

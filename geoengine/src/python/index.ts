@@ -128,7 +128,10 @@ def _set_variables():
         if not os.environ.get(name):
             os.environ[name] = value
     if _WINDOWS:
-        first = _folders()
+        # A working environment's programs before the base's, as its activated shell has them: else a pip or python
+        # that a script runs is the base's.
+        own = [os.path.join(sys.prefix, "Scripts")] if sys.prefix != sys.base_prefix else []
+        first = own + _folders()
         rest = [folder for folder in os.environ.get("PATH", "").split(os.pathsep) if folder and folder not in first]
         os.environ["PATH"] = os.pathsep.join(first + rest)
 
