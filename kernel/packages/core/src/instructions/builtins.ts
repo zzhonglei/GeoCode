@@ -40,6 +40,11 @@ const layer = Layer.effect(
                   `  Workspace root folder: ${location.project.directory}`,
                   `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
                   `  Platform: ${process.platform}`,
+                  // --- GeoCode: the Python environment its shell runs (geocode/shell.ts), at the versions of
+                  // geoengine/environment/pixi.toml ---
+                  "  Python environment: GeoCode's own, Python 3.13 with common geospatial packages",
+                  "  GDAL: 3.13, bundled with GeoCode, in that environment and on the shell's PATH",
+                  // --- /GeoCode ---
                   `  Prefer ${global.tmp} over generic system temporary directories such as /tmp; it is pre-created and approved for external access.`,
                   "</env>",
                 ].join("\n"),
