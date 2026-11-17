@@ -79,6 +79,7 @@ const memoryTitleLines = (entries) => entries
  * tool description alone is read only when the agent already means to call it,
  * so agents told nothing here saved only when the user said "remember".
  */
+/* --- GeoCode: memory holds what the user chose to keep; GeoCode's version below ---
 const MEMORY_SAVE_GUIDANCE = 'The geocode_memory tool keeps memory across sessions. Save to it in the' // GeoCode: the tool's name in GeoCode, also in buildMemoryBlock
   + ' moment, without asking, when the user corrects how you work or states a'
   + ' preference (a coordinate system, a map style, a data source), confirms a non-obvious approach worked, or you learn a project fact' // GeoCode: the preferences geographic work has
@@ -89,6 +90,20 @@ const MEMORY_SAVE_GUIDANCE = 'The geocode_memory tool keeps memory across sessio
   + ' commit records needs no entry. Save before your final reply and'
   + ' mention the save there briefly: the app shows only the text after a turn\'s last'
   + ' tool call as the reply.';
+*/
+// An agent proposes and the user decides, so the store does not pile up what no one chose to keep. Without
+// guidance here, an agent proposes nothing; the tool's description repeats the rule for an agent about to save.
+const MEMORY_SAVE_GUIDANCE = 'The geocode_memory tool keeps memory across sessions, and it holds only what the user chose to keep.'
+  + ' When you come across something a later session would want to know and could not easily find out again'
+  + " (the user's preferences and corrections, a decision and why it was made, something that took real effort to learn),"
+  + ' propose saving it in one line at the end of your reply, with the title you would use, and save it once the user agrees.'
+  + ' Propose only what is clearly worth keeping, at most one entry per reply, and never again one the user declined.'
+  + ' What the user asks you to remember, save without asking.'
+  + " What the project's files show at a glance needs no entry, nor a decision still under discussion."
+  + ' Before saving, check the index and update an entry that already covers it rather than adding another.'
+  + ' Save before your final reply and mention the save there briefly: the app shows only the text after a'
+  + " turn's last tool call as the reply.";
+// --- /GeoCode ---
 
 /**
  * When to link, stated in every session that has the `openchamber` tool, and
