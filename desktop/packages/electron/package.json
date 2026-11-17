@@ -169,6 +169,7 @@
     "npmRebuild": false,
     "mac": {
       "category": "public.app-category.developer-tools",
+      "minimumSystemVersion": "13.3",
       "icon": "resources/icons/icon.icns",
       "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "extendInfo": {

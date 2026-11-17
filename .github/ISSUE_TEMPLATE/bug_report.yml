@@ -48,7 +48,7 @@ body:
     id: system
     attributes:
       label: System
-      description: GeoCode runs on macOS 13 or later on Apple silicon, and on 64-bit Windows.
+      description: GeoCode runs on macOS 13.3 or later on Apple silicon, and on 64-bit Windows.
       options:
         - macOS
         - Windows

@@ -86,7 +86,13 @@ DEFINED=$(node -e '
   const [lock, platform, unpack, install] = process.argv.slice(1)
   // Without carriage returns, which a Windows checkout may add, so the id is the same there.
   const read = (file) => fs.readFileSync(file, "utf-8").replace(/\r/g, "")
-  const section = read(lock).match(new RegExp(`^      ${platform}:\\n((?:      - .*\\n)+)`, "m"))
+  const text = read(lock)
+  // By the name pixi.lock gives the platform: one with system requirements of its own is named for them, as
+  // osx-arm64-macos-13-3, with its subdir beside the name.
+  const platforms = [...text.split("\npackages:")[0].matchAll(/^- name: (\S+)\n(?:  subdir: (\S+)\n)?/gm)]
+  const named = platforms.find((entry) => (entry[2] ?? entry[1]) === platform)?.[1]
+  if (!named) throw new Error(`pixi.lock has no platform for ${platform}`)
+  const section = text.match(new RegExp(`^      ${named}:\\n((?:      - .*\\n)+)`, "m"))
   if (!section) throw new Error(`pixi.lock has no packages for ${platform}`)
   const packages = section[1].split("\n").filter(Boolean).map((line) => line.trim()).sort()
   const python = packages.map((line) => line.match(/\/python-(\d+\.\d+\.\d+)-[^/]*\.conda$/)).find(Boolean)

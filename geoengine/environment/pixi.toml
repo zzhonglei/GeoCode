@@ -6,6 +6,12 @@ name = "geocode-python"
 channels = ["conda-forge"]
 platforms = ["osx-arm64", "win-64"]
 
+# GeoCode's oldest macOS, which the app declares as mac.minimumSystemVersion in desktop/packages/electron/package.json.
+# Solved for an older one, GDAL's PostgreSQL plugins fall back to builds for another GDAL, which none loads: the libpq
+# of theirs needs 13.3.
+[system-requirements]
+macos = "13.3"
+
 [dependencies]
 python = "3.13.*"
 pip = "*"
@@ -37,10 +43,19 @@ shapely = "*"
 pyproj = "*"
 pyogrio = "*"
 rasterio = "*"
+# GDAL's other Python interface, much used in scripts. Named here, not left to rasterstats, which happens to bring it:
+# PyPI's fiona carries a GDAL and a PROJ of its own, which GeoAgent would install beside these if it were gone.
+fiona = "*"
+# HDF5 files, as many remote sensing products are, on the HDF5 library GDAL and netCDF4 already use. PyPI's h5py carries
+# a library of its own.
+h5py = "*"
 # Zonal statistics of a raster over vector features.
 rasterstats = "*"
 rioxarray = "*"
 xarray = "*"
+# Rasters larger than memory, in chunks and in parallel, through xarray and rioxarray. The core alone, without the
+# distributed scheduler and its dashboard.
+dask-core = "*"
 netcdf4 = "*"
 numpy = "*"
 pandas = "*"

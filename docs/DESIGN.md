@@ -6,7 +6,7 @@
 
 GeoCode 是面向地理数据处理任务的桌面端智能体应用。用户用自然语言描述地理任务,内置的 GeoAgent 调用 QGIS、GDAL、Google Earth Engine 与 OpenStreetMap 等工具或者 Python 代码,完成各种 GIS 与遥感数据的处理分析。
 
-GeoCode 只做桌面应用,支持 Apple 芯片的 macOS 13 以上与 Windows(x64)。macOS 的下限来自内核:以 Bun 编译的内核可执行文件要求 macOS 13。
+GeoCode 只做桌面应用,支持 Apple 芯片的 macOS 13.3 以上与 Windows(x64)。macOS 的下限来自两处:以 Bun 编译的内核可执行文件要求 macOS 13,内置 Python 环境里 GDAL 读写 PostgreSQL 所用的 libpq 要求 13.3。
 
 ## 2. 整体架构
 
