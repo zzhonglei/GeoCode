@@ -18,6 +18,7 @@ import { OsmSearchTool } from "./osmsearch.js"
 import { QgisDocTool } from "./qgisdoc.js"
 import { QgisRunTool } from "./qgisrun.js"
 import { ReadGeodataTool } from "./readgeodata.js"
+import { GeoShell } from "./shell.js"
 
 /** The namespace OpenCode gives the tools that manage the app itself, such as `session_rename`. */
 const upstream = "opencode"
@@ -56,7 +57,8 @@ export const Namespace = {
 /**
  * GeoCode's geo tools, built in as OpenCode's own tools are: each asks the kernel's permission rules itself and then
  * has GeoEngine do the work. One plugin holds them all, so the upstream list registers it once. The interface knows
- * them by name, in desktop/packages/ui/src/geocode/geoTools.ts.
+ * them by name, in desktop/packages/ui/src/geocode/geoTools.ts. It also has the shell run GeoEngine's Python
+ * environment, as GeoShell does.
  */
 export const Plugin = {
   id: "geocode.tools",
@@ -83,6 +85,7 @@ export const Plugin = {
         editor.add(OsmGetTools.makeFeatures(permission, access, location))
       })
       .pipe(Effect.orDie)
+    yield* ctx.shell.hook("create.before", GeoShell.make())
     // Where the rules allow qgisrun, an OSM download or a geo tool's read, a call outside the project, among others,
     // still asks.
     yield* ctx.permission.hook("evaluate", (event) =>

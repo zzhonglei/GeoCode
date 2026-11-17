@@ -62,12 +62,12 @@
 ```
 ~/.local/share/geocode/python/
 ├── base/                 环境本体,第一次启动时从应用里安装;GeoEngine 往里写自己的启动文件、Python 包 geocodekit 与「不要用 pip 改这里」的标记(见 PYTHON.md 第 2.2 节)
-├── envs/default/         工作环境,GeoAgent 装的包在这里
+├── envs/default/         工作环境,GeoAgent 装的包在这里;GeoEngine 往里写 pip 的配置(pip.conf,Windows 上是 pip.ini)与锁住 base 里各包版本的 constraints.txt(见 PYTHON.md 第 2.2 节)
 ├── base.json             装好的环境的标识,与应用自带的不同时重新安装
 └── proj/                 PROJ 下载的坐标转换网格的缓存(见 PYTHON.md 第 2.5 节)
 ```
 
-每次启动只检查环境,第一次安装、应用自带的环境变了或工作环境缺失时才写。安装期间解开的包与装好的环境同时在,占用约 2.3 GB。Python 第一次导入模块时在各包旁边写 `__pycache__/`。
+每次启动检查环境,第一次安装、应用自带的环境变了,或工作环境缺失、不完整(如没有自己的 pip)时才装。工作环境里 pip 的配置与约束内容变了才重写;只删掉 constraints.txt 时,到下次启动重写之前,工作环境里的 pip 会因找不到约束文件而拒绝运行。安装期间解开的包与装好的环境同时在,占用约 2.3 GB。Python 第一次导入模块时在各包旁边写 `__pycache__/`。
 
 ### 3.3 应用的设置与状态
 

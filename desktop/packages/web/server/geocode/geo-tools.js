@@ -2,8 +2,10 @@ import express from 'express';
 
 export const GEO_TOOL_PATH = '/api/geocode/geo-tool';
 
-// The GeoEngine methods the kernel's geo tools call; nothing else reaches GeoEngine this way.
+// The GeoEngine methods the kernel calls, for its geo tools and to activate GeoAgent's shell (python.activation, in
+// kernel/packages/core/src/geocode/shell.ts); nothing else reaches GeoEngine this way.
 const TOOL_METHODS = new Set([
+  'python.activation',
   'qgis.doc',
   'qgis.read',
   'qgis.locate',

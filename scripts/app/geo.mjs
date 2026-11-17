@@ -1,5 +1,6 @@
 // The packaged app's geo tools in a fresh sandbox, as GeoAgent would call them in one turn: readgeodata and qgisdoc
-// on a small GeoJSON, the QGIS manual through webfetch, and qgisrun writing its centroids, on the QGIS given; with
+// on a small GeoJSON, the QGIS manual through webfetch, qgisrun writing its centroids, on the QGIS given, and a shell
+// command finding GeoCode's Python environment activated; with
 // --gee, geerun on that Cloud project, at once and in the background, which uses the user's Earth Engine credentials
 // (a copy, in the sandbox) and quota. Each call must give back what the tool is for, and the app must quit leaving
 // nothing running and write in no other product's folders. The first start installs GeoCode's Python environment in
@@ -88,6 +89,13 @@ const CALLS = [
       parameters: { INPUT: 'data/cells.geojson', OUTPUT: 'data/centroids.geojson' },
     },
     // Judged by how the run ended and the file it wrote, below.
+  },
+  {
+    // GeoAgent's shell runs GeoCode's working environment, and GDAL's commands load every driver plugin it has: one
+    // built for another GDAL prints an error at each command.
+    name: 'shell',
+    arguments: { command: 'python -c "import sys; print(sys.prefix)" && gdalinfo --formats 2>&1 | grep -iE "netcdf|error"' },
+    gives: /^(?![\s\S]*ERROR)[\s\S]*\.local\/share\/geocode\/python\/envs\/default\n[\s\S]*netCDF/,
   },
   ...(gee
     ? [

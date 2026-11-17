@@ -61,6 +61,8 @@ export const bundle = async (
       `{ echo "PYTHON $*"; env; echo END; } > "$(mktemp '${notes}/call.XXXXXX')"`,
       ...(options.slowWarm
         ? [
+            // The script that describes the environment imports too, but is no warm-up.
+            `case "$*" in *importlib.metadata*) exec '${python3}' "$@" ;; esac`,
             `case "$*" in *"-c import "*)`,
             `  mkdir '${path.join(directory, "running")}'.$$; sleep 1`,
             `  ls -d '${path.join(directory, "running")}'.* | wc -l >> '${path.join(directory, "overlap")}'`,

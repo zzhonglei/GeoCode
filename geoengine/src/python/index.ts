@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto"
 import fs from "node:fs"
 import fsp from "node:fs/promises"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { Data, type Duration, Effect, Exit, Schema } from "effect"
 import { Bundled } from "../bundled.ts"
 import type { Engine } from "../engine.ts"
@@ -76,31 +77,79 @@ import sys
 _LOOPBACK = ("localhost", "127.0.0.1", "::1", "[::1]")
 
 
-def _set_variables():
+_WINDOWS = sys.platform == "win32"
+
+
+def _library():
+    return os.path.join(sys.base_prefix, "Library") if _WINDOWS else sys.base_prefix
+
+
+def _variables():
     base = sys.base_prefix
-    library = os.path.join(base, "Library") if sys.platform == "win32" else base
-    os.environ["GDAL_DATA"] = os.path.join(library, "share", "gdal")
-    os.environ["GDAL_DRIVER_PATH"] = os.path.join(library, "lib", "gdalplugins")
-    os.environ["PROJ_DATA"] = os.path.join(library, "share", "proj")
-    # As conda's activation turns it on without the grids installed: a transformation that needs one fetches what it
-    # uses, kept beside the base environment rather than in the user's folders.
-    os.environ["PROJ_NETWORK"] = "ON"
-    os.environ["PROJ_USER_WRITABLE_DIRECTORY"] = os.path.join(os.path.dirname(base), "proj")
-    # A file that is never there, read in place of the user's ~/.gdal/gdalrc.
-    os.environ["GDAL_CONFIG_FILE"] = os.path.join(base, "gdalrc")
-    if sys.platform == "win32":
-        # OpenSSL on Windows finds no certificates of its own; the user's, when given, are kept.
-        for name, value in [
-            ("SSL_CERT_FILE", os.path.join(library, "ssl", "cacert.pem")),
-            ("SSL_CERT_DIR", os.path.join(library, "ssl", "certs")),
-        ]:
-            if not os.environ.get(name):
-                os.environ[name] = value
-        # First the folders conda's activation puts first, for the DLLs of the environment and the programs it starts.
-        first = [base] + [os.path.join(library, folder, "bin") for folder in ("mingw-w64", "usr", "")]
-        first += [os.path.join(base, "Scripts"), os.path.join(base, "bin")]
+    library = _library()
+    return {
+        "GDAL_DATA": os.path.join(library, "share", "gdal"),
+        "GDAL_DRIVER_PATH": os.path.join(library, "lib", "gdalplugins"),
+        "PROJ_DATA": os.path.join(library, "share", "proj"),
+        # As conda's activation turns it on without the grids installed: a transformation that needs one fetches what
+        # it uses, kept beside the base environment rather than in the user's folders.
+        "PROJ_NETWORK": "ON",
+        "PROJ_USER_WRITABLE_DIRECTORY": os.path.join(os.path.dirname(base), "proj"),
+        # A file that is never there, read in place of the user's ~/.gdal/gdalrc.
+        "GDAL_CONFIG_FILE": os.path.join(base, "gdalrc"),
+    }
+
+
+# OpenSSL on Windows finds no certificates of its own; the user's, when given, are kept.
+def _certificates():
+    if not _WINDOWS:
+        return {}
+    return {
+        "SSL_CERT_FILE": os.path.join(_library(), "ssl", "cacert.pem"),
+        "SSL_CERT_DIR": os.path.join(_library(), "ssl", "certs"),
+    }
+
+
+# The folders conda's activation puts first in PATH, for the programs of the environment and the DLLs they load.
+def _folders():
+    base = sys.base_prefix
+    if not _WINDOWS:
+        return [os.path.join(base, "bin")]
+    library = _library()
+    return [base] + [os.path.join(library, folder, "bin") for folder in ("mingw-w64", "usr", "")] + [
+        os.path.join(base, "Scripts"),
+        os.path.join(base, "bin"),
+    ]
+
+
+def _set_variables():
+    os.environ.update(_variables())
+    for name, value in _certificates().items():
+        if not os.environ.get(name):
+            os.environ[name] = value
+    if _WINDOWS:
+        first = _folders()
         rest = [folder for folder in os.environ.get("PATH", "").split(os.pathsep) if folder and folder not in first]
         os.environ["PATH"] = os.pathsep.join(first + rest)
+
+
+def shell(environment):
+    """What a shell needs to run the commands of the working environment at \`environment\` as an activated conda
+    environment's: its folders first in PATH, the variables to set, those set only where the user has none, and those
+    to take away, which would lead its Python to other packages."""
+    scripts = os.path.join(environment, "Scripts" if _WINDOWS else "bin")
+    variables = _variables()
+    # As this Python leaves out the user's site-packages when GeoEngine runs it isolated.
+    variables["PYTHONNOUSERSITE"] = "1"
+    if _WINDOWS:
+        # As GeoEngine runs it, rather than in the code page of the system.
+        variables["PYTHONUTF8"] = "1"
+    return {
+        "path": [scripts] + _folders(),
+        "set": variables,
+        "fallback": _certificates(),
+        "remove": ["PYTHONPATH", "PYTHONHOME"],
+    }
 
 
 def _arrange_proxy():
@@ -177,6 +226,42 @@ const STARTUP_MODULE = "_geocode_environment"
 
 const STARTUP_PTH = `import ${STARTUP_MODULE}\n`
 
+/**
+ * Run by the base's interpreter with the startup module's file, the base's site-packages and the working environment:
+ * prints what a shell needs to run the working environment, from the startup module, which sets the same variables, and
+ * the packages installed in the base. Loaded by its file and listed by that folder, not from wherever the interpreter
+ * finds them.
+ */
+const DESCRIBE = `import importlib.metadata, importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("${STARTUP_MODULE}", sys.argv[1])
+environment = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(environment)
+packages = {}
+for found in importlib.metadata.distributions(path=[sys.argv[2]]):
+    if found.metadata["Name"]:
+        packages[found.metadata["Name"]] = found.version
+print(json.dumps({"shell": environment.shell(sys.argv[3]), "packages": packages}))
+`
+
+const DESCRIBE_TIMEOUT = "1 minute"
+
+/**
+ * What a shell needs to run the working environment's commands, as the startup module's `shell` gives it: folders to
+ * put first in PATH, variables to set, variables to set only where the user has none, and variables to take away. The
+ * kernel, which reads it as `python.activation`, keeps a copy as `Activation` in kernel/packages/core/src/geocode/shell.ts.
+ */
+export const Activation = Schema.Struct({
+  path: Schema.Array(Schema.String),
+  set: Schema.Record(Schema.String, Schema.String),
+  fallback: Schema.Record(Schema.String, Schema.String),
+  remove: Schema.Array(Schema.String),
+})
+export type Activation = typeof Activation.Type
+
+const Description = Schema.Struct({ shell: Activation, packages: Schema.Record(Schema.String, Schema.String) })
+
+const decodeDescription = Schema.decodeUnknownExit(Schema.fromJsonString(Description))
+
 /** pip and uv refuse to install into the base environment (PEP 668). */
 const EXTERNALLY_MANAGED =
   "[externally-managed]\nError=No packages can be installed into GeoCode's base Python environment.\n"
@@ -238,6 +323,11 @@ export const layout = (data: string) => {
     marker: path.join(root, "base.json"),
     basePython: WINDOWS ? path.join(base, "python.exe") : path.join(base, "bin", "python3"),
     envPython: WINDOWS ? path.join(env, "Scripts", "python.exe") : path.join(env, "bin", "python"),
+    envPip: WINDOWS ? path.join(env, "Scripts", "pip.exe") : path.join(env, "bin", "pip"),
+    /** pip's configuration for the working environment alone, by the name pip reads there. */
+    pipConfig: path.join(env, WINDOWS ? "pip.ini" : "pip.conf"),
+    /** The base environment's packages at their versions, which pip may not replace in the working environment. */
+    constraints: path.join(env, "constraints.txt"),
     /** The base environment's standard library, for its Python version, such as 3.13.17. */
     stdlib: (version: string) =>
       WINDOWS ? path.join(base, "Lib") : path.join(base, "lib", `python${version.split(".").slice(0, 2).join(".")}`),
@@ -323,13 +413,35 @@ export const capability = (places: Places): Engine.Capability =>
       Effect.gen(function* () {
         yield* writer.commit(token, { status: "preparing", step: "creating" })
         yield* attempt("environment", () => fsp.rm(where.env, { recursive: true, force: true }))
-        // Without pip of its own: the base environment's, which it sees, installs into it.
-        const args = ["-m", "venv", "--system-site-packages", "--without-pip", where.env]
+        // With a pip of its own, from the base's ensurepip, which needs no network: the base's pip, found first in PATH
+        // otherwise, installs into the base, which refuses it.
+        const args = ["-m", "venv", "--system-site-packages", where.env]
         const result = yield* python(where.basePython, args, CREATE_TIMEOUT).pipe(
           Effect.mapError((error) => new Failed({ step: "environment", message: error.message })),
         )
         yield* expect("environment", "venv", result, result.stderr || result.stdout)
       })
+
+    // What the shell needs to run the working environment, and the base's packages, through the base's interpreter.
+    const describe = (version: string) =>
+      Effect.gen(function* () {
+        const site = path.join(where.stdlib(version), "site-packages")
+        const args = ["-c", DESCRIBE, path.join(site, `${STARTUP_MODULE}.py`), site, where.env]
+        const result = yield* python(where.basePython, args, DESCRIBE_TIMEOUT).pipe(
+          Effect.mapError((error) => new Failed({ step: "environment", message: error.message })),
+        )
+        yield* expect("environment", "the base interpreter", result, result.stderr || result.stdout)
+        const decoded = decodeDescription(result.stdout)
+        if (Exit.isSuccess(decoded)) return decoded.value
+        return yield* new Failed({
+          step: "environment",
+          message: "the base interpreter did not describe the environment as expected",
+          output: result.stdout.slice(-OUTPUT_TAIL),
+        })
+      })
+
+    // Set once the environment is ready, for the kernel to activate GeoAgent's shell with.
+    let activation: Activation | null = null
 
     const runSync = Effect.runSyncWith(yield* Effect.context<never>())
 
@@ -393,8 +505,12 @@ export const capability = (places: Places): Engine.Capability =>
       yield* attempt("files", () => update(where, bundle.python))
       const creating = !(yield* Effect.promise(() => made(where)))
       if (creating) yield* create()
+      // At every start, as the startup file: GeoEngine's own text, and the packages of the base installed now.
+      const described = yield* describe(bundle.python)
+      yield* attempt("environment", () => pin(where, described.packages))
       // Before ready, so nothing that waits for it meets a library loaded for the first time.
       yield* warm(installing || creating)
+      activation = described.shell
       yield* writer.commit(token, {
         status: "ready",
         version: bundle.python,
@@ -416,7 +532,9 @@ export const capability = (places: Places): Engine.Capability =>
     )
 
     yield* Effect.forkScoped(prepare)
-    return { domain: DOMAIN, methods: {} }
+    // null until the environment is ready, and when it could not be prepared: the shell then runs as the user's. The
+    // kernel calls it through the shell server, whose desktop/packages/web/server/geocode/geo-tools.js lets it through.
+    return { domain: DOMAIN, methods: { activation: () => Effect.succeed(activation) } }
   })
 
 function attempt<A>(step: Step, run: () => Promise<A>) {
@@ -494,11 +612,16 @@ async function installed(where: ReturnType<typeof layout>, id: string) {
 
 /**
  * The working environment was made to the end: venv writes the line that lets it see the base environment's packages
- * last, after its interpreter, so one cut short has an interpreter that imports none of them.
+ * last, after its interpreter, so one cut short has an interpreter that imports none of them. One without a pip of its
+ * own is made again.
  */
 async function made(where: ReturnType<typeof layout>) {
   const config = await fsp.readFile(path.join(where.env, "pyvenv.cfg"), "utf-8").catch(() => "")
-  return /^include-system-site-packages = true\r?$/m.test(config) && fs.existsSync(where.envPython)
+  return (
+    /^include-system-site-packages = true\r?$/m.test(config) &&
+    fs.existsSync(where.envPython) &&
+    fs.existsSync(where.envPip)
+  )
 }
 
 /**
@@ -581,10 +704,32 @@ export async function compare(where: ReturnType<typeof layout>, python: string) 
 async function update(where: ReturnType<typeof layout>, python: string) {
   const { write, remove } = await compare(where, python)
   for (const target of remove) await fsp.rm(target, { recursive: true, force: true })
-  for (const [file, text] of write) {
-    await fsp.mkdir(path.dirname(file), { recursive: true })
-    const temporary = path.join(where.root, `${WRITING}${randomUUID()}`)
-    await fsp.writeFile(temporary, text)
-    await fsp.rename(temporary, file)
-  }
+  for (const [file, text] of write) await place(where, file, text)
+}
+
+/**
+ * Pins the base's packages in the working environment: its pip takes them as constraints, so an install may add
+ * packages but not replace one of the base's, which PyPI's builds of the geographic ones would do with a GDAL, PROJ or
+ * HDF5 of their own. The constraints first: pip stops on a configured file that is not there.
+ */
+async function pin(where: ReturnType<typeof layout>, packages: Readonly<Record<string, string>>) {
+  const pinned = Object.entries(packages)
+    .map(([name, version]) => `${name}==${version}`)
+    .sort((left, right) => left.toLowerCase().localeCompare(right.toLowerCase()))
+  await place(where, where.constraints, pinned.join("\n") + "\n")
+  // As a file URL: pip splits a configured constraint at its spaces and reads the file in the system's code page, so a
+  // home such as C:\Users\Lei Zhong or C:\Users\张三 would stop every install. Without pip's notice of a newer pip,
+  // which the constraints keep it from installing.
+  const config = `[global]\nconstraint = ${pathToFileURL(where.constraints).href}\ndisable-pip-version-check = true\n`
+  await place(where, where.pipConfig, config)
+}
+
+/** Writes a file unless it already holds the text, moved into place whole. */
+async function place(where: ReturnType<typeof layout>, file: string, text: string) {
+  const found = await fsp.readFile(file).catch(() => undefined)
+  if (found?.equals(Buffer.from(text))) return
+  await fsp.mkdir(path.dirname(file), { recursive: true })
+  const temporary = path.join(where.root, `${WRITING}${randomUUID()}`)
+  await fsp.writeFile(temporary, text)
+  await fsp.rename(temporary, file)
 }

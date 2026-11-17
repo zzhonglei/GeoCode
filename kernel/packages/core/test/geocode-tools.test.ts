@@ -112,6 +112,8 @@ const geoToolsNode = makeLocationNode({
         reply: () => Effect.die("unused permission.reply"),
         assert: () => Effect.die("unused permission.assert"),
       },
+      // The shell's activation is geocode-shell.test.ts's.
+      shell: { hook: () => Effect.succeed({ dispose: Effect.void }) },
       storage: {
         get: (key) => Effect.sync(() => stored.get(key)),
         set: (key, value) => Effect.sync(() => void stored.set(key, value)),
